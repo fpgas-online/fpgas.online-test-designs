@@ -56,9 +56,13 @@ def main():
     # Restore original init
     kosagi_netv2.Platform.__init__ = _orig_init
 
-    # Newer yosys emits $scopeinfo cells that older nextpnr-xilinx cannot place.
-    # Provide a custom yosys template with a "delete t:$scopeinfo" step between
-    # synth and write to strip them before the JSON netlist is emitted.
+    # Work around yosys/nextpnr-xilinx incompatibilities:
+    # 1. Newer yosys emits $scopeinfo debug cells that nextpnr-xilinx cannot
+    #    place -- add a "delete t:$scopeinfo" step before writing the netlist.
+    # 2. nextpnr-xilinx may not support RAM256X1S (distributed RAM) placement
+    #    -- add -nodram to disable distributed RAM inference.
+    if hasattr(soc.platform.toolchain, "_synth_opts"):
+        soc.platform.toolchain._synth_opts += " -nodram"
     from litex.build.yosys_wrapper import YosysWrapper
     patched = []
     for line in YosysWrapper._default_template:
