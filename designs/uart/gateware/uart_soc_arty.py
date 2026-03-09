@@ -7,9 +7,11 @@ an identification banner on boot and provides an interactive serial console
 that echoes characters -- this is all we need for the UART test.
 
 Build command (from repo root):
-    uv run python designs/uart/gateware/uart_soc_arty.py --toolchain yosys+nextpnr --build
+    uv run python designs/uart/gateware/uart_soc_arty.py --toolchain openxc7 --build
 
-The bitstream is written to: build/arty/gateware/arty.bit
+Requires environment variables CHIPDB and PRJXRAY_DB_DIR pointing to the
+openxc7 toolchain directories. The bitstream is written to:
+    designs/uart/build/arty/gateware/digilent_arty.bit
 """
 
 import os

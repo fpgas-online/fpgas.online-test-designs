@@ -7,9 +7,11 @@ The NeTV2 UART connects to the RPi via GPIO (FPGA TX=E14, RX=E13).
 Serial port on the RPi is /dev/ttyAMA0.
 
 Build command (from repo root):
-    uv run python designs/uart/gateware/uart_soc_netv2.py --toolchain yosys+nextpnr --build
+    uv run python designs/uart/gateware/uart_soc_netv2.py --toolchain openxc7 --build
 
-The bitstream is written to: build/netv2/gateware/netv2.bit
+Requires environment variables CHIPDB and PRJXRAY_DB_DIR pointing to the
+openxc7 toolchain directories. The bitstream is written to:
+    designs/uart/build/netv2/gateware/kosagi_netv2.bit
 """
 
 import os
