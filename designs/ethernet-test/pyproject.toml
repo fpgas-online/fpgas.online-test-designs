@@ -9,6 +9,7 @@ dependencies = [
     "litedram",
     "liteeth",
     "litepcie",
+    "setuptools",
     "pythondata-cpu-vexriscv",
     "pythondata-software-compiler-rt",
     "pythondata-software-picolibc",
