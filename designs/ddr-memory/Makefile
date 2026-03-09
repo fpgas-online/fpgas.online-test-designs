@@ -7,10 +7,10 @@ include ../../mk/common.mk
 .PHONY: build-arty build-netv2 build-all
 
 build-arty:
-	$(PYTHON) gateware/ddr_soc_arty.py --toolchain yosys+nextpnr --build
+	$(PYTHON) gateware/ddr_soc_arty.py --toolchain openxc7 --build
 
 build-netv2:
-	$(PYTHON) gateware/ddr_soc_netv2.py --toolchain yosys+nextpnr --build
+	$(PYTHON) gateware/ddr_soc_netv2.py --toolchain openxc7 --build
 
 build-all: build-arty build-netv2
 
@@ -33,7 +33,7 @@ test-ddr-netv2:
 .PHONY: program-ddr-arty program-ddr-netv2
 
 program-ddr-arty:
-	openFPGALoader -b arty build/arty/gateware/arty_ddr_test.bit
+	openFPGALoader -b arty build/arty/gateware/digilent_arty.bit
 
 program-ddr-netv2:
-	openocd -f alphamax-rpi.cfg -c "pld load 0 build/netv2/gateware/netv2_ddr_test.bit; exit"
+	openocd -f alphamax-rpi.cfg -c "pld load 0 build/netv2/gateware/kosagi_netv2.bit; exit"
