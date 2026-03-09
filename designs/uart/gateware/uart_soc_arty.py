@@ -81,6 +81,17 @@ def main():
         **soc_kwargs,
     )
 
+    # Strip $scopeinfo cells that newer Yosys emits but nextpnr-xilinx does not support.
+    platform = soc.platform
+    if hasattr(platform.toolchain, "_yosys"):
+        yosys = platform.toolchain._yosys
+        patched = []
+        for line in yosys._template:
+            patched.append(line)
+            if line.startswith("synth_"):
+                patched.append("delete t:$scopeinfo")
+        yosys._template = patched
+
     # Resolve output_dir relative to the design directory (two levels up from this script).
     design_dir = Path(os.path.realpath(__file__)).parent.parent
     builder_kwargs = parser.builder_argdict
