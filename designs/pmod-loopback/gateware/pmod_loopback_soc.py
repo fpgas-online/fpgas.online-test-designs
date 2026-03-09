@@ -83,11 +83,26 @@ class PmodLoopbackSoC(SoCCore):
             setattr(self, port_name, GPIOTristate(pads))
 
 
+def _find_openxc7_dir():
+    """Find the openXC7 toolchain directory by walking up from this file."""
+    d = os.path.dirname(os.path.abspath(__file__))
+    for _ in range(10):
+        candidate = os.path.join(d, ".venv", "toolchains", "openxc7")
+        if os.path.isdir(candidate):
+            return candidate
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+    return None
+
+
 def _setup_openxc7_env():
     """Set environment variables for the openXC7 toolchain if not already set."""
-    # Locate the repo root's toolchain directory.
-    repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-    openxc7_dir = os.path.join(repo_root, ".venv", "toolchains", "openxc7")
+    openxc7_dir = _find_openxc7_dir()
+    if openxc7_dir is None:
+        print("WARNING: Could not locate openXC7 toolchain directory.")
+        return
 
     if "CHIPDB" not in os.environ:
         chipdb_dir = os.path.join(openxc7_dir, "chipdb")
