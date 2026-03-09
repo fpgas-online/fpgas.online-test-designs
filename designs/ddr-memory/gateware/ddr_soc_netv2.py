@@ -34,8 +34,6 @@ def main():
         platform       = kosagi_netv2.Platform(variant=args.variant, toolchain=args.toolchain),
         sys_clk_freq   = sys_clk_freq,
         ident          = "fpgas-online DDR Test SoC -- NeTV2",
-        ident_version  = True,
-        uart_baudrate  = 115200,
         **parser.soc_argdict,
     )
 
