@@ -35,7 +35,7 @@ def main():
 
     soc = SoCCore(
         platform       = platform,
-        sys_clk_freq   = sys_clk_freq,
+        clk_freq       = sys_clk_freq,
         **parser.soc_argdict,
     )
 
