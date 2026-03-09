@@ -7,7 +7,7 @@ Clock: 50 MHz system clock (pin J19).
 UART: GPIO to RPi (FPGA TX=E14, RX=E13) -> /dev/ttyAMA0.
 
 Build command:
-    uv run python designs/spi-flash-id/gateware/spiflash_soc_netv2.py --toolchain yosys+nextpnr --build
+    uv run python designs/spi-flash-id/gateware/spiflash_soc_netv2.py --toolchain openxc7 --build
 
 The bitstream is written to: designs/spi-flash-id/build/netv2/gateware/netv2_spiflash_test.bit
 """

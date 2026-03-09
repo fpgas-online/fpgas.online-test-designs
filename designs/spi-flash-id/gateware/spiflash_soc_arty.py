@@ -9,7 +9,7 @@ be loaded to explicitly read the JEDEC ID via command 0x9F.
 Arty A7 SPI Flash: Quad SPI, CS=L13.
 
 Build command:
-    uv run python designs/spi-flash-id/gateware/spiflash_soc_arty.py --toolchain yosys+nextpnr --build
+    uv run python designs/spi-flash-id/gateware/spiflash_soc_arty.py --toolchain openxc7 --build
 
 The bitstream is written to: designs/spi-flash-id/build/arty/gateware/arty_spiflash_test.bit
 """
