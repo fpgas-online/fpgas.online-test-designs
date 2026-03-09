@@ -1,3 +1,5 @@
+include ../../mk/common.mk
+
 TOOLCHAIN      ?= yosys+nextpnr
 VARIANT        ?= a7-35
 BUILD_DIR      ?= build/netv2
@@ -8,7 +10,7 @@ UART_PORT      ?= /dev/ttyAMA0
 .PHONY: gateware program test clean
 
 gateware:
-	uv run python gateware/pcie_soc_netv2.py \
+	$(PYTHON) gateware/pcie_soc_netv2.py \
 		--variant $(VARIANT) \
 		--toolchain $(TOOLCHAIN) \
 		--build
@@ -17,7 +19,7 @@ program:
 	openocd -f $(OPENOCD_CFG) -c "init; pld load 0 $(BITSTREAM); exit"
 
 test:
-	sudo uv run python host/test_pcie_enumeration.py
+	sudo $(PYTHON) host/test_pcie_enumeration.py
 
 clean:
 	rm -rf build/

@@ -43,6 +43,12 @@ help:
 	@echo "  make clean-venv         Remove venv and toolchains"
 	@echo "  make clean-builds       Remove all build artifacts"
 
+.PHONY: build-pcie-enumeration test-pcie-enumeration
+build-pcie-enumeration:
+	$(MAKE) -C designs/pcie-enumeration gateware
+test-pcie-enumeration:
+	sudo $(MAKE) -C designs/pcie-enumeration test
+
 .PHONY: clean-builds
 clean-builds:
 	@for mf in $(DESIGNS); do \
