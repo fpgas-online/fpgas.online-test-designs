@@ -27,23 +27,20 @@ NeTV2 PCIe pinout:
 """
 
 import argparse
-
-from migen import *
+import importlib
 
 # Monkey-patch litex memory Verilog generator to handle write-only ports.
 # The migen git version (needed for Python 3.12) can create memory ports
 # with dat_r=None (write-only), but litex's memory.py doesn't handle this.
-import litex.gen.fhdl.memory as _litex_memory
+_litex_memory = importlib.import_module("litex.gen.fhdl.memory")
 _orig_memory_generate_verilog = _litex_memory._memory_generate_verilog
 
 def _patched_memory_generate_verilog(name, memory, namespace, add_data_file):
-    # Temporarily replace None dat_r with a dummy Signal for ports that
-    # are write-only, then restore after generation.
     from migen.fhdl.structure import Signal
     patched_ports = []
     for port in memory.ports:
         if port.dat_r is None:
-            port.dat_r = Signal(memory.width, name_override=f"_dummy_dat_r")
+            port.dat_r = Signal(memory.width, name_override="_dummy_dat_r")
             patched_ports.append(port)
     try:
         return _orig_memory_generate_verilog(name, memory, namespace, add_data_file)
@@ -52,6 +49,8 @@ def _patched_memory_generate_verilog(name, memory, namespace, add_data_file):
             port.dat_r = None
 
 _litex_memory._memory_generate_verilog = _patched_memory_generate_verilog
+
+from migen import *
 
 from litex.soc.integration.builder import Builder
 from litex.soc.integration.soc_core import SoCCore
