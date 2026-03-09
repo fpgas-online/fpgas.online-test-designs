@@ -19,7 +19,7 @@ program:
 	openocd -f $(OPENOCD_CFG) -c "init; pld load 0 $(BITSTREAM); exit"
 
 test:
-	sudo $(PYTHON) host/test_pcie_enumeration.py
+	sudo $(VENV_DIR)/bin/python host/test_pcie_enumeration.py
 
 clean:
 	rm -rf build/
