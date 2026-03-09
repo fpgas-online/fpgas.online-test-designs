@@ -9,6 +9,9 @@ dependencies = [
     "litedram",
     "liteeth",
     "litepcie",
+    "pythondata-cpu-vexriscv",
+    "pythondata-software-compiler-rt",
+    "pythondata-software-picolibc",
     "pyserial>=3.5",
 ]
 
