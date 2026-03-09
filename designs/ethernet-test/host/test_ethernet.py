@@ -20,6 +20,8 @@ Requires root (sudo) for network interface configuration and arping.
 """
 
 import argparse
+import ipaddress
+import os
 import re
 import subprocess
 import sys
@@ -71,7 +73,6 @@ def find_usb_ethernet_interface():
         # Check if this is a USB device by looking at sysfs
         try:
             sysfs_path = f"/sys/class/net/{iface}/device"
-            import os
             real_path = os.path.realpath(sysfs_path)
             if "/usb" in real_path:
                 interfaces.append(iface)
@@ -103,13 +104,14 @@ def find_usb_ethernet_interface():
 
 def configure_interface(iface, ip, netmask):
     """Configure network interface with static IP."""
-    print(f"Configuring {iface} with {ip}/{netmask}...")
+    prefix_len = ipaddress.IPv4Network(f"0.0.0.0/{netmask}").prefixlen
+    print(f"Configuring {iface} with {ip}/{prefix_len}...")
     subprocess.run(
         ["sudo", "ip", "addr", "flush", "dev", iface],
         check=True,
     )
     subprocess.run(
-        ["sudo", "ip", "addr", "add", f"{ip}/24", "dev", iface],
+        ["sudo", "ip", "addr", "add", f"{ip}/{prefix_len}", "dev", iface],
         check=True,
     )
     subprocess.run(
@@ -118,7 +120,7 @@ def configure_interface(iface, ip, netmask):
     )
     # Wait for link to come up
     time.sleep(2)
-    print(f"  {iface} configured: {ip}/24")
+    print(f"  {iface} configured: {ip}/{prefix_len}")
 
 
 # -- UART MAC address parsing ---------------------------------------------------
@@ -136,37 +138,37 @@ def read_mac_from_bios(uart_port, baud=115200, timeout=None):
     Returns MAC address string or None.
     """
     timeout = timeout or BIOS_TIMEOUT
-    ser = serial.Serial(uart_port, baud, timeout=1)
-    ser.reset_input_buffer()
 
     mac_pattern = re.compile(
         r"([0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:"
         r"[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2})"
     )
 
-    deadline = time.time() + timeout
     bios_output = []
     mac_address = None
 
     print(f"Reading BIOS output from {uart_port}...")
-    while time.time() < deadline:
-        line = ser.readline().decode(errors="replace").strip()
-        if not line:
-            continue
-        bios_output.append(line)
-        print(f"  BIOS: {line}")
+    with serial.Serial(uart_port, baud, timeout=1) as ser:
+        ser.reset_input_buffer()
+        deadline = time.time() + timeout
 
-        # Look for MAC address in the output
-        match = mac_pattern.search(line)
-        if match:
-            mac_address = match.group(1).lower()
-            print(f"  Found MAC: {mac_address}")
+        while time.time() < deadline:
+            line = ser.readline().decode(errors="replace").strip()
+            if not line:
+                continue
+            bios_output.append(line)
+            print(f"  BIOS: {line}")
 
-        # BIOS is done booting when it shows the prompt
-        if "litex>" in line.lower() or "RUNTIME" in line:
-            break
+            # Look for MAC address in the output
+            match = mac_pattern.search(line)
+            if match:
+                mac_address = match.group(1).lower()
+                print(f"  Found MAC: {mac_address}")
 
-    ser.close()
+            # BIOS is done booting when it shows the prompt
+            if "litex>" in line.lower() or "RUNTIME" in line:
+                break
+
     return mac_address, bios_output
 
 
@@ -175,10 +177,14 @@ def read_mac_from_bios(uart_port, baud=115200, timeout=None):
 def test_arp(fpga_ip, interface, timeout=5):
     """Send ARP request and verify response. Returns (success, mac_from_arp)."""
     print(f"ARP test: arping {fpga_ip} on {interface}...")
-    result = subprocess.run(
-        ["sudo", "arping", "-c", "3", "-w", str(timeout), "-I", interface, fpga_ip],
-        capture_output=True, text=True,
-    )
+    try:
+        result = subprocess.run(
+            ["sudo", "arping", "-c", "3", "-w", str(timeout), "-I", interface, fpga_ip],
+            capture_output=True, text=True,
+        )
+    except FileNotFoundError:
+        print("  FAIL: 'arping' not found. Install it with: sudo apt install arping")
+        return False, None
     print(f"  stdout: {result.stdout.strip()}")
 
     # Check for successful ARP reply
@@ -203,12 +209,12 @@ def test_ping(fpga_ip, interface, count=5, timeout=2):
     )
     print(f"  stdout: {result.stdout.strip()}")
 
-    # Parse packet loss
+    # Parse packet loss — require at most 20% loss to pass
     loss_match = re.search(r"(\d+)% packet loss", result.stdout)
     if loss_match:
         loss = int(loss_match.group(1))
         stats_line = result.stdout.strip().split("\n")[-1]  # rtt summary
-        return loss < 100, stats_line
+        return loss <= 20, stats_line
 
     return result.returncode == 0, ""
 
