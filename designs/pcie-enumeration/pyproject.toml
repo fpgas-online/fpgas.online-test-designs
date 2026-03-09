@@ -9,6 +9,7 @@ dependencies = [
     "litedram==2023.12",
     "litepcie==2023.12",
     "migen @ git+https://github.com/m-labs/migen.git",
+    "pythondata-cpu-vexriscv @ git+https://github.com/litex-hub/pythondata-cpu-vexriscv.git",
 ]
 
 [project.optional-dependencies]
