@@ -29,7 +29,14 @@ NeTV2 PCIe pinout:
 import argparse
 import importlib
 import os
-import re
+import pathlib
+import sys
+
+# Add repo root to sys.path so shared modules can be imported.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
+
+from designs._shared.platform_fixups import fix_openxc7_device_name, ensure_chipdb_symlink
+from designs._shared.yosys_workarounds import patch_yosys_template, apply_nodram_workaround
 
 # Monkey-patch litex memory Verilog generator to handle write-only ports.
 # The migen git version (needed for Python 3.12) can create memory ports
@@ -180,31 +187,9 @@ class PCIeEnumerationSoC(SoCCore):
     def __init__(self, variant="a7-35", toolchain="openxc7", **kwargs):
         platform = kosagi_netv2.Platform(variant=variant, toolchain=toolchain)
 
-        # The NeTV2 platform specifies the device as "xc7a35t-fgg484-2" but
-        # the openXC7/prjxray tools expect "xc7a35tfgg484-2" (no dash between
-        # fabric name and package). Remove the first dash.
+        # Fix device name for openXC7 (removes dash between part and package).
         if toolchain in ("openxc7", "yosys+nextpnr"):
-            platform.device = re.sub(
-                r"^(xc7[a-z]\d+t?)-(\w+-\d)",
-                r"\1\2",
-                platform.device,
-            )
-
-        # Work around yosys $scopeinfo cells that nextpnr-xilinx cannot place.
-        # Provide a custom yosys template that deletes these debug cells.
-        if toolchain in ("openxc7", "yosys+nextpnr"):
-            platform.toolchain._yosys_template = [
-                "verilog_defaults -push",
-                "verilog_defaults -add -defer",
-                "{read_files}",
-                "verilog_defaults -pop",
-                'attrmap -tocase keep -imap keep="true" keep=1 '
-                '-imap keep="false" keep=0 -remove keep=0',
-                "{yosys_cmds}",
-                "synth_{target} {synth_opts} -top {build_name}",
-                "delete t:$scopeinfo",
-                "write_{write_fmt} {write_opts} {output_name}.{synth_fmt}",
-            ]
+            fix_openxc7_device_name(platform)
 
         sys_clk_freq = 50e6
         is_vivado = (toolchain == "vivado")
@@ -220,6 +205,11 @@ class PCIeEnumerationSoC(SoCCore):
             integrated_main_ram_size=0x10000,   # 64 KB (used when no DDR3)
             **kwargs,
         )
+
+        # Apply yosys workarounds for openXC7 toolchain.
+        if toolchain in ("openxc7", "yosys+nextpnr"):
+            patch_yosys_template(self)
+            apply_nodram_workaround(self)
 
         # DDR3 SDRAM -- requires Xilinx ISERDES/OSERDES primitives (Vivado only)
         if is_vivado:
@@ -318,6 +308,7 @@ def main():
         oxc7_snap = os.path.join(oxc7_root, "squashfs-root")
         if "CHIPDB" not in os.environ:
             os.environ["CHIPDB"] = os.path.join(oxc7_root, "chipdb")
+        # PCIe-specific env vars needed by openXC7 toolchain.
         if "PRJXRAY_DB_DIR" not in os.environ:
             os.environ["PRJXRAY_DB_DIR"] = os.path.join(
                 oxc7_snap, "opt",
@@ -353,6 +344,10 @@ def main():
         os.environ["PATH"] = current_path
 
     soc = PCIeEnumerationSoC(variant=args.variant, toolchain=args.toolchain)
+
+    # Create chipdb symlink for the un-dashed device name if needed.
+    if args.toolchain == "openxc7":
+        ensure_chipdb_symlink(soc.platform)
 
     builder = Builder(soc, output_dir="build/netv2")
     builder.build(run=args.build)
