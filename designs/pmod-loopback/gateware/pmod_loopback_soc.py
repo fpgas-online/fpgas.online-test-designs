@@ -57,6 +57,20 @@ class PmodLoopbackSoC(SoCCore):
                  sys_clk_freq=int(100e6), **kwargs):
         platform = digilent_arty.Platform(variant=variant, toolchain=toolchain)
 
+        # Workaround: newer yosys emits $scopeinfo cells that older
+        # nextpnr-xilinx does not understand. Strip them after synthesis.
+        platform.toolchain._yosys_template = [
+            "verilog_defaults -push",
+            "verilog_defaults -add -defer",
+            "{read_files}",
+            "verilog_defaults -pop",
+            'attrmap -tocase keep -imap keep="true" keep=1 -imap keep="false" keep=0 -remove keep=0',
+            "{yosys_cmds}",
+            "synth_{target} {synth_opts} -top {build_name}",
+            "delete t:$scopeinfo",
+            "write_{write_fmt} {write_opts} {output_name}.{synth_fmt}",
+        ]
+
         # CRG ------------------------------------------------------------------------------------------
         self.crg = _CRG(platform, sys_clk_freq)
 
