@@ -108,6 +108,11 @@ def main():
         **parser.soc_argdict,
     )
 
+    # Workaround: nextpnr-xilinx chipdb for fgg484 package does not expose
+    # RAM256X1S Bels. Use -nodram to prevent distributed RAM inference and
+    # force block RAM or LUT usage instead.
+    soc.platform.toolchain._synth_opts += "-nodram "
+
     # Strip $scopeinfo cells that newer Yosys emits but nextpnr-xilinx
     # does not understand.
     soc.platform.toolchain._yosys_template = [
