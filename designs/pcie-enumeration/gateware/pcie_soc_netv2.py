@@ -63,6 +63,17 @@ class PCIeEnumerationSoC(SoCCore):
     def __init__(self, variant="a7-35", toolchain="openxc7", **kwargs):
         platform = kosagi_netv2.Platform(variant=variant, toolchain=toolchain)
 
+        # The NeTV2 platform specifies the device as "xc7a35t-fgg484-2" but
+        # the openXC7/prjxray tools expect "xc7a35tfgg484-2" (no dash between
+        # fabric name and package). Remove the first dash.
+        if toolchain in ("openxc7", "yosys+nextpnr"):
+            import re
+            platform.device = re.sub(
+                r"^(xc7[a-z]\d+t?)-(\w+-\d)",
+                r"\1\2",
+                platform.device,
+            )
+
         # Work around yosys $scopeinfo cells that nextpnr-xilinx cannot place.
         # Provide a custom yosys template that deletes these debug cells.
         if toolchain in ("openxc7", "yosys+nextpnr"):
