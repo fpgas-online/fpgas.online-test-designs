@@ -29,7 +29,7 @@ class _CRG(LiteXModule):
     """Minimal CRG for Arty A7: generates sys clock from the 100 MHz on-board oscillator."""
     def __init__(self, platform, sys_clk_freq, with_rst=True):
         self.rst    = Signal()
-        self.cd_sys = ClockDomain()
+        self.cd_sys = ClockDomain("sys")
 
         # Clk/Rst.
         clk100 = platform.request("clk100")

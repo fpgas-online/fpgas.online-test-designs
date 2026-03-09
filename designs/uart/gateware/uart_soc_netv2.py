@@ -29,7 +29,7 @@ class _CRG(LiteXModule):
     """Minimal CRG for NeTV2: generates sys clock from the 50 MHz on-board oscillator."""
     def __init__(self, platform, sys_clk_freq):
         self.rst    = Signal()
-        self.cd_sys = ClockDomain()
+        self.cd_sys = ClockDomain("sys")
 
         # Clk.
         clk50 = platform.request("clk50")
