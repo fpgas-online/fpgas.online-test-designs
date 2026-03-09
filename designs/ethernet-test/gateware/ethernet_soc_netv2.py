@@ -56,6 +56,15 @@ def main():
     # Restore original init
     kosagi_netv2.Platform.__init__ = _orig_init
 
+    # The NeTV2 platform defines its device as "xc7a35t-fgg484-2" but the
+    # openxc7 toolchain and prjxray-db expect "xc7a35tfgg484-2" (no dash
+    # between device family and package).  Patch the platform device string.
+    if "-" in soc.platform.device:
+        # xc7a35t-fgg484-2 -> xc7a35tfgg484-2
+        parts = soc.platform.device.split("-")
+        if len(parts) == 3:
+            soc.platform.device = parts[0] + parts[1] + "-" + parts[2]
+
     # Work around yosys/nextpnr-xilinx incompatibilities:
     # 1. Newer yosys emits $scopeinfo debug cells that nextpnr-xilinx cannot
     #    place -- add a "delete t:$scopeinfo" step before writing the netlist.
