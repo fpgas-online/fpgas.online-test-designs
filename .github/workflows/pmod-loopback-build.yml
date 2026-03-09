@@ -20,8 +20,11 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git build-essential python3 python3-pip \
-            yosys nextpnr-xilinx prjxray-tools
+          sudo apt-get install -y git build-essential python3 python3-pip
+
+      - name: Install openXC7 toolchain via snap
+        run: |
+          sudo snap install --classic openxc7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -35,7 +38,7 @@ jobs:
         run: |
           uv run python gateware/pmod_loopback_soc.py \
             --variant a7-35 \
-            --toolchain yosys+nextpnr \
+            --toolchain openxc7 \
             --build
 
       - name: Upload bitstream artifact
