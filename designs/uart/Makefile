@@ -15,10 +15,10 @@ include ../../mk/common.mk
 .PHONY: uart-arty uart-netv2 uart-all
 
 uart-arty:
-	$(PYTHON) gateware/uart_soc_arty.py --toolchain yosys+nextpnr --build
+	$(PYTHON) gateware/uart_soc_arty.py --toolchain openxc7 --build
 
 uart-netv2:
-	$(PYTHON) gateware/uart_soc_netv2.py --toolchain yosys+nextpnr --build
+	$(PYTHON) gateware/uart_soc_netv2.py --toolchain openxc7 --build
 
 uart-all: uart-arty uart-netv2
 
@@ -41,10 +41,10 @@ test-uart-netv2:
 .PHONY: program-arty program-netv2
 
 program-arty:
-	openFPGALoader -b arty build/arty/gateware/arty_uart_test.bit
+	openFPGALoader -b arty build/arty/gateware/digilent_arty.bit
 
 program-netv2:
-	openocd -f alphamax-rpi.cfg -c "pld load 0 build/netv2/gateware/netv2_uart_test.bit; exit"
+	openocd -f alphamax-rpi.cfg -c "pld load 0 build/netv2/gateware/kosagi_netv2.bit; exit"
 
 # --------------------------------------------------------------------------- #
 # Utilities
