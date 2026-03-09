@@ -8,7 +8,7 @@
 __pycache__/
 *.pyc
 *.egg-info/
-.venv/
+**/.venv/
 
 # uv
 uv.lock
