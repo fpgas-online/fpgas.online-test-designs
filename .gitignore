@@ -1,0 +1,14 @@
+# Git worktrees
+.worktrees/
+
+# Build artifacts
+**/build/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+
+# uv
+uv.lock
