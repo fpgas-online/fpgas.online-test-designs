@@ -30,7 +30,7 @@ from litex_boards.platforms.digilent_arty import raw_pmod_io
 class _CRG(LiteXModule):
     def __init__(self, platform, sys_clk_freq):
         self.rst    = Signal()
-        self.cd_sys = ClockDomain()
+        self.cd_sys = ClockDomain("sys")
 
         # Clk/Rst.
         clk100 = platform.request("clk100")
