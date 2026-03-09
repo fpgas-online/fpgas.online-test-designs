@@ -40,10 +40,12 @@ HAT_TO_ARTY_PORT = {
     "JC": "C",
 }
 
-# Default GPIO chip name (works on both RPi 4 and RPi 5)
-GPIO_CHIP = "/dev/gpiochip0"
-# On RPi 5, the main GPIO is on /dev/gpiochip4 (RP1 chip)
-GPIO_CHIP_RPI5 = "/dev/gpiochip4"
+# GPIO chip labels for Raspberry Pi models.  Using labels is more reliable
+# than hard-coded device node numbers which can change across kernel versions.
+GPIO_CHIP_LABELS = {
+    "pinctrl-rp1":     None,   # RPi 5 (RP1 chip)
+    "pinctrl-bcm2835": None,   # RPi 4 / RPi 3
+}
 
 
 # -- Test patterns -------------------------------------------------------------
@@ -140,16 +142,27 @@ class FpgaUart:
 # -- GPIO helper ---------------------------------------------------------------
 
 def detect_gpio_chip():
-    """Detect the correct gpiochip for RPi GPIO pins."""
-    # Try RPi 5 chip first, fall back to RPi 4/3 chip
-    for chip_path in [GPIO_CHIP_RPI5, GPIO_CHIP]:
+    """Detect the correct gpiochip for RPi GPIO pins by chip label.
+
+    Using the chip label (e.g. 'pinctrl-rp1' for RPi 5, 'pinctrl-bcm2835'
+    for RPi 4) is more robust than relying on device node numbers like
+    /dev/gpiochip0 or /dev/gpiochip4, which can change across kernels.
+    """
+    import pathlib
+    for chip_path in sorted(pathlib.Path("/dev").glob("gpiochip*")):
         try:
-            chip = gpiod.Chip(chip_path)
+            chip = gpiod.Chip(str(chip_path))
+            info = chip.get_info()
+            label = info.label
             chip.close()
-            return chip_path
+            if label in GPIO_CHIP_LABELS:
+                return str(chip_path)
         except (OSError, PermissionError):
             continue
-    raise RuntimeError("Cannot find GPIO chip. Is libgpiod installed?")
+    raise RuntimeError(
+        "Cannot find GPIO chip with a known label "
+        f"({', '.join(GPIO_CHIP_LABELS)}). Is this a Raspberry Pi?"
+    )
 
 
 class PmodHatGpio:
