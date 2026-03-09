@@ -12,8 +12,6 @@ Build command:
 The bitstream is written to: designs/ddr-memory/build/netv2/gateware/netv2_ddr_test.bit
 """
 
-import os
-
 from migen import *
 
 from litex.gen import *
@@ -22,7 +20,6 @@ from litex_boards.platforms import kosagi_netv2
 
 from litex.soc.cores.clock import *
 from litex.soc.integration.soc_core import *
-from litex.soc.integration.builder import *
 
 from litedram.modules import MT41K256M16
 from litedram.phy import s7ddrphy
@@ -56,8 +53,8 @@ class _CRG(LiteXModule):
 # BaseSoC ------------------------------------------------------------------------------------------
 
 class BaseSoC(SoCCore):
-    def __init__(self, variant="a7-35", toolchain="vivado", sys_clk_freq=50e6, **kwargs):
-        platform = kosagi_netv2.Platform(variant=variant, toolchain=toolchain)
+    def __init__(self, toolchain="vivado", sys_clk_freq=50e6, **kwargs):
+        platform = kosagi_netv2.Platform(toolchain=toolchain)
 
         # Fix device name for openxc7/nextpnr-xilinx: the NeTV2 platform
         # uses a hyphenated device name (e.g. "xc7a35t-fgg484-2") but the
@@ -97,12 +94,10 @@ class BaseSoC(SoCCore):
 def main():
     from litex.build.parser import LiteXArgumentParser
     parser = LiteXArgumentParser(platform=kosagi_netv2.Platform, description="DDR Memory Test SoC for NeTV2")
-    parser.add_target_argument("--variant",       default="a7-35",     help="Board variant (a7-35 or a7-100).")
     parser.add_target_argument("--sys-clk-freq",  default=50e6, type=float, help="System clock frequency.")
     args = parser.parse_args()
 
     soc = BaseSoC(
-        variant      = args.variant,
         toolchain    = args.toolchain,
         sys_clk_freq = int(args.sys_clk_freq),
         **parser.soc_argdict,
@@ -111,27 +106,13 @@ def main():
     # Workaround: nextpnr-xilinx chipdb for fgg484 package does not expose
     # RAM256X1S Bels. Use -nodram to prevent distributed RAM inference and
     # force block RAM or LUT usage instead.
-    soc.platform.toolchain._synth_opts += "-nodram "
+    if hasattr(soc.platform.toolchain, "_synth_opts"):
+        soc.platform.toolchain._synth_opts += "-nodram "
 
-    # Strip $scopeinfo cells that newer Yosys emits but nextpnr-xilinx
-    # does not understand.
-    soc.platform.toolchain._yosys_template = [
-        "verilog_defaults -push",
-        "verilog_defaults -add -defer",
-        "{read_files}",
-        "verilog_defaults -pop",
-        'attrmap -tocase keep -imap keep="true" keep=1 -imap keep="false" keep=0 -remove keep=0',
-        "{yosys_cmds}",
-        "synth_{target} {synth_opts} -top {build_name}",
-        "delete t:$scopeinfo",
-        "write_{write_fmt} {write_opts} {output_name}.{synth_fmt}",
-    ]
-
-    builder_kwargs = parser.builder_argdict
-    builder_kwargs["output_dir"] = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build", "netv2")
-    builder = Builder(soc, **builder_kwargs)
-    if args.build:
-        builder.build(**parser.toolchain_argdict)
+    import sys, os as _os
+    sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+    from common import build_soc
+    build_soc(soc, parser, args, "netv2")
 
 
 if __name__ == "__main__":

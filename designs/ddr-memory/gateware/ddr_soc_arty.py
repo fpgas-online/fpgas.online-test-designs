@@ -14,8 +14,6 @@ Build command:
 The bitstream is written to: designs/ddr-memory/build/arty/gateware/arty_ddr_test.bit
 """
 
-import os
-
 from migen import *
 
 from litex.gen import *
@@ -24,7 +22,6 @@ from litex_boards.platforms import digilent_arty
 
 from litex.soc.cores.clock import *
 from litex.soc.integration.soc_core import *
-from litex.soc.integration.builder import *
 
 from litedram.modules import MT41K128M16
 from litedram.phy import s7ddrphy
@@ -101,25 +98,10 @@ def main():
         **parser.soc_argdict,
     )
 
-    # Strip $scopeinfo cells that newer Yosys emits but nextpnr-xilinx
-    # does not understand.
-    soc.platform.toolchain._yosys_template = [
-        "verilog_defaults -push",
-        "verilog_defaults -add -defer",
-        "{read_files}",
-        "verilog_defaults -pop",
-        'attrmap -tocase keep -imap keep="true" keep=1 -imap keep="false" keep=0 -remove keep=0',
-        "{yosys_cmds}",
-        "synth_{target} {synth_opts} -top {build_name}",
-        "delete t:$scopeinfo",
-        "write_{write_fmt} {write_opts} {output_name}.{synth_fmt}",
-    ]
-
-    builder_kwargs = parser.builder_argdict
-    builder_kwargs["output_dir"] = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build", "arty")
-    builder = Builder(soc, **builder_kwargs)
-    if args.build:
-        builder.build(**parser.toolchain_argdict)
+    import sys, os as _os
+    sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+    from common import build_soc
+    build_soc(soc, parser, args, "arty")
 
 
 if __name__ == "__main__":
