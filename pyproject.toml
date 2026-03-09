@@ -20,7 +20,6 @@ build = [
 ]
 # Host-side test dependencies
 test = [
-    "pyserial>=3.5",
     "gpiod>=2.0",
 ]
 # Development tools
