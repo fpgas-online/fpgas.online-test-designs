@@ -53,8 +53,8 @@ class _CRG(LiteXModule):
 # BaseSoC ------------------------------------------------------------------------------------------
 
 class BaseSoC(SoCCore):
-    def __init__(self, toolchain="vivado", sys_clk_freq=50e6, **kwargs):
-        platform = kosagi_netv2.Platform(toolchain=toolchain)
+    def __init__(self, variant="a7-35", toolchain="vivado", sys_clk_freq=50e6, **kwargs):
+        platform = kosagi_netv2.Platform(variant=variant, toolchain=toolchain)
 
         # Fix device name for openxc7/nextpnr-xilinx: the NeTV2 platform
         # uses a hyphenated device name (e.g. "xc7a35t-fgg484-2") but the
@@ -94,10 +94,14 @@ class BaseSoC(SoCCore):
 def main():
     from litex.build.parser import LiteXArgumentParser
     parser = LiteXArgumentParser(platform=kosagi_netv2.Platform, description="DDR Memory Test SoC for NeTV2")
+    parser.add_target_argument("--variant", default="a7-35",
+        choices=["a7-35", "a7-100"],
+        help="NeTV2 FPGA variant: a7-35 (developer) or a7-100 (production)")
     parser.add_target_argument("--sys-clk-freq",  default=50e6, type=float, help="System clock frequency.")
     args = parser.parse_args()
 
     soc = BaseSoC(
+        variant      = args.variant,
         toolchain    = args.toolchain,
         sys_clk_freq = int(args.sys_clk_freq),
         **parser.soc_argdict,
