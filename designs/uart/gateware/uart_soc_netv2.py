@@ -15,7 +15,7 @@ openxc7 toolchain directories. The bitstream is written to:
 """
 
 import os
-from pathlib import Path
+import re
 
 from migen import *
 
@@ -25,7 +25,8 @@ from litex_boards.platforms import kosagi_netv2
 
 from litex.soc.cores.clock import S7PLL
 from litex.soc.integration.soc_core import SoCCore
-from litex.soc.integration.builder import Builder
+
+from common import default_soc_kwargs, patch_yosys_template, build_soc
 
 
 # CRG (Clock Reset Generator) ---------------------------------------------------------------------
@@ -50,35 +51,53 @@ class _CRG(LiteXModule):
 # BaseSoC -----------------------------------------------------------------------------------------
 
 class BaseSoC(SoCCore):
-    def __init__(self, variant="a7-35", toolchain="vivado", sys_clk_freq=100e6, **kwargs):
+    def __init__(self, variant="a7-35", toolchain="openxc7", sys_clk_freq=100e6, **kwargs):
         platform = kosagi_netv2.Platform(variant=variant, toolchain=toolchain)
 
         # The NeTV2 platform uses dashed device names (e.g. "xc7a35t-fgg484-2")
         # for Vivado compatibility. The openxc7 toolchain's prjxray database
         # expects no dash between device and package (e.g. "xc7a35tfgg484-2").
-        # Remove the dash so fasm2frames can find the part, and create a chipdb
-        # symlink so nextpnr can find its database file under the new name.
+        # Remove the dash so fasm2frames can find the part.
         if toolchain == "openxc7":
-            import re
             old_device = platform.device
             new_device = re.sub(r"^(xc7[aksz]\d+t)-(.*)", r"\1\2", old_device)
             if new_device != old_device:
                 platform.device = new_device
-                # Ensure chipdb file can be found under the un-dashed dbpart name.
-                chipdb_dir = os.environ.get("CHIPDB", "")
-                if chipdb_dir:
-                    old_dbpart = re.sub(r"-\d+$", "", old_device)
-                    new_dbpart = re.sub(r"-\d+$", "", new_device)
-                    old_chipdb = os.path.join(chipdb_dir, old_dbpart + ".bin")
-                    new_chipdb = os.path.join(chipdb_dir, new_dbpart + ".bin")
-                    if os.path.exists(old_chipdb) and not os.path.exists(new_chipdb):
-                        os.symlink(old_chipdb, new_chipdb)
 
         # CRG ----------------------------------------------------------------------------------
         self.crg = _CRG(platform, sys_clk_freq)
 
         # SoCCore ------------------------------------------------------------------------------
         SoCCore.__init__(self, platform, sys_clk_freq, **kwargs)
+
+
+def _ensure_chipdb_symlink(platform):
+    """Create a chipdb symlink for the un-dashed device name if needed.
+
+    The openxc7 chipdb directory may only have a file for the dashed
+    device name. This creates a symlink so nextpnr can find the database
+    under the un-dashed name.
+    """
+    chipdb_dir = os.environ.get("CHIPDB", "")
+    if not chipdb_dir:
+        return
+
+    device = platform.device
+    old_device_dashed = re.sub(r"^(xc7[aksz]\d+t)(.*)", r"\1-\2", device)
+    old_dbpart = re.sub(r"-\d+$", "", old_device_dashed)
+    new_dbpart = re.sub(r"-\d+$", "", device)
+
+    if old_dbpart == new_dbpart:
+        return
+
+    old_chipdb = os.path.join(chipdb_dir, old_dbpart + ".bin")
+    new_chipdb = os.path.join(chipdb_dir, new_dbpart + ".bin")
+
+    if os.path.exists(old_chipdb) and not os.path.exists(new_chipdb):
+        try:
+            os.symlink(old_chipdb, new_chipdb)
+        except FileExistsError:
+            pass  # Another process may have created it concurrently.
 
 
 # Build --------------------------------------------------------------------------------------------
@@ -90,11 +109,7 @@ def main():
     parser.add_target_argument("--sys-clk-freq", default=100e6, type=float, help="System clock frequency.")
     args = parser.parse_args()
 
-    soc_kwargs = parser.soc_argdict
-    soc_kwargs["ident"]                    = "fpgas-online UART Test SoC -- NeTV2"
-    soc_kwargs["ident_version"]            = True
-    soc_kwargs["uart_baudrate"]            = 115200
-    soc_kwargs["integrated_main_ram_size"] = 8192
+    soc_kwargs = default_soc_kwargs(parser, ident="fpgas-online UART Test SoC -- NeTV2")
 
     soc = BaseSoC(
         variant      = args.variant,
@@ -103,27 +118,9 @@ def main():
         **soc_kwargs,
     )
 
-    # Strip $scopeinfo cells that newer Yosys emits but nextpnr-xilinx does not support.
-    # Set a custom Yosys template that adds "delete t:$scopeinfo" after synthesis.
-    soc.platform.toolchain._yosys_template = [
-        "verilog_defaults -push",
-        "verilog_defaults -add -defer",
-        "{read_files}",
-        "verilog_defaults -pop",
-        'attrmap -tocase keep -imap keep="true" keep=1 -imap keep="false" keep=0 -remove keep=0',
-        "{yosys_cmds}",
-        "synth_{target} {synth_opts} -top {build_name}",
-        "delete t:$scopeinfo",
-        "write_{write_fmt} {write_opts} {output_name}.{synth_fmt}",
-    ]
-
-    # Resolve output_dir relative to the design directory (two levels up from this script).
-    design_dir = Path(os.path.realpath(__file__)).parent.parent
-    builder_kwargs = parser.builder_argdict
-    builder_kwargs["output_dir"] = str(design_dir / "build" / "netv2")
-    builder = Builder(soc, **builder_kwargs)
-    if args.build:
-        builder.build(**parser.toolchain_argdict)
+    _ensure_chipdb_symlink(soc.platform)
+    patch_yosys_template(soc)
+    build_soc(soc, parser, subdir="netv2")
 
 
 if __name__ == "__main__":

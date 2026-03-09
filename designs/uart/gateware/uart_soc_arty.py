@@ -14,9 +14,6 @@ openxc7 toolchain directories. The bitstream is written to:
     designs/uart/build/arty/gateware/digilent_arty.bit
 """
 
-import os
-from pathlib import Path
-
 from migen import *
 
 from litex.gen import *
@@ -25,7 +22,8 @@ from litex_boards.platforms import digilent_arty
 
 from litex.soc.cores.clock import S7PLL
 from litex.soc.integration.soc_core import SoCCore
-from litex.soc.integration.builder import Builder
+
+from common import default_soc_kwargs, patch_yosys_template, build_soc
 
 
 # CRG (Clock Reset Generator) ---------------------------------------------------------------------
@@ -70,11 +68,7 @@ def main():
     parser.add_target_argument("--sys-clk-freq", default=100e6, type=float, help="System clock frequency.")
     args = parser.parse_args()
 
-    soc_kwargs = parser.soc_argdict
-    soc_kwargs["ident"]                    = "fpgas-online UART Test SoC -- Arty A7"
-    soc_kwargs["ident_version"]            = True
-    soc_kwargs["uart_baudrate"]            = 115200
-    soc_kwargs["integrated_main_ram_size"] = 8192
+    soc_kwargs = default_soc_kwargs(parser, ident="fpgas-online UART Test SoC -- Arty A7")
 
     soc = BaseSoC(
         variant      = args.variant,
@@ -83,27 +77,8 @@ def main():
         **soc_kwargs,
     )
 
-    # Strip $scopeinfo cells that newer Yosys emits but nextpnr-xilinx does not support.
-    # Set a custom Yosys template that adds "delete t:$scopeinfo" after synthesis.
-    soc.platform.toolchain._yosys_template = [
-        "verilog_defaults -push",
-        "verilog_defaults -add -defer",
-        "{read_files}",
-        "verilog_defaults -pop",
-        'attrmap -tocase keep -imap keep="true" keep=1 -imap keep="false" keep=0 -remove keep=0',
-        "{yosys_cmds}",
-        "synth_{target} {synth_opts} -top {build_name}",
-        "delete t:$scopeinfo",
-        "write_{write_fmt} {write_opts} {output_name}.{synth_fmt}",
-    ]
-
-    # Resolve output_dir relative to the design directory (two levels up from this script).
-    design_dir = Path(os.path.realpath(__file__)).parent.parent
-    builder_kwargs = parser.builder_argdict
-    builder_kwargs["output_dir"] = str(design_dir / "build" / "arty")
-    builder = Builder(soc, **builder_kwargs)
-    if args.build:
-        builder.build(**parser.toolchain_argdict)
+    patch_yosys_template(soc)
+    build_soc(soc, parser, subdir="arty")
 
 
 if __name__ == "__main__":
