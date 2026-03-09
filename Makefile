@@ -43,6 +43,10 @@ help:
 	@echo "  make clean-venv         Remove venv and toolchains"
 	@echo "  make clean-builds       Remove all build artifacts"
 
+.PHONY: build-ddr-memory
+build-ddr-memory:
+	$(MAKE) -C designs/ddr-memory build-all
+
 .PHONY: clean-builds
 clean-builds:
 	@for mf in $(DESIGNS); do \

@@ -2,7 +2,7 @@
 # DDR Memory Test
 # --------------------------------------------------------------------------- #
 
-PYTHON ?= uv run python
+include ../../mk/common.mk
 
 .PHONY: build-arty build-netv2 build-all
 
