@@ -12,6 +12,13 @@ Build command:
 The bitstream is written to: designs/ddr-memory/build/netv2/gateware/kosagi_netv2.bit
 """
 
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
+
+import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+
 from migen import *
 
 from litex.gen import *
@@ -19,6 +26,7 @@ from litex.gen import *
 from litex_boards.platforms import kosagi_netv2
 
 from litex.soc.cores.clock import *
+from litex.soc.integration.builder import Builder
 from litex.soc.integration.soc_core import *
 
 from litedram.modules import MT41K256M16
@@ -56,14 +64,10 @@ class BaseSoC(SoCCore):
     def __init__(self, variant="a7-35", toolchain="vivado", sys_clk_freq=50e6, **kwargs):
         platform = kosagi_netv2.Platform(variant=variant, toolchain=toolchain)
 
-        # Fix device name for openxc7/nextpnr-xilinx: the NeTV2 platform
-        # uses a hyphenated device name (e.g. "xc7a35t-fgg484-2") but the
-        # openxc7 chipdb and prjxray-db expect no hyphen between part and
-        # package (e.g. "xc7a35tfgg484-2").
-        import re
-        m = re.match(r"(xc7[aksz]\d+t)-([a-z]+\d+-\d+\S*)", platform.device)
-        if m:
-            platform.device = m.group(1) + m.group(2)
+        # Fix device name for openxc7/nextpnr-xilinx: remove the dash
+        # between part and package (e.g. "xc7a35t-fgg484-2" -> "xc7a35tfgg484-2").
+        from designs._shared.platform_fixups import fix_openxc7_device_name
+        fix_openxc7_device_name(platform)
 
         # CRG --------------------------------------------------------------------------------------
         self.crg = _CRG(platform, sys_clk_freq)
@@ -107,16 +111,17 @@ def main():
         **parser.soc_argdict,
     )
 
-    # Workaround: nextpnr-xilinx chipdb for fgg484 package does not expose
-    # RAM256X1S Bels. Use -nodram to prevent distributed RAM inference and
-    # force block RAM or LUT usage instead.
-    if hasattr(soc.platform.toolchain, "_synth_opts"):
-        soc.platform.toolchain._synth_opts += "-nodram "
+    from designs._shared.yosys_workarounds import patch_yosys_template, apply_nodram_workaround
+    from designs._shared.build_helpers import default_build_dir
 
-    import sys, os as _os
-    sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
-    from common import build_soc
-    build_soc(soc, parser, args, "netv2")
+    patch_yosys_template(soc)
+    apply_nodram_workaround(soc)
+
+    builder_kwargs = parser.builder_argdict
+    builder_kwargs["output_dir"] = default_build_dir(__file__, "netv2")
+    builder = Builder(soc, **builder_kwargs)
+    if args.build:
+        builder.build(**parser.toolchain_argdict)
 
 
 if __name__ == "__main__":
