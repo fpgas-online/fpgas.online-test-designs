@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""
+Host-side DDR memory test script.
+
+Captures UART output from the LiteX BIOS boot sequence and parses for:
+  1. DRAM calibration results (read/write leveling)
+  2. Memtest verdict ("Memtest OK" or "Memtest KO")
+
+Usage:
+    uv run python designs/ddr-memory/host/test_ddr.py --port /dev/ttyUSB1
+    uv run python designs/ddr-memory/host/test_ddr.py --port /dev/ttyAMA0 --board netv2
+"""
+
+import argparse
+import re
+import sys
+import time
+
+import serial
+
+
+# --------------------------------------------------------------------------- #
+# Constants
+# --------------------------------------------------------------------------- #
+
+BAUD_RATE = 115200
+BOOT_TIMEOUT_S = 60  # DDR calibration can take a while
+
+# Expected DRAM sizes per board (bytes).
+EXPECTED_DRAM_SIZE = {
+    "arty":  256 * 1024 * 1024,  # 256 MB
+    "netv2": 512 * 1024 * 1024,  # 512 MB
+}
+
+
+# --------------------------------------------------------------------------- #
+# Test logic
+# --------------------------------------------------------------------------- #
+
+def run_ddr_test(ser: serial.Serial, board: str) -> tuple[bool, list[str]]:
+    """Capture boot output and parse DDR test results.
+
+    Returns (overall_pass, captured_lines).
+    """
+    lines: list[str] = []
+    deadline = time.monotonic() + BOOT_TIMEOUT_S
+
+    calibration_ok = False
+    memtest_ok = None  # None = not seen, True = OK, False = KO
+    memtest_line = ""
+
+    while time.monotonic() < deadline:
+        raw = ser.readline()
+        if not raw:
+            continue
+        line = raw.decode("utf-8", errors="replace").strip()
+        lines.append(line)
+
+        # Track calibration progress.
+        if "SDRAM now under software control" in line:
+            calibration_ok = True
+
+        # Detect memtest result.
+        if "Memtest OK" in line:
+            memtest_ok = True
+            memtest_line = line
+            break
+        elif "Memtest KO" in line:
+            memtest_ok = False
+            memtest_line = line
+            break
+
+        # Detect calibration failure.
+        if re.search(r"(calibration|leveling).*(fail|error)", line, re.IGNORECASE):
+            print(f"FAIL: DRAM calibration failed: {line}")
+            return False, lines
+
+        # If we see the BIOS prompt without a memtest result, boot
+        # completed but memtest was skipped or not run.
+        if "litex>" in line:
+            break
+
+    # Report results.
+    results: list[bool] = []
+
+    if calibration_ok:
+        print("PASS: DRAM calibration completed (SDRAM under software control)")
+    else:
+        print("FAIL: DRAM calibration not detected")
+    results.append(calibration_ok)
+
+    if memtest_ok is True:
+        print(f"PASS: {memtest_line}")
+    elif memtest_ok is False:
+        print(f"FAIL: {memtest_line}")
+    else:
+        print("FAIL: Memtest result not detected within timeout")
+    results.append(memtest_ok is True)
+
+    return all(results), lines
+
+
+# --------------------------------------------------------------------------- #
+# Main
+# --------------------------------------------------------------------------- #
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="DDR memory test for FPGA boards")
+    parser.add_argument(
+        "--port",
+        required=True,
+        help="Serial port device path (e.g. /dev/ttyUSB1, /dev/ttyAMA0)",
+    )
+    parser.add_argument(
+        "--board",
+        default="arty",
+        choices=list(EXPECTED_DRAM_SIZE.keys()),
+        help="Board under test (default: arty)",
+    )
+    parser.add_argument(
+        "--baud",
+        type=int,
+        default=BAUD_RATE,
+        help=f"Baud rate (default: {BAUD_RATE})",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=BOOT_TIMEOUT_S,
+        help=f"Boot timeout in seconds (default: {BOOT_TIMEOUT_S})",
+    )
+    args = parser.parse_args()
+
+    global BOOT_TIMEOUT_S
+    BOOT_TIMEOUT_S = args.timeout
+
+    print(f"Opening {args.port} at {args.baud} baud...")
+    print(f"Board: {args.board}, expected DRAM: "
+          f"{EXPECTED_DRAM_SIZE[args.board] // (1024*1024)} MB")
+    print(f"Waiting up to {BOOT_TIMEOUT_S}s for boot + memtest...")
+    print()
+
+    ser = serial.Serial(args.port, args.baud, timeout=2)
+
+    passed, boot_lines = run_ddr_test(ser, args.board)
+    ser.close()
+
+    if not passed:
+        print("\nFull boot output:")
+        for line in boot_lines:
+            print(f"  {line}")
+
+    print()
+    if passed:
+        print("RESULT: PASS — DDR memory test completed successfully")
+        return 0
+    else:
+        print("RESULT: FAIL — DDR memory test had failures")
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
