@@ -72,7 +72,11 @@ class FpgaUart:
     """Communicate with PMOD loopback firmware over UART."""
 
     def __init__(self, port, baud=115200, timeout=2.0):
-        self.ser = serial.Serial(port, baud, timeout=timeout)
+        # Use a short per-read timeout so readline() returns quickly,
+        # allowing the retry loop in _read_response() to check multiple
+        # lines within the overall deadline.
+        self.ser = serial.Serial(port, baud, timeout=0.1)
+        self._response_timeout = timeout
         time.sleep(0.1)  # let FPGA boot
         self.ser.reset_input_buffer()
 
@@ -85,9 +89,11 @@ class FpgaUart:
 
     def _read_response(self):
         """Read lines until we get a response (skip prompt '> ' lines)."""
-        deadline = time.time() + 2.0
+        deadline = time.time() + self._response_timeout
         while time.time() < deadline:
             line = self.ser.readline().decode(errors="replace").strip()
+            if not line:
+                continue  # empty read due to per-read timeout, retry
             if line.startswith("> "):
                 line = line[2:]
             if line.startswith("OK") or line.startswith("ERR") or line == "PONG":
