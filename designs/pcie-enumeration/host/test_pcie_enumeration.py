@@ -193,7 +193,7 @@ def check_config_space(bdf):
 
 # -- Main test runner -----------------------------------------------------------
 
-def run_test(program=False, bitstream=None, openocd_cfg=OPENOCD_CFG):
+def run_test(program=False, bitstream=None, openocd_cfg=OPENOCD_CFG, skip_rescan=False):
     """Run the full PCIe enumeration test."""
     total_tests = 0
     failures = []
@@ -212,12 +212,15 @@ def run_test(program=False, bitstream=None, openocd_cfg=OPENOCD_CFG):
         print()
 
     # Step 1: PCIe bus rescan
-    total_tests += 1
-    if not pcie_rescan():
-        failures.append("PCIe bus rescan failed")
-        # Can't continue without rescan
-        print(f"\n=== Results: 0/{total_tests} passed ===")
-        return False
+    if skip_rescan:
+        print("Skipping PCIe bus rescan (--skip-rescan)")
+    else:
+        total_tests += 1
+        if not pcie_rescan():
+            failures.append("PCIe bus rescan failed")
+            # Can't continue without rescan
+            print(f"\n=== Results: 0/{total_tests} passed ===")
+            return False
     print()
 
     # Step 2: Device detection
@@ -335,6 +338,7 @@ def main():
         program=args.program,
         bitstream=args.bitstream,
         openocd_cfg=args.openocd_cfg,
+        skip_rescan=args.skip_rescan,
     )
     sys.exit(0 if success else 1)
 
