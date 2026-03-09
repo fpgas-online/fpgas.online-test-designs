@@ -33,8 +33,8 @@ def main():
     soc_kwargs["uart_baudrate"] = 115200
 
     soc = SoCCore(
-        platform     = platform,
-        sys_clk_freq = int(args.sys_clk_freq),
+        platform = platform,
+        clk_freq = int(args.sys_clk_freq),
         **soc_kwargs,
     )
 
