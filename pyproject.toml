@@ -19,6 +19,7 @@ build = [
     "litepcie",
     "litespi",
     "litescope",
+    "pythondata-cpu-vexriscv",
 ]
 # Host-side test dependencies
 test = [
