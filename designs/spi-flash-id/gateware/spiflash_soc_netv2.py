@@ -32,6 +32,9 @@ def main():
     from litex.build.parser import LiteXArgumentParser
     parser = LiteXArgumentParser(platform=Platform, description="SPI Flash ID Test SoC for NeTV2")
     target_group = parser.target_group
+    target_group.add_argument("--variant", default="a7-35",
+        choices=["a7-35", "a7-100"],
+        help="NeTV2 FPGA variant: a7-35 (developer) or a7-100 (production)")
     target_group.add_argument("--sys-clk-freq",  default=50e6, type=float, help="System clock frequency.")
     parser.set_defaults(
         ident          = "fpgas-online SPI Flash Test SoC -- NeTV2",
@@ -40,7 +43,7 @@ def main():
     )
     args = parser.parse_args()
 
-    platform = Platform(toolchain=args.toolchain)
+    platform = Platform(variant=args.variant, toolchain=args.toolchain)
     # Fix device string: NeTV2 platform uses "xc7a35t-fgg484-2" but the openxc7
     # toolchain (prjxray-db/bbaexport) expects "xc7a35tfgg484-2" (no hyphen
     # between the device family and package).
