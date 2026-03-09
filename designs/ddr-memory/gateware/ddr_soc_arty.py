@@ -99,7 +99,9 @@ def main():
         **parser.soc_argdict,
     )
 
-    builder = Builder(soc, output_dir="designs/ddr-memory/build/arty", **parser.builder_argdict)
+    builder_kwargs = parser.builder_argdict
+    builder_kwargs["output_dir"] = "designs/ddr-memory/build/arty"
+    builder = Builder(soc, **builder_kwargs)
     if args.build:
         builder.build(**parser.toolchain_argdict)
 

@@ -37,3 +37,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["designs"]
+
+[tool.uv]
+# Pin migen to git main for Python 3.12+ bytecode tracer compatibility.
+override-dependencies = [
+    "migen @ git+https://github.com/m-labs/migen.git",
+]
