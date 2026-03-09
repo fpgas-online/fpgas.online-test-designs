@@ -45,6 +45,9 @@ packages = ["designs"]
 # Pin migen to git main for Python 3.12+ bytecode tracer compatibility.
 override-dependencies = [
     "migen @ git+https://github.com/m-labs/migen.git",
+    "litex @ git+https://github.com/enjoy-digital/litex.git",
+    "litex-boards @ git+https://github.com/litex-hub/litex-boards.git",
+    "litedram @ git+https://github.com/enjoy-digital/litedram.git",
     "pythondata-cpu-vexriscv @ git+https://github.com/litex-hub/pythondata-cpu-vexriscv.git",
     "pythondata-software-picolibc @ git+https://github.com/litex-hub/pythondata-software-picolibc.git",
     "pythondata-software-compiler_rt @ git+https://github.com/litex-hub/pythondata-software-compiler_rt.git",

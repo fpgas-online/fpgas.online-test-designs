@@ -59,6 +59,15 @@ class BaseSoC(SoCCore):
     def __init__(self, variant="a7-35", toolchain="vivado", sys_clk_freq=50e6, **kwargs):
         platform = kosagi_netv2.Platform(variant=variant, toolchain=toolchain)
 
+        # Fix device name for openxc7/nextpnr-xilinx: the NeTV2 platform
+        # uses a hyphenated device name (e.g. "xc7a35t-fgg484-2") but the
+        # openxc7 chipdb and prjxray-db expect no hyphen between part and
+        # package (e.g. "xc7a35tfgg484-2").
+        import re
+        m = re.match(r"(xc7[aksz]\d+t)-([a-z]+\d+-\d+\S*)", platform.device)
+        if m:
+            platform.device = m.group(1) + m.group(2)
+
         # CRG --------------------------------------------------------------------------------------
         self.crg = _CRG(platform, sys_clk_freq)
 
