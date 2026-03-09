@@ -2,9 +2,11 @@
 #
 # Requires: openXC7 toolchain on PATH (/opt/openxc7/bin)
 #           LiteX and litex-boards installed (uv sync --extra build)
+#
+# NOTE: Run 'make setup' from the repo root first to install toolchains
+#       and Python dependencies.
 
-SHELL := /bin/bash
-PYTHON := uv run python
+include ../../mk/common.mk
 
 # --------------------------------------------------------------------------- #
 # UART Test
@@ -48,13 +50,10 @@ program-netv2:
 # Utilities
 # --------------------------------------------------------------------------- #
 
-.PHONY: clean install-deps
+.PHONY: clean
 
 clean:
 	rm -rf build/
-
-install-deps:
-	uv sync --extra build
 
 # --------------------------------------------------------------------------- #
 # All
