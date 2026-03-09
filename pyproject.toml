@@ -15,17 +15,12 @@ build = [
     "litex-boards",
     "migen",
     "litedram",
-    "liteeth",
-    "litepcie",
-    "litespi",
-    "litescope",
     "pythondata-cpu-vexriscv",
     "pythondata-software-picolibc",
     "pythondata-software-compiler-rt",
 ]
 # Host-side test dependencies
 test = [
-    "pyserial>=3.5",
     "gpiod>=2.0",
 ]
 # Development tools
