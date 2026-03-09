@@ -6,11 +6,14 @@ Same approach as the Arty target: minimal SoC with CPU + BIOS + UART.
 The NeTV2 UART connects to the RPi via GPIO (FPGA TX=E14, RX=E13).
 Serial port on the RPi is /dev/ttyAMA0.
 
-Build command:
+Build command (from repo root):
     uv run python designs/uart/gateware/uart_soc_netv2.py --toolchain yosys+nextpnr --build
 
-The bitstream is written to: designs/uart/build/netv2/gateware/netv2.bit
+The bitstream is written to: build/netv2/gateware/netv2.bit
 """
+
+import os
+from pathlib import Path
 
 from migen import *
 
@@ -77,8 +80,10 @@ def main():
         **soc_kwargs,
     )
 
+    # Resolve output_dir relative to the design directory (two levels up from this script).
+    design_dir = Path(os.path.realpath(__file__)).parent.parent
     builder_kwargs = parser.builder_argdict
-    builder_kwargs["output_dir"] = "designs/uart/build/netv2"
+    builder_kwargs["output_dir"] = str(design_dir / "build" / "netv2")
     builder = Builder(soc, **builder_kwargs)
     if args.build:
         builder.build(**parser.toolchain_argdict)

@@ -6,11 +6,14 @@ Builds a minimal SoC with CPU + BIOS + UART. The BIOS automatically prints
 an identification banner on boot and provides an interactive serial console
 that echoes characters -- this is all we need for the UART test.
 
-Build command:
+Build command (from repo root):
     uv run python designs/uart/gateware/uart_soc_arty.py --toolchain yosys+nextpnr --build
 
-The bitstream is written to: designs/uart/build/arty/gateware/arty.bit
+The bitstream is written to: build/arty/gateware/arty.bit
 """
+
+import os
+from pathlib import Path
 
 from migen import *
 
@@ -78,8 +81,10 @@ def main():
         **soc_kwargs,
     )
 
+    # Resolve output_dir relative to the design directory (two levels up from this script).
+    design_dir = Path(os.path.realpath(__file__)).parent.parent
     builder_kwargs = parser.builder_argdict
-    builder_kwargs["output_dir"] = "designs/uart/build/arty"
+    builder_kwargs["output_dir"] = str(design_dir / "build" / "arty")
     builder = Builder(soc, **builder_kwargs)
     if args.build:
         builder.build(**parser.toolchain_argdict)
