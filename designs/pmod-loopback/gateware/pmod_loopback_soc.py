@@ -84,11 +84,15 @@ class PmodLoopbackSoC(SoCCore):
 
 
 def _find_openxc7_dir():
-    """Find the openXC7 toolchain directory by walking up from this file."""
+    """Find the openXC7 toolchain directory by walking up from this file.
+
+    Requires the squashfs-root subdirectory to exist, which distinguishes a
+    real openXC7 installation from a stale/empty directory.
+    """
     d = os.path.dirname(os.path.abspath(__file__))
     for _ in range(10):
         candidate = os.path.join(d, ".venv", "toolchains", "openxc7")
-        if os.path.isdir(candidate):
+        if os.path.isdir(os.path.join(candidate, "squashfs-root")):
             return candidate
         parent = os.path.dirname(d)
         if parent == d:
