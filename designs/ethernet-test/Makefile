@@ -1,6 +1,6 @@
 include ../../mk/common.mk
 
-TOOLCHAIN   ?= yosys+nextpnr
+TOOLCHAIN   ?= openxc7
 BAUD_RATE   ?= 115200
 
 # ---- Arty A7 ----------------------------------------------------------------
@@ -36,6 +36,8 @@ gateware-netv2:
 		--toolchain $(TOOLCHAIN) \
 		--build
 
+# alphamax-rpi.cfg is the OpenOCD config for the NeTV2's JTAG interface via RPi GPIO.
+# See: https://github.com/AlphamaxMedia/netv2-fpga/tree/master/openocd
 program-netv2:
 	openocd -f alphamax-rpi.cfg -c "init; pld load 0 $(NETV2_BUILD_DIR)/gateware/kosagi_netv2.bit; exit"
 
