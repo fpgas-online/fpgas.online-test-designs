@@ -15,39 +15,34 @@ The bitstream is written to: designs/ddr-memory/build/netv2/gateware/netv2_ddr_t
 from litex.soc.integration.soc_core import SoCCore
 from litex.soc.integration.builder import Builder
 
-from litex_boards.platforms.kosagi_netv2 import Platform
+from litex_boards.platforms import kosagi_netv2
 
 from litedram.modules import MT41K256M16
 from litedram.phy import s7ddrphy
 
 
 def main():
-    from litex.soc.integration.soc import LiteXSoCArgumentParser
-    parser = LiteXSoCArgumentParser(description="DDR Memory Test SoC for NeTV2")
-    target_group = parser.add_argument_group(title="Target options")
-    target_group.add_argument("--variant",       default="a7-35",     help="Board variant (a7-35 or a7-100).")
-    target_group.add_argument("--toolchain",     default="yosys+nextpnr", help="FPGA toolchain.")
-    target_group.add_argument("--sys-clk-freq",  default=50e6, type=float, help="System clock frequency.")
-    builder_args = Builder.add_arguments(parser)
-    soc_args = SoCCore.add_arguments(parser)
+    from litex.build.parser import LiteXArgumentParser
+    parser = LiteXArgumentParser(platform=kosagi_netv2.Platform, description="DDR Memory Test SoC for NeTV2")
+    parser.add_target_argument("--variant",       default="a7-35",     help="Board variant (a7-35 or a7-100).")
+    parser.add_target_argument("--sys-clk-freq",  default=50e6, type=float, help="System clock frequency.")
     args = parser.parse_args()
 
-    platform = Platform(variant=args.variant, toolchain=args.toolchain)
     sys_clk_freq = int(args.sys_clk_freq)
 
     soc = SoCCore(
-        platform       = platform,
+        platform       = kosagi_netv2.Platform(variant=args.variant, toolchain=args.toolchain),
         sys_clk_freq   = sys_clk_freq,
-        ident          = "fpgas-online DDR Test SoC — NeTV2",
+        ident          = "fpgas-online DDR Test SoC -- NeTV2",
         ident_version  = True,
         uart_baudrate  = 115200,
-        **SoCCore.argdict(args),
+        **parser.soc_argdict,
     )
 
     # Add DDR3 SDRAM ----------------------------------------------------------
     # NeTV2 has 32-bit wide DDR3 (4 byte lanes, 512 MB total).
     soc.submodules.ddrphy = s7ddrphy.A7DDRPHY(
-        platform.request("ddram"),
+        soc.platform.request("ddram"),
         memtype   = "DDR3",
         nphases   = 4,
         sys_clk_freq = sys_clk_freq,
@@ -59,8 +54,9 @@ def main():
         size      = 0x20000000,  # 512 MB
     )
 
-    builder = Builder(soc, output_dir="designs/ddr-memory/build/netv2", **Builder.argdict(args))
-    builder.build(run=args.build)
+    builder = Builder(soc, output_dir="designs/ddr-memory/build/netv2", **parser.builder_argdict)
+    if args.build:
+        builder.build(**parser.toolchain_argdict)
 
 
 if __name__ == "__main__":
