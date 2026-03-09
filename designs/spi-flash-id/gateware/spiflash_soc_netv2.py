@@ -32,6 +32,10 @@ def main():
     args = parser.parse_args()
 
     platform = Platform(variant=args.variant, toolchain=args.toolchain)
+    # Fix device string: NeTV2 platform uses "xc7a35t-fgg484-2" but the openxc7
+    # toolchain (prjxray-db/bbaexport) expects "xc7a35tfgg484-2" (no hyphen
+    # between the device family and package).
+    platform.device = platform.device.replace("t-fgg", "tfgg")
     sys_clk_freq = int(args.sys_clk_freq)
 
     # Workaround: newer Yosys emits $scopeinfo cells that older nextpnr-xilinx
