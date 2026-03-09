@@ -29,6 +29,9 @@ from _toolchain_fixups import clean_soc_kwargs, apply_yosys_nextpnr_workarounds
 def main():
     from litex.build.parser import LiteXArgumentParser
     parser = LiteXArgumentParser(platform=kosagi_netv2.Platform, description="Ethernet Test SoC for NeTV2")
+    parser.add_target_argument("--variant", default="a7-35",
+        choices=["a7-35", "a7-100"],
+        help="NeTV2 FPGA variant: a7-35 (developer) or a7-100 (production)")
     parser.add_target_argument("--sys-clk-freq", default=50e6,  type=float, help="System clock frequency.")
     args = parser.parse_args()
 
@@ -38,8 +41,9 @@ def main():
     # monkey-patch the Platform default to match the requested toolchain.
     _orig_init = kosagi_netv2.Platform.__init__
     _toolchain = args.toolchain
+    _variant = args.variant
     def _patched_platform_init(self, variant="a7-35", toolchain="vivado"):
-        _orig_init(self, variant=variant, toolchain=_toolchain)
+        _orig_init(self, variant=_variant, toolchain=_toolchain)
     kosagi_netv2.Platform.__init__ = _patched_platform_init
 
     soc = BaseSoC(
