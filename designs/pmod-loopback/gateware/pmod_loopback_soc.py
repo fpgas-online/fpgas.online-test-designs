@@ -68,6 +68,7 @@ class PmodLoopbackSoC(SoCCore):
             ident="PMOD Loopback Test SoC",
             ident_version=True,
             uart_baudrate=115200,
+            integrated_rom_size=32768,
             integrated_main_ram_size=8192,
             **kwargs,
         )
