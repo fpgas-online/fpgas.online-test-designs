@@ -34,7 +34,7 @@ def main():
 
     soc = SoCCore(
         platform       = digilent_arty.Platform(variant=args.variant, toolchain=args.toolchain),
-        sys_clk_freq   = sys_clk_freq,
+        clk_freq       = sys_clk_freq,
         ident          = "fpgas-online DDR Test SoC -- Arty A7",
         **parser.soc_argdict,
     )
