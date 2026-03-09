@@ -35,6 +35,8 @@ from litex.soc.integration.builder import Builder
 from litex_boards.platforms import digilent_arty
 from litex_boards.targets.digilent_arty import BaseSoC
 
+from _toolchain_fixups import clean_soc_kwargs, apply_yosys_nextpnr_workarounds
+
 
 def main():
     from litex.build.parser import LiteXArgumentParser
@@ -44,12 +46,7 @@ def main():
     parser.add_target_argument("--eth-ip",       default="192.168.1.50",    help="Ethernet IP address.")
     args = parser.parse_args()
 
-    soc_kwargs = parser.soc_argdict
-    # Note: ident/ident_version are hard-coded by the upstream BaseSoC and
-    # cannot be overridden via kwargs without causing a duplicate-keyword error.
-    soc_kwargs.pop("ident", None)
-    soc_kwargs.pop("ident_version", None)
-    soc_kwargs["uart_baudrate"] = 115200
+    soc_kwargs = clean_soc_kwargs(parser)
 
     soc = BaseSoC(
         variant       = args.variant,
@@ -60,20 +57,7 @@ def main():
         **soc_kwargs,
     )
 
-    # Work around yosys/nextpnr-xilinx incompatibilities:
-    # 1. Newer yosys emits $scopeinfo debug cells that nextpnr-xilinx cannot
-    #    place -- add a "delete t:$scopeinfo" step before writing the netlist.
-    # 2. nextpnr-xilinx may not support RAM256X1S (distributed RAM) placement
-    #    -- add -nodram to disable distributed RAM inference.
-    if hasattr(soc.platform.toolchain, "_synth_opts"):
-        soc.platform.toolchain._synth_opts += " -nodram"
-    from litex.build.yosys_wrapper import YosysWrapper
-    patched = []
-    for line in YosysWrapper._default_template:
-        if line.startswith("write_"):
-            patched.append("delete t:$scopeinfo")
-        patched.append(line)
-    soc.platform.toolchain._yosys_template = patched
+    apply_yosys_nextpnr_workarounds(soc)
 
     builder_kwargs = parser.builder_argdict
     builder_kwargs["output_dir"] = "build/arty"

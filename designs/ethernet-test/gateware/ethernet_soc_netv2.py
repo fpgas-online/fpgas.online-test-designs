@@ -23,20 +23,16 @@ from litex.soc.integration.builder import Builder
 from litex_boards.platforms import kosagi_netv2
 from litex_boards.targets.kosagi_netv2 import BaseSoC
 
+from _toolchain_fixups import clean_soc_kwargs, apply_yosys_nextpnr_workarounds
+
 
 def main():
     from litex.build.parser import LiteXArgumentParser
     parser = LiteXArgumentParser(platform=kosagi_netv2.Platform, description="Ethernet Test SoC for NeTV2")
-    parser.add_target_argument("--variant",      default="a7-35",           help="Board variant (a7-35 or a7-100).")
     parser.add_target_argument("--sys-clk-freq", default=50e6,  type=float, help="System clock frequency.")
     args = parser.parse_args()
 
-    soc_kwargs = parser.soc_argdict
-    # Note: ident/ident_version are hard-coded by the upstream BaseSoC and
-    # cannot be overridden via kwargs without causing a duplicate-keyword error.
-    soc_kwargs.pop("ident", None)
-    soc_kwargs.pop("ident_version", None)
-    soc_kwargs["uart_baudrate"] = 115200
+    soc_kwargs = clean_soc_kwargs(parser)
 
     # The upstream NeTV2 BaseSoC doesn't pass toolchain to Platform, so we
     # monkey-patch the Platform default to match the requested toolchain.
@@ -47,7 +43,6 @@ def main():
     kosagi_netv2.Platform.__init__ = _patched_platform_init
 
     soc = BaseSoC(
-        variant       = args.variant,
         sys_clk_freq  = int(args.sys_clk_freq),
         with_ethernet = True,
         **soc_kwargs,
@@ -65,20 +60,7 @@ def main():
         if len(parts) == 3:
             soc.platform.device = parts[0] + parts[1] + "-" + parts[2]
 
-    # Work around yosys/nextpnr-xilinx incompatibilities:
-    # 1. Newer yosys emits $scopeinfo debug cells that nextpnr-xilinx cannot
-    #    place -- add a "delete t:$scopeinfo" step before writing the netlist.
-    # 2. nextpnr-xilinx may not support RAM256X1S (distributed RAM) placement
-    #    -- add -nodram to disable distributed RAM inference.
-    if hasattr(soc.platform.toolchain, "_synth_opts"):
-        soc.platform.toolchain._synth_opts += " -nodram"
-    from litex.build.yosys_wrapper import YosysWrapper
-    patched = []
-    for line in YosysWrapper._default_template:
-        if line.startswith("write_"):
-            patched.append("delete t:$scopeinfo")
-        patched.append(line)
-    soc.platform.toolchain._yosys_template = patched
+    apply_yosys_nextpnr_workarounds(soc)
 
     builder_kwargs = parser.builder_argdict
     builder_kwargs["output_dir"] = "build/netv2"
