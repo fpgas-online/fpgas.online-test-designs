@@ -1,0 +1,20 @@
+[project]
+name = "pcie-enumeration-test"
+version = "0.1.0"
+description = "PCIe enumeration test for NeTV2 on RPi5"
+requires-python = ">=3.9"
+dependencies = [
+    "litex",
+    "litex-boards",
+    "litepcie",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "pytest",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
