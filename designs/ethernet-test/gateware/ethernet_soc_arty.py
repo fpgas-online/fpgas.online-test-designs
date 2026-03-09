@@ -16,11 +16,15 @@ Default network config (LiteX BIOS defaults):
   - Host IP:  192.168.1.100 (TFTP server)
   - MAC:      10:e2:d5:00:00:00 (default, configurable via --eth-ip)
 
-Note on yosys+nextpnr toolchain:
+Note on open-source toolchain (openxc7 / yosys+nextpnr):
   The upstream digilent_arty target notes that DDR3 should be disabled and
   the clock frequency lowered when using the open-source toolchain.  This
-  script therefore uses --integrated-main-ram-size=8192 and --sys-clk-freq=50e6
-  when targeting yosys+nextpnr.
+  script therefore uses --sys-clk-freq=50e6 by default.
+
+  The openxc7 toolchain requires these environment variables:
+    CHIPDB                   - directory for chipdb .bin cache (may be empty)
+    NEXTPNR_XILINX_PYTHON_DIR - path to nextpnr-xilinx python scripts
+    PRJXRAY_DB_DIR           - path to prjxray-db database
 """
 
 import importlib, pathlib, sys  # noqa: E401
@@ -55,6 +59,11 @@ def main():
         eth_ip        = args.eth_ip,
         **soc_kwargs,
     )
+
+    # Newer yosys emits $scopeinfo cells that older nextpnr-xilinx cannot place.
+    # Adding -noscopeinfo to the synth options avoids this incompatibility.
+    if hasattr(soc.platform.toolchain, "_synth_opts"):
+        soc.platform.toolchain._synth_opts += " -noscopeinfo"
 
     builder_kwargs = parser.builder_argdict
     builder_kwargs["output_dir"] = "build/arty"

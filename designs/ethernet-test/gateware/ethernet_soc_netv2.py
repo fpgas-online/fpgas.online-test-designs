@@ -45,6 +45,11 @@ def main():
         **soc_kwargs,
     )
 
+    # Newer yosys emits $scopeinfo cells that older nextpnr-xilinx cannot place.
+    # Adding -noscopeinfo to the synth options avoids this incompatibility.
+    if hasattr(soc.platform.toolchain, "_synth_opts"):
+        soc.platform.toolchain._synth_opts += " -noscopeinfo"
+
     builder_kwargs = parser.builder_argdict
     builder_kwargs["output_dir"] = "build/netv2"
     builder = Builder(soc, **builder_kwargs)
