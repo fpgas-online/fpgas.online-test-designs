@@ -92,16 +92,16 @@ def find_pcie_device(vendor, device):
     BDF format: "0000:XX:YY.Z"
     """
     result = subprocess.run(
-        ["lspci", "-n", "-d", f"{vendor}:{device}"],
+        ["lspci", "-D", "-n", "-d", f"{vendor}:{device}"],
         capture_output=True, text=True,
     )
     if result.returncode != 0 or not result.stdout.strip():
         return None
 
-    # First line: "XX:YY.Z Class VVVV:DDDD"
+    # First line: "DDDD:XX:YY.Z Class VVVV:DDDD"
     line = result.stdout.strip().split("\n")[0]
-    bdf_short = line.split()[0]  # "XX:YY.Z"
-    return f"0000:{bdf_short}"
+    bdf = line.split()[0]  # "DDDD:XX:YY.Z"
+    return bdf
 
 
 def get_device_info(vendor, device):
