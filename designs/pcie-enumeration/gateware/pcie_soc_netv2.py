@@ -29,6 +29,7 @@ NeTV2 PCIe pinout:
 import argparse
 import importlib
 import os
+import re
 
 # Monkey-patch litex memory Verilog generator to handle write-only ports.
 # The migen git version (needed for Python 3.12) can create memory ports
@@ -183,7 +184,6 @@ class PCIeEnumerationSoC(SoCCore):
         # the openXC7/prjxray tools expect "xc7a35tfgg484-2" (no dash between
         # fabric name and package). Remove the first dash.
         if toolchain in ("openxc7", "yosys+nextpnr"):
-            import re
             platform.device = re.sub(
                 r"^(xc7[a-z]\d+t?)-(\w+-\d)",
                 r"\1\2",
