@@ -14,20 +14,20 @@ Build command:
 The bitstream is written to: designs/spi-flash-id/build/arty/gateware/arty_spiflash_test.bit
 """
 
-import os
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
 from litex.soc.integration.soc_core import SoCCore
 from litex.soc.integration.builder import Builder
 
 from litex_boards.platforms.digilent_arty import Platform
 
-from common import (
-    YOSYS_TEMPLATE_SCOPEINFO_FIX,
-    add_spi_flash,
-    default_build_dir,
-)
+from designs._shared.build_helpers import default_build_dir
+from designs._shared.yosys_workarounds import patch_yosys_template
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
+from common import add_spi_flash
 
 
 def main():
@@ -39,14 +39,12 @@ def main():
     parser.set_defaults(
         ident          = "fpgas-online SPI Flash Test SoC -- Arty A7",
         uart_baudrate  = 115200,
-        output_dir     = default_build_dir(_HERE, "arty"),
+        output_dir     = default_build_dir(__file__, "arty"),
     )
     args = parser.parse_args()
 
     platform = Platform(variant=args.variant, toolchain=args.toolchain)
     sys_clk_freq = int(args.sys_clk_freq)
-
-    platform.toolchain._yosys_template = list(YOSYS_TEMPLATE_SCOPEINFO_FIX)
 
     soc = SoCCore(
         platform       = platform,
@@ -54,6 +52,7 @@ def main():
         **parser.soc_argdict,
     )
 
+    patch_yosys_template(soc)
     add_spi_flash(soc, platform, sys_clk_freq)
 
     builder = Builder(soc, **parser.builder_argdict)

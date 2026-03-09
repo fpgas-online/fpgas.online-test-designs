@@ -12,20 +12,21 @@ Build command:
 The bitstream is written to: designs/spi-flash-id/build/netv2/gateware/netv2_spiflash_test.bit
 """
 
-import os
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
 from litex.soc.integration.soc_core import SoCCore
 from litex.soc.integration.builder import Builder
 
 from litex_boards.platforms.kosagi_netv2 import Platform
 
-from common import (
-    YOSYS_TEMPLATE_SCOPEINFO_FIX,
-    add_spi_flash,
-    default_build_dir,
-)
+from designs._shared.build_helpers import default_build_dir
+from designs._shared.platform_fixups import fix_openxc7_device_name
+from designs._shared.yosys_workarounds import patch_yosys_template
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
+from common import add_spi_flash
 
 
 def main():
@@ -39,18 +40,13 @@ def main():
     parser.set_defaults(
         ident          = "fpgas-online SPI Flash Test SoC -- NeTV2",
         uart_baudrate  = 115200,
-        output_dir     = default_build_dir(_HERE, "netv2"),
+        output_dir     = default_build_dir(__file__, "netv2"),
     )
     args = parser.parse_args()
 
     platform = Platform(variant=args.variant, toolchain=args.toolchain)
-    # Fix device string: NeTV2 platform uses "xc7a35t-fgg484-2" but the openxc7
-    # toolchain (prjxray-db/bbaexport) expects "xc7a35tfgg484-2" (no hyphen
-    # between the device family and package).
-    platform.device = platform.device.replace("t-fgg", "tfgg")
+    fix_openxc7_device_name(platform)
     sys_clk_freq = int(args.sys_clk_freq)
-
-    platform.toolchain._yosys_template = list(YOSYS_TEMPLATE_SCOPEINFO_FIX)
 
     soc = SoCCore(
         platform       = platform,
@@ -58,6 +54,7 @@ def main():
         **parser.soc_argdict,
     )
 
+    patch_yosys_template(soc)
     add_spi_flash(soc, platform, sys_clk_freq)
 
     builder = Builder(soc, **parser.builder_argdict)
