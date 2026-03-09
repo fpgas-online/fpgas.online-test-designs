@@ -43,10 +43,12 @@ class PCIeEnumerationSoC(SoCCore):
     def __init__(self, variant="a7-35", toolchain="yosys+nextpnr", **kwargs):
         platform = kosagi_netv2.Platform(variant=variant, toolchain=toolchain)
 
+        sys_clk_freq = 50e6
+
         SoCCore.__init__(
             self,
             platform,
-            sys_clk_freq=50e6,
+            clk_freq=int(sys_clk_freq),
             ident="PCIe Enumeration Test SoC (NeTV2)",
             ident_version=True,
             uart_baudrate=115200,
@@ -54,8 +56,6 @@ class PCIeEnumerationSoC(SoCCore):
         )
 
         # Add DDR3 SDRAM
-        from litex.soc.cores.sdram import SDRAMModule
-        from litex.soc.integration.soc import SoCRegion
         from litedram.modules import MT41K256M16
         from litedram.phy import s7ddrphy
 
@@ -63,12 +63,12 @@ class PCIeEnumerationSoC(SoCCore):
             platform.request("ddram"),
             memtype="DDR3",
             nphases=4,
-            sys_clk_freq=50e6,
+            sys_clk_freq=sys_clk_freq,
         )
         self.add_sdram(
             "sdram",
             phy=self.ddrphy,
-            module=MT41K256M16(50e6, "1:4"),
+            module=MT41K256M16(sys_clk_freq, "1:4"),
             l2_cache_size=8192,
         )
 
