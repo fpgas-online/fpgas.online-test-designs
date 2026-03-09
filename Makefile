@@ -43,6 +43,12 @@ help:
 	@echo "  make clean-venv         Remove venv and toolchains"
 	@echo "  make clean-builds       Remove all build artifacts"
 
+.PHONY: build-pmod-loopback test-pmod-loopback
+build-pmod-loopback:
+	$(MAKE) -C designs/pmod-loopback gateware
+test-pmod-loopback:
+	$(MAKE) -C designs/pmod-loopback test
+
 .PHONY: clean-builds
 clean-builds:
 	@for mf in $(DESIGNS); do \
