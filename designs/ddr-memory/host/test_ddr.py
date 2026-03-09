@@ -37,13 +37,13 @@ EXPECTED_DRAM_SIZE = {
 # Test logic
 # --------------------------------------------------------------------------- #
 
-def run_ddr_test(ser: serial.Serial, board: str) -> tuple[bool, list[str]]:
+def run_ddr_test(ser: serial.Serial, board: str, timeout: int = BOOT_TIMEOUT_S) -> tuple[bool, list[str]]:
     """Capture boot output and parse DDR test results.
 
     Returns (overall_pass, captured_lines).
     """
     lines: list[str] = []
-    deadline = time.monotonic() + BOOT_TIMEOUT_S
+    deadline = time.monotonic() + timeout
 
     calibration_ok = False
     memtest_ok = None  # None = not seen, True = OK, False = KO
@@ -131,17 +131,16 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    global BOOT_TIMEOUT_S
-    BOOT_TIMEOUT_S = args.timeout
+    boot_timeout = args.timeout
 
     print(f"Opening {args.port} at {args.baud} baud...")
     print(f"Board: {args.board}, expected DRAM: "
           f"{EXPECTED_DRAM_SIZE[args.board] // (1024*1024)} MB")
-    print(f"Waiting up to {BOOT_TIMEOUT_S}s for boot + memtest...")
+    print(f"Waiting up to {boot_timeout}s for boot + memtest...")
     print()
 
     with serial.Serial(args.port, args.baud, timeout=2) as ser:
-        passed, boot_lines = run_ddr_test(ser, args.board)
+        passed, boot_lines = run_ddr_test(ser, args.board, timeout=boot_timeout)
 
     if not passed:
         print("\nFull boot output:")
