@@ -14,8 +14,8 @@ Build command:
 The bitstream is written to: designs/spi-flash-id/build/arty/gateware/arty_spiflash_test.bit
 """
 
-from litex.soc.integration.soc_core import SoCCore
-from litex.soc.integration.builder import Builder
+from litex.soc.integration.soc_core import SoCCore, soc_core_args, soc_core_argdict
+from litex.soc.integration.builder import Builder, builder_args, builder_argdict
 
 from litex_boards.platforms.digilent_arty import Platform
 
@@ -27,8 +27,8 @@ def main():
     target_group.add_argument("--variant",       default="a7-35",     help="Board variant (a7-35 or a7-100).")
     target_group.add_argument("--toolchain",     default="yosys+nextpnr", help="FPGA toolchain.")
     target_group.add_argument("--sys-clk-freq",  default=100e6, type=float, help="System clock frequency.")
-    builder_args = Builder.add_arguments(parser)
-    soc_args = SoCCore.add_arguments(parser)
+    builder_args(parser)
+    soc_core_args(parser)
     args = parser.parse_args()
 
     platform = Platform(variant=args.variant, toolchain=args.toolchain)
@@ -40,20 +40,18 @@ def main():
         ident          = "fpgas-online SPI Flash Test SoC — Arty A7",
         ident_version  = True,
         uart_baudrate  = 115200,
-        **SoCCore.argdict(args),
+        **soc_core_argdict(args),
     )
 
     # Add SPI Flash with bitbang access for JEDEC ID reading -------------------
-    from litex.soc.cores.spi_flash import SpiFlash
-    soc.submodules.spiflash = SpiFlash(
-        platform.request("spiflash4x"),
-        dummy=11,
-        div=2,
-        endianness="little",
+    from litex.soc.cores.spi_flash import S7SPIFlash
+    soc.submodules.spiflash = S7SPIFlash(
+        pads         = platform.request("spiflash"),
+        sys_clk_freq = sys_clk_freq,
     )
     soc.add_csr("spiflash")
 
-    builder = Builder(soc, output_dir="designs/spi-flash-id/build/arty", **Builder.argdict(args))
+    builder = Builder(soc, output_dir="designs/spi-flash-id/build/arty", **builder_argdict(args))
     builder.build(run=args.build)
 
 
