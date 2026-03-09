@@ -99,7 +99,8 @@ def _find_openxc7_dir():
     Requires the squashfs-root subdirectory to exist, which distinguishes a
     real openXC7 installation from a stale/empty directory.
     """
-    d = os.path.dirname(os.path.abspath(__file__))
+    # Start from the design root (parent of gateware/), not gateware/ itself.
+    d = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     for _ in range(10):
         candidate = os.path.join(d, ".venv", "toolchains", "openxc7")
         if os.path.isdir(os.path.join(candidate, "squashfs-root")):
