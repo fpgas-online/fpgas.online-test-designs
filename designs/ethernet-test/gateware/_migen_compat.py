@@ -17,7 +17,6 @@ if sys.version_info >= (3, 11):
     import dis
     import inspect
     from opcode import opname
-    from collections import defaultdict
 
     # ---- patched helpers ------------------------------------------------
 
