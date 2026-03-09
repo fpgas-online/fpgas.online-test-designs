@@ -15,40 +15,46 @@ Default network config (LiteX BIOS defaults):
   - FPGA IP:  192.168.1.50
   - Host IP:  192.168.1.100 (TFTP server)
   - MAC:      10:e2:d5:00:00:00 (default, configurable via --eth-ip)
+
+Note on yosys+nextpnr toolchain:
+  The upstream digilent_arty target notes that DDR3 should be disabled and
+  the clock frequency lowered when using the open-source toolchain.  This
+  script therefore uses --integrated-main-ram-size=8192 and --sys-clk-freq=50e6
+  when targeting yosys+nextpnr.
 """
 
-import argparse
+import gateware._migen_compat  # noqa: F401  -- patch migen tracer for Python >= 3.11
 
 from litex.soc.integration.builder import Builder
-
+from litex_boards.platforms import digilent_arty
 from litex_boards.targets.digilent_arty import BaseSoC
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Ethernet Test SoC for Arty A7")
-    parser.add_argument("--variant",    default="a7-35",         help="a7-35 or a7-100")
-    parser.add_argument("--toolchain",  default="yosys+nextpnr", help="vivado or yosys+nextpnr")
-    parser.add_argument("--build",      action="store_true",     help="Build bitstream")
-    parser.add_argument("--load",       action="store_true",     help="Load bitstream")
-    parser.add_argument("--eth-ip",     default="192.168.1.50",  help="FPGA IP address")
-    parser.add_argument("--remote-ip",  default="192.168.1.100", help="Host/TFTP IP address")
+    from litex.build.parser import LiteXArgumentParser
+    parser = LiteXArgumentParser(platform=digilent_arty.Platform, description="Ethernet Test SoC for Arty A7")
+    parser.add_target_argument("--variant",      default="a7-35",           help="Board variant (a7-35 or a7-100).")
+    parser.add_target_argument("--sys-clk-freq", default=50e6,  type=float, help="System clock frequency.")
+    parser.add_target_argument("--eth-ip",       default="192.168.1.50",    help="Ethernet IP address.")
     args = parser.parse_args()
 
-    # BaseSoC from litex-boards already supports --with-ethernet and --with-sdram.
-    # We instantiate it directly with the flags we need.
+    soc_kwargs = parser.soc_argdict
+    soc_kwargs["ident"]         = "fpgas-online Ethernet Test SoC -- Arty A7"
+    soc_kwargs["ident_version"] = True
+    soc_kwargs["uart_baudrate"] = 115200
+
     soc = BaseSoC(
-        variant=args.variant,
-        toolchain=args.toolchain,
-        sys_clk_freq=100e6,
-        with_ethernet=True,
-        with_sdram=True,
-        uart_baudrate=115200,
-        ident="Ethernet Test SoC (Arty A7)",
-        ident_version=True,
+        variant       = args.variant,
+        toolchain     = args.toolchain,
+        sys_clk_freq  = int(args.sys_clk_freq),
+        with_ethernet = True,
+        eth_ip        = args.eth_ip,
+        **soc_kwargs,
     )
 
-    builder = Builder(soc, output_dir="build/arty")
-    builder.build(run=args.build)
+    builder = Builder(soc, output_dir="build/arty", **parser.builder_argdict)
+    if args.build:
+        builder.build(**parser.toolchain_argdict)
 
     if args.load:
         prog = soc.platform.create_programmer()

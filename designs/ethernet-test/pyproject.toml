@@ -8,6 +8,7 @@ dependencies = [
     "litex-boards",
     "litedram",
     "liteeth",
+    "litepcie",
     "pyserial>=3.5",
 ]
 
