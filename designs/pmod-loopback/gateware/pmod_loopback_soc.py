@@ -11,6 +11,12 @@ The firmware sets direction via oe, then reads/writes via in/out registers.
 """
 
 import argparse
+import os
+import sys
+
+# Ensure the gateware directory is importable.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import migen_compat  # noqa: F401, E402  -- patch migen tracer for Python 3.12+
 
 from migen import *
 
