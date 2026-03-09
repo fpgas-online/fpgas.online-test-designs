@@ -8,6 +8,27 @@
 
 **Tech Stack:** LiteX with LitePCIe, openXC7 toolchain, OpenOCD (bcm2835gpio/linuxgpiod JTAG), Python 3 with subprocess, GitHub Actions CI
 
+**Branch:** `feature/pcie-enumeration-test` (developed in `.worktrees/pcie-enumeration-test` worktree)
+
+---
+
+### Task 0: Set Up Worktree and Branch
+**Prerequisites:** `.gitignore` must include `.worktrees/` (already configured in main).
+
+**Step 1: Create worktree with feature branch**
+```bash
+git worktree add .worktrees/pcie-enumeration-test -b feature/pcie-enumeration-test
+cd .worktrees/pcie-enumeration-test
+```
+
+**Step 2: Verify clean baseline**
+```bash
+git status
+git log --oneline -3
+```
+
+> **Note:** All subsequent tasks in this plan are executed inside the `.worktrees/pcie-enumeration-test` worktree. File paths are relative to the worktree root.
+
 ---
 
 ### Task 1: Create Project Structure
@@ -708,4 +729,38 @@ jobs:
 ```bash
 git add .github/workflows/pcie-enumeration-build.yml
 git commit -m "pcie-enumeration: add GitHub Actions workflow for NeTV2 bitstream build"
+```
+
+---
+
+### Task 5: Create Pull Request
+**Step 1: Push branch to remote**
+```bash
+git push -u origin feature/pcie-enumeration-test
+```
+
+**Step 2: Create pull request**
+```bash
+gh pr create --title "Add PCIe enumeration test design for NeTV2 on RPi5" --body "$(cat <<'EOF'
+## Summary
+- LiteX SoC with LitePCIe endpoint for NeTV2
+- OpenOCD JTAG configuration for RPi GPIO bitbang
+- Host-side Python test script (PCIe rescan, lspci, sysfs, BAR verification)
+- GitHub Actions workflow for bitstream builds
+
+## Test plan
+- [ ] Verify SoC target parses with `--help` flag
+- [ ] Verify host script parses with `--help` flag
+- [ ] CI builds bitstreams successfully
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+EOF
+)"
+```
+
+**Step 3: Clean up worktree (after PR is merged)**
+```bash
+cd /home/tim/github/mithro/fpgas-online-test-designs
+git worktree remove .worktrees/pcie-enumeration-test
+git branch -d feature/pcie-enumeration-test
 ```

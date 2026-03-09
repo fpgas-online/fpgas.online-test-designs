@@ -8,6 +8,27 @@
 
 **Tech Stack:** LiteX + LiteSPI (Python SoC builder), openXC7 (Yosys + nextpnr-xilinx), C firmware (compiled by LiteX build system), Python 3 with pyserial, uv, GitHub Actions with OpenXC7-LiteX Docker container.
 
+**Branch:** `feature/spi-flash-id-test` (developed in `.worktrees/spi-flash-id-test` worktree)
+
+---
+
+### Task 0: Set Up Worktree and Branch
+**Prerequisites:** `.gitignore` must include `.worktrees/` (already configured in main).
+
+**Step 1: Create worktree with feature branch**
+```bash
+git worktree add .worktrees/spi-flash-id-test -b feature/spi-flash-id-test
+cd .worktrees/spi-flash-id-test
+```
+
+**Step 2: Verify clean baseline**
+```bash
+git status
+git log --oneline -3
+```
+
+> **Note:** All subsequent tasks in this plan are executed inside the `.worktrees/spi-flash-id-test` worktree. File paths are relative to the worktree root.
+
 ---
 
 ### Task 1: Create Directory Structure and Write LiteX SoC with SPI Flash Access for Arty A7
@@ -757,4 +778,39 @@ all: uart-all ddr-all spiflash-all
 **Step 5: Commit**
 ```
 Add SPI flash test GitHub Actions workflow and Makefile targets
+```
+
+---
+
+### Task 6: Create Pull Request
+**Step 1: Push branch to remote**
+```bash
+git push -u origin feature/spi-flash-id-test
+```
+
+**Step 2: Create pull request**
+```bash
+gh pr create --title "Add SPI flash ID test design for Arty A7 and NeTV2" --body "$(cat <<'EOF'
+## Summary
+- LiteX SoC targets with SPI flash CSR access for Arty A7 and NeTV2
+- Custom C firmware reading JEDEC ID via 0x9F command
+- Host-side Python test script validating manufacturer/device/capacity bytes
+- GitHub Actions workflow for bitstream builds
+- Makefile for local builds and testing
+
+## Test plan
+- [ ] Verify `uv run python designs/spi-flash-id/gateware/spiflash_soc_arty.py --help` parses correctly
+- [ ] Verify `uv run python designs/spi-flash-id/host/test_spiflash.py --help` parses correctly
+- [ ] CI builds bitstreams successfully
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+EOF
+)"
+```
+
+**Step 3: Clean up worktree (after PR is merged)**
+```bash
+cd /home/tim/github/mithro/fpgas-online-test-designs
+git worktree remove .worktrees/spi-flash-id-test
+git branch -d feature/spi-flash-id-test
 ```

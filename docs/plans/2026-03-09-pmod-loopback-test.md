@@ -8,6 +8,27 @@
 
 **Tech Stack:** LiteX (Python SoC builder), openXC7 toolchain (Yosys + nextpnr-xilinx), Python 3 with gpiod + pyserial, GitHub Actions CI
 
+**Branch:** `feature/pmod-loopback-test` (developed in `.worktrees/pmod-loopback-test` worktree)
+
+---
+
+### Task 0: Set Up Worktree and Branch
+**Prerequisites:** `.gitignore` must include `.worktrees/` (already configured in main).
+
+**Step 1: Create worktree with feature branch**
+```bash
+git worktree add .worktrees/pmod-loopback-test -b feature/pmod-loopback-test
+cd .worktrees/pmod-loopback-test
+```
+
+**Step 2: Verify clean baseline**
+```bash
+git status
+git log --oneline -3
+```
+
+> **Note:** All subsequent tasks in this plan are executed inside the `.worktrees/pmod-loopback-test` worktree. File paths are relative to the worktree root.
+
 ---
 
 ### Task 1: Create Project Structure
@@ -877,4 +898,38 @@ jobs:
 ```bash
 git add .github/workflows/pmod-loopback-build.yml
 git commit -m "pmod-loopback: add GitHub Actions workflow for bitstream build and lint"
+```
+
+---
+
+### Task 6: Create Pull Request
+**Step 1: Push branch to remote**
+```bash
+git push -u origin feature/pmod-loopback-test
+```
+
+**Step 2: Create pull request**
+```bash
+gh pr create --title "Add PMOD loopback test design for Arty A7" --body "$(cat <<'EOF'
+## Summary
+- LiteX SoC with GPIOTristate for all four PMOD connectors
+- Custom C firmware with UART command interface (PING/READ/DRIVE/HIZ)
+- Host-side Python test script using gpiod + pyserial for bidirectional testing
+- GitHub Actions workflow for bitstream builds
+
+## Test plan
+- [ ] Verify SoC builds with `--help` flag
+- [ ] Verify host script parses with `--help` flag
+- [ ] CI builds bitstreams successfully
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+EOF
+)"
+```
+
+**Step 3: Clean up worktree (after PR is merged)**
+```bash
+cd /home/tim/github/mithro/fpgas-online-test-designs
+git worktree remove .worktrees/pmod-loopback-test
+git branch -d feature/pmod-loopback-test
 ```

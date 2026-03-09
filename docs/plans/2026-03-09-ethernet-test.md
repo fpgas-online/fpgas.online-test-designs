@@ -8,6 +8,27 @@
 
 **Tech Stack:** LiteX with LiteEth, openXC7 toolchain, Python 3 with pyserial + subprocess (arping/ping), GitHub Actions CI
 
+**Branch:** `feature/ethernet-test` (developed in `.worktrees/ethernet-test` worktree)
+
+---
+
+### Task 0: Set Up Worktree and Branch
+**Prerequisites:** `.gitignore` must include `.worktrees/` (already configured in main).
+
+**Step 1: Create worktree with feature branch**
+```bash
+git worktree add .worktrees/ethernet-test -b feature/ethernet-test
+cd .worktrees/ethernet-test
+```
+
+**Step 2: Verify clean baseline**
+```bash
+git status
+git log --oneline -3
+```
+
+> **Note:** All subsequent tasks in this plan are executed inside the `.worktrees/ethernet-test` worktree. File paths are relative to the worktree root.
+
 ---
 
 ### Task 1: Create Project Structure
@@ -675,4 +696,38 @@ jobs:
 ```bash
 git add .github/workflows/ethernet-test-build.yml
 git commit -m "ethernet-test: add GitHub Actions workflow for Arty + NeTV2 builds"
+```
+
+---
+
+### Task 5: Create Pull Request
+**Step 1: Push branch to remote**
+```bash
+git push -u origin feature/ethernet-test
+```
+
+**Step 2: Create pull request**
+```bash
+gh pr create --title "Add Ethernet test design for Arty A7 and NeTV2" --body "$(cat <<'EOF'
+## Summary
+- LiteX SoC targets with LiteEth for Arty A7 (MII) and NeTV2 (RMII)
+- Host-side Python test script with MAC parsing, ARP, and ICMP ping
+- GitHub Actions workflow for bitstream builds
+- Makefile for local builds and testing
+
+## Test plan
+- [ ] Verify SoC targets parse with `--help` flag
+- [ ] Verify host script parses with `--help` flag
+- [ ] CI builds bitstreams successfully
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+EOF
+)"
+```
+
+**Step 3: Clean up worktree (after PR is merged)**
+```bash
+cd /home/tim/github/mithro/fpgas-online-test-designs
+git worktree remove .worktrees/ethernet-test
+git branch -d feature/ethernet-test
 ```
