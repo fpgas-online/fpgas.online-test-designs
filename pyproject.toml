@@ -20,6 +20,8 @@ build = [
     "litespi",
     "litescope",
     "pythondata-cpu-vexriscv",
+    "pythondata-software-picolibc",
+    "pythondata-software-compiler_rt",
 ]
 # Host-side test dependencies
 test = [
