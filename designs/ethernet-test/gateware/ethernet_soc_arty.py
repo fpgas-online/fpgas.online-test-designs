@@ -23,7 +23,9 @@ Note on yosys+nextpnr toolchain:
   when targeting yosys+nextpnr.
 """
 
-import gateware._migen_compat  # noqa: F401  -- patch migen tracer for Python >= 3.11
+import importlib, pathlib, sys  # noqa: E401
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+importlib.import_module("_migen_compat")  # patch migen tracer for Python >= 3.11
 
 from litex.soc.integration.builder import Builder
 from litex_boards.platforms import digilent_arty
