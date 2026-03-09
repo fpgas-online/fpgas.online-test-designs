@@ -33,21 +33,137 @@ import os
 # Monkey-patch litex memory Verilog generator to handle write-only ports.
 # The migen git version (needed for Python 3.12) can create memory ports
 # with dat_r=None (write-only), but litex's memory.py doesn't handle this.
+# We patch three sections: intermediate signals, read logic, and read mapping
+# to skip ports where dat_r is None, avoiding undeclared wire warnings.
 _litex_memory = importlib.import_module("litex.gen.fhdl.memory")
 _orig_memory_generate_verilog = _litex_memory._memory_generate_verilog
 
 def _patched_memory_generate_verilog(name, memory, namespace, add_data_file):
-    from migen.fhdl.structure import Signal
-    patched_ports = []
-    for port in memory.ports:
-        if port.dat_r is None:
-            port.dat_r = Signal(memory.width, name_override="_dummy_dat_r")
-            patched_ports.append(port)
-    try:
+    # Check if any port has dat_r=None; if not, use original directly.
+    if all(port.dat_r is not None for port in memory.ports):
         return _orig_memory_generate_verilog(name, memory, namespace, add_data_file)
-    finally:
-        for port in patched_ports:
-            port.dat_r = None
+
+    # Import everything needed from the original module's scope.
+    from migen.fhdl.structure import Signal
+    from migen.fhdl.bitcontainer import bits_for
+    from migen.fhdl.verilog import _printexpr as verilog_printexpr
+    from migen.fhdl.specials import (
+        Memory, READ_FIRST, WRITE_FIRST, NO_CHANGE,
+    )
+
+    def _get_name(e):
+        if isinstance(e, Memory):
+            return namespace.get_name(e)
+        else:
+            return verilog_printexpr(namespace, e)[0]
+
+    r = ""
+    adr_regs = {}
+    data_regs = {}
+
+    clocks = [port.clock for port in memory.ports]
+    if clocks.count(clocks[0]) != len(clocks):
+        for port in memory.ports:
+            port.mode = READ_FIRST
+
+    for port in memory.ports:
+        if port.we_granularity == 0:
+            port.we_granularity = memory.width
+
+    # Memory Description.
+    r += "//" + "-" * 78 + "\n"
+    r += f"// Memory {_get_name(memory)}: {memory.depth}-words x {memory.width}-bit\n"
+    r += "//" + "-" * 78 + "\n"
+    for n, port in enumerate(memory.ports):
+        r += f"// Port {n} | "
+        if port.async_read:
+            r += "Read: Async | "
+        else:
+            r += "Read: Sync  | "
+        if port.we is None:
+            r += "Write: ---- | "
+        else:
+            r += "Write: Sync | "
+            r += "Mode: "
+            if port.mode == WRITE_FIRST:
+                r += "Write-First | "
+            elif port.mode == READ_FIRST:
+                r += "Read-First  | "
+            elif port.mode == NO_CHANGE:
+                r += "No-Change | "
+            r += f"Write-Granularity: {port.we_granularity} "
+        r += "\n"
+
+    # Memory Logic Declaration/Initialization.
+    r += f"reg [{memory.width - 1}:0] {_get_name(memory)}[0:{memory.depth - 1}];\n"
+    if memory.init is not None:
+        content = ""
+        formatter = f"{{:0{int(memory.width / 4)}x}}\n"
+        for d in memory.init:
+            content += formatter.format(d)
+        memory_filename = add_data_file(
+            f"{name}_{_get_name(memory)}.init", content,
+        )
+        r += "initial begin\n"
+        r += f'\t$readmemh("{memory_filename}", {_get_name(memory)});\n'
+        r += "end\n"
+
+    # Port Intermediate Signals (skip write-only ports).
+    for n, port in enumerate(memory.ports):
+        if port.dat_r is None or port.async_read:
+            continue
+        if port.mode in [WRITE_FIRST]:
+            adr_regs[n] = Signal(
+                name_override=f"{_get_name(memory)}_adr{n}",
+            )
+            r += f"reg [{bits_for(memory.depth - 1) - 1}:0] {_get_name(adr_regs[n])};\n"
+        if port.mode in [READ_FIRST, NO_CHANGE]:
+            data_regs[n] = Signal(
+                name_override=f"{_get_name(memory)}_dat{n}",
+            )
+            r += f"reg [{memory.width - 1}:0] {_get_name(data_regs[n])};\n"
+
+    # Ports Write/Read Logic (skip read logic for write-only ports).
+    for n, port in enumerate(memory.ports):
+        r += f"always @(posedge {_get_name(port.clock)}) begin\n"
+        if port.we is not None:
+            for i in range(memory.width // port.we_granularity):
+                wbit = f"[{i}]" if memory.width != port.we_granularity else ""
+                r += f"\tif ({_get_name(port.we)}{wbit})\n"
+                lbit = i * port.we_granularity
+                hbit = (i + 1) * port.we_granularity - 1
+                dslc = f"[{hbit}:{lbit}]" if (memory.width != port.we_granularity) else ""
+                r += f"\t\t{_get_name(memory)}[{_get_name(port.adr)}]{dslc} <= {_get_name(port.dat_w)}{dslc};\n"
+
+        if port.dat_r is not None and not port.async_read:
+            if port.mode in [WRITE_FIRST]:
+                rd = f"\t{_get_name(adr_regs[n])} <= {_get_name(port.adr)};\n"
+            if port.mode in [READ_FIRST, NO_CHANGE]:
+                rd = ""
+                if port.mode == NO_CHANGE:
+                    rd += f"\tif (!{_get_name(port.we)})\n\t"
+                rd += f"\t{_get_name(data_regs[n])} <= {_get_name(memory)}[{_get_name(port.adr)}];\n"
+            if port.re is None:
+                r += rd
+            else:
+                r += f"\tif ({_get_name(port.re)})\n"
+                r += "\t" + rd.replace("\n\t", "\n\t\t")
+        r += "end\n"
+
+    # Ports Read Mapping (skip write-only ports).
+    for n, port in enumerate(memory.ports):
+        if port.dat_r is None:
+            continue
+        if port.async_read:
+            r += f"assign {_get_name(port.dat_r)} = {_get_name(memory)}[{_get_name(port.adr)}];\n"
+            continue
+        if port.mode in [WRITE_FIRST]:
+            r += f"assign {_get_name(port.dat_r)} = {_get_name(memory)}[{_get_name(adr_regs[n])}];\n"
+        if port.mode in [READ_FIRST, NO_CHANGE]:
+            r += f"assign {_get_name(port.dat_r)} = {_get_name(data_regs[n])};\n"
+    r += "\n\n"
+
+    return r
 
 _litex_memory._memory_generate_verilog = _patched_memory_generate_verilog
 
@@ -208,6 +324,30 @@ def main():
             os.environ["NEXTPNR_XILINX_PYTHON_DIR"] = os.path.join(
                 oxc7_snap, "opt", "nextpnr-xilinx", "python",
             )
+
+        # Add toolchain bin directories to PATH so the build script can
+        # find fasm2frames, xc7frames2bit, nextpnr-xilinx, and yosys.
+        toolchains_root = os.path.join(repo_root, ".venv", "toolchains")
+        extra_paths = [
+            os.path.join(oxc7_root, "bin"),               # fasm2frames, xc7frames2bit
+            os.path.join(oxc7_snap, "usr", "bin"),         # nextpnr-xilinx
+            os.path.join(
+                toolchains_root, "oss-cad-suite",
+                "oss-cad-suite", "bin",
+            ),                                              # yosys
+        ]
+        # Also add RISC-V GCC toolchain to PATH for firmware compilation.
+        riscv_gcc_dir = os.path.join(toolchains_root, "riscv-gcc")
+        if os.path.isdir(riscv_gcc_dir):
+            for entry in os.listdir(riscv_gcc_dir):
+                bin_dir = os.path.join(riscv_gcc_dir, entry, "bin")
+                if os.path.isdir(bin_dir):
+                    extra_paths.append(bin_dir)
+        current_path = os.environ.get("PATH", "")
+        for p in extra_paths:
+            if os.path.isdir(p) and p not in current_path:
+                current_path = p + os.pathsep + current_path
+        os.environ["PATH"] = current_path
 
     soc = PCIeEnumerationSoC(variant=args.variant, toolchain=args.toolchain)
 
