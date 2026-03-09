@@ -15,15 +15,17 @@ Note on yosys+nextpnr toolchain:
   --integrated-main-ram-size=8192 and --sys-clk-freq=50e6 by default.
 """
 
-import importlib, pathlib, sys  # noqa: E401
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-importlib.import_module("_migen_compat")  # patch migen tracer for Python >= 3.11
+import pathlib, sys  # noqa: E401
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
+
+import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer for Python >= 3.11
 
 from litex.soc.integration.builder import Builder
 from litex_boards.platforms import kosagi_netv2
 from litex_boards.targets.kosagi_netv2 import BaseSoC
 
-from _toolchain_fixups import clean_soc_kwargs, apply_yosys_nextpnr_workarounds
+from designs._shared.platform_fixups import fix_openxc7_device_name
+from designs._shared.yosys_workarounds import patch_yosys_template, apply_nodram_workaround
 
 
 def main():
@@ -35,7 +37,10 @@ def main():
     parser.add_target_argument("--sys-clk-freq", default=50e6,  type=float, help="System clock frequency.")
     args = parser.parse_args()
 
-    soc_kwargs = clean_soc_kwargs(parser)
+    soc_kwargs = parser.soc_argdict
+    soc_kwargs.pop("ident", None)
+    soc_kwargs.pop("ident_version", None)
+    soc_kwargs["uart_baudrate"] = 115200
 
     # The upstream NeTV2 BaseSoC doesn't pass toolchain to Platform, so we
     # monkey-patch the Platform default to match the requested toolchain.
@@ -55,16 +60,10 @@ def main():
     # Restore original init
     kosagi_netv2.Platform.__init__ = _orig_init
 
-    # The NeTV2 platform defines its device as "xc7a35t-fgg484-2" but the
-    # openxc7 toolchain and prjxray-db expect "xc7a35tfgg484-2" (no dash
-    # between device family and package).  Patch the platform device string.
-    if "-" in soc.platform.device:
-        # xc7a35t-fgg484-2 -> xc7a35tfgg484-2
-        parts = soc.platform.device.split("-")
-        if len(parts) == 3:
-            soc.platform.device = parts[0] + parts[1] + "-" + parts[2]
+    fix_openxc7_device_name(soc.platform)
 
-    apply_yosys_nextpnr_workarounds(soc)
+    patch_yosys_template(soc)
+    apply_nodram_workaround(soc)
 
     builder_kwargs = parser.builder_argdict
     builder_kwargs["output_dir"] = "build/netv2"

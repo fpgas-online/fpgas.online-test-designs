@@ -27,15 +27,16 @@ Note on open-source toolchain (openxc7 / yosys+nextpnr):
     PRJXRAY_DB_DIR           - path to prjxray-db database
 """
 
-import importlib, pathlib, sys  # noqa: E401
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-importlib.import_module("_migen_compat")  # patch migen tracer for Python >= 3.11
+import pathlib, sys  # noqa: E401
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
+
+import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer for Python >= 3.11
 
 from litex.soc.integration.builder import Builder
 from litex_boards.platforms import digilent_arty
 from litex_boards.targets.digilent_arty import BaseSoC
 
-from _toolchain_fixups import clean_soc_kwargs, apply_yosys_nextpnr_workarounds
+from designs._shared.yosys_workarounds import patch_yosys_template, apply_nodram_workaround
 
 
 def main():
@@ -46,7 +47,10 @@ def main():
     parser.add_target_argument("--eth-ip",       default="192.168.1.50",    help="Ethernet IP address.")
     args = parser.parse_args()
 
-    soc_kwargs = clean_soc_kwargs(parser)
+    soc_kwargs = parser.soc_argdict
+    soc_kwargs.pop("ident", None)
+    soc_kwargs.pop("ident_version", None)
+    soc_kwargs["uart_baudrate"] = 115200
 
     soc = BaseSoC(
         variant       = args.variant,
@@ -57,7 +61,8 @@ def main():
         **soc_kwargs,
     )
 
-    apply_yosys_nextpnr_workarounds(soc)
+    patch_yosys_template(soc)
+    apply_nodram_workaround(soc)
 
     builder_kwargs = parser.builder_argdict
     builder_kwargs["output_dir"] = "build/arty"
