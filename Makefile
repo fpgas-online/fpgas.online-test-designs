@@ -43,6 +43,16 @@ help:
 	@echo "  make clean-venv         Remove venv and toolchains"
 	@echo "  make clean-builds       Remove all build artifacts"
 
+.PHONY: build-ethernet-arty build-ethernet-netv2 test-ethernet-arty test-ethernet-netv2
+build-ethernet-arty:
+	$(MAKE) -C designs/ethernet-test gateware-arty
+build-ethernet-netv2:
+	$(MAKE) -C designs/ethernet-test gateware-netv2
+test-ethernet-arty:
+	$(MAKE) -C designs/ethernet-test test-arty
+test-ethernet-netv2:
+	$(MAKE) -C designs/ethernet-test test-netv2
+
 .PHONY: clean-builds
 clean-builds:
 	@for mf in $(DESIGNS); do \
