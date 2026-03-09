@@ -52,6 +52,7 @@ class PCIeEnumerationSoC(SoCCore):
             ident="PCIe Enumeration Test SoC (NeTV2)",
             ident_version=True,
             uart_baudrate=115200,
+            integrated_rom_size=0x10000,  # 64 KB BIOS ROM
             **kwargs,
         )
 
