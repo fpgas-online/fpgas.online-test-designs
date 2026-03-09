@@ -63,6 +63,22 @@ class PCIeEnumerationSoC(SoCCore):
     def __init__(self, variant="a7-35", toolchain="openxc7", **kwargs):
         platform = kosagi_netv2.Platform(variant=variant, toolchain=toolchain)
 
+        # Work around yosys $scopeinfo cells that nextpnr-xilinx cannot place.
+        # Provide a custom yosys template that deletes these debug cells.
+        if toolchain in ("openxc7", "yosys+nextpnr"):
+            platform.toolchain._yosys_template = [
+                "verilog_defaults -push",
+                "verilog_defaults -add -defer",
+                "{read_files}",
+                "verilog_defaults -pop",
+                'attrmap -tocase keep -imap keep="true" keep=1 '
+                '-imap keep="false" keep=0 -remove keep=0',
+                "{yosys_cmds}",
+                "synth_{target} {synth_opts} -top {build_name}",
+                "delete t:$scopeinfo",
+                "write_{write_fmt} {write_opts} {output_name}.{synth_fmt}",
+            ]
+
         sys_clk_freq = 50e6
         is_vivado = (toolchain == "vivado")
 
