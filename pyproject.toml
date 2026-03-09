@@ -1,0 +1,39 @@
+[project]
+name = "fpgas-online-test-designs"
+version = "0.1.0"
+description = "Automated FPGA hardware verification test designs for fpgas.online"
+requires-python = ">=3.9"
+license = "Apache-2.0"
+dependencies = [
+    "pyserial>=3.5",
+]
+
+[project.optional-dependencies]
+# LiteX SoC builder and peripheral cores (needed to build gateware)
+build = [
+    "litex",
+    "litex-boards",
+    "migen",
+    "litedram",
+    "liteeth",
+    "litepcie",
+    "litespi",
+    "litescope",
+]
+# Host-side test dependencies
+test = [
+    "pyserial>=3.5",
+    "gpiod>=2.0",
+]
+# Development tools
+dev = [
+    "ruff",
+    "pytest",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["designs"]
