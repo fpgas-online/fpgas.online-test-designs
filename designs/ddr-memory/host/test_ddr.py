@@ -140,10 +140,8 @@ def main() -> int:
     print(f"Waiting up to {BOOT_TIMEOUT_S}s for boot + memtest...")
     print()
 
-    ser = serial.Serial(args.port, args.baud, timeout=2)
-
-    passed, boot_lines = run_ddr_test(ser, args.board)
-    ser.close()
+    with serial.Serial(args.port, args.baud, timeout=2) as ser:
+        passed, boot_lines = run_ddr_test(ser, args.board)
 
     if not passed:
         print("\nFull boot output:")
