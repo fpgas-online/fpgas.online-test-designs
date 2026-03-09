@@ -265,8 +265,11 @@ class PCIeEnumerationSoC(SoCCore):
             )
             self.bus.add_master(master=self.pcie_bridge.wishbone)
 
-            # PCIe MSI (Message Signaled Interrupts)
-            self.pcie_msi = LitePCIeMSI()
+            # PCIe MSI -- not needed for enumeration-only test, but kept
+            # to match the typical LitePCIe SoC topology.  No IRQ sources
+            # are connected (irqs tied to 0).
+            self.pcie_msi = LitePCIeMSI(width=1)
+            self.comb += self.pcie_msi.irqs.eq(0)
 
             # Connect MSI to PHY
             self.comb += self.pcie_msi.source.connect(self.pcie_phy.msi)
