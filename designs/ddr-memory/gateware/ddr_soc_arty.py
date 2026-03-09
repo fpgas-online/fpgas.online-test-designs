@@ -14,6 +14,8 @@ Build command:
 The bitstream is written to: designs/ddr-memory/build/arty/gateware/arty_ddr_test.bit
 """
 
+import os
+
 from migen import *
 
 from litex.gen import *
@@ -100,7 +102,7 @@ def main():
     )
 
     builder_kwargs = parser.builder_argdict
-    builder_kwargs["output_dir"] = "designs/ddr-memory/build/arty"
+    builder_kwargs["output_dir"] = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build", "arty")
     builder = Builder(soc, **builder_kwargs)
     if args.build:
         builder.build(**parser.toolchain_argdict)

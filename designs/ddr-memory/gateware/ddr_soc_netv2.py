@@ -12,6 +12,8 @@ Build command:
 The bitstream is written to: designs/ddr-memory/build/netv2/gateware/netv2_ddr_test.bit
 """
 
+import os
+
 from migen import *
 
 from litex.gen import *
@@ -98,7 +100,7 @@ def main():
     )
 
     builder_kwargs = parser.builder_argdict
-    builder_kwargs["output_dir"] = "designs/ddr-memory/build/netv2"
+    builder_kwargs["output_dir"] = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build", "netv2")
     builder = Builder(soc, **builder_kwargs)
     if args.build:
         builder.build(**parser.toolchain_argdict)
