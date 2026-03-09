@@ -1,0 +1,47 @@
+name: Build DDR Memory Test Bitstreams
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'designs/ddr-memory/gateware/ddr_soc_*.py'
+      - '.github/workflows/build-ddr-test.yml'
+  pull_request:
+    paths:
+      - 'designs/ddr-memory/gateware/ddr_soc_*.py'
+      - '.github/workflows/build-ddr-test.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/meriac/openxc7-litex:latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - board: arty
+            target: designs/ddr-memory/gateware/ddr_soc_arty.py
+            output_dir: designs/ddr-memory/build/arty
+          - board: netv2
+            target: designs/ddr-memory/gateware/ddr_soc_netv2.py
+            output_dir: designs/ddr-memory/build/netv2
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build ${{ matrix.board }} DDR test bitstream
+        run: |
+          python3 ${{ matrix.target }} \
+            --toolchain yosys+nextpnr \
+            --build
+
+      - name: Upload bitstream artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ddr-test-${{ matrix.board }}
+          path: |
+            ${{ matrix.output_dir }}/gateware/*.bit
+            ${{ matrix.output_dir }}/gateware/*.bin
+          if-no-files-found: error
