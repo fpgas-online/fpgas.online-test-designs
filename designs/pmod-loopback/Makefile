@@ -19,7 +19,8 @@ firmware:
 	$(PYTHON) gateware/pmod_loopback_soc.py \
 		--variant $(VARIANT) \
 		--toolchain $(TOOLCHAIN) \
-		--no-compile-gateware
+		--no-compile-gateware \
+		--build
 
 program:
 	openFPGALoader -b arty $(BUILD_DIR)/gateware/digilent_arty.bit

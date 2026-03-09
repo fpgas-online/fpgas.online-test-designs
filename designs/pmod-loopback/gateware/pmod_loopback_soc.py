@@ -153,6 +153,13 @@ def main():
     soc = PmodLoopbackSoC(variant=args.variant, toolchain=args.toolchain)
 
     builder = Builder(soc, compile_gateware=not args.no_compile_gateware)
+
+    # Include the custom firmware so it gets compiled and linked into the
+    # integrated ROM alongside the LiteX BIOS.
+    firmware_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "firmware")
+    if os.path.isdir(firmware_dir):
+        builder.add_software_package("firmware", firmware_dir)
+
     builder.build(run=args.build)
 
     if args.load:
