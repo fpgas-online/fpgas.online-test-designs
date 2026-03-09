@@ -56,7 +56,9 @@ def main():
         **soc_kwargs,
     )
 
-    builder = Builder(soc, output_dir="build/arty", **parser.builder_argdict)
+    builder_kwargs = parser.builder_argdict
+    builder_kwargs["output_dir"] = "build/arty"
+    builder = Builder(soc, **builder_kwargs)
     if args.build:
         builder.build(**parser.toolchain_argdict)
 
