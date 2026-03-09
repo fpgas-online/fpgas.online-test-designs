@@ -19,6 +19,9 @@ build = [
     "litepcie",
     "litespi",
     "litescope",
+    "pythondata-cpu-vexriscv",
+    "pythondata-software-picolibc",
+    "pythondata-software-compiler-rt",
 ]
 # Host-side test dependencies
 test = [
@@ -42,4 +45,7 @@ packages = ["designs"]
 # Pin migen to git main for Python 3.12+ bytecode tracer compatibility.
 override-dependencies = [
     "migen @ git+https://github.com/m-labs/migen.git",
+    "pythondata-cpu-vexriscv @ git+https://github.com/litex-hub/pythondata-cpu-vexriscv.git",
+    "pythondata-software-picolibc @ git+https://github.com/litex-hub/pythondata-software-picolibc.git",
+    "pythondata-software-compiler_rt @ git+https://github.com/litex-hub/pythondata-software-compiler_rt.git",
 ]
