@@ -28,6 +28,7 @@ NeTV2 PCIe pinout:
 
 import argparse
 import importlib
+import os
 
 # Monkey-patch litex memory Verilog generator to handle write-only ports.
 # The migen git version (needed for Python 3.12) can create memory ports
@@ -59,7 +60,7 @@ from litex_boards.platforms import kosagi_netv2
 
 
 class PCIeEnumerationSoC(SoCCore):
-    def __init__(self, variant="a7-35", toolchain="yosys+nextpnr", **kwargs):
+    def __init__(self, variant="a7-35", toolchain="openxc7", **kwargs):
         platform = kosagi_netv2.Platform(variant=variant, toolchain=toolchain)
 
         sys_clk_freq = 50e6
@@ -144,8 +145,8 @@ def main():
         "--variant", default="a7-35", help="a7-35 or a7-100",
     )
     parser.add_argument(
-        "--toolchain", default="yosys+nextpnr",
-        help="vivado or yosys+nextpnr",
+        "--toolchain", default="openxc7",
+        help="vivado, openxc7, or yosys+nextpnr",
     )
     parser.add_argument(
         "--build", action="store_true", help="Build bitstream",
@@ -154,6 +155,27 @@ def main():
         "--load", action="store_true", help="Load bitstream via OpenOCD",
     )
     args = parser.parse_args()
+
+    # Set openXC7 environment variables if not already set.
+    if args.toolchain == "openxc7":
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(script_dir)
+        # Walk up to find the repo root (contains .venv/toolchains).
+        repo_root = project_root
+        while repo_root != "/":
+            if os.path.isdir(os.path.join(repo_root, ".venv", "toolchains")):
+                break
+            repo_root = os.path.dirname(repo_root)
+        oxc7_root = os.path.join(
+            repo_root, ".venv", "toolchains", "openxc7",
+        )
+        if "CHIPDB" not in os.environ:
+            os.environ["CHIPDB"] = os.path.join(oxc7_root, "chipdb")
+        if "PRJXRAY_DB_DIR" not in os.environ:
+            os.environ["PRJXRAY_DB_DIR"] = os.path.join(
+                oxc7_root, "squashfs-root", "opt",
+                "nextpnr-xilinx", "external", "prjxray-db",
+            )
 
     soc = PCIeEnumerationSoC(variant=args.variant, toolchain=args.toolchain)
 
