@@ -27,6 +27,7 @@ def main():
     parser.set_defaults(
         ident          = "fpgas-online SPI Flash Test SoC -- NeTV2",
         uart_baudrate  = 115200,
+        output_dir     = "designs/spi-flash-id/build/netv2",
     )
     args = parser.parse_args()
 
@@ -47,7 +48,7 @@ def main():
     )
     soc.add_csr("spiflash")
 
-    builder = Builder(soc, output_dir="designs/spi-flash-id/build/netv2", **parser.builder_argdict)
+    builder = Builder(soc, **parser.builder_argdict)
     builder.build(run=args.build)
 
 
