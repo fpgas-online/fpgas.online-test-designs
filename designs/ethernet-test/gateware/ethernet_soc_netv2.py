@@ -46,9 +46,16 @@ def main():
     )
 
     # Newer yosys emits $scopeinfo cells that older nextpnr-xilinx cannot place.
-    # Adding -noscopeinfo to the synth options avoids this incompatibility.
-    if hasattr(soc.platform.toolchain, "_synth_opts"):
-        soc.platform.toolchain._synth_opts += " -noscopeinfo"
+    # Insert a "delete t:$scopeinfo" step between synth and write in the yosys
+    # template to strip them before the JSON netlist is emitted.
+    if hasattr(soc.platform.toolchain, "_yosys_template"):
+        tpl = soc.platform.toolchain._yosys_template
+        patched = []
+        for line in tpl:
+            if line.startswith("write_"):
+                patched.append("delete t:$scopeinfo")
+            patched.append(line)
+        soc.platform.toolchain._yosys_template = patched
 
     builder_kwargs = parser.builder_argdict
     builder_kwargs["output_dir"] = "build/netv2"
