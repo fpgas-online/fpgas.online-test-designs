@@ -246,6 +246,7 @@ def run_test(uart_port, baud, hat_port, arty_port):
     try:
         # Wait for firmware ready
         print("Waiting for FPGA firmware...", end=" ", flush=True)
+        fpga.wait_ready()
         if not fpga.ping():
             print("FAIL - no PONG response")
             return False
