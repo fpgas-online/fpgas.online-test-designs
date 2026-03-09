@@ -99,6 +99,20 @@ def main():
         **parser.soc_argdict,
     )
 
+    # Strip $scopeinfo cells that newer Yosys emits but nextpnr-xilinx
+    # does not understand.
+    soc.platform.toolchain._yosys_template = [
+        "verilog_defaults -push",
+        "verilog_defaults -add -defer",
+        "{read_files}",
+        "verilog_defaults -pop",
+        'attrmap -tocase keep -imap keep="true" keep=1 -imap keep="false" keep=0 -remove keep=0',
+        "{yosys_cmds}",
+        "synth_{target} {synth_opts} -top {build_name}",
+        "delete t:$scopeinfo",
+        "write_{write_fmt} {write_opts} {output_name}.{synth_fmt}",
+    ]
+
     builder_kwargs = parser.builder_argdict
     builder_kwargs["output_dir"] = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build", "netv2")
     builder = Builder(soc, **builder_kwargs)
