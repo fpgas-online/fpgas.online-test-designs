@@ -42,6 +42,14 @@ else ifneq ($(wildcard $(OSS_CAD_DIR)/*/bin),)
   export PATH := $(wildcard $(OSS_CAD_DIR)/*/bin):$(PATH)
 endif
 
+# RISC-V GCC cross-compiler (for LiteX VexRiscv BIOS/firmware)
+RISCV_GCC_DIR := $(VENV_DIR)/toolchains/riscv-gcc
+ifneq ($(wildcard $(RISCV_GCC_DIR)/bin),)
+  export PATH := $(RISCV_GCC_DIR)/bin:$(PATH)
+else ifneq ($(wildcard $(RISCV_GCC_DIR)/*/bin),)
+  export PATH := $(wildcard $(RISCV_GCC_DIR)/*/bin):$(PATH)
+endif
+
 # ---------------------------------------------------------------------------
 # Virtual environment and dependency targets
 # ---------------------------------------------------------------------------

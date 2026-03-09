@@ -4,14 +4,16 @@
 Downloads pre-built binaries for:
   - openXC7 (Yosys + nextpnr-xilinx + Project X-Ray) for Xilinx 7-Series
   - OSS CAD Suite (Yosys + nextpnr-ice40 + nextpnr-ecp5 + icestorm + trellis)
+  - RISC-V GCC (riscv64-unknown-elf-gcc) for LiteX VexRiscv CPU firmware/BIOS
 
-Both toolchains are extracted into .venv/toolchains/ so they live alongside
+All toolchains are extracted into .venv/toolchains/ so they live alongside
 the Python packages managed by uv.
 
 Usage:
     uv run python scripts/setup_toolchains.py
     uv run python scripts/setup_toolchains.py --toolchain openxc7
     uv run python scripts/setup_toolchains.py --toolchain oss-cad-suite
+    uv run python scripts/setup_toolchains.py --toolchain riscv-gcc
     uv run python scripts/setup_toolchains.py --venv-dir .venv
 """
 
@@ -50,6 +52,22 @@ OSS_CAD_SUITE_RELEASES = {
 
 # Fallback: use GitHub API to find the latest OSS CAD Suite release date
 OSS_CAD_SUITE_LATEST_API = "https://api.github.com/repos/YosysHQ/oss-cad-suite-build/releases/latest"
+
+# RISC-V GCC: pre-built cross-compiler for VexRiscv firmware/BIOS
+# LiteX requires riscv64-unknown-elf-gcc (or riscv-none-elf-gcc) to compile
+# the BIOS and any custom C firmware that runs on the soft CPU.
+# Source: https://github.com/sifive/freedom-tools/releases (SiFive)
+# Alternative: https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack/releases
+RISCV_GCC_RELEASES = {
+    ("Linux", "x86_64"): "https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack/releases/download/v14.2.0-3/xpack-riscv-none-elf-gcc-14.2.0-3-linux-x64.tar.gz",
+    ("Linux", "aarch64"): "https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack/releases/download/v14.2.0-3/xpack-riscv-none-elf-gcc-14.2.0-3-linux-arm64.tar.gz",
+    ("Darwin", "x86_64"): "https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack/releases/download/v14.2.0-3/xpack-riscv-none-elf-gcc-14.2.0-3-darwin-x64.tar.gz",
+    ("Darwin", "aarch64"): "https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack/releases/download/v14.2.0-3/xpack-riscv-none-elf-gcc-14.2.0-3-darwin-arm64.tar.gz",
+}
+
+# The xpack RISC-V GCC uses "riscv-none-elf-" prefix. LiteX expects
+# "riscv64-unknown-elf-" or "riscv-none-elf-" — both work since LiteX
+# searches for multiple prefixes via its CrossCompiler class.
 
 
 # ---------------------------------------------------------------------------
@@ -293,6 +311,112 @@ def _verify_oss_cad_suite(install_dir: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# RISC-V GCC: cross-compiler for LiteX VexRiscv BIOS/firmware
+# ---------------------------------------------------------------------------
+
+def install_riscv_gcc(toolchains_dir: Path, cache_dir: Path) -> Path:
+    """Download and extract the RISC-V GCC cross-compiler."""
+    print("\n=== Installing RISC-V GCC cross-compiler ===")
+
+    system, machine = detect_platform()
+    key = (system, machine)
+    if key not in RISCV_GCC_RELEASES:
+        print(f"  ERROR: No RISC-V GCC build available for {system}/{machine}")
+        print(f"  Available platforms: {list(RISCV_GCC_RELEASES.keys())}")
+        raise SystemExit(1)
+
+    url = RISCV_GCC_RELEASES[key]
+    install_dir = toolchains_dir / "riscv-gcc"
+
+    # Check if already installed
+    marker = install_dir / ".installed"
+    if marker.exists():
+        print(f"  Already installed at {install_dir}")
+        print(f"  (delete {marker} to force reinstall)")
+        return install_dir
+
+    # Download
+    tarball_name = url.split("/")[-1]
+    tarball = cache_dir / tarball_name
+    if not tarball.exists():
+        download_file(url, tarball, "RISC-V GCC cross-compiler")
+    else:
+        print(f"  Using cached download: {tarball}")
+
+    # Extract
+    if install_dir.exists():
+        shutil.rmtree(install_dir)
+    extract_tarball(tarball, install_dir)
+
+    # Mark as installed
+    marker.write_text(url + "\n")
+
+    # Verify and create compatibility symlinks
+    _verify_riscv_gcc(install_dir)
+
+    return install_dir
+
+
+def _verify_riscv_gcc(install_dir: Path) -> None:
+    """Check that RISC-V GCC binaries are present and create symlinks if needed."""
+    # Find the bin directory (xpack extracts with a version-named subdirectory)
+    bin_candidates = list(install_dir.rglob("bin/riscv-none-elf-gcc"))
+    if not bin_candidates:
+        bin_candidates = list(install_dir.rglob("bin/riscv64-unknown-elf-gcc"))
+
+    if bin_candidates:
+        bin_dir = bin_candidates[0].parent
+        print(f"  Binaries found in: {bin_dir}")
+
+        # Check for key tools
+        for tool_suffix in ["gcc", "ld", "objcopy", "objdump", "ar", "as"]:
+            found = False
+            for prefix in ["riscv-none-elf-", "riscv64-unknown-elf-"]:
+                tool_path = bin_dir / f"{prefix}{tool_suffix}"
+                if tool_path.exists():
+                    print(f"    ok {prefix}{tool_suffix}")
+                    found = True
+                    break
+            if not found:
+                print(f"    MISSING {tool_suffix}")
+
+        # Create riscv64-unknown-elf-* symlinks if only riscv-none-elf-* exists.
+        # LiteX searches for both prefixes, but some older LiteX versions only
+        # look for riscv64-unknown-elf-*. Symlinks ensure compatibility.
+        _create_riscv_symlinks(bin_dir)
+
+    else:
+        print("  WARNING: Could not find RISC-V GCC binary in extracted files")
+        print("  Contents of install dir:")
+        for p in sorted(install_dir.iterdir()):
+            print(f"    {p.name}")
+
+
+def _create_riscv_symlinks(bin_dir: Path) -> None:
+    """Create riscv64-unknown-elf-* symlinks pointing to riscv-none-elf-* if needed."""
+    created = 0
+    for src in bin_dir.glob("riscv-none-elf-*"):
+        # Map riscv-none-elf-gcc -> riscv64-unknown-elf-gcc
+        dest_name = src.name.replace("riscv-none-elf-", "riscv64-unknown-elf-")
+        dest = bin_dir / dest_name
+        if not dest.exists():
+            dest.symlink_to(src.name)
+            created += 1
+
+    if created > 0:
+        print(f"  Created {created} riscv64-unknown-elf-* compatibility symlinks")
+
+
+def check_riscv_gcc_available() -> bool:
+    """Check if a RISC-V GCC cross-compiler is already on PATH."""
+    for prefix in ["riscv64-unknown-elf-gcc", "riscv-none-elf-gcc",
+                    "riscv64-elf-gcc", "riscv32-unknown-elf-gcc"]:
+        if shutil.which(prefix):
+            return True
+    return False
+
+
+# ---------------------------------------------------------------------------
 # Activation script generation
 # ---------------------------------------------------------------------------
 
@@ -344,6 +468,57 @@ def write_activate_script(venv_dir: Path, toolchains_dir: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Final verification
+# ---------------------------------------------------------------------------
+
+def _verify_all_tools(toolchains_dir: Path) -> None:
+    """Verify all required tools are accessible after installation."""
+    # Build a PATH that includes all toolchain bin directories
+    extra_paths = []
+    for toolchain in sorted(toolchains_dir.iterdir()):
+        if not toolchain.is_dir():
+            continue
+        for candidate in [toolchain / "bin", *toolchain.glob("*/bin")]:
+            if candidate.is_dir():
+                extra_paths.append(str(candidate))
+                break
+
+    combined_path = os.pathsep.join(extra_paths + [os.environ.get("PATH", "")])
+
+    required_tools = [
+        # RISC-V GCC (needed for LiteX BIOS and firmware compilation)
+        ("riscv64-unknown-elf-gcc", "RISC-V GCC", True),
+        ("riscv64-unknown-elf-ld", "RISC-V linker", True),
+        ("riscv64-unknown-elf-objcopy", "RISC-V objcopy", True),
+        # FPGA synthesis (at least one yosys should be present)
+        ("yosys", "Yosys synthesis", True),
+        # Xilinx 7-Series (optional — only needed for Arty/NeTV2)
+        ("nextpnr-xilinx", "nextpnr-xilinx (openXC7)", False),
+        # iCE40 (optional — only needed for Fomu/TT FPGA)
+        ("nextpnr-ice40", "nextpnr-ice40", False),
+        # ECP5 (optional — only needed for ULX3S/ButterStick)
+        ("nextpnr-ecp5", "nextpnr-ecp5", False),
+        # Programming tools
+        ("openFPGALoader", "openFPGALoader", False),
+    ]
+
+    all_ok = True
+    for tool_name, description, required in required_tools:
+        found = shutil.which(tool_name, path=combined_path)
+        if found:
+            print(f"  ok  {description}: {found}")
+        elif required:
+            print(f"  FAIL {description}: {tool_name} not found")
+            all_ok = False
+        else:
+            print(f"  --  {description}: {tool_name} not found (optional)")
+
+    if not all_ok:
+        print("\n  WARNING: Some required tools are missing.")
+        print("  LiteX builds may fail without a RISC-V cross-compiler.")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -359,7 +534,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--toolchain",
-        choices=["openxc7", "oss-cad-suite", "all"],
+        choices=["openxc7", "oss-cad-suite", "riscv-gcc", "all"],
         default="all",
         help="Which toolchain to install (default: all)",
     )
@@ -388,6 +563,9 @@ def main() -> int:
 
     cache_dir.mkdir(parents=True, exist_ok=True)
 
+    if args.toolchain in ("riscv-gcc", "all"):
+        install_riscv_gcc(toolchains_dir, cache_dir)
+
     if args.toolchain in ("openxc7", "all"):
         install_openxc7(toolchains_dir, cache_dir)
 
@@ -395,6 +573,10 @@ def main() -> int:
         install_oss_cad_suite(toolchains_dir, cache_dir)
 
     write_activate_script(venv_dir, toolchains_dir)
+
+    # Final verification: check RISC-V GCC is reachable
+    print("\n=== Verification ===")
+    _verify_all_tools(toolchains_dir)
 
     print("\n=== Setup complete ===")
     print(f"Activate with:  source {venv_dir / 'activate-all.sh'}")
