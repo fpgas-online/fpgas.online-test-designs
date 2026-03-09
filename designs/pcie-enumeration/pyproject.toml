@@ -10,6 +10,8 @@ dependencies = [
     "litepcie==2023.12",
     "migen @ git+https://github.com/m-labs/migen.git",
     "pythondata-cpu-vexriscv @ git+https://github.com/litex-hub/pythondata-cpu-vexriscv.git",
+    "pythondata-software-picolibc @ git+https://github.com/litex-hub/pythondata-software-picolibc.git",
+    "pythondata-software-compiler_rt @ git+https://github.com/litex-hub/pythondata-software-compiler_rt.git",
 ]
 
 [project.optional-dependencies]
