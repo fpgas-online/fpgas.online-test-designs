@@ -45,11 +45,13 @@ OPENXC7_RELEASES = {
 
 # OSS CAD Suite: nightly builds
 # Source: https://github.com/YosysHQ/oss-cad-suite-build/releases
+# URL pattern uses {tag} for the release tag (e.g. "2026-03-09") and
+# {date_compact} for the filename date (e.g. "20260309", no hyphens).
 OSS_CAD_SUITE_RELEASES = {
-    ("Linux", "x86_64"): "https://github.com/YosysHQ/oss-cad-suite-build/releases/download/bucket-{date}/oss-cad-suite-linux-x64-{date}.tgz",
-    ("Linux", "aarch64"): "https://github.com/YosysHQ/oss-cad-suite-build/releases/download/bucket-{date}/oss-cad-suite-linux-arm64-{date}.tgz",
-    ("Darwin", "x86_64"): "https://github.com/YosysHQ/oss-cad-suite-build/releases/download/bucket-{date}/oss-cad-suite-darwin-x64-{date}.tgz",
-    ("Darwin", "arm64"): "https://github.com/YosysHQ/oss-cad-suite-build/releases/download/bucket-{date}/oss-cad-suite-darwin-arm64-{date}.tgz",
+    ("Linux", "x86_64"): "https://github.com/YosysHQ/oss-cad-suite-build/releases/download/{tag}/oss-cad-suite-linux-x64-{date_compact}.tgz",
+    ("Linux", "aarch64"): "https://github.com/YosysHQ/oss-cad-suite-build/releases/download/{tag}/oss-cad-suite-linux-arm64-{date_compact}.tgz",
+    ("Darwin", "x86_64"): "https://github.com/YosysHQ/oss-cad-suite-build/releases/download/{tag}/oss-cad-suite-darwin-x64-{date_compact}.tgz",
+    ("Darwin", "arm64"): "https://github.com/YosysHQ/oss-cad-suite-build/releases/download/{tag}/oss-cad-suite-darwin-arm64-{date_compact}.tgz",
 }
 
 # Fallback: use GitHub API to find the latest OSS CAD Suite release date
@@ -154,10 +156,12 @@ def extract_zip(zippath: Path, dest_dir: Path) -> Path:
 # OSS CAD Suite: resolve latest release date
 # ---------------------------------------------------------------------------
 
-def get_oss_cad_suite_latest_date() -> str:
+def get_oss_cad_suite_latest_tag() -> tuple[str, str]:
     """Query GitHub API for the latest OSS CAD Suite release tag.
 
-    Returns the date string (e.g., '2025-03-01') from the tag 'bucket-YYYY-MM-DD'.
+    Returns (tag, date_compact) where tag is the release tag (e.g. "2026-03-09"
+    or "bucket-2025-03-01") and date_compact is the date without hyphens
+    (e.g. "20260309") used in filenames.
     """
     import json
 
@@ -169,14 +173,16 @@ def get_oss_cad_suite_latest_date() -> str:
     with urllib.request.urlopen(req) as response:
         data = json.loads(response.read())
 
-    tag = data["tag_name"]  # e.g. "bucket-2025-03-01"
-    if not tag.startswith("bucket-"):
-        print(f"    WARNING: Unexpected tag format: {tag}")
-        return tag
+    tag = data["tag_name"]  # e.g. "2026-03-09" or "bucket-2025-03-01"
+    print(f"    Latest release tag: {tag}")
 
-    date = tag.removeprefix("bucket-")
-    print(f"    Latest release: {date}")
-    return date
+    # Extract the date portion (strip "bucket-" prefix if present)
+    date_str = tag.removeprefix("bucket-")
+    # Remove hyphens for the compact filename format
+    date_compact = date_str.replace("-", "")
+
+    print(f"    Date compact: {date_compact}")
+    return tag, date_compact
 
 
 # ---------------------------------------------------------------------------
@@ -334,8 +340,8 @@ def install_oss_cad_suite(toolchains_dir: Path, cache_dir: Path) -> Path:
         return install_dir
 
     # Get latest release date
-    date = get_oss_cad_suite_latest_date()
-    url = OSS_CAD_SUITE_RELEASES[key].format(date=date)
+    tag, date_compact = get_oss_cad_suite_latest_tag()
+    url = OSS_CAD_SUITE_RELEASES[key].format(tag=tag, date_compact=date_compact)
 
     # Download
     tarball_name = url.split("/")[-1]
