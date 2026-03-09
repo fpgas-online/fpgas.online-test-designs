@@ -32,10 +32,10 @@ from litedram.phy import s7ddrphy
 class _CRG(LiteXModule):
     def __init__(self, platform, sys_clk_freq, with_rst=True):
         self.rst          = Signal()
-        self.cd_sys       = ClockDomain()
-        self.cd_sys4x     = ClockDomain()
-        self.cd_sys4x_dqs = ClockDomain()
-        self.cd_idelay    = ClockDomain()
+        self.cd_sys       = ClockDomain("sys")
+        self.cd_sys4x     = ClockDomain("sys4x")
+        self.cd_sys4x_dqs = ClockDomain("sys4x_dqs")
+        self.cd_idelay    = ClockDomain("idelay")
 
         # Clk/Rst.
         clk100 = platform.request("clk100")
