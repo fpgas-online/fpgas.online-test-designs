@@ -34,11 +34,13 @@ from pathlib import Path
 # Toolchain release URLs and metadata
 # ---------------------------------------------------------------------------
 
-# openXC7: nightly builds from the toolchain-nix repo
-# Source: https://github.com/openXC7/toolchain-nix/releases
+# openXC7: snap packages containing nextpnr-xilinx and Xilinx 7-Series tools.
+# These are squashfs images that we extract with unsquashfs (no snap daemon needed).
+# Source: https://github.com/openXC7/openXC7-snap/releases
+# Note: Only x86_64 snaps are published; aarch64 must build from source.
+OPENXC7_SNAP_VERSION = "0.8.2"
 OPENXC7_RELEASES = {
-    ("Linux", "x86_64"): "https://github.com/openXC7/toolchain-nix/releases/latest/download/openXC7-toolchain-linux-x64.tar.gz",
-    ("Linux", "aarch64"): "https://github.com/openXC7/toolchain-nix/releases/latest/download/openXC7-toolchain-linux-arm64.tar.gz",
+    ("Linux", "x86_64"): f"https://github.com/openXC7/openXC7-snap/releases/download/{OPENXC7_SNAP_VERSION}/openxc7_{OPENXC7_SNAP_VERSION}_amd64.snap",
 }
 
 # OSS CAD Suite: nightly builds
@@ -135,7 +137,7 @@ def extract_tarball(tarball: Path, dest_dir: Path) -> Path:
     print(f"  Extracting {tarball.name} to {dest_dir}...")
     dest_dir.mkdir(parents=True, exist_ok=True)
     with tarfile.open(tarball, "r:gz") as tf:
-        tf.extractall(dest_dir)
+        tf.extractall(dest_dir, filter="data")
     return dest_dir
 
 
@@ -182,14 +184,23 @@ def get_oss_cad_suite_latest_date() -> str:
 # ---------------------------------------------------------------------------
 
 def install_openxc7(toolchains_dir: Path, cache_dir: Path) -> Path:
-    """Download and extract the openXC7 toolchain."""
+    """Download and extract the openXC7 toolchain from a snap package.
+
+    The openXC7 project distributes nextpnr-xilinx and related tools as snap
+    packages (squashfs images). We extract them with unsquashfs so no snap
+    daemon is needed.
+    """
     print("\n=== Installing openXC7 toolchain ===")
 
     system, machine = detect_platform()
     key = (system, machine)
     if key not in OPENXC7_RELEASES:
         print(f"  ERROR: No openXC7 build available for {system}/{machine}")
-        print(f"  Available platforms: {list(OPENXC7_RELEASES.keys())}")
+        if system == "Linux" and machine == "aarch64":
+            print("  openXC7 snaps are only published for x86_64.")
+            print("  For aarch64, build from source: https://github.com/openXC7")
+        else:
+            print(f"  Available platforms: {list(OPENXC7_RELEASES.keys())}")
         raise SystemExit(1)
 
     url = OPENXC7_RELEASES[key]
@@ -202,21 +213,30 @@ def install_openxc7(toolchains_dir: Path, cache_dir: Path) -> Path:
         print(f"  (delete {marker} to force reinstall)")
         return install_dir
 
-    # Download
-    tarball_name = url.split("/")[-1]
-    tarball = cache_dir / tarball_name
-    if not tarball.exists():
-        download_file(url, tarball, "openXC7 toolchain")
-    else:
-        print(f"  Using cached download: {tarball}")
+    # Verify unsquashfs is available (needed to extract snap packages)
+    if not shutil.which("unsquashfs"):
+        print("  ERROR: 'unsquashfs' not found on PATH.")
+        print("  Install squashfs-tools: sudo apt install squashfs-tools")
+        raise SystemExit(1)
 
-    # Extract
+    # Download
+    snap_name = url.split("/")[-1]
+    snap_file = cache_dir / snap_name
+    if not snap_file.exists():
+        download_file(url, snap_file, "openXC7 snap package")
+    else:
+        print(f"  Using cached download: {snap_file}")
+
+    # Extract snap (squashfs image) with unsquashfs
     if install_dir.exists():
         shutil.rmtree(install_dir)
-    extract_tarball(tarball, install_dir)
+    _extract_snap(snap_file, install_dir)
 
     # Mark as installed
     marker.write_text(url + "\n")
+
+    # Create a flat bin/ directory with symlinks to the extracted binaries
+    _create_openxc7_bin_links(install_dir)
 
     # Verify key binaries exist
     _verify_openxc7(install_dir)
@@ -224,21 +244,70 @@ def install_openxc7(toolchains_dir: Path, cache_dir: Path) -> Path:
     return install_dir
 
 
+def _extract_snap(snap_file: Path, dest_dir: Path) -> None:
+    """Extract a snap package (squashfs image) to a destination directory."""
+    print(f"  Extracting {snap_file.name} with unsquashfs...")
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(
+        ["unsquashfs", "-f", "-d", str(dest_dir / "squashfs-root"), str(snap_file)],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(f"  ERROR: unsquashfs failed (exit code {result.returncode})")
+        print(f"  stderr: {result.stderr}")
+        raise SystemExit(1)
+    print(f"  Extracted to {dest_dir / 'squashfs-root'}")
+
+
+def _create_openxc7_bin_links(install_dir: Path) -> None:
+    """Create a top-level bin/ directory with symlinks to openXC7 tools.
+
+    The snap extracts into squashfs-root/usr/bin/ (or similar). We create
+    install_dir/bin/ with symlinks so the PATH setup in common.mk works.
+    """
+    bin_dir = install_dir / "bin"
+    bin_dir.mkdir(exist_ok=True)
+
+    # Tools we expect from the openXC7 snap
+    openxc7_tools = [
+        "nextpnr-xilinx", "fasm2frames", "xc7frames2bit", "bbasm", "bit2fasm",
+    ]
+
+    # Search for binaries in the extracted squashfs
+    squashfs = install_dir / "squashfs-root"
+    found = 0
+    for tool in openxc7_tools:
+        candidates = list(squashfs.rglob(tool))
+        # Filter to actual executables (not directories or .d files)
+        candidates = [c for c in candidates if c.is_file() and c.name == tool]
+        if candidates:
+            src = candidates[0]
+            dest = bin_dir / tool
+            if not dest.exists():
+                dest.symlink_to(src.resolve())
+                found += 1
+                print(f"    Linked {tool} -> {src}")
+        else:
+            print(f"    WARNING: {tool} not found in snap")
+
+    if found > 0:
+        print(f"  Created {found} symlinks in {bin_dir}")
+
+
 def _verify_openxc7(install_dir: Path) -> None:
     """Check that key openXC7 binaries are present."""
-    # The tarball may extract with a top-level directory; find the bin dir
-    bin_candidates = list(install_dir.rglob("bin/yosys"))
-    if bin_candidates:
-        bin_dir = bin_candidates[0].parent
-        print(f"  Binaries found in: {bin_dir}")
-        for tool in ["yosys", "nextpnr-xilinx"]:
+    bin_dir = install_dir / "bin"
+    if bin_dir.is_dir():
+        print(f"  Binaries in: {bin_dir}")
+        for tool in ["nextpnr-xilinx", "fasm2frames", "xc7frames2bit"]:
             tool_path = bin_dir / tool
             if tool_path.exists():
-                print(f"    ✓ {tool}")
+                print(f"    ok {tool}")
             else:
-                print(f"    ✗ {tool} (not found)")
+                print(f"    MISSING {tool}")
     else:
-        print("  WARNING: Could not find yosys binary in extracted files")
+        print("  WARNING: bin/ directory not created")
         print("  Contents of install dir:")
         for p in sorted(install_dir.iterdir()):
             print(f"    {p.name}")
