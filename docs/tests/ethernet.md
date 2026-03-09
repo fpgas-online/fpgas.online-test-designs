@@ -95,7 +95,7 @@ This step tests sustained data transfer and catches intermittent PHY/MAC issues.
 | MAC address prefix | `0x10e2d5xxxxxx` (LiteX default range) |
 | Subnet mask | `255.255.255.0` |
 
-The MAC address is configurable at build time via the `--eth-ip` and `--remote-ip` LiteX build flags.
+The IP addresses are configurable at build time via the `--eth-ip` and `--remote-ip` LiteX build flags. The MAC address uses a LiteX default prefix (`10:e2:d5:xx:xx:xx`).
 
 Source: [LiteX BIOS networking](https://github.com/enjoy-digital/litex/blob/master/litex/soc/software/bios/net.c)
 

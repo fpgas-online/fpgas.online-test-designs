@@ -14,7 +14,7 @@ responds to ARP/ICMP automatically.  No custom firmware is needed.
 Default network config (LiteX BIOS defaults):
   - FPGA IP:  192.168.1.50
   - Host IP:  192.168.1.100 (TFTP server)
-  - MAC:      10:e2:d5:00:00:00 (default, configurable via --eth-ip)
+  - MAC:      10:e2:d5:00:00:00 (LiteX default)
 
 Note on open-source toolchain (openxc7 / yosys+nextpnr):
   The upstream digilent_arty target notes that DDR3 should be disabled and
