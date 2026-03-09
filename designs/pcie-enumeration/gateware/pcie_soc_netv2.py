@@ -169,12 +169,17 @@ def main():
         oxc7_root = os.path.join(
             repo_root, ".venv", "toolchains", "openxc7",
         )
+        oxc7_snap = os.path.join(oxc7_root, "squashfs-root")
         if "CHIPDB" not in os.environ:
             os.environ["CHIPDB"] = os.path.join(oxc7_root, "chipdb")
         if "PRJXRAY_DB_DIR" not in os.environ:
             os.environ["PRJXRAY_DB_DIR"] = os.path.join(
-                oxc7_root, "squashfs-root", "opt",
+                oxc7_snap, "opt",
                 "nextpnr-xilinx", "external", "prjxray-db",
+            )
+        if "NEXTPNR_XILINX_PYTHON_DIR" not in os.environ:
+            os.environ["NEXTPNR_XILINX_PYTHON_DIR"] = os.path.join(
+                oxc7_snap, "opt", "nextpnr-xilinx", "python",
             )
 
     soc = PCIeEnumerationSoC(variant=args.variant, toolchain=args.toolchain)
