@@ -83,7 +83,6 @@ class PCIeEnumerationSoC(SoCCore):
             data_width=64,
             bar0_size=0x20000,  # 128 KB BAR0
         )
-        self.add_module(name="pcie_phy", module=self.pcie_phy)
 
         # PCIe endpoint
         self.pcie_endpoint = LitePCIeEndpoint(self.pcie_phy, max_pending_requests=4)
@@ -96,7 +95,6 @@ class PCIeEnumerationSoC(SoCCore):
 
         # PCIe MSI (Message Signaled Interrupts)
         self.pcie_msi = LitePCIeMSI()
-        self.add_module(name="pcie_msi", module=self.pcie_msi)
 
         # Connect MSI to PHY
         self.comb += self.pcie_msi.source.connect(self.pcie_phy.msi)
