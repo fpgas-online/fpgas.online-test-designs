@@ -81,15 +81,18 @@ def main():
     )
 
     # Strip $scopeinfo cells that newer Yosys emits but nextpnr-xilinx does not support.
-    platform = soc.platform
-    if hasattr(platform.toolchain, "_yosys"):
-        yosys = platform.toolchain._yosys
-        patched = []
-        for line in yosys._template:
-            patched.append(line)
-            if line.startswith("synth_"):
-                patched.append("delete t:$scopeinfo")
-        yosys._template = patched
+    # Set a custom Yosys template that adds "delete t:$scopeinfo" after synthesis.
+    soc.platform.toolchain._yosys_template = [
+        "verilog_defaults -push",
+        "verilog_defaults -add -defer",
+        "{read_files}",
+        "verilog_defaults -pop",
+        'attrmap -tocase keep -imap keep="true" keep=1 -imap keep="false" keep=0 -remove keep=0',
+        "{yosys_cmds}",
+        "synth_{target} {synth_opts} -top {build_name}",
+        "delete t:$scopeinfo",
+        "write_{write_fmt} {write_opts} {output_name}.{synth_fmt}",
+    ]
 
     # Resolve output_dir relative to the design directory (two levels up from this script).
     design_dir = Path(os.path.realpath(__file__)).parent.parent
