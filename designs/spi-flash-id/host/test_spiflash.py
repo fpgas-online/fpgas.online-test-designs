@@ -54,7 +54,8 @@ MANUFACTURER_NAMES = {
 # Test logic
 # --------------------------------------------------------------------------- #
 
-def run_firmware_mode(ser: serial.Serial, board: str) -> tuple[bool, list[str]]:
+def run_firmware_mode(ser: serial.Serial, board: str,
+                      expected_ids: dict[str, tuple[int, int, int] | None] | None = None) -> tuple[bool, list[str]]:
     """Parse output from custom JEDEC ID firmware.
 
     Looks for lines:
@@ -95,11 +96,17 @@ def run_firmware_mode(ser: serial.Serial, board: str) -> tuple[bool, list[str]]:
 
     mfr, dtype, cap = jedec_id
     mfr_name = MANUFACTURER_NAMES.get(mfr, "Unknown")
-    cap_mb = (2 ** cap) // (1024 * 1024) if cap >= 20 else (2 ** cap) // 1024 if cap >= 10 else 2 ** cap
+    cap_bytes = 2 ** cap if cap else 0
+    if cap_bytes >= 1024 * 1024:
+        cap_str = f"{cap_bytes // (1024 * 1024)} MB"
+    elif cap_bytes >= 1024:
+        cap_str = f"{cap_bytes // 1024} KB"
+    else:
+        cap_str = f"{cap_bytes} B"
     print(f"JEDEC ID: 0x{mfr:02X} 0x{dtype:02X} 0x{cap:02X}")
     print(f"  Manufacturer: {mfr_name} (0x{mfr:02X})")
     print(f"  Device type:  0x{dtype:02X}")
-    print(f"  Capacity:     0x{cap:02X}")
+    print(f"  Capacity:     0x{cap:02X} ({cap_str})")
 
     results: list[bool] = []
 
@@ -115,7 +122,8 @@ def run_firmware_mode(ser: serial.Serial, board: str) -> tuple[bool, list[str]]:
         results.append(False)
 
     # Optionally compare against expected JEDEC ID.
-    expected = EXPECTED_JEDEC_IDS.get(board)
+    ids = expected_ids if expected_ids is not None else EXPECTED_JEDEC_IDS
+    expected = ids.get(board)
     if expected is not None:
         if jedec_id == expected:
             print(f"PASS: JEDEC ID matches expected value for {board}")
@@ -196,13 +204,15 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    # Override expected JEDEC ID if provided on command line.
+    # Build a local copy of expected IDs so we don't mutate the module constant.
+    expected_ids = dict(EXPECTED_JEDEC_IDS)
+
     if args.expected_jedec:
         hex_str = args.expected_jedec.replace("0x", "").replace(" ", "")
         if len(hex_str) != 6:
             print(f"ERROR: --expected-jedec must be 6 hex digits, got '{args.expected_jedec}'")
             return 2
-        EXPECTED_JEDEC_IDS[args.board] = (
+        expected_ids[args.board] = (
             int(hex_str[0:2], 16),
             int(hex_str[2:4], 16),
             int(hex_str[4:6], 16),
@@ -213,14 +223,11 @@ def main() -> int:
     print(f"Mode: {'BIOS' if args.bios else 'Custom firmware'}")
     print()
 
-    ser = serial.Serial(args.port, args.baud, timeout=2)
-
-    if args.bios:
-        passed, boot_lines = run_bios_mode(ser, args.board)
-    else:
-        passed, boot_lines = run_firmware_mode(ser, args.board)
-
-    ser.close()
+    with serial.Serial(args.port, args.baud, timeout=2) as ser:
+        if args.bios:
+            passed, boot_lines = run_bios_mode(ser, args.board)
+        else:
+            passed, boot_lines = run_firmware_mode(ser, args.board, expected_ids)
 
     if not passed:
         print("\nFull output:")
