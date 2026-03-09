@@ -14,21 +14,18 @@ Build command:
 The bitstream is written to: designs/spi-flash-id/build/arty/gateware/arty_spiflash_test.bit
 """
 
-from litex.soc.integration.soc_core import SoCCore, soc_core_args, soc_core_argdict
-from litex.soc.integration.builder import Builder, builder_args, builder_argdict
+from litex.soc.integration.soc_core import SoCCore
+from litex.soc.integration.builder import Builder
 
 from litex_boards.platforms.digilent_arty import Platform
 
 
 def main():
-    from litex.soc.integration.soc import LiteXSoCArgumentParser
-    parser = LiteXSoCArgumentParser(description="SPI Flash ID Test SoC for Arty A7")
-    target_group = parser.add_argument_group(title="Target options")
+    from litex.build.parser import LiteXArgumentParser
+    parser = LiteXArgumentParser(platform=Platform, description="SPI Flash ID Test SoC for Arty A7")
+    target_group = parser.target_group
     target_group.add_argument("--variant",       default="a7-35",     help="Board variant (a7-35 or a7-100).")
-    target_group.add_argument("--toolchain",     default="yosys+nextpnr", help="FPGA toolchain.")
     target_group.add_argument("--sys-clk-freq",  default=100e6, type=float, help="System clock frequency.")
-    builder_args(parser)
-    soc_core_args(parser)
     args = parser.parse_args()
 
     platform = Platform(variant=args.variant, toolchain=args.toolchain)
@@ -37,10 +34,10 @@ def main():
     soc = SoCCore(
         platform       = platform,
         sys_clk_freq   = sys_clk_freq,
-        ident          = "fpgas-online SPI Flash Test SoC — Arty A7",
+        ident          = "fpgas-online SPI Flash Test SoC -- Arty A7",
         ident_version  = True,
         uart_baudrate  = 115200,
-        **soc_core_argdict(args),
+        **parser.soc_argdict,
     )
 
     # Add SPI Flash with bitbang access for JEDEC ID reading -------------------
@@ -51,7 +48,7 @@ def main():
     )
     soc.add_csr("spiflash")
 
-    builder = Builder(soc, output_dir="designs/spi-flash-id/build/arty", **builder_argdict(args))
+    builder = Builder(soc, output_dir="designs/spi-flash-id/build/arty", **parser.builder_argdict)
     builder.build(run=args.build)
 
 
