@@ -53,7 +53,7 @@ class _CRG(LiteXModule):
 # SoC --------------------------------------------------------------------------------------------------
 
 class PmodLoopbackSoC(SoCCore):
-    def __init__(self, variant="a7-35", toolchain="yosys+nextpnr",
+    def __init__(self, variant="a7-35", toolchain="openxc7",
                  sys_clk_freq=int(100e6), **kwargs):
         platform = digilent_arty.Platform(variant=variant, toolchain=toolchain)
 
@@ -83,14 +83,39 @@ class PmodLoopbackSoC(SoCCore):
             setattr(self, port_name, GPIOTristate(pads))
 
 
+def _setup_openxc7_env():
+    """Set environment variables for the openXC7 toolchain if not already set."""
+    # Locate the repo root's toolchain directory.
+    repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    openxc7_dir = os.path.join(repo_root, ".venv", "toolchains", "openxc7")
+
+    if "CHIPDB" not in os.environ:
+        chipdb_dir = os.path.join(openxc7_dir, "chipdb")
+        os.makedirs(chipdb_dir, exist_ok=True)
+        os.environ["CHIPDB"] = chipdb_dir
+
+    if "NEXTPNR_XILINX_PYTHON_DIR" not in os.environ:
+        python_dir = os.path.join(openxc7_dir, "squashfs-root", "opt", "nextpnr-xilinx", "python")
+        if os.path.isdir(python_dir):
+            os.environ["NEXTPNR_XILINX_PYTHON_DIR"] = python_dir
+
+    if "PRJXRAY_DB_DIR" not in os.environ:
+        db_dir = os.path.join(openxc7_dir, "squashfs-root", "opt", "nextpnr-xilinx", "external", "prjxray-db")
+        if os.path.isdir(db_dir):
+            os.environ["PRJXRAY_DB_DIR"] = db_dir
+
+
 def main():
     parser = argparse.ArgumentParser(description="PMOD Loopback SoC for Arty A7")
     parser.add_argument("--variant",    default="a7-35",          help="Arty variant: a7-35 or a7-100")
-    parser.add_argument("--toolchain",  default="yosys+nextpnr",  help="Toolchain: vivado or yosys+nextpnr")
+    parser.add_argument("--toolchain",  default="openxc7",        help="Toolchain: vivado, yosys+nextpnr, or openxc7")
     parser.add_argument("--build",      action="store_true",      help="Build the bitstream")
     parser.add_argument("--load",       action="store_true",      help="Load bitstream to FPGA")
     parser.add_argument("--no-compile-gateware", action="store_true")
     args = parser.parse_args()
+
+    if args.toolchain == "openxc7":
+        _setup_openxc7_env()
 
     soc = PmodLoopbackSoC(variant=args.variant, toolchain=args.toolchain)
 
