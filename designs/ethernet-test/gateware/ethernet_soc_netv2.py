@@ -38,12 +38,23 @@ def main():
     soc_kwargs.pop("ident_version", None)
     soc_kwargs["uart_baudrate"] = 115200
 
+    # The upstream NeTV2 BaseSoC doesn't pass toolchain to Platform, so we
+    # monkey-patch the Platform default to match the requested toolchain.
+    _orig_init = kosagi_netv2.Platform.__init__
+    _toolchain = args.toolchain
+    def _patched_platform_init(self, variant="a7-35", toolchain="vivado"):
+        _orig_init(self, variant=variant, toolchain=_toolchain)
+    kosagi_netv2.Platform.__init__ = _patched_platform_init
+
     soc = BaseSoC(
         variant       = args.variant,
         sys_clk_freq  = int(args.sys_clk_freq),
         with_ethernet = True,
         **soc_kwargs,
     )
+
+    # Restore original init
+    kosagi_netv2.Platform.__init__ = _orig_init
 
     # Newer yosys emits $scopeinfo cells that older nextpnr-xilinx cannot place.
     # Provide a custom yosys template with a "delete t:$scopeinfo" step between
