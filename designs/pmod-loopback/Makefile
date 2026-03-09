@@ -1,6 +1,6 @@
 BOARD       ?= arty
 VARIANT     ?= a7-35
-TOOLCHAIN   ?= yosys+nextpnr
+TOOLCHAIN   ?= openxc7
 UART_PORT   ?= /dev/ttyUSB1
 BAUD_RATE   ?= 115200
 BUILD_DIR   ?= build/digilent_arty
