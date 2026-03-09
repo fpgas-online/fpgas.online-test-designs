@@ -27,13 +27,15 @@ def main():
 
     platform = digilent_arty.Platform(variant=args.variant, toolchain=args.toolchain)
 
+    soc_kwargs = parser.soc_argdict
+    soc_kwargs["ident"]         = "fpgas-online UART Test SoC -- Arty A7"
+    soc_kwargs["ident_version"] = True
+    soc_kwargs["uart_baudrate"] = 115200
+
     soc = SoCCore(
-        platform       = platform,
-        sys_clk_freq   = int(args.sys_clk_freq),
-        ident          = "fpgas-online UART Test SoC — Arty A7",
-        ident_version  = True,
-        uart_baudrate  = 115200,
-        **parser.soc_argdict,
+        platform     = platform,
+        sys_clk_freq = int(args.sys_clk_freq),
+        **soc_kwargs,
     )
 
     builder = Builder(soc, output_dir="designs/uart/build/arty", **parser.builder_argdict)
