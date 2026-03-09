@@ -51,6 +51,27 @@ class BaseSoC(SoCCore):
     def __init__(self, variant="a7-35", toolchain="vivado", sys_clk_freq=100e6, **kwargs):
         platform = kosagi_netv2.Platform(variant=variant, toolchain=toolchain)
 
+        # The NeTV2 platform uses dashed device names (e.g. "xc7a35t-fgg484-2")
+        # for Vivado compatibility. The openxc7 toolchain's prjxray database
+        # expects no dash between device and package (e.g. "xc7a35tfgg484-2").
+        # Remove the dash so fasm2frames can find the part, and create a chipdb
+        # symlink so nextpnr can find its database file under the new name.
+        if toolchain == "openxc7":
+            import re
+            old_device = platform.device
+            new_device = re.sub(r"^(xc7[aksz]\d+t)-(.*)", r"\1\2", old_device)
+            if new_device != old_device:
+                platform.device = new_device
+                # Ensure chipdb file can be found under the un-dashed dbpart name.
+                chipdb_dir = os.environ.get("CHIPDB", "")
+                if chipdb_dir:
+                    old_dbpart = re.sub(r"-\d+$", "", old_device)
+                    new_dbpart = re.sub(r"-\d+$", "", new_device)
+                    old_chipdb = os.path.join(chipdb_dir, old_dbpart + ".bin")
+                    new_chipdb = os.path.join(chipdb_dir, new_dbpart + ".bin")
+                    if os.path.exists(old_chipdb) and not os.path.exists(new_chipdb):
+                        os.symlink(old_chipdb, new_chipdb)
+
         # CRG ----------------------------------------------------------------------------------
         self.crg = _CRG(platform, sys_clk_freq)
 
