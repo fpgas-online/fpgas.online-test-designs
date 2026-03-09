@@ -12,11 +12,12 @@ The firmware sets direction via oe, then reads/writes via in/out registers.
 
 import argparse
 import os
+import pathlib
 import sys
 
-# Ensure the gateware directory is importable.
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import migen_compat  # noqa: F401, E402  -- patch migen tracer for Python 3.12+
+# Ensure the repo root is importable so shared modules can be loaded.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
+import designs._shared.migen_compat  # noqa: F401, E402  -- patch migen tracer for Python 3.11+
 
 from migen import *
 
@@ -56,16 +57,6 @@ class PmodLoopbackSoC(SoCCore):
     def __init__(self, variant="a7-35", toolchain="openxc7",
                  sys_clk_freq=int(100e6), **kwargs):
         platform = digilent_arty.Platform(variant=variant, toolchain=toolchain)
-
-        # Workaround: newer yosys emits $scopeinfo cells that older
-        # nextpnr-xilinx does not understand. Insert a "delete" command
-        # right after the synth line rather than replacing the entire template.
-        patched = []
-        for line in platform.toolchain._yosys_template:
-            patched.append(line)
-            if line.strip().startswith("synth_"):
-                patched.append("delete t:$scopeinfo")
-        platform.toolchain._yosys_template = patched
 
         # CRG ------------------------------------------------------------------------------------------
         self.crg = _CRG(platform, sys_clk_freq)
@@ -148,6 +139,11 @@ def main():
         _setup_openxc7_env()
 
     soc = PmodLoopbackSoC(variant=args.variant, toolchain=args.toolchain)
+
+    # Apply Yosys workaround: strip $scopeinfo cells that nextpnr-xilinx
+    # does not understand.
+    from designs._shared.yosys_workarounds import patch_yosys_template
+    patch_yosys_template(soc)
 
     builder = Builder(soc, compile_gateware=not args.no_compile_gateware)
 
