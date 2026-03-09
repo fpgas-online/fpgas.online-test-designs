@@ -26,6 +26,10 @@ def main():
     target_group = parser.target_group
     target_group.add_argument("--variant",       default="a7-35",     help="Board variant (a7-35 or a7-100).")
     target_group.add_argument("--sys-clk-freq",  default=100e6, type=float, help="System clock frequency.")
+    parser.set_defaults(
+        ident          = "fpgas-online SPI Flash Test SoC -- Arty A7",
+        uart_baudrate  = 115200,
+    )
     args = parser.parse_args()
 
     platform = Platform(variant=args.variant, toolchain=args.toolchain)
@@ -34,9 +38,6 @@ def main():
     soc = SoCCore(
         platform       = platform,
         sys_clk_freq   = sys_clk_freq,
-        ident          = "fpgas-online SPI Flash Test SoC -- Arty A7",
-        ident_version  = True,
-        uart_baudrate  = 115200,
         **parser.soc_argdict,
     )
 
