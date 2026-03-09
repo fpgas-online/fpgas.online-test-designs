@@ -77,7 +77,9 @@ def main():
         **soc_kwargs,
     )
 
-    builder = Builder(soc, output_dir="designs/uart/build/netv2", **parser.builder_argdict)
+    builder_kwargs = parser.builder_argdict
+    builder_kwargs["output_dir"] = "designs/uart/build/netv2"
+    builder = Builder(soc, **builder_kwargs)
     if args.build:
         builder.build(**parser.toolchain_argdict)
 
