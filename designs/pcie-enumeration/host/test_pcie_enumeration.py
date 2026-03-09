@@ -33,9 +33,11 @@ import time
 
 VENDOR_ID = "10ee"   # Xilinx Corporation
 DEVICE_ID = "7011"   # 7-Series PCIe endpoint (LitePCIe default)
-EXPECTED_LINK_SPEEDS = ["2.5 GT/s", "5 GT/s"]  # Gen1 or Gen2
 EXPECTED_LINK_WIDTH  = "x1"
-OPENOCD_CFG = "openocd/alphamax-rpi.cfg"
+OPENOCD_CFG = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "openocd", "alphamax-rpi.cfg",
+)
 
 
 # -- FPGA programming ----------------------------------------------------------
@@ -148,7 +150,7 @@ def check_link_from_sysfs(bdf):
         try:
             with open(path) as f:
                 info[key] = f.read().strip()
-        except (OSError, FileNotFoundError):
+        except OSError:
             pass
 
     return info
@@ -278,7 +280,7 @@ def run_test(program=False, bitstream=None, openocd_cfg=OPENOCD_CFG, skip_rescan
     link_width = link_info.get("link_width", "unknown")
 
     speed_ok = any(s in link_speed for s in ["2.5", "5"])
-    width_ok = "x1" in link_width or "1" == link_width
+    width_ok = link_width in ("x1", "1")
 
     if speed_ok:
         print(f"  Link speed: {link_speed} - OK")
