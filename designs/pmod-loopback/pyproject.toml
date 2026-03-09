@@ -6,6 +6,9 @@ requires-python = ">=3.9"
 dependencies = [
     "litex",
     "litex-boards",
+    "pythondata-cpu-vexriscv",
+    "pythondata-software-compiler-rt",
+    "pythondata-software-picolibc",
     "pyserial>=3.5",
     "gpiod>=2.0",
 ]
