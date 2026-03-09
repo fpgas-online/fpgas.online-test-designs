@@ -4,9 +4,11 @@ version = "0.1.0"
 description = "PCIe enumeration test for NeTV2 on RPi5"
 requires-python = ">=3.9"
 dependencies = [
-    "litex",
-    "litex-boards",
-    "litepcie",
+    "litex==2023.12",
+    "litex-boards==2023.12",
+    "litedram==2023.12",
+    "litepcie==2023.12",
+    "migen @ git+https://github.com/m-labs/migen.git",
 ]
 
 [project.optional-dependencies]
