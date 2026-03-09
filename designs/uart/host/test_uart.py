@@ -3,7 +3,7 @@
 Host-side UART test script.
 
 Connects to the FPGA's serial port, waits for the LiteX BIOS banner,
-then performs an echo test with all 256 byte values.
+then performs an echo test with printable ASCII bytes.
 
 Usage:
     uv run python designs/uart/host/test_uart.py --port /dev/ttyUSB1
@@ -34,13 +34,18 @@ BOARD_IDENT = {
     "netv2": "NeTV2",
 }
 
+# Printable ASCII range for the echo test.  Control characters (0x00-0x1F,
+# 0x7F) are excluded because the LiteX BIOS interprets many of them (e.g.
+# backspace, Ctrl-C, newline) rather than echoing them verbatim.
+ECHO_TEST_BYTES = bytes(range(0x20, 0x7F))
+
 
 # --------------------------------------------------------------------------- #
 # Test steps
 # --------------------------------------------------------------------------- #
 
 def wait_for_banner(ser: serial.Serial, board: str) -> tuple[bool, list[str]]:
-    """Read lines until we see the BIOS banner or timeout.
+    """Read lines until we see the BIOS ``litex>`` prompt or timeout.
 
     Returns (success, captured_lines).
     """
@@ -62,8 +67,8 @@ def wait_for_banner(ser: serial.Serial, board: str) -> tuple[bool, list[str]]:
         if expected_ident and expected_ident in line:
             found_ident = True
 
-        # Once we see the BIOS prompt "litex>", boot is complete.
-        if "litex>" in line or (found_bios and found_ident):
+        # Once we see the BIOS prompt, boot is complete.
+        if "litex>" in line:
             break
 
     if not found_bios:
@@ -79,18 +84,19 @@ def wait_for_banner(ser: serial.Serial, board: str) -> tuple[bool, list[str]]:
 
 
 def echo_test(ser: serial.Serial) -> bool:
-    """Send all 256 byte values one at a time and verify echo.
+    """Send printable ASCII bytes one at a time and verify echo.
 
-    The LiteX BIOS console echoes every character it receives.
+    The LiteX BIOS console echoes every printable character it receives.
+    Control characters (0x00-0x1F, 0x7F) are excluded because the BIOS
+    interprets them as commands rather than echoing them verbatim.
     """
     # Flush any pending input.
     ser.reset_input_buffer()
     time.sleep(0.1)
 
-    test_data = bytes(range(256))
     errors = 0
 
-    for byte_val in test_data:
+    for byte_val in ECHO_TEST_BYTES:
         ser.write(bytes([byte_val]))
         response = ser.read(1)
         if len(response) == 0:
@@ -103,11 +109,12 @@ def echo_test(ser: serial.Serial) -> bool:
             )
             errors += 1
 
+    total = len(ECHO_TEST_BYTES)
     if errors == 0:
-        print(f"PASS: Echo test — all 256 bytes echoed correctly")
+        print(f"PASS: Echo test — all {total} printable bytes echoed correctly")
         return True
     else:
-        print(f"FAIL: Echo test — {errors}/256 bytes failed")
+        print(f"FAIL: Echo test — {errors}/{total} bytes failed")
         return False
 
 
@@ -142,26 +149,24 @@ def main() -> int:
     args = parser.parse_args()
 
     print(f"Opening {args.port} at {args.baud} baud...")
-    ser = serial.Serial(args.port, args.baud, timeout=2)
 
     results: list[bool] = []
 
-    # Step 1: Wait for BIOS banner
-    if not args.skip_banner:
-        passed, boot_lines = wait_for_banner(ser, args.board)
+    with serial.Serial(args.port, args.baud, timeout=ECHO_TIMEOUT_S) as ser:
+        # Step 1: Wait for BIOS banner
+        if not args.skip_banner:
+            passed, boot_lines = wait_for_banner(ser, args.board)
+            results.append(passed)
+            if not passed:
+                print("\nBoot output captured:")
+                for line in boot_lines:
+                    print(f"  {line}")
+        else:
+            print("Skipping banner check (--skip-banner)")
+
+        # Step 2: Printable-byte echo test
+        passed = echo_test(ser)
         results.append(passed)
-        if not passed:
-            print("\nBoot output captured:")
-            for line in boot_lines:
-                print(f"  {line}")
-    else:
-        print("Skipping banner check (--skip-banner)")
-
-    # Step 2: Full byte-range echo test
-    passed = echo_test(ser)
-    results.append(passed)
-
-    ser.close()
 
     # Summary
     print()
