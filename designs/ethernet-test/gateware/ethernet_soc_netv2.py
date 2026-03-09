@@ -32,8 +32,10 @@ def main():
     args = parser.parse_args()
 
     soc_kwargs = parser.soc_argdict
-    soc_kwargs["ident"]         = "fpgas-online Ethernet Test SoC -- NeTV2"
-    soc_kwargs["ident_version"] = True
+    # Note: ident/ident_version are hard-coded by the upstream BaseSoC and
+    # cannot be overridden via kwargs without causing a duplicate-keyword error.
+    soc_kwargs.pop("ident", None)
+    soc_kwargs.pop("ident_version", None)
     soc_kwargs["uart_baudrate"] = 115200
 
     soc = BaseSoC(
