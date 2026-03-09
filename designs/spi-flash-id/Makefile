@@ -6,18 +6,21 @@
 #   make all       — Build all bitstreams
 #   make test-arty — Run host-side test (Arty, requires FPGA attached)
 #   make test-netv2— Run host-side test (NeTV2, requires FPGA attached)
+#   make clean     — Remove build artifacts
+#
+# NOTE: Firmware is built separately after gateware. See firmware/Makefile.
 
 include ../../mk/common.mk
 
-.PHONY: all arty netv2 test-arty test-netv2 program-arty program-netv2
+.PHONY: all arty netv2 test-arty test-netv2 program-arty program-netv2 clean
 
 all: arty netv2
 
 arty:
-	$(PYTHON) gateware/spiflash_soc_arty.py --toolchain yosys+nextpnr --build
+	$(PYTHON) gateware/spiflash_soc_arty.py --toolchain openxc7 --build
 
 netv2:
-	$(PYTHON) gateware/spiflash_soc_netv2.py --toolchain yosys+nextpnr --build
+	$(PYTHON) gateware/spiflash_soc_netv2.py --toolchain openxc7 --build
 
 # --------------------------------------------------------------------------- #
 # Host-side tests (run on RPi with FPGA attached)
@@ -38,3 +41,11 @@ program-arty:
 
 program-netv2:
 	openocd -f alphamax-rpi.cfg -c "pld load 0 build/netv2/gateware/netv2_spiflash_test.bit; exit"
+
+# --------------------------------------------------------------------------- #
+# Clean
+# --------------------------------------------------------------------------- #
+
+clean:
+	rm -rf build/
+	$(MAKE) -C firmware clean
