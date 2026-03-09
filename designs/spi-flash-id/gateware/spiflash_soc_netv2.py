@@ -12,45 +12,42 @@ Build command:
 The bitstream is written to: designs/spi-flash-id/build/netv2/gateware/netv2_spiflash_test.bit
 """
 
+import os
+
 from litex.soc.integration.soc_core import SoCCore
 from litex.soc.integration.builder import Builder
 
 from litex_boards.platforms.kosagi_netv2 import Platform
+
+from common import (
+    YOSYS_TEMPLATE_SCOPEINFO_FIX,
+    add_spi_flash,
+    default_build_dir,
+)
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def main():
     from litex.build.parser import LiteXArgumentParser
     parser = LiteXArgumentParser(platform=Platform, description="SPI Flash ID Test SoC for NeTV2")
     target_group = parser.target_group
-    target_group.add_argument("--variant",       default="a7-35",     help="Board variant (a7-35 or a7-100).")
     target_group.add_argument("--sys-clk-freq",  default=50e6, type=float, help="System clock frequency.")
     parser.set_defaults(
         ident          = "fpgas-online SPI Flash Test SoC -- NeTV2",
         uart_baudrate  = 115200,
-        output_dir     = "designs/spi-flash-id/build/netv2",
+        output_dir     = default_build_dir(_HERE, "netv2"),
     )
     args = parser.parse_args()
 
-    platform = Platform(variant=args.variant, toolchain=args.toolchain)
+    platform = Platform(toolchain=args.toolchain)
     # Fix device string: NeTV2 platform uses "xc7a35t-fgg484-2" but the openxc7
     # toolchain (prjxray-db/bbaexport) expects "xc7a35tfgg484-2" (no hyphen
     # between the device family and package).
     platform.device = platform.device.replace("t-fgg", "tfgg")
     sys_clk_freq = int(args.sys_clk_freq)
 
-    # Workaround: newer Yosys emits $scopeinfo cells that older nextpnr-xilinx
-    # cannot place. Strip them after synthesis by using a custom Yosys template.
-    platform.toolchain._yosys_template = [
-        "verilog_defaults -push",
-        "verilog_defaults -add -defer",
-        "{read_files}",
-        "verilog_defaults -pop",
-        'attrmap -tocase keep -imap keep="true" keep=1 -imap keep="false" keep=0 -remove keep=0',
-        "{yosys_cmds}",
-        "synth_{target} {synth_opts} -top {build_name}",
-        "delete t:$scopeinfo",
-        "write_{write_fmt} {write_opts} {output_name}.{synth_fmt}",
-    ]
+    platform.toolchain._yosys_template = list(YOSYS_TEMPLATE_SCOPEINFO_FIX)
 
     soc = SoCCore(
         platform       = platform,
@@ -58,13 +55,7 @@ def main():
         **parser.soc_argdict,
     )
 
-    # Add SPI Flash with bitbang access for JEDEC ID reading -------------------
-    from litex.soc.cores.spi_flash import S7SPIFlash
-    soc.submodules.spiflash = S7SPIFlash(
-        pads         = platform.request("spiflash"),
-        sys_clk_freq = sys_clk_freq,
-    )
-    soc.add_csr("spiflash")
+    add_spi_flash(soc, platform, sys_clk_freq)
 
     builder = Builder(soc, **parser.builder_argdict)
     builder.build(run=args.build)
