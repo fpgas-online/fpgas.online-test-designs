@@ -7,7 +7,7 @@
 #   make test-arty — Run host-side test (Arty, requires FPGA attached)
 #   make test-netv2— Run host-side test (NeTV2, requires FPGA attached)
 
-PYTHON ?= uv run python
+include ../../mk/common.mk
 
 .PHONY: all arty netv2 test-arty test-netv2 program-arty program-netv2
 
