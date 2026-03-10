@@ -37,6 +37,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer for Python >= 3.11
 
+from designs._shared.build_helpers import default_build_dir
 from designs._shared.platform_fixups import fix_openxc7_device_name, ensure_chipdb_symlink
 from designs._shared.yosys_workarounds import patch_yosys_template, apply_nodram_workaround
 
@@ -352,7 +353,7 @@ def main():
     if args.toolchain == "openxc7":
         ensure_chipdb_symlink(soc.platform)
 
-    builder = Builder(soc, output_dir="build/netv2")
+    builder = Builder(soc, output_dir=default_build_dir(__file__, "netv2"))
     builder.build(run=args.build)
 
     if args.load:

@@ -24,6 +24,7 @@ from litex.soc.integration.builder import Builder
 from litex_boards.platforms import kosagi_netv2
 from litex_boards.targets.kosagi_netv2 import BaseSoC
 
+from designs._shared.build_helpers import default_build_dir
 from designs._shared.platform_fixups import fix_openxc7_device_name, ensure_chipdb_symlink
 from designs._shared.yosys_workarounds import patch_yosys_template, apply_nodram_workaround
 
@@ -67,7 +68,7 @@ def main():
     apply_nodram_workaround(soc)
 
     builder_kwargs = parser.builder_argdict
-    builder_kwargs["output_dir"] = "build/netv2"
+    builder_kwargs["output_dir"] = default_build_dir(__file__, "netv2")
     builder = Builder(soc, **builder_kwargs)
     if args.build:
         builder.build(**parser.toolchain_argdict)

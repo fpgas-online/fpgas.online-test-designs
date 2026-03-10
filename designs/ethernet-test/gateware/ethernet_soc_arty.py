@@ -36,6 +36,7 @@ from litex.soc.integration.builder import Builder
 from litex_boards.platforms import digilent_arty
 from litex_boards.targets.digilent_arty import BaseSoC
 
+from designs._shared.build_helpers import default_build_dir
 from designs._shared.yosys_workarounds import patch_yosys_template, apply_nodram_workaround
 
 
@@ -65,7 +66,7 @@ def main():
     apply_nodram_workaround(soc)
 
     builder_kwargs = parser.builder_argdict
-    builder_kwargs["output_dir"] = "build/arty"
+    builder_kwargs["output_dir"] = default_build_dir(__file__, "arty")
     builder = Builder(soc, **builder_kwargs)
     if args.build:
         builder.build(**parser.toolchain_argdict)
