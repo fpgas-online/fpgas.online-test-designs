@@ -50,12 +50,12 @@ This repository contains LiteX-based FPGA test designs that run automatically du
 
 | Test                                                  | Arty A7 | NeTV2 (RPi5) | NeTV2 (RPi3) | Fomu EVT | TT FPGA | ULX3S | ButterStick |
 |-------------------------------------------------------|---------|--------------|--------------|----------|---------|-------|-------------|
-| [GPIO Loopback](docs/tests/pmod-loopback.md)          | Yes     | Yes          | Yes          | Yes      | Plan    | -     | -           |
-| [UART](docs/tests/uart.md)                            | Yes     | Yes          | Yes          | Yes      | Plan    | -     | -           |
+| [GPIO Loopback](docs/tests/pmod-loopback.md)          | Yes     | Yes          | Yes          | Yes      | Yes     | -     | -           |
+| [UART](docs/tests/uart.md)                            | Yes     | Yes          | Yes          | Yes      | Yes     | -     | -           |
 | [Ethernet](docs/tests/ethernet.md)                    | Yes     | Yes          | -            | -        | -       | -     | Plan        |
 | [PCIe Enumeration](docs/tests/pcie-enumeration.md)    | -       | Yes          | -            | -        | -       | -     | -           |
 | [DDR Memory](docs/tests/ddr-memory.md)                | Yes     | Yes          | Yes          | -        | -       | Plan  | Plan        |
-| [SPI Flash ID](docs/tests/spi-flash-id.md)            | Yes     | Yes          | Yes          | Yes      | Plan    | Plan  | Plan        |
+| [SPI Flash ID](docs/tests/spi-flash-id.md)            | Yes     | Yes          | Yes          | Yes      | Yes     | Plan  | Plan        |
 
 See [docs/tests/](docs/tests/) for detailed test specifications.
 
