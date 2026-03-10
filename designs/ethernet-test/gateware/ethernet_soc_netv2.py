@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+# designs/ethernet-test/gateware/ethernet_soc_netv2.py
+"""LiteX SoC with LiteEth (RMII) for NeTV2 Ethernet testing.
+
+The NeTV2 has an independent RMII 100Base-T Ethernet PHY with:
+  - RMII reference clock on pin D17 (50 MHz)
+  - Separate RJ45 jack (not shared with the RPi's Ethernet)
+
+This builds a standard LiteX SoC using the kosagi_netv2 target with
+--with-ethernet enabled.
+
+Note on yosys+nextpnr toolchain:
+  DDR3 should be disabled and the clock frequency lowered when using the
+  open-source toolchain.  This script therefore uses
+  --integrated-main-ram-size=8192 and --sys-clk-freq=50e6 by default.
+"""
+
+import pathlib, sys  # noqa: E401
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
+
+import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer for Python >= 3.11
+
+from litex.soc.integration.builder import Builder
+from litex_boards.platforms import kosagi_netv2
+from litex_boards.targets.kosagi_netv2 import BaseSoC
+
+from designs._shared.platform_fixups import fix_openxc7_device_name
+from designs._shared.yosys_workarounds import patch_yosys_template, apply_nodram_workaround
+
+
+def main():
+    from litex.build.parser import LiteXArgumentParser
+    parser = LiteXArgumentParser(platform=kosagi_netv2.Platform, description="Ethernet Test SoC for NeTV2")
+    parser.add_target_argument("--variant", default="a7-35",
+        choices=["a7-35", "a7-100"],
+        help="NeTV2 FPGA variant: a7-35 (developer) or a7-100 (production)")
+    parser.add_target_argument("--sys-clk-freq", default=50e6,  type=float, help="System clock frequency.")
+    args = parser.parse_args()
+
+    soc_kwargs = parser.soc_argdict
+    soc_kwargs.pop("ident", None)
+    soc_kwargs.pop("ident_version", None)
+    soc_kwargs["uart_baudrate"] = 115200
+
+    # The upstream NeTV2 BaseSoC doesn't pass toolchain to Platform, so we
+    # monkey-patch the Platform default to match the requested toolchain.
+    _orig_init = kosagi_netv2.Platform.__init__
+    _toolchain = args.toolchain
+    _variant = args.variant
+    def _patched_platform_init(self, variant="a7-35", toolchain="vivado"):
+        _orig_init(self, variant=_variant, toolchain=_toolchain)
+    kosagi_netv2.Platform.__init__ = _patched_platform_init
+
+    soc = BaseSoC(
+        sys_clk_freq  = int(args.sys_clk_freq),
+        with_ethernet = True,
+        **soc_kwargs,
+    )
+
+    # Restore original init
+    kosagi_netv2.Platform.__init__ = _orig_init
+
+    fix_openxc7_device_name(soc.platform)
+
+    patch_yosys_template(soc)
+    apply_nodram_workaround(soc)
+
+    builder_kwargs = parser.builder_argdict
+    builder_kwargs["output_dir"] = "build/netv2"
+    builder = Builder(soc, **builder_kwargs)
+    if args.build:
+        builder.build(**parser.toolchain_argdict)
+
+    if args.load:
+        prog = soc.platform.create_programmer()
+        prog.load_bitstream(builder.get_bitstream_filename(mode="sram"))
+
+
+if __name__ == "__main__":
+    main()

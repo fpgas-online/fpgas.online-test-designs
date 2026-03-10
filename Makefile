@@ -44,19 +44,66 @@ help:
 	@echo "  make clean-builds       Remove all build artifacts"
 
 # ---------------------------------------------------------------------------
-# UART design targets
+# UART test
 # ---------------------------------------------------------------------------
 
 .PHONY: build-uart test-uart-arty test-uart-netv2
-
 build-uart:
 	$(MAKE) -C designs/uart uart-all
-
 test-uart-arty:
 	$(MAKE) -C designs/uart test-uart-arty
-
 test-uart-netv2:
 	$(MAKE) -C designs/uart test-uart-netv2
+
+# ---------------------------------------------------------------------------
+# Ethernet test
+# ---------------------------------------------------------------------------
+
+.PHONY: build-ethernet-arty build-ethernet-netv2 test-ethernet-arty test-ethernet-netv2
+build-ethernet-arty:
+	$(MAKE) -C designs/ethernet-test gateware-arty
+build-ethernet-netv2:
+	$(MAKE) -C designs/ethernet-test gateware-netv2
+test-ethernet-arty:
+	$(MAKE) -C designs/ethernet-test test-arty
+test-ethernet-netv2:
+	$(MAKE) -C designs/ethernet-test test-netv2
+
+# ---------------------------------------------------------------------------
+# DDR memory test
+# ---------------------------------------------------------------------------
+
+.PHONY: build-ddr-memory
+build-ddr-memory:
+	$(MAKE) -C designs/ddr-memory build-all
+
+# ---------------------------------------------------------------------------
+# SPI Flash ID test
+# ---------------------------------------------------------------------------
+
+.PHONY: build-spi-flash-id
+build-spi-flash-id:
+	$(MAKE) -C designs/spi-flash-id all
+
+# ---------------------------------------------------------------------------
+# PMOD / GPIO loopback test
+# ---------------------------------------------------------------------------
+
+.PHONY: build-pmod-loopback test-pmod-loopback
+build-pmod-loopback:
+	$(MAKE) -C designs/pmod-loopback gateware
+test-pmod-loopback:
+	$(MAKE) -C designs/pmod-loopback test
+
+# ---------------------------------------------------------------------------
+# PCIe enumeration test
+# ---------------------------------------------------------------------------
+
+.PHONY: build-pcie-enumeration test-pcie-enumeration
+build-pcie-enumeration:
+	$(MAKE) -C designs/pcie-enumeration gateware
+test-pcie-enumeration:
+	sudo $(MAKE) -C designs/pcie-enumeration test
 
 # ---------------------------------------------------------------------------
 # Cleanup

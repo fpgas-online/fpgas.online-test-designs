@@ -1,0 +1,30 @@
+[project]
+name = "ethernet-test"
+version = "0.1.0"
+description = "Ethernet connectivity test for fpgas.online infrastructure"
+requires-python = ">=3.9"
+dependencies = [
+    "litex",
+    "litex-boards",
+    "migen",
+    "litedram",
+    "liteeth",
+    "setuptools",
+    "pythondata-cpu-vexriscv",
+    "pythondata-software-compiler-rt",
+    "pythondata-software-picolibc",
+    "pyserial>=3.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "pytest",
+]
+
+[tool.setuptools]
+packages = []
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
