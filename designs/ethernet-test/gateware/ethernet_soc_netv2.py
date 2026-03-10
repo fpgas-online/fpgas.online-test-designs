@@ -24,7 +24,7 @@ from litex.soc.integration.builder import Builder
 from litex_boards.platforms import kosagi_netv2
 from litex_boards.targets.kosagi_netv2 import BaseSoC
 
-from designs._shared.platform_fixups import fix_openxc7_device_name
+from designs._shared.platform_fixups import fix_openxc7_device_name, ensure_chipdb_symlink
 from designs._shared.yosys_workarounds import patch_yosys_template, apply_nodram_workaround
 
 
@@ -61,6 +61,7 @@ def main():
     kosagi_netv2.Platform.__init__ = _orig_init
 
     fix_openxc7_device_name(soc.platform)
+    ensure_chipdb_symlink(soc.platform)
 
     patch_yosys_template(soc)
     apply_nodram_workaround(soc)

@@ -18,7 +18,7 @@ from migen import *
 from litex_boards.platforms.kosagi_netv2 import Platform
 
 from designs._shared.yosys_workarounds import YOSYS_TEMPLATE_STRIP_SCOPEINFO
-from designs._shared.platform_fixups import fix_openxc7_device_name
+from designs._shared.platform_fixups import fix_openxc7_device_name, ensure_chipdb_symlink
 
 
 class GPIOLoopback(Module):
@@ -41,6 +41,7 @@ def main():
 
     if args.toolchain == "openxc7":
         fix_openxc7_device_name(platform)
+        ensure_chipdb_symlink(platform)
 
     module = GPIOLoopback(platform)
 

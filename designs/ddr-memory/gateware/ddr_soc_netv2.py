@@ -113,7 +113,9 @@ def main():
 
     from designs._shared.yosys_workarounds import patch_yosys_template, apply_nodram_workaround
     from designs._shared.build_helpers import default_build_dir
+    from designs._shared.platform_fixups import ensure_chipdb_symlink
 
+    ensure_chipdb_symlink(soc.platform)
     patch_yosys_template(soc)
     apply_nodram_workaround(soc)
 
