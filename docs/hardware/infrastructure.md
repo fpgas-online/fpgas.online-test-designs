@@ -106,8 +106,8 @@ Source: `lsusb` and `ls /dev/serial/by-id/` output from pi23, pi25.
 | Host | Switch Port | IP | RPi Model | Notes |
 |------|------------|-----|-----------|-------|
 | pi7 | port 7 | 10.21.0.107 | RPi 4 | PoE fault — offline |
-| pi19 | port 19 | 10.21.0.119 | RPi 3B+ | PMOD HAT + MicroPython (not an FPGA test board) |
-| pi21 | port 21 | 10.21.0.121 | RPi 3B+ | Cythion/LUNA (16d0:05a5) |
+| pi19 | port 19 | 10.21.0.119 | RPi 3B+ | Tiny Tapeout FPGA Demo Board |
+| pi21 | port 21 | 10.21.0.121 | RPi 3B+ | Fomu EVT (iCE40UP5K) |
 | pi33 | port 33 | 10.21.0.133 | RPi 3B+ | Unknown role |
 
 Source: dnsmasq DHCP configuration on tweed.
