@@ -43,6 +43,25 @@ help:
 	@echo "  make clean-venv         Remove venv and toolchains"
 	@echo "  make clean-builds       Remove all build artifacts"
 
+# ---------------------------------------------------------------------------
+# UART design targets
+# ---------------------------------------------------------------------------
+
+.PHONY: build-uart test-uart-arty test-uart-netv2
+
+build-uart:
+	$(MAKE) -C designs/uart uart-all
+
+test-uart-arty:
+	$(MAKE) -C designs/uart test-uart-arty
+
+test-uart-netv2:
+	$(MAKE) -C designs/uart test-uart-netv2
+
+# ---------------------------------------------------------------------------
+# Cleanup
+# ---------------------------------------------------------------------------
+
 .PHONY: clean-builds
 clean-builds:
 	@for mf in $(DESIGNS); do \
