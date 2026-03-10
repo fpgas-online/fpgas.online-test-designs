@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 # designs/pmod-loopback/host/test_pmod_loopback.py
-"""Host-side PMOD loopback test script.
+"""Host-side GPIO loopback test script.
 
-Runs on the Raspberry Pi.  Uses gpiod to drive/read the PMOD HAT GPIO pins
-and pyserial to communicate with the FPGA firmware over UART.
+Runs on the Raspberry Pi. Drives one set of GPIO pins and reads another set
+to verify that the FPGA performs output = ~input (bitwise inversion).
+
+No UART or serial communication — purely GPIO-based.
 
 Usage:
-    uv run python host/test_pmod_loopback.py --port /dev/ttyUSB1 --pmod-port JA
+    uv run python host/test_pmod_loopback.py --board arty
+    uv run python host/test_pmod_loopback.py --board netv2
+    uv run python host/test_pmod_loopback.py --board fomu
 
 Requirements:
-    - Raspberry Pi with Digilent PMOD HAT
-    - FPGA programmed with pmod_loopback_soc bitstream
-    - PMOD cable connecting RPi PMOD HAT port to Arty PMOD port
+    - Raspberry Pi with appropriate wiring to the FPGA board
+    - FPGA programmed with the matching gpio_loopback bitstream
     - libgpiod2 installed (apt install libgpiod2 python3-libgpiod)
 """
 
@@ -20,126 +23,44 @@ import sys
 import time
 
 import gpiod
-import serial
 
 
-# -- PMOD HAT GPIO pin mapping (RPi BCM GPIO numbers) -------------------------
-# Each PMOD HAT port has 8 signal pins mapped to specific BCM GPIO numbers.
-# Pin order matches PMOD standard: pins 1-4 (top row), pins 7-10 (bottom row).
+# -- Board-specific pin configurations ----------------------------------------
+# Pin mappings: RPi BCM GPIO numbers.
+# "drive_pins" are RPi outputs that connect to the FPGA input side.
+# "read_pins" are RPi inputs that connect to the FPGA output side.
 
-PMOD_HAT_PINS = {
-    "JA": [6, 13, 19, 26, 12, 16, 20, 21],
-    "JB": [5, 11,  9, 10,  7,  8,  0,  1],
-    "JC": [17, 18,  4, 14,  2,  3, 15, 25],
+BOARD_CONFIGS = {
+    "arty": {
+        # RPi PMOD HAT JA -> Arty PMOD A (FPGA input side)
+        "drive_pins": [6, 13, 19, 26, 12, 16, 20, 21],  # JA1-JA4, JA7-JA10
+        # RPi PMOD HAT JB -> Arty PMOD B (FPGA output side)
+        "read_pins": [5, 11, 9, 10, 7, 8, 0, 1],  # JB1-JB4, JB7-JB10
+        "width": 8,
+    },
+    "netv2": {
+        "drive_pins": [14],  # RPi GPIO14 (TX) -> FPGA E13 (RX)
+        "read_pins": [15],   # RPi GPIO15 (RX) <- FPGA E14 (TX)
+        "width": 1,
+    },
+    "fomu": {
+        # These pin numbers depend on how the Fomu EVT is wired to the RPi.
+        # Placeholder -- needs to be filled in based on actual wiring.
+        "drive_pins": [],  # TBD: RPi GPIO pins wired to Fomu pmoda_n
+        "read_pins": [],   # TBD: RPi GPIO pins wired to Fomu pmodb_n
+        "width": 4,
+    },
 }
 
-# Map PMOD HAT port to Arty PMOD port letter for firmware commands
-HAT_TO_ARTY_PORT = {
-    "JA": "A",
-    "JB": "B",
-    "JC": "C",
-}
 
-# GPIO chip labels for Raspberry Pi models.  Using labels is more reliable
-# than hard-coded device node numbers which can change across kernel versions.
+# GPIO chip labels for Raspberry Pi models.
 GPIO_CHIP_LABELS = {
     "pinctrl-rp1":     None,   # RPi 5 (RP1 chip)
     "pinctrl-bcm2835": None,   # RPi 4 / RPi 3
 }
 
 
-# -- Test patterns -------------------------------------------------------------
-
-def generate_test_patterns():
-    """Generate the set of test bit patterns for 8-bit PMOD port."""
-    patterns = []
-    # All zeros and all ones
-    patterns.append(0x00)
-    patterns.append(0xFF)
-    # Walking 1
-    for i in range(8):
-        patterns.append(1 << i)
-    # Walking 0
-    for i in range(8):
-        patterns.append(0xFF ^ (1 << i))
-    # Alternating
-    patterns.append(0xAA)
-    patterns.append(0x55)
-    return patterns
-
-
-# -- UART communication --------------------------------------------------------
-
-class FpgaUart:
-    """Communicate with PMOD loopback firmware over UART."""
-
-    def __init__(self, port, baud=115200, timeout=2.0):
-        # Use a short per-read timeout so readline() returns quickly,
-        # allowing the retry loop in _read_response() to check multiple
-        # lines within the overall deadline.
-        self.ser = serial.Serial(port, baud, timeout=0.1)
-        self._response_timeout = timeout
-        time.sleep(0.1)  # let FPGA boot
-        self.ser.reset_input_buffer()
-
-    def close(self):
-        self.ser.close()
-
-    def _send(self, cmd):
-        self.ser.write((cmd + "\n").encode())
-        self.ser.flush()
-
-    def _read_response(self):
-        """Read lines until we get a response (skip prompt '> ' lines)."""
-        deadline = time.time() + self._response_timeout
-        while time.time() < deadline:
-            line = self.ser.readline().decode(errors="replace").strip()
-            if not line:
-                continue  # empty read due to per-read timeout, retry
-            if line.startswith("> "):
-                line = line[2:]
-            if line.startswith("OK") or line.startswith("ERR") or line == "PONG":
-                return line
-        raise TimeoutError("No response from FPGA firmware")
-
-    def ping(self):
-        self._send("PING")
-        resp = self._read_response()
-        return resp == "PONG"
-
-    def wait_ready(self):
-        """Wait for the READY banner after boot/reset."""
-        deadline = time.time() + 5.0
-        while time.time() < deadline:
-            line = self.ser.readline().decode(errors="replace").strip()
-            if "READY" in line:
-                return True
-        return False
-
-    def read_port(self, port_letter):
-        """Read 8-bit input value from FPGA PMOD port. Returns int."""
-        self._send(f"READ {port_letter}")
-        resp = self._read_response()
-        if not resp.startswith("OK "):
-            raise RuntimeError(f"READ failed: {resp}")
-        return int(resp.split()[1], 16)
-
-    def drive_port(self, port_letter, value):
-        """Drive 8-bit value on FPGA PMOD port (enables output)."""
-        self._send(f"DRIVE {port_letter} {value:02X}")
-        resp = self._read_response()
-        if resp != "OK":
-            raise RuntimeError(f"DRIVE failed: {resp}")
-
-    def hiz_port(self, port_letter):
-        """Set FPGA PMOD port to high-impedance (input mode)."""
-        self._send(f"HIZ {port_letter}")
-        resp = self._read_response()
-        if resp != "OK":
-            raise RuntimeError(f"HIZ failed: {resp}")
-
-
-# -- GPIO helper ---------------------------------------------------------------
+# -- GPIO helpers --------------------------------------------------------------
 
 def detect_gpio_chip():
     """Detect the correct gpiochip for RPi GPIO pins by chip label.
@@ -166,145 +87,163 @@ def detect_gpio_chip():
 
 
 class PmodHatGpio:
-    """Drive/read PMOD HAT GPIO pins using gpiod."""
+    """Drive/read GPIO pins using gpiod."""
 
-    def __init__(self, hat_port, chip_path=None):
-        if hat_port not in PMOD_HAT_PINS:
-            raise ValueError(f"Unknown PMOD HAT port: {hat_port}. Use JA, JB, or JC.")
-        self.pin_numbers = PMOD_HAT_PINS[hat_port]
+    def __init__(self, drive_pins, read_pins, chip_path=None):
+        self.drive_pins = drive_pins
+        self.read_pins = read_pins
         self.chip_path = chip_path or detect_gpio_chip()
-        self._request = None
+        self._drive_request = None
+        self._read_request = None
+
+    def open(self):
+        """Configure drive pins as outputs and read pins as inputs."""
+        if self.drive_pins:
+            self._drive_request = gpiod.request_lines(
+                self.chip_path,
+                consumer="pmod-loopback-test",
+                config={
+                    tuple(self.drive_pins): gpiod.LineSettings(
+                        direction=gpiod.line.Direction.OUTPUT,
+                        output_value=gpiod.line.Value.INACTIVE,
+                    ),
+                },
+            )
+        if self.read_pins:
+            self._read_request = gpiod.request_lines(
+                self.chip_path,
+                consumer="pmod-loopback-test",
+                config={
+                    tuple(self.read_pins): gpiod.LineSettings(
+                        direction=gpiod.line.Direction.INPUT,
+                    ),
+                },
+            )
 
     def close(self):
-        if self._request:
-            self._request.release()
-            self._request = None
-
-    def configure_output(self):
-        """Configure all 8 pins as outputs."""
-        self.close()
-        self._request = gpiod.request_lines(
-            self.chip_path,
-            consumer="pmod-loopback-test",
-            config={
-                tuple(self.pin_numbers): gpiod.LineSettings(
-                    direction=gpiod.line.Direction.OUTPUT,
-                    output_value=gpiod.line.Value.INACTIVE,
-                ),
-            },
-        )
-
-    def configure_input(self):
-        """Configure all 8 pins as inputs."""
-        self.close()
-        self._request = gpiod.request_lines(
-            self.chip_path,
-            consumer="pmod-loopback-test",
-            config={
-                tuple(self.pin_numbers): gpiod.LineSettings(
-                    direction=gpiod.line.Direction.INPUT,
-                ),
-            },
-        )
+        if self._drive_request:
+            self._drive_request.release()
+            self._drive_request = None
+        if self._read_request:
+            self._read_request.release()
+            self._read_request = None
 
     def write(self, value):
-        """Write 8-bit value to output pins. Bit 0 = pin index 0, etc."""
+        """Write N-bit value to drive (output) pins. Bit 0 = pin index 0."""
         values = {}
-        for i, pin in enumerate(self.pin_numbers):
+        for i, pin in enumerate(self.drive_pins):
             bit = (value >> i) & 1
             values[pin] = gpiod.line.Value.ACTIVE if bit else gpiod.line.Value.INACTIVE
-        self._request.set_values(values)
+        self._drive_request.set_values(values)
 
     def read(self):
-        """Read 8-bit value from input pins. Returns int."""
-        values = self._request.get_values()
+        """Read N-bit value from read (input) pins. Returns int."""
+        values = self._read_request.get_values()
         result = 0
-        for i, pin in enumerate(self.pin_numbers):
+        for i, pin in enumerate(self.read_pins):
             if values[pin] == gpiod.line.Value.ACTIVE:
                 result |= (1 << i)
         return result
 
 
-# -- Test runner ----------------------------------------------------------------
+# -- Test patterns -------------------------------------------------------------
 
-def run_test(uart_port, baud, hat_port, arty_port):
-    """Run bidirectional PMOD loopback test."""
-    patterns = generate_test_patterns()
+def generate_test_patterns(width):
+    """Generate test bit patterns appropriate for the given pin width."""
+    mask = (1 << width) - 1
+    patterns = []
+
+    # All zeros and all ones
+    patterns.append(0x00)
+    patterns.append(mask)
+
+    # Walking 1
+    for i in range(width):
+        patterns.append(1 << i)
+
+    # Walking 0
+    for i in range(width):
+        patterns.append(mask ^ (1 << i))
+
+    # Alternating (only meaningful for width >= 2)
+    if width >= 2:
+        patterns.append(0xAA & mask)
+        patterns.append(0x55 & mask)
+
+    # Deduplicate while preserving order
+    seen = set()
+    unique = []
+    for p in patterns:
+        if p not in seen:
+            seen.add(p)
+            unique.append(p)
+    return unique
+
+
+# -- Test runner ---------------------------------------------------------------
+
+def run_test(board_name, config):
+    """Run GPIO loopback test for the specified board."""
+    width = config["width"]
+    mask = (1 << width) - 1
+    patterns = generate_test_patterns(width)
     total_tests = 0
     failures = []
 
-    print(f"=== PMOD Loopback Test ===")
-    print(f"UART:       {uart_port} @ {baud}")
-    print(f"HAT port:   {hat_port} (RPi PMOD HAT)")
-    print(f"Arty port:  PMOD{arty_port}")
+    print(f"=== PMOD GPIO Loopback Test ===")
+    print(f"Board:      {board_name}")
+    print(f"Width:      {width} bits")
+    print(f"Drive pins: {config['drive_pins']}")
+    print(f"Read pins:  {config['read_pins']}")
     print(f"Patterns:   {len(patterns)}")
     print()
 
-    fpga = FpgaUart(uart_port, baud)
-    gpio = PmodHatGpio(hat_port)
+    if not config["drive_pins"] or not config["read_pins"]:
+        print("ERROR: Pin mapping not configured for this board.")
+        print("Edit BOARD_CONFIGS in test_pmod_loopback.py to set pin numbers.")
+        return False
+
+    gpio = PmodHatGpio(config["drive_pins"], config["read_pins"])
 
     try:
-        # Wait for firmware ready
-        print("Waiting for FPGA firmware...", end=" ", flush=True)
-        fpga.wait_ready()
-        if not fpga.ping():
-            print("FAIL - no PONG response")
-            return False
-        print("OK")
+        gpio.open()
 
-        # ---- Phase 1: RPi drives, FPGA reads ----
-        print("\n--- Phase 1: RPi -> FPGA ---")
-        fpga.hiz_port(arty_port)         # FPGA pins as inputs
-        gpio.configure_output()           # RPi pins as outputs
+        # Small delay to let lines settle after configuration
         time.sleep(0.01)
 
         for pattern in patterns:
             gpio.write(pattern)
-            time.sleep(0.001)  # settle time
-            reading = fpga.read_port(arty_port)
-            total_tests += 1
-            if reading != pattern:
-                failures.append(
-                    f"RPi->FPGA: sent 0x{pattern:02X}, got 0x{reading:02X} "
-                    f"(diff 0x{pattern ^ reading:02X})"
-                )
-                print(f"  FAIL: sent 0x{pattern:02X}, got 0x{reading:02X}")
-            else:
-                print(f"  OK:   0x{pattern:02X}")
+            time.sleep(0.001)  # propagation settle time
 
-        # ---- Phase 2: FPGA drives, RPi reads ----
-        print("\n--- Phase 2: FPGA -> RPi ---")
-        gpio.configure_input()            # RPi pins as inputs
-        time.sleep(0.01)
-
-        for pattern in patterns:
-            fpga.drive_port(arty_port, pattern)
-            time.sleep(0.001)  # settle time
             reading = gpio.read()
-            total_tests += 1
-            if reading != pattern:
-                failures.append(
-                    f"FPGA->RPi: sent 0x{pattern:02X}, got 0x{reading:02X} "
-                    f"(diff 0x{pattern ^ reading:02X})"
-                )
-                print(f"  FAIL: sent 0x{pattern:02X}, got 0x{reading:02X}")
-            else:
-                print(f"  OK:   0x{pattern:02X}")
+            expected = (~pattern) & mask
 
-        # Clean up: set FPGA back to high-Z
-        fpga.hiz_port(arty_port)
+            total_tests += 1
+            if reading != expected:
+                failures.append(
+                    f"sent 0x{pattern:0{(width + 3) // 4}X}, "
+                    f"expected 0x{expected:0{(width + 3) // 4}X}, "
+                    f"got 0x{reading:0{(width + 3) // 4}X} "
+                    f"(diff 0x{expected ^ reading:0{(width + 3) // 4}X})"
+                )
+                print(f"  FAIL: sent 0x{pattern:0{(width + 3) // 4}X}, "
+                      f"expected ~=0x{expected:0{(width + 3) // 4}X}, "
+                      f"got 0x{reading:0{(width + 3) // 4}X}")
+            else:
+                print(f"  OK:   0x{pattern:0{(width + 3) // 4}X} -> "
+                      f"~=0x{expected:0{(width + 3) // 4}X}")
 
     finally:
         gpio.close()
-        fpga.close()
 
-    # ---- Results ----
+    # Results
     print()
     print(f"=== Results: {total_tests - len(failures)}/{total_tests} passed ===")
     if failures:
         print("Failures:")
         for f in failures:
             print(f"  - {f}")
+        print("FAIL")
         return False
     else:
         print("PASS")
@@ -312,16 +251,16 @@ def run_test(uart_port, baud, hat_port, arty_port):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="PMOD Loopback Test (host-side)")
-    parser.add_argument("--port",      default="/dev/ttyUSB1",  help="UART serial port")
-    parser.add_argument("--baud",      type=int, default=115200, help="UART baud rate")
-    parser.add_argument("--hat-port",  default="JA",            help="PMOD HAT port: JA, JB, JC")
-    parser.add_argument("--arty-port", default=None,            help="Arty PMOD port letter: A, B, C, D (default: matches HAT port)")
+    parser = argparse.ArgumentParser(
+        description="PMOD GPIO Loopback Test (host-side, no UART)")
+    parser.add_argument(
+        "--board", default="arty",
+        choices=list(BOARD_CONFIGS.keys()),
+        help="Target board (default: arty)")
     args = parser.parse_args()
 
-    arty_port = args.arty_port or HAT_TO_ARTY_PORT.get(args.hat_port, "A")
-
-    success = run_test(args.port, args.baud, args.hat_port, arty_port)
+    config = BOARD_CONFIGS[args.board]
+    success = run_test(args.board, config)
     sys.exit(0 if success else 1)
 
 
