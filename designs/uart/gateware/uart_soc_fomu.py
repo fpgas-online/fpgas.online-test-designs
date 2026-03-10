@@ -25,56 +25,18 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
 
 from migen import *
-from migen.genlib.resetsync import AsyncResetSynchronizer
-
-from litex.gen import *
 
 from litex_boards.platforms import kosagi_fomu_evt
 
 from litex.soc.cores.ram import Up5kSPRAM
-from litex.soc.cores.clock import iCE40PLL
 from litex.soc.integration.soc_core import SoCCore
 from litex.soc.integration.soc import SoCRegion
 from litex.soc.integration.builder import Builder
 
 from designs._shared.build_helpers import default_build_dir
+from designs._shared.fomu_crg import FomuCRG
 
 kB = 1024
-
-
-# CRG (Clock Reset Generator) ---------------------------------------------------------------------
-
-class _CRG(LiteXModule):
-    """Minimal CRG for Fomu EVT: derives 12 MHz sys clock from the 48 MHz oscillator via PLL.
-
-    Unlike the upstream Fomu CRG we omit the USB clock domains since we
-    use GPIO-based serial UART instead of USB ACM.
-    """
-    def __init__(self, platform, sys_clk_freq):
-        assert sys_clk_freq == 12e6
-        self.rst    = Signal()
-        self.cd_sys = ClockDomain()
-        self.cd_por = ClockDomain()
-
-        # # #
-
-        # Clk/Rst
-        clk48 = platform.request("clk48")
-        platform.add_period_constraint(clk48, 1e9/48e6)
-
-        # Power On Reset
-        por_count = Signal(16, reset=2**16-1)
-        por_done  = Signal()
-        self.comb += self.cd_por.clk.eq(ClockSignal())
-        self.comb += por_done.eq(por_count == 0)
-        self.sync.por += If(~por_done, por_count.eq(por_count - 1))
-
-        # PLL: 48 MHz -> 12 MHz
-        self.pll = pll = iCE40PLL()
-        pll.clko_freq_range = (12e6, 275e9)  # Widen range per upstream workaround.
-        pll.register_clkin(clk48, 48e6)
-        pll.create_clkout(self.cd_sys, 12e6, with_reset=False)
-        self.specials += AsyncResetSynchronizer(self.cd_sys, ~por_done | ~pll.locked)
 
 
 # BaseSoC -----------------------------------------------------------------------------------------
@@ -84,7 +46,7 @@ class BaseSoC(SoCCore):
         platform = kosagi_fomu_evt.Platform()
 
         # CRG ----------------------------------------------------------------------------------
-        self.crg = _CRG(platform, sys_clk_freq)
+        self.crg = FomuCRG(platform, sys_clk_freq)
 
         # SoCCore ------------------------------------------------------------------------------
         # Use GPIO serial pins instead of USB ACM.
