@@ -39,8 +39,8 @@ This repository contains LiteX-based FPGA test designs that run automatically du
 
 | Board | FPGA | Toolchain | Connection to Host | Status |
 |-------|------|-----------|-------------------|--------|
-| [Digilent Arty A7](docs/hardware/arty-a7.md) | Xilinx Artix-7 | openXC7 | USB-UART + PMOD HAT | Active |
-| [Kosagi NeTV2](docs/hardware/netv2.md) | Xilinx Artix-7 | openXC7 | GPIO (JTAG+UART) + PCIe | Active |
+| [Digilent Arty A7](docs/hardware/arty-a7.md) | Xilinx Artix-7 | openXC7 | USB-UART + PMOD HAT + Ethernet | Active |
+| [Kosagi NeTV2](docs/hardware/netv2.md) | Xilinx Artix-7 | openXC7 | GPIO (JTAG+UART) + PCIe + Ethernet | Active |
 | [Fomu EVT](docs/hardware/fomu-evt.md) | Lattice iCE40UP5K | Yosys + nextpnr-ice40 | USB | Active |
 | [TT FPGA Demo Board](docs/hardware/tt-fpga.md) | Lattice iCE40UP5K | Yosys + nextpnr-ice40 | USB (via RP2040) | Active |
 | [Radiona ULX3S](docs/hardware/ulx3s.md) | Lattice ECP5 | Yosys + nextpnr-ecp5 | USB | Planned |
