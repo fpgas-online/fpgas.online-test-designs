@@ -50,8 +50,8 @@ This repository contains LiteX-based FPGA test designs that run automatically du
 
 | Test | Arty A7 | NeTV2 (RPi5) | NeTV2 (RPi3) | Fomu EVT | TT FPGA | ULX3S | ButterStick |
 |------|---------|--------------|--------------|----------|---------|-------|-------------|
-| [PMOD Loopback](docs/tests/pmod-loopback.md) | Yes | - | - | - | Yes | - | - |
-| [UART](docs/tests/uart.md) | Yes | Yes | Yes | - | TBD | - | - |
+| [GPIO Loopback](docs/tests/pmod-loopback.md) | Yes | Yes | Yes | Yes | Yes | - | - |
+| [UART](docs/tests/uart.md) | Yes | Yes | Yes | Yes | TBD | - | - |
 | [Ethernet](docs/tests/ethernet.md) | Yes | Yes | - | - | - | - | Yes |
 | [PCIe Enumeration](docs/tests/pcie-enumeration.md) | - | Yes | - | - | - | - | - |
 | [DDR Memory](docs/tests/ddr-memory.md) | Yes | Yes | Yes | - | - | Yes | Yes |
