@@ -32,6 +32,7 @@ BIOS_BANNER_MARKER = "LiteX"
 BOARD_IDENT = {
     "arty":  "Arty A7",
     "netv2": "NeTV2",
+    "fomu":  "Fomu EVT",
 }
 
 # Printable ASCII range for the echo test.  Control characters (0x00-0x1F,

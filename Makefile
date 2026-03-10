@@ -47,13 +47,15 @@ help:
 # UART test
 # ---------------------------------------------------------------------------
 
-.PHONY: build-uart test-uart-arty test-uart-netv2
+.PHONY: build-uart test-uart-arty test-uart-netv2 test-uart-fomu
 build-uart:
 	$(MAKE) -C designs/uart uart-all
 test-uart-arty:
 	$(MAKE) -C designs/uart test-uart-arty
 test-uart-netv2:
 	$(MAKE) -C designs/uart test-uart-netv2
+test-uart-fomu:
+	$(MAKE) -C designs/uart test-uart-fomu
 
 # ---------------------------------------------------------------------------
 # Ethernet test
