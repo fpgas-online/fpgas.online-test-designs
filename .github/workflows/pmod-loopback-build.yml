@@ -1,0 +1,62 @@
+# .github/workflows/pmod-loopback-build.yml
+name: "Build: PMOD Loopback"
+
+on:
+  push:
+    paths:
+      - "designs/pmod-loopback/**"
+      - ".github/workflows/pmod-loopback-build.yml"
+  pull_request:
+    paths:
+      - "designs/pmod-loopback/**"
+
+jobs:
+  build-arty:
+    name: "Arty A7-35T bitstream"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git build-essential python3 python3-pip
+
+      - name: Install openXC7 toolchain via snap
+        run: |
+          sudo snap install --classic openxc7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        working-directory: designs/pmod-loopback
+        run: uv sync
+
+      - name: Build gateware (bitstream + firmware)
+        working-directory: designs/pmod-loopback
+        run: |
+          uv run python gateware/pmod_loopback_soc.py \
+            --variant a7-35 \
+            --toolchain openxc7 \
+            --build
+
+      - name: Upload bitstream artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmod-loopback-arty-a7-35t
+          path: designs/pmod-loopback/build/digilent_arty/gateware/digilent_arty.bit
+
+  lint:
+    name: "Lint Python"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Lint with ruff
+        working-directory: designs/pmod-loopback
+        run: |
+          uv run ruff check gateware/ host/ firmware/

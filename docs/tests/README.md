@@ -55,7 +55,7 @@ For tests that do not use UART as the primary interface (e.g., PCIe enumeration)
 
 | Test | Arty A7 | NeTV2 (RPi5) | NeTV2 (RPi3) | Fomu EVT | TT FPGA | ULX3S | ButterStick |
 |------|---------|--------------|--------------|----------|---------|-------|-------------|
-| [PMOD Loopback](pmod-loopback.md) | Yes | - | - | - | Yes | - | - |
+| [PMOD Loopback](pmod-loopback.md) | Yes | Yes | Yes | Yes | Yes | - | - |
 | [UART](uart.md) | Yes | Yes | Yes | - | TBD | - | - |
 | [Ethernet](ethernet.md) | Yes | Yes | - | - | - | - | Yes |
 | [PCIe Enumeration](pcie-enumeration.md) | - | Yes | - | - | - | - | - |
@@ -68,7 +68,7 @@ Source: [Project README Test Matrix](../../README.md#test-matrix)
 
 ### PMOD Loopback
 
-Verifies PMOD connector connectivity between the RPi PMOD HAT and the FPGA board. The RPi drives known bit patterns through the PMOD HAT GPIO pins; the FPGA reads them and reports back over UART. The reverse direction is also tested. Applicable to boards with PMOD connectors (Arty A7, TT FPGA Demo Board).
+Verifies PMOD/GPIO pin connectivity between the RPi and the FPGA board using pure combinational gateware (`output = ~input`). The RPi drives known bit patterns on one set of GPIO pins and reads the inverted result on another set. No UART, no CPU, no firmware needed. Supports Arty A7 (8-bit), NeTV2 (1-bit), and Fomu EVT (4-bit).
 
 See: [pmod-loopback.md](pmod-loopback.md)
 
