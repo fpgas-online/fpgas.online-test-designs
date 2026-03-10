@@ -35,6 +35,8 @@ import sys
 # Add repo root to sys.path so shared modules can be imported.
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
+import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer for Python >= 3.11
+
 from designs._shared.platform_fixups import fix_openxc7_device_name, ensure_chipdb_symlink
 from designs._shared.yosys_workarounds import patch_yosys_template, apply_nodram_workaround
 
@@ -278,7 +280,8 @@ def main():
         description="PCIe Enumeration Test SoC for NeTV2",
     )
     parser.add_argument(
-        "--variant", default="a7-35", help="a7-35 or a7-100",
+        "--variant", default="a7-35", choices=["a7-35", "a7-100"],
+        help="NeTV2 FPGA variant: a7-35 (developer) or a7-100 (production)",
     )
     parser.add_argument(
         "--toolchain", default="openxc7",
