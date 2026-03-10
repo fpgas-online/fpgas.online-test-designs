@@ -37,6 +37,7 @@ BOOT_TIMEOUT_S = 30
 EXPECTED_JEDEC_IDS: dict[str, tuple[int, int, int] | None] = {
     "arty":  None,  # TBD — varies by board revision
     "netv2": None,  # TBD — to be determined
+    "fomu":  (0x1F, 0x86, 0x01),  # AT25SF161: Adesto/Renesas, 16 Mbit
 }
 
 # Common manufacturer names for reporting.
