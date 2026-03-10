@@ -12,6 +12,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
+import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+
 from migen import *
 from litex_boards.platforms.kosagi_netv2 import Platform
 
