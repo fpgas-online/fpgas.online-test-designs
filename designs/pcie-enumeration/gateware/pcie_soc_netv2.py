@@ -297,55 +297,55 @@ def main():
     args = parser.parse_args()
 
     # Set openXC7 environment variables if not already set.
+    # Supports two layouts:
+    #   1. System snap: /snap/openxc7/current/opt/nextpnr-xilinx/...
+    #   2. Local dev:   .venv/toolchains/openxc7/squashfs-root/opt/...
     if args.toolchain == "openxc7":
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(script_dir)
-        # Walk up to find the repo root (contains .venv/toolchains).
-        repo_root = project_root
-        while repo_root != "/":
-            if os.path.isdir(os.path.join(repo_root, ".venv", "toolchains")):
-                break
-            repo_root = os.path.dirname(repo_root)
-        oxc7_root = os.path.join(
-            repo_root, ".venv", "toolchains", "openxc7",
-        )
-        oxc7_snap = os.path.join(oxc7_root, "squashfs-root")
-        if "CHIPDB" not in os.environ:
-            os.environ["CHIPDB"] = os.path.join(oxc7_root, "chipdb")
-        # PCIe-specific env vars needed by openXC7 toolchain.
+        snap_dir = "/snap/openxc7/current"
+        if os.path.isdir(snap_dir):
+            # System snap installation (e.g. CI).
+            oxc7_snap = snap_dir
+        else:
+            # Local development layout.
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(script_dir)
+            repo_root = project_root
+            while repo_root != "/":
+                if os.path.isdir(os.path.join(repo_root, ".venv", "toolchains")):
+                    break
+                repo_root = os.path.dirname(repo_root)
+            oxc7_root = os.path.join(repo_root, ".venv", "toolchains", "openxc7")
+            oxc7_snap = os.path.join(oxc7_root, "squashfs-root")
+            if "CHIPDB" not in os.environ:
+                os.environ["CHIPDB"] = os.path.join(oxc7_root, "chipdb")
+
+            # Add local toolchain bin directories to PATH.
+            toolchains_root = os.path.join(repo_root, ".venv", "toolchains")
+            extra_paths = [
+                os.path.join(oxc7_root, "bin"),
+                os.path.join(oxc7_snap, "usr", "bin"),
+                os.path.join(toolchains_root, "oss-cad-suite", "oss-cad-suite", "bin"),
+            ]
+            riscv_gcc_dir = os.path.join(toolchains_root, "riscv-gcc")
+            if os.path.isdir(riscv_gcc_dir):
+                for entry in os.listdir(riscv_gcc_dir):
+                    bin_dir = os.path.join(riscv_gcc_dir, entry, "bin")
+                    if os.path.isdir(bin_dir):
+                        extra_paths.append(bin_dir)
+            current_path = os.environ.get("PATH", "")
+            for p in extra_paths:
+                if os.path.isdir(p) and p not in current_path:
+                    current_path = p + os.pathsep + current_path
+            os.environ["PATH"] = current_path
+
         if "PRJXRAY_DB_DIR" not in os.environ:
             os.environ["PRJXRAY_DB_DIR"] = os.path.join(
-                oxc7_snap, "opt",
-                "nextpnr-xilinx", "external", "prjxray-db",
+                oxc7_snap, "opt", "nextpnr-xilinx", "external", "prjxray-db",
             )
         if "NEXTPNR_XILINX_PYTHON_DIR" not in os.environ:
             os.environ["NEXTPNR_XILINX_PYTHON_DIR"] = os.path.join(
                 oxc7_snap, "opt", "nextpnr-xilinx", "python",
             )
-
-        # Add toolchain bin directories to PATH so the build script can
-        # find fasm2frames, xc7frames2bit, nextpnr-xilinx, and yosys.
-        toolchains_root = os.path.join(repo_root, ".venv", "toolchains")
-        extra_paths = [
-            os.path.join(oxc7_root, "bin"),               # fasm2frames, xc7frames2bit
-            os.path.join(oxc7_snap, "usr", "bin"),         # nextpnr-xilinx
-            os.path.join(
-                toolchains_root, "oss-cad-suite",
-                "oss-cad-suite", "bin",
-            ),                                              # yosys
-        ]
-        # Also add RISC-V GCC toolchain to PATH for firmware compilation.
-        riscv_gcc_dir = os.path.join(toolchains_root, "riscv-gcc")
-        if os.path.isdir(riscv_gcc_dir):
-            for entry in os.listdir(riscv_gcc_dir):
-                bin_dir = os.path.join(riscv_gcc_dir, entry, "bin")
-                if os.path.isdir(bin_dir):
-                    extra_paths.append(bin_dir)
-        current_path = os.environ.get("PATH", "")
-        for p in extra_paths:
-            if os.path.isdir(p) and p not in current_path:
-                current_path = p + os.pathsep + current_path
-        os.environ["PATH"] = current_path
 
     soc = PCIeEnumerationSoC(variant=args.variant, toolchain=args.toolchain)
 
