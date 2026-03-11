@@ -37,7 +37,10 @@ jobs:
         run: uv sync --extra build
 
       - name: Build Arty UART test bitstream
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
         run: |
+          mkdir -p "$CHIPDB"
           uv run python designs/uart/gateware/uart_soc_arty.py \
             --toolchain yosys+nextpnr \
             --build
@@ -73,7 +76,10 @@ jobs:
         run: uv sync --extra build
 
       - name: Build NeTV2 UART test bitstream
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
         run: |
+          mkdir -p "$CHIPDB"
           uv run python designs/uart/gateware/uart_soc_netv2.py \
             --toolchain yosys+nextpnr \
             --build

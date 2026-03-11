@@ -190,7 +190,7 @@ def run_test(board_name, config):
     total_tests = 0
     failures = []
 
-    print(f"=== PMOD GPIO Loopback Test ===")
+    print("=== PMOD GPIO Loopback Test ===")
     print(f"Board:      {board_name}")
     print(f"Width:      {width} bits")
     print(f"Drive pins: {config['drive_pins']}")

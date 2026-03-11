@@ -37,7 +37,10 @@ jobs:
         run: uv sync --extra build
 
       - name: Build Arty GPIO Loopback
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
         run: |
+          mkdir -p "$CHIPDB"
           uv run python designs/pmod-loopback/gateware/gpio_loopback_arty.py \
             --toolchain openxc7 \
             --build
@@ -73,7 +76,10 @@ jobs:
         run: uv sync --extra build
 
       - name: Build NeTV2 GPIO Loopback
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
         run: |
+          mkdir -p "$CHIPDB"
           uv run python designs/pmod-loopback/gateware/gpio_loopback_netv2.py \
             --toolchain openxc7 \
             --build

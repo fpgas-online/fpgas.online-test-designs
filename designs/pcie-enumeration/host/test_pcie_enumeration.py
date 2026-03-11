@@ -232,7 +232,7 @@ def run_test(program=False, bitstream=None, openocd_cfg=OPENOCD_CFG, skip_rescan
     if bdf:
         print(f"  FOUND at {bdf}")
     else:
-        print(f"  NOT FOUND")
+        print("  NOT FOUND")
         failures.append(f"Device {VENDOR_ID}:{DEVICE_ID} not found in lspci")
         # Can't continue without device
         print(f"\n=== Results: {total_tests - len(failures)}/{total_tests} passed ===")

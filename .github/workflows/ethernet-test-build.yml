@@ -37,7 +37,10 @@ jobs:
         run: uv sync --extra build
 
       - name: Build Arty Ethernet SoC
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
         run: |
+          mkdir -p "$CHIPDB"
           uv run python designs/ethernet-test/gateware/ethernet_soc_arty.py \
             --variant a7-35 \
             --toolchain yosys+nextpnr \
@@ -72,7 +75,10 @@ jobs:
         run: uv sync --extra build
 
       - name: Build NeTV2 Ethernet SoC
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
         run: |
+          mkdir -p "$CHIPDB"
           uv run python designs/ethernet-test/gateware/ethernet_soc_netv2.py \
             --variant a7-35 \
             --toolchain yosys+nextpnr \

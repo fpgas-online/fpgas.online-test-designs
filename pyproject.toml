@@ -11,6 +11,8 @@ dependencies = [
 [project.optional-dependencies]
 # LiteX SoC builder and peripheral cores (needed to build gateware)
 build = [
+    "meson>=1.0",
+    "ninja",
     "litex @ git+https://github.com/enjoy-digital/litex.git",
     "litex-boards @ git+https://github.com/litex-hub/litex-boards.git",
     "migen @ git+https://github.com/m-labs/migen.git",
@@ -42,6 +44,15 @@ allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["designs"]
+
+[tool.ruff.lint]
+# LiteX/migen code requires monkey-patching before imports and uses wildcard imports
+# by convention. These are intentional patterns, not bugs.
+ignore = [
+    "E402",   # Module-level import not at top of file (monkey-patching before imports)
+    "F403",   # Wildcard import (migen convention: from migen import *)
+    "F405",   # May be undefined from wildcard import
+]
 
 [tool.uv]
 # Pin migen to git main for Python 3.12+ bytecode tracer compatibility.
