@@ -20,10 +20,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Install openXC7 toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y yosys nextpnr-xilinx prjxray-tools
+          sudo apt-get install -y yosys
+          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
+          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
+          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
+          sudo snap alias openxc7.fasm2frames fasm2frames
+          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -51,10 +56,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Install openXC7 toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y yosys nextpnr-xilinx prjxray-tools
+          sudo apt-get install -y yosys
+          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
+          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
+          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
+          sudo snap alias openxc7.fasm2frames fasm2frames
+          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -82,7 +92,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Install iCE40 toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y yosys nextpnr-ice40 fpga-icestorm
@@ -112,7 +122,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Install iCE40 toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y yosys nextpnr-ice40 fpga-icestorm
@@ -146,4 +156,4 @@ jobs:
         uses: astral-sh/setup-uv@v4
 
       - name: Lint
-        run: uv run ruff check designs/pmod-loopback/gateware/
+        run: uv run --extra dev ruff check designs/pmod-loopback/gateware/
