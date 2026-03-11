@@ -212,5 +212,5 @@ __marimo__/
 # Build artifacts
 **/build/
 
-# uv
-uv.lock
+# uv.lock — tracked for reproducible CI builds
+# uv.lock
