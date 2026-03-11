@@ -43,7 +43,7 @@ jobs:
         run: |
           mkdir -p "$CHIPDB"
           uv run python designs/uart/gateware/uart_soc_arty.py \
-            --toolchain yosys+nextpnr \
+            --toolchain openxc7 \
             --build
 
       - name: Upload bitstream
@@ -83,7 +83,7 @@ jobs:
         run: |
           mkdir -p "$CHIPDB"
           uv run python designs/uart/gateware/uart_soc_netv2.py \
-            --toolchain yosys+nextpnr \
+            --toolchain openxc7 \
             --build
 
       - name: Upload bitstream

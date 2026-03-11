@@ -44,7 +44,7 @@ jobs:
           mkdir -p "$CHIPDB"
           uv run python designs/ethernet-test/gateware/ethernet_soc_arty.py \
             --variant a7-35 \
-            --toolchain yosys+nextpnr \
+            --toolchain openxc7 \
             --build
 
       - name: Upload bitstream
@@ -83,7 +83,7 @@ jobs:
           mkdir -p "$CHIPDB"
           uv run python designs/ethernet-test/gateware/ethernet_soc_netv2.py \
             --variant a7-35 \
-            --toolchain yosys+nextpnr \
+            --toolchain openxc7 \
             --build
 
       - name: Upload bitstream

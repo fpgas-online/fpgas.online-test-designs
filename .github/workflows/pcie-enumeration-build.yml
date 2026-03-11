@@ -44,7 +44,7 @@ jobs:
           mkdir -p "$CHIPDB"
           uv run python designs/pcie-enumeration/gateware/pcie_soc_netv2.py \
             --variant a7-35 \
-            --toolchain yosys+nextpnr \
+            --toolchain openxc7 \
             --build
 
       - name: Upload bitstream
