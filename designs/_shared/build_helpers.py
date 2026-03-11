@@ -39,7 +39,7 @@ def default_build_dir(gateware_file, board_name):
     return str(design_dir / "build" / board_name)
 
 
-def build_soc(soc, parser, board_name, gateware_file=None):
+def build_soc(soc, parser, board_name, gateware_file=None, args=None):
     """Configure the Builder and run the build if requested.
 
     *board_name* is the board-specific subdirectory name under ``build/``
@@ -48,8 +48,13 @@ def build_soc(soc, parser, board_name, gateware_file=None):
     If *gateware_file* is provided, the output directory is resolved
     relative to that file's design directory.  Otherwise falls back to
     the parser's builder_argdict output_dir (if set).
+
+    If *args* is provided, it is used directly instead of calling
+    ``parser.parse_args()`` again (which would cause argparse conflicts
+    when the caller has already parsed arguments).
     """
-    args = parser.parse_args()
+    if args is None:
+        args = parser.parse_args()
 
     builder_kwargs = parser.builder_argdict
     if gateware_file is not None:

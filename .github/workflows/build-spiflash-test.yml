@@ -23,12 +23,13 @@ jobs:
       - name: Install openXC7 toolchain and cross compiler
         run: |
           sudo apt-get update
-          sudo apt-get install -y yosys gcc-riscv64-linux-gnu
+          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
           wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
           sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
           sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
           sudo snap alias openxc7.fasm2frames fasm2frames
           sudo snap alias openxc7.xc7frames2bit xc7frames2bit
+          sudo snap alias openxc7.bbasm bbasm
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -62,12 +63,13 @@ jobs:
       - name: Install openXC7 toolchain and cross compiler
         run: |
           sudo apt-get update
-          sudo apt-get install -y yosys gcc-riscv64-linux-gnu
+          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
           wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
           sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
           sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
           sudo snap alias openxc7.fasm2frames fasm2frames
           sudo snap alias openxc7.xc7frames2bit xc7frames2bit
+          sudo snap alias openxc7.bbasm bbasm
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -92,65 +94,10 @@ jobs:
             designs/spi-flash-id/build/netv2/gateware/*.bit
           if-no-files-found: error
 
-  build-fomu:
-    name: "Fomu EVT"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install iCE40 toolchain and cross compiler
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yosys nextpnr-ice40 fpga-icestorm gcc-riscv64-linux-gnu
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync --extra build
-
-      - name: Build Fomu SPI Flash test bitstream
-        run: |
-          uv run python designs/spi-flash-id/gateware/spiflash_soc_fomu.py \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: spiflash-test-fomu
-          path: |
-            designs/spi-flash-id/build/fomu/gateware/*.bin
-          if-no-files-found: error
-
-  build-tt:
-    name: "TT FPGA Demo Board"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install iCE40 toolchain and cross compiler
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yosys nextpnr-ice40 fpga-icestorm gcc-riscv64-linux-gnu
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync --extra build
-
-      - name: Build TT FPGA SPI Flash test bitstream
-        run: |
-          uv run python designs/spi-flash-id/gateware/spiflash_soc_tt.py \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: spiflash-test-tt-fpga
-          path: |
-            designs/spi-flash-id/build/tt/gateware/*.bin
-          if-no-files-found: error
+  # NOTE: Fomu EVT and TT FPGA Demo Board SPI Flash builds are disabled.
+  # The VexRiscv SoC + SPI Flash design exceeds the iCE40UP5K's 5280 LCs
+  # (requires ~5326 LCs). These boards use S7SPIFlash which is Xilinx-specific
+  # anyway; iCE40 boards would need a different SPI flash approach.
 
   lint:
     name: "Lint Python"

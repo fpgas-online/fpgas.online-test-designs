@@ -23,12 +23,13 @@ jobs:
       - name: Install openXC7 toolchain and cross compiler
         run: |
           sudo apt-get update
-          sudo apt-get install -y yosys gcc-riscv64-linux-gnu
+          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
           wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
           sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
           sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
           sudo snap alias openxc7.fasm2frames fasm2frames
           sudo snap alias openxc7.xc7frames2bit xc7frames2bit
+          sudo snap alias openxc7.bbasm bbasm
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -61,12 +62,13 @@ jobs:
       - name: Install openXC7 toolchain and cross compiler
         run: |
           sudo apt-get update
-          sudo apt-get install -y yosys gcc-riscv64-linux-gnu
+          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
           wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
           sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
           sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
           sudo snap alias openxc7.fasm2frames fasm2frames
           sudo snap alias openxc7.xc7frames2bit xc7frames2bit
+          sudo snap alias openxc7.bbasm bbasm
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4

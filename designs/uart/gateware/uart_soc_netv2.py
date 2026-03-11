@@ -91,7 +91,7 @@ def main():
 
     ensure_chipdb_symlink(soc.platform)
     patch_yosys_template(soc)
-    build_soc(soc, parser, board_name="netv2", gateware_file=__file__)
+    build_soc(soc, parser, board_name="netv2", gateware_file=__file__, args=args)
 
 
 if __name__ == "__main__":
