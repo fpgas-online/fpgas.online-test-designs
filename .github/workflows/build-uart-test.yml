@@ -1,47 +1,149 @@
-name: Build UART Test Bitstreams
+# .github/workflows/build-uart-test.yml
+name: "Build: UART Test"
 
 on:
   push:
-    branches: [main]
     paths:
-      - 'designs/uart/gateware/uart_soc_*.py'
-      - '.github/workflows/build-uart-test.yml'
+      - "designs/uart/**"
+      - "designs/_shared/**"
+      - ".github/workflows/build-uart-test.yml"
   pull_request:
     paths:
-      - 'designs/uart/gateware/uart_soc_*.py'
-      - '.github/workflows/build-uart-test.yml'
+      - "designs/uart/**"
+      - "designs/_shared/**"
   workflow_dispatch:
 
 jobs:
-  build:
+  build-arty:
+    name: "Arty A7-35T"
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/meriac/openxc7-litex:latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - board: arty
-            target: designs/uart/gateware/uart_soc_arty.py
-            output_dir: designs/uart/build/arty
-          - board: netv2
-            target: designs/uart/gateware/uart_soc_netv2.py
-            output_dir: designs/uart/build/netv2
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build ${{ matrix.board }} UART test bitstream
+      - name: Install system dependencies
         run: |
-          python3 ${{ matrix.target }} \
+          sudo apt-get update
+          sudo apt-get install -y yosys nextpnr-xilinx prjxray-tools
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build Arty UART test bitstream
+        run: |
+          uv run python designs/uart/gateware/uart_soc_arty.py \
             --toolchain yosys+nextpnr \
             --build
 
-      - name: Upload bitstream artifact
+      - name: Upload bitstream
         uses: actions/upload-artifact@v4
         with:
-          name: uart-test-${{ matrix.board }}
+          name: uart-test-arty
           path: |
-            ${{ matrix.output_dir }}/gateware/*.bit
-            ${{ matrix.output_dir }}/gateware/*.bin
+            designs/uart/build/arty/gateware/*.bit
           if-no-files-found: error
+
+  build-netv2:
+    name: "NeTV2"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys nextpnr-xilinx prjxray-tools
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build NeTV2 UART test bitstream
+        run: |
+          uv run python designs/uart/gateware/uart_soc_netv2.py \
+            --toolchain yosys+nextpnr \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: uart-test-netv2
+          path: |
+            designs/uart/build/netv2/gateware/*.bit
+          if-no-files-found: error
+
+  build-fomu:
+    name: "Fomu EVT"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys nextpnr-ice40 fpga-icestorm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build Fomu UART test bitstream
+        run: |
+          uv run python designs/uart/gateware/uart_soc_fomu.py \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: uart-test-fomu
+          path: |
+            designs/uart/build/fomu/gateware/*.bin
+          if-no-files-found: error
+
+  build-tt:
+    name: "TT FPGA Demo Board"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys nextpnr-ice40 fpga-icestorm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build TT FPGA UART test bitstream
+        run: |
+          uv run python designs/uart/gateware/uart_soc_tt.py \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: uart-test-tt-fpga
+          path: |
+            designs/uart/build/tt/gateware/*.bin
+          if-no-files-found: error
+
+  lint:
+    name: "Lint Python"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Lint
+        run: uv run ruff check designs/uart/gateware/

@@ -1,18 +1,21 @@
 # .github/workflows/pmod-loopback-build.yml
-name: "Build: PMOD Loopback"
+name: "Build: GPIO Loopback (PMOD)"
 
 on:
   push:
     paths:
       - "designs/pmod-loopback/**"
+      - "designs/_shared/**"
       - ".github/workflows/pmod-loopback-build.yml"
   pull_request:
     paths:
       - "designs/pmod-loopback/**"
+      - "designs/_shared/**"
+  workflow_dispatch:
 
 jobs:
   build-arty:
-    name: "Arty A7-35T bitstream"
+    name: "Arty A7-35T"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,32 +23,118 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git build-essential python3 python3-pip
-
-      - name: Install openXC7 toolchain via snap
-        run: |
-          sudo snap install --classic openxc7
+          sudo apt-get install -y yosys nextpnr-xilinx prjxray-tools
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
       - name: Install Python dependencies
-        working-directory: designs/pmod-loopback
-        run: uv sync
+        run: uv sync --extra build
 
-      - name: Build gateware (bitstream + firmware)
-        working-directory: designs/pmod-loopback
+      - name: Build Arty GPIO Loopback
         run: |
-          uv run python gateware/pmod_loopback_soc.py \
-            --variant a7-35 \
+          uv run python designs/pmod-loopback/gateware/gpio_loopback_arty.py \
             --toolchain openxc7 \
             --build
 
-      - name: Upload bitstream artifact
+      - name: Upload bitstream
         uses: actions/upload-artifact@v4
         with:
-          name: pmod-loopback-arty-a7-35t
-          path: designs/pmod-loopback/build/digilent_arty/gateware/digilent_arty.bit
+          name: gpio-loopback-arty-a7-35t
+          path: |
+            designs/pmod-loopback/build/arty/*.bit
+          if-no-files-found: error
+
+  build-netv2:
+    name: "NeTV2"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys nextpnr-xilinx prjxray-tools
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build NeTV2 GPIO Loopback
+        run: |
+          uv run python designs/pmod-loopback/gateware/gpio_loopback_netv2.py \
+            --toolchain openxc7 \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpio-loopback-netv2
+          path: |
+            designs/pmod-loopback/build/netv2/*.bit
+          if-no-files-found: error
+
+  build-fomu:
+    name: "Fomu EVT"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys nextpnr-ice40 fpga-icestorm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build Fomu GPIO Loopback
+        run: |
+          uv run python designs/pmod-loopback/gateware/gpio_loopback_fomu.py \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpio-loopback-fomu-evt
+          path: |
+            designs/pmod-loopback/build/fomu/*.bin
+          if-no-files-found: error
+
+  build-tt:
+    name: "TT FPGA Demo Board"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys nextpnr-ice40 fpga-icestorm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build TT FPGA GPIO Loopback
+        run: |
+          uv run python designs/pmod-loopback/gateware/gpio_loopback_tt.py \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpio-loopback-tt-fpga
+          path: |
+            designs/pmod-loopback/build/tt/*.bin
+          if-no-files-found: error
 
   lint:
     name: "Lint Python"
@@ -56,7 +145,5 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
-      - name: Lint with ruff
-        working-directory: designs/pmod-loopback
-        run: |
-          uv run ruff check gateware/ host/ firmware/
+      - name: Lint
+        run: uv run ruff check designs/pmod-loopback/gateware/

@@ -1,47 +1,89 @@
-name: Build DDR Memory Test Bitstreams
+# .github/workflows/build-ddr-test.yml
+name: "Build: DDR Memory Test"
 
 on:
   push:
-    branches: [main]
     paths:
-      - 'designs/ddr-memory/gateware/ddr_soc_*.py'
-      - '.github/workflows/build-ddr-test.yml'
+      - "designs/ddr-memory/**"
+      - "designs/_shared/**"
+      - ".github/workflows/build-ddr-test.yml"
   pull_request:
     paths:
-      - 'designs/ddr-memory/gateware/ddr_soc_*.py'
-      - '.github/workflows/build-ddr-test.yml'
+      - "designs/ddr-memory/**"
+      - "designs/_shared/**"
   workflow_dispatch:
 
 jobs:
-  build:
+  build-arty:
+    name: "Arty A7-35T (DDR3)"
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/meriac/openxc7-litex:latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - board: arty
-            target: designs/ddr-memory/gateware/ddr_soc_arty.py
-            output_dir: designs/ddr-memory/build/arty
-          - board: netv2
-            target: designs/ddr-memory/gateware/ddr_soc_netv2.py
-            output_dir: designs/ddr-memory/build/netv2
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build ${{ matrix.board }} DDR test bitstream
+      - name: Install system dependencies
         run: |
-          python3 ${{ matrix.target }} \
+          sudo apt-get update
+          sudo apt-get install -y yosys nextpnr-xilinx prjxray-tools
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build Arty DDR test bitstream
+        run: |
+          uv run python designs/ddr-memory/gateware/ddr_soc_arty.py \
             --toolchain yosys+nextpnr \
             --build
 
-      - name: Upload bitstream artifact
+      - name: Upload bitstream
         uses: actions/upload-artifact@v4
         with:
-          name: ddr-test-${{ matrix.board }}
+          name: ddr-test-arty
           path: |
-            ${{ matrix.output_dir }}/gateware/*.bit
-            ${{ matrix.output_dir }}/gateware/*.bin
+            designs/ddr-memory/build/arty/gateware/*.bit
           if-no-files-found: error
+
+  build-netv2:
+    name: "NeTV2 (DDR3)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys nextpnr-xilinx prjxray-tools
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build NeTV2 DDR test bitstream
+        run: |
+          uv run python designs/ddr-memory/gateware/ddr_soc_netv2.py \
+            --toolchain yosys+nextpnr \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: ddr-test-netv2
+          path: |
+            designs/ddr-memory/build/netv2/gateware/*.bit
+          if-no-files-found: error
+
+  lint:
+    name: "Lint Python"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Lint
+        run: uv run ruff check designs/ddr-memory/gateware/

@@ -1,47 +1,149 @@
-name: Build SPI Flash ID Test Bitstreams
+# .github/workflows/build-spiflash-test.yml
+name: "Build: SPI Flash ID Test"
 
 on:
   push:
-    branches: [main]
     paths:
-      - 'designs/spi-flash-id/**'
-      - '.github/workflows/build-spiflash-test.yml'
+      - "designs/spi-flash-id/**"
+      - "designs/_shared/**"
+      - ".github/workflows/build-spiflash-test.yml"
   pull_request:
     paths:
-      - 'designs/spi-flash-id/**'
-      - '.github/workflows/build-spiflash-test.yml'
+      - "designs/spi-flash-id/**"
+      - "designs/_shared/**"
   workflow_dispatch:
 
 jobs:
-  build:
+  build-arty:
+    name: "Arty A7-35T"
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/meriac/openxc7-litex:latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - board: arty
-            target: designs/spi-flash-id/gateware/spiflash_soc_arty.py
-            output_dir: designs/spi-flash-id/build/arty
-          - board: netv2
-            target: designs/spi-flash-id/gateware/spiflash_soc_netv2.py
-            output_dir: designs/spi-flash-id/build/netv2
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build ${{ matrix.board }} SPI flash test bitstream
+      - name: Install system dependencies
         run: |
-          python3 ${{ matrix.target }} \
+          sudo apt-get update
+          sudo apt-get install -y yosys nextpnr-xilinx prjxray-tools
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build Arty SPI Flash test bitstream
+        run: |
+          uv run python designs/spi-flash-id/gateware/spiflash_soc_arty.py \
             --toolchain yosys+nextpnr \
             --build
 
-      - name: Upload bitstream artifact
+      - name: Upload bitstream
         uses: actions/upload-artifact@v4
         with:
-          name: spiflash-test-${{ matrix.board }}
+          name: spiflash-test-arty
           path: |
-            ${{ matrix.output_dir }}/gateware/*.bit
-            ${{ matrix.output_dir }}/gateware/*.bin
+            designs/spi-flash-id/build/arty/gateware/*.bit
           if-no-files-found: error
+
+  build-netv2:
+    name: "NeTV2"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys nextpnr-xilinx prjxray-tools
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build NeTV2 SPI Flash test bitstream
+        run: |
+          uv run python designs/spi-flash-id/gateware/spiflash_soc_netv2.py \
+            --toolchain yosys+nextpnr \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: spiflash-test-netv2
+          path: |
+            designs/spi-flash-id/build/netv2/gateware/*.bit
+          if-no-files-found: error
+
+  build-fomu:
+    name: "Fomu EVT"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys nextpnr-ice40 fpga-icestorm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build Fomu SPI Flash test bitstream
+        run: |
+          uv run python designs/spi-flash-id/gateware/spiflash_soc_fomu.py \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: spiflash-test-fomu
+          path: |
+            designs/spi-flash-id/build/fomu/gateware/*.bin
+          if-no-files-found: error
+
+  build-tt:
+    name: "TT FPGA Demo Board"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys nextpnr-ice40 fpga-icestorm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build TT FPGA SPI Flash test bitstream
+        run: |
+          uv run python designs/spi-flash-id/gateware/spiflash_soc_tt.py \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: spiflash-test-tt-fpga
+          path: |
+            designs/spi-flash-id/build/tt/gateware/*.bin
+          if-no-files-found: error
+
+  lint:
+    name: "Lint Python"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Lint
+        run: uv run ruff check designs/spi-flash-id/gateware/
