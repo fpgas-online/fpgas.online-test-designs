@@ -94,10 +94,65 @@ jobs:
             designs/spi-flash-id/build/netv2/gateware/*.bit
           if-no-files-found: error
 
-  # NOTE: Fomu EVT and TT FPGA Demo Board SPI Flash builds are disabled.
-  # The VexRiscv SoC + SPI Flash design exceeds the iCE40UP5K's 5280 LCs
-  # (requires ~5326 LCs). These boards use S7SPIFlash which is Xilinx-specific
-  # anyway; iCE40 boards would need a different SPI flash approach.
+  build-fomu:
+    name: "Fomu EVT"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install iCE40 toolchain and cross compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys nextpnr-ice40 fpga-icestorm gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build Fomu SPI Flash test bitstream
+        run: |
+          uv run python designs/spi-flash-id/gateware/spiflash_soc_fomu.py \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: spiflash-test-fomu
+          path: |
+            designs/spi-flash-id/build/fomu/gateware/*.bin
+          if-no-files-found: error
+
+  build-tt:
+    name: "TT FPGA Demo Board"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install iCE40 toolchain and cross compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys nextpnr-ice40 fpga-icestorm gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build TT FPGA SPI Flash test bitstream
+        run: |
+          uv run python designs/spi-flash-id/gateware/spiflash_soc_tt.py \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: spiflash-test-tt-fpga
+          path: |
+            designs/spi-flash-id/build/tt/gateware/*.bin
+          if-no-files-found: error
 
   lint:
     name: "Lint Python"

@@ -87,6 +87,7 @@ def main():
 
     soc = BaseSoC(
         sys_clk_freq = sys_clk_freq,
+        cpu_variant  = "minimal",
         ident        = "fpgas-online SPI Flash Test SoC -- TT FPGA",
         uart_baudrate = 115200,
     )
