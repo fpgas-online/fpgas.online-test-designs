@@ -187,7 +187,7 @@ class PmodHatGpio:
         if _GPIOD_V2:
             values = self._read_request.get_values()
             for i, pin in enumerate(self.read_pins):
-                if values[pin] == gpiod.line.Value.ACTIVE:
+                if values[i] == gpiod.line.Value.ACTIVE:
                     result |= (1 << i)
         else:
             for i, line in enumerate(self._read_lines):
