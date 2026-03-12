@@ -54,20 +54,11 @@ class BaseSoC(SoCCore):
         kwargs["uart_name"] = "serial"
         # BIOS lives in EBR-based ROM (initialized via bitstream).
         # SPRAM is used for SRAM/main_ram only (cannot be initialized).
-        kwargs["integrated_rom_size"]  = 15*kB
+        kwargs["integrated_rom_size"]  = 1*kB   # Custom firmware is <200 bytes
         kwargs["integrated_sram_size"] = 0
         # Use VexRiscv "minimal" variant: smallest footprint for iCE40.
         kwargs.setdefault("cpu_variant", "minimal")
         SoCCore.__init__(self, platform, sys_clk_freq, **kwargs)
-
-        # Shrink BIOS to fit in iCE40 EBR (~15 KB max).
-        # Disable banner, boot sequence, CRC, and memtest to minimize ROM usage.
-        # BIOS still prints init header + SPI flash info + "Done (No Console)".
-        # (BIOS_NO_BUILD_TIME is set automatically when ident_version=False.)
-        self.add_config("BIOS_NO_PROMPT")
-        self.add_config("BIOS_NO_BOOT")
-        self.add_config("BIOS_NO_CRC")
-        self.add_config("MAIN_RAM_INIT")
 
         # 128KB SPRAM (used as 64kB SRAM / 64kB main RAM) -----------------------------------------
         self.spram = Up5kSPRAM(size=128*kB)
