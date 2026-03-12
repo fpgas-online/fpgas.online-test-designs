@@ -63,10 +63,10 @@ class BaseSoC(SoCCore):
         kwargs.setdefault("cpu_variant", "minimal")
         SoCCore.__init__(self, platform, sys_clk_freq, **kwargs)
 
-        # Shrink BIOS to fit in iCE40 EBR: disable boot sequence, CRC, build time.
+        # Shrink BIOS to fit in iCE40 EBR: disable boot sequence and CRC.
+        # (BIOS_NO_BUILD_TIME is set automatically when ident_version=False.)
         self.add_config("BIOS_NO_BOOT")
         self.add_config("BIOS_NO_CRC")
-        self.add_config("BIOS_NO_BUILD_TIME")
 
         # 128 KB SPRAM (64 KB SRAM + 64 KB main RAM) ------------------------------------------
         self.spram = Up5kSPRAM(size=128*kB)
