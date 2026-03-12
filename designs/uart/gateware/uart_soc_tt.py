@@ -101,8 +101,8 @@ def main():
 
     output_dir = default_build_dir(__file__, "tt")
     builder = Builder(soc, output_dir=output_dir,
-        bios_console = "lite",  # Minimal console to fit in iCE40 EBR.
-        bios_lto     = True,    # Link-time optimization for smaller BIOS.
+        bios_console = "disable",  # No interactive console; LTO removes all cmd code.
+        bios_lto     = True,       # Link-time optimization for smaller BIOS.
     )
     if args.build:
         builder.build()
