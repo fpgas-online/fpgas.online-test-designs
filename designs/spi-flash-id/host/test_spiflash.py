@@ -38,6 +38,7 @@ EXPECTED_JEDEC_IDS: dict[str, tuple[int, int, int] | None] = {
     "arty":  None,  # TBD — varies by board revision
     "netv2": None,  # TBD — to be determined
     "fomu":  (0x1F, 0x86, 0x01),  # AT25SF161: Adesto/Renesas, 16 Mbit
+    "tt":    None,  # TBD — TT FPGA Demo Board SPI flash
 }
 
 # Common manufacturer names for reporting.

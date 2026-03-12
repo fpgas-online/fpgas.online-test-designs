@@ -56,7 +56,8 @@ BOARD_CONFIGS = {
 # GPIO chip labels for Raspberry Pi models.
 GPIO_CHIP_LABELS = {
     "pinctrl-rp1",       # RPi 5 (RP1 chip)
-    "pinctrl-bcm2835",   # RPi 4 / RPi 3
+    "pinctrl-bcm2711",   # RPi 4 (BCM2711)
+    "pinctrl-bcm2835",   # RPi 3 / RPi Zero
 }
 
 # Detect gpiod API version.

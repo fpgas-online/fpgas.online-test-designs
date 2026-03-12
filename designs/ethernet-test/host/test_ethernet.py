@@ -185,6 +185,10 @@ def test_arp(fpga_ip, interface, timeout=10):
     except FileNotFoundError:
         print("  FAIL: 'arping' not found. Install it with: sudo apt install arping")
         return False, None
+    # When sudo wraps a missing command, it returns exit code 1 with stderr
+    if "not found" in result.stderr or "No such file" in result.stderr:
+        print("  FAIL: 'arping' not found. Install it with: sudo apt install arping")
+        return False, None
     print(f"  stdout: {result.stdout.strip()}")
 
     # Check for successful ARP reply
