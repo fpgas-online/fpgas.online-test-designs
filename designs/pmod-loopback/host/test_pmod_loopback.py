@@ -32,11 +32,12 @@ import gpiod
 
 BOARD_CONFIGS = {
     "arty": {
-        # RPi PMOD HAT JA -> Arty PMOD A (FPGA input side)
-        "drive_pins": [6, 13, 19, 26, 12, 16, 20, 21],  # JA1-JA4, JA7-JA10
-        # RPi PMOD HAT JB -> Arty PMOD B (FPGA output side)
-        "read_pins": [5, 11, 9, 10, 7, 8, 0, 1],  # JB1-JB4, JB7-JB10
-        "width": 8,
+        # Single PMOD cable: RPi PMOD HAT JA -> Arty PMOD A (JA)
+        # Top row (pins 1-4) = FPGA input  (pmoda:0-3)
+        "drive_pins": [6, 13, 19, 26],       # JA1-JA4
+        # Bottom row (pins 7-10) = FPGA output (pmoda:4-7)
+        "read_pins": [12, 16, 20, 21],       # JA7-JA10
+        "width": 4,
     },
     "netv2": {
         "drive_pins": [14],  # RPi GPIO14 (TX) -> FPGA E13 (RX)
@@ -267,30 +268,31 @@ def run_test(board_name, config):
             expected = (~pattern) & mask
 
             total_tests += 1
+            hex_width = (width + 3) // 4
+            fmt = "0x{{:0{}X}}".format(hex_width)
             if reading != expected:
                 failures.append(
-                    f"sent 0x{pattern:0{(width + 3) // 4}X}, "
-                    f"expected 0x{expected:0{(width + 3) // 4}X}, "
-                    f"got 0x{reading:0{(width + 3) // 4}X} "
-                    f"(diff 0x{expected ^ reading:0{(width + 3) // 4}X})"
+                    "sent {}, expected {}, got {} (diff {})".format(
+                        fmt.format(pattern), fmt.format(expected),
+                        fmt.format(reading), fmt.format(expected ^ reading))
                 )
-                print(f"  FAIL: sent 0x{pattern:0{(width + 3) // 4}X}, "
-                      f"expected ~=0x{expected:0{(width + 3) // 4}X}, "
-                      f"got 0x{reading:0{(width + 3) // 4}X}")
+                print("  FAIL: sent {}, expected ~={}, got {}".format(
+                      fmt.format(pattern), fmt.format(expected),
+                      fmt.format(reading)))
             else:
-                print(f"  OK:   0x{pattern:0{(width + 3) // 4}X} -> "
-                      f"~=0x{expected:0{(width + 3) // 4}X}")
+                print("  OK:   {} -> ~={}".format(
+                      fmt.format(pattern), fmt.format(expected)))
 
     finally:
         gpio.close()
 
     # Results
     print()
-    print(f"=== Results: {total_tests - len(failures)}/{total_tests} passed ===")
+    print("=== Results: {}/{} passed ===".format(total_tests - len(failures), total_tests))
     if failures:
         print("Failures:")
         for f in failures:
-            print(f"  - {f}")
+            print("  - {}".format(f))
         print("FAIL")
         return False
     else:
