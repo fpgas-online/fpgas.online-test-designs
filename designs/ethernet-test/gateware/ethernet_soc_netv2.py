@@ -32,7 +32,7 @@ from designs._shared.yosys_workarounds import patch_yosys_template, apply_nodram
 def main():
     from litex.build.parser import LiteXArgumentParser
     parser = LiteXArgumentParser(platform=kosagi_netv2.Platform, description="Ethernet Test SoC for NeTV2")
-    parser.add_target_argument("--variant", default="a7-35",
+    parser.add_target_argument("--variant", default="a7-100",
         choices=["a7-35", "a7-100"],
         help="NeTV2 FPGA variant: a7-35 (developer) or a7-100 (production)")
     parser.add_target_argument("--sys-clk-freq", default=50e6,  type=float, help="System clock frequency.")

@@ -33,7 +33,7 @@ def main():
     from litex.build.parser import LiteXArgumentParser
     parser = LiteXArgumentParser(platform=Platform, description="SPI Flash ID Test SoC for NeTV2")
     target_group = parser.target_group
-    target_group.add_argument("--variant", default="a7-35",
+    target_group.add_argument("--variant", default="a7-100",
         choices=["a7-35", "a7-100"],
         help="NeTV2 FPGA variant: a7-35 (developer) or a7-100 (production)")
     target_group.add_argument("--sys-clk-freq",  default=50e6, type=float, help="System clock frequency.")

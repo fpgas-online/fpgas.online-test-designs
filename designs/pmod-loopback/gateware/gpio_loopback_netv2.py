@@ -32,7 +32,7 @@ class GPIOLoopback(Module):
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="GPIO Loopback for NeTV2")
-    parser.add_argument("--variant", default="a7-35", choices=["a7-35", "a7-100"])
+    parser.add_argument("--variant", default="a7-100", choices=["a7-35", "a7-100"])
     parser.add_argument("--toolchain", default="openxc7", choices=["openxc7", "vivado"])
     parser.add_argument("--build", action="store_true")
     args = parser.parse_args()

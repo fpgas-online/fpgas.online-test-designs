@@ -75,7 +75,7 @@ class BaseSoC(SoCCore):
 def main():
     from litex.build.parser import LiteXArgumentParser
     parser = LiteXArgumentParser(platform=kosagi_netv2.Platform, description="UART Test SoC for NeTV2")
-    parser.add_target_argument("--variant",      default="a7-35", choices=["a7-35", "a7-100"],
+    parser.add_target_argument("--variant",      default="a7-100", choices=["a7-35", "a7-100"],
         help="NeTV2 FPGA variant: a7-35 (developer) or a7-100 (production).")
     parser.add_target_argument("--sys-clk-freq", default=100e6, type=float, help="System clock frequency.")
     args = parser.parse_args()

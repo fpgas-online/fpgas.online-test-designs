@@ -281,7 +281,7 @@ def main():
         description="PCIe Enumeration Test SoC for NeTV2",
     )
     parser.add_argument(
-        "--variant", default="a7-35", choices=["a7-35", "a7-100"],
+        "--variant", default="a7-100", choices=["a7-35", "a7-100"],
         help="NeTV2 FPGA variant: a7-35 (developer) or a7-100 (production)",
     )
     parser.add_argument(
