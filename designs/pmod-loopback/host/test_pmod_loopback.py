@@ -15,7 +15,7 @@ Usage:
 Requirements:
     - Raspberry Pi with appropriate wiring to the FPGA board
     - FPGA programmed with the matching gpio_loopback bitstream
-    - libgpiod2 installed (apt install libgpiod2 python3-libgpiod)
+    - python3-libgpiod installed (v1.6+ or v2.x both supported)
 """
 
 import argparse
@@ -55,9 +55,12 @@ BOARD_CONFIGS = {
 
 # GPIO chip labels for Raspberry Pi models.
 GPIO_CHIP_LABELS = {
-    "pinctrl-rp1":     None,   # RPi 5 (RP1 chip)
-    "pinctrl-bcm2835": None,   # RPi 4 / RPi 3
+    "pinctrl-rp1",       # RPi 5 (RP1 chip)
+    "pinctrl-bcm2835",   # RPi 4 / RPi 3
 }
+
+# Detect gpiod API version.
+_GPIOD_V2 = hasattr(gpiod, "request_lines")
 
 
 # -- GPIO helpers --------------------------------------------------------------
@@ -73,8 +76,10 @@ def detect_gpio_chip():
     for chip_path in sorted(pathlib.Path("/dev").glob("gpiochip*")):
         try:
             chip = gpiod.Chip(str(chip_path))
-            info = chip.get_info()
-            label = info.label
+            if _GPIOD_V2:
+                label = chip.get_info().label
+            else:
+                label = chip.label()
             chip.close()
             if label in GPIO_CHIP_LABELS:
                 return str(chip_path)
@@ -87,17 +92,28 @@ def detect_gpio_chip():
 
 
 class PmodHatGpio:
-    """Drive/read GPIO pins using gpiod."""
+    """Drive/read GPIO pins using gpiod (supports both v1.6+ and v2.x)."""
 
     def __init__(self, drive_pins, read_pins, chip_path=None):
         self.drive_pins = drive_pins
         self.read_pins = read_pins
         self.chip_path = chip_path or detect_gpio_chip()
+        # v2 state
         self._drive_request = None
         self._read_request = None
+        # v1 state
+        self._chip = None
+        self._drive_lines = []
+        self._read_lines = []
 
     def open(self):
         """Configure drive pins as outputs and read pins as inputs."""
+        if _GPIOD_V2:
+            self._open_v2()
+        else:
+            self._open_v1()
+
+    def _open_v2(self):
         if self.drive_pins:
             self._drive_request = gpiod.request_lines(
                 self.chip_path,
@@ -120,29 +136,60 @@ class PmodHatGpio:
                 },
             )
 
+    def _open_v1(self):
+        self._chip = gpiod.Chip(self.chip_path)
+        for pin in self.drive_pins:
+            line = self._chip.get_line(pin)
+            line.request(consumer="pmod-loopback-test",
+                         type=gpiod.LINE_REQ_DIR_OUT, default_val=0)
+            self._drive_lines.append(line)
+        for pin in self.read_pins:
+            line = self._chip.get_line(pin)
+            line.request(consumer="pmod-loopback-test",
+                         type=gpiod.LINE_REQ_DIR_IN)
+            self._read_lines.append(line)
+
     def close(self):
-        if self._drive_request:
-            self._drive_request.release()
-            self._drive_request = None
-        if self._read_request:
-            self._read_request.release()
-            self._read_request = None
+        if _GPIOD_V2:
+            if self._drive_request:
+                self._drive_request.release()
+                self._drive_request = None
+            if self._read_request:
+                self._read_request.release()
+                self._read_request = None
+        else:
+            for line in self._drive_lines + self._read_lines:
+                line.release()
+            self._drive_lines.clear()
+            self._read_lines.clear()
+            if self._chip:
+                self._chip.close()
+                self._chip = None
 
     def write(self, value):
         """Write N-bit value to drive (output) pins. Bit 0 = pin index 0."""
-        values = {}
-        for i, pin in enumerate(self.drive_pins):
-            bit = (value >> i) & 1
-            values[pin] = gpiod.line.Value.ACTIVE if bit else gpiod.line.Value.INACTIVE
-        self._drive_request.set_values(values)
+        if _GPIOD_V2:
+            values = {}
+            for i, pin in enumerate(self.drive_pins):
+                bit = (value >> i) & 1
+                values[pin] = gpiod.line.Value.ACTIVE if bit else gpiod.line.Value.INACTIVE
+            self._drive_request.set_values(values)
+        else:
+            for i, line in enumerate(self._drive_lines):
+                line.set_value((value >> i) & 1)
 
     def read(self):
         """Read N-bit value from read (input) pins. Returns int."""
-        values = self._read_request.get_values()
         result = 0
-        for i, pin in enumerate(self.read_pins):
-            if values[pin] == gpiod.line.Value.ACTIVE:
-                result |= (1 << i)
+        if _GPIOD_V2:
+            values = self._read_request.get_values()
+            for i, pin in enumerate(self.read_pins):
+                if values[pin] == gpiod.line.Value.ACTIVE:
+                    result |= (1 << i)
+        else:
+            for i, line in enumerate(self._read_lines):
+                if line.get_value():
+                    result |= (1 << i)
         return result
 
 
