@@ -10,7 +10,7 @@ No CPU, no UART, no firmware required on the FPGA.
 
 | Board | Interface | Pin Width | Status |
 |-------|-----------|-----------|--------|
-| [Digilent Arty A7](../hardware/arty-a7.md) | PMOD A (input) / PMOD B (output) | 8-bit | Active |
+| [Digilent Arty A7](../hardware/arty-a7.md) | PMOD A (input) / PMOD B (output) | 4-bit (of 8) | Active |
 | [Kosagi NeTV2](../hardware/netv2.md) | Serial pins E13 (input) / E14 (output) | 1-bit | Active |
 | [Fomu EVT](../hardware/fomu-evt.md) | Half-PMOD A (input) / Half-PMOD B (output) | 4-bit | Active |
 
@@ -118,10 +118,23 @@ uv run python host/test_pmod_loopback.py --board fomu
 
 ### Arty A7
 
-| RPi PMOD HAT JA (drive) | Arty PMOD A (FPGA in) | RPi PMOD HAT JB (read) | Arty PMOD B (FPGA out) |
-|--------------------------|----------------------|------------------------|------------------------|
-| GPIO 6, 13, 19, 26 | pmoda:0-3 | GPIO 5, 11, 9, 10 | pmodb:0-3 |
-| GPIO 12, 16, 20, 21 | pmoda:4-7 | GPIO 7, 8, 0, 1 | pmodb:4-7 |
+**Cable wiring**: RPi PMOD HAT JA -> Arty PMOD A (JA), RPi PMOD HAT JC -> Arty PMOD B (JB).
+
+The FPGA gateware maps all 8 bits (`pmodb[N] = ~pmoda[N]`), but only 4 of the 8
+bit lanes have confirmed end-to-end RPi-to-FPGA-to-RPi connectivity. The test
+currently exercises these 4 empirically verified pairs:
+
+| Bit | Drive (RPi out) | HAT Port | Read (RPi in) | HAT Port | Verified |
+|-----|-----------------|----------|---------------|----------|----------|
+| 0 | GPIO 8 | JB8 | GPIO 7 | JB7 | Yes |
+| 1 | GPIO 19 | JA3 | GPIO 26 | JA4 | Yes |
+| 2 | GPIO 20 | JA9 | GPIO 3 | JC8 | Yes |
+| 3 | GPIO 21 | JA10 | GPIO 13 | JA2 | Yes |
+
+The remaining 4 pairs (to cover all 8 FPGA bit lanes) have not yet been
+identified. A comprehensive GPIO scan (test_diag16.py) found no additional
+responding pairs, suggesting those pins may not be physically connected
+by the current cable setup.
 
 ### NeTV2
 
