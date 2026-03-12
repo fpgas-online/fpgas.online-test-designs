@@ -54,8 +54,8 @@ jobs:
             designs/ddr-memory/build/arty/gateware/*.bit
           if-no-files-found: error
 
-  build-netv2:
-    name: "NeTV2 (DDR3)"
+  build-netv2-a7-35:
+    name: "NeTV2 A7-35T (DDR3)"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -77,19 +77,61 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --extra build
 
-      - name: Build NeTV2 DDR test bitstream
+      - name: Build NeTV2 A7-35T DDR test bitstream
         env:
           CHIPDB: ${{ github.workspace }}/chipdb
         run: |
           mkdir -p "$CHIPDB"
           uv run python designs/ddr-memory/gateware/ddr_soc_netv2.py \
+            --variant a7-35 \
             --toolchain openxc7 \
             --build
 
       - name: Upload bitstream
         uses: actions/upload-artifact@v4
         with:
-          name: ddr-test-netv2
+          name: ddr-test-netv2-a7-35t
+          path: |
+            designs/ddr-memory/build/netv2/gateware/*.bit
+          if-no-files-found: error
+
+  build-netv2-a7-100:
+    name: "NeTV2 A7-100T (DDR3)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install openXC7 toolchain and cross compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
+          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
+          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
+          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
+          sudo snap alias openxc7.fasm2frames fasm2frames
+          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
+          sudo snap alias openxc7.bbasm bbasm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build NeTV2 A7-100T DDR test bitstream
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
+        run: |
+          mkdir -p "$CHIPDB"
+          uv run python designs/ddr-memory/gateware/ddr_soc_netv2.py \
+            --variant a7-100 \
+            --toolchain openxc7 \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: ddr-test-netv2-a7-100t
           path: |
             designs/ddr-memory/build/netv2/gateware/*.bit
           if-no-files-found: error
