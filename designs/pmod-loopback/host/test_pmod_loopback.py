@@ -88,7 +88,7 @@ def detect_gpio_chip():
             continue
     raise RuntimeError(
         "Cannot find GPIO chip with a known label "
-        f"({', '.join(GPIO_CHIP_LABELS)}). Is this a Raspberry Pi?"
+        "({}). Is this a Raspberry Pi?".format(', '.join(GPIO_CHIP_LABELS))
     )
 
 
@@ -239,11 +239,11 @@ def run_test(board_name, config):
     failures = []
 
     print("=== PMOD GPIO Loopback Test ===")
-    print(f"Board:      {board_name}")
-    print(f"Width:      {width} bits")
-    print(f"Drive pins: {config['drive_pins']}")
-    print(f"Read pins:  {config['read_pins']}")
-    print(f"Patterns:   {len(patterns)}")
+    print("Board:      {}".format(board_name))
+    print("Width:      {} bits".format(width))
+    print("Drive pins: {}".format(config['drive_pins']))
+    print("Read pins:  {}".format(config['read_pins']))
+    print("Patterns:   {}".format(len(patterns)))
     print()
 
     if not config["drive_pins"] or not config["read_pins"]:
