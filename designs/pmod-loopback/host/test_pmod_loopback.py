@@ -32,11 +32,13 @@ import gpiod
 
 BOARD_CONFIGS = {
     "arty": {
-        # RPi PMOD HAT JA -> Arty PMOD A (FPGA input side)
-        "drive_pins": [6, 13, 19, 26, 12, 16, 20, 21],  # JA1-JA4, JA7-JA10
-        # RPi PMOD HAT JB -> Arty PMOD B (FPGA output side)
-        "read_pins": [5, 11, 9, 10, 7, 8, 0, 1],  # JB1-JB4, JB7-JB10
-        "width": 8,
+        # Empirically confirmed loopback pairs (100% confidence):
+        # Two PMOD cables: RPi HAT JA -> Arty JA, RPi HAT JC -> Arty JB
+        # FPGA does: pmodb = ~pmoda (per-bit inversion)
+        # 4 of 8 pairs confirmed; others need further investigation.
+        "drive_pins": [8, 19, 20, 21],   # RPi -> FPGA pmoda inputs
+        "read_pins":  [7, 26, 3, 13],    # FPGA pmodb outputs -> RPi
+        "width": 4,
     },
     "netv2": {
         "drive_pins": [14],  # RPi GPIO14 (TX) -> FPGA E13 (RX)
@@ -259,6 +261,8 @@ def run_test(board_name, config):
         # Small delay to let lines settle after configuration
         time.sleep(0.01)
 
+        hex_w = (width + 3) // 4
+
         for pattern in patterns:
             gpio.write(pattern)
             time.sleep(0.001)  # propagation settle time
@@ -269,28 +273,33 @@ def run_test(board_name, config):
             total_tests += 1
             if reading != expected:
                 failures.append(
-                    f"sent 0x{pattern:0{(width + 3) // 4}X}, "
-                    f"expected 0x{expected:0{(width + 3) // 4}X}, "
-                    f"got 0x{reading:0{(width + 3) // 4}X} "
-                    f"(diff 0x{expected ^ reading:0{(width + 3) // 4}X})"
-                )
-                print(f"  FAIL: sent 0x{pattern:0{(width + 3) // 4}X}, "
-                      f"expected ~=0x{expected:0{(width + 3) // 4}X}, "
-                      f"got 0x{reading:0{(width + 3) // 4}X}")
+                    "sent 0x{:0{}X}, "
+                    "expected 0x{:0{}X}, "
+                    "got 0x{:0{}X} "
+                    "(diff 0x{:0{}X})".format(
+                        pattern, hex_w, expected, hex_w,
+                        reading, hex_w, expected ^ reading, hex_w))
+                print("  FAIL: sent 0x{:0{}X}, "
+                      "expected ~=0x{:0{}X}, "
+                      "got 0x{:0{}X}".format(
+                          pattern, hex_w, expected, hex_w,
+                          reading, hex_w))
             else:
-                print(f"  OK:   0x{pattern:0{(width + 3) // 4}X} -> "
-                      f"~=0x{expected:0{(width + 3) // 4}X}")
+                print("  OK:   0x{:0{}X} -> "
+                      "~=0x{:0{}X}".format(
+                          pattern, hex_w, expected, hex_w))
 
     finally:
         gpio.close()
 
     # Results
     print()
-    print(f"=== Results: {total_tests - len(failures)}/{total_tests} passed ===")
+    print("=== Results: {}/{} passed ===".format(
+        total_tests - len(failures), total_tests))
     if failures:
         print("Failures:")
-        for f in failures:
-            print(f"  - {f}")
+        for fail in failures:
+            print("  - {}".format(fail))
         print("FAIL")
         return False
     else:
