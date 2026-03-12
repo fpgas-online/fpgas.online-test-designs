@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 """Pure GPIO loopback test for Digilent Arty A7.
 
-Uses a single PMOD connector (JA / pmoda) for both input and output:
-  - Top row    (pmoda:0-3, pins 1-4)  = input from RPi PMOD HAT
-  - Bottom row (pmoda:4-7, pins 7-10) = output to RPi PMOD HAT
+Uses a single PMOD connector (JA / pmoda) for both input and output.
+A 6-pin PMOD cable connects the RPi PMOD HAT JA bottom row to the
+Arty PMOD A bottom row (pins 7-10 only; pins 1-4 are not connected):
 
-Output = ~Input (4-bit bitwise inversion)
+  - Bottom row pins 7-8  (pmoda:4-5) = input from RPi PMOD HAT
+  - Bottom row pins 9-10 (pmoda:6-7) = output to RPi PMOD HAT
 
-This single-connector design works with one PMOD cable between the
-RPi PMOD HAT (JA) and the Arty PMOD A connector.
+Output = ~Input (2-bit bitwise inversion)
 
-No CPU, no UART, no firmware. The RPi drives the top-row JA pins
-via the PMOD HAT and reads the bottom-row JA pins to verify the
-connection.
+No CPU, no UART, no firmware. The RPi drives JA pins 7-8 via the
+PMOD HAT and reads JA pins 9-10 to verify the connection.
 """
 
 import sys
@@ -30,13 +29,16 @@ from litex_boards.platforms.digilent_arty import Platform
 from designs._shared.yosys_workarounds import YOSYS_TEMPLATE_STRIP_SCOPEINFO
 
 
-# Pin extension: top row of PMOD A = input, bottom row of PMOD A = output.
+# Pin extension: bottom row of PMOD A, split into input and output halves.
+# A 6-pin PMOD cable connects only the bottom row (pins 7-10).
+#   pmoda:4 (pin 7) and pmoda:5 (pin 8)  = input  (RPi drives)
+#   pmoda:6 (pin 9) and pmoda:7 (pin 10) = output (RPi reads)
 _loopback_io = [
     ("loopback_in", 0,
-        Pins("pmoda:0 pmoda:1 pmoda:2 pmoda:3"),
+        Pins("pmoda:4 pmoda:5"),
         IOStandard("LVCMOS33")),
     ("loopback_out", 0,
-        Pins("pmoda:4 pmoda:5 pmoda:6 pmoda:7"),
+        Pins("pmoda:6 pmoda:7"),
         IOStandard("LVCMOS33")),
 ]
 

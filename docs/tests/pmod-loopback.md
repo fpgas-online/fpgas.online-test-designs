@@ -10,7 +10,7 @@ No CPU, no UART, no firmware required on the FPGA.
 
 | Board | Interface | Pin Width | Status |
 |-------|-----------|-----------|--------|
-| [Digilent Arty A7](../hardware/arty-a7.md) | PMOD A (input) / PMOD B (output) | 8-bit | Active |
+| [Digilent Arty A7](../hardware/arty-a7.md) | PMOD A top row (input) / PMOD A bottom row (output) | 4-bit | Active |
 | [Kosagi NeTV2](../hardware/netv2.md) | Serial pins E13 (input) / E14 (output) | 1-bit | Active |
 | [Fomu EVT](../hardware/fomu-evt.md) | Half-PMOD A (input) / Half-PMOD B (output) | 4-bit | Active |
 
@@ -39,7 +39,7 @@ The FPGA is loaded with a minimal bitstream containing only:
 output_pins = ~input_pins
 ```
 
-- **Arty A7**: 8-bit inversion from PMOD A to PMOD B
+- **Arty A7**: 4-bit inversion from PMOD A top row to PMOD A bottom row
 - **NeTV2**: 1-bit inversion from serial RX pin (E13) to serial TX pin (E14)
 - **Fomu EVT**: 4-bit inversion from half-PMOD A to half-PMOD B
 
@@ -59,13 +59,13 @@ No clock domain, CRG, CPU, or bus infrastructure is needed.
 
 Patterns are adapted to the pin width:
 
-| Pattern Type | 8-bit (Arty) | 4-bit (Fomu) | 1-bit (NeTV2) |
-|-------------|--------------|---------------|---------------|
-| All zeros | 0x00 | 0x0 | 0 |
-| All ones | 0xFF | 0xF | 1 |
-| Walking 1 | 0x01..0x80 | 0x1..0x8 | (same as all-ones) |
-| Walking 0 | 0xFE..0x7F | 0xE..0x7 | (same as all-zeros) |
-| Alternating | 0xAA, 0x55 | 0xA, 0x5 | N/A |
+| Pattern Type | 4-bit (Arty/Fomu) | 1-bit (NeTV2) |
+|-------------|-------------------|---------------|
+| All zeros | 0x0 | 0 |
+| All ones | 0xF | 1 |
+| Walking 1 | 0x1..0x8 | (same as all-ones) |
+| Walking 0 | 0xE..0x7 | (same as all-zeros) |
+| Alternating | 0xA, 0x5 | N/A |
 
 ## Pass/Fail Criteria
 
@@ -118,10 +118,21 @@ uv run python host/test_pmod_loopback.py --board fomu
 
 ### Arty A7
 
-| RPi PMOD HAT JA (drive) | Arty PMOD A (FPGA in) | RPi PMOD HAT JB (read) | Arty PMOD B (FPGA out) |
-|--------------------------|----------------------|------------------------|------------------------|
-| GPIO 6, 13, 19, 26 | pmoda:0-3 | GPIO 5, 11, 9, 10 | pmodb:0-3 |
-| GPIO 12, 16, 20, 21 | pmoda:4-7 | GPIO 7, 8, 0, 1 | pmodb:4-7 |
+Uses a single PMOD cable from RPi PMOD HAT JA to Arty PMOD A (JA). The top row is input, the bottom row is output, on the same connector.
+
+| RPi PMOD HAT JA (drive) | Arty PMOD A top row (FPGA in) |
+|--------------------------|-------------------------------|
+| GPIO 6 (JA1)  | pmoda:0 (pin 1) |
+| GPIO 13 (JA2) | pmoda:1 (pin 2) |
+| GPIO 19 (JA3) | pmoda:2 (pin 3) |
+| GPIO 26 (JA4) | pmoda:3 (pin 4) |
+
+| RPi PMOD HAT JA (read) | Arty PMOD A bottom row (FPGA out) |
+|-------------------------|-----------------------------------|
+| GPIO 12 (JA7)  | pmoda:4 (pin 7)  |
+| GPIO 16 (JA8)  | pmoda:5 (pin 8)  |
+| GPIO 20 (JA9)  | pmoda:6 (pin 9)  |
+| GPIO 21 (JA10) | pmoda:7 (pin 10) |
 
 ### NeTV2
 

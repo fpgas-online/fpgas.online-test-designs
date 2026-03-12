@@ -32,12 +32,12 @@ import gpiod
 
 BOARD_CONFIGS = {
     "arty": {
-        # Single PMOD cable: RPi PMOD HAT JA -> Arty PMOD A (JA)
-        # Top row (pins 1-4) = FPGA input  (pmoda:0-3)
-        "drive_pins": [6, 13, 19, 26],       # JA1-JA4
-        # Bottom row (pins 7-10) = FPGA output (pmoda:4-7)
-        "read_pins": [12, 16, 20, 21],       # JA7-JA10
-        "width": 4,
+        # 6-pin PMOD cable: RPi PMOD HAT JA bottom row -> Arty PMOD A bottom row
+        # Pins 7-8 (pmoda:4-5) = FPGA input  (RPi drives)
+        "drive_pins": [12, 16],               # JA7, JA8
+        # Pins 9-10 (pmoda:6-7) = FPGA output (RPi reads)
+        "read_pins": [20, 21],                # JA9, JA10
+        "width": 2,
     },
     "netv2": {
         "drive_pins": [14],  # RPi GPIO14 (TX) -> FPGA E13 (RX)
