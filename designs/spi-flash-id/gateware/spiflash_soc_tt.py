@@ -32,7 +32,7 @@ from litex.soc.integration.builder import Builder
 
 from designs._shared.tt_fpga_platform import Platform
 from designs._shared.tt_fpga_crg import TtFpgaCRG
-from designs._shared.build_helpers import default_build_dir, patch_builder_gc_sections
+from designs._shared.build_helpers import default_build_dir, patch_builder_for_ice40
 
 kB = 1024
 
@@ -51,7 +51,7 @@ class BaseSoC(SoCCore):
         kwargs["uart_name"] = "serial"
         # BIOS lives in EBR-based ROM (initialized via bitstream).
         # SPRAM is used for SRAM/main_ram only (cannot be initialized).
-        kwargs["integrated_rom_size"]  = 12*kB
+        kwargs["integrated_rom_size"]  = 15*kB
         kwargs["integrated_sram_size"] = 0
         # Use VexRiscv "minimal" variant: smallest footprint for iCE40.
         kwargs.setdefault("cpu_variant", "minimal")
@@ -109,7 +109,7 @@ def main():
         bios_console = "disable",  # No interactive console; LTO removes all cmd code.
         bios_lto     = True,       # Link-time optimization for smaller BIOS.
     )
-    patch_builder_gc_sections(builder)
+    patch_builder_for_ice40(builder)
     builder.build(run=args.build)
 
 

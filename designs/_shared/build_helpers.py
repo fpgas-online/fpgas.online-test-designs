@@ -39,18 +39,25 @@ def default_build_dir(gateware_file, board_name):
     return str(design_dir / "build" / board_name)
 
 
-def patch_builder_gc_sections(builder):
-    """Add -ffunction-sections -fdata-sections to BIOS build flags.
+def patch_builder_for_ice40(builder):
+    """Patch Builder to minimise BIOS binary size for iCE40UP5K.
 
-    Without these flags, ``--gc-sections`` can only discard entire object
-    files.  With them, the linker removes individual unused functions and
-    data items, which is critical on iCE40UP5K where EBR is limited to
-    ~15 KB.
+    - Adds ``-ffunction-sections -fdata-sections`` so ``--gc-sections``
+      can discard individual unused functions (not just whole objects).
+    - Forces ``BIOS_CONSOLE_LITE=1`` so the Makefile compiles the small
+      ``readline_simple.o`` instead of the full ``readline.o``, even when
+      ``bios_console="disable"`` is used.  The C code only checks
+      ``BIOS_CONSOLE_DISABLE`` for the console loop, so both flags are
+      safe to combine.
     """
     orig = builder._get_variables_contents
 
     def _patched():
-        return orig() + "\nCPUFLAGS += -ffunction-sections -fdata-sections"
+        extra = (
+            "\nCPUFLAGS += -ffunction-sections -fdata-sections"
+            "\nBIOS_CONSOLE_LITE=1"
+        )
+        return orig() + extra
 
     builder._get_variables_contents = _patched
 
