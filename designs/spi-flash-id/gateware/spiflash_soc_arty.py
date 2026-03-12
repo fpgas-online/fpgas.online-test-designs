@@ -19,6 +19,13 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
+import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+
+from migen import *
+
+from litex.gen import *
+
+from litex.soc.cores.clock import S7PLL
 from litex.soc.integration.soc_core import SoCCore
 from litex.soc.integration.builder import Builder
 
@@ -29,6 +36,44 @@ from designs._shared.yosys_workarounds import patch_yosys_template
 
 from common import add_spi_flash
 
+
+# CRG (Clock Reset Generator) ---------------------------------------------------------------------
+
+class _CRG(LiteXModule):
+    """Minimal CRG for Arty A7: generates sys clock from the 100 MHz on-board oscillator."""
+    def __init__(self, platform, sys_clk_freq, with_rst=True):
+        self.rst    = Signal()
+        self.cd_sys = ClockDomain("sys")
+
+        # Clk/Rst.
+        clk100 = platform.request("clk100")
+        rst    = ~platform.request("cpu_reset") if with_rst else 0
+
+        # PLL.
+        self.pll = pll = S7PLL(speedgrade=-1)
+        self.comb += pll.reset.eq(rst | self.rst)
+        pll.register_clkin(clk100, 100e6)
+        pll.create_clkout(self.cd_sys, sys_clk_freq)
+        platform.add_false_path_constraints(self.cd_sys.clk, pll.clkin)
+
+
+# BaseSoC -----------------------------------------------------------------------------------------
+
+class BaseSoC(SoCCore):
+    def __init__(self, variant="a7-35", toolchain="vivado", sys_clk_freq=100e6, **kwargs):
+        platform = Platform(variant=variant, toolchain=toolchain)
+
+        # CRG ----------------------------------------------------------------------------------
+        self.crg = _CRG(platform, sys_clk_freq)
+
+        # SoCCore ------------------------------------------------------------------------------
+        SoCCore.__init__(self, platform, sys_clk_freq, **kwargs)
+
+        # SPI Flash ----------------------------------------------------------------------------
+        add_spi_flash(self, platform, sys_clk_freq)
+
+
+# Build --------------------------------------------------------------------------------------------
 
 def main():
     from litex.build.parser import LiteXArgumentParser
@@ -43,17 +88,14 @@ def main():
     )
     args = parser.parse_args()
 
-    platform = Platform(variant=args.variant, toolchain=args.toolchain)
-    sys_clk_freq = int(args.sys_clk_freq)
-
-    soc = SoCCore(
-        platform       = platform,
-        clk_freq       = sys_clk_freq,
+    soc = BaseSoC(
+        variant      = args.variant,
+        toolchain    = args.toolchain,
+        sys_clk_freq = int(args.sys_clk_freq),
         **parser.soc_argdict,
     )
 
     patch_yosys_template(soc)
-    add_spi_flash(soc, platform, sys_clk_freq)
 
     builder = Builder(soc, **parser.builder_argdict)
     builder.build(run=args.build)

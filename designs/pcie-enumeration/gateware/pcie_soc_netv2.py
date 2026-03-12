@@ -180,11 +180,35 @@ _litex_memory._memory_generate_verilog = _patched_memory_generate_verilog
 
 from migen import *
 
+from litex.gen import *
+
+from litex.soc.cores.clock import S7PLL
 from litex.soc.integration.builder import Builder
 from litex.soc.integration.soc_core import SoCCore
 
 from litex_boards.platforms import kosagi_netv2
 
+
+# CRG (Clock Reset Generator) ---------------------------------------------------------------------
+
+class _CRG(LiteXModule):
+    """Minimal CRG for NeTV2: generates sys clock from the 50 MHz on-board oscillator."""
+    def __init__(self, platform, sys_clk_freq):
+        self.rst    = Signal()
+        self.cd_sys = ClockDomain("sys")
+
+        # Clk.
+        clk50 = platform.request("clk50")
+
+        # PLL.
+        self.pll = pll = S7PLL(speedgrade=-1)
+        self.comb += pll.reset.eq(self.rst)
+        pll.register_clkin(clk50, 50e6)
+        pll.create_clkout(self.cd_sys, sys_clk_freq)
+        platform.add_false_path_constraints(self.cd_sys.clk, pll.clkin)
+
+
+# SoC ----------------------------------------------------------------------------------------------
 
 class PCIeEnumerationSoC(SoCCore):
     def __init__(self, variant="a7-35", toolchain="openxc7", **kwargs):
@@ -196,6 +220,9 @@ class PCIeEnumerationSoC(SoCCore):
 
         sys_clk_freq = 50e6
         is_vivado = (toolchain == "vivado")
+
+        # CRG ----------------------------------------------------------------------------------
+        self.crg = _CRG(platform, sys_clk_freq)
 
         SoCCore.__init__(
             self,
