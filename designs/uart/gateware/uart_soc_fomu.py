@@ -37,7 +37,7 @@ from litex.soc.integration.soc_core import SoCCore
 from litex.soc.integration.soc import SoCRegion
 from litex.soc.integration.builder import Builder
 
-from designs._shared.build_helpers import default_build_dir, patch_builder_for_ice40
+from designs._shared.build_helpers import default_build_dir
 from designs._shared.fomu_crg import FomuCRG
 
 kB = 1024
@@ -95,21 +95,24 @@ def main():
     parser.add_argument("--build", action="store_true", help="Build bitstream.")
     args = parser.parse_args()
 
+    ident = "fpgas-online UART Test SoC -- Fomu EVT"
+
     soc = BaseSoC(
         sys_clk_freq           = int(12e6),
-        ident                  = "fpgas-online UART Test SoC -- Fomu EVT",
+        ident                  = ident,
         uart_baudrate          = 115200,
         integrated_main_ram_size = 0,  # Provided by SPRAM above.
     )
 
     output_dir = default_build_dir(__file__, "fomu")
-    builder = Builder(soc, output_dir=output_dir,
-        bios_console = "disable",  # No interactive console; all cmd code is dead.
-        bios_lto     = False,      # LTO conflicts with --gc-sections; use -ffunction-sections instead.
-    )
-    patch_builder_for_ice40(builder)
-    if args.build:
-        builder.build()
+    # Skip BIOS compilation — LiteX BIOS (~24 KB) does not fit in iCE40 EBR (15 KB).
+    # Instead, install minimal custom firmware (< 200 bytes) after SoC finalization.
+    builder = Builder(soc, output_dir=output_dir, compile_software=False)
+
+    from designs._shared.ice40_firmware import install_uart_firmware
+    install_uart_firmware(soc, ident)
+
+    builder.build(run=args.build)
 
 
 if __name__ == "__main__":

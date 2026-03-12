@@ -32,7 +32,7 @@ from litex.soc.integration.builder import Builder
 
 from designs._shared.tt_fpga_platform import Platform
 from designs._shared.tt_fpga_crg import TtFpgaCRG
-from designs._shared.build_helpers import default_build_dir, patch_builder_for_ice40
+from designs._shared.build_helpers import default_build_dir
 
 kB = 1024
 
@@ -96,20 +96,23 @@ def main():
     args = parser.parse_args()
 
     sys_clk_freq = int(args.sys_clk_freq)
+    ident = "fpgas-online SPI Flash Test SoC -- TT FPGA"
 
     soc = BaseSoC(
         sys_clk_freq = sys_clk_freq,
         cpu_variant  = "minimal",
-        ident        = "fpgas-online SPI Flash Test SoC -- TT FPGA",
+        ident        = ident,
         uart_baudrate = 115200,
     )
 
     output_dir = args.output_dir or default_build_dir(__file__, "tt")
-    builder = Builder(soc, output_dir=output_dir,
-        bios_console = "disable",  # No interactive console; all cmd code is dead.
-        bios_lto     = False,      # LTO conflicts with --gc-sections; use -ffunction-sections instead.
-    )
-    patch_builder_for_ice40(builder)
+    # Skip BIOS compilation — LiteX BIOS (~24 KB) does not fit in iCE40 EBR (15 KB).
+    # TODO: Replace with SPI Flash firmware that reads JEDEC ID once implemented.
+    builder = Builder(soc, output_dir=output_dir, compile_software=False)
+
+    from designs._shared.ice40_firmware import install_uart_firmware
+    install_uart_firmware(soc, ident)
+
     builder.build(run=args.build)
 
 
