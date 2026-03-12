@@ -90,13 +90,15 @@ def main():
     soc = BaseSoC(
         sys_clk_freq           = int(12e6),
         ident                  = "fpgas-online UART Test SoC -- TT FPGA",
-        ident_version          = True,
         uart_baudrate          = 115200,
         integrated_main_ram_size = 0,  # Provided by SPRAM above.
     )
 
     output_dir = default_build_dir(__file__, "tt")
-    builder = Builder(soc, output_dir=output_dir)
+    builder = Builder(soc, output_dir=output_dir,
+        bios_console = "lite",  # Minimal console to fit in iCE40 EBR.
+        bios_lto     = True,    # Link-time optimization for smaller BIOS.
+    )
     if args.build:
         builder.build()
 

@@ -96,7 +96,10 @@ def main():
     )
 
     output_dir = args.output_dir or default_build_dir(__file__, "tt")
-    builder = Builder(soc, output_dir=output_dir)
+    builder = Builder(soc, output_dir=output_dir,
+        bios_console = "lite",  # Minimal console to fit in iCE40 EBR.
+        bios_lto     = True,    # Link-time optimization for smaller BIOS.
+    )
     builder.build(run=args.build)
 
 
