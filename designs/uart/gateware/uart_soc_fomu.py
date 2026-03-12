@@ -104,8 +104,8 @@ def main():
 
     output_dir = default_build_dir(__file__, "fomu")
     builder = Builder(soc, output_dir=output_dir,
-        bios_console = "disable",  # No interactive console; LTO removes all cmd code.
-        bios_lto     = True,       # Link-time optimization for smaller BIOS.
+        bios_console = "disable",  # No interactive console; all cmd code is dead.
+        bios_lto     = False,      # LTO conflicts with --gc-sections; use -ffunction-sections instead.
     )
     patch_builder_for_ice40(builder)
     if args.build:

@@ -54,7 +54,7 @@ def patch_builder_for_ice40(builder):
 
     def _patched():
         extra = (
-            "\nCPUFLAGS += -ffunction-sections -fdata-sections -Oz"
+            "\nCPUFLAGS += -ffunction-sections -fdata-sections"
             "\nBIOS_CONSOLE_LITE=1"
         )
         return orig() + extra
