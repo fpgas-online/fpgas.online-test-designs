@@ -6,8 +6,13 @@ Builds a minimal SoC with CPU + BIOS + UART.  The TT FPGA board's
 RP2040 acts as a USB-to-UART bridge:
   UART RX = ui_in[3] (pin 21), TX = uo_out[4] (pin 45).
 
-The iCE40UP5K has no block RAM large enough for a BIOS, so we use the
-128 KB UP5K SPRAM (split as 64 KB SRAM + 64 KB main RAM).
+Memory layout:
+  - Boot ROM: iCE40 EBR (block RAM), initialized via bitstream with BIOS.
+  - SRAM + main RAM: 128 KB UP5K SPRAM (64 KB + 64 KB).
+
+SPRAM cannot be initialized via bitstream, so a small block-RAM ROM is
+required for the CPU to boot.  The iCE40UP5K has 30 EBR blocks (15 KB
+total); we use ~12 KB for ROM, leaving the rest for peripheral FIFOs.
 
 Clock: 50 MHz from RP2040 → 12 MHz system clock via PLL.
 
@@ -15,7 +20,7 @@ Build command (from repo root):
     uv run python designs/uart/gateware/uart_soc_tt.py --build
 
 The bitstream is written to:
-    designs/uart/build/tt/gateware/ice40up5ksg48.bit
+    designs/uart/build/tt/gateware/tt_fpga_platform.bin
 """
 
 import argparse
@@ -51,9 +56,12 @@ class BaseSoC(SoCCore):
         # SoCCore ------------------------------------------------------------------------------
         # Use serial pins (UART via RP2040 USB bridge).
         kwargs["uart_name"] = "serial"
-        # Disable integrated SRAM/ROM -- iCE40 block RAM is too small; use SPRAM instead.
+        # BIOS lives in EBR-based ROM (initialized via bitstream).
+        # SPRAM is used for SRAM/main_ram only (cannot be initialized).
+        kwargs["integrated_rom_size"]  = 12*kB
         kwargs["integrated_sram_size"] = 0
-        kwargs["integrated_rom_size"]  = 0
+        # Use VexRiscv "minimal" variant: smallest footprint for iCE40.
+        kwargs.setdefault("cpu_variant", "minimal")
         SoCCore.__init__(self, platform, sys_clk_freq, **kwargs)
 
         # 128 KB SPRAM (64 KB SRAM + 64 KB main RAM) ------------------------------------------

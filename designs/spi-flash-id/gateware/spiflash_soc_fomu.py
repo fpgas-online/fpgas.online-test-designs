@@ -52,9 +52,12 @@ class BaseSoC(SoCCore):
         # SoCCore ----------------------------------------------------------------------------------
         # Use hardware UART on serial pins (not USB ACM).
         kwargs["uart_name"] = "serial"
-        # Disable Integrated ROM/SRAM — iCE40 UP5K uses dedicated SPRAM.
+        # BIOS lives in EBR-based ROM (initialized via bitstream).
+        # SPRAM is used for SRAM/main_ram only (cannot be initialized).
+        kwargs["integrated_rom_size"]  = 12*kB
         kwargs["integrated_sram_size"] = 0
-        kwargs["integrated_rom_size"]  = 0
+        # Use VexRiscv "minimal" variant: smallest footprint for iCE40.
+        kwargs.setdefault("cpu_variant", "minimal")
         SoCCore.__init__(self, platform, sys_clk_freq, **kwargs)
 
         # 128KB SPRAM (used as 64kB SRAM / 64kB main RAM) -----------------------------------------
