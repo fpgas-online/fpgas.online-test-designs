@@ -57,7 +57,7 @@ def run_ddr_test(ser: serial.Serial, board: str, timeout: int = BOOT_TIMEOUT_S) 
         lines.append(line)
 
         # Track calibration progress.
-        if "SDRAM now under software control" in line:
+        if "Switching SDRAM to software control" in line:
             calibration_ok = True
 
         # Detect memtest result.
