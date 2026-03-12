@@ -24,7 +24,7 @@ Internet ─── eth-uplink ──│  Debian 12 (bookworm)        │
               │ + Arty A7  │   │ + Fomu EVT  │   │ + TT08      │
               │ + PMOD HAT │   │ + OpenVizsla│   │ (RP2040)    │
               └────────────┘   └─────────────┘   └─────────────┘
-                  (×3)             (×1)              (×2)
+                  (×3)             (×2)              (×2)
 ```
 
 All Raspberry Pis netboot via PXE/TFTP from tweed. They connect to a PoE switch with numbered ports. Each RPi has a USB Ethernet adapter for the Arty board's Ethernet PHY testing.
@@ -74,17 +74,18 @@ Each RPi also has a separate USB Ethernet adapter connected to the Arty's Ethern
 
 Source: `lsusb` and `ls /dev/serial/by-id/` output from each RPi.
 
-### Fomu EVT (×1, on RPi 3B+)
+### Fomu EVT (×2, on RPi 3B+ hosts)
 
 | Host | Switch Port | IP | RPi Model | USB VID:PID | DFU Version |
 |------|------------|-----|-----------|-------------|-------------|
 | pi17 | port 17 | 10.21.0.117 | RPi 3B+ Rev 1.3 | 1209:5bf0 | v2.0.4 |
+| pi21 | port 21 | 10.21.0.121 | RPi 3B+ Rev 1.3 | 1209:5bf0 | v2.0.4 |
 
-The Fomu EVT appears as "Generic Fomu EVT running DFU Bootloader v2.0.4". No serial devices — the Fomu uses native USB for communication.
+Each Fomu EVT appears as "Generic Fomu EVT running DFU Bootloader v2.0.4". No serial devices — the Fomu uses native USB (ValentyUSB) for communication.
 
 Also on pi17: **OpenVizsla USB sniffer/analyzer** (VID:PID `1d50:607c`).
 
-Source: `lsusb` output from pi17.
+Source: `lsusb` output from pi17 and pi21.
 
 ### Tiny Tapeout Boards (×2, on RPi 3B+ hosts)
 
@@ -107,7 +108,6 @@ Source: `lsusb` and `ls /dev/serial/by-id/` output from pi23, pi25.
 |------|------------|-----|-----------|-------|
 | pi7 | port 7 | 10.21.0.107 | RPi 4 | PoE fault — offline |
 | pi19 | port 19 | 10.21.0.119 | RPi 3B+ | Tiny Tapeout ASIC board |
-| pi21 | port 21 | 10.21.0.121 | RPi 3B+ | Fomu EVT (iCE40UP5K) |
 | pi27 | port 27 | 10.21.0.127 | RPi 3B+ | Tiny Tapeout FPGA Demo Board + PMOD HAT |
 | pi29 | port 29 | 10.21.0.129 | RPi 3B+ | Tiny Tapeout FPGA Demo Board + PMOD HAT |
 | pi31 | port 31 | 10.21.0.131 | RPi 3B+ | Tiny Tapeout FPGA Demo Board + PMOD HAT |
@@ -122,7 +122,7 @@ The NeTV2 boards are on a **separate network** from the tweed-managed RPi fleet,
 | Host | IP (via DNS) | RPi Model | Board | Connections | SSH |
 |------|-------------|-----------|-------|-------------|-----|
 | rpi5-netv2.iot.welland.mithis.com | 10.1.90.210/211 | RPi 5 Model B Rev 1.0 | NeTV2 (bare developer) | GPIO + PCIe Gen2 x1 | `tim@rpi5-netv2.iot.welland.mithis.com` (via `wg-desktop`) |
-| rpi3-netv2.iot.welland.mithis.com | 10.1.90.212/213 | RPi 3 | NeTV2 (stock packaged) | GPIO only | Auth issues (key not accepted) |
+| rpi3-netv2.iot.welland.mithis.com | 10.1.90.212/213 | RPi 3 | NeTV2 (stock packaged) | GPIO only | `pi@rpi3-netv2.iot.welland.mithis.com` (via `wg-desktop`) |
 
 **rpi5-netv2** details (verified via SSH):
 - OS: Debian 13 (Trixie), kernel 6.12.47+rpt-rpi-2712 aarch64
@@ -131,7 +131,7 @@ The NeTV2 boards are on a **separate network** from the tweed-managed RPi fleet,
 - PCIe: Only RP1 south bridge visible — NeTV2 FPGA not currently enumerating on PCIe bus
 - No USB serial devices present
 
-**rpi3-netv2**: SSH authentication denied — OS details not confirmed.
+**rpi3-netv2**: Accessible via `pi@rpi3-netv2.iot.welland.mithis.com`.
 
 ### PMOD HAT Hosts (separate network)
 
@@ -294,5 +294,5 @@ The PMOD HAT provides 3 PMOD ports (JA, JB, JC) connecting RPi GPIO pins to stan
 - **pi11** (port 11): Arty A7 FTDI USB disconnected — board cannot be programmed or tested.
 - **pi7** (port 7): PoE fault — RPi is offline.
 - **rpi5-netv2**: NeTV2 FPGA not currently visible on PCIe bus (may need bitstream loaded first).
-- **rpi3-netv2**: SSH authentication denied — cannot verify hardware state.
+- **rpi3-netv2**: Accessible via `pi@rpi3-netv2.iot.welland.mithis.com` (previously had auth issues — resolved by using `pi` user instead of `tim`).
 - **rpi5-pmod / rpi4-pmod**: Discovered in known_hosts but not yet explored.

@@ -33,7 +33,12 @@ BOARD_IDENT = {
     "arty":  "Arty A7",
     "netv2": "NeTV2",
     "fomu":  "Fomu EVT",
+    "tt":    "TT FPGA",
 }
+
+# The LiteX BIOS readline buffer is ~64 characters.  We must reset
+# the command line periodically during the echo test to avoid overflow.
+BUFFER_RESET_INTERVAL = 50
 
 # Printable ASCII range for the echo test.  Control characters (0x00-0x1F,
 # 0x7F) are excluded because the LiteX BIOS interprets many of them (e.g.
@@ -76,6 +81,12 @@ def wait_for_banner(ser: serial.Serial, board: str) -> tuple[bool, list[str]]:
         print("FAIL: BIOS banner not detected within timeout")
         return False, lines
 
+    # If the ident string wasn't found in the boot output, try querying
+    # it explicitly via the BIOS ``ident`` command.  Some LiteX versions
+    # don't print the ident during boot, but the command always works.
+    if expected_ident and not found_ident:
+        found_ident = query_ident(ser, expected_ident, lines)
+
     if expected_ident and not found_ident:
         print(f"FAIL: Board identification string '{expected_ident}' not found")
         return False, lines
@@ -84,20 +95,55 @@ def wait_for_banner(ser: serial.Serial, board: str) -> tuple[bool, list[str]]:
     return True, lines
 
 
+def query_ident(ser: serial.Serial, expected_ident: str, lines: list[str]) -> bool:
+    """Send the ``ident`` command at the litex> prompt and check the response."""
+    ser.reset_input_buffer()
+    ser.write(b"ident\n")
+    time.sleep(0.5)
+
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        raw = ser.readline()
+        if not raw:
+            continue
+        line = raw.decode("utf-8", errors="replace").strip()
+        lines.append(line)
+        if expected_ident in line:
+            return True
+        # Stop reading once we see the next prompt.
+        if "litex>" in line:
+            break
+    return False
+
+
+def _reset_command_buffer(ser: serial.Serial):
+    """Send Ctrl-C to reset the BIOS command line and flush the response."""
+    ser.write(b"\x03")
+    time.sleep(0.1)
+    ser.reset_input_buffer()
+
+
 def echo_test(ser: serial.Serial) -> bool:
     """Send printable ASCII bytes one at a time and verify echo.
 
     The LiteX BIOS console echoes every printable character it receives.
     Control characters (0x00-0x1F, 0x7F) are excluded because the BIOS
     interprets them as commands rather than echoing them verbatim.
+
+    The BIOS readline buffer is ~64 characters, so we periodically send
+    Ctrl-C to reset the command line and prevent buffer overflow (which
+    causes the BIOS to respond with BEL instead of echoing).
     """
     # Flush any pending input.
-    ser.reset_input_buffer()
-    time.sleep(0.1)
+    _reset_command_buffer(ser)
 
     errors = 0
 
-    for byte_val in ECHO_TEST_BYTES:
+    for i, byte_val in enumerate(ECHO_TEST_BYTES):
+        # Reset the command buffer periodically to prevent overflow.
+        if i > 0 and i % BUFFER_RESET_INTERVAL == 0:
+            _reset_command_buffer(ser)
+
         ser.write(bytes([byte_val]))
         response = ser.read(1)
         if len(response) == 0:
@@ -133,7 +179,7 @@ def main() -> int:
     parser.add_argument(
         "--board",
         default="arty",
-        choices=list(BOARD_IDENT.keys()),
+        choices=["arty", "netv2", "fomu", "tt"],
         help="Board under test (default: arty)",
     )
     parser.add_argument(
