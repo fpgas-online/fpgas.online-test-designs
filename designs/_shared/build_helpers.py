@@ -39,6 +39,22 @@ def default_build_dir(gateware_file, board_name):
     return str(design_dir / "build" / board_name)
 
 
+def patch_builder_gc_sections(builder):
+    """Add -ffunction-sections -fdata-sections to BIOS build flags.
+
+    Without these flags, ``--gc-sections`` can only discard entire object
+    files.  With them, the linker removes individual unused functions and
+    data items, which is critical on iCE40UP5K where EBR is limited to
+    ~15 KB.
+    """
+    orig = builder._get_variables_contents
+
+    def _patched():
+        return orig() + "\nCPUFLAGS += -ffunction-sections -fdata-sections"
+
+    builder._get_variables_contents = _patched
+
+
 def build_soc(soc, parser, board_name, gateware_file=None, args=None):
     """Configure the Builder and run the build if requested.
 

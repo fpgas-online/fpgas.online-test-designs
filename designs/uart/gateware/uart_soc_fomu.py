@@ -37,7 +37,7 @@ from litex.soc.integration.soc_core import SoCCore
 from litex.soc.integration.soc import SoCRegion
 from litex.soc.integration.builder import Builder
 
-from designs._shared.build_helpers import default_build_dir
+from designs._shared.build_helpers import default_build_dir, patch_builder_gc_sections
 from designs._shared.fomu_crg import FomuCRG
 
 kB = 1024
@@ -107,6 +107,7 @@ def main():
         bios_console = "disable",  # No interactive console; LTO removes all cmd code.
         bios_lto     = True,       # Link-time optimization for smaller BIOS.
     )
+    patch_builder_gc_sections(builder)
     if args.build:
         builder.build()
 
