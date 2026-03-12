@@ -64,10 +64,14 @@ class BaseSoC(SoCCore):
         kwargs.setdefault("cpu_variant", "minimal")
         SoCCore.__init__(self, platform, sys_clk_freq, **kwargs)
 
-        # Shrink BIOS to fit in iCE40 EBR: disable boot sequence and CRC.
+        # Shrink BIOS to fit in iCE40 EBR (~15 KB max).
+        # Disable banner, boot sequence, CRC, and memtest to minimize ROM usage.
+        # BIOS still prints init header + "Done (No Console)" over UART.
         # (BIOS_NO_BUILD_TIME is set automatically when ident_version=False.)
+        self.add_config("BIOS_NO_PROMPT")
         self.add_config("BIOS_NO_BOOT")
         self.add_config("BIOS_NO_CRC")
+        self.add_config("MAIN_RAM_INIT")
 
         # 128 KB SPRAM (64 KB SRAM + 64 KB main RAM) ------------------------------------------
         self.spram = Up5kSPRAM(size=128*kB)
