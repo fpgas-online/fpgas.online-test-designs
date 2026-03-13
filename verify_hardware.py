@@ -80,7 +80,8 @@ DESIGNS = {
             # "netv2": {"artifact": "uart-test-netv2/kosagi_netv2.bit",
             #            "test_args": "--port /dev/ttyAMA0 --board netv2"},
             "fomu":  {"artifact": "uart-test-fomu/kosagi_fomu_evt.bin",
-                       "test_args": "--port /dev/ttyUSB0 --board fomu"},
+                       "test_args": "--port /dev/ttyAMA0 --board fomu --skip-banner",
+                       "pre_test": "systemctl stop serial-getty@ttyAMA0 2>&1; true"},
             "tt":    {"artifact": "uart-test-tt-fpga/tt_fpga_platform.bin",
                        "test_args": "--port /dev/ttyACM0 --board tt --skip-banner"},
         },
@@ -114,7 +115,7 @@ DESIGNS = {
             # "netv2": {"artifact": "spiflash-test-netv2/kosagi_netv2.bit",
             #            "test_args": "--port /dev/ttyAMA0 --board netv2"},
             "fomu":  {"artifact": "spiflash-test-fomu/kosagi_fomu_evt.bin",
-                       "test_args": "--port /dev/ttyUSB0 --board fomu"},
+                       "test_args": "--port /dev/ttyAMA0 --board fomu"},
             "tt":    {"artifact": "spiflash-test-tt-fpga/tt_fpga_platform.bin",
                        "test_args": "--port /dev/ttyACM0 --board tt"},
         },
@@ -238,9 +239,9 @@ def poe_reset(host_name, off_seconds=5):
         return False
     # Wait for host to boot (RPi 3 PXE boot can take ~2 minutes)
     print("  Waiting for {} to boot...".format(host_name))
-    for _ in range(30):
-        time.sleep(5)
-        if ssh_check_connectivity(host_name, timeout=5):
+    for _ in range(24):
+        time.sleep(10)
+        if ssh_check_connectivity(host_name, timeout=15):
             print("  {} is back online".format(host_name))
             return True
     print("  {} did not come back after PoE reset".format(host_name))
@@ -378,6 +379,12 @@ def run_single_test(test, skip_upload=False):
         if test["board"] == "fomu" and "No DFU capable USB device" in output:
             print("  Fomu DFU timeout — PoE resetting to re-enter bootloader...")
             if poe_reset(test["host"]):
+                # Re-upload files (PXE tmpfs lost on reboot)
+                print("  Re-uploading bitstream and test script...")
+                bitstream_path = os.path.join(ARTIFACTS_DIR, test["artifact"])
+                ssh_upload(test["host"], bitstream_path, test["remote_bitstream"])
+                script_path = os.path.join(REPO_DIR, test["test_script"])
+                ssh_upload(test["host"], script_path, test["remote_script"])
                 print("  Retrying FPGA programming...")
                 rc, stdout, stderr = ssh_run(
                     test["host"], test["program_cmd"], timeout=120)
