@@ -219,14 +219,23 @@ def _install_safe_main(port):
     can hang permanently, making the RP2350 unrecoverable without a
     physical reset.  Replace it with a no-op so the REPL always starts.
     """
-    subprocess.call(
-        ["mpremote", "connect", port, "exec",
-         "f = open('main.py', 'w')\n"
-         "f.write('# Safe main.py for FPGA test automation\\n')\n"
-         "f.write('print(\"TT FPGA board ready\")\\n')\n"
-         "f.close()"],
-        timeout=30,
-    )
+    try:
+        result = subprocess.run(
+            ["mpremote", "connect", port, "exec",
+             "f = open('main.py', 'w')\n"
+             "f.write('# Safe main.py for FPGA test automation\\n')\n"
+             "f.write('print(\"TT FPGA board ready\")\\n')\n"
+             "f.close()"],
+            timeout=30,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        if result.returncode != 0:
+            print("Warning: safe main.py install failed (non-critical)",
+                  file=sys.stderr)
+    except subprocess.TimeoutExpired:
+        print("Warning: safe main.py install timed out (non-critical)",
+              file=sys.stderr)
 
 
 def upload_bitstream(port, local_path):
