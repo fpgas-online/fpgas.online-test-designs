@@ -75,7 +75,7 @@ DESIGNS = {
             "arty":  {"artifact": "uart-test-arty/digilent_arty.bit",
                        "test_args": "--port /dev/ttyUSB1 --board arty"},
             "netv2": {"artifact": "uart-test-netv2/kosagi_netv2.bit",
-                       "test_args": "--port /dev/serial0 --board netv2 --baud 57600 --skip-banner",
+                       "test_args": "--port /dev/serial0 --board netv2",
                        "pre_test": "sudo systemctl stop 'serial-getty@*' 2>&1; sudo fuser -k /dev/serial0 2>&1; sudo chmod 666 /dev/serial0 2>&1; stty -F /dev/serial0 raw -echo 2>&1; which pinctrl >/dev/null && sudo pinctrl set 14 a4 && sudo pinctrl set 15 a4; true"},
             "fomu":  {"artifact": "uart-test-fomu/kosagi_fomu_evt.bin",
                        "test_args": "--port /dev/serial0 --board fomu --skip-banner",

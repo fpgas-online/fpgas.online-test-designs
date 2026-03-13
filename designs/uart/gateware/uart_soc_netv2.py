@@ -56,7 +56,7 @@ class _CRG(LiteXModule):
 # BaseSoC -----------------------------------------------------------------------------------------
 
 class BaseSoC(SoCCore):
-    def __init__(self, variant="a7-35", toolchain="openxc7", sys_clk_freq=100e6, **kwargs):
+    def __init__(self, variant="a7-35", toolchain="openxc7", sys_clk_freq=50e6, **kwargs):
         platform = kosagi_netv2.Platform(variant=variant, toolchain=toolchain)
 
         # Fix dashed device name for openXC7 compatibility.
@@ -77,7 +77,7 @@ def main():
     parser = LiteXArgumentParser(platform=kosagi_netv2.Platform, description="UART Test SoC for NeTV2")
     parser.add_target_argument("--variant",      default="a7-100", choices=["a7-35", "a7-100"],
         help="NeTV2 FPGA variant: a7-35 (developer) or a7-100 (production).")
-    parser.add_target_argument("--sys-clk-freq", default=100e6, type=float, help="System clock frequency.")
+    parser.add_target_argument("--sys-clk-freq", default=50e6, type=float, help="System clock frequency.")
     args = parser.parse_args()
 
     soc_kwargs = default_soc_kwargs(parser, ident="fpgas-online UART Test SoC -- NeTV2")
