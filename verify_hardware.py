@@ -79,7 +79,7 @@ DESIGNS = {
             "fomu":  {"artifact": "uart-test-fomu/kosagi_fomu_evt.bin",
                        "test_args": "--port /dev/ttyUSB0 --board fomu"},
             "tt":    {"artifact": "uart-test-tt-fpga/tt_fpga_platform.bin",
-                       "test_args": "--port /dev/ttyACM0 --board tt"},
+                       "test_args": "--port /dev/ttyACM0 --board tt --skip-banner"},
         },
     },
     "ddr": {
@@ -133,6 +133,7 @@ DESIGNS = {
 EXTRA_UPLOADS = {
     "tt": [
         ("designs/_shared/tt_fpga_program.py", "~/tt_fpga_program.py"),
+        ("designs/_shared/tt_test_wrapper.py", "~/tt_test_wrapper.py"),
     ],
 }
 
@@ -302,6 +303,20 @@ def run_single_test(test, skip_upload=False):
     if test.get("pre_test"):
         print("  Pre-test: {}".format(test["pre_test"]))
         ssh_run(test["host"], test["pre_test"], timeout=30)
+
+    # TT FPGA boards with UART-based tests need a combined program + bridge
+    # + test flow because the FPGA UART goes through the RP2350 (not USB).
+    if test["board"] == "tt" and test["test_type"] in ("uart", "spiflash"):
+        wrapper_cmd = "python3 ~/tt_test_wrapper.py /dev/ttyACM0 {} {}".format(
+            test["remote_bitstream"], test["test_cmd"])
+        print("  Running combined program + bridge + test...")
+        rc, stdout, stderr = ssh_run(test["host"], wrapper_cmd, timeout=240)
+        output = stdout + stderr
+        for line in output.strip().split("\n"):
+            print("    {}".format(line))
+        passed = check_test_result(output, rc)
+        print("  RESULT: {}".format("PASS" if passed else "FAIL"))
+        return passed
 
     # Program FPGA
     print("  Programming FPGA...")
