@@ -141,6 +141,7 @@ EXTRA_UPLOADS = {
     "tt": [
         ("designs/_shared/tt_fpga_program.py", "~/tt_fpga_program.py"),
         ("designs/_shared/tt_test_wrapper.py", "~/tt_test_wrapper.py"),
+        ("designs/_shared/tt_pmod_wrapper.py", "~/tt_pmod_wrapper.py"),
     ],
 }
 
@@ -346,8 +347,21 @@ def run_single_test(test, skip_upload=False):
         print("  Pre-test: {}".format(test["pre_test"]))
         ssh_run(test["host"], test["pre_test"], timeout=30)
 
-    # TT FPGA boards with UART-based tests need a combined program + bridge
-    # + test flow because the FPGA UART goes through the RP2350 (not USB).
+    # TT FPGA boards: all tests go through RP2350 (no direct RPi GPIO/UART).
+    # UART/spiflash use tt_test_wrapper.py (UART bridge + PTY relay).
+    # PMOD uses tt_pmod_wrapper.py (GPIO test runs on RP2350 directly).
+    if test["board"] == "tt" and test["test_type"] == "pmod":
+        wrapper_cmd = "python3 ~/tt_pmod_wrapper.py /dev/ttyACM0 {}".format(
+            test["remote_bitstream"])
+        print("  Running combined program + GPIO test on RP2350...")
+        rc, stdout, stderr = ssh_run(test["host"], wrapper_cmd, timeout=240)
+        output = stdout + stderr
+        for line in output.strip().split("\n"):
+            print("    {}".format(line))
+        passed = check_test_result(output, rc)
+        print("  RESULT: {}".format("PASS" if passed else "FAIL"))
+        return passed
+
     if test["board"] == "tt" and test["test_type"] in ("uart", "spiflash"):
         wrapper_cmd = "python3 ~/tt_test_wrapper.py /dev/ttyACM0 {} {}".format(
             test["remote_bitstream"], test["test_cmd"])
