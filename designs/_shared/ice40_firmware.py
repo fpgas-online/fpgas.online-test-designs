@@ -203,21 +203,34 @@ def generate_uart_firmware(uart_base, ident):
     i_prompt_addi  = len(words); words.append(0)        # 9
     i_prompt_jal   = len(words); words.append(0)        # 10
 
-    # Echo loop (words 11-17).
+    # Echo loop.
+    #
+    # LiteX UART's RX FIFO does NOT pop on a CSR read of RXTX.  The FIFO
+    # only advances when the RX event pending bit is cleared by writing to
+    # UART_EV_PENDING (offset 0x10, bit 1 = RX).  Without this write the
+    # firmware would re-read the same byte forever, producing a flood.
+    #
+    # CSR layout (from csr.csv):
+    #   +0x00  RXTX        read=RX data, write=TX data
+    #   +0x04  TXFULL      1 when TX FIFO full
+    #   +0x08  RXEMPTY     1 when RX FIFO empty
+    #   +0x10  EV_PENDING  write bit 1 to clear RX event → pops RX FIFO
     i_echo_loop = len(words)
-    words.append(_lw(T0, S0, 8))                        # 11: t0 = UART_RXEMPTY
-    words.append(_bne(T0, ZERO, w(i_echo_loop) - w(i_echo_loop + 1)))  # 12: wait
-    words.append(_lw(A0, S0, 0))                        # 13: a0 = UART_RXTX (read)
+    words.append(_lw(T0, S0, 8))                        # t0 = UART_RXEMPTY
+    words.append(_bne(T0, ZERO, w(i_echo_loop) - w(i_echo_loop + 1)))
+    words.append(_lw(A0, S0, 0))                        # a0 = UART_RXTX (read)
+    words.append(_addi(T0, ZERO, 2))                    # t0 = EV_RX (bit 1)
+    words.append(_sw(T0, S0, 16))                       # UART_EV_PENDING = 2 (pop RX FIFO)
 
     i_tx_wait = len(words)
-    words.append(_lw(T0, S0, 4))                        # 14: t0 = UART_TXFULL
-    words.append(_bne(T0, ZERO, w(i_tx_wait) - w(i_tx_wait + 1)))  # 15: wait
-    words.append(_sw(A0, S0, 0))                        # 16: UART_RXTX = a0 (write)
+    words.append(_lw(T0, S0, 4))                        # t0 = UART_TXFULL
+    words.append(_bne(T0, ZERO, w(i_tx_wait) - w(i_tx_wait + 1)))
+    words.append(_sw(A0, S0, 0))                        # UART_RXTX = a0 (echo)
 
     i_echo_jal = len(words)
-    words.append(_jal(ZERO, w(i_echo_loop) - w(i_echo_jal)))  # 17: → echo_loop
+    words.append(_jal(ZERO, w(i_echo_loop) - w(i_echo_jal)))
 
-    # putstr subroutine (words 18-25).
+    # putstr subroutine.
     i_putstr = len(words)
     words.append(_lbu(T0, A0, 0))                       # 18: t0 = *a0
     i_putstr_beq = len(words); words.append(0)          # 19: if null → return (patch)
