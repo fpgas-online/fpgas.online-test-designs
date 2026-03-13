@@ -36,6 +36,7 @@ from litex_boards.platforms.kosagi_fomu_evt import Platform
 
 from designs._shared.build_helpers import default_build_dir
 from designs._shared.fomu_crg import FomuCRG
+from designs._shared.ice40_spi_flash import Ice40SPIFlash
 
 kB = 1024
 
@@ -75,11 +76,11 @@ class BaseSoC(SoCCore):
                 linker = True,
             ))
 
-        # SPI Flash (LiteSPI) ---------------------------------------------------------------------
-        from litespi.modules import AT25SF161
-        from litespi.opcodes import SpiNorFlashOpCodes as Codes
-
-        self.add_spi_flash(mode="4x", module=AT25SF161(Codes.READ_1_1_1), with_master=False)
+        # SPI Flash (bitbang) -------------------------------------------------------------------
+        self.submodules.spiflash = Ice40SPIFlash(
+            pads=platform.request("spiflash"),
+        )
+        self.add_csr("spiflash")
 
 
 def main():
@@ -101,11 +102,10 @@ def main():
 
     output_dir = args.output_dir or default_build_dir(__file__, "fomu")
     # Skip BIOS compilation — LiteX BIOS (~24 KB) does not fit in iCE40 EBR (15 KB).
-    # TODO: Replace with SPI Flash firmware that reads JEDEC ID once implemented.
     builder = Builder(soc, output_dir=output_dir, compile_software=False)
 
-    from designs._shared.ice40_firmware import install_uart_firmware
-    install_uart_firmware(soc, ident)
+    from designs._shared.ice40_firmware import install_spiflash_firmware
+    install_spiflash_firmware(soc, ident)
 
     builder.build(run=args.build)
 
