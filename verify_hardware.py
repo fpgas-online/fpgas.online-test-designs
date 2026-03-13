@@ -212,6 +212,41 @@ def ssh_check_connectivity(host_name, timeout=10):
         return False
 
 
+def poe_reset(host_name, off_seconds=5):
+    """Power-cycle a PoE-powered RPi via the managed switch.
+
+    Only works for tweed-connected hosts (piNN naming convention).
+    The PoE switch port number matches the host suffix: pi27 → port 27.
+    """
+    import re
+    m = re.match(r"pi(\d+)$", host_name)
+    if not m:
+        print("  Cannot PoE-reset {}: not a piNN host".format(host_name))
+        return False
+    port = m.group(1)
+    print("  PoE reset: port {} off for {}s...".format(port, off_seconds))
+    try:
+        subprocess.run(
+            ["ssh", TWEED, "poe.sh {} 2".format(port)],
+            timeout=15, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        time.sleep(off_seconds)
+        subprocess.run(
+            ["ssh", TWEED, "poe.sh {} 1".format(port)],
+            timeout=15, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        print("  PoE reset failed: {}".format(e))
+        return False
+    # Wait for host to boot
+    print("  Waiting for {} to boot...".format(host_name))
+    for _ in range(12):
+        time.sleep(5)
+        if ssh_check_connectivity(host_name, timeout=5):
+            print("  {} is back online".format(host_name))
+            return True
+    print("  {} did not come back after PoE reset".format(host_name))
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Test generation — expand designs x hosts into concrete test cases
 # ---------------------------------------------------------------------------
