@@ -50,12 +50,12 @@ ECHO_TEST_BYTES = bytes(range(0x20, 0x7F))
 # Test steps
 # --------------------------------------------------------------------------- #
 
-def wait_for_banner(ser: serial.Serial, board: str) -> tuple[bool, list[str]]:
+def wait_for_banner(ser, board):
     """Read lines until we see the BIOS ``litex>`` prompt or timeout.
 
     Returns (success, captured_lines).
     """
-    lines: list[str] = []
+    lines = []
     deadline = time.monotonic() + BOOT_TIMEOUT_S
     found_bios = False
     found_ident = False
@@ -88,14 +88,14 @@ def wait_for_banner(ser: serial.Serial, board: str) -> tuple[bool, list[str]]:
         found_ident = query_ident(ser, expected_ident, lines)
 
     if expected_ident and not found_ident:
-        print(f"FAIL: Board identification string '{expected_ident}' not found")
+        print("FAIL: Board identification string '{}' not found".format(expected_ident))
         return False, lines
 
     print("PASS: BIOS banner and board identification received")
     return True, lines
 
 
-def query_ident(ser: serial.Serial, expected_ident: str, lines: list[str]) -> bool:
+def query_ident(ser, expected_ident, lines):
     """Send the ``ident`` command at the litex> prompt and check the response."""
     ser.reset_input_buffer()
     ser.write(b"ident\n")
@@ -147,21 +147,21 @@ def echo_test(ser: serial.Serial) -> bool:
         ser.write(bytes([byte_val]))
         response = ser.read(1)
         if len(response) == 0:
-            print(f"  FAIL: Timeout waiting for echo of 0x{byte_val:02X}")
+            print("  FAIL: Timeout waiting for echo of 0x{:02X}".format(byte_val))
             errors += 1
         elif response[0] != byte_val:
             print(
-                f"  FAIL: Echo mismatch for 0x{byte_val:02X}: "
-                f"got 0x{response[0]:02X}"
+                "  FAIL: Echo mismatch for 0x{:02X}: "
+                "got 0x{:02X}".format(byte_val, response[0])
             )
             errors += 1
 
     total = len(ECHO_TEST_BYTES)
     if errors == 0:
-        print(f"PASS: Echo test — all {total} printable bytes echoed correctly")
+        print("PASS: Echo test -- all {} printable bytes echoed correctly".format(total))
         return True
     else:
-        print(f"FAIL: Echo test — {errors}/{total} bytes failed")
+        print("FAIL: Echo test -- {}/{} bytes failed".format(errors, total))
         return False
 
 
@@ -186,7 +186,7 @@ def main() -> int:
         "--baud",
         type=int,
         default=BAUD_RATE,
-        help=f"Baud rate (default: {BAUD_RATE})",
+        help="Baud rate (default: {})".format(BAUD_RATE),
     )
     parser.add_argument(
         "--skip-banner",
@@ -195,9 +195,9 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    print(f"Opening {args.port} at {args.baud} baud...")
+    print("Opening {} at {} baud...".format(args.port, args.baud))
 
-    results: list[bool] = []
+    results = []
 
     with serial.Serial(args.port, args.baud, timeout=ECHO_TIMEOUT_S) as ser:
         # Step 1: Wait for BIOS banner
@@ -207,7 +207,7 @@ def main() -> int:
             if not passed:
                 print("\nBoot output captured:")
                 for line in boot_lines:
-                    print(f"  {line}")
+                    print("  {}".format(line))
         else:
             print("Skipping banner check (--skip-banner)")
 

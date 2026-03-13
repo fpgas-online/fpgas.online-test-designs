@@ -89,6 +89,6 @@ class Platform(LatticeiCE40Platform):
 
     def do_finalize(self, fragment):
         LatticeiCE40Platform.do_finalize(self, fragment)
-        self.add_period_constraint(
-            self.lookup_request("clk_rp2040", loose=True), 1e9 / 50e6,
-        )
+        clk = self.lookup_request("clk_rp2040", loose=True)
+        if clk is not None and clk not in self.toolchain.clocks:
+            self.add_period_constraint(clk, 1e9 / 50e6)

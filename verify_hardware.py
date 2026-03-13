@@ -60,7 +60,7 @@ PROGRAM_CMD = {
 # Per-host overrides for programming command
 HOST_PROGRAM_CMD = {
     "rpi5-netv2": "sudo openFPGALoader -c rp1pio --pins 27:22:4:17 {bitstream}",
-    "rpi3-netv2": "sudo openocd -f ~/netv2/alphamax-rpi.cfg -c 'init; pld load xc7.pld {bitstream_abs}; exit'",
+    "rpi3-netv2": "sudo openocd -f ~/netv2/alphamax-rpi.cfg -c 'init; pld load 0 {bitstream_abs}; exit'",
 }
 
 
@@ -74,8 +74,11 @@ DESIGNS = {
         "boards": {
             "arty":  {"artifact": "uart-test-arty/digilent_arty.bit",
                        "test_args": "--port /dev/ttyUSB1 --board arty"},
-            "netv2": {"artifact": "uart-test-netv2/kosagi_netv2.bit",
-                       "test_args": "--port /dev/ttyAMA0 --board netv2"},
+            # NeTV2 UART disabled: schematic shows P10C (UART header) is DNP.
+            # FPGA pins E14/E13 route to unpopulated P10C, NOT to RPi GPIO.
+            # Needs hardware mod (solder P10C + wire to RPi GPIO14/15).
+            # "netv2": {"artifact": "uart-test-netv2/kosagi_netv2.bit",
+            #            "test_args": "--port /dev/ttyAMA0 --board netv2"},
             "fomu":  {"artifact": "uart-test-fomu/kosagi_fomu_evt.bin",
                        "test_args": "--port /dev/ttyUSB0 --board fomu"},
             "tt":    {"artifact": "uart-test-tt-fpga/tt_fpga_platform.bin",
@@ -87,8 +90,9 @@ DESIGNS = {
         "boards": {
             "arty":  {"artifact": "ddr-test-arty/digilent_arty.bit",
                        "test_args": "--port /dev/ttyUSB1 --board arty"},
-            "netv2": {"artifact": "ddr-test-netv2/kosagi_netv2.bit",
-                       "test_args": "--port /dev/ttyAMA0 --board netv2"},
+            # NeTV2 disabled: UART header (P10C) is DNP — see uart section comment.
+            # "netv2": {"artifact": "ddr-test-netv2/kosagi_netv2.bit",
+            #            "test_args": "--port /dev/ttyAMA0 --board netv2"},
         },
     },
     "ethernet": {
@@ -96,8 +100,9 @@ DESIGNS = {
         "boards": {
             "arty":  {"artifact": "ethernet-test-arty-a7-35t/digilent_arty.bit",
                        "test_args": "--board arty --uart-port /dev/ttyUSB1"},
-            "netv2": {"artifact": "ethernet-test-netv2/kosagi_netv2.bit",
-                       "test_args": "--board netv2 --uart-port /dev/ttyAMA0"},
+            # NeTV2 disabled: UART header (P10C) is DNP — see uart section comment.
+            # "netv2": {"artifact": "ethernet-test-netv2/kosagi_netv2.bit",
+            #            "test_args": "--board netv2 --uart-port /dev/ttyAMA0"},
         },
     },
     "spiflash": {
@@ -105,8 +110,9 @@ DESIGNS = {
         "boards": {
             "arty":  {"artifact": "spiflash-test-arty/digilent_arty.bit",
                        "test_args": "--port /dev/ttyUSB1 --board arty"},
-            "netv2": {"artifact": "spiflash-test-netv2/kosagi_netv2.bit",
-                       "test_args": "--port /dev/ttyAMA0 --board netv2"},
+            # NeTV2 disabled: UART header (P10C) is DNP — see uart section comment.
+            # "netv2": {"artifact": "spiflash-test-netv2/kosagi_netv2.bit",
+            #            "test_args": "--port /dev/ttyAMA0 --board netv2"},
             "fomu":  {"artifact": "spiflash-test-fomu/kosagi_fomu_evt.bin",
                        "test_args": "--port /dev/ttyUSB0 --board fomu"},
             "tt":    {"artifact": "spiflash-test-tt-fpga/tt_fpga_platform.bin",
