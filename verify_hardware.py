@@ -385,6 +385,9 @@ def run_single_test(test, skip_upload=False):
                 ssh_upload(test["host"], bitstream_path, test["remote_bitstream"])
                 script_path = os.path.join(REPO_DIR, test["test_script"])
                 ssh_upload(test["host"], script_path, test["remote_script"])
+                # Re-run pre_test (e.g. stop serial-getty, lost on reboot)
+                if test.get("pre_test"):
+                    ssh_run(test["host"], test["pre_test"], timeout=30)
                 print("  Retrying FPGA programming...")
                 rc, stdout, stderr = ssh_run(
                     test["host"], test["program_cmd"], timeout=120)
