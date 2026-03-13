@@ -212,6 +212,23 @@ def usb_power_cycle(port):
     time.sleep(3)  # Wait for re-enumeration
 
 
+def _install_safe_main(port):
+    """Replace the ttboard main.py with a minimal version.
+
+    The stock ttboard main.py calls DemoBoard() which probes I2C and
+    can hang permanently, making the RP2350 unrecoverable without a
+    physical reset.  Replace it with a no-op so the REPL always starts.
+    """
+    subprocess.call(
+        ["mpremote", "connect", port, "exec",
+         "f = open('main.py', 'w')\n"
+         "f.write('# Safe main.py for FPGA test automation\\n')\n"
+         "f.write('print(\"TT FPGA board ready\")\\n')\n"
+         "f.close()"],
+        timeout=30,
+    )
+
+
 def upload_bitstream(port, local_path):
     """Upload bitstream to RP2350 filesystem via mpremote."""
     # Break any stuck MicroPython script before mpremote tries raw REPL.
@@ -242,6 +259,9 @@ def upload_bitstream(port, local_path):
              ":" + BITSTREAM_DEVICE_PATH],
             timeout=120,
         )
+    if rc == 0:
+        # Install safe main.py to prevent DemoBoard() hangs on reboot
+        _install_safe_main(port)
     return rc == 0
 
 
