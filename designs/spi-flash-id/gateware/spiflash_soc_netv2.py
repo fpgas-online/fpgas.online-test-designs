@@ -2,7 +2,10 @@
 """
 LiteX SoC target for SPI Flash ID test on Kosagi NeTV2.
 
-NeTV2 SPI Flash: Quad SPI, CS=T19.
+Builds a minimal SoC with CPU + UART + bitbang SPI Flash.  Custom RV32I
+firmware reads the JEDEC ID via command 0x9F and prints the result.
+
+NeTV2 SPI Flash: Quad SPI, CS=T19.  Clock routed via STARTUPE2.
 Clock: 50 MHz system clock (pin J19).
 UART: GPIO to RPi (FPGA TX=E14, RX=E13) -> /dev/ttyAMA0.
 
@@ -34,6 +37,8 @@ from designs._shared.platform_fixups import fix_openxc7_device_name, ensure_chip
 from designs._shared.yosys_workarounds import patch_yosys_template
 
 from common import add_spi_flash
+
+kB = 1024
 
 
 # CRG (Clock Reset Generator) ---------------------------------------------------------------------
@@ -69,10 +74,14 @@ class BaseSoC(SoCCore):
         self.crg = _CRG(platform, sys_clk_freq)
 
         # SoCCore ------------------------------------------------------------------------------
+        kwargs["uart_name"] = "serial"
+        kwargs["integrated_rom_size"]  = 1*kB
+        kwargs["integrated_sram_size"] = 4*kB
+        kwargs.setdefault("cpu_variant", "minimal")
         SoCCore.__init__(self, platform, sys_clk_freq, **kwargs)
 
-        # SPI Flash ----------------------------------------------------------------------------
-        add_spi_flash(self, platform, sys_clk_freq)
+        # SPI Flash (bitbang via STARTUPE2) ----------------------------------------------------
+        add_spi_flash(self, platform)
 
 
 # Build --------------------------------------------------------------------------------------------
@@ -102,7 +111,14 @@ def main():
     ensure_chipdb_symlink(soc.platform)
     patch_yosys_template(soc)
 
-    builder = Builder(soc, **parser.builder_argdict)
+    builder_args = dict(parser.builder_argdict)
+    builder_args["compile_software"] = False
+    builder = Builder(soc, **builder_args)
+
+    from designs._shared.ice40_firmware import install_spiflash_firmware
+    ident = "fpgas-online SPI Flash Test SoC -- NeTV2"
+    install_spiflash_firmware(soc, ident)
+
     builder.build(run=args.build)
 
 

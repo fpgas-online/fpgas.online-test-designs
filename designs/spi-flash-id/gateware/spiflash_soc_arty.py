@@ -2,11 +2,10 @@
 """
 LiteX SoC target for SPI Flash ID test on Digilent Arty A7.
 
-Builds a SoC with CPU + BIOS + UART + SPI Flash access. The BIOS prints
-the SPI flash identification on boot. Additionally, custom firmware can
-be loaded to explicitly read the JEDEC ID via command 0x9F.
+Builds a minimal SoC with CPU + UART + bitbang SPI Flash.  Custom RV32I
+firmware reads the JEDEC ID via command 0x9F and prints the result.
 
-Arty A7 SPI Flash: Quad SPI, CS=L13.
+Arty A7 SPI Flash: Quad SPI, CS=L13.  Clock routed via STARTUPE2.
 
 Build command:
     uv run python designs/spi-flash-id/gateware/spiflash_soc_arty.py --toolchain openxc7 --build
@@ -35,6 +34,8 @@ from designs._shared.build_helpers import default_build_dir
 from designs._shared.yosys_workarounds import patch_yosys_template
 
 from common import add_spi_flash
+
+kB = 1024
 
 
 # CRG (Clock Reset Generator) ---------------------------------------------------------------------
@@ -67,10 +68,14 @@ class BaseSoC(SoCCore):
         self.crg = _CRG(platform, sys_clk_freq)
 
         # SoCCore ------------------------------------------------------------------------------
+        kwargs["uart_name"] = "serial"
+        kwargs["integrated_rom_size"]  = 1*kB
+        kwargs["integrated_sram_size"] = 4*kB
+        kwargs.setdefault("cpu_variant", "minimal")
         SoCCore.__init__(self, platform, sys_clk_freq, **kwargs)
 
-        # SPI Flash ----------------------------------------------------------------------------
-        add_spi_flash(self, platform, sys_clk_freq)
+        # SPI Flash (bitbang via STARTUPE2) ----------------------------------------------------
+        add_spi_flash(self, platform)
 
 
 # Build --------------------------------------------------------------------------------------------
@@ -97,7 +102,14 @@ def main():
 
     patch_yosys_template(soc)
 
-    builder = Builder(soc, **parser.builder_argdict)
+    builder_args = dict(parser.builder_argdict)
+    builder_args["compile_software"] = False
+    builder = Builder(soc, **builder_args)
+
+    from designs._shared.ice40_firmware import install_spiflash_firmware
+    ident = "fpgas-online SPI Flash Test SoC -- Arty A7"
+    install_spiflash_firmware(soc, ident)
+
     builder.build(run=args.build)
 
 

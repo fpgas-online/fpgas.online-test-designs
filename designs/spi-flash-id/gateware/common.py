@@ -4,34 +4,20 @@ SPI Flash ID test design-specific helpers.
 Provides the SPI flash integration used by both the Arty and NeTV2 targets.
 """
 
-from litex.soc.cores.spi_flash import S7SPIFlash
+from designs._shared.s7_spi_flash import S7BitbangSPIFlash
 
 
-def add_spi_flash(soc, platform, sys_clk_freq: int) -> None:
-    """Add an S7SPIFlash peripheral to *soc* with bitbang access.
+def add_spi_flash(soc, platform) -> None:
+    """Add a bitbang SPI Flash peripheral to *soc*.
 
-    S7SPIFlash uses a simple SPIMaster — it is *not* the LiteSPI
-    memory-mapped flash core.  However, LiteX always compiles
-    ``liblitespi`` as part of the BIOS, and since LiteX 2025.x the
-    guard changed from ``CSR_SPIFLASH_CORE_BASE`` to
-    ``CSR_SPIFLASH_BASE``.  The latter IS defined for any CSR group
-    named "spiflash", so the liblitespi code compiles and references
-    constants (``SPIFLASH_MODULE_NAME``, ``SPIFLASH_BASE``, etc.)
-    that S7SPIFlash does not normally provide.
+    Uses S7BitbangSPIFlash which has the same CSR layout as
+    Ice40SPIFlash (bitbang + miso), but routes the clock through
+    STARTUPE2 for Xilinx 7-series configuration flash access.
 
-    We add the missing constants here so the BIOS compiles cleanly.
-    ``SPIFLASH_BASE`` is pointed at address 0 (ROM, always readable)
-    since S7SPIFlash has no memory-mapped flash region.  Frequency
-    calibration is skipped (no PHY clock divisor CSR exists).
+    The CSR group is named ``spiflash`` so the firmware can resolve
+    the bitbang/miso register addresses from the CSR map.
     """
-    soc.submodules.spiflash = S7SPIFlash(
+    soc.submodules.spiflash = S7BitbangSPIFlash(
         pads=platform.request("spiflash"),
-        sys_clk_freq=sys_clk_freq,
     )
     soc.add_csr("spiflash")
-
-    # Satisfy liblitespi compilation — see docstring above.
-    soc.add_constant("SPIFLASH_MODULE_NAME", "S7SPIFlash")
-    soc.add_constant("SPIFLASH_BASE", 0)
-    soc.add_constant("SPIFLASH_PHY_FREQUENCY", int(sys_clk_freq) // 4)
-    soc.add_constant("SPIFLASH_SKIP_FREQ_INIT")

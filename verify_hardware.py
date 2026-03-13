@@ -104,9 +104,9 @@ DESIGNS = {
         "test_script": "designs/spi-flash-id/host/test_spiflash.py",
         "boards": {
             "arty":  {"artifact": "spiflash-test-arty/digilent_arty.bit",
-                       "test_args": "--port /dev/ttyUSB1 --board arty --bios"},
+                       "test_args": "--port /dev/ttyUSB1 --board arty"},
             "netv2": {"artifact": "spiflash-test-netv2/kosagi_netv2.bit",
-                       "test_args": "--port /dev/ttyAMA0 --board netv2 --bios"},
+                       "test_args": "--port /dev/ttyAMA0 --board netv2"},
             "fomu":  {"artifact": "spiflash-test-fomu/kosagi_fomu_evt.bin",
                        "test_args": "--port /dev/ttyUSB0 --board fomu"},
             "tt":    {"artifact": "spiflash-test-tt-fpga/tt_fpga_platform.bin",
