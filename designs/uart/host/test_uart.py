@@ -116,8 +116,23 @@ def query_ident(ser, expected_ident, lines):
     return False
 
 
-def _reset_command_buffer(ser: serial.Serial):
-    """Send Ctrl-C to reset the BIOS command line and flush the response."""
+def _reset_command_buffer(ser, deep=False):
+    """Send Ctrl-C to reset the BIOS command line and flush the response.
+
+    With deep=True, first drains all queued BIOS output (from boot or
+    prior serial-getty interaction) by reading without sending, then
+    sends Ctrl-C to reset the command line.
+    """
+    if deep:
+        # Drain queued output WITHOUT sending (sending Ctrl-C would
+        # trigger more BIOS prompt output, creating a feedback loop).
+        old_timeout = ser.timeout
+        ser.timeout = 0.3
+        for _ in range(30):
+            chunk = ser.read(4096)
+            if not chunk:
+                break
+        ser.timeout = old_timeout
     ser.write(b"\x03")
     time.sleep(0.1)
     ser.reset_input_buffer()
@@ -134,8 +149,23 @@ def echo_test(ser: serial.Serial) -> bool:
     Ctrl-C to reset the command line and prevent buffer overflow (which
     causes the BIOS to respond with BEL instead of echoing).
     """
-    # Flush any pending input.
-    _reset_command_buffer(ser)
+    # Flush stale BIOS output, then synchronize by sending Ctrl-C and
+    # waiting for a clean prompt echo cycle.
+    _reset_command_buffer(ser, deep=True)
+    # Synchronization: send a unique byte, read until we see it echoed.
+    # This ensures all queued BIOS responses have been consumed.
+    ser.write(b"\x03")  # Ctrl-C to reset command line
+    time.sleep(0.2)
+    ser.reset_input_buffer()
+    ser.write(b"~")  # Tilde is unlikely to appear in BIOS output
+    deadline = time.monotonic() + 3.0
+    while time.monotonic() < deadline:
+        b = ser.read(1)
+        if b == b"~":
+            break
+    ser.write(b"\x03")  # Reset command line (discard the "~")
+    time.sleep(0.1)
+    ser.reset_input_buffer()
 
     errors = 0
 

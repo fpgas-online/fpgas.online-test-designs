@@ -45,8 +45,8 @@ HOSTS = {
     "pi31": {"ssh_type": "tweed", "target": "10.21.0.131", "board": "tt"},
     "pi33": {"ssh_type": "tweed", "target": "10.21.0.133", "board": "tt"},
     # Direct SSH
-    "rpi5-netv2": {"ssh_type": "direct", "target": "tim@rpi5-netv2.iot.welland.mithis.com", "board": "netv2"},
-    "rpi3-netv2": {"ssh_type": "direct", "target": "pi@rpi3-netv2.iot.welland.mithis.com", "board": "netv2"},
+    "rpi5-netv2": {"ssh_type": "direct", "target": "tim@rpi5-netv2.iot.welland.mithis.com", "board": "netv2", "variant": "a7-100"},
+    "rpi3-netv2": {"ssh_type": "direct", "target": "pi@rpi3-netv2.iot.welland.mithis.com", "board": "netv2", "variant": "a7-35"},
 }
 
 # Board-specific FPGA programming commands (use {bitstream} placeholder)
@@ -74,14 +74,12 @@ DESIGNS = {
         "boards": {
             "arty":  {"artifact": "uart-test-arty/digilent_arty.bit",
                        "test_args": "--port /dev/ttyUSB1 --board arty"},
-            # NeTV2 UART disabled: schematic shows P10C (UART header) is DNP.
-            # FPGA pins E14/E13 route to unpopulated P10C, NOT to RPi GPIO.
-            # Needs hardware mod (solder P10C + wire to RPi GPIO14/15).
-            # "netv2": {"artifact": "uart-test-netv2/kosagi_netv2.bit",
-            #            "test_args": "--port /dev/ttyAMA0 --board netv2"},
+            "netv2": {"artifact": "uart-test-netv2/kosagi_netv2.bit",
+                       "test_args": "--port /dev/serial0 --board netv2 --baud 57600 --skip-banner",
+                       "pre_test": "sudo systemctl stop 'serial-getty@*' 2>&1; sudo fuser -k /dev/serial0 2>&1; sudo chmod 666 /dev/serial0 2>&1; stty -F /dev/serial0 raw -echo 2>&1; which pinctrl >/dev/null && sudo pinctrl set 14 a4 && sudo pinctrl set 15 a4; true"},
             "fomu":  {"artifact": "uart-test-fomu/kosagi_fomu_evt.bin",
-                       "test_args": "--port /dev/ttyAMA0 --board fomu --skip-banner",
-                       "pre_test": "systemctl stop serial-getty@ttyAMA0 2>&1; true"},
+                       "test_args": "--port /dev/serial0 --board fomu --skip-banner",
+                       "pre_test": "sudo systemctl stop 'serial-getty@*' 2>&1; sudo fuser -k /dev/serial0 2>&1; sudo chmod 666 /dev/serial0 2>&1; which pinctrl >/dev/null && sudo pinctrl set 14 a4 && sudo pinctrl set 15 a4; true"},
             "tt":    {"artifact": "uart-test-tt-fpga/tt_fpga_platform.bin",
                        "test_args": "--port /dev/ttyACM0 --board tt --skip-banner"},
         },
@@ -91,9 +89,9 @@ DESIGNS = {
         "boards": {
             "arty":  {"artifact": "ddr-test-arty/digilent_arty.bit",
                        "test_args": "--port /dev/ttyUSB1 --board arty"},
-            # NeTV2 disabled: UART header (P10C) is DNP — see uart section comment.
-            # "netv2": {"artifact": "ddr-test-netv2/kosagi_netv2.bit",
-            #            "test_args": "--port /dev/ttyAMA0 --board netv2"},
+            "netv2": {"artifact": "ddr-test-netv2/kosagi_netv2.bit",
+                       "test_args": "--port /dev/ttyAMA0 --board netv2",
+                       "pre_test": "systemctl stop serial-getty@ttyAMA0 2>&1; true"},
         },
     },
     "ethernet": {
@@ -101,9 +99,9 @@ DESIGNS = {
         "boards": {
             "arty":  {"artifact": "ethernet-test-arty-a7-35t/digilent_arty.bit",
                        "test_args": "--board arty --uart-port /dev/ttyUSB1"},
-            # NeTV2 disabled: UART header (P10C) is DNP — see uart section comment.
-            # "netv2": {"artifact": "ethernet-test-netv2/kosagi_netv2.bit",
-            #            "test_args": "--board netv2 --uart-port /dev/ttyAMA0"},
+            "netv2": {"artifact": "ethernet-test-netv2/kosagi_netv2.bit",
+                       "test_args": "--board netv2 --uart-port /dev/ttyAMA0",
+                       "pre_test": "systemctl stop serial-getty@ttyAMA0 2>&1; true"},
         },
     },
     "spiflash": {
@@ -111,11 +109,12 @@ DESIGNS = {
         "boards": {
             "arty":  {"artifact": "spiflash-test-arty/digilent_arty.bit",
                        "test_args": "--port /dev/ttyUSB1 --board arty"},
-            # NeTV2 disabled: UART header (P10C) is DNP — see uart section comment.
-            # "netv2": {"artifact": "spiflash-test-netv2/kosagi_netv2.bit",
-            #            "test_args": "--port /dev/ttyAMA0 --board netv2"},
+            "netv2": {"artifact": "spiflash-test-netv2/kosagi_netv2.bit",
+                       "test_args": "--port /dev/ttyAMA0 --board netv2",
+                       "pre_test": "systemctl stop serial-getty@ttyAMA0 2>&1; true"},
             "fomu":  {"artifact": "spiflash-test-fomu/kosagi_fomu_evt.bin",
-                       "test_args": "--port /dev/ttyAMA0 --board fomu"},
+                       "test_args": "--port /dev/serial0 --board fomu",
+                       "pre_test": "sudo systemctl stop 'serial-getty@*' 2>&1; sudo fuser -k /dev/serial0 2>&1; sudo chmod 666 /dev/serial0 2>&1; which pinctrl >/dev/null && sudo pinctrl set 14 a4 && sudo pinctrl set 15 a4; true"},
             "tt":    {"artifact": "spiflash-test-tt-fpga/tt_fpga_platform.bin",
                        "test_args": "--port /dev/ttyACM0 --board tt"},
         },
@@ -266,6 +265,16 @@ def generate_tests():
             artifact = board_cfg["artifact"]
             test_args = board_cfg["test_args"]
 
+            # NeTV2 variant selection: prefer variant-specific artifact if it exists.
+            # CI builds separate a7-35t and a7-100t artifacts for NeTV2.
+            variant = host.get("variant")
+            if variant:
+                # e.g. "uart-test-netv2/x.bit" -> "uart-test-netv2-a7-100t/x.bit"
+                parts = artifact.split("/", 1)
+                variant_artifact = "{}-{}t/{}".format(parts[0], variant, parts[1])
+                if os.path.exists(os.path.join(ARTIFACTS_DIR, variant_artifact)):
+                    artifact = variant_artifact
+
             # Determine remote paths
             ext = os.path.splitext(artifact)[1]
             remote_bitstream = "~/{}_{}{}".format(design_name, board, ext)
@@ -342,7 +351,9 @@ def run_single_test(test, skip_upload=False):
             if os.path.exists(local_path):
                 ssh_upload(test["host"], local_path, remote)
 
-    # Pre-test command (e.g. unload conflicting kernel modules)
+    # Pre-test command BEFORE programming — stop serial-getty, unload
+    # conflicting kernel modules, etc. Must run before FPGA programming
+    # so the BIOS boots into a clean serial port (no getty interference).
     if test.get("pre_test"):
         print("  Pre-test: {}".format(test["pre_test"]))
         ssh_run(test["host"], test["pre_test"], timeout=30)
