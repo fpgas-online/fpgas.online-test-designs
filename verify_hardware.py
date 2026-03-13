@@ -236,9 +236,9 @@ def poe_reset(host_name, off_seconds=5):
     except (subprocess.TimeoutExpired, OSError) as e:
         print("  PoE reset failed: {}".format(e))
         return False
-    # Wait for host to boot
+    # Wait for host to boot (RPi 3 PXE boot can take ~2 minutes)
     print("  Waiting for {} to boot...".format(host_name))
-    for _ in range(12):
+    for _ in range(30):
         time.sleep(5)
         if ssh_check_connectivity(host_name, timeout=5):
             print("  {} is back online".format(host_name))
@@ -373,10 +373,25 @@ def run_single_test(test, skip_upload=False):
         or "dfuIDLE" in output
     )
     if not programming_ok:
-        print("  FAIL: FPGA programming failed (rc={})".format(rc))
-        for line in output.strip().split("\n"):
-            print("    {}".format(line))
-        return False
+        # For Fomu: DFU bootloader may have timed out. PoE-reset to
+        # reboot into DFU mode and retry programming immediately.
+        if test["board"] == "fomu" and "No DFU capable USB device" in output:
+            print("  Fomu DFU timeout — PoE resetting to re-enter bootloader...")
+            if poe_reset(test["host"]):
+                print("  Retrying FPGA programming...")
+                rc, stdout, stderr = ssh_run(
+                    test["host"], test["program_cmd"], timeout=120)
+                output = stdout + stderr
+                programming_ok = (
+                    rc == 0
+                    or "done 1" in output.lower()
+                    or "dfuIDLE" in output
+                )
+        if not programming_ok:
+            print("  FAIL: FPGA programming failed (rc={})".format(rc))
+            for line in output.strip().split("\n"):
+                print("    {}".format(line))
+            return False
     print("  FPGA programmed successfully")
 
     # Run test — the test script handles its own boot-wait and timeouts
