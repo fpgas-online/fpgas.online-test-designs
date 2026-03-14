@@ -265,7 +265,7 @@ def run_test(board_name, config):
 
         for pattern in patterns:
             gpio.write(pattern)
-            time.sleep(0.001)  # propagation settle time
+            time.sleep(0.010)  # propagation settle time (Fomu needs ~5ms)
 
             reading = gpio.read()
             expected = (~pattern) & mask
