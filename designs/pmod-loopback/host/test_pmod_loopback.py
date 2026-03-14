@@ -46,11 +46,11 @@ BOARD_CONFIGS = {
         "width": 1,
     },
     "fomu": {
-        # These pin numbers depend on how the Fomu EVT is wired to the RPi.
-        # Placeholder -- needs to be filled in based on actual wiring.
-        "drive_pins": [],  # TBD: RPi GPIO pins wired to Fomu pmoda_n
-        "read_pins": [],   # TBD: RPi GPIO pins wired to Fomu pmodb_n
-        "width": 4,
+        # Empirically confirmed: Fomu EVT on pi17/pi21 test jig.
+        # Only 1 of the 4 loopback pairs connects to RPi GPIO.
+        "drive_pins": [27],   # RPi GPIO27 -> Fomu pmoda_n input
+        "read_pins":  [9],    # Fomu pmodb_n output -> RPi GPIO9
+        "width": 1,
     },
 }
 
