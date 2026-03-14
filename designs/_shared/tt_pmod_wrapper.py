@@ -18,7 +18,7 @@ import time
 # Reuse upload/serial infrastructure from the UART wrapper.
 sys.path.insert(0, os.path.dirname(__file__))
 from tt_test_wrapper import (
-    upload_bitstream, open_raw_serial, enter_raw_repl, execute_raw_repl,
+    upload_bitstream, open_raw_serial, enter_raw_repl, execute_raw_repl, drain,
 )
 
 
