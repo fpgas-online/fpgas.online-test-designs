@@ -176,8 +176,7 @@ def reset_rp2350(port):
             tty.setraw(fd)
             for _ in range(3):
                 os.write(fd, b'\x03')
-                time.sleep(0.1)
-            time.sleep(0.3)
+                drain(fd, timeout=0.2)
             drain(fd, timeout=0.5)
         finally:
             os.close(fd)
@@ -209,7 +208,11 @@ def usb_power_cycle(port):
     subprocess.call(
         ["uhubctl", "-l", hub, "-p", port_num, "-a", "cycle"],
         timeout=15)
-    time.sleep(3)  # Wait for re-enumeration
+    # Poll for device re-enumeration instead of sleeping
+    for _ in range(30):
+        time.sleep(0.1)
+        if os.path.exists(port):
+            break
 
 
 def _install_safe_main(port):
@@ -311,13 +314,11 @@ def drain(fd, timeout=0.3):
 def enter_raw_repl(fd):
     """Enter MicroPython raw REPL mode on the serial port."""
     os.write(fd, b'\x03')
-    time.sleep(0.1)
+    drain(fd, timeout=0.2)
     os.write(fd, b'\x03')
-    time.sleep(0.2)
-    drain(fd)
+    drain(fd, timeout=0.3)
     os.write(fd, b'\x01')
-    time.sleep(0.3)
-    drain(fd)
+    drain(fd, timeout=0.3)
 
 
 def execute_raw_repl(fd, script, marker, timeout=60):
@@ -370,8 +371,6 @@ def main():
         print("ERROR: Failed to upload bitstream", file=sys.stderr)
         return 1
     print("Upload complete.")
-
-    time.sleep(0.5)
 
     # Step 2: Open raw serial and program + bridge
     print("Opening raw serial to RP2350...")
@@ -492,9 +491,9 @@ def main():
     relay_thread.join(timeout=2)
     try:
         os.write(serial_fd, b'\x03')
-        time.sleep(0.1)
+        drain(fd=serial_fd, timeout=0.2)
         os.write(serial_fd, b'\x03')
-        time.sleep(0.1)
+        drain(fd=serial_fd, timeout=0.2)
     except OSError:
         pass
     for fd in (master_fd, slave_fd, serial_fd):

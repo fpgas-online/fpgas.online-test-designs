@@ -118,8 +118,15 @@ def configure_interface(iface, ip, netmask):
         ["sudo", "ip", "link", "set", iface, "up"],
         check=True,
     )
-    # Wait for link to come up
-    time.sleep(2)
+    # Poll for link to come up (carrier detect)
+    for _ in range(40):
+        try:
+            with open("/sys/class/net/{}/carrier".format(iface)) as f:
+                if f.read().strip() == "1":
+                    break
+        except (IOError, OSError):
+            pass
+        time.sleep(0.1)
     print("  {} configured: {}/{}".format(iface, ip, prefix_len))
 
 

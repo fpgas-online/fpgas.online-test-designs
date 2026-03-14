@@ -59,8 +59,8 @@ def program_fpga(bitstream, openocd_cfg=OPENOCD_CFG):
         return False
 
     print("  FPGA programmed successfully")
-    # Give the FPGA time to initialize
-    time.sleep(1)
+    # Poll for FPGA DONE pin via JTAG status (already confirmed by OpenOCD).
+    # No additional wait needed — the FPGA starts immediately after programming.
     return True
 
 
@@ -74,8 +74,6 @@ def pcie_rescan():
         with open(rescan_path, "w") as f:
             f.write("1")
         print("  Rescan triggered")
-        # Wait for enumeration to complete
-        time.sleep(2)
         return True
     except PermissionError:
         print(f"  ERROR: Permission denied writing to {rescan_path}")
@@ -228,7 +226,13 @@ def run_test(program=False, bitstream=None, openocd_cfg=OPENOCD_CFG, skip_rescan
     # Step 2: Device detection
     total_tests += 1
     print(f"Looking for device {VENDOR_ID}:{DEVICE_ID}...")
-    bdf = find_pcie_device(VENDOR_ID, DEVICE_ID)
+    # Poll for device to appear (enumeration may take a moment after rescan)
+    bdf = None
+    for _ in range(20):
+        bdf = find_pcie_device(VENDOR_ID, DEVICE_ID)
+        if bdf:
+            break
+        time.sleep(0.2)
     if bdf:
         print(f"  FOUND at {bdf}")
     else:

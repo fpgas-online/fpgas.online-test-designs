@@ -99,7 +99,6 @@ def query_ident(ser, expected_ident, lines):
     """Send the ``ident`` command at the litex> prompt and check the response."""
     ser.reset_input_buffer()
     ser.write(b"ident\n")
-    time.sleep(0.5)
 
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
@@ -134,8 +133,11 @@ def _reset_command_buffer(ser, deep=False):
                 break
         ser.timeout = old_timeout
     ser.write(b"\x03")
-    time.sleep(0.1)
-    ser.reset_input_buffer()
+    # Read and discard the Ctrl-C response (prompt redraw)
+    old_timeout = ser.timeout
+    ser.timeout = 0.2
+    ser.read(256)
+    ser.timeout = old_timeout
 
 
 def echo_test(ser: serial.Serial) -> bool:
@@ -152,20 +154,24 @@ def echo_test(ser: serial.Serial) -> bool:
     # Flush stale BIOS output, then synchronize by sending Ctrl-C and
     # waiting for a clean prompt echo cycle.
     _reset_command_buffer(ser, deep=True)
-    # Synchronization: send a unique byte, read until we see it echoed.
-    # This ensures all queued BIOS responses have been consumed.
+    # Synchronization: send Ctrl-C, drain response, then send a unique
+    # byte and read until we see it echoed. This ensures all queued
+    # BIOS responses have been consumed.
     ser.write(b"\x03")  # Ctrl-C to reset command line
-    time.sleep(0.2)
-    ser.reset_input_buffer()
+    old_timeout = ser.timeout
+    ser.timeout = 0.3
+    ser.read(4096)  # drain Ctrl-C response
     ser.write(b"~")  # Tilde is unlikely to appear in BIOS output
+    ser.timeout = 3.0
     deadline = time.monotonic() + 3.0
     while time.monotonic() < deadline:
         b = ser.read(1)
         if b == b"~":
             break
     ser.write(b"\x03")  # Reset command line (discard the "~")
-    time.sleep(0.1)
-    ser.reset_input_buffer()
+    ser.timeout = 0.2
+    ser.read(256)  # drain Ctrl-C response
+    ser.timeout = old_timeout
 
     errors = 0
 

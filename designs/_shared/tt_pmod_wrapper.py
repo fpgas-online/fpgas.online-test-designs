@@ -168,8 +168,6 @@ def main():
         return 1
     print("Upload complete.")
 
-    time.sleep(0.5)
-
     # Step 2: Open raw serial and run combined program + test
     print("Opening raw serial to RP2350...")
     serial_fd = open_raw_serial(port)
@@ -197,7 +195,7 @@ def main():
     # Cleanup
     try:
         os.write(serial_fd, b'\x03')
-        time.sleep(0.1)
+        drain(serial_fd, timeout=0.2)
         os.write(serial_fd, b'\x03')
     except OSError:
         pass

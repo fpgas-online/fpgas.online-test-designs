@@ -226,23 +226,27 @@ def poe_reset(host_name, off_seconds=5):
         print("  Cannot PoE-reset {}: not a piNN host".format(host_name))
         return False
     port = m.group(1)
-    print("  PoE reset: port {} off for {}s...".format(port, off_seconds))
+    print("  PoE reset: port {} off...".format(port))
     try:
         subprocess.run(
             ["ssh", TWEED, "poe.sh {} 2".format(port)],
             timeout=15, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        time.sleep(off_seconds)
+        # Poll until host is unreachable (confirms power is off)
+        for _ in range(off_seconds * 2):
+            if not ssh_check_connectivity(host_name, timeout=1):
+                break
+            time.sleep(0.5)
         subprocess.run(
             ["ssh", TWEED, "poe.sh {} 1".format(port)],
             timeout=15, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     except (subprocess.TimeoutExpired, OSError) as e:
         print("  PoE reset failed: {}".format(e))
         return False
-    # Wait for host to boot (RPi 3 PXE boot can take ~2 minutes)
+    # Poll for host to come back (RPi 3 PXE boot can take ~2 minutes).
+    # ssh_check_connectivity timeout provides the poll interval.
     print("  Waiting for {} to boot...".format(host_name))
     for _ in range(24):
-        time.sleep(10)
-        if ssh_check_connectivity(host_name, timeout=15):
+        if ssh_check_connectivity(host_name, timeout=10):
             print("  {} is back online".format(host_name))
             return True
     print("  {} did not come back after PoE reset".format(host_name))

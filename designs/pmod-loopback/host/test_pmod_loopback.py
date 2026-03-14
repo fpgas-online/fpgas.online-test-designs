@@ -258,17 +258,29 @@ def run_test(board_name, config):
     try:
         gpio.open()
 
-        # Small delay to let lines settle after configuration
-        time.sleep(0.01)
+        # Write initial value and poll until output settles (confirms
+        # GPIO lines are active and FPGA loopback is responding).
+        gpio.write(0)
+        expected_init = mask  # ~0x00
+        for _ in range(100):
+            if gpio.read() == expected_init:
+                break
+            time.sleep(0.001)
 
         hex_w = (width + 3) // 4
 
         for pattern in patterns:
             gpio.write(pattern)
-            time.sleep(0.010)  # propagation settle time (Fomu needs ~5ms)
-
-            reading = gpio.read()
             expected = (~pattern) & mask
+
+            # Poll until output matches expected or timeout (~50ms).
+            reading = gpio.read()
+            if reading != expected:
+                for _ in range(50):
+                    time.sleep(0.001)
+                    reading = gpio.read()
+                    if reading == expected:
+                        break
 
             total_tests += 1
             if reading != expected:
