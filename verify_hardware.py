@@ -45,8 +45,8 @@ HOSTS = {
     "pi31": {"ssh_type": "tweed", "target": "10.21.0.131", "board": "tt"},
     "pi33": {"ssh_type": "tweed", "target": "10.21.0.133", "board": "tt"},
     # Direct SSH
-    "rpi5-netv2": {"ssh_type": "direct", "target": "tim@rpi5-netv2.iot.welland.mithis.com", "board": "netv2", "variant": "a7-100"},
-    "rpi3-netv2": {"ssh_type": "direct", "target": "pi@rpi3-netv2.iot.welland.mithis.com", "board": "netv2", "variant": "a7-35"},
+    "rpi5-netv2": {"ssh_type": "direct", "target": "tim@rpi5-netv2.iot.welland.mithis.com", "board": "netv2", "variant": "a7-100", "serial_port": "/dev/ttyAMA0"},
+    "rpi3-netv2": {"ssh_type": "direct", "target": "pi@rpi3-netv2.iot.welland.mithis.com", "board": "netv2", "variant": "a7-35", "serial_port": "/dev/serial0"},
 }
 
 # Board-specific FPGA programming commands (use {bitstream} placeholder)
@@ -270,6 +270,16 @@ def generate_tests():
             board_cfg = design["boards"][board]
             artifact = board_cfg["artifact"]
             test_args = board_cfg["test_args"]
+
+            # Host-specific serial port override (e.g. rpi5 uses ttyAMA0,
+            # rpi3 uses serial0 for the same GPIO UART pins).
+            serial_port = host.get("serial_port")
+            if serial_port and "--port" in test_args:
+                import re as _re
+                test_args = _re.sub(
+                    r"--port\s+\S+",
+                    "--port {}".format(serial_port),
+                    test_args)
 
             # NeTV2 variant selection: prefer variant-specific artifact if it exists.
             # CI builds separate a7-35t and a7-100t artifacts for NeTV2.
