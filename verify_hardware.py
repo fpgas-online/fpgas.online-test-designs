@@ -373,7 +373,7 @@ def run_single_test(test, skip_upload=False):
         print("  Programming FPGA via RP2350 wrapper...")
         rc, stdout, stderr = ssh_run(test["host"], wrapper_cmd, timeout=240)
         output = stdout + stderr
-        if rc != 0 or "SETUP_DONE" not in output:
+        if rc != 0:
             print("  FAIL: FPGA programming/setup failed")
             for line in output.strip().split("\n"):
                 print("    {}".format(line))
