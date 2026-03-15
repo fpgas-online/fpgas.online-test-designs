@@ -52,6 +52,18 @@ BOARD_CONFIGS = {
         "read_pins":  [9],    # Fomu pmodb_n output -> RPi GPIO9
         "width": 1,
     },
+    "tt": {
+        # Empirically confirmed: TT FPGA Demo Board v3 via PMOD HAT.
+        # PMOD cables: RPi HAT JA/JC/JB -> TT PMOD headers.
+        # FPGA does: uo_out = ~ui_in (per-bit inversion, 8-bit).
+        # RP2350 GPIOs must be released to input (high-Z) first.
+        #   ui_in[0:7] drive GPIOs: JA1, JA7, JA8, JB1, JC1, JC3, JC4, JC9
+        #   uo_out[0:7] read GPIOs: JC2, JA10, JB8, JA9, JB2, JA3, JB4, JB3
+        "drive_pins": [6, 12, 16, 5, 17, 4, 14, 15],
+        "read_pins":  [18, 21, 8, 20, 11, 19, 10, 9],
+        "width": 8,
+        "pre_test": "rmmod spidev spi_bcm2835 2>&1; true",
+    },
 }
 
 
