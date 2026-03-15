@@ -132,7 +132,7 @@ DESIGNS = {
                        "pre_test": "rmmod spidev spi_bcm2835 2>&1; true"},
             "tt":    {"artifact": "gpio-loopback-tt-fpga/top.bin",
                        "test_args": "--board tt",
-                       "pre_test": "rmmod spidev spi_bcm2835 2>&1; mpremote connect /dev/ttyACM0 exec 'from machine import Pin\nfor g in list(range(17,25))+list(range(33,41)):\n Pin(g,Pin.IN)\n' 2>&1; true"},
+                       "pre_test": "rmmod spidev spi_bcm2835 2>&1; true"},
         },
     },
 }
@@ -364,9 +364,32 @@ def run_single_test(test, skip_upload=False):
         print("  Pre-test: {}".format(test["pre_test"]))
         ssh_run(test["host"], test["pre_test"], timeout=30)
 
-    # TT FPGA boards with UART-based tests need a combined program + bridge
-    # + test flow because the FPGA UART goes through the RP2350 (not USB).
-    # PMOD tests use RPi GPIO directly (via PMOD HAT -> TT PMOD headers).
+    # TT FPGA boards: RP2350 sits between RPi and FPGA.
+    # UART/spiflash: combined program + bridge + test (UART goes through RP2350).
+    # PMOD: program via RP2350 wrapper (handles reset/retry), then test via RPi GPIO.
+    if test["board"] == "tt" and test["test_type"] == "pmod":
+        wrapper_cmd = "python3 ~/tt_pmod_wrapper.py /dev/ttyACM0 {}".format(
+            test["remote_bitstream"])
+        print("  Programming FPGA via RP2350 wrapper...")
+        rc, stdout, stderr = ssh_run(test["host"], wrapper_cmd, timeout=240)
+        output = stdout + stderr
+        if rc != 0 or "SETUP_DONE" not in output:
+            print("  FAIL: FPGA programming/setup failed")
+            for line in output.strip().split("\n"):
+                print("    {}".format(line))
+            return False
+        print("  FPGA programmed, running GPIO test via RPi...")
+        # Skip standard programming — wrapper already did it.
+        # Jump directly to test execution.
+        print("  Running test...")
+        rc, stdout, stderr = ssh_run(test["host"], test["test_cmd"], timeout=180)
+        output = stdout + stderr
+        for line in output.strip().split("\n"):
+            print("    {}".format(line))
+        passed = check_test_result(output, rc)
+        print("  RESULT: {}".format("PASS" if passed else "FAIL"))
+        return passed
+
     if test["board"] == "tt" and test["test_type"] in ("uart", "spiflash"):
         wrapper_cmd = "python3 ~/tt_test_wrapper.py /dev/ttyACM0 {} {}".format(
             test["remote_bitstream"], test["test_cmd"])
