@@ -18,6 +18,7 @@ Usage:
 
 import argparse
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -221,7 +222,6 @@ def poe_reset(host_name, off_seconds=5):
     Only works for tweed-connected hosts (piNN naming convention).
     The PoE switch port number matches the host suffix: pi27 → port 27.
     """
-    import re
     m = re.match(r"pi(\d+)$", host_name)
     if not m:
         print("  Cannot PoE-reset {}: not a piNN host".format(host_name))
@@ -275,8 +275,7 @@ def generate_tests():
             # rpi3 uses serial0 for the same GPIO UART pins).
             serial_port = host.get("serial_port")
             if serial_port and "--port" in test_args:
-                import re as _re
-                test_args = _re.sub(
+                test_args = re.sub(
                     r"--port\s+\S+",
                     "--port {}".format(serial_port),
                     test_args)
@@ -416,14 +415,12 @@ def run_single_test(test, skip_upload=False):
     print("  Programming FPGA...")
     rc, stdout, stderr = ssh_run(test["host"], test["program_cmd"], timeout=120)
     output = stdout + stderr
-    # Check for successful programming indicators from each tool:
+    # Check for successful programming indicators:
     # - openFPGALoader: prints "done 1" in FPGA status register output
-    # - dfu-util: prints "state(2) = dfuIDLE" on success
     # - tt_fpga_program.py: returns rc=0
     programming_ok = (
         rc == 0
         or "done 1" in output.lower()
-        or "dfuIDLE" in output
     )
     if not programming_ok:
         # For Fomu: DFU bootloader may have timed out. PoE-reset to
@@ -447,7 +444,6 @@ def run_single_test(test, skip_upload=False):
                 programming_ok = (
                     rc == 0
                     or "done 1" in output.lower()
-                    or "dfuIDLE" in output
                 )
         if not programming_ok:
             print("  FAIL: FPGA programming failed (rc={})".format(rc))

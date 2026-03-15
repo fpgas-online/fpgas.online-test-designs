@@ -37,18 +37,6 @@ HOST_IP      = "192.168.1.100"
 NETMASK      = "255.255.255.0"
 BIOS_TIMEOUT = 30  # seconds to wait for BIOS boot
 
-# USB Ethernet adapter identification for Arty Pi hosts.
-# Each RPi has a different USB Ethernet adapter connected to the Arty's
-# Ethernet port.  We detect by USB vendor/product strings.
-USB_ETH_IDENTIFIERS = [
-    "dm9601",       # DM9601 (pi3)
-    "ax88179",      # ASIX AX88179 (pi9)
-    "cdc_ether",    # Linksys / generic CDC (pi5)
-    "r8152",        # Realtek USB Ethernet
-    "asix",         # ASIX generic
-]
-
-
 # -- Network interface detection -----------------------------------------------
 
 def find_usb_ethernet_interface():

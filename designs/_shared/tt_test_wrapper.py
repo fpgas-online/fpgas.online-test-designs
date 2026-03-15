@@ -148,7 +148,6 @@ import select as _sel
 p = _sel.poll()
 p.register(uart, _sel.POLLIN)
 p.register(si, _sel.POLLIN)
-sent_marker = False
 while True:
     evts = p.poll(100)
     for obj, ev in evts:

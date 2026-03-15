@@ -19,6 +19,7 @@ Requirements:
 """
 
 import argparse
+import pathlib
 import sys
 import time
 
@@ -87,7 +88,6 @@ def detect_gpio_chip():
     for RPi 4) is more robust than relying on device node numbers like
     /dev/gpiochip0 or /dev/gpiochip4, which can change across kernels.
     """
-    import pathlib
     for chip_path in sorted(pathlib.Path("/dev").glob("gpiochip*")):
         try:
             chip = gpiod.Chip(str(chip_path))
