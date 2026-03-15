@@ -52,7 +52,7 @@ HOSTS = {
 # Board-specific FPGA programming commands (use {bitstream} placeholder)
 PROGRAM_CMD = {
     "arty":  "openFPGALoader -b arty {bitstream}",
-    "fomu":  "dfu-util -R -D {bitstream}",
+    "fomu":  "openFPGALoader -b fomu {bitstream}",
     "tt":    "python3 ~/tt_fpga_program.py /dev/ttyACM0 {bitstream}",
     # NeTV2 varies by host — handled per-host below
 }
@@ -395,7 +395,7 @@ def run_single_test(test, skip_upload=False):
     if not programming_ok:
         # For Fomu: DFU bootloader may have timed out. PoE-reset to
         # reboot into DFU mode and retry programming immediately.
-        if test["board"] == "fomu" and "No DFU capable USB device" in output:
+        if test["board"] == "fomu" and not programming_ok:
             print("  Fomu DFU timeout — PoE resetting to re-enter bootloader...")
             if poe_reset(test["host"]):
                 # Re-upload files (PXE tmpfs lost on reboot)
