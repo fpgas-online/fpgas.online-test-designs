@@ -24,6 +24,7 @@ The wrapper replaces occurrences of the serial port in the test command
 with the PTY path so the test script transparently sees the FPGA UART.
 """
 
+import contextlib
 import os
 import pty
 import select
@@ -33,7 +34,6 @@ import termios
 import threading
 import time
 import tty
-
 
 BITSTREAM_DEVICE_PATH = "/bitstreams/custom.bin"
 
@@ -174,13 +174,13 @@ def reset_rp2350(port):
         try:
             tty.setraw(fd)
             for _ in range(3):
-                os.write(fd, b'\x03')
+                os.write(fd, b"\x03")
                 drain(fd, timeout=0.2)
             drain(fd, timeout=0.5)
         finally:
             os.close(fd)
     except OSError as e:
-        print("Warning: could not reset RP2350: {}".format(e))
+        print(f"Warning: could not reset RP2350: {e}")
 
 
 def usb_power_cycle(port):
@@ -190,10 +190,10 @@ def usb_power_cycle(port):
     Only works if the RP2350 is solely USB-powered.
     """
     import glob as _glob
+
     # Find USB device backing ttyACM port
     acm_idx = port.replace("/dev/ttyACM", "")
-    sysfs_matches = _glob.glob(
-        "/sys/class/tty/ttyACM{}/device/..".format(acm_idx))
+    sysfs_matches = _glob.glob(f"/sys/class/tty/ttyACM{acm_idx}/device/..")
     if not sysfs_matches:
         return
     dev_path = os.path.realpath(sysfs_matches[0])
@@ -201,12 +201,10 @@ def usb_power_cycle(port):
     busport = os.path.basename(dev_path)
     if "." not in busport:
         return
-    hub = busport.rsplit(".", 1)[0]   # "1-1"
+    hub = busport.rsplit(".", 1)[0]  # "1-1"
     port_num = busport.rsplit(".", 1)[1]  # "2"
-    print("USB power-cycling hub {} port {}...".format(hub, port_num))
-    subprocess.call(
-        ["uhubctl", "-l", hub, "-p", port_num, "-a", "cycle"],
-        timeout=15)
+    print(f"USB power-cycling hub {hub} port {port_num}...")
+    subprocess.call(["uhubctl", "-l", hub, "-p", port_num, "-a", "cycle"], timeout=15)
     # Poll for device re-enumeration instead of sleeping
     for _ in range(30):
         time.sleep(0.1)
@@ -223,21 +221,23 @@ def _install_safe_main(port):
     """
     try:
         result = subprocess.run(
-            ["mpremote", "connect", port, "exec",
-             "f = open('main.py', 'w')\n"
-             "f.write('# Safe main.py for FPGA test automation\\n')\n"
-             "f.write('print(\"TT FPGA board ready\")\\n')\n"
-             "f.close()"],
+            [
+                "mpremote",
+                "connect",
+                port,
+                "exec",
+                "f = open('main.py', 'w')\n"
+                "f.write('# Safe main.py for FPGA test automation\\n')\n"
+                "f.write('print(\"TT FPGA board ready\")\\n')\n"
+                "f.close()",
+            ],
             timeout=30,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
         )
         if result.returncode != 0:
-            print("Warning: safe main.py install failed (non-critical)",
-                  file=sys.stderr)
+            print("Warning: safe main.py install failed (non-critical)", file=sys.stderr)
     except subprocess.TimeoutExpired:
-        print("Warning: safe main.py install timed out (non-critical)",
-              file=sys.stderr)
+        print("Warning: safe main.py install timed out (non-critical)", file=sys.stderr)
 
 
 def upload_bitstream(port, local_path):
@@ -246,13 +246,11 @@ def upload_bitstream(port, local_path):
     reset_rp2350(port)
 
     subprocess.call(
-        ["mpremote", "connect", port, "exec",
-         "import os\ntry:\n os.mkdir('/bitstreams')\nexcept OSError:\n pass"],
+        ["mpremote", "connect", port, "exec", "import os\ntry:\n os.mkdir('/bitstreams')\nexcept OSError:\n pass"],
         timeout=30,
     )
     rc = subprocess.call(
-        ["mpremote", "connect", port, "cp", local_path,
-         ":" + BITSTREAM_DEVICE_PATH],
+        ["mpremote", "connect", port, "cp", local_path, ":" + BITSTREAM_DEVICE_PATH],
         timeout=120,
     )
     if rc != 0:
@@ -261,13 +259,11 @@ def upload_bitstream(port, local_path):
         usb_power_cycle(port)
         reset_rp2350(port)
         subprocess.call(
-            ["mpremote", "connect", port, "exec",
-             "import os\ntry:\n os.mkdir('/bitstreams')\nexcept OSError:\n pass"],
+            ["mpremote", "connect", port, "exec", "import os\ntry:\n os.mkdir('/bitstreams')\nexcept OSError:\n pass"],
             timeout=30,
         )
         rc = subprocess.call(
-            ["mpremote", "connect", port, "cp", local_path,
-             ":" + BITSTREAM_DEVICE_PATH],
+            ["mpremote", "connect", port, "cp", local_path, ":" + BITSTREAM_DEVICE_PATH],
             timeout=120,
         )
     if rc == 0:
@@ -284,12 +280,12 @@ def open_raw_serial(port):
     # Set baud rate. cfsetispeed/cfsetospeed were added in Python 3.13;
     # fall back to direct index assignment for older versions.
     baud = termios.B115200
-    if hasattr(termios, 'cfsetispeed'):
+    if hasattr(termios, "cfsetispeed"):
         termios.cfsetispeed(attrs, baud)
         termios.cfsetospeed(attrs, baud)
     else:
-        attrs[4] = baud   # ispeed
-        attrs[5] = baud   # ospeed
+        attrs[4] = baud  # ispeed
+        attrs[5] = baud  # ospeed
     attrs[6][termios.VMIN] = 0
     attrs[6][termios.VTIME] = 1
     termios.tcsetattr(fd, termios.TCSANOW, attrs)
@@ -312,11 +308,11 @@ def drain(fd, timeout=0.3):
 
 def enter_raw_repl(fd):
     """Enter MicroPython raw REPL mode on the serial port."""
-    os.write(fd, b'\x03')
+    os.write(fd, b"\x03")
     drain(fd, timeout=0.2)
-    os.write(fd, b'\x03')
+    os.write(fd, b"\x03")
     drain(fd, timeout=0.3)
-    os.write(fd, b'\x01')
+    os.write(fd, b"\x01")
     drain(fd, timeout=0.3)
 
 
@@ -328,7 +324,7 @@ def execute_raw_repl(fd, script, marker, timeout=60):
     if isinstance(script, str):
         script = script.encode()
     os.write(fd, script)
-    os.write(fd, b'\x04')
+    os.write(fd, b"\x04")
 
     buf = b""
     deadline = time.monotonic() + timeout
@@ -344,11 +340,13 @@ def execute_raw_repl(fd, script, marker, timeout=60):
                 if marker in buf:
                     marker_pos = buf.index(marker)
                     pre_marker = buf[:marker_pos]
-                    print("Raw REPL output before marker ({} bytes): {}".format(
-                        len(pre_marker),
-                        pre_marker.decode("utf-8", errors="replace")[:500]))
+                    print(
+                        "Raw REPL output before marker ({} bytes): {}".format(
+                            len(pre_marker), pre_marker.decode("utf-8", errors="replace")[:500]
+                        )
+                    )
                     idx = marker_pos + len(marker)
-                    while idx < len(buf) and buf[idx:idx + 1] in (b'\r', b'\n'):
+                    while idx < len(buf) and buf[idx : idx + 1] in (b"\r", b"\n"):
                         idx += 1
                     return True, buf[idx:]
     return False, buf
@@ -356,8 +354,7 @@ def execute_raw_repl(fd, script, marker, timeout=60):
 
 def main():
     if len(sys.argv) < 4:
-        print("usage: tt_test_wrapper.py PORT BITSTREAM TEST_CMD [ARGS...]",
-              file=sys.stderr)
+        print("usage: tt_test_wrapper.py PORT BITSTREAM TEST_CMD [ARGS...]", file=sys.stderr)
         return 2
 
     port = sys.argv[1]
@@ -380,19 +377,19 @@ def main():
 
     print("Programming FPGA and starting UART bridge...")
     ok, extra_data = execute_raw_repl(
-        serial_fd, PROGRAM_AND_BRIDGE_SCRIPT,
-        marker=b"BRIDGE_ACTIVE", timeout=60,
+        serial_fd,
+        PROGRAM_AND_BRIDGE_SCRIPT,
+        marker=b"BRIDGE_ACTIVE",
+        timeout=60,
     )
     if not ok:
         print("ERROR: Bridge did not activate", file=sys.stderr)
-        print("Output: {}".format(
-            extra_data.decode("utf-8", errors="replace")), file=sys.stderr)
+        print("Output: {}".format(extra_data.decode("utf-8", errors="replace")), file=sys.stderr)
         os.close(serial_fd)
         return 1
 
     print("FPGA programmed, UART bridge active.")
-    print("Extra data after marker ({} bytes): {}".format(
-        len(extra_data), repr(extra_data[:200])))
+    print(f"Extra data after marker ({len(extra_data)} bytes): {extra_data[:200]!r}")
 
     # Step 3: Create PTY pair
     master_fd, slave_fd = pty.openpty()
@@ -420,8 +417,7 @@ def main():
             boot_data = os.read(serial_fd, 4096)
             if boot_data:
                 os.write(master_fd, boot_data)
-                print("Boot data forwarded to PTY ({} bytes)".format(
-                    len(boot_data)))
+                print(f"Boot data forwarded to PTY ({len(boot_data)} bytes)")
                 break
         else:
             # No more data within 200 ms — boot data has been consumed
@@ -451,12 +447,12 @@ def main():
                             # The test script sends Ctrl-C to reset the
                             # BIOS command buffer, but our custom firmware
                             # doesn't need it.
-                            data = data.replace(b'\x03', b'')
+                            data = data.replace(b"\x03", b"")
                             if data:
                                 os.write(serial_fd, data)
                             relay_stats["pty_to_serial"] += len(data)
             except OSError as e:
-                print("Relay error: {}".format(e), flush=True)
+                print(f"Relay error: {e}", flush=True)
                 break
         print("Relay thread exiting", flush=True)
 
@@ -480,8 +476,9 @@ def main():
         print("ERROR: Test timed out", file=sys.stderr)
         rc = 1
 
-    print("Relay stats: serial->pty={}, pty->serial={}".format(
-        relay_stats["serial_to_pty"], relay_stats["pty_to_serial"]))
+    print(
+        "Relay stats: serial->pty={}, pty->serial={}".format(relay_stats["serial_to_pty"], relay_stats["pty_to_serial"])
+    )
 
     # Step 6: Cleanup -- send Ctrl-C to break the MicroPython bridge
     # script.  The relay is stopped first so Ctrl-C goes directly to
@@ -489,17 +486,15 @@ def main():
     relay_active = False
     relay_thread.join(timeout=2)
     try:
-        os.write(serial_fd, b'\x03')
+        os.write(serial_fd, b"\x03")
         drain(fd=serial_fd, timeout=0.2)
-        os.write(serial_fd, b'\x03')
+        os.write(serial_fd, b"\x03")
         drain(fd=serial_fd, timeout=0.2)
     except OSError:
         pass
     for fd in (master_fd, slave_fd, serial_fd):
-        try:
+        with contextlib.suppress(OSError):
             os.close(fd)
-        except OSError:
-            pass
 
     return rc
 

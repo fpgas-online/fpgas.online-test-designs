@@ -45,14 +45,36 @@ allow-direct-references = true
 [tool.hatch.build.targets.wheel]
 packages = ["designs"]
 
+[tool.ruff]
+target-version = "py39"
+line-length = 120
+
 [tool.ruff.lint]
-# LiteX/migen code requires monkey-patching before imports and uses wildcard imports
-# by convention. These are intentional patterns, not bugs.
-ignore = [
-    "E402",   # Module-level import not at top of file (monkey-patching before imports)
-    "F403",   # Wildcard import (migen convention: from migen import *)
-    "F405",   # May be undefined from wildcard import
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "SIM",    # flake8-simplify
+    "RUF",    # ruff-specific rules
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# LiteX/migen gateware code requires monkey-patching before imports and uses
+# wildcard imports by convention. These are intentional patterns, not bugs.
+"designs/*/gateware/*.py" = ["E402", "F403", "F405"]
+"designs/_shared/*.py" = ["E402", "F403", "F405"]
+# test_uart.py runs on rpi3-netv2 (Python 3.5) — must use .format() not f-strings.
+"designs/uart/host/test_uart.py" = ["UP032"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["designs"]
+
+[tool.ruff.format]
+quote-style = "double"
+docstring-code-format = true
 
 [tool.uv]
 # Pin migen to git main for Python 3.12+ bytecode tracer compatibility.

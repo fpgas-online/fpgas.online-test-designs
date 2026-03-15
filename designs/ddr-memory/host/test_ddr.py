@@ -18,7 +18,6 @@ import time
 
 import serial
 
-
 # --------------------------------------------------------------------------- #
 # Constants
 # --------------------------------------------------------------------------- #
@@ -28,7 +27,7 @@ BOOT_TIMEOUT_S = 60  # DDR calibration can take a while
 
 # Expected DRAM sizes per board (bytes).
 EXPECTED_DRAM_SIZE = {
-    "arty":  256 * 1024 * 1024,  # 256 MB
+    "arty": 256 * 1024 * 1024,  # 256 MB
     "netv2": 512 * 1024 * 1024,  # 512 MB
 }
 
@@ -36,6 +35,7 @@ EXPECTED_DRAM_SIZE = {
 # --------------------------------------------------------------------------- #
 # Test logic
 # --------------------------------------------------------------------------- #
+
 
 def run_ddr_test(ser, board, timeout=BOOT_TIMEOUT_S):
     """Capture boot output and parse DDR test results.
@@ -72,7 +72,7 @@ def run_ddr_test(ser, board, timeout=BOOT_TIMEOUT_S):
 
         # Detect calibration failure.
         if re.search(r"(calibration|leveling).*(fail|error)", line, re.IGNORECASE):
-            print("FAIL: DRAM calibration failed: {}".format(line))
+            print(f"FAIL: DRAM calibration failed: {line}")
             return False, lines
 
         # If we see the BIOS prompt without a memtest result, boot
@@ -90,9 +90,9 @@ def run_ddr_test(ser, board, timeout=BOOT_TIMEOUT_S):
     results.append(calibration_ok)
 
     if memtest_ok is True:
-        print("PASS: {}".format(memtest_line))
+        print(f"PASS: {memtest_line}")
     elif memtest_ok is False:
-        print("FAIL: {}".format(memtest_line))
+        print(f"FAIL: {memtest_line}")
     else:
         print("FAIL: Memtest result not detected within timeout")
     results.append(memtest_ok is True)
@@ -103,6 +103,7 @@ def run_ddr_test(ser, board, timeout=BOOT_TIMEOUT_S):
 # --------------------------------------------------------------------------- #
 # Main
 # --------------------------------------------------------------------------- #
+
 
 def main():
     parser = argparse.ArgumentParser(description="DDR memory test for FPGA boards")
@@ -121,22 +122,21 @@ def main():
         "--baud",
         type=int,
         default=BAUD_RATE,
-        help="Baud rate (default: {})".format(BAUD_RATE),
+        help=f"Baud rate (default: {BAUD_RATE})",
     )
     parser.add_argument(
         "--timeout",
         type=int,
         default=BOOT_TIMEOUT_S,
-        help="Boot timeout in seconds (default: {})".format(BOOT_TIMEOUT_S),
+        help=f"Boot timeout in seconds (default: {BOOT_TIMEOUT_S})",
     )
     args = parser.parse_args()
 
     boot_timeout = args.timeout
 
-    print("Opening {} at {} baud...".format(args.port, args.baud))
-    print("Board: {}, expected DRAM: {} MB".format(
-          args.board, EXPECTED_DRAM_SIZE[args.board] // (1024*1024)))
-    print("Waiting up to {}s for boot + memtest...".format(boot_timeout))
+    print(f"Opening {args.port} at {args.baud} baud...")
+    print(f"Board: {args.board}, expected DRAM: {EXPECTED_DRAM_SIZE[args.board] // (1024 * 1024)} MB")
+    print(f"Waiting up to {boot_timeout}s for boot + memtest...")
     print()
 
     with serial.Serial(args.port, args.baud, timeout=2) as ser:
@@ -145,7 +145,7 @@ def main():
     if not passed:
         print("\nFull boot output:")
         for line in boot_lines:
-            print("  {}".format(line))
+            print(f"  {line}")
 
     print()
     if passed:

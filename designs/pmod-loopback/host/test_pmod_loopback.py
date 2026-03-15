@@ -25,7 +25,6 @@ import time
 
 import gpiod
 
-
 # -- Board-specific pin configurations ----------------------------------------
 # Pin mappings: RPi BCM GPIO numbers.
 # "drive_pins" are RPi outputs that connect to the FPGA input side.
@@ -37,20 +36,20 @@ BOARD_CONFIGS = {
         # Two PMOD cables: RPi HAT JA -> Arty JA, RPi HAT JC -> Arty JB
         # FPGA does: pmodb = ~pmoda (per-bit inversion)
         # 4 of 8 pairs confirmed; others need further investigation.
-        "drive_pins": [8, 19, 20, 21],   # RPi -> FPGA pmoda inputs
-        "read_pins":  [7, 26, 3, 13],    # FPGA pmodb outputs -> RPi
+        "drive_pins": [8, 19, 20, 21],  # RPi -> FPGA pmoda inputs
+        "read_pins": [7, 26, 3, 13],  # FPGA pmodb outputs -> RPi
         "width": 4,
     },
     "netv2": {
         "drive_pins": [14],  # RPi GPIO14 (TX) -> FPGA E13 (RX)
-        "read_pins": [15],   # RPi GPIO15 (RX) <- FPGA E14 (TX)
+        "read_pins": [15],  # RPi GPIO15 (RX) <- FPGA E14 (TX)
         "width": 1,
     },
     "fomu": {
         # Empirically confirmed: Fomu EVT on pi17/pi21 test jig.
         # Only 1 of the 4 loopback pairs connects to RPi GPIO.
-        "drive_pins": [27],   # RPi GPIO27 -> Fomu pmoda_n input
-        "read_pins":  [9],    # Fomu pmodb_n output -> RPi GPIO9
+        "drive_pins": [27],  # RPi GPIO27 -> Fomu pmoda_n input
+        "read_pins": [9],  # Fomu pmodb_n output -> RPi GPIO9
         "width": 1,
     },
     "tt": {
@@ -61,7 +60,7 @@ BOARD_CONFIGS = {
         #   ui_in[0:7] drive GPIOs: JA1, JA7, JA8, JB1, JC1, JC3, JC4, JC9
         #   uo_out[0:7] read GPIOs: JC2, JA10, JB8, JA9, JB2, JA3, JB4, JB3
         "drive_pins": [6, 12, 16, 5, 17, 4, 14, 15],
-        "read_pins":  [18, 21, 8, 20, 11, 19, 10, 9],
+        "read_pins": [18, 21, 8, 20, 11, 19, 10, 9],
         "width": 8,
         "pre_test": "rmmod spidev spi_bcm2835 2>&1; true",
     },
@@ -70,9 +69,9 @@ BOARD_CONFIGS = {
 
 # GPIO chip labels for Raspberry Pi models.
 GPIO_CHIP_LABELS = {
-    "pinctrl-rp1",       # RPi 5 (RP1 chip)
-    "pinctrl-bcm2711",   # RPi 4 (BCM2711)
-    "pinctrl-bcm2835",   # RPi 3 / RPi Zero
+    "pinctrl-rp1",  # RPi 5 (RP1 chip)
+    "pinctrl-bcm2711",  # RPi 4 (BCM2711)
+    "pinctrl-bcm2835",  # RPi 3 / RPi Zero
 }
 
 # Detect gpiod API version.
@@ -80,6 +79,7 @@ _GPIOD_V2 = hasattr(gpiod, "request_lines")
 
 
 # -- GPIO helpers --------------------------------------------------------------
+
 
 def detect_gpio_chip():
     """Detect the correct gpiochip for RPi GPIO pins by chip label.
@@ -91,18 +91,14 @@ def detect_gpio_chip():
     for chip_path in sorted(pathlib.Path("/dev").glob("gpiochip*")):
         try:
             chip = gpiod.Chip(str(chip_path))
-            if _GPIOD_V2:
-                label = chip.get_info().label
-            else:
-                label = chip.label()
+            label = chip.get_info().label if _GPIOD_V2 else chip.label()
             chip.close()
             if label in GPIO_CHIP_LABELS:
                 return str(chip_path)
         except (OSError, PermissionError):
             continue
     raise RuntimeError(
-        "Cannot find GPIO chip with a known label "
-        "({}). Is this a Raspberry Pi?".format(', '.join(GPIO_CHIP_LABELS))
+        "Cannot find GPIO chip with a known label ({}). Is this a Raspberry Pi?".format(", ".join(GPIO_CHIP_LABELS))
     )
 
 
@@ -155,13 +151,11 @@ class PmodHatGpio:
         self._chip = gpiod.Chip(self.chip_path)
         for pin in self.drive_pins:
             line = self._chip.get_line(pin)
-            line.request(consumer="pmod-loopback-test",
-                         type=gpiod.LINE_REQ_DIR_OUT, default_val=0)
+            line.request(consumer="pmod-loopback-test", type=gpiod.LINE_REQ_DIR_OUT, default_val=0)
             self._drive_lines.append(line)
         for pin in self.read_pins:
             line = self._chip.get_line(pin)
-            line.request(consumer="pmod-loopback-test",
-                         type=gpiod.LINE_REQ_DIR_IN)
+            line.request(consumer="pmod-loopback-test", type=gpiod.LINE_REQ_DIR_IN)
             self._read_lines.append(line)
 
     def close(self):
@@ -198,17 +192,18 @@ class PmodHatGpio:
         result = 0
         if _GPIOD_V2:
             values = self._read_request.get_values()
-            for i, pin in enumerate(self.read_pins):
+            for i, _pin in enumerate(self.read_pins):
                 if values[i] == gpiod.line.Value.ACTIVE:
-                    result |= (1 << i)
+                    result |= 1 << i
         else:
             for i, line in enumerate(self._read_lines):
                 if line.get_value():
-                    result |= (1 << i)
+                    result |= 1 << i
         return result
 
 
 # -- Test patterns -------------------------------------------------------------
+
 
 def generate_test_patterns(width):
     """Generate test bit patterns appropriate for the given pin width."""
@@ -244,6 +239,7 @@ def generate_test_patterns(width):
 
 # -- Test runner ---------------------------------------------------------------
 
+
 def run_test(board_name, config):
     """Run GPIO loopback test for the specified board."""
     width = config["width"]
@@ -253,11 +249,11 @@ def run_test(board_name, config):
     failures = []
 
     print("=== PMOD GPIO Loopback Test ===")
-    print("Board:      {}".format(board_name))
-    print("Width:      {} bits".format(width))
-    print("Drive pins: {}".format(config['drive_pins']))
-    print("Read pins:  {}".format(config['read_pins']))
-    print("Patterns:   {}".format(len(patterns)))
+    print(f"Board:      {board_name}")
+    print(f"Width:      {width} bits")
+    print("Drive pins: {}".format(config["drive_pins"]))
+    print("Read pins:  {}".format(config["read_pins"]))
+    print(f"Patterns:   {len(patterns)}")
     print()
 
     if not config["drive_pins"] or not config["read_pins"]:
@@ -297,33 +293,28 @@ def run_test(board_name, config):
             total_tests += 1
             if reading != expected:
                 failures.append(
-                    "sent 0x{:0{}X}, "
-                    "expected 0x{:0{}X}, "
-                    "got 0x{:0{}X} "
-                    "(diff 0x{:0{}X})".format(
-                        pattern, hex_w, expected, hex_w,
-                        reading, hex_w, expected ^ reading, hex_w))
-                print("  FAIL: sent 0x{:0{}X}, "
-                      "expected ~=0x{:0{}X}, "
-                      "got 0x{:0{}X}".format(
-                          pattern, hex_w, expected, hex_w,
-                          reading, hex_w))
+                    "sent 0x{:0{}X}, expected 0x{:0{}X}, got 0x{:0{}X} (diff 0x{:0{}X})".format(
+                        pattern, hex_w, expected, hex_w, reading, hex_w, expected ^ reading, hex_w
+                    )
+                )
+                print(
+                    "  FAIL: sent 0x{:0{}X}, expected ~=0x{:0{}X}, got 0x{:0{}X}".format(
+                        pattern, hex_w, expected, hex_w, reading, hex_w
+                    )
+                )
             else:
-                print("  OK:   0x{:0{}X} -> "
-                      "~=0x{:0{}X}".format(
-                          pattern, hex_w, expected, hex_w))
+                print("  OK:   0x{:0{}X} -> ~=0x{:0{}X}".format(pattern, hex_w, expected, hex_w))
 
     finally:
         gpio.close()
 
     # Results
     print()
-    print("=== Results: {}/{} passed ===".format(
-        total_tests - len(failures), total_tests))
+    print(f"=== Results: {total_tests - len(failures)}/{total_tests} passed ===")
     if failures:
         print("Failures:")
         for fail in failures:
-            print("  - {}".format(fail))
+            print(f"  - {fail}")
         print("FAIL")
         return False
     else:
@@ -332,12 +323,10 @@ def run_test(board_name, config):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="PMOD GPIO Loopback Test (host-side, no UART)")
+    parser = argparse.ArgumentParser(description="PMOD GPIO Loopback Test (host-side, no UART)")
     parser.add_argument(
-        "--board", default="arty",
-        choices=list(BOARD_CONFIGS.keys()),
-        help="Target board (default: arty)")
+        "--board", default="arty", choices=list(BOARD_CONFIGS.keys()), help="Target board (default: arty)"
+    )
     args = parser.parse_args()
 
     config = BOARD_CONFIGS[args.board]

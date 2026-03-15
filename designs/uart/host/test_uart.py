@@ -16,7 +16,6 @@ import time
 
 import serial
 
-
 # --------------------------------------------------------------------------- #
 # Constants
 # --------------------------------------------------------------------------- #
@@ -30,10 +29,10 @@ BIOS_BANNER_MARKER = "LiteX"
 
 # Board-specific identification strings set via SoCCore(ident=...).
 BOARD_IDENT = {
-    "arty":  "Arty A7",
+    "arty": "Arty A7",
     "netv2": "NeTV2",
-    "fomu":  "Fomu EVT",
-    "tt":    "TT FPGA",
+    "fomu": "Fomu EVT",
+    "tt": "TT FPGA",
 }
 
 # The LiteX BIOS readline buffer is ~64 characters.  We must reset
@@ -49,6 +48,7 @@ ECHO_TEST_BYTES = bytes(range(0x20, 0x7F))
 # --------------------------------------------------------------------------- #
 # Test steps
 # --------------------------------------------------------------------------- #
+
 
 def wait_for_banner(ser, board):
     """Read lines until we see the BIOS ``litex>`` prompt or timeout.
@@ -186,10 +186,7 @@ def echo_test(ser: serial.Serial) -> bool:
             print("  FAIL: Timeout waiting for echo of 0x{:02X}".format(byte_val))
             errors += 1
         elif response[0] != byte_val:
-            print(
-                "  FAIL: Echo mismatch for 0x{:02X}: "
-                "got 0x{:02X}".format(byte_val, response[0])
-            )
+            print("  FAIL: Echo mismatch for 0x{:02X}: got 0x{:02X}".format(byte_val, response[0]))
             errors += 1
 
     total = len(ECHO_TEST_BYTES)
@@ -204,6 +201,7 @@ def echo_test(ser: serial.Serial) -> bool:
 # --------------------------------------------------------------------------- #
 # Main
 # --------------------------------------------------------------------------- #
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="UART echo test for FPGA boards")

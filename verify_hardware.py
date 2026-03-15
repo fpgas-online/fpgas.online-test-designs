@@ -24,7 +24,6 @@ import subprocess
 import sys
 import time
 
-
 REPO_DIR = os.path.dirname(os.path.abspath(__file__))
 ARTIFACTS_DIR = os.path.join(REPO_DIR, "artifacts")
 TWEED = "root@tweed.welland.mithis.com"
@@ -36,9 +35,9 @@ TWEED = "root@tweed.welland.mithis.com"
 
 HOSTS = {
     # Tweed-connected (via double-hop SSH)
-    "pi3":  {"ssh_type": "tweed", "target": "10.21.0.103", "board": "arty"},
-    "pi5":  {"ssh_type": "tweed", "target": "10.21.0.105", "board": "arty"},
-    "pi9":  {"ssh_type": "tweed", "target": "10.21.0.109", "board": "arty"},
+    "pi3": {"ssh_type": "tweed", "target": "10.21.0.103", "board": "arty"},
+    "pi5": {"ssh_type": "tweed", "target": "10.21.0.105", "board": "arty"},
+    "pi9": {"ssh_type": "tweed", "target": "10.21.0.109", "board": "arty"},
     "pi17": {"ssh_type": "tweed", "target": "10.21.0.117", "board": "fomu"},
     "pi21": {"ssh_type": "tweed", "target": "10.21.0.121", "board": "fomu"},
     "pi27": {"ssh_type": "tweed", "target": "10.21.0.127", "board": "tt"},
@@ -46,15 +45,27 @@ HOSTS = {
     "pi31": {"ssh_type": "tweed", "target": "10.21.0.131", "board": "tt"},
     "pi33": {"ssh_type": "tweed", "target": "10.21.0.133", "board": "tt"},
     # Direct SSH
-    "rpi5-netv2": {"ssh_type": "direct", "target": "tim@rpi5-netv2.iot.welland.mithis.com", "board": "netv2", "variant": "a7-100", "serial_port": "/dev/ttyAMA0"},
-    "rpi3-netv2": {"ssh_type": "direct", "target": "pi@rpi3-netv2.iot.welland.mithis.com", "board": "netv2", "variant": "a7-35", "serial_port": "/dev/serial0"},
+    "rpi5-netv2": {
+        "ssh_type": "direct",
+        "target": "tim@rpi5-netv2.iot.welland.mithis.com",
+        "board": "netv2",
+        "variant": "a7-100",
+        "serial_port": "/dev/ttyAMA0",
+    },
+    "rpi3-netv2": {
+        "ssh_type": "direct",
+        "target": "pi@rpi3-netv2.iot.welland.mithis.com",
+        "board": "netv2",
+        "variant": "a7-35",
+        "serial_port": "/dev/serial0",
+    },
 }
 
 # Board-specific FPGA programming commands (use {bitstream} placeholder)
 PROGRAM_CMD = {
-    "arty":  "openFPGALoader -b arty {bitstream}",
-    "fomu":  "openFPGALoader -b fomu {bitstream}",
-    "tt":    "python3 ~/tt_fpga_program.py /dev/ttyACM0 {bitstream}",
+    "arty": "openFPGALoader -b arty {bitstream}",
+    "fomu": "openFPGALoader -b fomu {bitstream}",
+    "tt": "python3 ~/tt_fpga_program.py /dev/ttyACM0 {bitstream}",
     # NeTV2 varies by host — handled per-host below
 }
 
@@ -73,67 +84,111 @@ DESIGNS = {
     "uart": {
         "test_script": "designs/uart/host/test_uart.py",
         "boards": {
-            "arty":  {"artifact": "uart-test-arty/digilent_arty.bit",
-                       "test_args": "--port /dev/ttyUSB1 --board arty"},
-            "netv2": {"artifact": "uart-test-netv2/kosagi_netv2.bit",
-                       "test_args": "--port /dev/ttyAMA0 --board netv2 --skip-banner",
-                       "pre_test": "sudo systemctl stop 'serial-getty@*' 2>&1; test -x /home/pi/n/bin/node && /home/pi/n/bin/node /home/pi/n/lib/node_modules/pm2/bin/pm2 stop all 2>&1; pkill -f netv2-status 2>&1; sudo fuser -k /dev/ttyAMA0 /dev/serial0 2>&1; sudo chmod 666 /dev/ttyAMA0 /dev/serial0 2>&1; which pinctrl >/dev/null && sudo pinctrl set 14 a4 && sudo pinctrl set 15 a4; true"},
-            "fomu":  {"artifact": "uart-test-fomu/kosagi_fomu_evt.bin",
-                       "test_args": "--port /dev/serial0 --board fomu --skip-banner",
-                       "pre_test": "systemctl mask serial-getty@ttyAMA0 2>&1; systemctl stop serial-getty@ttyAMA0 2>&1; fuser -k /dev/serial0 2>&1; chmod 666 /dev/serial0 2>&1; true"},
-            "tt":    {"artifact": "uart-test-tt-fpga/tt_fpga_platform.bin",
-                       "test_args": "--port /dev/ttyACM0 --board tt --skip-banner"},
+            "arty": {"artifact": "uart-test-arty/digilent_arty.bit", "test_args": "--port /dev/ttyUSB1 --board arty"},
+            "netv2": {
+                "artifact": "uart-test-netv2/kosagi_netv2.bit",
+                "test_args": "--port /dev/ttyAMA0 --board netv2 --skip-banner",
+                "pre_test": (
+                    "sudo systemctl stop 'serial-getty@*' 2>&1;"
+                    " test -x /home/pi/n/bin/node"
+                    " && /home/pi/n/bin/node /home/pi/n/lib/node_modules/pm2/bin/pm2 stop all 2>&1;"
+                    " pkill -f netv2-status 2>&1;"
+                    " sudo fuser -k /dev/ttyAMA0 /dev/serial0 2>&1;"
+                    " sudo chmod 666 /dev/ttyAMA0 /dev/serial0 2>&1;"
+                    " which pinctrl >/dev/null && sudo pinctrl set 14 a4 && sudo pinctrl set 15 a4;"
+                    " true"
+                ),
+            },
+            "fomu": {
+                "artifact": "uart-test-fomu/kosagi_fomu_evt.bin",
+                "test_args": "--port /dev/serial0 --board fomu --skip-banner",
+                "pre_test": (
+                    "systemctl mask serial-getty@ttyAMA0 2>&1;"
+                    " systemctl stop serial-getty@ttyAMA0 2>&1;"
+                    " fuser -k /dev/serial0 2>&1;"
+                    " chmod 666 /dev/serial0 2>&1;"
+                    " true"
+                ),
+            },
+            "tt": {
+                "artifact": "uart-test-tt-fpga/tt_fpga_platform.bin",
+                "test_args": "--port /dev/ttyACM0 --board tt --skip-banner",
+            },
         },
     },
     "ddr": {
         "test_script": "designs/ddr-memory/host/test_ddr.py",
         "boards": {
-            "arty":  {"artifact": "ddr-test-arty/digilent_arty.bit",
-                       "test_args": "--port /dev/ttyUSB1 --board arty"},
-            "netv2": {"artifact": "ddr-test-netv2/kosagi_netv2.bit",
-                       "test_args": "--port /dev/ttyAMA0 --board netv2",
-                       "pre_test": "systemctl stop serial-getty@ttyAMA0 2>&1; true"},
+            "arty": {"artifact": "ddr-test-arty/digilent_arty.bit", "test_args": "--port /dev/ttyUSB1 --board arty"},
+            "netv2": {
+                "artifact": "ddr-test-netv2/kosagi_netv2.bit",
+                "test_args": "--port /dev/ttyAMA0 --board netv2",
+                "pre_test": "systemctl stop serial-getty@ttyAMA0 2>&1; true",
+            },
         },
     },
     "ethernet": {
         "test_script": "designs/ethernet-test/host/test_ethernet.py",
         "boards": {
-            "arty":  {"artifact": "ethernet-test-arty-a7-35t/digilent_arty.bit",
-                       "test_args": "--board arty --uart-port /dev/ttyUSB1"},
-            "netv2": {"artifact": "ethernet-test-netv2/kosagi_netv2.bit",
-                       "test_args": "--board netv2 --uart-port /dev/ttyAMA0",
-                       "pre_test": "systemctl stop serial-getty@ttyAMA0 2>&1; true"},
+            "arty": {
+                "artifact": "ethernet-test-arty-a7-35t/digilent_arty.bit",
+                "test_args": "--board arty --uart-port /dev/ttyUSB1",
+            },
+            "netv2": {
+                "artifact": "ethernet-test-netv2/kosagi_netv2.bit",
+                "test_args": "--board netv2 --uart-port /dev/ttyAMA0",
+                "pre_test": "systemctl stop serial-getty@ttyAMA0 2>&1; true",
+            },
         },
     },
     "spiflash": {
         "test_script": "designs/spi-flash-id/host/test_spiflash.py",
         "boards": {
-            "arty":  {"artifact": "spiflash-test-arty/digilent_arty.bit",
-                       "test_args": "--port /dev/ttyUSB1 --board arty"},
-            "netv2": {"artifact": "spiflash-test-netv2/kosagi_netv2.bit",
-                       "test_args": "--port /dev/ttyAMA0 --board netv2",
-                       "pre_test": "systemctl stop serial-getty@ttyAMA0 2>&1; true"},
-            "fomu":  {"artifact": "spiflash-test-fomu/kosagi_fomu_evt.bin",
-                       "test_args": "--port /dev/serial0 --board fomu",
-                       "pre_test": "sudo systemctl stop 'serial-getty@*' 2>&1; sudo fuser -k /dev/serial0 2>&1; sudo chmod 666 /dev/serial0 2>&1; which pinctrl >/dev/null && sudo pinctrl set 14 a4 && sudo pinctrl set 15 a4; true"},
-            "tt":    {"artifact": "spiflash-test-tt-fpga/tt_fpga_platform.bin",
-                       "test_args": "--port /dev/ttyACM0 --board tt"},
+            "arty": {
+                "artifact": "spiflash-test-arty/digilent_arty.bit",
+                "test_args": "--port /dev/ttyUSB1 --board arty",
+            },
+            "netv2": {
+                "artifact": "spiflash-test-netv2/kosagi_netv2.bit",
+                "test_args": "--port /dev/ttyAMA0 --board netv2",
+                "pre_test": "systemctl stop serial-getty@ttyAMA0 2>&1; true",
+            },
+            "fomu": {
+                "artifact": "spiflash-test-fomu/kosagi_fomu_evt.bin",
+                "test_args": "--port /dev/serial0 --board fomu",
+                "pre_test": (
+                    "sudo systemctl stop 'serial-getty@*' 2>&1;"
+                    " sudo fuser -k /dev/serial0 2>&1;"
+                    " sudo chmod 666 /dev/serial0 2>&1;"
+                    " which pinctrl >/dev/null && sudo pinctrl set 14 a4 && sudo pinctrl set 15 a4;"
+                    " true"
+                ),
+            },
+            "tt": {
+                "artifact": "spiflash-test-tt-fpga/tt_fpga_platform.bin",
+                "test_args": "--port /dev/ttyACM0 --board tt",
+            },
         },
     },
     "pmod": {
         "test_script": "designs/pmod-loopback/host/test_pmod_loopback.py",
         "boards": {
-            "arty":  {"artifact": "gpio-loopback-arty-a7-35t/top.bit",
-                       "test_args": "--board arty",
-                       "pre_test": "rmmod spidev spi_bcm2835 2>&1; true"},
-            "netv2": {"artifact": "gpio-loopback-netv2/top.bit",
-                       "test_args": "--board netv2"},
-            "fomu":  {"artifact": "gpio-loopback-fomu-evt/top.bin",
-                       "test_args": "--board fomu",
-                       "pre_test": "rmmod spidev spi_bcm2835 2>&1; true"},
-            "tt":    {"artifact": "gpio-loopback-tt-fpga/top.bin",
-                       "test_args": "--board tt",
-                       "pre_test": "rmmod spidev spi_bcm2835 2>&1; true"},
+            "arty": {
+                "artifact": "gpio-loopback-arty-a7-35t/top.bit",
+                "test_args": "--board arty",
+                "pre_test": "rmmod spidev spi_bcm2835 2>&1; true",
+            },
+            "netv2": {"artifact": "gpio-loopback-netv2/top.bit", "test_args": "--board netv2"},
+            "fomu": {
+                "artifact": "gpio-loopback-fomu-evt/top.bin",
+                "test_args": "--board fomu",
+                "pre_test": "rmmod spidev spi_bcm2835 2>&1; true",
+            },
+            "tt": {
+                "artifact": "gpio-loopback-tt-fpga/top.bin",
+                "test_args": "--board tt",
+                "pre_test": "rmmod spidev spi_bcm2835 2>&1; true",
+            },
         },
     },
 }
@@ -141,9 +196,9 @@ DESIGNS = {
 # Extra files that certain boards need uploaded
 EXTRA_UPLOADS = {
     "tt": [
-        ("designs/_shared/tt_fpga_program.py", "~/tt_fpga_program.py"),
-        ("designs/_shared/tt_test_wrapper.py", "~/tt_test_wrapper.py"),
-        ("designs/_shared/tt_pmod_wrapper.py", "~/tt_pmod_wrapper.py"),
+        ("designs/_host/tt_fpga_program.py", "~/tt_fpga_program.py"),
+        ("designs/_host/tt_test_wrapper.py", "~/tt_test_wrapper.py"),
+        ("designs/_host/tt_pmod_wrapper.py", "~/tt_pmod_wrapper.py"),
     ],
 }
 
@@ -151,6 +206,7 @@ EXTRA_UPLOADS = {
 # ---------------------------------------------------------------------------
 # SSH transport
 # ---------------------------------------------------------------------------
+
 
 def _build_ssh_cmd(host_name, remote_cmd):
     """Build the full SSH command list for a given host.
@@ -163,8 +219,7 @@ def _build_ssh_cmd(host_name, remote_cmd):
         # Double-hop: local -> tweed -> rpi
         # The inner command must be shell-escaped for the tweed shell,
         # and the remote_cmd must be escaped for the rpi shell.
-        inner_cmd = "ssh root@{} {}".format(
-            host["target"], shlex.quote(remote_cmd))
+        inner_cmd = "ssh root@{} {}".format(host["target"], shlex.quote(remote_cmd))
         return ["ssh", TWEED, inner_cmd]
     else:
         return ["ssh", host["target"], remote_cmd]
@@ -175,9 +230,8 @@ def ssh_run(host_name, cmd, timeout=180):
     full_cmd = _build_ssh_cmd(host_name, cmd)
     result = subprocess.run(
         full_cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        universal_newlines=True,
+        capture_output=True,
+        text=True,
         timeout=timeout,
     )
     return result.returncode, result.stdout, result.stderr
@@ -188,20 +242,18 @@ def ssh_upload(host_name, local_path, remote_path, timeout=120):
 
     Returns True on success.
     """
-    host = HOSTS[host_name]
     # Read file locally and pipe through SSH stdin — avoids shell escaping
     # issues with file paths entirely.
     with open(local_path, "rb") as f:
         file_data = f.read()
 
-    write_cmd = "cat > {}".format(remote_path)
+    write_cmd = f"cat > {remote_path}"
     full_cmd = _build_ssh_cmd(host_name, write_cmd)
 
     result = subprocess.run(
         full_cmd,
         input=file_data,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         timeout=timeout,
     )
     return result.returncode == 0
@@ -224,39 +276,36 @@ def poe_reset(host_name, off_seconds=5):
     """
     m = re.match(r"pi(\d+)$", host_name)
     if not m:
-        print("  Cannot PoE-reset {}: not a piNN host".format(host_name))
+        print(f"  Cannot PoE-reset {host_name}: not a piNN host")
         return False
     port = m.group(1)
-    print("  PoE reset: port {} off...".format(port))
+    print(f"  PoE reset: port {port} off...")
     try:
-        subprocess.run(
-            ["ssh", TWEED, "poe.sh {} 2".format(port)],
-            timeout=15, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(["ssh", TWEED, f"poe.sh {port} 2"], timeout=15, capture_output=True)
         # Poll until host is unreachable (confirms power is off)
         for _ in range(off_seconds * 2):
             if not ssh_check_connectivity(host_name, timeout=1):
                 break
             time.sleep(0.5)
-        subprocess.run(
-            ["ssh", TWEED, "poe.sh {} 1".format(port)],
-            timeout=15, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(["ssh", TWEED, f"poe.sh {port} 1"], timeout=15, capture_output=True)
     except (subprocess.TimeoutExpired, OSError) as e:
-        print("  PoE reset failed: {}".format(e))
+        print(f"  PoE reset failed: {e}")
         return False
     # Poll for host to come back (RPi 3 PXE boot can take ~2 minutes).
     # ssh_check_connectivity timeout provides the poll interval.
-    print("  Waiting for {} to boot...".format(host_name))
+    print(f"  Waiting for {host_name} to boot...")
     for _ in range(24):
         if ssh_check_connectivity(host_name, timeout=10):
-            print("  {} is back online".format(host_name))
+            print(f"  {host_name} is back online")
             return True
-    print("  {} did not come back after PoE reset".format(host_name))
+    print(f"  {host_name} did not come back after PoE reset")
     return False
 
 
 # ---------------------------------------------------------------------------
 # Test generation — expand designs x hosts into concrete test cases
 # ---------------------------------------------------------------------------
+
 
 def generate_tests():
     """Generate test cases from DESIGNS x HOSTS."""
@@ -275,10 +324,7 @@ def generate_tests():
             # rpi3 uses serial0 for the same GPIO UART pins).
             serial_port = host.get("serial_port")
             if serial_port and "--port" in test_args:
-                test_args = re.sub(
-                    r"--port\s+\S+",
-                    "--port {}".format(serial_port),
-                    test_args)
+                test_args = re.sub(r"--port\s+\S+", f"--port {serial_port}", test_args)
 
             # NeTV2 variant selection: prefer variant-specific artifact if it exists.
             # CI builds separate a7-35t and a7-100t artifacts for NeTV2.
@@ -286,14 +332,14 @@ def generate_tests():
             if variant:
                 # e.g. "uart-test-netv2/x.bit" -> "uart-test-netv2-a7-100t/x.bit"
                 parts = artifact.split("/", 1)
-                variant_artifact = "{}-{}t/{}".format(parts[0], variant, parts[1])
+                variant_artifact = f"{parts[0]}-{variant}t/{parts[1]}"
                 if os.path.exists(os.path.join(ARTIFACTS_DIR, variant_artifact)):
                     artifact = variant_artifact
 
             # Determine remote paths
             ext = os.path.splitext(artifact)[1]
-            remote_bitstream = "~/{}_{}{}".format(design_name, board, ext)
-            remote_script = "~/test_{}.py".format(design_name)
+            remote_bitstream = f"~/{design_name}_{board}{ext}"
+            remote_script = f"~/test_{design_name}.py"
 
             # Determine programming command
             if host_name in HOST_PROGRAM_CMD:
@@ -301,26 +347,26 @@ def generate_tests():
                 # rpi3-netv2 needs absolute path (openocd doesn't expand ~)
                 home_dir = "/home/pi" if host_name == "rpi3-netv2" else "/home/tim"
                 bitstream_abs = remote_bitstream.replace("~", home_dir)
-                prog_cmd = prog_template.format(
-                    bitstream=remote_bitstream,
-                    bitstream_abs=bitstream_abs)
+                prog_cmd = prog_template.format(bitstream=remote_bitstream, bitstream_abs=bitstream_abs)
             else:
                 prog_cmd = PROGRAM_CMD[board].format(bitstream=remote_bitstream)
 
-            tests.append({
-                "name": "{} on {} ({})".format(design_name.upper(), board, host_name),
-                "test_type": design_name,
-                "host": host_name,
-                "board": board,
-                "enabled": True,
-                "artifact": artifact,
-                "test_script": design["test_script"],
-                "remote_bitstream": remote_bitstream,
-                "remote_script": remote_script,
-                "program_cmd": prog_cmd,
-                "test_cmd": "python3 {} {}".format(remote_script, test_args),
-                "pre_test": board_cfg.get("pre_test"),
-            })
+            tests.append(
+                {
+                    "name": f"{design_name.upper()} on {board} ({host_name})",
+                    "test_type": design_name,
+                    "host": host_name,
+                    "board": board,
+                    "enabled": True,
+                    "artifact": artifact,
+                    "test_script": design["test_script"],
+                    "remote_bitstream": remote_bitstream,
+                    "remote_script": remote_script,
+                    "program_cmd": prog_cmd,
+                    "test_cmd": f"python3 {remote_script} {test_args}",
+                    "pre_test": board_cfg.get("pre_test"),
+                }
+            )
 
     return tests
 
@@ -328,6 +374,7 @@ def generate_tests():
 # ---------------------------------------------------------------------------
 # Test runner
 # ---------------------------------------------------------------------------
+
 
 def run_single_test(test, skip_upload=False):
     """Run a single hardware test. Returns True (pass), False (fail), or None (skip)."""
@@ -377,15 +424,14 @@ def run_single_test(test, skip_upload=False):
     # UART/spiflash: combined program + bridge + test (UART goes through RP2350).
     # PMOD: program via RP2350 wrapper (handles reset/retry), then test via RPi GPIO.
     if test["board"] == "tt" and test["test_type"] == "pmod":
-        wrapper_cmd = "python3 ~/tt_pmod_wrapper.py /dev/ttyACM0 {}".format(
-            test["remote_bitstream"])
+        wrapper_cmd = "python3 ~/tt_pmod_wrapper.py /dev/ttyACM0 {}".format(test["remote_bitstream"])
         print("  Programming FPGA via RP2350 wrapper...")
         rc, stdout, stderr = ssh_run(test["host"], wrapper_cmd, timeout=240)
         output = stdout + stderr
         if rc != 0:
             print("  FAIL: FPGA programming/setup failed")
             for line in output.strip().split("\n"):
-                print("    {}".format(line))
+                print(f"    {line}")
             return False
         print("  FPGA programmed, running GPIO test via RPi...")
         # Skip standard programming — wrapper already did it.
@@ -394,19 +440,20 @@ def run_single_test(test, skip_upload=False):
         rc, stdout, stderr = ssh_run(test["host"], test["test_cmd"], timeout=180)
         output = stdout + stderr
         for line in output.strip().split("\n"):
-            print("    {}".format(line))
+            print(f"    {line}")
         passed = check_test_result(output, rc)
         print("  RESULT: {}".format("PASS" if passed else "FAIL"))
         return passed
 
     if test["board"] == "tt" and test["test_type"] in ("uart", "spiflash"):
         wrapper_cmd = "python3 ~/tt_test_wrapper.py /dev/ttyACM0 {} {}".format(
-            test["remote_bitstream"], test["test_cmd"])
+            test["remote_bitstream"], test["test_cmd"]
+        )
         print("  Running combined program + bridge + test...")
         rc, stdout, stderr = ssh_run(test["host"], wrapper_cmd, timeout=240)
         output = stdout + stderr
         for line in output.strip().split("\n"):
-            print("    {}".format(line))
+            print(f"    {line}")
         passed = check_test_result(output, rc)
         print("  RESULT: {}".format("PASS" if passed else "FAIL"))
         return passed
@@ -418,10 +465,7 @@ def run_single_test(test, skip_upload=False):
     # Check for successful programming indicators:
     # - openFPGALoader: prints "done 1" in FPGA status register output
     # - tt_fpga_program.py: returns rc=0
-    programming_ok = (
-        rc == 0
-        or "done 1" in output.lower()
-    )
+    programming_ok = rc == 0 or "done 1" in output.lower()
     if not programming_ok:
         # For Fomu: DFU bootloader may have timed out. PoE-reset to
         # reboot into DFU mode and retry programming immediately.
@@ -438,17 +482,13 @@ def run_single_test(test, skip_upload=False):
                 if test.get("pre_test"):
                     ssh_run(test["host"], test["pre_test"], timeout=30)
                 print("  Retrying FPGA programming...")
-                rc, stdout, stderr = ssh_run(
-                    test["host"], test["program_cmd"], timeout=120)
+                rc, stdout, stderr = ssh_run(test["host"], test["program_cmd"], timeout=120)
                 output = stdout + stderr
-                programming_ok = (
-                    rc == 0
-                    or "done 1" in output.lower()
-                )
+                programming_ok = rc == 0 or "done 1" in output.lower()
         if not programming_ok:
-            print("  FAIL: FPGA programming failed (rc={})".format(rc))
+            print(f"  FAIL: FPGA programming failed (rc={rc})")
             for line in output.strip().split("\n"):
-                print("    {}".format(line))
+                print(f"    {line}")
             return False
     print("  FPGA programmed successfully")
 
@@ -459,7 +499,7 @@ def run_single_test(test, skip_upload=False):
 
     # Print test output
     for line in output.strip().split("\n"):
-        print("    {}".format(line))
+        print(f"    {line}")
 
     # Determine pass/fail from test script output
     passed = check_test_result(output, rc)
@@ -485,34 +525,27 @@ def check_test_result(output, returncode):
         return False
 
     # Fallback: check for PASS/FAIL in final lines
-    if returncode == 0 and "PASS" in tail:
-        return True
-
-    return False
+    return bool(returncode == 0 and "PASS" in tail)
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Automated hardware verification runner")
+    parser = argparse.ArgumentParser(description="Automated hardware verification runner")
     parser.add_argument(
-        "--test", default=None,
-        help="Run only tests of this type (uart, ddr, ethernet, pmod, spiflash, pcie)")
+        "--test", default=None, help="Run only tests of this type (uart, ddr, ethernet, pmod, spiflash, pcie)"
+    )
     parser.add_argument(
-        "--host", default=None,
-        help="Run only tests on this host (pi3, pi5, pi9, pi17, pi21, pi27, etc.)")
+        "--host", default=None, help="Run only tests on this host (pi3, pi5, pi9, pi17, pi21, pi27, etc.)"
+    )
+    parser.add_argument("--board", default=None, help="Run only tests for this board (arty, netv2, fomu, tt)")
+    parser.add_argument("--list", action="store_true", help="List all tests without running them")
     parser.add_argument(
-        "--board", default=None,
-        help="Run only tests for this board (arty, netv2, fomu, tt)")
-    parser.add_argument(
-        "--list", action="store_true",
-        help="List all tests without running them")
-    parser.add_argument(
-        "--skip-upload", action="store_true",
-        help="Skip uploading files (use already-uploaded files on RPis)")
+        "--skip-upload", action="store_true", help="Skip uploading files (use already-uploaded files on RPis)"
+    )
     args = parser.parse_args()
 
     all_tests = generate_tests()
@@ -526,7 +559,7 @@ def main():
         tests = [t for t in tests if t["board"] == args.board]
 
     if args.list:
-        print("Enabled tests ({} total):".format(len(tests)))
+        print(f"Enabled tests ({len(tests)} total):")
         for i, t in enumerate(tests, 1):
             print("  {:2d}. [{:10s}] {}".format(i, t["test_type"], t["name"]))
         return 0
@@ -536,8 +569,8 @@ def main():
         return 1
 
     start = time.strftime("%Y-%m-%d %H:%M:%S")
-    print("Running {} tests...".format(len(tests)))
-    print("Start: {}".format(start))
+    print(f"Running {len(tests)} tests...")
+    print(f"Start: {start}")
 
     results = {}
     for test in tests:
@@ -548,7 +581,7 @@ def main():
             print("  TIMEOUT: Test exceeded time limit")
             results[test["name"]] = False
         except Exception as e:
-            print("  ERROR: {}".format(e))
+            print(f"  ERROR: {e}")
             results[test["name"]] = False
 
     # Summary
@@ -556,7 +589,7 @@ def main():
     print("\n" + "=" * 60)
     print("VERIFICATION SUMMARY")
     print("=" * 60)
-    print("Start: {}  End: {}".format(start, end))
+    print(f"Start: {start}  End: {end}")
     print()
 
     passed = sum(1 for v in results.values() if v is True)
@@ -565,11 +598,10 @@ def main():
 
     for name, result in results.items():
         status = "PASS" if result is True else "FAIL" if result is False else "SKIP"
-        print("  [{}] {}".format(status, name))
+        print(f"  [{status}] {name}")
 
     print()
-    print("{} passed, {} failed, {} skipped (out of {})".format(
-        passed, failed, skipped, len(results)))
+    print(f"{passed} passed, {failed} failed, {skipped} skipped (out of {len(results)})")
 
     return 0 if failed == 0 else 1
 

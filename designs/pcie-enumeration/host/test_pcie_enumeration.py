@@ -28,19 +28,20 @@ import subprocess
 import sys
 import time
 
-
 # -- Constants -----------------------------------------------------------------
 
-VENDOR_ID = "10ee"   # Xilinx Corporation
-DEVICE_ID = "7011"   # 7-Series PCIe endpoint (LitePCIe default)
-EXPECTED_LINK_WIDTH  = "x1"
+VENDOR_ID = "10ee"  # Xilinx Corporation
+DEVICE_ID = "7011"  # 7-Series PCIe endpoint (LitePCIe default)
+EXPECTED_LINK_WIDTH = "x1"
 OPENOCD_CFG = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "openocd", "alphamax-rpi.cfg",
+    "openocd",
+    "alphamax-rpi.cfg",
 )
 
 
 # -- FPGA programming ----------------------------------------------------------
+
 
 def program_fpga(bitstream, openocd_cfg=OPENOCD_CFG):
     """Program the NeTV2 FPGA via OpenOCD JTAG."""
@@ -50,9 +51,9 @@ def program_fpga(bitstream, openocd_cfg=OPENOCD_CFG):
         return False
 
     result = subprocess.run(
-        ["openocd", "-f", openocd_cfg,
-         "-c", f"init; pld load 0 {bitstream}; exit"],
-        capture_output=True, text=True,
+        ["openocd", "-f", openocd_cfg, "-c", f"init; pld load 0 {bitstream}; exit"],
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0:
         print(f"  ERROR: OpenOCD failed:\n{result.stderr}")
@@ -65,6 +66,7 @@ def program_fpga(bitstream, openocd_cfg=OPENOCD_CFG):
 
 
 # -- PCIe bus rescan ------------------------------------------------------------
+
 
 def pcie_rescan():
     """Trigger a PCIe bus rescan."""
@@ -86,6 +88,7 @@ def pcie_rescan():
 
 # -- Device detection -----------------------------------------------------------
 
+
 def find_pcie_device(vendor, device):
     """Find PCIe device by vendor:device ID.  Returns BDF string or None.
 
@@ -93,7 +96,8 @@ def find_pcie_device(vendor, device):
     """
     result = subprocess.run(
         ["lspci", "-D", "-n", "-d", f"{vendor}:{device}"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0 or not result.stdout.strip():
         return None
@@ -108,12 +112,14 @@ def get_device_info(vendor, device):
     """Get detailed device info from lspci -vvv."""
     result = subprocess.run(
         ["lspci", "-vvv", "-d", f"{vendor}:{device}"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     return result.stdout if result.returncode == 0 else ""
 
 
 # -- Link verification ---------------------------------------------------------
+
 
 def check_link_status(lspci_output):
     """Parse link capability and status from lspci -vvv output.
@@ -142,8 +148,7 @@ def check_link_from_sysfs(bdf):
     info = {}
     sysfs_dir = f"/sys/bus/pci/devices/{bdf}"
 
-    for attr, key in [("current_link_speed", "link_speed"),
-                      ("current_link_width", "link_width")]:
+    for attr, key in [("current_link_speed", "link_speed"), ("current_link_width", "link_width")]:
         path = os.path.join(sysfs_dir, attr)
         try:
             with open(path) as f:
@@ -156,6 +161,7 @@ def check_link_from_sysfs(bdf):
 
 # -- BAR verification -----------------------------------------------------------
 
+
 def check_bars(lspci_output):
     """Parse BAR allocations from lspci -vvv output.
 
@@ -163,20 +169,20 @@ def check_bars(lspci_output):
     """
     bars = []
     # Region 0: Memory at f0000000 (32-bit, non-prefetchable) [size=128K]
-    for match in re.finditer(
-        r"Region\s+(\d+):\s+(\S+)\s+at\s+(\S+)\s+.*\[size=([^\]]+)\]",
-        lspci_output
-    ):
-        bars.append({
-            "region":  int(match.group(1)),
-            "type":    match.group(2),
-            "address": match.group(3),
-            "size":    match.group(4),
-        })
+    for match in re.finditer(r"Region\s+(\d+):\s+(\S+)\s+at\s+(\S+)\s+.*\[size=([^\]]+)\]", lspci_output):
+        bars.append(
+            {
+                "region": int(match.group(1)),
+                "type": match.group(2),
+                "address": match.group(3),
+                "size": match.group(4),
+            }
+        )
     return bars
 
 
 # -- Config space verification --------------------------------------------------
+
 
 def check_config_space(bdf):
     """Read vendor and device ID from config space using setpci."""
@@ -184,7 +190,8 @@ def check_config_space(bdf):
     for reg, key in [("VENDOR_ID.w", "vendor_id"), ("DEVICE_ID.w", "device_id")]:
         result = subprocess.run(
             ["setpci", "-s", bdf, reg],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if result.returncode == 0:
             info[key] = result.stdout.strip().lower()
@@ -192,6 +199,7 @@ def check_config_space(bdf):
 
 
 # -- Main test runner -----------------------------------------------------------
+
 
 def run_test(program=False, bitstream=None, openocd_cfg=OPENOCD_CFG, skip_rescan=False):
     """Run the full PCIe enumeration test."""
@@ -334,10 +342,10 @@ def run_test(program=False, bitstream=None, openocd_cfg=OPENOCD_CFG, skip_rescan
 
 def main():
     parser = argparse.ArgumentParser(description="PCIe Enumeration Test (host-side)")
-    parser.add_argument("--program",     action="store_true",     help="Program FPGA before testing")
-    parser.add_argument("--bitstream",   default=None,            help="Path to bitstream file")
-    parser.add_argument("--openocd-cfg", default=OPENOCD_CFG,     help="OpenOCD config file")
-    parser.add_argument("--skip-rescan", action="store_true",     help="Skip PCIe bus rescan")
+    parser.add_argument("--program", action="store_true", help="Program FPGA before testing")
+    parser.add_argument("--bitstream", default=None, help="Path to bitstream file")
+    parser.add_argument("--openocd-cfg", default=OPENOCD_CFG, help="OpenOCD config file")
+    parser.add_argument("--skip-rescan", action="store_true", help="Skip PCIe bus rescan")
     args = parser.parse_args()
 
     success = run_test(

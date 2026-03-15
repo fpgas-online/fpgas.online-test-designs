@@ -23,7 +23,6 @@ import time
 
 import serial
 
-
 # --------------------------------------------------------------------------- #
 # Constants
 # --------------------------------------------------------------------------- #
@@ -35,10 +34,10 @@ BOOT_TIMEOUT_S = 30
 # Format: (manufacturer, device_type, capacity)
 # Set to None to skip validation — only check for non-zero/non-FF.
 EXPECTED_JEDEC_IDS = {
-    "arty":  None,  # TBD — varies by board revision
+    "arty": None,  # TBD — varies by board revision
     "netv2": None,  # TBD — to be determined
-    "fomu":  (0x1F, 0x86, 0x01),  # AT25SF161: Adesto/Renesas, 16 Mbit
-    "tt":    None,  # TBD — TT FPGA Demo Board SPI flash
+    "fomu": (0x1F, 0x86, 0x01),  # AT25SF161: Adesto/Renesas, 16 Mbit
+    "tt": None,  # TBD — TT FPGA Demo Board SPI flash
 }
 
 # Common manufacturer names for reporting.
@@ -55,6 +54,7 @@ MANUFACTURER_NAMES = {
 # --------------------------------------------------------------------------- #
 # Test logic
 # --------------------------------------------------------------------------- #
+
 
 def run_firmware_mode(ser, board, expected_ids=None):
     """Parse output from custom JEDEC ID firmware.
@@ -97,17 +97,17 @@ def run_firmware_mode(ser, board, expected_ids=None):
 
     mfr, dtype, cap = jedec_id
     mfr_name = MANUFACTURER_NAMES.get(mfr, "Unknown")
-    cap_bytes = 2 ** cap if cap else 0
+    cap_bytes = 2**cap if cap else 0
     if cap_bytes >= 1024 * 1024:
-        cap_str = "{} MB".format(cap_bytes // (1024 * 1024))
+        cap_str = f"{cap_bytes // (1024 * 1024)} MB"
     elif cap_bytes >= 1024:
-        cap_str = "{} KB".format(cap_bytes // 1024)
+        cap_str = f"{cap_bytes // 1024} KB"
     else:
-        cap_str = "{} B".format(cap_bytes)
-    print("JEDEC ID: 0x{:02X} 0x{:02X} 0x{:02X}".format(mfr, dtype, cap))
-    print("  Manufacturer: {} (0x{:02X})".format(mfr_name, mfr))
-    print("  Device type:  0x{:02X}".format(dtype))
-    print("  Capacity:     0x{:02X} ({})".format(cap, cap_str))
+        cap_str = f"{cap_bytes} B"
+    print(f"JEDEC ID: 0x{mfr:02X} 0x{dtype:02X} 0x{cap:02X}")
+    print(f"  Manufacturer: {mfr_name} (0x{mfr:02X})")
+    print(f"  Device type:  0x{dtype:02X}")
+    print(f"  Capacity:     0x{cap:02X} ({cap_str})")
 
     results = []
 
@@ -127,12 +127,12 @@ def run_firmware_mode(ser, board, expected_ids=None):
     expected = ids.get(board)
     if expected is not None:
         if jedec_id == expected:
-            print("PASS: JEDEC ID matches expected value for {}".format(board))
+            print(f"PASS: JEDEC ID matches expected value for {board}")
             results.append(True)
         else:
-            exp_str = " ".join("0x{:02X}".format(b) for b in expected)
-            got_str = " ".join("0x{:02X}".format(b) for b in jedec_id)
-            print("FAIL: JEDEC ID mismatch -- expected {}, got {}".format(exp_str, got_str))
+            exp_str = " ".join(f"0x{b:02X}" for b in expected)
+            got_str = " ".join(f"0x{b:02X}" for b in jedec_id)
+            print(f"FAIL: JEDEC ID mismatch -- expected {exp_str}, got {got_str}")
             results.append(False)
 
     return all(results), lines
@@ -158,7 +158,7 @@ def run_bios_mode(ser, board):
 
         if "SPI" in line.upper() and "flash" in line.lower():
             spi_detected = True
-            print("  SPI Flash detected: {}".format(line))
+            print(f"  SPI Flash detected: {line}")
 
         if "litex>" in line:
             break
@@ -174,6 +174,7 @@ def run_bios_mode(ser, board):
 # --------------------------------------------------------------------------- #
 # Main
 # --------------------------------------------------------------------------- #
+
 
 def main():
     parser = argparse.ArgumentParser(description="SPI Flash ID test for FPGA boards")
@@ -192,7 +193,7 @@ def main():
         "--baud",
         type=int,
         default=BAUD_RATE,
-        help="Baud rate (default: {})".format(BAUD_RATE),
+        help=f"Baud rate (default: {BAUD_RATE})",
     )
     parser.add_argument(
         "--bios",
@@ -211,7 +212,7 @@ def main():
     if args.expected_jedec:
         hex_str = args.expected_jedec.replace("0x", "").replace(" ", "")
         if len(hex_str) != 6:
-            print("ERROR: --expected-jedec must be 6 hex digits, got '{}'".format(args.expected_jedec))
+            print(f"ERROR: --expected-jedec must be 6 hex digits, got '{args.expected_jedec}'")
             return 2
         expected_ids[args.board] = (
             int(hex_str[0:2], 16),
@@ -219,9 +220,9 @@ def main():
             int(hex_str[4:6], 16),
         )
 
-    print("Opening {} at {} baud...".format(args.port, args.baud))
-    print("Board: {}".format(args.board))
-    print("Mode: {}".format('BIOS' if args.bios else 'Custom firmware'))
+    print(f"Opening {args.port} at {args.baud} baud...")
+    print(f"Board: {args.board}")
+    print("Mode: {}".format("BIOS" if args.bios else "Custom firmware"))
     print()
 
     with serial.Serial(args.port, args.baud, timeout=2) as ser:
@@ -233,7 +234,7 @@ def main():
     if not passed:
         print("\nFull output:")
         for line in boot_lines:
-            print("  {}".format(line))
+            print(f"  {line}")
 
     print()
     if passed:

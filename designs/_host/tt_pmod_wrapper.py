@@ -17,9 +17,12 @@ import sys
 # Reuse upload/serial infrastructure from the UART wrapper.
 sys.path.insert(0, os.path.dirname(__file__))
 from tt_test_wrapper import (
-    upload_bitstream, open_raw_serial, enter_raw_repl, execute_raw_repl, drain,
+    drain,
+    enter_raw_repl,
+    execute_raw_repl,
+    open_raw_serial,
+    upload_bitstream,
 )
-
 
 # MicroPython script: program FPGA, start clock, release GPIOs.
 PROGRAM_AND_RELEASE_SCRIPT = """\
@@ -126,20 +129,21 @@ def main():
 
     print("Programming FPGA and releasing GPIOs...")
     ok, extra_data = execute_raw_repl(
-        serial_fd, PROGRAM_AND_RELEASE_SCRIPT,
-        marker=b"SETUP_DONE", timeout=60,
+        serial_fd,
+        PROGRAM_AND_RELEASE_SCRIPT,
+        marker=b"SETUP_DONE",
+        timeout=60,
     )
 
     if not ok:
         print("ERROR: Setup did not complete", file=sys.stderr)
-        print("Output: {}".format(
-            extra_data.decode("utf-8", errors="replace")), file=sys.stderr)
+        print("Output: {}".format(extra_data.decode("utf-8", errors="replace")), file=sys.stderr)
 
     # Cleanup — leave RP2350 at REPL prompt
     try:
-        os.write(serial_fd, b'\x03')
+        os.write(serial_fd, b"\x03")
         drain(serial_fd, timeout=0.2)
-        os.write(serial_fd, b'\x03')
+        os.write(serial_fd, b"\x03")
         drain(serial_fd, timeout=0.2)
     except OSError:
         pass

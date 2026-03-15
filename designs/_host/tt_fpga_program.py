@@ -19,7 +19,6 @@ import subprocess
 import sys
 import tempfile
 
-
 BITSTREAM_DEVICE_PATH = "/bitstreams/custom.bin"
 
 # MicroPython scripts that run on the RP2350 to program the iCE40 FPGA.
@@ -166,7 +165,7 @@ print("PROGRAM_OK")
 
 def run_mpremote(port, args, timeout=60):
     """Run an mpremote command and return (returncode, stdout, stderr)."""
-    cmd = ["mpremote", "connect", port] + args
+    cmd = ["mpremote", "connect", port, *args]
     result = subprocess.run(
         cmd,
         capture_output=True,
@@ -198,22 +197,24 @@ def main():
     # Validate bitstream exists
     if not args.probe:
         if not os.path.isfile(args.bitstream):
-            print("ERROR: Bitstream file not found: {}".format(args.bitstream),
-                  file=sys.stderr)
+            print(f"ERROR: Bitstream file not found: {args.bitstream}", file=sys.stderr)
             return 1
         size = os.path.getsize(args.bitstream)
-        print("Bitstream: {} ({} bytes)".format(args.bitstream, size))
+        print(f"Bitstream: {args.bitstream} ({size} bytes)")
 
-    print("Port: {}".format(args.port))
+    print(f"Port: {args.port}")
 
     if args.probe:
         print("=== Probing RP2350 ===")
-        rc, out, err = run_mpremote(args.port, [
-            "exec",
-            "import sys; print('Python:', sys.version); "
-            "import os; print('Root:', os.listdir('/')); "
-            "print('Bitstreams:', os.listdir('/bitstreams') if 'bitstreams' in os.listdir('/') else 'none')",
-        ])
+        rc, out, err = run_mpremote(
+            args.port,
+            [
+                "exec",
+                "import sys; print('Python:', sys.version); "
+                "import os; print('Root:', os.listdir('/')); "
+                "print('Bitstreams:', os.listdir('/bitstreams') if 'bitstreams' in os.listdir('/') else 'none')",
+            ],
+        )
         print(out)
         if err.strip():
             print(err, file=sys.stderr)
@@ -221,25 +222,34 @@ def main():
 
     # Step 1: Ensure /bitstreams/ directory exists on device
     print("Creating /bitstreams/ directory on device...")
-    rc, out, err = run_mpremote(args.port, [
-        "exec",
-        "import os\n"
-        "try:\n"
-        "    os.mkdir('/bitstreams')\n"
-        "    print('Created /bitstreams/')\n"
-        "except OSError:\n"
-        "    print('/bitstreams/ already exists')\n",
-    ])
+    rc, out, err = run_mpremote(
+        args.port,
+        [
+            "exec",
+            "import os\n"
+            "try:\n"
+            "    os.mkdir('/bitstreams')\n"
+            "    print('Created /bitstreams/')\n"
+            "except OSError:\n"
+            "    print('/bitstreams/ already exists')\n",
+        ],
+    )
     print(out.strip())
     if rc != 0:
-        print("ERROR: Failed to create directory: {}".format(err), file=sys.stderr)
+        print(f"ERROR: Failed to create directory: {err}", file=sys.stderr)
         return 1
 
     # Step 2: Upload bitstream to device
-    print("Uploading bitstream to device:{}...".format(BITSTREAM_DEVICE_PATH))
-    rc, out, err = run_mpremote(args.port, [
-        "cp", args.bitstream, ":" + BITSTREAM_DEVICE_PATH,
-    ], timeout=120)
+    print(f"Uploading bitstream to device:{BITSTREAM_DEVICE_PATH}...")
+    rc, out, err = run_mpremote(
+        args.port,
+        [
+            "cp",
+            args.bitstream,
+            ":" + BITSTREAM_DEVICE_PATH,
+        ],
+        timeout=120,
+    )
     if rc != 0:
         print("ERROR: Failed to upload bitstream", file=sys.stderr)
         print(out)
@@ -249,22 +259,30 @@ def main():
 
     # Step 3: Program the FPGA
     script = PROGRAM_SCRIPT_PIO if args.method == "pio" else PROGRAM_SCRIPT_BITBANG
-    print("Programming FPGA via {} method...".format(args.method))
+    print(f"Programming FPGA via {args.method} method...")
 
     # Write script to a temporary file for mpremote run.
     # Use the directory containing this script (not /tmp/) for the temp file.
     script_dir = os.path.dirname(os.path.abspath(__file__))
     with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".py", prefix="tt_program_",
-        dir=script_dir, delete=False,
+        mode="w",
+        suffix=".py",
+        prefix="tt_program_",
+        dir=script_dir,
+        delete=False,
     ) as f:
         f.write(script)
         script_path = f.name
 
     try:
-        rc, out, err = run_mpremote(args.port, [
-            "run", script_path,
-        ], timeout=120)
+        rc, out, err = run_mpremote(
+            args.port,
+            [
+                "run",
+                script_path,
+            ],
+            timeout=120,
+        )
     finally:
         os.unlink(script_path)
 
@@ -276,8 +294,7 @@ def main():
         print("FPGA programming successful.")
         return 0
     else:
-        print("ERROR: FPGA programming may have failed (no PROGRAM_OK marker).",
-              file=sys.stderr)
+        print("ERROR: FPGA programming may have failed (no PROGRAM_OK marker).", file=sys.stderr)
         return 1
 
 
