@@ -212,5 +212,14 @@ __marimo__/
 # Build artifacts
 **/build/
 
+# CI artifacts (downloaded bitstreams)
+artifacts/
+
+# Temporary files
+tmp/
+
+# Claude Code
+.claude/
+
 # uv.lock — tracked for reproducible CI builds
 # uv.lock
