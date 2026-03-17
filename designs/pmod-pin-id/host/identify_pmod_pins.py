@@ -142,14 +142,21 @@ class GpioReader:
 def receive_byte(reader, timeout=0.1):
     """Receive one UART byte (8N1) by bit-banging.
 
-    Waits for a falling edge (start bit), then samples 8 data bits at
-    the center of each bit period.
+    Properly synchronizes to the HIGH→LOW transition (start bit edge)
+    to avoid sampling mid-byte. Samples 8 data bits at the center of
+    each bit period.
 
     Returns the decoded byte, or None on timeout.
     """
     deadline = time.monotonic() + timeout
 
-    # Wait for start bit (line goes low).
+    # First wait for line to be HIGH (idle/stop-bit state).
+    # This ensures we don't mistake a mid-byte LOW for a start bit.
+    while reader.read() == 0:
+        if time.monotonic() > deadline:
+            return None
+
+    # Now wait for the HIGH→LOW transition (actual start bit edge).
     while reader.read() != 0:
         if time.monotonic() > deadline:
             return None
@@ -205,22 +212,40 @@ def receive_label(reader, max_bytes=20, timeout=0.2):
     return None
 
 
-def identify_pin(reader, attempts=3):
+# Expected label format: 2 uppercase letters + 2 digits (e.g. "JA01", "JD10")
+import re
+_LABEL_PATTERN = re.compile(r'^[A-Z]{2}\d{2}$')
+
+
+def is_valid_label(label):
+    """Check if a decoded label matches the expected PMOD pin name format."""
+    return bool(_LABEL_PATTERN.match(label))
+
+
+def identify_pin(reader, attempts=10):
     """Read the pin label, trying multiple times for reliability.
 
+    Only accepts labels matching the expected format (e.g. "JA01").
     Returns the label string if consistently decoded, or None.
     """
-    results = []
+    valid_results = []
+    raw_results = []
     for _ in range(attempts):
         label = receive_label(reader)
         if label:
-            results.append(label)
-    if not results:
-        return None
-    # Return the most common result.
-    from collections import Counter
-    most_common, count = Counter(results).most_common(1)[0]
-    return most_common
+            raw_results.append(label)
+            if is_valid_label(label):
+                valid_results.append(label)
+    if valid_results:
+        from collections import Counter
+        most_common, count = Counter(valid_results).most_common(1)[0]
+        return most_common
+    # Return raw data for debugging if we got signal but no valid decode.
+    if raw_results:
+        from collections import Counter
+        most_common, count = Counter(raw_results).most_common(1)[0]
+        return f"?{most_common}"  # Prefix with ? to flag as unvalidated
+    return None
 
 
 # -- Scanner -------------------------------------------------------------------
@@ -235,10 +260,12 @@ def scan_gpios(gpio_list, chip_path):
             reader.open()
             label = identify_pin(reader)
             results[gpio_num] = label
-            if label:
-                print(f"  GPIO{gpio_num:2d} ({hat_label:20s}) -> {label}")
-            else:
+            if label is None:
                 print(f"  GPIO{gpio_num:2d} ({hat_label:20s}) -> (no signal)")
+            elif label.startswith("?"):
+                print(f"  GPIO{gpio_num:2d} ({hat_label:20s}) -> (garbled: {label[1:]!r})")
+            else:
+                print(f"  GPIO{gpio_num:2d} ({hat_label:20s}) -> {label}")
         except OSError as e:
             print(f"  GPIO{gpio_num:2d} ({hat_label:20s}) -> ERROR: {e}")
             results[gpio_num] = None
@@ -249,26 +276,38 @@ def scan_gpios(gpio_list, chip_path):
 
 def print_mapping_table(results):
     """Print a formatted mapping table suitable for documentation."""
-    found = {gpio: label for gpio, label in results.items() if label}
-    if not found:
+    valid = {gpio: label for gpio, label in results.items()
+             if label and not label.startswith("?")}
+    garbled = {gpio: label for gpio, label in results.items()
+               if label and label.startswith("?")}
+    no_signal = {gpio for gpio, label in results.items() if label is None}
+
+    if not valid and not garbled:
         print("\nNo FPGA pins detected on any GPIO.")
         return
 
-    print("\n=== Pin Mapping Table ===\n")
+    print(f"\n=== Pin Mapping Table ({len(valid)} confirmed, "
+          f"{len(garbled)} garbled, {len(no_signal)} no signal) ===\n")
     print("| RPi GPIO | HAT Location           | FPGA PMOD Pin |")
     print("|----------|------------------------|---------------|")
-    for gpio in sorted(found.keys()):
+    for gpio in sorted(valid.keys()):
         hat_label = HAT_GPIO_LABELS.get(gpio, f"GPIO{gpio}")
-        fpga_pin = found[gpio]
+        fpga_pin = valid[gpio]
         print(f"| GPIO{gpio:<4d} | {hat_label:<22s} | {fpga_pin:<13s} |")
 
     # Also print by FPGA pin for reverse lookup.
     print("\n=== Reverse Mapping (by FPGA pin) ===\n")
     print("| FPGA PMOD Pin | RPi GPIO | HAT Location           |")
     print("|---------------|----------|------------------------|")
-    for gpio, fpga_pin in sorted(found.items(), key=lambda x: x[1]):
+    for gpio, fpga_pin in sorted(valid.items(), key=lambda x: x[1]):
         hat_label = HAT_GPIO_LABELS.get(gpio, f"GPIO{gpio}")
         print(f"| {fpga_pin:<13s} | GPIO{gpio:<4d} | {hat_label:<22s} |")
+
+    if garbled:
+        print("\n=== Garbled Pins (signal present, decode failed) ===\n")
+        for gpio in sorted(garbled.keys()):
+            hat_label = HAT_GPIO_LABELS.get(gpio, f"GPIO{gpio}")
+            print(f"  GPIO{gpio:<4d} ({hat_label}): {garbled[gpio][1:]!r}")
 
 
 # -- Main ----------------------------------------------------------------------
@@ -305,9 +344,11 @@ def main():
     results = scan_gpios(gpio_list, chip_path)
     print_mapping_table(results)
 
-    found_count = sum(1 for v in results.values() if v)
-    print(f"\n{found_count}/{len(gpio_list)} pins identified.")
-    sys.exit(0 if found_count > 0 else 1)
+    valid_count = sum(1 for v in results.values() if v and not v.startswith("?"))
+    garbled_count = sum(1 for v in results.values() if v and v.startswith("?"))
+    print(f"\n{valid_count}/{len(gpio_list)} pins identified"
+          f" ({garbled_count} garbled).")
+    sys.exit(0 if valid_count > 0 else 1)
 
 
 if __name__ == "__main__":
