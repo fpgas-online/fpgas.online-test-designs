@@ -128,7 +128,7 @@ Source: [digilent_arty.py `_connectors`](https://github.com/litex-hub/litex-boar
 
 ### PMOD Usage in Test Infrastructure
 
-In the fpgas.online setup, the Arty A7's PMOD connectors can be connected to a Raspberry Pi via a [Digilent PMOD HAT adapter](pmod-hat.md). This enables PMOD loopback testing where the RPi drives signals through the PMOD HAT to the Arty's PMOD connectors and verifies correct signal propagation.
+In the fpgas.online setup, the Arty A7's PMOD connectors can be connected to a Raspberry Pi via a [Digilent PMOD HAT adapter](rpi-hat-pmod.md). This enables PMOD loopback testing where the RPi drives signals through the PMOD HAT to the Arty's PMOD connectors and verifies correct signal propagation.
 
 ## SPI Flash
 

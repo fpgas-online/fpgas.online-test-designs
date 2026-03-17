@@ -283,7 +283,7 @@ Used for: **Fomu EVT** (ValentyUSB on pi17/pi21), **Tiny Tapeout ASIC** (RP2040 
 
 Used for: **Arty A7** boards (RPi 4B hosts have PMOD HATs installed)
 
-The PMOD HAT provides 3 PMOD ports (JA, JB, JC) connecting RPi GPIO pins to standard 12-pin PMOD connectors. See [pmod-hat.md](pmod-hat.md) for the full pin mapping.
+The PMOD HAT provides 3 PMOD ports (JA, JB, JC) connecting RPi GPIO pins to standard 12-pin PMOD connectors. See [rpi-hat-pmod.md](rpi-hat-pmod.md) for the full pin mapping.
 
 ## Test Execution Flow
 

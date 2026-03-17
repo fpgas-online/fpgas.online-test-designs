@@ -178,4 +178,4 @@ The Fomu EVT has a debug connector with 6 pins:
 - LiteX platform file: [kosagi_fomu_evt.py](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/kosagi_fomu_evt.py)
 - Fomu EVT design files: [github.com/im-tomu/fomu-hardware](https://github.com/im-tomu/fomu-hardware/tree/evt/hardware/pcb)
 - Crowd Supply campaign: [crowdsupply.com/sutajio-kosagi/fomu](https://www.crowdsupply.com/sutajio-kosagi/fomu)
-- PMOD HAT Documentation: [pmod-hat.md](pmod-hat.md)
+- PMOD HAT Documentation: [rpi-hat-pmod.md](rpi-hat-pmod.md)

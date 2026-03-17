@@ -104,7 +104,7 @@ Source: `_connectors` in digilent_arty.py
 
 The Digilent PMOD HAT has three 12-pin PMOD ports. Each port connects to one Arty PMOD connector via a single cable.
 
-See [pmod-hat.md](pmod-hat.md) for the full PMOD HAT pin mapping. Summary:
+See [rpi-hat-pmod.md](rpi-hat-pmod.md) for the full PMOD HAT pin mapping. Summary:
 
 ### PMOD HAT Port JA (SPI Type 2, CE0)
 
@@ -300,4 +300,4 @@ On-board DDR3L SDRAM (256 MB, 16-bit wide).
 
 - LiteX platform file: [digilent_arty.py](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/digilent_arty.py)
 - Digilent Arty Reference Manual: [reference.digilentinc.com](https://reference.digilentinc.com/reference/programmable-logic/arty-a7/reference-manual)
-- PMOD HAT Documentation: [pmod-hat.md](pmod-hat.md)
+- PMOD HAT Documentation: [rpi-hat-pmod.md](rpi-hat-pmod.md)
