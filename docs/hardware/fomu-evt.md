@@ -178,6 +178,27 @@ iceprog design.bin
 
 Source: [Fomu Workshop](https://workshop.fomu.im)
 
+## Test Infrastructure Hosts
+
+The Fomu EVT boards are hosted on RPi 3B+ systems on the tweed network. Each host also has a USB protocol analyzer inline for capturing and analyzing the Fomu's USB traffic.
+
+| Host | IP          | Fomu USB VID:PID | DFU Version | USB Analyzer                  |
+|------|-------------|------------------|-------------|-------------------------------|
+| pi17 | 10.21.0.117 | 1209:5bf0        | v2.0.4      | OpenVizsla (VID:PID 1d50:607c) |
+| pi21 | 10.21.0.121 | 1209:5bf0        | v2.0.4      | Cythion/LUNA (VID:PID 16d0:05a5) |
+
+### OpenVizsla (pi17)
+
+The [OpenVizsla](https://github.com/openvizsla/ov_ftdi) is an open-source USB protocol analyzer. It captures USB traffic between the Fomu and the RPi host for debugging and test verification.
+
+### Cythion/LUNA (pi21)
+
+The [Cythion](https://greatscottgadgets.com/cythion/) (from Great Scott Gadgets) is a USB multitool running the [LUNA](https://github.com/greatscottgadgets/luna) USB framework. It provides USB protocol analysis, traffic capture, and can also act as a USB host or device for testing. Connected inline between the Fomu and the RPi host.
+
+Both analyzers allow monitoring the Fomu's native USB communication (DFU programming, CDC-ACM serial, custom USB protocols) without modifying the FPGA design or host software.
+
+Source: dnsmasq pibs.conf on tweed, verified 2026-03-17.
+
 ## LiteX Integration
 
 | Property | Value |
