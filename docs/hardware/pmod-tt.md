@@ -20,11 +20,12 @@ The TT demo board has three 12-pin PMOD connectors on the bottom edge, one per s
 ┌─────────────────────────────────────────┐
 │              TT Demo Board              │
 │                                         │
-├───────────┬───────────┬───────────┐     │
-│  ui_in    │  uio      │  uo_out   │     │
-│  (input)  │  (bidir)  │  (output) │     │
-└───────────┴───────────┴───────────┘
-   Left        Middle      Right
+│ ┌───────────┬───────────┬───────────┐   │
+│ │  ui_in    │  uio      │  uo_out   │   │
+│ │  (input)  │  (bidir)  │  (output) │   │
+│ └───────────┴───────────┴───────────┘   │
+└─────────────────────────────────────────┘
+    Left        Middle      Right
 ```
 
 Each connector maps signals straight through: IO1=bit[0], IO2=bit[1], ... IO8=bit[7].
