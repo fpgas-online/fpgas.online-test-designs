@@ -44,7 +44,7 @@ def build_pin_list(platform):
         connector_pins = platform.connectors.connector_table[connector_name]
         for idx in range(len(connector_pins)):
             resource_pin = f"{connector_name}:{idx}"
-            fpga_pin = connector_pins[str(idx)]
+            fpga_pin = connector_pins[idx]
             label = f"{fpga_pin}\r\n"
             pins.append((resource_pin, label))
     return pins
