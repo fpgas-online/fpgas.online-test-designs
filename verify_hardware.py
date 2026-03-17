@@ -26,7 +26,7 @@ import time
 
 REPO_DIR = os.path.dirname(os.path.abspath(__file__))
 ARTIFACTS_DIR = os.path.join(REPO_DIR, "artifacts")
-TWEED = "root@tweed.welland.mithis.com"
+TWEED = "pi@fpgas.mithis.com"
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +219,7 @@ def _build_ssh_cmd(host_name, remote_cmd):
         # Double-hop: local -> tweed -> rpi
         # The inner command must be shell-escaped for the tweed shell,
         # and the remote_cmd must be escaped for the rpi shell.
-        inner_cmd = "ssh root@{} {}".format(host["target"], shlex.quote(remote_cmd))
+        inner_cmd = "ssh pi@{} {}".format(host["target"], shlex.quote(remote_cmd))
         return ["ssh", TWEED, inner_cmd]
     else:
         return ["ssh", host["target"], remote_cmd]

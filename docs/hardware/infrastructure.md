@@ -43,11 +43,11 @@ Source: dnsmasq configuration on tweed (`/etc/dnsmasq.d/pibs.conf`), verified vi
 | eth-local  | 10.21.0.1/16 (RPi network)                                                           |
 | Domain     | fpgas.welland.mithis.com                                                             |
 | PCI        | 2× Intel 82574L GbE, Tundra PCI bridge, Matrox G200eW                                |
-| SSH access | `ssh root@tweed.welland.mithis.com` (via WireGuard `wg-desktop`, route to 10.21.0.1) |
+| SSH access | `ssh pi@fpgas.mithis.com` (via WireGuard `wg-desktop`, route to 10.21.0.1) |
 
 Tweed does **not** host any FPGA boards directly. It serves as the network gateway and PXE boot server for the RPi fleet. The RPis are on the `eth-local` (10.21.0.0/16) network.
 
-**SSH to RPis**: Direct SSH from external machines requires WireGuard VPN (`wg-desktop` interface routes 10.21.0.0/16). Alternatively, use nested SSH through tweed: `ssh root@tweed.welland.mithis.com "ssh root@<rpi-ip> '<command>'"`. The RPis only accept root's SSH key from tweed itself.
+**SSH to RPis**: Direct SSH from external machines requires WireGuard VPN (`wg-desktop` interface routes 10.21.0.0/16). Use nested SSH through tweed: `ssh pi@fpgas.mithis.com "ssh pi@<rpi-ip> '<command>'"`. The `pi` user is the standard non-privileged account used across the fpgas.online infrastructure (see [Getting Started](https://github.com/CarlFK/pici/wiki/Getting-Started)).
 
 ## FPGA Board Inventory
 
