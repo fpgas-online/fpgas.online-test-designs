@@ -104,151 +104,117 @@ Source: `_connectors` in digilent_arty.py
 
 The Digilent PMOD HAT has three 12-pin PMOD ports. Each port connects to one Arty PMOD connector via a single cable.
 
-### PMOD HAT Port JA
+See [pmod-hat.md](pmod-hat.md) for the full PMOD HAT pin mapping. Summary:
 
-| PMOD Pin | RPi GPIO | RPi Header Pin | BCM Alt Function |
-|----------|----------|----------------|-----------------|
-| 1 (top) | GPIO6 | 31 | — |
-| 2 (top) | GPIO13 | 33 | — |
-| 3 (top) | GPIO19 | 35 | PCM_FS |
-| 4 (top) | GPIO26 | 37 | — |
-| 7 (bottom) | GPIO12 | 32 | PWM0 |
-| 8 (bottom) | GPIO16 | 36 | — |
-| 9 (bottom) | GPIO20 | 38 | PCM_DIN |
-| 10 (bottom) | GPIO21 | 40 | PCM_DOUT |
+### PMOD HAT Port JA (SPI Type 2, CE0)
 
-### PMOD HAT Port JB
+| PMOD Pin | RPi GPIO | BCM Alt Function |
+|----------|----------|------------------|
+| 1        | GPIO8    | SPI0_CE0         |
+| 2        | GPIO10   | SPI0_MOSI (\*)   |
+| 3        | GPIO9    | SPI0_MISO (\*)   |
+| 4        | GPIO11   | SPI0_SCLK (\*)   |
+| 7        | GPIO19   | PCM_FS           |
+| 8        | GPIO21   | PCM_DOUT         |
+| 9        | GPIO20   | PCM_DIN          |
+| 10       | GPIO18   | PCM_CLK / PWM0   |
 
-| PMOD Pin | RPi GPIO | RPi Header Pin | BCM Alt Function |
-|----------|----------|----------------|-----------------|
-| 1 (top) | GPIO5 | 29 | — |
-| 2 (top) | GPIO11 | 23 | SPI0_SCLK |
-| 3 (top) | GPIO9 | 21 | SPI0_MISO |
-| 4 (top) | GPIO10 | 19 | SPI0_MOSI |
-| 7 (bottom) | GPIO7 | 26 | SPI0_CE1 |
-| 8 (bottom) | GPIO8 | 24 | SPI0_CE0 |
-| 9 (bottom) | GPIO0 | 27 | I2C0_SDA |
-| 10 (bottom) | GPIO1 | 28 | I2C0_SCL |
+### PMOD HAT Port JB (SPI Type 2, CE1)
 
-Note: GPIO7-11 overlap with SPI0. The SPI kernel modules must be unloaded (`rmmod spidev spi_bcm2835`) before GPIO access. GPIO0/1 are I2C0 with hardware pull-ups.
+| PMOD Pin | RPi GPIO | BCM Alt Function |
+|----------|----------|------------------|
+| 1        | GPIO7    | SPI0_CE1         |
+| 2        | GPIO10   | SPI0_MOSI (\*)   |
+| 3        | GPIO9    | SPI0_MISO (\*)   |
+| 4        | GPIO11   | SPI0_SCLK (\*)   |
+| 7        | GPIO26   |                  |
+| 8        | GPIO13   | PWM1             |
+| 9        | GPIO3    | I2C1_SCL         |
+| 10       | GPIO2    | I2C1_SDA         |
 
-### PMOD HAT Port JC
+(\*) JA pins 2-4 and JB pins 2-4 are the **same GPIOs** (SPI bus). `rmmod spidev spi_bcm2835` required before GPIO access.
 
-| PMOD Pin | RPi GPIO | RPi Header Pin | BCM Alt Function |
-|----------|----------|----------------|-----------------|
-| 1 (top) | GPIO17 | 11 | — |
-| 2 (top) | GPIO18 | 12 | PWM0 |
-| 3 (top) | GPIO4 | 7 | GPCLK0 |
-| 4 (top) | GPIO14 | 8 | TXD (UART) |
-| 7 (bottom) | GPIO2 | 3 | I2C1_SDA |
-| 8 (bottom) | GPIO3 | 5 | I2C1_SCL |
-| 9 (bottom) | GPIO15 | 10 | RXD (UART) |
-| 10 (bottom) | GPIO25 | 22 | — |
+### PMOD HAT Port JC (UART Type 3)
 
-Note: GPIO14/15 overlap with UART. GPIO2/3 are I2C1 with hardware pull-ups. GPIO4 is used as JTAG TCK in the NeTV2 configuration.
+| PMOD Pin | RPi GPIO | BCM Alt Function |
+|----------|----------|------------------|
+| 1        | GPIO16   | CTS0             |
+| 2        | GPIO14   | TXD0             |
+| 3        | GPIO15   | RXD0             |
+| 4        | GPIO17   | RTS0             |
+| 7        | GPIO4    | GPCLK0           |
+| 8        | GPIO12   | PWM0             |
+| 9        | GPIO5    |                  |
+| 10       | GPIO6    |                  |
 
 ### Unused RPi GPIOs
 
 These GPIOs are NOT assigned to any PMOD HAT port:
 
-| RPi GPIO | RPi Header Pin | Notes |
-|----------|----------------|-------|
-| GPIO22 | 15 | Free |
-| GPIO23 | 16 | Free |
-| GPIO24 | 18 | Free (SRST in NeTV2 JTAG config) |
-| GPIO27 | 13 | Free (TDI in NeTV2 JTAG config) |
+| RPi GPIO | RPi Header Pin | Notes                         |
+|----------|----------------|-------------------------------|
+| GPIO0    | 27             | I2C0_SDA (HAT EEPROM)         |
+| GPIO1    | 28             | I2C0_SCL (HAT EEPROM)         |
+| GPIO22   | 15             | Free                          |
+| GPIO23   | 16             | Free                          |
+| GPIO24   | 18             | Free (SRST in NeTV2 JTAG)     |
+| GPIO25   | 22             | Free                          |
+| GPIO27   | 13             | Free (TDI in NeTV2 JTAG)      |
 
 ## PMOD Cable Routing: HAT ↔ Arty
 
-Determined automatically using the `pmod-pin-id` design, which transmits each FPGA pin's ball name as 1200-baud UART. The RPi reads each GPIO and decodes the pin name. Two independent scans were run: v1 (transmitting PMOD connector names like "JA01") and v2 (transmitting FPGA pin names like "G13"). All v2 results match the v1-derived FPGA pin names, cross-validating the mapping.
+Ribbon cables connect straight through: **HAT JA → Arty JA**, **HAT JB → Arty JB**, **HAT JC → Arty JC**. Arty JD is not connected (HAT has only 3 ports).
 
-Cables do NOT route HAT ports to Arty PMODs 1:1 — the mapping is non-trivial. Arty JD is not connected (HAT has only 3 ports for 4 Arty PMODs).
+Verified using the `pmod-pin-id` design which transmits each FPGA pin's ball name as 1200-baud UART on every PMOD pin. Two independent scans (PMOD names and FPGA pin names) cross-validated.
 
-### Pi9 (21 of 24 pins confirmed, 2026-03-17)
+### Pi9 (21 of 24 unique GPIOs scanned, 2026-03-17)
 
-#### HAT Port JA
+#### HAT JA → Arty JA
 
-| HAT Pin | RPi GPIO | FPGA Pin | Arty PMOD Pin | Verification |
-|---------|----------|----------|---------------|--------------|
-| 01      | GPIO6    | U13      | JC10          | both scans   |
-| 02      | GPIO13   | J18      | JB08          | both scans   |
-| 03      | GPIO19   | D13      | JA07          | both scans   |
-| 04      | GPIO26   | J17      | JB07          | both scans   |
-| 07      | GPIO12   | V14      | JC08          | both scans   |
-| 08      | GPIO16   | V12      | JC02          | both scans   |
-| 09      | GPIO20   | A18      | JA09          | both scans   |
-| 10      | GPIO21   | B18      | JA08          | both scans   |
+| HAT Pin | RPi GPIO | Scanned FPGA Pin | Expected (Arty JA) | Match |
+|---------|----------|------------------|---------------------|-------|
+| 1       | GPIO8    | G13              | G13                 | yes   |
+| 2       | GPIO10   | E16              | B11 (but shared\*)  | (\*)  |
+| 3       | GPIO9    | D15              | A11 (but shared\*)  | (\*)  |
+| 4       | GPIO11   | C15              | D12 (but shared\*)  | (\*)  |
+| 7       | GPIO19   | D13              | D13                 | yes   |
+| 8       | GPIO21   | B18              | B18                 | yes   |
+| 9       | GPIO20   | A18              | A18                 | yes   |
+| 10      | GPIO18   | K16              | K16                 | yes   |
 
-#### HAT Port JB
+(\*) Pins 2-4 share GPIOs with JB pins 2-4. The scan reads Arty JB's pins (E16, D15, C15) because both cables drive the same GPIO lines. Arty JA pins 2-4 (B11, A11, D12) cannot be independently verified.
 
-| HAT Pin | RPi GPIO | FPGA Pin    | Arty PMOD Pin | Verification |
-|---------|----------|-------------|---------------|--------------|
-| 01      | GPIO5    | T13         | JC09          | both scans   |
-| 02      | GPIO11   | C15         | JB04          | v1 + derived |
-| 03      | GPIO9    | D15         | JB03          | both scans   |
-| 04      | GPIO10   | E16         | JB02          | both scans   |
-| 07      | GPIO7    | E15         | JB01          | v1 + derived |
-| 08      | GPIO8    | G13         | JA01          | both scans   |
-| 09      | GPIO0    | B11/A11/D12 | JA02/03/04    | unreadable   |
-| 10      | GPIO1    | B11/A11/D12 | JA02/03/04    | unreadable   |
+#### HAT JB → Arty JB (all 8 pins verified)
 
-#### HAT Port JC
+| HAT Pin | RPi GPIO | Scanned FPGA Pin | Expected (Arty JB) | Match |
+|---------|----------|------------------|---------------------|-------|
+| 1       | GPIO7    | E15              | E15                 | yes   |
+| 2       | GPIO10   | E16              | E16                 | yes   |
+| 3       | GPIO9    | D15              | D15                 | yes   |
+| 4       | GPIO11   | C15              | C15                 | yes   |
+| 7       | GPIO26   | J17              | J17                 | yes   |
+| 8       | GPIO13   | J18              | J18                 | yes   |
+| 9       | GPIO3    | K15              | K15                 | yes   |
+| 10      | GPIO2    | J15              | J15                 | yes   |
 
-| HAT Pin | RPi GPIO | FPGA Pin    | Arty PMOD Pin | Verification |
-|---------|----------|-------------|---------------|--------------|
-| 01      | GPIO17   | V11         | JC04          | both scans   |
-| 02      | GPIO18   | K16         | JA10          | both scans   |
-| 03      | GPIO4    | U14         | JC07          | both scans   |
-| 04      | GPIO14   | U12         | JC01          | v1 + derived |
-| 07      | GPIO2    | J15         | JB10          | both scans   |
-| 08      | GPIO3    | K15         | JB09          | v1 + derived |
-| 09      | GPIO15   | V10         | JC03          | both scans   |
-| 10      | GPIO25   | B11/A11/D12 | JA02/03/04    | no signal    |
+#### HAT JC → Arty JC (pins 1↔2 swapped in cable)
 
-GPIO0/1 (HAT JB:09/10): I2C0 hardware pull-ups (~1.8kΩ) hold lines high, preventing FPGA signal readout. GPIO25 (HAT JC:10): no signal detected. The three missing FPGA pins (B11=JA02, A11=JA03, D12=JA04) map to GPIO0, GPIO1, and GPIO25 in unknown order.
+| HAT Pin | RPi GPIO | Scanned FPGA Pin | Expected (Arty JC) | Match  |
+|---------|----------|------------------|---------------------|--------|
+| 1       | GPIO16   | V12              | U12                 | SWAP   |
+| 2       | GPIO14   | U12              | V12                 | SWAP   |
+| 3       | GPIO15   | V10              | V10                 | yes    |
+| 4       | GPIO17   | V11              | V11                 | yes    |
+| 7       | GPIO4    | U14              | U14                 | yes    |
+| 8       | GPIO12   | V14              | V14                 | yes    |
+| 9       | GPIO5    | T13              | T13                 | yes    |
+| 10      | GPIO6    | U13              | U13                 | yes    |
 
-### Pi3 (12 of 24 pins confirmed, 2026-03-17)
+HAT JC pins 1 and 2 are swapped relative to Arty JC pins 1 and 2. This is a physical cable crossover — GPIO16 connects to Arty JC pin 2 (V12) and GPIO14 connects to Arty JC pin 1 (U12). All other pins match 1:1.
 
-#### HAT Port JA
+### Pi3 (2026-03-17)
 
-| HAT Pin | RPi GPIO | FPGA Pin | Arty PMOD Pin | Verification |
-|---------|----------|----------|---------------|--------------|
-| 01      | GPIO6    | —        | —             | no signal    |
-| 02      | GPIO13   | J18      | JB08          | both scans   |
-| 03      | GPIO19   | D13      | JA07          | both scans   |
-| 04      | GPIO26   | J17      | JB07          | both scans   |
-| 07      | GPIO12   | —        | —             | no signal    |
-| 08      | GPIO16   | —        | —             | no signal    |
-| 09      | GPIO20   | A18      | JA09          | both scans   |
-| 10      | GPIO21   | B18      | JA08          | both scans   |
-
-#### HAT Port JB
-
-| HAT Pin | RPi GPIO | FPGA Pin | Arty PMOD Pin | Verification |
-|---------|----------|----------|---------------|--------------|
-| 01      | GPIO5    | —        | —             | no signal    |
-| 02      | GPIO11   | C15      | JB04          | both scans   |
-| 03      | GPIO9    | D15      | JB03          | v2 corrected |
-| 04      | GPIO10   | E16      | JB02          | both scans   |
-| 07      | GPIO7    | E15      | JB01          | v1 + derived |
-| 08      | GPIO8    | G13      | JA01          | both scans   |
-| 09      | GPIO0    | —        | —             | unreadable   |
-| 10      | GPIO1    | —        | —             | unreadable   |
-
-#### HAT Port JC
-
-| HAT Pin | RPi GPIO | FPGA Pin | Arty PMOD Pin | Verification |
-|---------|----------|----------|---------------|--------------|
-| 01      | GPIO17   | —        | —             | no signal    |
-| 02      | GPIO18   | —        | —             | no signal    |
-| 03      | GPIO4    | —        | —             | no signal    |
-| 04      | GPIO14   | —        | —             | no signal    |
-| 07      | GPIO2    | J15      | JB10          | both scans   |
-| 08      | GPIO3    | K15      | JB09          | both scans   |
-| 09      | GPIO15   | —        | —             | no signal    |
-| 10      | GPIO25   | —        | —             | no signal    |
-
-Pi3 has fewer reachable pins — likely fewer PMOD cables connected. The 12 confirmed pins all match pi9's mapping (same cable routing for the connected ports). GPIO9 was misread as JC03 in v1 but correctly reads D15 (=JB03) in v2.
+Pi3 detected fewer pins (12 of 21 unique GPIOs). All detected pins match pi9's results exactly, confirming the same cable routing. HAT JC top-row and some JA/JB pins showed no signal — likely loose cables or missing connections on this host.
 
 ### Pi5 (offline, 2026-03-17)
 
