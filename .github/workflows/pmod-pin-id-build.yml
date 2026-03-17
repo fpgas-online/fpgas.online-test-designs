@@ -1,0 +1,55 @@
+# .github/workflows/pmod-pin-id-build.yml
+name: "Build: PMOD Pin Identification"
+
+on:
+  push:
+    paths:
+      - "designs/pmod-pin-id/**"
+      - "designs/_shared/**"
+      - ".github/workflows/pmod-pin-id-build.yml"
+  pull_request:
+    paths:
+      - "designs/pmod-pin-id/**"
+      - "designs/_shared/**"
+  workflow_dispatch:
+
+jobs:
+  build-arty:
+    name: "Arty A7-35T"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install openXC7 toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys
+          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
+          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
+          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
+          sudo snap alias openxc7.fasm2frames fasm2frames
+          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
+          sudo snap alias openxc7.bbasm bbasm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build Arty PMOD Pin ID
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
+        run: |
+          mkdir -p "$CHIPDB"
+          uv run python designs/pmod-pin-id/gateware/pmod_pin_id_arty.py \
+            --toolchain openxc7 \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmod-pin-id-arty-a7-35t
+          path: |
+            designs/pmod-pin-id/build/arty/*.bit
+          if-no-files-found: error
