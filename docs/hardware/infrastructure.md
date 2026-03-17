@@ -5,26 +5,26 @@ This document describes the physical host machines, FPGA boards, programming met
 ## Network Topology
 
 ```
-                          ┌─────────────────────────────────┐
-                          │  tweed.welland.mithis.com        │
-Internet ─── eth-uplink ──│  Debian 12 (bookworm)            │
- (10.99.21.2)             │  x86_64, kernel 6.1.0-34         │
-                          │  Intel 3rd Gen Core               │
-                          │                                   │
-                          │  dnsmasq (DHCP/DNS/TFTP/PXE)      │
-              eth-local ──│  10.21.0.1/16                     │
-          (S3300 PoE sw.) │  domain: fpgas.welland.mithis.com │
-                          └───────────┬───────────────────────┘
+                          ┌────────────────────────────────────┐
+                          │  tweed.welland.mithis.com          │
+Internet ─── eth-uplink ──│  Debian 12 (bookworm)              │
+ (10.99.21.2)             │  x86_64, kernel 6.1.0-34           │
+                          │  Intel 3rd Gen Core                │
+                          │                                    │
+                          │  dnsmasq (DHCP/DNS/TFTP/PXE)       │
+              eth-local ──│  10.21.0.1/16                      │
+          (S3300 PoE sw.) │  domain: fpgas.welland.mithis.com  │
+                          └───────────┬────────────────────────┘
                                       │
         ┌──────────────┬──────────────┼──────────────┬──────────────┐
         │              │              │              │              │
-  ┌─────┴─────┐  ┌─────┴─────┐ ┌─────┴─────┐ ┌─────┴─────┐ ┌─────┴─────┐
-  │ RPi 4/3B+ │  │ RPi 3B+   │ │ RPi 5     │ │ RPi 3B+   │ │ RPi 4     │
-  │ +Arty A7  │  │ +NeTV2    │ │ +mPCIe HAT│ │ +Fomu EVT │ │ +TT FPGA  │
-  │ +PMOD HAT │  │ (GPIO     │ │ +Acorn    │ │ +USB Anlzr│ │ Demo Board│
-  │ +USB Eth  │  │  JTAG)    │ │  CLE-215+ │ │ +TT ASIC  │ │ +PMOD HAT │
-  └───────────┘  └───────────┘ └───────────┘ └───────────┘ └───────────┘
-      (×5)           (×5)        (×1+3 TBD)     (various)      (×4)
+  ┌─────┴─────┐  ┌─────┴─────┐  ┌─────┴─────┐  ┌─────┴─────┐  ┌─────┴─────┐
+  │ RPi 4/3B+ │  │ RPi 3B+   │  │ RPi 5     │  │ RPi 3B+   │  │ RPi 4     │
+  │ +Arty A7  │  │ +NeTV2    │  │ +mPCIe HAT│  │ +Fomu EVT │  │ +TT FPGA  │
+  │ +PMOD HAT │  │ (GPIO     │  │ +Acorn    │  │ +USB Anlzr│  │ Demo Board│
+  │ +USB Eth  │  │  JTAG)    │  │  CLE-215+ │  │ +TT ASIC  │  │ +PMOD HAT │
+  └───────────┘  └───────────┘  └───────────┘  └───────────┘  └───────────┘
+      (×5)           (×5)        (×1+3 TBD)      (various)        (×4)
 ```
 
 All Raspberry Pis netboot via PXE/TFTP from tweed. They connect to a Netgear S3300 PoE switch with numbered ports. IP addresses follow the convention `10.21.0.1XX` where `XX` is the switch port number.
@@ -295,12 +295,12 @@ The PMOD HAT provides 3 PMOD ports (JA, JB, JC) connecting RPi GPIO pins to stan
 │ 2. PROGRAM FPGA                                              │
 │    - openFPGALoader (Arty): USB FTDI JTAG                    │
 │    - openFPGALoader (NeTV2): RPi GPIO bitbang JTAG           │
-│    - openFPGALoader (Acorn): PCIe via mPCIe HAT             │
+│    - openFPGALoader (Acorn): PCIe via mPCIe HAT              │
 │    - openFPGALoader (Fomu): USB DFU                          │
-│    - RP2040/MicroPython (TT ASIC + FPGA Demo): /dev/ttyACM0 │
+│    - RP2040/MicroPython (TT ASIC + FPGA Demo): /dev/ttyACM0  │
 │                                                              │
 │ 3. RUN TEST HARNESS                                          │
-│    - Open serial port (ttyUSB1/ttyAMA0/ttyACM0)             │
+│    - Open serial port (ttyUSB1/ttyAMA0/ttyACM0)              │
 │    - Send test commands to FPGA                              │
 │    - Read responses and validate                             │
 │                                                              │
