@@ -34,10 +34,10 @@ BOARD_CONFIGS = {
     "arty": {
         # Empirically confirmed loopback pairs (4-transition verification on pi5):
         # FPGA does: pmodb = ~pmoda (per-bit inversion, 8-bit)
-        # Cable routing is non-trivial (pairs span HAT ports JA, JB, JC).
-        # 6 of 8 pairs confirmed; remaining 2 likely blocked by I2C/GPCLK drivers.
-        #   drive: JA3, JA7, JA9, JA10, JB2, JB8
-        #   read:  JA4, JB3, JC8, JA2,  JB4, JB7
+        # Cables: HAT JA → Arty JA (pmoda), HAT JB → Arty JB (pmodb).
+        # 6 of 8 pairs confirmed; pins 2-4 shared between JA/JB (SPI bus).
+        #   drive (pmoda): JA7, JC8, JA9, JA8, JA4, JA1
+        #   read  (pmodb): JB7, JA3, JB9, JB8, JA2, JB1
         "drive_pins": [19, 12, 20, 21, 11, 8],
         "read_pins": [26, 9, 3, 13, 10, 7],
         "width": 6,
@@ -56,11 +56,11 @@ BOARD_CONFIGS = {
     },
     "tt": {
         # Empirically confirmed: TT FPGA Demo Board v3 via PMOD HAT.
-        # PMOD cables: RPi HAT JA/JC/JB -> TT PMOD headers.
+        # Cables: HAT JC → TT ui_in, HAT JA → TT uo_out.
         # FPGA does: uo_out = ~ui_in (per-bit inversion, 8-bit).
         # RP2350 GPIOs must be released to input (high-Z) first.
-        #   ui_in[0:7] drive GPIOs: JA1, JA7, JA8, JB1, JC1, JC3, JC4, JC9
-        #   uo_out[0:7] read GPIOs: JC2, JA10, JB8, JA9, JB2, JA3, JB4, JB3
+        #   ui_in[0:7] drive GPIOs: JC10, JC8, JC1, JC9, JC4, JC7, JC2, JC3
+        #   uo_out[0:7] read GPIOs: JA10, JA8, JA1, JA9, JA4, JA7, JA2, JA3
         "drive_pins": [6, 12, 16, 5, 17, 4, 14, 15],
         "read_pins": [18, 21, 8, 20, 11, 19, 10, 9],
         "width": 8,

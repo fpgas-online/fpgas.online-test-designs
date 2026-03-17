@@ -67,30 +67,30 @@ The iCE40 is programmed via the RP2350 over USB CDC, not directly from the RPi.
 8-bit input bus. The RPi drives these through the PMOD HAT; the FPGA reads them.
 
 | Bit | iCE40 Pin | RP2350 GPIO | PMOD HAT Pin | RPi GPIO |
-|-----|-----------|-------------|-------------|----------|
-| ui_in[0] | 13 | 17 | JA1 | 6 |
-| ui_in[1] | 19 | 18 | JA7 | 12 |
-| ui_in[2] | 18 | 19 | JA8 | 16 |
-| ui_in[3] | 21 | 20 | JB1 | 5 |
-| ui_in[4] | 23 | 21 | JC1 | 17 |
-| ui_in[5] | 25 | 22 | JC3 | 4 |
-| ui_in[6] | 26 | 23 | JC4 | 14 |
-| ui_in[7] | 27 | 24 | JC9 | 15 |
+|-----|-----------|-------------|--------------|----------|
+| ui_in[0] | 13 | 17 | JC10 | 6 |
+| ui_in[1] | 19 | 18 | JC8  | 12 |
+| ui_in[2] | 18 | 19 | JC1  | 16 |
+| ui_in[3] | 21 | 20 | JC9  | 5 |
+| ui_in[4] | 23 | 21 | JC4  | 17 |
+| ui_in[5] | 25 | 22 | JC7  | 4 |
+| ui_in[6] | 26 | 23 | JC2  | 14 |
+| ui_in[7] | 27 | 24 | JC3  | 15 |
 
 ### uo_out (User Outputs)
 
 8-bit output bus. The FPGA drives these; the RPi reads them through the PMOD HAT.
 
 | Bit | iCE40 Pin | RP2350 GPIO | PMOD HAT Pin | RPi GPIO |
-|-----|-----------|-------------|-------------|----------|
-| uo_out[0] | 38 | 33 | JC2 | 18 |
-| uo_out[1] | 42 | 34 | JA10 | 21 |
-| uo_out[2] | 43 | 35 | JB8 | 8 |
-| uo_out[3] | 44 | 36 | JA9 | 20 |
-| uo_out[4] | 45 | 37 | JB2 | 11 |
-| uo_out[5] | 46 | 38 | JA3 | 19 |
-| uo_out[6] | 47 | 39 | JB4 | 10 |
-| uo_out[7] | 48 | 40 | JB3 | 9 |
+|-----|-----------|-------------|--------------|----------|
+| uo_out[0] | 38 | 33 | JA10 | 18 |
+| uo_out[1] | 42 | 34 | JA8  | 21 |
+| uo_out[2] | 43 | 35 | JA1  | 8 |
+| uo_out[3] | 44 | 36 | JA9  | 20 |
+| uo_out[4] | 45 | 37 | JA4  | 11 |
+| uo_out[5] | 46 | 38 | JA7  | 19 |
+| uo_out[6] | 47 | 39 | JA2  | 10 |
+| uo_out[7] | 48 | 40 | JA3  | 9 |
 
 ### uio (Bidirectional I/O)
 
@@ -114,9 +114,9 @@ The iCE40 is programmed via the RP2350 over USB CDC, not directly from the RPi.
 The FPGA's UART pins are routed through the PMOD HAT to RPi GPIOs. This is a direct connection — NOT through the RP2350.
 
 | Signal | iCE40 Pin | TT Signal | PMOD HAT Pin | RPi GPIO |
-|--------|-----------|-----------|-------------|----------|
-| Serial RX (FPGA receives) | 21 | ui_in[3] | JB1 | 5 |
-| Serial TX (FPGA sends) | 45 | uo_out[4] | JB2 | 11 |
+|--------|-----------|-----------|--------------|----------|
+| Serial RX (FPGA receives) | 21 | ui_in[3] | JC9 | 5 |
+| Serial TX (FPGA sends) | 45 | uo_out[4] | JA4 | 11 |
 
 | Parameter | Value |
 |-----------|-------|
@@ -133,7 +133,7 @@ All 8 pairs are **empirically confirmed** (4-transition verification on pi33). S
 
 ### Pre-test Requirements
 
-- `rmmod spidev spi_bcm2835` — SPI kernel modules claim GPIO7-11 (overlap with PMOD HAT JB pins used by uo_out[2], uo_out[4], uo_out[7])
+- `rmmod spidev spi_bcm2835` — SPI kernel modules claim GPIO7-11 (overlap with HAT JA pins 1-4 and JB pin 1, used by uo_out[2], uo_out[4], uo_out[6], uo_out[7])
 - RP2350 GPIOs must be released to high-Z after FPGA programming (the programming wrapper handles this automatically)
 
 ## SPI Flash
