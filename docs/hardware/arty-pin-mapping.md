@@ -168,7 +168,7 @@ Determined automatically using the `pmod-pin-id` design, which transmits each FP
 |----------|-------------|---------------|----------|
 | GPIO6    | JA:01       | JC10          | U13      |
 | GPIO13   | JA:02       | JB08          | J18      |
-| GPIO19   | JA:03       | JA07          | K16      |
+| GPIO19   | JA:03       | JA07          | D13      |
 | GPIO26   | JA:04       | JB07          | J17      |
 | GPIO12   | JA:07       | JC08          | V14      |
 | GPIO16   | JA:08       | JC02          | V12      |
@@ -200,7 +200,7 @@ Arty JD: Not reachable (HAT has only 3 ports for 4 Arty PMODs).
 | RPi GPIO | HAT Port:Pin | Arty PMOD Pin | FPGA Pin |
 |----------|-------------|---------------|----------|
 | GPIO13   | JA:02       | JB08          | J18      |
-| GPIO19   | JA:03       | JA07          | K16      |
+| GPIO19   | JA:03       | JA07          | D13      |
 | GPIO26   | JA:04       | JB07          | J17      |
 | GPIO20   | JA:09       | JA09          | A18      |
 | GPIO21   | JA:10       | JA08          | B18      |
