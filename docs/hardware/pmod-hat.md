@@ -125,8 +125,7 @@ The PMOD HAT maps Raspberry Pi GPIO pins to three PMOD ports (JA, JB, JC). Each 
 | JC10     | I/O 8  | GPIO6    | Pin 31         |              |
 
 **Notes on JC**:
-- GPIO14/15 (JC2/JC3) are the default UART TX/RX pins. If using GPIO UART for NeTV2 communication, these pins are not available for PMOD.
-- GPIO4 (JC7) is used for JTAG TCK in the NeTV2 OpenOCD configuration.
+- GPIO14/15 (JC2/JC3) are the default UART TX/RX pins. If using GPIO UART for other purposes, these pins are not available for PMOD.
 
 Source: [DesignSpark.Pmod HAT.py driver](https://github.com/DesignSparkRS/DesignSpark.Pmod/blob/master/DesignSpark/Pmod/HAT.py), [Digilent PMOD HAT Schematic](https://digilent.com/reference/_media/learn/documentation/schematics/pmod_hat_adapter_sch.pdf), [Digilent PMOD HAT Reference Manual](https://digilent.com/reference/add-ons/pmod-hat/reference-manual)
 
@@ -140,9 +139,9 @@ The following RPi GPIO pins are NOT assigned to any PMOD port and remain availab
 | GPIO1    | Pin 28         | I2C0_SCL (HAT EEPROM) |
 | GPIO22   | Pin 15         | Free |
 | GPIO23   | Pin 16         | Free |
-| GPIO24   | Pin 18         | Used as SRST in NeTV2 OpenOCD config |
+| GPIO24   | Pin 18         | Free |
 | GPIO25   | Pin 22         | Free |
-| GPIO27   | Pin 13         | Used as TDI in NeTV2 OpenOCD config |
+| GPIO27   | Pin 13         | Free |
 
 GPIO0/1 are reserved for the HAT ID EEPROM I2C bus and are not routed to any PMOD connector.
 

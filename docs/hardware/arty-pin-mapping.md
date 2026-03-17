@@ -157,9 +157,9 @@ These GPIOs are NOT assigned to any PMOD HAT port:
 | GPIO1    | 28             | I2C0_SCL (HAT EEPROM)         |
 | GPIO22   | 15             | Free                          |
 | GPIO23   | 16             | Free                          |
-| GPIO24   | 18             | Free (SRST in NeTV2 JTAG)     |
+| GPIO24   | 18             | Free                          |
 | GPIO25   | 22             | Free                          |
-| GPIO27   | 13             | Free (TDI in NeTV2 JTAG)      |
+| GPIO27   | 13             | Free                          |
 
 ## PMOD Cable Routing: HAT ↔ Arty
 
