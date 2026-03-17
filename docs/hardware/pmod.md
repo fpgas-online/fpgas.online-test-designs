@@ -24,7 +24,7 @@ Host side (looking at board edge):
 ```
 
 | Pin | Function   |
-|-----|------------|
+| --- | ---------- |
 | 1   | Signal I/O |
 | 2   | Signal I/O |
 | 3   | Signal I/O |
@@ -50,7 +50,7 @@ Host side (looking at board edge):
 ```
 
 | Pin | Function   | Pin | Function   |
-|-----|------------|-----|------------|
+| --- | ---------- | --- | ---------- |
 | 1   | Signal I/O | 7   | Signal I/O |
 | 2   | Signal I/O | 8   | Signal I/O |
 | 3   | Signal I/O | 9   | Signal I/O |
@@ -60,13 +60,13 @@ Host side (looking at board edge):
 
 ### Electrical Characteristics
 
-| Parameter           | Value                          |
-|---------------------|--------------------------------|
-| VCC voltage         | 3.3V (standard)                |
-| Max current per VCC | 100 mA                         |
-| I/O standard        | LVCMOS33 (matched to VCC)      |
-| Pin pitch           | 100 mil (2.54 mm)              |
-| Connector type      | Standard 100 mil pin header    |
+| Parameter           | Value                       |
+| ------------------- | --------------------------- |
+| VCC voltage         | 3.3V (standard)             |
+| Max current per VCC | 100 mA                      |
+| I/O standard        | LVCMOS33 (matched to VCC)   |
+| Pin pitch           | 100 mil (2.54 mm)           |
+| Connector type      | Standard 100 mil pin header |
 
 ## Standard PMOD Interface Types
 
@@ -77,7 +77,7 @@ Digilent defines 9 interface types that assign specific protocols to the signal 
 General-purpose I/O. All 4 signal pins are bidirectional.
 
 | Pin | Signal | Direction |
-|-----|--------|-----------|
+| --- | ------ | --------- |
 | 1   | IO1    | In/Out    |
 | 2   | IO2    | In/Out    |
 | 3   | IO3    | In/Out    |
@@ -90,7 +90,7 @@ General-purpose I/O. All 4 signal pins are bidirectional.
 Double-width GPIO with 8 bidirectional I/O pins in two banks (A and B).
 
 | Pin | Signal | Direction | Pin | Signal | Direction |
-|-----|--------|-----------|-----|--------|-----------|
+| --- | ------ | --------- | --- | ------ | --------- |
 | 1   | IOA1   | In/Out    | 7   | IOB1   | In/Out    |
 | 2   | IOA2   | In/Out    | 8   | IOB2   | In/Out    |
 | 3   | IOA3   | In/Out    | 9   | IOB3   | In/Out    |
@@ -102,34 +102,34 @@ Double-width GPIO with 8 bidirectional I/O pins in two banks (A and B).
 
 SPI bus interface. Direction is from the host's perspective (host is SPI master).
 
-| Pin | Signal | Direction | Description                          |
-|-----|--------|-----------|--------------------------------------|
-| 1   | SS     | Out       | Slave Select (active low)            |
-| 2   | MOSI   | Out       | Master Out Slave In (data to slave)  |
-| 3   | MISO   | In        | Master In Slave Out (data from slave)|
-| 4   | SCK    | Out       | Serial Clock (from master)           |
-| 5   | GND    | —         |                                      |
-| 6   | VCC    | —         |                                      |
+| Pin | Signal | Direction | Description                           |
+| --- | ------ | --------- | ------------------------------------- |
+| 1   | SS     | Out       | Slave Select (active low)             |
+| 2   | MOSI   | Out       | Master Out Slave In (data to slave)   |
+| 3   | MISO   | In        | Master In Slave Out (data from slave) |
+| 4   | SCK    | Out       | Serial Clock (from master)            |
+| 5   | GND    | —         |                                       |
+| 6   | VCC    | —         |                                       |
 
 ### Type 2A — Expanded SPI (12-pin)
 
 SPI with additional control signals on the bottom row.
 
-| Pin | Signal | Direction | Pin | Signal | Direction | Description                     |
-|-----|--------|-----------|-----|--------|-----------|---------------------------------|
-| 1   | SS     | Out       | 7   | INT    | In        | Interrupt (peripheral → host)   |
-| 2   | MOSI   | Out       | 8   | RESET  | Out       | Reset (host → peripheral)       |
-| 3   | MISO   | In        | 9   | N/S    | N/S       | Module-specific or unconnected  |
-| 4   | SCK    | Out       | 10  | N/S    | N/S       | Module-specific or unconnected  |
-| 5   | GND    | —         | 11  | GND    | —         |                                 |
-| 6   | VCC    | —         | 12  | VCC    | —         |                                 |
+| Pin | Signal | Direction | Pin | Signal | Direction | Description                    |
+| --- | ------ | --------- | --- | ------ | --------- | ------------------------------ |
+| 1   | SS     | Out       | 7   | INT    | In        | Interrupt (peripheral → host)  |
+| 2   | MOSI   | Out       | 8   | RESET  | Out       | Reset (host → peripheral)      |
+| 3   | MISO   | In        | 9   | N/S    | N/S       | Module-specific or unconnected |
+| 4   | SCK    | Out       | 10  | N/S    | N/S       | Module-specific or unconnected |
+| 5   | GND    | —         | 11  | GND    | —         |                                |
+| 6   | VCC    | —         | 12  | VCC    | —         |                                |
 
 ### Type 3 — UART (6-pin)
 
 UART with hardware flow control. Direction is from the **peripheral's** perspective (peripheral sends CTS/RXD, receives RTS/TXD).
 
 | Pin | Signal | Direction | Description                               |
-|-----|--------|-----------|-------------------------------------------|
+| --- | ------ | --------- | ----------------------------------------- |
 | 1   | CTS    | Out       | Permission for peripheral to send to host |
 | 2   | RTS    | In        | Request from peripheral to send to host   |
 | 3   | RXD    | In        | Data from peripheral to host              |
@@ -144,7 +144,7 @@ Note: Type 3 is defined from a different perspective than Type 4. Type 3 "Out" m
 UART with hardware flow control. Direction is from the **device's** perspective (device asserts CTS when ready to receive, asserts RTS when ready to send).
 
 | Pin | Signal | Direction | Description                       |
-|-----|--------|-----------|-----------------------------------|
+| --- | ------ | --------- | --------------------------------- |
 | 1   | CTS    | In        | Device transmits only when active |
 | 2   | TXD    | Out       | Data from peripheral to host      |
 | 3   | RXD    | In        | Data from host to peripheral      |
@@ -156,40 +156,40 @@ UART with hardware flow control. Direction is from the **device's** perspective 
 
 UART (Type 4 pinout) with additional control signals on the bottom row.
 
-| Pin | Signal | Direction | Pin | Signal | Direction | Description                     |
-|-----|--------|-----------|-----|--------|-----------|---------------------------------|
-| 1   | CTS    | In        | 7   | INT    | In        | Interrupt (peripheral → host)   |
-| 2   | TXD    | Out       | 8   | RESET  | Out       | Reset (host → peripheral)       |
-| 3   | RXD    | In        | 9   | N/S    | N/S       | Module-specific or unconnected  |
-| 4   | RTS    | Out       | 10  | N/S    | N/S       | Module-specific or unconnected  |
-| 5   | GND    | —         | 11  | GND    | —         |                                 |
-| 6   | VCC    | —         | 12  | VCC    | —         |                                 |
+| Pin | Signal | Direction | Pin | Signal | Direction | Description                    |
+| --- | ------ | --------- | --- | ------ | --------- | ------------------------------ |
+| 1   | CTS    | In        | 7   | INT    | In        | Interrupt (peripheral → host)  |
+| 2   | TXD    | Out       | 8   | RESET  | Out       | Reset (host → peripheral)      |
+| 3   | RXD    | In        | 9   | N/S    | N/S       | Module-specific or unconnected |
+| 4   | RTS    | Out       | 10  | N/S    | N/S       | Module-specific or unconnected |
+| 5   | GND    | —         | 11  | GND    | —         |                                |
+| 6   | VCC    | —         | 12  | VCC    | —         |                                |
 
 ### Type 5 — H-Bridge (6-pin)
 
 Single H-bridge motor driver interface.
 
-| Pin | Signal | Direction | Description            |
-|-----|--------|-----------|------------------------|
-| 1   | DIR    | Out       | Motor direction        |
+| Pin | Signal | Direction | Description                |
+| --- | ------ | --------- | -------------------------- |
+| 1   | DIR    | Out       | Motor direction            |
 | 2   | EN     | Out       | Motor enable (active high) |
-| 3   | SA     | In        | Feedback sense A       |
-| 4   | SB     | In        | Feedback sense B       |
-| 5   | GND    | —         |                        |
-| 6   | VCC    | —         |                        |
+| 3   | SA     | In        | Feedback sense A           |
+| 4   | SB     | In        | Feedback sense B           |
+| 5   | GND    | —         |                            |
+| 6   | VCC    | —         |                            |
 
 ### Type 6 — Dual H-Bridge (6-pin)
 
 Two H-bridge motor/phase drivers on a single 6-pin connector (no feedback).
 
-| Pin | Signal | Direction | Description                          |
-|-----|--------|-----------|--------------------------------------|
-| 1   | DIR1   | Out       | Motor/Phase 1 direction (active high)|
-| 2   | EN1    | Out       | Motor/Phase 1 enable                 |
-| 3   | DIR2   | Out       | Motor/Phase 2 direction (active high)|
-| 4   | EN2    | Out       | Motor/Phase 2 enable                 |
-| 5   | GND    | —         |                                      |
-| 6   | VCC    | —         |                                      |
+| Pin | Signal | Direction | Description                           |
+| --- | ------ | --------- | ------------------------------------- |
+| 1   | DIR1   | Out       | Motor/Phase 1 direction (active high) |
+| 2   | EN1    | Out       | Motor/Phase 1 enable                  |
+| 3   | DIR2   | Out       | Motor/Phase 2 direction (active high) |
+| 4   | EN2    | Out       | Motor/Phase 2 enable                  |
+| 5   | GND    | —         |                                       |
+| 6   | VCC    | —         |                                       |
 
 ## Extended Interface: I2C (8-pin)
 
@@ -203,7 +203,7 @@ The I2C PMOD interface is not part of the standard Digilent PMOD specification b
 ```
 
 | Pin | Signal | Pin | Signal |
-|-----|--------|-----|--------|
+| --- | ------ | --- | ------ |
 | 1   | SCL    | 2   | SCL    |
 | 3   | SDA    | 4   | SDA    |
 | 5   | GND    | 6   | GND    |
@@ -216,7 +216,7 @@ Source: [High Speed PMOD Spreadsheet](https://docs.google.com/spreadsheets/d/1D-
 ## Summary Table
 
 | Type | Name           | Width  | Pins | Protocol          |
-|------|----------------|--------|------|-------------------|
+| ---- | -------------- | ------ | ---- | ----------------- |
 | 1    | GPIO           | Single | 6    | General I/O       |
 | 1A   | Expanded GPIO  | Double | 12   | General I/O (×8)  |
 | 2    | SPI            | Single | 6    | SPI bus           |
