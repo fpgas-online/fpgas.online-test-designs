@@ -62,7 +62,7 @@ The `HOSTS` dict maps host names to their properties:
 
 `ssh_upload()` pipes file contents through SSH stdin to `cat > <remote_path>`. This avoids `scp` shell-escaping issues with double-hop SSH. The file data is read locally and sent as raw bytes.
 
-For TT FPGA boards, `EXTRA_UPLOADS` sends additional helper scripts (`tt_fpga_program.py`, `tt_test_wrapper.py`, `tt_pmod_wrapper.py`) that handle RP2350 communication.
+For TT FPGA boards, `EXTRA_UPLOADS` sends additional helper scripts from `designs/_host/` (`tt_fpga_program.py`, `tt_test_wrapper.py`, `tt_pmod_wrapper.py`) that handle RP2350 programming and GPIO release.
 
 ## Pre-Test Commands
 
@@ -93,14 +93,13 @@ Programming varies by board:
 
 **NeTV2 (rpi3)**: `sudo openocd -f alphamax-rpi.cfg -c 'init; pld load 0 <bitstream>; exit'` — JTAG via OpenOCD with BCM2835 GPIO bitbang. Uses `pld load 0` (device index 0, OpenOCD 0.10.x syntax).
 
-**TT FPGA**: `python3 ~/tt_fpga_program.py /dev/ttyACM0 <bitstream>` — Programming goes through the RP2350 microcontroller. The script uses `mpremote` to upload the bitstream to the RP2350's filesystem, then executes a MicroPython script that programs the iCE40 via PIO-accelerated SPI. The RP2350 connects to the RPi via USB CDC (`/dev/ttyACM0`), not GPIO.
+**TT FPGA**: `python3 ~/tt_fpga_program.py /dev/ttyACM0 <bitstream>` — Programming goes through the RP2350 microcontroller via USB CDC (`/dev/ttyACM0`). The script uses `mpremote` to upload the bitstream to the RP2350's filesystem, then executes a MicroPython script that programs the iCE40 via PIO-accelerated SPI and starts the 50 MHz clock. After programming, the RP2350 releases all shared GPIO pins to high-impedance so the RPi can communicate with the FPGA directly through the PMOD HAT.
 
 ### Programming Success Detection
 
 The script checks multiple indicators because different tools report success differently:
 - `rc == 0` — Standard exit code
 - `"done 1" in output` — openFPGALoader prints the FPGA's DONE status bit
-- `"dfuIDLE" in output` — dfu-util's success indicator (legacy, kept for compatibility)
 
 ### Fomu DFU Timeout Recovery
 
@@ -125,48 +124,51 @@ The sequence:
 
 No fixed sleeps — all waits use polling with bounded timeouts.
 
-## TT FPGA Special Handling
+## TT FPGA Programming
 
-The TT FPGA Demo Board v3 has an RP2350 microcontroller between the RPi and the iCE40 FPGA. The RPi has no direct GPIO or UART connection to the FPGA — everything goes through the RP2350 via USB.
+The TT FPGA Demo Board v3 has an RP2350 microcontroller that **programs** the iCE40 FPGA via PIO-accelerated SPI. After programming, the RP2350 releases its GPIO pins to high-impedance (input mode) so the RPi can communicate directly with the FPGA.
 
-### UART Tests (tt_test_wrapper.py)
+The RPi connects to the FPGA through the same PMOD HAT used for all other boards — PMOD cables run from the RPi's PMOD HAT to the PMOD headers on the TT Demo Board, which connect directly to iCE40 pins. This means **UART and PMOD tests work identically to Arty and Fomu** once the FPGA is programmed. The only TT-specific step is programming.
 
-The wrapper creates a transparent UART bridge:
+### Programming Flow (tt_fpga_program.py / tt_pmod_wrapper.py)
 
-1. **Upload bitstream** to RP2350 filesystem via `mpremote`. Includes `reset_rp2350()` (Ctrl-C flood to break any stuck MicroPython script) and USB power cycle retry.
-2. **Program FPGA** via MicroPython raw REPL: PIO SPI programming, UART1 setup on the correct TTDBv3 GPIO pins (GPIO20=RX, GPIO37=TX), 50 MHz PWM clock start.
-3. **Bridge loop**: MicroPython relays bytes between USB CDC (stdin/stdout) and UART1 hardware.
-4. **PTY relay**: The wrapper creates a PTY pair. A thread copies data bidirectionally between the USB serial fd and the PTY master. The test script connects to the PTY slave, thinking it's a real serial port. Ctrl-C (0x03) is stripped from RPi→RP2350 direction to prevent killing the bridge.
-5. **Test execution**: `test_uart.py --port /dev/pts/N --board tt --skip-banner`
+1. **Upload bitstream** to RP2350 filesystem via `mpremote` over USB CDC (`/dev/ttyACM0`). Includes `reset_rp2350()` (Ctrl-C to break any stuck MicroPython script) and USB power cycle retry.
+2. **Program FPGA** via MicroPython raw REPL: PIO SPI to the iCE40, then start the 50 MHz PWM clock on GPIO16.
+3. **Release RP2350 GPIOs to high-Z** — all ui_in, uo_out, and uio pins are set to `Pin.IN` (input mode). This is critical: the RP2350 shares the same physical traces as the PMOD headers. Without releasing, the RP2350's output drivers would contend with the RPi's GPIO signals coming through the PMOD HAT.
 
-### PMOD Tests (tt_pmod_wrapper.py)
+After step 3, the RPi has clean access to the FPGA through the PMOD HAT, and tests run the same way as on any other board.
 
-The PMOD headers on the TT board connect directly to the RPi's PMOD HAT — no RP2350 needed for the test itself. But the FPGA must still be programmed through the RP2350.
+### Pin Mapping: iCE40 ↔ PMOD HAT ↔ RPi GPIO
 
-1. **Program FPGA** via the same MicroPython flow (SPI + clock).
-2. **Release RP2350 GPIOs** to high-impedance (input mode) — the RP2350 shares the same pins as the PMOD headers. Without releasing them, the RP2350's output drivers would contend with the RPi's GPIO drivers.
-3. **Run test on RPi**: `test_pmod_loopback.py --board tt` uses `gpiod` to drive/read GPIOs directly through the PMOD HAT.
+The TT Demo Board's PMOD headers carry TinyTapeout I/O signals to/from the iCE40. PMOD cables connect these to the RPi's PMOD HAT ports (JA, JB, JC), mapping each signal to a specific RPi GPIO.
 
-The empirically confirmed TTDBv3 pin mapping through the PMOD HAT:
+**Inputs (RPi drives → FPGA receives):**
 
-| Signal | PMOD HAT Pin | RPi GPIO | Direction |
-|--------|-------------|----------|-----------|
-| ui_in[0] | JA1 | 6 | RPi drives |
-| ui_in[1] | JA7 | 12 | RPi drives |
-| ui_in[2] | JA8 | 16 | RPi drives |
-| ui_in[3] | JB1 | 5 | RPi drives |
-| ui_in[4] | JC1 | 17 | RPi drives |
-| ui_in[5] | JC3 | 4 | RPi drives |
-| ui_in[6] | JC4 | 14 | RPi drives |
-| ui_in[7] | JC9 | 15 | RPi drives |
-| uo_out[0] | JC2 | 18 | RPi reads |
-| uo_out[1] | JA10 | 21 | RPi reads |
-| uo_out[2] | JB8 | 8 | RPi reads |
-| uo_out[3] | JA9 | 20 | RPi reads |
-| uo_out[4] | JB2 | 11 | RPi reads |
-| uo_out[5] | JA3 | 19 | RPi reads |
-| uo_out[6] | JB4 | 10 | RPi reads |
-| uo_out[7] | JB3 | 9 | RPi reads |
+| TT Signal | iCE40 Pin | PMOD HAT | RPi GPIO |
+|-----------|-----------|----------|----------|
+| ui_in[0] | 13 | JA1 | 6 |
+| ui_in[1] | 19 | JA7 | 12 |
+| ui_in[2] | 18 | JA8 | 16 |
+| ui_in[3] | 21 | JB1 | 5 |
+| ui_in[4] | 23 | JC1 | 17 |
+| ui_in[5] | 25 | JC3 | 4 |
+| ui_in[6] | 26 | JC4 | 14 |
+| ui_in[7] | 27 | JC9 | 15 |
+
+**Outputs (FPGA drives → RPi reads):**
+
+| TT Signal | iCE40 Pin | PMOD HAT | RPi GPIO |
+|-----------|-----------|----------|----------|
+| uo_out[0] | 38 | JC2 | 18 |
+| uo_out[1] | 42 | JA10 | 21 |
+| uo_out[2] | 43 | JB8 | 8 |
+| uo_out[3] | 44 | JA9 | 20 |
+| uo_out[4] | 45 | JB2 | 11 |
+| uo_out[5] | 46 | JA3 | 19 |
+| uo_out[6] | 47 | JB4 | 10 |
+| uo_out[7] | 48 | JB3 | 9 |
+
+The UART design uses ui_in[3] (iCE40 pin 21, RPi GPIO 5) for serial RX and uo_out[4] (iCE40 pin 45, RPi GPIO 11) for serial TX.
 
 ## Test Execution and Result Detection
 
