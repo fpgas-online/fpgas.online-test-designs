@@ -100,24 +100,88 @@ The Arty has four PMOD connectors. The GPIO loopback test uses PMODA (input) and
 
 Source: `_connectors` in digilent_arty.py
 
-## PMOD Loopback: RPi GPIO ↔ FPGA
+## PMOD HAT Ports (RPi Side)
 
-PMOD cables connect the RPi's PMOD HAT to the Arty's PMOD connectors. The loopback gateware computes `pmodb = ~pmoda` (per-bit inversion).
+The Digilent PMOD HAT has three 12-pin PMOD ports. Each port connects to one Arty PMOD connector via a single cable.
 
-The following pairs are **empirically confirmed** by probing with the loopback bitstream loaded (4-transition verification on pi5):
+### PMOD HAT Port JA
 
-| # | Drive RPi GPIO | Drive HAT Pin | Read RPi GPIO | Read HAT Pin | Status |
-|---|---------------|---------------|---------------|-------------|--------|
-| 1 | GPIO19 | JA3 | GPIO26 | JA4 | Confirmed |
-| 2 | GPIO12 | JA7 | GPIO9 | JB3 | Confirmed |
-| 3 | GPIO20 | JA9 | GPIO3 | JC8 | Confirmed |
-| 4 | GPIO21 | JA10 | GPIO13 | JA2 | Confirmed |
-| 5 | GPIO11 | JB2 | GPIO10 | JB4 | Confirmed |
-| 6 | GPIO8 | JB8 | GPIO7 | JB7 | Confirmed |
+| PMOD Pin | RPi GPIO | RPi Header Pin | BCM Alt Function |
+|----------|----------|----------------|-----------------|
+| 1 (top) | GPIO6 | 31 | — |
+| 2 (top) | GPIO13 | 33 | — |
+| 3 (top) | GPIO19 | 35 | PCM_FS |
+| 4 (top) | GPIO26 | 37 | — |
+| 7 (bottom) | GPIO12 | 32 | PWM0 |
+| 8 (bottom) | GPIO16 | 36 | — |
+| 9 (bottom) | GPIO20 | 38 | PCM_DIN |
+| 10 (bottom) | GPIO21 | 40 | PCM_DOUT |
 
-The drive pins span HAT ports JA and JB. The read pins span JA, JB, and JC. The cable routing is not a simple port-to-port mapping — physical inspection of the cable wiring is needed to determine the exact routing.
+### PMOD HAT Port JB
 
-**TODO**: Determine the remaining 2 loopback pairs (8-bit loopback, only 6 pairs found). The missing pairs likely involve GPIOs that conflict with kernel drivers (I2C on GPIO0/1/2/3, GPCLK on GPIO4).
+| PMOD Pin | RPi GPIO | RPi Header Pin | BCM Alt Function |
+|----------|----------|----------------|-----------------|
+| 1 (top) | GPIO5 | 29 | — |
+| 2 (top) | GPIO11 | 23 | SPI0_SCLK |
+| 3 (top) | GPIO9 | 21 | SPI0_MISO |
+| 4 (top) | GPIO10 | 19 | SPI0_MOSI |
+| 7 (bottom) | GPIO7 | 26 | SPI0_CE1 |
+| 8 (bottom) | GPIO8 | 24 | SPI0_CE0 |
+| 9 (bottom) | GPIO0 | 27 | I2C0_SDA |
+| 10 (bottom) | GPIO1 | 28 | I2C0_SCL |
+
+Note: GPIO7-11 overlap with SPI0. The SPI kernel modules must be unloaded (`rmmod spidev spi_bcm2835`) before GPIO access. GPIO0/1 are I2C0 with hardware pull-ups.
+
+### PMOD HAT Port JC
+
+| PMOD Pin | RPi GPIO | RPi Header Pin | BCM Alt Function |
+|----------|----------|----------------|-----------------|
+| 1 (top) | GPIO17 | 11 | — |
+| 2 (top) | GPIO18 | 12 | PWM0 |
+| 3 (top) | GPIO4 | 7 | GPCLK0 |
+| 4 (top) | GPIO14 | 8 | TXD (UART) |
+| 7 (bottom) | GPIO2 | 3 | I2C1_SDA |
+| 8 (bottom) | GPIO3 | 5 | I2C1_SCL |
+| 9 (bottom) | GPIO15 | 10 | RXD (UART) |
+| 10 (bottom) | GPIO25 | 22 | — |
+
+Note: GPIO14/15 overlap with UART. GPIO2/3 are I2C1 with hardware pull-ups. GPIO4 is used as JTAG TCK in the NeTV2 configuration.
+
+### Unused RPi GPIOs
+
+These GPIOs are NOT assigned to any PMOD HAT port:
+
+| RPi GPIO | RPi Header Pin | Notes |
+|----------|----------------|-------|
+| GPIO22 | 15 | Free |
+| GPIO23 | 16 | Free |
+| GPIO24 | 18 | Free (SRST in NeTV2 JTAG config) |
+| GPIO27 | 13 | Free (TDI in NeTV2 JTAG config) |
+
+## PMOD Cable Routing: HAT ↔ Arty
+
+Each PMOD HAT port connects to one Arty PMOD connector via a single cable. The cable may reverse the pin order within each row (top row pins 1-4 and bottom row pins 7-10) depending on connector orientation.
+
+**TODO**: Physically inspect the cables on pi3/pi5/pi9 to determine:
+1. Which HAT port (JA/JB/JC) connects to which Arty PMOD (A/B/C/D)
+2. Whether the cables reverse pin order within each row
+
+## GPIO Loopback Test
+
+The loopback gateware computes `pmodb = ~pmoda` (per-bit inversion). The RPi drives PMODA pins and reads the inverted result on PMODB pins.
+
+The following pairs are **empirically confirmed** (4-transition verification on pi5 and pi9):
+
+| # | Drive RPi GPIO | Drive HAT Pin | Read RPi GPIO | Read HAT Pin |
+|---|---------------|---------------|---------------|-------------|
+| 1 | GPIO19 | JA3 | GPIO26 | JA4 |
+| 2 | GPIO12 | JA7 | GPIO9 | JB3 |
+| 3 | GPIO20 | JA9 | GPIO3 | JC8 |
+| 4 | GPIO21 | JA10 | GPIO13 | JA2 |
+| 5 | GPIO11 | JB2 | GPIO10 | JB4 |
+| 6 | GPIO8 | JB8 | GPIO7 | JB7 |
+
+6 of the expected 8 pairs are confirmed. The remaining 2 pairs could not be reliably probed due to GPIO conflicts with kernel drivers (I2C hardware pull-ups on GPIO0/1/2, SPI residual state on GPIO9-11 creating phantom readings).
 
 ### Pre-test Requirements
 
