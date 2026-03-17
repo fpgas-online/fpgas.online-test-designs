@@ -17,7 +17,9 @@ Source: [kosagi_fomu_evt.py](https://github.com/litex-hub/litex-boards/blob/mast
 
 ## Physical Form Factor
 
-The Fomu EVT is a tiny PCB that fits inside a USB-A connector. It has edge pads on the bottom for test jig contact. On pi17/pi21, the Fomu sits in a test jig with pogo pins that contact these pads, connecting signals to the RPi's GPIO header.
+The Fomu EVT is a tiny PCB that fits inside a USB-A connector. On pi17/pi21, the Fomu connects to the RPi in two ways:
+- **GPIO header**: The Fomu sits directly on the RPi GPIO header as a standard HAT, connecting UART and GPIO signals.
+- **USB**: The Fomu's USB-A connector plugs into the RPi's USB port (through the inline USB analyzer — OpenVizsla on pi17, Cythion/LUNA on pi21).
 
 ## Programming Interface
 
@@ -50,18 +52,16 @@ The USB interface is active only when the DFU bootloader or a USB-enabled bitstr
 
 ## USB Monitoring
 
-pi17 has an OpenVizsla USB sniffer connected for debugging USB issues.
+Each Fomu host has an inline USB protocol analyzer between the Fomu and the RPi USB port for capturing and debugging USB traffic.
 
-| Parameter | Value |
-|-----------|-------|
-| Device | OpenVizsla ov3p1 |
-| USB VID:PID | `1d50:607c` |
-| Serial | OV100662 |
-| USB hub port | 1-1.2 |
+| Host | Analyzer       | USB VID:PID |
+|------|----------------|-------------|
+| pi17 | OpenVizsla     | `1d50:607c` |
+| pi21 | Cythion/LUNA   | `16d0:05a5` |
 
 ## UART Interface
 
-The FPGA's serial pins connect to the RPi's GPIO UART via the test jig pogo pins. This is a direct connection — NOT through USB.
+The FPGA's serial pins connect to the RPi's GPIO UART via the GPIO header. This is a direct connection — NOT through USB.
 
 | Signal | iCE40 Pin | Direction | IO Standard |
 |--------|-----------|-----------|-------------|
@@ -76,7 +76,7 @@ The FPGA's serial pins connect to the RPi's GPIO UART via the test jig pogo pins
 
 On pi17/pi21 (RPi 3), `hciuart` is inactive, so `/dev/ttyAMA0` (PL011) is available on GPIO14/15 for FPGA UART. `serial-getty` must be masked (not just stopped) to prevent it from consuming serial data.
 
-**TODO**: Document the exact test jig wiring from Fomu pads (iCE40 pins 13, 21) to RPi GPIO14, GPIO15.
+**TODO**: Document the exact Fomu-to-RPi GPIO header pin mapping from iCE40 pins 13, 21 to RPi GPIO14, GPIO15.
 
 ### Pre-test Requirements
 
@@ -111,18 +111,18 @@ Note: `pmodb_n` shares pins with `touch_pins` (capacitive touch pads on the Fomu
 
 ### Confirmed Loopback Pair
 
-Only 1 of the 4 loopback pairs connects to RPi GPIO through the test jig:
+Only 1 of the 4 loopback pairs connects to RPi GPIO through the GPIO header:
 
 | Drive RPi GPIO | Read RPi GPIO | Status |
 |---------------|--------------|--------|
 | GPIO27 | GPIO9 | Confirmed |
 
-**TODO**: Determine which iCE40 pins GPIO27 and GPIO9 map to through the test jig. The test jig wiring needs physical inspection.
+**TODO**: Determine which iCE40 pins GPIO27 and GPIO9 map to through the GPIO header. The Fomu-to-RPi header pin mapping needs physical inspection.
 
 ### Pre-test Requirements
 
 - `rmmod spidev spi_bcm2835` — GPIO9 is SPI0_MISO; the kernel driver must be unloaded
-- The Fomu GPIO output has slow propagation (~5ms settle time through the test jig). The test uses a poll-until-stable loop.
+- The Fomu GPIO output has slow propagation (~5ms settle time). The test uses a poll-until-stable loop.
 
 ## SPI Flash
 
