@@ -15,73 +15,13 @@ The Digilent PMOD HAT Adapter connects standard Digilent PMOD modules to a Raspb
 
 Source: [Digilent PMOD HAT Reference Manual](https://digilent.com/reference/add-ons/pmod-hat/reference-manual)
 
-## PMOD Standard Connector Definition
-
-### 6-Pin PMOD (Half PMOD)
-
-```
-┌───────────────────────┐
-│ Pin1  Pin2  Pin3  Pin4│  ← 4 signal pins
-│ GND               VCC│  ← Power
-└───────────────────────┘
-```
-
-| Pin | Function |
-|-----|----------|
-| 1 | Signal (I/O 1) |
-| 2 | Signal (I/O 2) |
-| 3 | Signal (I/O 3) |
-| 4 | Signal (I/O 4) |
-| 5 | GND |
-| 6 | VCC (3.3V) |
-
-### 12-Pin PMOD (Full PMOD)
-
-```
-┌───────────────────────────────────────────┐
-│ Pin1  Pin2  Pin3  Pin4   GND   VCC        │  ← Top row
-│ Pin7  Pin8  Pin9  Pin10  GND   VCC        │  ← Bottom row
-└───────────────────────────────────────────┘
-```
-
-| Pin | Function |
-|-----|----------|
-| 1 | Signal (I/O 1) |
-| 2 | Signal (I/O 2) |
-| 3 | Signal (I/O 3) |
-| 4 | Signal (I/O 4) |
-| 5 | GND |
-| 6 | VCC (3.3V) |
-| 7 | Signal (I/O 5) |
-| 8 | Signal (I/O 6) |
-| 9 | Signal (I/O 7) |
-| 10 | Signal (I/O 8) |
-| 11 | GND |
-| 12 | VCC (3.3V) |
-
-Source: [Digilent PMOD Specification](https://digilent.com/reference/pmod/specification)
-
-## PMOD Types
-
-The Digilent PMOD specification defines several standard types based on pin function assignment:
-
-| Type | Name | Pin 1 | Pin 2 | Pin 3 | Pin 4 |
-|------|------|-------|-------|-------|-------|
-| Type 1 | GPIO | I/O 1 | I/O 2 | I/O 3 | I/O 4 |
-| Type 2 | SPI | CS | MOSI | MISO | SCK |
-| Type 3 | UART | CTS | TX | RX | RTS |
-| Type 5 | H-bridge | DIR | EN | SA | SB |
-| Type 6 | I2C | INT | RESET | SCL | SDA |
-
-Type 1 (GPIO) is the most common and is used for general-purpose I/O including loopback testing.
-
-Source: [Digilent PMOD Specification](https://digilent.com/reference/pmod/specification)
+For the PMOD connector pinouts, interface types, and electrical specification, see [pmod.md](pmod.md).
 
 ## RPi GPIO to PMOD Pin Mapping
 
 The PMOD HAT maps Raspberry Pi GPIO pins to three PMOD ports (JA, JB, JC). Each PMOD port has 8 signal pins (top row pins 1-4 and bottom row pins 7-10).
 
-### Port JA (SPI Type 2 — active chip select CE0)
+### Port JA (top row: Type 2 SPI with CE0)
 
 | PMOD Pin | Signal | RPi GPIO | RPi Header Pin | BCM Function   |
 |----------|--------|----------|----------------|----------------|
@@ -96,7 +36,7 @@ The PMOD HAT maps Raspberry Pi GPIO pins to three PMOD ports (JA, JB, JC). Each 
 
 (\*) Shared with JB pins 2-4 — see note below.
 
-### Port JB (SPI Type 2 — active chip select CE1, plus I2C)
+### Port JB (top row: Type 2 SPI with CE1; bottom row has I2C1)
 
 | PMOD Pin | Signal | RPi GPIO | RPi Header Pin | BCM Function   |
 |----------|--------|----------|----------------|----------------|
@@ -111,7 +51,7 @@ The PMOD HAT maps Raspberry Pi GPIO pins to three PMOD ports (JA, JB, JC). Each 
 
 (\*) JA pins 2-4 and JB pins 2-4 are the **same physical GPIO lines** (GPIO10, GPIO9, GPIO11 = SPI0 MOSI/MISO/SCLK). They share a single SPI bus with different chip selects (JA1=CE0, JB1=CE1). When using these ports for GPIO (not SPI), pins 2-4 of both ports will read/drive the same signal.
 
-### Port JC (UART Type 3 — plus general GPIO)
+### Port JC (top row: Type 4 UART)
 
 | PMOD Pin | Signal | RPi GPIO | RPi Header Pin | BCM Function |
 |----------|--------|----------|----------------|--------------|
@@ -128,6 +68,60 @@ The PMOD HAT maps Raspberry Pi GPIO pins to three PMOD ports (JA, JB, JC). Each 
 - GPIO14/15 (JC2/JC3) are the default UART TX/RX pins. If using GPIO UART for other purposes, these pins are not available for PMOD.
 
 Source: [DesignSpark.Pmod HAT.py driver](https://github.com/DesignSparkRS/DesignSpark.Pmod/blob/master/DesignSpark/Pmod/HAT.py), [Digilent PMOD HAT Schematic](https://digilent.com/reference/_media/learn/documentation/schematics/pmod_hat_adapter_sch.pdf), [Digilent PMOD HAT Reference Manual](https://digilent.com/reference/add-ons/pmod-hat/reference-manual)
+
+## PMOD Type Conformance
+
+Analysis of how each port's RPi hardware controller mapping aligns with the standard [PMOD interface types](pmod.md):
+
+### JA/JB Top Row — Type 2 (SPI): Exact Match
+
+The top row (pins 1-4) of both JA and JB exactly matches the **Type 2 (SPI)** pinout when the RPi's SPI0 hardware controller is enabled:
+
+| PMOD Pin | Type 2 Standard | JA RPi Function | JB RPi Function |
+|----------|-----------------|-----------------|-----------------|
+| 1        | SS (Out)        | SPI0_CE0        | SPI0_CE1        |
+| 2        | MOSI (Out)      | SPI0_MOSI       | SPI0_MOSI (\*)  |
+| 3        | MISO (In)       | SPI0_MISO       | SPI0_MISO (\*)  |
+| 4        | SCK (Out)       | SPI0_SCLK       | SPI0_SCLK (\*)  |
+
+(\*) JA and JB share the same SPI0 bus lines (GPIO10/9/11) — only the chip select differs (CE0 vs CE1). This is standard SPI multi-device bus topology.
+
+### JC Top Row — Type 4 (UART): Exact Match
+
+The top row (pins 1-4) of JC exactly matches the **Type 4 (UART)** pinout when the RPi's UART0 hardware controller is enabled:
+
+| PMOD Pin | Type 4 Standard | JC RPi Function |
+|----------|-----------------|-----------------|
+| 1        | CTS (In)        | CTS0            |
+| 2        | TXD (Out)       | TXD0            |
+| 3        | RXD (In)        | RXD0            |
+| 4        | RTS (Out)       | RTS0            |
+
+Note: the port was previously labelled "Type 3" but the pin ordering (CTS, TXD, RXD, RTS) matches **Type 4**, not Type 3 (which has CTS, RTS, RXD, TXD in a different order with different direction conventions).
+
+### Bottom Rows — No Standard Type Match
+
+The bottom rows (pins 7-10) of all three ports do **not** conform to any standard expanded PMOD type:
+
+| Port | Pin 7     | Pin 8      | Pin 9     | Pin 10    | Standard Type? |
+|------|-----------|------------|-----------|-----------|----------------|
+| JA   | PCM_FS    | PCM_DOUT   | PCM_DIN   | PCM_CLK   | No — PCM/I2S   |
+| JB   | GPIO26    | PWM1       | I2C1_SCL  | I2C1_SDA  | No — mixed     |
+| JC   | GPCLK0    | PWM0       | GPIO5     | GPIO6     | No — mixed     |
+
+- **JA bottom**: The 4 PCM/I2S pins are grouped together, but this is not a defined PMOD type.
+- **JB bottom**: I2C1 is on pins 9-10 (SCL, SDA), but Type 2A expects INT and RESET on pins 7-8 (not present). The I2C signals are also in non-standard pin positions.
+- **JC bottom**: Type 4A would expect INT, RESET, N/S, N/S on pins 7-10, which is not the case.
+
+### Summary
+
+| Port | Top Row (1-4) | Bottom Row (7-10) | Full 12-pin Type? |
+|------|---------------|--------------------|--------------------|
+| JA   | Type 2 (SPI)  | PCM/I2S (custom)   | No                 |
+| JB   | Type 2 (SPI)  | Mixed + I2C        | No                 |
+| JC   | Type 4 (UART) | Mixed + PWM        | No                 |
+
+Only the top rows conform to standard PMOD types. The bottom rows provide useful RPi hardware peripherals (PCM, I2C, PWM) but not in standard PMOD type positions.
 
 ## Unused GPIO Pins
 
@@ -194,6 +188,6 @@ When connecting the PMOD HAT to an Arty A7 via ribbon cables (HAT JA→Arty JA, 
 
 ## References
 
+- PMOD Interface Specification: [pmod.md](pmod.md)
 - Digilent PMOD HAT Reference Manual: <https://digilent.com/reference/add-ons/pmod-hat/reference-manual>
-- Digilent PMOD Specification: <https://digilent.com/reference/pmod/specification>
 - Digilent PMOD HAT Product Page: <https://digilent.com/shop/pmod-hat-adapter/>
