@@ -160,28 +160,67 @@ These GPIOs are NOT assigned to any PMOD HAT port:
 
 ## PMOD Cable Routing: HAT ↔ Arty
 
-Each PMOD HAT port connects to one Arty PMOD connector via a single cable. The cable may reverse the pin order within each row (top row pins 1-4 and bottom row pins 7-10) depending on connector orientation.
+Determined automatically using the `pmod-pin-id` design, which transmits each FPGA PMOD pin's name as 1200-baud UART. The RPi reads each GPIO and decodes the pin name. Cables do NOT route HAT ports to Arty PMODs 1:1 — the mapping is non-trivial and differs per host.
 
-**TODO**: Physically inspect the cables on pi3/pi5/pi9 to determine:
-1. Which HAT port (JA/JB/JC) connects to which Arty PMOD (A/B/C/D)
-2. Whether the cables reverse pin order within each row
+### Pi9 (21 of 24 pins confirmed, 2026-03-17)
+
+| RPi GPIO | HAT Port:Pin | Arty PMOD Pin | FPGA Pin |
+|----------|-------------|---------------|----------|
+| GPIO6    | JA:01       | JC10          | U13      |
+| GPIO13   | JA:02       | JB08          | J18      |
+| GPIO19   | JA:03       | JA07          | K16      |
+| GPIO26   | JA:04       | JB07          | J17      |
+| GPIO12   | JA:07       | JC08          | V14      |
+| GPIO16   | JA:08       | JC02          | V12      |
+| GPIO20   | JA:09       | JA09          | A18      |
+| GPIO21   | JA:10       | JA08          | B18      |
+| GPIO5    | JB:01       | JC09          | T13      |
+| GPIO11   | JB:02       | JB04          | C15      |
+| GPIO9    | JB:03       | JB03          | D15      |
+| GPIO10   | JB:04       | JB02          | E16      |
+| GPIO7    | JB:07       | JB01          | E15      |
+| GPIO8    | JB:08       | JA01          | G13      |
+| GPIO0    | JB:09       | (unreadable)  | —        |
+| GPIO1    | JB:10       | (unreadable)  | —        |
+| GPIO17   | JC:01       | JC04          | V11      |
+| GPIO18   | JC:02       | JA10          | K16      |
+| GPIO4    | JC:03       | JC07          | U14      |
+| GPIO14   | JC:04       | JC01          | U12      |
+| GPIO2    | JC:07       | JB10          | J15      |
+| GPIO3    | JC:08       | JB09          | K15      |
+| GPIO15   | JC:09       | JC03          | V10      |
+| GPIO25   | JC:10       | (no signal)   | —        |
+
+GPIO0/1: I2C0 hardware pull-ups (~1.8kΩ) hold lines high, masking FPGA output. Likely JA02/JA03/JA04.
+GPIO25: No signal detected — may not be connected to an Arty PMOD pin.
+Arty JD: Not reachable (HAT has only 3 ports for 4 Arty PMODs).
+
+### Pi3 (12 of 24 pins confirmed, 2026-03-17)
+
+| RPi GPIO | HAT Port:Pin | Arty PMOD Pin | FPGA Pin |
+|----------|-------------|---------------|----------|
+| GPIO13   | JA:02       | JB08          | J18      |
+| GPIO19   | JA:03       | JA07          | K16      |
+| GPIO26   | JA:04       | JB07          | J17      |
+| GPIO20   | JA:09       | JA09          | A18      |
+| GPIO21   | JA:10       | JA08          | B18      |
+| GPIO11   | JB:02       | JB04          | C15      |
+| GPIO9    | JB:03       | JC03          | V10      |
+| GPIO10   | JB:04       | JB02          | E16      |
+| GPIO7    | JB:07       | JB01          | E15      |
+| GPIO8    | JB:08       | JA01          | G13      |
+| GPIO2    | JC:07       | JB10          | J15      |
+| GPIO3    | JC:08       | JB09          | K15      |
+
+Pi3 has fewer reachable pins — likely has fewer PMOD cables connected or different routing. Note GPIO9 maps to JC03 on pi3 but JB03 on pi9, confirming per-host cable differences.
+
+### Pi5 (offline, 2026-03-17)
+
+Pi5 (10.21.0.105) was unreachable during scanning — host appears powered off.
 
 ## GPIO Loopback Test
 
-The loopback gateware computes `pmodb = ~pmoda` (per-bit inversion). The RPi drives PMODA pins and reads the inverted result on PMODB pins.
-
-The following pairs are **empirically confirmed** (4-transition verification on pi5 and pi9):
-
-| # | Drive RPi GPIO | Drive HAT Pin | Read RPi GPIO | Read HAT Pin |
-|---|---------------|---------------|---------------|-------------|
-| 1 | GPIO19 | JA3 | GPIO26 | JA4 |
-| 2 | GPIO12 | JA7 | GPIO9 | JB3 |
-| 3 | GPIO20 | JA9 | GPIO3 | JC8 |
-| 4 | GPIO21 | JA10 | GPIO13 | JA2 |
-| 5 | GPIO11 | JB2 | GPIO10 | JB4 |
-| 6 | GPIO8 | JB8 | GPIO7 | JB7 |
-
-6 of the expected 8 pairs are confirmed. The remaining 2 pairs could not be reliably probed due to GPIO conflicts with kernel drivers (I2C hardware pull-ups on GPIO0/1/2, SPI residual state on GPIO9-11 creating phantom readings).
+The loopback gateware computes `pmodb = ~pmoda` (per-bit inversion). The RPi drives PMODA pins and reads the inverted result on PMODB pins. The loopback pairs can be derived from the per-host PMOD cable routing tables above.
 
 ### Pre-test Requirements
 
