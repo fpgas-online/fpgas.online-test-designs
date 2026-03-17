@@ -94,20 +94,20 @@ The iCE40 is programmed via the RP2350 over USB CDC, not directly from the RPi.
 
 ### uio (Bidirectional I/O)
 
-8-bit bidirectional bus.
+8-bit bidirectional bus. Connected through the TT board's third PMOD header to PMOD HAT port JB.
 
-| Bit | iCE40 Pin |
-|-----|-----------|
-| uio[0] | 2 |
-| uio[1] | 4 |
-| uio[2] | 3 |
-| uio[3] | 6 |
-| uio[4] | 9 |
-| uio[5] | 10 |
-| uio[6] | 11 |
-| uio[7] | 12 |
+| Bit    | iCE40 Pin | RP2350 GPIO | PMOD HAT Pin | RPi GPIO |
+|--------|-----------|-------------|--------------|----------|
+| uio[0] | 2         | 25          | JB1          | 7        |
+| uio[1] | 4         | 26          | JB2          | 10       |
+| uio[2] | 3         | 27          | JB3          | 9        |
+| uio[3] | 6         | 28          | JB4          | 11       |
+| uio[4] | 9         | 29          | JB7          | 26       |
+| uio[5] | 10        | 30          | JB8          | 13       |
+| uio[6] | 11        | 31          | JB9          | 3        |
+| uio[7] | 12        | 32          | JB10         | 2        |
 
-**TODO**: Determine PMOD HAT mapping for uio pins (not yet probed).
+RP2350 GPIO numbers follow the sequential pattern (ui_in=17-24, uio=25-32, uo_out=33-40). HAT JB pins 2-4 (GPIO10, 9, 11) are shared with HAT JA pins 2-4 — `rmmod spidev spi_bcm2835` required.
 
 ## UART Interface
 
@@ -175,4 +175,4 @@ The TT Demo PCB has a 7-segment LED display connected to uo_out[0:6]. These shar
 
 - TT FPGA platform definition: [tt_fpga_platform.py](../../designs/_shared/tt_fpga_platform.py)
 - TinyTapeout PCB Specs: [tinytapeout.com/specs/pcb](https://tinytapeout.com/specs/pcb/)
-- PMOD HAT Documentation: [pmod-hat.md](pmod-hat.md)
+- PMOD HAT Documentation: [rpi-hat-pmod.md](rpi-hat-pmod.md)
