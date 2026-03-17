@@ -41,7 +41,6 @@ BOARD_CONFIGS = {
         "drive_pins": [19, 12, 20, 21, 11, 8],
         "read_pins": [26, 9, 3, 13, 10, 7],
         "width": 6,
-        "pre_test": "rmmod spidev spi_bcm2835 2>&1; true",
     },
     "netv2": {
         "drive_pins": [14],  # RPi GPIO14 (TX) -> FPGA E13 (RX)
@@ -65,7 +64,6 @@ BOARD_CONFIGS = {
         "drive_pins": [6, 12, 16, 5, 17, 4, 14, 15],
         "read_pins": [18, 21, 8, 20, 11, 19, 10, 9],
         "width": 8,
-        "pre_test": "rmmod spidev spi_bcm2835 2>&1; true",
     },
 }
 
