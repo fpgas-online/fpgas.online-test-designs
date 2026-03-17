@@ -192,4 +192,5 @@ The TT Demo PCB has a 7-segment LED display connected to uo_out[0:6]. These shar
 - TT FPGA platform definition: [tt_fpga_platform.py](../../designs/_shared/tt_fpga_platform.py)
 - TinyTapeout PCB Specs: [tinytapeout.com/specs/pcb](https://tinytapeout.com/specs/pcb/)
 - PMOD Interface Specification: [pmod.md](pmod.md)
+- TinyTapeout PMOD Connector Standards: [pmod-tt.md](pmod-tt.md)
 - PMOD HAT Adapter (RPi): [rpi-hat-pmod.md](rpi-hat-pmod.md)
