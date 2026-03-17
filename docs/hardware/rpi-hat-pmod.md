@@ -114,35 +114,22 @@ The PMOD HAT does not include any level shifters or buffers -- signals pass dire
 
 ## Usage in fpgas.online
 
-### PMOD Loopback Test
+The PMOD HAT is installed on RPi hosts that have **Arty A7** or **Tiny Tapeout FPGA Demo Board** hardware attached. It connects the RPi's GPIO pins to the PMOD connectors on these FPGA boards, enabling the RPi to directly drive and read FPGA I/O pins for testing (GPIO loopback, SPI, UART, etc.).
 
-The primary use of the PMOD HAT in the test infrastructure is the PMOD loopback test:
+### Wiring
 
-1. The RPi drives known patterns out through its GPIO pins to the PMOD HAT
-2. The PMOD HAT connector is plugged into a PMOD port on the FPGA board (e.g., Arty A7's JA)
-3. The FPGA design echoes/loops back the signals (or the signals are looped back externally)
-4. The RPi reads back the signals and verifies correctness
+Ribbon cables connect straight through between matching port names:
 
-This tests the end-to-end signal path: RPi GPIO -> PMOD HAT -> cable -> FPGA PMOD port -> FPGA fabric -> (loopback) -> FPGA PMOD port -> cable -> PMOD HAT -> RPi GPIO.
+| HAT Port | FPGA Board Port | Cable       |
+| -------- | --------------- | ----------- |
+| JA       | JA              | 12-pin PMOD |
+| JB       | JB              | 12-pin PMOD |
+| JC       | JC              | 12-pin PMOD |
 
-### Connecting to Arty A7
+The full RPi GPIO → PMOD pin → FPGA pin mappings for each board are documented in:
 
-When connecting the PMOD HAT to an Arty A7 via ribbon cables (HAT JA→Arty JA, JB→Arty JB, JC→Arty JC), the RPi GPIO pins map to FPGA pins as follows:
-
-**HAT JA → Arty JA:**
-
-| PMOD Pin | RPi GPIO | FPGA Pin |
-| -------- | -------- | -------- |
-| 1        | GPIO8    | G13      |
-| 2        | GPIO10   | B11 (\*) |
-| 3        | GPIO9    | A11 (\*) |
-| 4        | GPIO11   | D12 (\*) |
-| 7        | GPIO19   | D13      |
-| 8        | GPIO21   | B18      |
-| 9        | GPIO20   | A18      |
-| 10       | GPIO18   | K16      |
-
-(\*) Pins 2-4 are shared with JB — when both cables are connected, these GPIOs also drive/read Arty JB pins 2-4 (E16, D15, C15).
+- **Arty A7**: [arty-pin-mapping.md](arty-pin-mapping.md)
+- **TT FPGA Demo Board**: [tt-fpga-pin-mapping.md](tt-fpga-pin-mapping.md)
 
 ## References
 
