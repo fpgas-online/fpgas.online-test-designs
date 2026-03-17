@@ -17,14 +17,14 @@ TinyTapeout projects have three groups of 8 signals (24 total):
 The TT demo board has three 12-pin PMOD connectors on the bottom edge, one per signal group. Looking at the board from the top:
 
 ```
-            ┌──────────────────────────────────────────────────────┐
-            │                   TT Demo Board                      │
-            │                                                      │
-            ├──────────┬──────────┬──────────┐                     │
-            │ ui_in    │ uio      │ uo_out   │                     │
-            │ (input)  │ (bidir)  │ (output) │                     │
-            └──────────┴──────────┴──────────┘
-              Left       Middle     Right
+┌─────────────────────────────────────────┐
+│              TT Demo Board              │
+│                                         │
+├───────────┬───────────┬───────────┐     │
+│  ui_in    │  uio      │  uo_out   │     │
+│  (input)  │  (bidir)  │  (output) │     │
+└───────────┴───────────┴───────────┘
+   Left        Middle      Right
 ```
 
 Each connector maps signals straight through: IO1=bit[0], IO2=bit[1], ... IO8=bit[7].
@@ -155,63 +155,87 @@ The latest demo board uses an RP2350B. Each TT signal maps to a specific RP2350 
 
 Control signals: reset = GPIO14, clock = GPIO16.
 
-| TT Signal   | PMOD Header | PMOD Pin | RP2350 GPIO | I2C       | SPI       | UART      |
-|-------------|-------------|----------|-------------|-----------|-----------|-----------|
-| ui_in[0]    | Input       | 1        | GPIO17      |           | SPI0.cs   |           |
-| ui_in[1]    | Input       | 2        | GPIO18      |           | SPI0.sck  |           |
-| ui_in[2]    | Input       | 3        | GPIO19      |           | SPI0.tx   |           |
-| ui_in[3]    | Input       | 4        | GPIO20      |           |           | UART1.tx  |
-| ui_in[4]    | Input       | 7        | GPIO21      |           | SPI0.cs   |           |
-| ui_in[5]    | Input       | 8        | GPIO22      |           | SPI0.sck  |           |
-| ui_in[6]    | Input       | 9        | GPIO23      |           | SPI0.tx   | UART1.rts |
-| ui_in[7]    | Input       | 10       | GPIO24      |           |           |           |
-| uio[0]      | Bidir       | 1        | GPIO25      | I2C0.scl  | SPI1.cs   | UART1.rx  |
-| uio[1]      | Bidir       | 2        | GPIO26      | I2C1.sda  | SPI1.sck  | UART1.cts |
-| uio[2]      | Bidir       | 3        | GPIO27      | I2C1.scl  | SPI1.tx   | UART0.rts |
-| uio[3]      | Bidir       | 4        | GPIO28      | I2C0.sda  | SPI1.rx   | UART0.tx  |
-| uio[4]      | Bidir       | 7        | GPIO29      | I2C0.scl  | SPI1.cs   | UART0.rx  |
-| uio[5]      | Bidir       | 8        | GPIO30      | I2C1.sda  | SPI1.sck  | UART0.cts |
-| uio[6]      | Bidir       | 9        | GPIO31      | I2C1.scl  | SPI1.tx   | UART0.rts |
-| uio[7]      | Bidir       | 10       | GPIO32      |           |           |           |
-| uo_out[0]   | Output      | 1        | GPIO33      |           |           | UART0.rx  |
-| uo_out[1]   | Output      | 2        | GPIO34      |           |           | UART0.cts |
-| uo_out[2]   | Output      | 3        | GPIO35      |           |           |           |
-| uo_out[3]   | Output      | 4        | GPIO36      |           | SPI0.rx   |           |
-| uo_out[4]   | Output      | 7        | GPIO37      |           |           | UART1.rx  |
-| uo_out[5]   | Output      | 8        | GPIO38      |           |           | UART1.cts |
-| uo_out[6]   | Output      | 9        | GPIO39      |           |           |           |
-| uo_out[7]   | Output      | 10       | GPIO40      |           | SPI0.rx   |           |
+### Input PMOD (ui_in)
+
+| TT Signal   | PMOD Pin | RP2350 GPIO | I2C | SPI       | UART      |
+|-------------|----------|-------------|-----|-----------|-----------|
+| ui_in[0]    | 1        | GPIO17      |     | SPI0.cs   |           |
+| ui_in[1]    | 2        | GPIO18      |     | SPI0.sck  |           |
+| ui_in[2]    | 3        | GPIO19      |     | SPI0.tx   |           |
+| ui_in[3]    | 4        | GPIO20      |     |           | UART1.tx  |
+| ui_in[4]    | 7        | GPIO21      |     | SPI0.cs   |           |
+| ui_in[5]    | 8        | GPIO22      |     | SPI0.sck  |           |
+| ui_in[6]    | 9        | GPIO23      |     | SPI0.tx   | UART1.rts |
+| ui_in[7]    | 10       | GPIO24      |     |           |           |
+
+### Bidirectional PMOD (uio)
+
+| TT Signal   | PMOD Pin | RP2350 GPIO | I2C      | SPI       | UART      |
+|-------------|----------|-------------|----------|-----------|-----------|
+| uio[0]      | 1        | GPIO25      | I2C0.scl | SPI1.cs   | UART1.rx  |
+| uio[1]      | 2        | GPIO26      | I2C1.sda | SPI1.sck  | UART1.cts |
+| uio[2]      | 3        | GPIO27      | I2C1.scl | SPI1.tx   | UART0.rts |
+| uio[3]      | 4        | GPIO28      | I2C0.sda | SPI1.rx   | UART0.tx  |
+| uio[4]      | 7        | GPIO29      | I2C0.scl | SPI1.cs   | UART0.rx  |
+| uio[5]      | 8        | GPIO30      | I2C1.sda | SPI1.sck  | UART0.cts |
+| uio[6]      | 9        | GPIO31      | I2C1.scl | SPI1.tx   | UART0.rts |
+| uio[7]      | 10       | GPIO32      |          |           |           |
+
+### Output PMOD (uo_out)
+
+| TT Signal   | PMOD Pin | RP2350 GPIO | I2C | SPI       | UART      |
+|-------------|----------|-------------|-----|-----------|-----------|
+| uo_out[0]   | 1        | GPIO33      |     |           | UART0.rx  |
+| uo_out[1]   | 2        | GPIO34      |     |           | UART0.cts |
+| uo_out[2]   | 3        | GPIO35      |     |           |           |
+| uo_out[3]   | 4        | GPIO36      |     | SPI0.rx   |           |
+| uo_out[4]   | 7        | GPIO37      |     |           | UART1.rx  |
+| uo_out[5]   | 8        | GPIO38      |     |           | UART1.cts |
+| uo_out[6]   | 9        | GPIO39      |     |           |           |
+| uo_out[7]   | 10       | GPIO40      |     | SPI0.rx   |           |
 
 ## RP2040 GPIO Mapping (Demo Board v2, TT06-TT08)
 
 Control signals: clock = GPIO0, reset = GPIO1. TT04/TT05 had a discrete MUX sharing uo_out[0:3] with control signals; TT06+ removed it.
 
-| TT Signal   | PMOD Header | PMOD Pin | RP2040 GPIO | I2C       | SPI       | UART      |
-|-------------|-------------|----------|-------------|-----------|-----------|-----------|
-| ui_in[0]    | Input       | 1        | GPIO9       |           | SPI1.cs   |           |
-| ui_in[1]    | Input       | 2        | GPIO10      |           | SPI1.sck  |           |
-| ui_in[2]    | Input       | 3        | GPIO11      |           | SPI1.tx   |           |
-| ui_in[3]    | Input       | 4        | GPIO12      |           | SPI1.rx   | UART0.tx  |
-| ui_in[4]    | Input       | 7        | GPIO17      |           | SPI0.cs   |           |
-| ui_in[5]    | Input       | 8        | GPIO18      |           | SPI0.sck  |           |
-| ui_in[6]    | Input       | 9        | GPIO19      |           | SPI0.tx   |           |
-| ui_in[7]    | Input       | 10       | GPIO20      |           | SPI0.rx   | UART1.tx  |
-| uio[0]      | Bidir       | 1        | GPIO21      | I2C0.scl  |           | UART1.rx  |
-| uio[1]      | Bidir       | 2        | GPIO22      |           |           |           |
-| uio[2]      | Bidir       | 3        | GPIO23      |           |           |           |
-| uio[3]      | Bidir       | 4        | GPIO24      |           | SPI1.rx   | UART1.tx  |
-| uio[4]      | Bidir       | 7        | GPIO25      |           | SPI1.cs   | UART1.rx  |
-| uio[5]      | Bidir       | 8        | GPIO26      |           | SPI1.sck  |           |
-| uio[6]      | Bidir       | 9        | GPIO27      |           | SPI1.tx   |           |
-| uio[7]      | Bidir       | 10       | GPIO28      |           | SPI1.rx   |           |
-| uo_out[0]   | Output      | 1        | GPIO5       |           |           |           |
-| uo_out[1]   | Output      | 2        | GPIO6       |           |           |           |
-| uo_out[2]   | Output      | 3        | GPIO7       |           | SPI0.tx   |           |
-| uo_out[3]   | Output      | 4        | GPIO8       |           | SPI0.rx   | UART1.tx  |
-| uo_out[4]   | Output      | 7        | GPIO13      |           | SPI1.cs   |           |
-| uo_out[5]   | Output      | 8        | GPIO14      |           | SPI1.sck  |           |
-| uo_out[6]   | Output      | 9        | GPIO15      |           | SPI1.tx   |           |
-| uo_out[7]   | Output      | 10       | GPIO16      |           | SPI1.rx   | UART0.tx  |
+### Input PMOD (ui_in)
+
+| TT Signal   | PMOD Pin | RP2040 GPIO | I2C | SPI       | UART      |
+|-------------|----------|-------------|-----|-----------|-----------|
+| ui_in[0]    | 1        | GPIO9       |     | SPI1.cs   |           |
+| ui_in[1]    | 2        | GPIO10      |     | SPI1.sck  |           |
+| ui_in[2]    | 3        | GPIO11      |     | SPI1.tx   |           |
+| ui_in[3]    | 4        | GPIO12      |     | SPI1.rx   | UART0.tx  |
+| ui_in[4]    | 7        | GPIO17      |     | SPI0.cs   |           |
+| ui_in[5]    | 8        | GPIO18      |     | SPI0.sck  |           |
+| ui_in[6]    | 9        | GPIO19      |     | SPI0.tx   |           |
+| ui_in[7]    | 10       | GPIO20      |     | SPI0.rx   | UART1.tx  |
+
+### Bidirectional PMOD (uio)
+
+| TT Signal   | PMOD Pin | RP2040 GPIO | I2C      | SPI       | UART      |
+|-------------|----------|-------------|----------|-----------|-----------|
+| uio[0]      | 1        | GPIO21      | I2C0.scl |           | UART1.rx  |
+| uio[1]      | 2        | GPIO22      |          |           |           |
+| uio[2]      | 3        | GPIO23      |          |           |           |
+| uio[3]      | 4        | GPIO24      |          | SPI1.rx   | UART1.tx  |
+| uio[4]      | 7        | GPIO25      |          | SPI1.cs   | UART1.rx  |
+| uio[5]      | 8        | GPIO26      |          | SPI1.sck  |           |
+| uio[6]      | 9        | GPIO27      |          | SPI1.tx   |           |
+| uio[7]      | 10       | GPIO28      |          | SPI1.rx   |           |
+
+### Output PMOD (uo_out)
+
+| TT Signal   | PMOD Pin | RP2040 GPIO | I2C | SPI       | UART      |
+|-------------|----------|-------------|-----|-----------|-----------|
+| uo_out[0]   | 1        | GPIO5       |     |           |           |
+| uo_out[1]   | 2        | GPIO6       |     |           |           |
+| uo_out[2]   | 3        | GPIO7       |     | SPI0.tx   |           |
+| uo_out[3]   | 4        | GPIO8       |     | SPI0.rx   | UART1.tx  |
+| uo_out[4]   | 7        | GPIO13      |     | SPI1.cs   |           |
+| uo_out[5]   | 8        | GPIO14      |     | SPI1.sck  |           |
+| uo_out[6]   | 9        | GPIO15      |     | SPI1.tx   |           |
+| uo_out[7]   | 10       | GPIO16      |     | SPI1.rx   | UART0.tx  |
 
 ## Community PMOD Boards
 
