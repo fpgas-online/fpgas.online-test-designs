@@ -32,13 +32,16 @@ import gpiod
 
 BOARD_CONFIGS = {
     "arty": {
-        # Empirically confirmed loopback pairs (100% confidence):
-        # Two PMOD cables: RPi HAT JA -> Arty JA, RPi HAT JC -> Arty JB
-        # FPGA does: pmodb = ~pmoda (per-bit inversion)
-        # 4 of 8 pairs confirmed; others need further investigation.
-        "drive_pins": [8, 19, 20, 21],  # RPi -> FPGA pmoda inputs
-        "read_pins": [7, 26, 3, 13],  # FPGA pmodb outputs -> RPi
-        "width": 4,
+        # Empirically confirmed loopback pairs (4-transition verification on pi5):
+        # FPGA does: pmodb = ~pmoda (per-bit inversion, 8-bit)
+        # Cable routing is non-trivial (pairs span HAT ports JA, JB, JC).
+        # 6 of 8 pairs confirmed; remaining 2 likely blocked by I2C/GPCLK drivers.
+        #   drive: JA3, JA7, JA9, JA10, JB2, JB8
+        #   read:  JA4, JB3, JC8, JA2,  JB4, JB7
+        "drive_pins": [19, 12, 20, 21, 11, 8],
+        "read_pins": [26, 9, 3, 13, 10, 7],
+        "width": 6,
+        "pre_test": "rmmod spidev spi_bcm2835 2>&1; true",
     },
     "netv2": {
         "drive_pins": [14],  # RPi GPIO14 (TX) -> FPGA E13 (RX)
