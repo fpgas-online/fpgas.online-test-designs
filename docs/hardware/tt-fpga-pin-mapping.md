@@ -13,13 +13,13 @@ The RP2350 programs the iCE40 via SPI and provides a 50 MHz clock. After program
 
 ## FPGA Device
 
-| Parameter | Value |
-|-----------|-------|
-| FPGA | Lattice iCE40UP5K-SG48 |
-| Package | SG48 (48-pin QFN) |
-| Clock | 50 MHz from RP2350 PWM (GPIO16) |
-| Block RAM | 30 EBR blocks (15 KB total) |
-| SPRAM | 128 KB (4 × 32 KB) |
+| Parameter | Value                                  |
+| --------- | -------------------------------------- |
+| FPGA      | Lattice iCE40UP5K-SG48                 |
+| Package   | SG48 (48-pin QFN)                      |
+| Clock     | 50 MHz from RP2350 PWM (GPIO16)        |
+| Block RAM | 30 EBR blocks (15 KB total)            |
+| SPRAM     | 128 KB (4 × 32 KB)                     |
 | Toolchain | icestorm / nextpnr-ice40 (open source) |
 
 Source: [tt_fpga_platform.py](../../designs/_shared/tt_fpga_platform.py)
@@ -28,22 +28,22 @@ Source: [tt_fpga_platform.py](../../designs/_shared/tt_fpga_platform.py)
 
 The iCE40 is programmed via the RP2350 over USB CDC, not directly from the RPi.
 
-| Parameter | Value |
-|-----------|-------|
-| Interface | RP2350 PIO SPI → iCE40 SPI configuration port |
-| USB device | `/dev/ttyACM0` (MicroPython REPL) |
-| USB VID:PID | `2e8a:0005` (MicroPython Board in FS mode) |
-| Tool | `python3 tt_fpga_program.py /dev/ttyACM0 <bitstream>` |
-| Bitstream type | `.bin` (volatile SRAM load) |
+| Parameter      | Value                                                 |
+| -------------- | ----------------------------------------------------- |
+| Interface      | RP2350 PIO SPI → iCE40 SPI configuration port         |
+| USB device     | `/dev/ttyACM0` (MicroPython REPL)                     |
+| USB VID:PID    | `2e8a:0005` (MicroPython Board in FS mode)            |
+| Tool           | `python3 tt_fpga_program.py /dev/ttyACM0 <bitstream>` |
+| Bitstream type | `.bin` (volatile SRAM load)                           |
 
 ### RP2350 SPI Programming Pins
 
-| Signal | RP2350 GPIO | Function |
-|--------|------------|----------|
-| SCK | GPIO6 | SPI clock |
-| MOSI | GPIO3 | SPI data out |
-| SS | GPIO5 | SPI chip select |
-| CRESET_B | GPIO1 | iCE40 configuration reset |
+| Signal   | RP2350 GPIO | Function                  |
+| -------- | ----------- | ------------------------- |
+| SCK      | GPIO6       | SPI clock                 |
+| MOSI     | GPIO3       | SPI data out              |
+| SS       | GPIO5       | SPI chip select           |
+| CRESET_B | GPIO1       | iCE40 configuration reset |
 
 ### Programming Flow
 
@@ -66,38 +66,38 @@ The iCE40 is programmed via the RP2350 over USB CDC, not directly from the RPi.
 
 8-bit input bus. The RPi drives these through the PMOD HAT; the FPGA reads them.
 
-| Bit | iCE40 Pin | RP2350 GPIO | PMOD HAT Pin | RPi GPIO |
-|-----|-----------|-------------|--------------|----------|
-| ui_in[0] | 13 | 17 | JC10 | 6 |
-| ui_in[1] | 19 | 18 | JC8  | 12 |
-| ui_in[2] | 18 | 19 | JC1  | 16 |
-| ui_in[3] | 21 | 20 | JC9  | 5 |
-| ui_in[4] | 23 | 21 | JC4  | 17 |
-| ui_in[5] | 25 | 22 | JC7  | 4 |
-| ui_in[6] | 26 | 23 | JC2  | 14 |
-| ui_in[7] | 27 | 24 | JC3  | 15 |
+| Bit      | iCE40 Pin | RP2350 GPIO | PMOD HAT Pin | RPi GPIO |
+| -------- | --------- | ----------- | ------------ | -------- |
+| ui_in[0] | 13        | 17          | JC10         | 6        |
+| ui_in[1] | 19        | 18          | JC8          | 12       |
+| ui_in[2] | 18        | 19          | JC1          | 16       |
+| ui_in[3] | 21        | 20          | JC9          | 5        |
+| ui_in[4] | 23        | 21          | JC4          | 17       |
+| ui_in[5] | 25        | 22          | JC7          | 4        |
+| ui_in[6] | 26        | 23          | JC2          | 14       |
+| ui_in[7] | 27        | 24          | JC3          | 15       |
 
 ### uo_out (User Outputs)
 
 8-bit output bus. The FPGA drives these; the RPi reads them through the PMOD HAT.
 
-| Bit | iCE40 Pin | RP2350 GPIO | PMOD HAT Pin | RPi GPIO |
-|-----|-----------|-------------|--------------|----------|
-| uo_out[0] | 38 | 33 | JA10 | 18 |
-| uo_out[1] | 42 | 34 | JA8  | 21 |
-| uo_out[2] | 43 | 35 | JA1  | 8 |
-| uo_out[3] | 44 | 36 | JA9  | 20 |
-| uo_out[4] | 45 | 37 | JA4  | 11 |
-| uo_out[5] | 46 | 38 | JA7  | 19 |
-| uo_out[6] | 47 | 39 | JA2  | 10 |
-| uo_out[7] | 48 | 40 | JA3  | 9 |
+| Bit       | iCE40 Pin | RP2350 GPIO | PMOD HAT Pin | RPi GPIO |
+| --------- | --------- | ----------- | ------------ | -------- |
+| uo_out[0] | 38        | 33          | JA10         | 18       |
+| uo_out[1] | 42        | 34          | JA8          | 21       |
+| uo_out[2] | 43        | 35          | JA1          | 8        |
+| uo_out[3] | 44        | 36          | JA9          | 20       |
+| uo_out[4] | 45        | 37          | JA4          | 11       |
+| uo_out[5] | 46        | 38          | JA7          | 19       |
+| uo_out[6] | 47        | 39          | JA2          | 10       |
+| uo_out[7] | 48        | 40          | JA3          | 9        |
 
 ### uio (Bidirectional I/O)
 
 8-bit bidirectional bus. Connected through the TT board's third PMOD header to PMOD HAT port JB.
 
 | Bit    | iCE40 Pin | RP2350 GPIO | PMOD HAT Pin | RPi GPIO |
-|--------|-----------|-------------|--------------|----------|
+| ------ | --------- | ----------- | ------------ | -------- |
 | uio[0] | 2         | 25          | JB1          | 7        |
 | uio[1] | 4         | 26          | JB2          | 10       |
 | uio[2] | 3         | 27          | JB3          | 9        |
@@ -107,20 +107,36 @@ The iCE40 is programmed via the RP2350 over USB CDC, not directly from the RPi.
 | uio[6] | 11        | 31          | JB9          | 3        |
 | uio[7] | 12        | 32          | JB10         | 2        |
 
-RP2350 GPIO numbers follow the sequential pattern (ui_in=17-24, uio=25-32, uo_out=33-40). HAT JB pins 2-4 (GPIO10, 9, 11) are shared with HAT JA pins 2-4 — `rmmod spidev spi_bcm2835` required.
+RP2350 GPIO numbers follow the sequential pattern (ui_in=17-24, uio=25-32, uo_out=33-40).
+
+**WARNING — JA/JB pin sharing conflict**: HAT JB pins 2-4 and HAT JA pins 2-4 are the [same RPi GPIO lines](rpi-hat-pmod.md) (GPIO10, GPIO9, GPIO11 — the shared SPI0 bus). This means 3 uo_out signals and 3 uio signals are electrically connected at the RPi side:
+
+| RPi GPIO | HAT JA Pin | TT Signal (uo_out) | HAT JB Pin | TT Signal (uio) | Conflict |
+| -------- | ---------- | ------------------ | ---------- | --------------- | -------- |
+| GPIO10   | JA2        | uo_out[6]          | JB2        | uio[1]          | Shorted  |
+| GPIO9    | JA3        | uo_out[7]          | JB3        | uio[2]          | Shorted  |
+| GPIO11   | JA4        | uo_out[4]          | JB4        | uio[3]          | Shorted  |
+
+When the FPGA drives uo_out[4,6,7] and uio[1,2,3] simultaneously with different values, the two FPGA outputs will fight each other through the shared RPi GPIO. This has several consequences:
+
+- **GPIO loopback test**: Works because the test only drives ui_in (JC) and reads uo_out (JA). The uio pins (JB) are not driven during this test, so no conflict occurs.
+- **Bidirectional I/O test**: Cannot independently test uio[1,2,3] because they are shorted to uo_out[6,7,4] respectively. If the FPGA drives both buses, the conflicting outputs may cause contention or incorrect readings.
+- **SPI kernel modules**: Must be unloaded (`rmmod spidev spi_bcm2835`) since GPIO7-11 overlap with HAT JA pins 1-4 and JB pins 1-4.
+
+The 5 unaffected uio bits (uio[0], uio[4:7]) on JB pins 1 and 7-10 use unique RPi GPIOs and work correctly.
 
 ## UART Interface
 
 The FPGA's UART pins are routed through the PMOD HAT to RPi GPIOs. This is a direct connection — NOT through the RP2350.
 
-| Signal | iCE40 Pin | TT Signal | PMOD HAT Pin | RPi GPIO |
-|--------|-----------|-----------|--------------|----------|
-| Serial RX (FPGA receives) | 21 | ui_in[3] | JC9 | 5 |
-| Serial TX (FPGA sends) | 45 | uo_out[4] | JA4 | 11 |
+| Signal                    | iCE40 Pin | TT Signal | PMOD HAT Pin | RPi GPIO |
+| ------------------------- | --------- | --------- | ------------ | -------- |
+| Serial RX (FPGA receives) | 21        | ui_in[3]  | JC9          | 5        |
+| Serial TX (FPGA sends)    | 45        | uo_out[4] | JA4          | 11       |
 
-| Parameter | Value |
-|-----------|-------|
-| Baud rate | 115200 |
+| Parameter | Value                                   |
+| --------- | --------------------------------------- |
+| Baud rate | 115200                                  |
 | Test args | `--port <TBD> --board tt --skip-banner` |
 
 **TODO**: RPi GPIO5 and GPIO11 are not standard hardware UART pins. A device tree overlay or alternative UART peripheral is needed to use these as a serial port. See task #10.
@@ -141,38 +157,39 @@ All 8 pairs are **empirically confirmed** (4-transition verification on pi33). S
 Dedicated iCE40 SPI pins on the FPGA breakout board (not shared with PMOD).
 
 | Signal | iCE40 Pin |
-|--------|-----------|
-| CS_N | 16 |
-| CLK | 15 |
-| MISO | 17 |
-| MOSI | 14 |
+| ------ | --------- |
+| CS_N   | 16        |
+| CLK    | 15        |
+| MISO   | 17        |
+| MOSI   | 14        |
 
 ## 7-Segment Display
 
 The TT Demo PCB has a 7-segment LED display connected to uo_out[0:6]. These share the same PMOD traces — when the RPi is driving GPIO tests, the display reflects the test patterns.
 
 | Segment | TT Signal | iCE40 Pin |
-|---------|-----------|-----------|
-| a | uo_out[0] | 38 |
-| b | uo_out[1] | 42 |
-| c | uo_out[2] | 43 |
-| d | uo_out[3] | 44 |
-| e | uo_out[4] | 45 |
-| f | uo_out[5] | 46 |
-| g | uo_out[6] | 47 |
+| ------- | --------- | --------- |
+| a       | uo_out[0] | 38        |
+| b       | uo_out[1] | 42        |
+| c       | uo_out[2] | 43        |
+| d       | uo_out[3] | 44        |
+| e       | uo_out[4] | 45        |
+| f       | uo_out[5] | 46        |
+| g       | uo_out[6] | 47        |
 
 ## Other Signals
 
-| Signal | iCE40 Pin | Function |
-|--------|-----------|----------|
-| clk_rp2040 | 20 | 50 MHz clock from RP2350 PWM GPIO16 |
-| rst_n | 37 | Reset (active low) |
-| RGB LED R | 39 | Accent LED (active low) |
-| RGB LED G | 40 | Accent LED (active low) |
-| RGB LED B | 41 | Accent LED (active low) |
+| Signal     | iCE40 Pin | Function                            |
+| ---------- | --------- | ----------------------------------- |
+| clk_rp2040 | 20        | 50 MHz clock from RP2350 PWM GPIO16 |
+| rst_n      | 37        | Reset (active low)                  |
+| RGB LED R  | 39        | Accent LED (active low)             |
+| RGB LED G  | 40        | Accent LED (active low)             |
+| RGB LED B  | 41        | Accent LED (active low)             |
 
 ## References
 
 - TT FPGA platform definition: [tt_fpga_platform.py](../../designs/_shared/tt_fpga_platform.py)
 - TinyTapeout PCB Specs: [tinytapeout.com/specs/pcb](https://tinytapeout.com/specs/pcb/)
-- PMOD HAT Documentation: [rpi-hat-pmod.md](rpi-hat-pmod.md)
+- PMOD Interface Specification: [pmod.md](pmod.md)
+- PMOD HAT Adapter (RPi): [rpi-hat-pmod.md](rpi-hat-pmod.md)
