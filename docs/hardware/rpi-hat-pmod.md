@@ -19,109 +19,67 @@ For the PMOD connector pinouts, interface types, and electrical specification, s
 
 ## RPi GPIO to PMOD Pin Mapping
 
-The PMOD HAT maps Raspberry Pi GPIO pins to three PMOD ports (JA, JB, JC). Each PMOD port has 8 signal pins (top row pins 1-4 and bottom row pins 7-10).
+The PMOD HAT maps Raspberry Pi GPIO pins to three PMOD ports (JA, JB, JC). Each PMOD port has 8 signal pins (top row pins 1-4 and bottom row pins 7-10). Only the top rows conform to standard [PMOD interface types](pmod.md); the bottom rows provide RPi hardware peripherals but not in standard PMOD type positions.
 
-### Port JA (top row: Type 2 SPI with CE0)
+| Port | Top Row (1-4)             | Bottom Row (7-10) | Full 12-pin Type? |
+| ---- | ------------------------- | ----------------- | ----------------- |
+| JA   | **Type 2 (SPI)** — CE0    | PCM/I2S (custom)  | No                |
+| JB   | **Type 2 (SPI)** — CE1    | Mixed + I2C       | No                |
+| JC   | **Type 4 (UART)** — UART0 | Mixed + PWM       | No                |
 
-| PMOD Pin | Signal | RPi GPIO | RPi Header Pin | BCM Function   |
-| -------- | ------ | -------- | -------------- | -------------- |
-| JA1      | CS     | GPIO8    | Pin 24         | SPI0_CE0       |
-| JA2      | MOSI   | GPIO10   | Pin 19         | SPI0_MOSI (\*) |
-| JA3      | MISO   | GPIO9    | Pin 21         | SPI0_MISO (\*) |
-| JA4      | SCK    | GPIO11   | Pin 23         | SPI0_SCLK (\*) |
-| JA7      | I/O 5  | GPIO19   | Pin 35         | PCM_FS         |
-| JA8      | I/O 6  | GPIO21   | Pin 40         | PCM_DOUT       |
-| JA9      | I/O 7  | GPIO20   | Pin 38         | PCM_DIN        |
-| JA10     | I/O 8  | GPIO18   | Pin 12         | PCM_CLK / PWM0 |
+### Port JA — Top Row: Type 2 (SPI) Exact Match
+
+The top row (pins 1-4) exactly matches the [Type 2 (SPI)](pmod.md#type-2--spi-6-pin) pinout when the RPi's SPI0 hardware controller is enabled. The bottom row carries RPi PCM/I2S signals (not a standard PMOD type).
+
+| PMOD Pin | Signal | RPi GPIO | RPi Header Pin | BCM Function   | Type 2 Standard |
+| -------- | ------ | -------- | -------------- | -------------- | --------------- |
+| JA1      | CS     | GPIO8    | Pin 24         | SPI0_CE0       | SS (Out)        |
+| JA2      | MOSI   | GPIO10   | Pin 19         | SPI0_MOSI (\*) | MOSI (Out)      |
+| JA3      | MISO   | GPIO9    | Pin 21         | SPI0_MISO (\*) | MISO (In)       |
+| JA4      | SCK    | GPIO11   | Pin 23         | SPI0_SCLK (\*) | SCK (Out)       |
+| JA7      | I/O 5  | GPIO19   | Pin 35         | PCM_FS         | —               |
+| JA8      | I/O 6  | GPIO21   | Pin 40         | PCM_DOUT       | —               |
+| JA9      | I/O 7  | GPIO20   | Pin 38         | PCM_DIN        | —               |
+| JA10     | I/O 8  | GPIO18   | Pin 12         | PCM_CLK / PWM0 | —               |
 
 (\*) Shared with JB pins 2-4 — see note below.
 
-### Port JB (top row: Type 2 SPI with CE1; bottom row has I2C1)
+### Port JB — Top Row: Type 2 (SPI) Exact Match
 
-| PMOD Pin | Signal | RPi GPIO | RPi Header Pin | BCM Function   |
-| -------- | ------ | -------- | -------------- | -------------- |
-| JB1      | CS     | GPIO7    | Pin 26         | SPI0_CE1       |
-| JB2      | MOSI   | GPIO10   | Pin 19         | SPI0_MOSI (\*) |
-| JB3      | MISO   | GPIO9    | Pin 21         | SPI0_MISO (\*) |
-| JB4      | SCK    | GPIO11   | Pin 23         | SPI0_SCLK (\*) |
-| JB7      | I/O 5  | GPIO26   | Pin 37         |                |
-| JB8      | I/O 6  | GPIO13   | Pin 33         | PWM1           |
-| JB9      | I/O 7  | GPIO3    | Pin 5          | I2C1_SCL       |
-| JB10     | I/O 8  | GPIO2    | Pin 3          | I2C1_SDA       |
+Same SPI bus as JA but with a different chip select (CE1). The bottom row has I2C1 on pins 9-10, but this does not match Type 2A (which expects INT/RESET on pins 7-8).
+
+| PMOD Pin | Signal | RPi GPIO | RPi Header Pin | BCM Function   | Type 2 Standard |
+| -------- | ------ | -------- | -------------- | -------------- | --------------- |
+| JB1      | CS     | GPIO7    | Pin 26         | SPI0_CE1       | SS (Out)        |
+| JB2      | MOSI   | GPIO10   | Pin 19         | SPI0_MOSI (\*) | MOSI (Out)      |
+| JB3      | MISO   | GPIO9    | Pin 21         | SPI0_MISO (\*) | MISO (In)       |
+| JB4      | SCK    | GPIO11   | Pin 23         | SPI0_SCLK (\*) | SCK (Out)       |
+| JB7      | I/O 5  | GPIO26   | Pin 37         |                | —               |
+| JB8      | I/O 6  | GPIO13   | Pin 33         | PWM1           | —               |
+| JB9      | I/O 7  | GPIO3    | Pin 5          | I2C1_SCL       | —               |
+| JB10     | I/O 8  | GPIO2    | Pin 3          | I2C1_SDA       | —               |
 
 (\*) JA pins 2-4 and JB pins 2-4 are the **same physical GPIO lines** (GPIO10, GPIO9, GPIO11 = SPI0 MOSI/MISO/SCLK). They share a single SPI bus with different chip selects (JA1=CE0, JB1=CE1). When using these ports for GPIO (not SPI), pins 2-4 of both ports will read/drive the same signal.
 
-### Port JC (top row: Type 4 UART)
+### Port JC — Top Row: Type 4 (UART) Exact Match
 
-| PMOD Pin | Signal | RPi GPIO | RPi Header Pin | BCM Function |
-| -------- | ------ | -------- | -------------- | ------------ |
-| JC1      | CTS    | GPIO16   | Pin 36         | CTS0         |
-| JC2      | TX     | GPIO14   | Pin 8          | TXD0         |
-| JC3      | RX     | GPIO15   | Pin 10         | RXD0         |
-| JC4      | RTS    | GPIO17   | Pin 11         | RTS0         |
-| JC7      | I/O 5  | GPIO4    | Pin 7          | GPCLK0       |
-| JC8      | I/O 6  | GPIO12   | Pin 32         | PWM0         |
-| JC9      | I/O 7  | GPIO5    | Pin 29         |              |
-| JC10     | I/O 8  | GPIO6    | Pin 31         |              |
+The top row (pins 1-4) exactly matches the [Type 4 (UART)](pmod.md#type-4--uart-6-pin) pinout (CTS, TXD, RXD, RTS) when the RPi's UART0 hardware controller is enabled. Note: this is Type 4, **not** Type 3 (which has a different pin order: CTS, RTS, RXD, TXD). The bottom row carries mixed signals (not a standard PMOD type).
+
+| PMOD Pin | Signal | RPi GPIO | RPi Header Pin | BCM Function | Type 4 Standard |
+| -------- | ------ | -------- | -------------- | ------------ | --------------- |
+| JC1      | CTS    | GPIO16   | Pin 36         | CTS0         | CTS (In)        |
+| JC2      | TXD    | GPIO14   | Pin 8          | TXD0         | TXD (Out)       |
+| JC3      | RXD    | GPIO15   | Pin 10         | RXD0         | RXD (In)        |
+| JC4      | RTS    | GPIO17   | Pin 11         | RTS0         | RTS (Out)       |
+| JC7      | I/O 5  | GPIO4    | Pin 7          | GPCLK0       | —               |
+| JC8      | I/O 6  | GPIO12   | Pin 32         | PWM0         | —               |
+| JC9      | I/O 7  | GPIO5    | Pin 29         |              | —               |
+| JC10     | I/O 8  | GPIO6    | Pin 31         |              | —               |
 
 **Notes on JC**:
 - GPIO14/15 (JC2/JC3) are the default UART TX/RX pins. If using GPIO UART for other purposes, these pins are not available for PMOD.
 
 Source: [DesignSpark.Pmod HAT.py driver](https://github.com/DesignSparkRS/DesignSpark.Pmod/blob/master/DesignSpark/Pmod/HAT.py), [Digilent PMOD HAT Schematic](https://digilent.com/reference/_media/learn/documentation/schematics/pmod_hat_adapter_sch.pdf), [Digilent PMOD HAT Reference Manual](https://digilent.com/reference/add-ons/pmod-hat/reference-manual)
-
-## PMOD Type Conformance
-
-Analysis of how each port's RPi hardware controller mapping aligns with the standard [PMOD interface types](pmod.md):
-
-### JA/JB Top Row — Type 2 (SPI): Exact Match
-
-The top row (pins 1-4) of both JA and JB exactly matches the **Type 2 (SPI)** pinout when the RPi's SPI0 hardware controller is enabled:
-
-| PMOD Pin | Type 2 Standard | JA RPi Function | JB RPi Function |
-| -------- | --------------- | --------------- | --------------- |
-| 1        | SS (Out)        | SPI0_CE0        | SPI0_CE1        |
-| 2        | MOSI (Out)      | SPI0_MOSI       | SPI0_MOSI (\*)  |
-| 3        | MISO (In)       | SPI0_MISO       | SPI0_MISO (\*)  |
-| 4        | SCK (Out)       | SPI0_SCLK       | SPI0_SCLK (\*)  |
-
-(\*) JA and JB share the same SPI0 bus lines (GPIO10/9/11) — only the chip select differs (CE0 vs CE1). This is standard SPI multi-device bus topology.
-
-### JC Top Row — Type 4 (UART): Exact Match
-
-The top row (pins 1-4) of JC exactly matches the **Type 4 (UART)** pinout when the RPi's UART0 hardware controller is enabled:
-
-| PMOD Pin | Type 4 Standard | JC RPi Function |
-| -------- | --------------- | --------------- |
-| 1        | CTS (In)        | CTS0            |
-| 2        | TXD (Out)       | TXD0            |
-| 3        | RXD (In)        | RXD0            |
-| 4        | RTS (Out)       | RTS0            |
-
-Note: the port was previously labelled "Type 3" but the pin ordering (CTS, TXD, RXD, RTS) matches **Type 4**, not Type 3 (which has CTS, RTS, RXD, TXD in a different order with different direction conventions).
-
-### Bottom Rows — No Standard Type Match
-
-The bottom rows (pins 7-10) of all three ports do **not** conform to any standard expanded PMOD type:
-
-| Port | Pin 7  | Pin 8    | Pin 9    | Pin 10   | Standard Type? |
-| ---- | ------ | -------- | -------- | -------- | -------------- |
-| JA   | PCM_FS | PCM_DOUT | PCM_DIN  | PCM_CLK  | No — PCM/I2S   |
-| JB   | GPIO26 | PWM1     | I2C1_SCL | I2C1_SDA | No — mixed     |
-| JC   | GPCLK0 | PWM0     | GPIO5    | GPIO6    | No — mixed     |
-
-- **JA bottom**: The 4 PCM/I2S pins are grouped together, but this is not a defined PMOD type.
-- **JB bottom**: I2C1 is on pins 9-10 (SCL, SDA), but Type 2A expects INT and RESET on pins 7-8 (not present). The I2C signals are also in non-standard pin positions.
-- **JC bottom**: Type 4A would expect INT, RESET, N/S, N/S on pins 7-10, which is not the case.
-
-### Summary
-
-| Port | Top Row (1-4) | Bottom Row (7-10) | Full 12-pin Type? |
-| ---- | ------------- | ----------------- | ----------------- |
-| JA   | Type 2 (SPI)  | PCM/I2S (custom)  | No                |
-| JB   | Type 2 (SPI)  | Mixed + I2C       | No                |
-| JC   | Type 4 (UART) | Mixed + PWM       | No                |
-
-Only the top rows conform to standard PMOD types. The bottom rows provide useful RPi hardware peripherals (PCM, I2C, PWM) but not in standard PMOD type positions.
 
 ## Unused GPIO Pins
 
