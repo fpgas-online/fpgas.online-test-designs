@@ -41,7 +41,7 @@ def build_pin_list(platform):
     """
     pins = []
     for connector_name in CONNECTORS:
-        connector_pins = platform.connectors.connector_table[connector_name]
+        connector_pins = platform.constraint_manager.connector_manager.connector_table[connector_name]
         for idx in range(len(connector_pins)):
             resource_pin = f"{connector_name}:{idx}"
             fpga_pin = connector_pins[idx]
