@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Scan RPi GPIO pins and decode FPGA PMOD pin identification strings.
+"""Scan RPi GPIO pins and decode FPGA pin identification strings.
 
-The FPGA continuously transmits each PMOD pin's name (e.g. "JA01\\r\\n")
+The FPGA continuously transmits each pin's FPGA ball name (e.g. "G13\\r\\n")
 at 1200 baud 8N1. This script reads each RPi GPIO pin, decodes the UART
 data via software bit-banging, and reports the mapping.
 
@@ -23,6 +23,7 @@ Requirements:
 
 import argparse
 import pathlib
+import subprocess
 import sys
 import time
 
@@ -212,13 +213,15 @@ def receive_label(reader, max_bytes=20, timeout=0.2):
     return None
 
 
-# Expected label format: 2 uppercase letters + 2 digits (e.g. "JA01", "JD10")
+# Expected label format: FPGA pin names are 2-4 alphanumeric characters.
+# Examples: "G13", "B11", "A9", "K16", "V14" (Xilinx 7-series ball names)
+# Also accepts PMOD-style names like "JA01" for backwards compatibility.
 import re
-_LABEL_PATTERN = re.compile(r'^[A-Z]{2}\d{2}$')
+_LABEL_PATTERN = re.compile(r'^[A-Z][A-Za-z0-9]{1,3}$')
 
 
 def is_valid_label(label):
-    """Check if a decoded label matches the expected PMOD pin name format."""
+    """Check if a decoded label looks like a valid pin identifier."""
     return bool(_LABEL_PATTERN.match(label))
 
 
@@ -288,20 +291,20 @@ def print_mapping_table(results):
 
     print(f"\n=== Pin Mapping Table ({len(valid)} confirmed, "
           f"{len(garbled)} garbled, {len(no_signal)} no signal) ===\n")
-    print("| RPi GPIO | HAT Location           | FPGA PMOD Pin |")
-    print("|----------|------------------------|---------------|")
+    print("| RPi GPIO | HAT Location           | FPGA Pin |")
+    print("|----------|------------------------|----------|")
     for gpio in sorted(valid.keys()):
         hat_label = HAT_GPIO_LABELS.get(gpio, f"GPIO{gpio}")
         fpga_pin = valid[gpio]
-        print(f"| GPIO{gpio:<4d} | {hat_label:<22s} | {fpga_pin:<13s} |")
+        print(f"| GPIO{gpio:<4d} | {hat_label:<22s} | {fpga_pin:<8s} |")
 
     # Also print by FPGA pin for reverse lookup.
     print("\n=== Reverse Mapping (by FPGA pin) ===\n")
-    print("| FPGA PMOD Pin | RPi GPIO | HAT Location           |")
-    print("|---------------|----------|------------------------|")
+    print("| FPGA Pin | RPi GPIO | HAT Location           |")
+    print("|----------|----------|------------------------|")
     for gpio, fpga_pin in sorted(valid.items(), key=lambda x: x[1]):
         hat_label = HAT_GPIO_LABELS.get(gpio, f"GPIO{gpio}")
-        print(f"| {fpga_pin:<13s} | GPIO{gpio:<4d} | {hat_label:<22s} |")
+        print(f"| {fpga_pin:<8s} | GPIO{gpio:<4d} | {hat_label:<22s} |")
 
     if garbled:
         print("\n=== Garbled Pins (signal present, decode failed) ===\n")
@@ -310,11 +313,45 @@ def print_mapping_table(results):
             print(f"  GPIO{gpio:<4d} ({hat_label}): {garbled[gpio][1:]!r}")
 
 
+# -- Kernel module management --------------------------------------------------
+
+# Modules that claim GPIO pins and must be unloaded before scanning.
+# Order matters: unload dependents first.
+_MODULES_TO_UNLOAD = [
+    "spidev",
+    "spi_bcm2835",
+    "i2c_dev",
+    "i2c_mux_pinctrl",
+    "i2c_mux",
+    "i2c_brcmstb",
+    "i2c_bcm2835",
+]
+
+
+def release_kernel_gpio_drivers():
+    """Unload kernel modules that claim GPIO pins (SPI, I2C).
+
+    These modules hold GPIO0/1 (I2C), GPIO7-11 (SPI), and others,
+    preventing gpiod from reading FPGA signals on those pins.
+    """
+    unloaded = []
+    for mod in _MODULES_TO_UNLOAD:
+        result = subprocess.run(
+            ["rmmod", mod], capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            unloaded.append(mod)
+    if unloaded:
+        print(f"Unloaded kernel modules: {', '.join(unloaded)}")
+    else:
+        print("No kernel modules needed unloading.")
+
+
 # -- Main ----------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Identify FPGA PMOD pins via UART transmission at 1200 baud"
+        description="Identify FPGA pins via UART transmission at 1200 baud"
     )
     parser.add_argument(
         "--gpios", type=int, nargs="+",
@@ -323,6 +360,10 @@ def main():
     parser.add_argument(
         "--hat-port", choices=["JA", "JB", "JC"],
         help="Scan all GPIOs on a specific PMOD HAT port"
+    )
+    parser.add_argument(
+        "--no-unload", action="store_true",
+        help="Skip unloading kernel modules (SPI, I2C)"
     )
     args = parser.parse_args()
 
@@ -333,9 +374,12 @@ def main():
     else:
         gpio_list = ALL_HAT_GPIOS
 
+    if not args.no_unload:
+        release_kernel_gpio_drivers()
+
     chip_path = detect_gpio_chip()
 
-    print("=== PMOD Pin Identification Scanner ===")
+    print("=== FPGA Pin Identification Scanner ===")
     print(f"Baud rate:  {BAUD_RATE}")
     print(f"GPIO chip:  {chip_path}")
     print(f"Scanning:   {len(gpio_list)} GPIO pins")

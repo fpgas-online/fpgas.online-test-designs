@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """PMOD pin identification design for Digilent Arty A7.
 
-Each of the 32 PMOD data pins continuously transmits its own name
-(e.g. "JA01\\r\\n") as 1200-baud 8N1 UART. Connect any RPi GPIO to
+Each of the 32 PMOD data pins continuously transmits its FPGA pin name
+(e.g. "G13\\r\\n") as 1200-baud 8N1 UART. Connect any RPi GPIO to
 any PMOD pin and decode the name to determine the cable mapping.
+
+Pin names are extracted from the LiteX platform's connector definitions,
+so the output matches the FPGA package ball names exactly.
 
 No CPU, no firmware. Pure gateware.
 """
@@ -23,41 +26,41 @@ from litex_boards.platforms.digilent_arty import Platform
 from designs._shared.yosys_workarounds import YOSYS_TEMPLATE_STRIP_SCOPEINFO
 from pmod_pin_id import UARTTxIdentifier
 
-# PMOD connector names and their physical pin-to-index mapping.
-# LiteX indices 0-3 = physical pins 1-4 (top row)
-# LiteX indices 4-7 = physical pins 7-10 (bottom row)
-INDEX_TO_PHYSICAL = {0: 1, 1: 2, 2: 3, 3: 4, 4: 7, 5: 8, 6: 9, 7: 10}
-
-# Arty PMOD connectors (matching board silkscreen)
-PMOD_CONNECTORS = ["JA", "JB", "JC", "JD"]
-PMOD_RESOURCES = ["pmoda", "pmodb", "pmodc", "pmodd"]
+# Connector names to scan (all PMOD connectors on the Arty).
+CONNECTORS = ["pmoda", "pmodb", "pmodc", "pmodd"]
 
 BAUD_RATE = 1200
 SYS_CLK_FREQ = 100e6
 
 
-def build_pin_list():
-    """Build list of (resource_pin, label) for all 32 PMOD data pins."""
+def build_pin_list(platform):
+    """Build list of (resource_pin, label) using FPGA pin names from platform.
+
+    Extracts pin names from the platform's connector table so the
+    transmitted label is the actual FPGA ball name (e.g. "G13").
+    """
     pins = []
-    for connector, resource in zip(PMOD_CONNECTORS, PMOD_RESOURCES):
-        for idx, phys in INDEX_TO_PHYSICAL.items():
-            resource_pin = f"{resource}:{idx}"
-            label = f"{connector}{phys:02d}\r\n"
+    for connector_name in CONNECTORS:
+        connector_pins = platform.connectors.connector_table[connector_name]
+        for idx in range(len(connector_pins)):
+            resource_pin = f"{connector_name}:{idx}"
+            fpga_pin = connector_pins[str(idx)]
+            label = f"{fpga_pin}\r\n"
             pins.append((resource_pin, label))
     return pins
 
 
-# Build IO extensions: one single-bit output per PMOD pin.
-_pin_list = build_pin_list()
-_pin_id_io = [
-    (f"pin_id_{i}", 0, Pins(resource_pin), IOStandard("LVCMOS33"))
-    for i, (resource_pin, _label) in enumerate(_pin_list)
-]
+def build_io_extensions(pin_list):
+    """Build IO extensions: one single-bit output per pin."""
+    return [
+        (f"pin_id_{i}", 0, Pins(resource_pin), IOStandard("LVCMOS33"))
+        for i, (resource_pin, _label) in enumerate(pin_list)
+    ]
 
 
 class PMODPinIdentifier(Module):
-    def __init__(self, platform):
-        for i, (_resource_pin, label) in enumerate(_pin_list):
+    def __init__(self, platform, pin_list):
+        for i, (_resource_pin, label) in enumerate(pin_list):
             pin = platform.request(f"pin_id_{i}")
             tx = UARTTxIdentifier(pin, label, int(SYS_CLK_FREQ), baud=BAUD_RATE)
             self.submodules += tx
@@ -72,9 +75,16 @@ def main():
     args = parser.parse_args()
 
     platform = Platform(variant=args.variant, toolchain=args.toolchain)
-    platform.add_extension(_pin_id_io)
 
-    module = PMODPinIdentifier(platform)
+    pin_list = build_pin_list(platform)
+    platform.add_extension(build_io_extensions(pin_list))
+
+    # Print the pin list for reference during build.
+    print(f"PMOD Pin ID: {len(pin_list)} pins")
+    for resource_pin, label in pin_list:
+        print(f"  {resource_pin:10s} -> {label.strip()!r}")
+
+    module = PMODPinIdentifier(platform, pin_list)
 
     # Apply yosys workaround for openxc7
     if args.toolchain == "openxc7" and hasattr(platform.toolchain, "_yosys_template"):
