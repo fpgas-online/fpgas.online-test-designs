@@ -33,16 +33,22 @@ import gpiod
 
 # RPi BCM GPIO numbers for each PMOD HAT port, in PMOD pin order
 # (pins 1-4 top row, pins 7-10 bottom row).
+# Source: DesignSpark.Pmod HAT.py driver + Digilent PMOD HAT schematic.
+# Note: JA pins 2-4 and JB pins 2-4 share the same GPIOs (SPI bus).
 PMOD_HAT_PORTS = {
-    "JA": [6, 13, 19, 26, 12, 16, 20, 21],
-    "JB": [5, 11, 9, 10, 7, 8, 0, 1],
-    "JC": [17, 18, 4, 14, 2, 3, 15, 25],
+    "JA": [8, 10, 9, 11, 19, 21, 20, 18],
+    "JB": [7, 10, 9, 11, 26, 13, 3, 2],
+    "JC": [16, 14, 15, 17, 4, 12, 5, 6],
 }
 
-# All PMOD HAT GPIOs in a flat list.
+# All PMOD HAT GPIOs in a flat list (deduplicated, since JA/JB share pins 2-4).
+_seen = set()
 ALL_HAT_GPIOS = []
 for port_name in ["JA", "JB", "JC"]:
-    ALL_HAT_GPIOS.extend(PMOD_HAT_PORTS[port_name])
+    for gpio in PMOD_HAT_PORTS[port_name]:
+        if gpio not in _seen:
+            _seen.add(gpio)
+            ALL_HAT_GPIOS.append(gpio)
 
 # PMOD HAT pin labels for display (port + physical pin number).
 HAT_GPIO_LABELS = {}
@@ -315,24 +321,20 @@ def print_mapping_table(results):
 
 # -- Kernel module management --------------------------------------------------
 
-# Modules that claim GPIO pins and must be unloaded before scanning.
-# Order matters: unload dependents first.
+# Modules that claim GPIO pins used by PMOD HAT ports.
+# SPI0 uses GPIO7-11 (JA pin 1, JB pin 1, and shared pins 2-4).
+# I2C1 uses GPIO2-3 (JB pins 9-10). i2c_bcm2835 often can't be
+# unloaded at runtime, but gpiod can usually still read these pins.
 _MODULES_TO_UNLOAD = [
     "spidev",
     "spi_bcm2835",
-    "i2c_dev",
-    "i2c_mux_pinctrl",
-    "i2c_mux",
-    "i2c_brcmstb",
-    "i2c_bcm2835",
 ]
 
 
 def release_kernel_gpio_drivers():
-    """Unload kernel modules that claim GPIO pins (SPI, I2C).
+    """Unload kernel modules that claim GPIO pins used by PMOD ports.
 
-    These modules hold GPIO0/1 (I2C), GPIO7-11 (SPI), and others,
-    preventing gpiod from reading FPGA signals on those pins.
+    SPI0 claims GPIO7-11 which are on HAT ports JA/JB pins 1-4.
     """
     unloaded = []
     for mod in _MODULES_TO_UNLOAD:

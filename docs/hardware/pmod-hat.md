@@ -81,51 +81,54 @@ Source: [Digilent PMOD Specification](https://digilent.com/reference/pmod/specif
 
 The PMOD HAT maps Raspberry Pi GPIO pins to three PMOD ports (JA, JB, JC). Each PMOD port has 8 signal pins (top row pins 1-4 and bottom row pins 7-10).
 
-### Port JA
+### Port JA (SPI Type 2 — active chip select CE0)
+
+| PMOD Pin | Signal | RPi GPIO | RPi Header Pin | BCM Function   |
+|----------|--------|----------|----------------|----------------|
+| JA1      | CS     | GPIO8    | Pin 24         | SPI0_CE0       |
+| JA2      | MOSI   | GPIO10   | Pin 19         | SPI0_MOSI (\*) |
+| JA3      | MISO   | GPIO9    | Pin 21         | SPI0_MISO (\*) |
+| JA4      | SCK    | GPIO11   | Pin 23         | SPI0_SCLK (\*) |
+| JA7      | I/O 5  | GPIO19   | Pin 35         | PCM_FS         |
+| JA8      | I/O 6  | GPIO21   | Pin 40         | PCM_DOUT       |
+| JA9      | I/O 7  | GPIO20   | Pin 38         | PCM_DIN        |
+| JA10     | I/O 8  | GPIO18   | Pin 12         | PCM_CLK / PWM0 |
+
+(\*) Shared with JB pins 2-4 — see note below.
+
+### Port JB (SPI Type 2 — active chip select CE1, plus I2C)
+
+| PMOD Pin | Signal | RPi GPIO | RPi Header Pin | BCM Function   |
+|----------|--------|----------|----------------|----------------|
+| JB1      | CS     | GPIO7    | Pin 26         | SPI0_CE1       |
+| JB2      | MOSI   | GPIO10   | Pin 19         | SPI0_MOSI (\*) |
+| JB3      | MISO   | GPIO9    | Pin 21         | SPI0_MISO (\*) |
+| JB4      | SCK    | GPIO11   | Pin 23         | SPI0_SCLK (\*) |
+| JB7      | I/O 5  | GPIO26   | Pin 37         |                |
+| JB8      | I/O 6  | GPIO13   | Pin 33         | PWM1           |
+| JB9      | I/O 7  | GPIO3    | Pin 5          | I2C1_SCL       |
+| JB10     | I/O 8  | GPIO2    | Pin 3          | I2C1_SDA       |
+
+(\*) JA pins 2-4 and JB pins 2-4 are the **same physical GPIO lines** (GPIO10, GPIO9, GPIO11 = SPI0 MOSI/MISO/SCLK). They share a single SPI bus with different chip selects (JA1=CE0, JB1=CE1). When using these ports for GPIO (not SPI), pins 2-4 of both ports will read/drive the same signal.
+
+### Port JC (UART Type 3 — plus general GPIO)
 
 | PMOD Pin | Signal | RPi GPIO | RPi Header Pin | BCM Function |
-|----------|--------|----------|----------------|-------------|
-| JA1 (top 1) | I/O 1 | GPIO6 | Pin 31 | |
-| JA2 (top 2) | I/O 2 | GPIO13 | Pin 33 | |
-| JA3 (top 3) | I/O 3 | GPIO19 | Pin 35 | PCM_FS |
-| JA4 (top 4) | I/O 4 | GPIO26 | Pin 37 | |
-| JA7 (bottom 1) | I/O 5 | GPIO12 | Pin 32 | PWM0 |
-| JA8 (bottom 2) | I/O 6 | GPIO16 | Pin 36 | |
-| JA9 (bottom 3) | I/O 7 | GPIO20 | Pin 38 | PCM_DIN |
-| JA10 (bottom 4) | I/O 8 | GPIO21 | Pin 40 | PCM_DOUT |
+|----------|--------|----------|----------------|--------------|
+| JC1      | CTS    | GPIO16   | Pin 36         | CTS0         |
+| JC2      | TX     | GPIO14   | Pin 8          | TXD0         |
+| JC3      | RX     | GPIO15   | Pin 10         | RXD0         |
+| JC4      | RTS    | GPIO17   | Pin 11         | RTS0         |
+| JC7      | I/O 5  | GPIO4    | Pin 7          | GPCLK0       |
+| JC8      | I/O 6  | GPIO12   | Pin 32         | PWM0         |
+| JC9      | I/O 7  | GPIO5    | Pin 29         |              |
+| JC10     | I/O 8  | GPIO6    | Pin 31         |              |
 
-### Port JB
+**Notes on JC**:
+- GPIO14/15 (JC2/JC3) are the default UART TX/RX pins. If using GPIO UART for NeTV2 communication, these pins are not available for PMOD.
+- GPIO4 (JC7) is used for JTAG TCK in the NeTV2 OpenOCD configuration.
 
-| PMOD Pin | Signal | RPi GPIO | RPi Header Pin | BCM Function |
-|----------|--------|----------|----------------|-------------|
-| JB1 (top 1) | I/O 1 | GPIO5 | Pin 29 | |
-| JB2 (top 2) | I/O 2 | GPIO11 | Pin 23 | SPI0_SCLK |
-| JB3 (top 3) | I/O 3 | GPIO9 | Pin 21 | SPI0_MISO |
-| JB4 (top 4) | I/O 4 | GPIO10 | Pin 19 | SPI0_MOSI |
-| JB7 (bottom 1) | I/O 5 | GPIO7 | Pin 26 | SPI0_CE1 |
-| JB8 (bottom 2) | I/O 6 | GPIO8 | Pin 24 | SPI0_CE0 |
-| JB9 (bottom 3) | I/O 7 | GPIO0 | Pin 27 | I2C0_SDA |
-| JB10 (bottom 4) | I/O 8 | GPIO1 | Pin 28 | I2C0_SCL |
-
-### Port JC
-
-| PMOD Pin | Signal | RPi GPIO | RPi Header Pin | BCM Function |
-|----------|--------|----------|----------------|-------------|
-| JC1 (top 1) | I/O 1 | GPIO17 | Pin 11 | |
-| JC2 (top 2) | I/O 2 | GPIO18 | Pin 12 | PWM0 |
-| JC3 (top 3) | I/O 3 | GPIO4 | Pin 7 | GPCLK0 |
-| JC4 (top 4) | I/O 4 | GPIO14 | Pin 8 | TXD |
-| JC7 (bottom 1) | I/O 5 | GPIO2 | Pin 3 | I2C1_SDA |
-| JC8 (bottom 2) | I/O 6 | GPIO3 | Pin 5 | I2C1_SCL |
-| JC9 (bottom 3) | I/O 7 | GPIO15 | Pin 10 | RXD |
-| JC10 (bottom 4) | I/O 8 | GPIO25 | Pin 22 | |
-
-**Important note about JC**: Several JC pins overlap with commonly used RPi functions:
-- GPIO14/15 (JC4/JC9) are the default UART TX/RX pins. If using GPIO UART for NeTV2 communication, these pins are not available for PMOD.
-- GPIO4 (JC3) is used for JTAG TCK in the NeTV2 OpenOCD configuration.
-- GPIO2/3 (JC7/JC8) are the default I2C1 bus pins with hardware pull-ups.
-
-Source: [Digilent PMOD HAT Reference Manual](https://digilent.com/reference/add-ons/pmod-hat/reference-manual)
+Source: [DesignSpark.Pmod HAT.py driver](https://github.com/DesignSparkRS/DesignSpark.Pmod/blob/master/DesignSpark/Pmod/HAT.py), [Digilent PMOD HAT Schematic](https://digilent.com/reference/_media/learn/documentation/schematics/pmod_hat_adapter_sch.pdf), [Digilent PMOD HAT Reference Manual](https://digilent.com/reference/add-ons/pmod-hat/reference-manual)
 
 ## Unused GPIO Pins
 
@@ -133,13 +136,17 @@ The following RPi GPIO pins are NOT assigned to any PMOD port and remain availab
 
 | RPi GPIO | RPi Header Pin | Notes |
 |----------|----------------|-------|
-| GPIO22 | Pin 15 | Free |
-| GPIO23 | Pin 16 | Free |
-| GPIO24 | Pin 18 | Used as SRST in NeTV2 OpenOCD config |
-| GPIO25 | Pin 22 | Free (but assigned to JC10 in some HAT revisions) |
-| GPIO27 | Pin 13 | Used as TDI in NeTV2 OpenOCD config |
+| GPIO0    | Pin 27         | I2C0_SDA (HAT EEPROM) |
+| GPIO1    | Pin 28         | I2C0_SCL (HAT EEPROM) |
+| GPIO22   | Pin 15         | Free |
+| GPIO23   | Pin 16         | Free |
+| GPIO24   | Pin 18         | Used as SRST in NeTV2 OpenOCD config |
+| GPIO25   | Pin 22         | Free |
+| GPIO27   | Pin 13         | Used as TDI in NeTV2 OpenOCD config |
 
-Source: [Digilent PMOD HAT Reference Manual](https://digilent.com/reference/add-ons/pmod-hat/reference-manual)
+GPIO0/1 are reserved for the HAT ID EEPROM I2C bus and are not routed to any PMOD connector.
+
+Source: [DesignSpark.Pmod HAT.py driver](https://github.com/DesignSparkRS/DesignSpark.Pmod/blob/master/DesignSpark/Pmod/HAT.py), [Digilent PMOD HAT Schematic](https://digilent.com/reference/_media/learn/documentation/schematics/pmod_hat_adapter_sch.pdf)
 
 ## Electrical Characteristics
 
@@ -169,18 +176,22 @@ This tests the end-to-end signal path: RPi GPIO -> PMOD HAT -> cable -> FPGA PMO
 
 ### Connecting to Arty A7
 
-When connecting the PMOD HAT to an Arty A7 PMOD port, the RPi GPIO pins map to FPGA pins as follows (example using PMOD HAT port JA connected to Arty PMODA):
+When connecting the PMOD HAT to an Arty A7 via ribbon cables (HAT JA→Arty JA, JB→Arty JB, JC→Arty JC), the RPi GPIO pins map to FPGA pins as follows:
 
-| PMOD Pin | RPi GPIO | Arty PMODA FPGA Pin |
-|----------|----------|---------------------|
-| Pin 1 | GPIO6 | G13 |
-| Pin 2 | GPIO13 | B11 |
-| Pin 3 | GPIO19 | A11 |
-| Pin 4 | GPIO26 | D12 |
-| Pin 7 | GPIO12 | D13 |
-| Pin 8 | GPIO16 | B18 |
-| Pin 9 | GPIO20 | A18 |
-| Pin 10 | GPIO21 | K16 |
+**HAT JA → Arty JA:**
+
+| PMOD Pin | RPi GPIO | FPGA Pin |
+|----------|----------|----------|
+| 1        | GPIO8    | G13      |
+| 2        | GPIO10   | B11 (\*) |
+| 3        | GPIO9    | A11 (\*) |
+| 4        | GPIO11   | D12 (\*) |
+| 7        | GPIO19   | D13      |
+| 8        | GPIO21   | B18      |
+| 9        | GPIO20   | A18      |
+| 10       | GPIO18   | K16      |
+
+(\*) Pins 2-4 are shared with JB — when both cables are connected, these GPIOs also drive/read Arty JB pins 2-4 (E16, D15, C15).
 
 ## References
 
