@@ -24,22 +24,21 @@ The bitstream is written to:
 """
 
 import argparse
-import sys
 import pathlib
+import sys
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
-import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-
+from litex.soc.cores.ram import Up5kSPRAM
+from litex.soc.integration.builder import Builder
+from litex.soc.integration.soc import SoCRegion
+from litex.soc.integration.soc_core import SoCCore
 from migen import *
 
-from litex.soc.cores.ram import Up5kSPRAM
-from litex.soc.integration.soc_core import SoCCore
-from litex.soc.integration.soc import SoCRegion
-from litex.soc.integration.builder import Builder
-
-from designs._shared.tt_fpga_platform import Platform
-from designs._shared.tt_fpga_crg import TtFpgaCRG
+import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
 from designs._shared.build_helpers import default_build_dir
+from designs._shared.tt_fpga_crg import TtFpgaCRG
+from designs._shared.tt_fpga_platform import Platform
 
 kB = 1024
 

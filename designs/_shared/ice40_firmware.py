@@ -433,7 +433,7 @@ def generate_spiflash_firmware(uart_base, spiflash_base, ident):
     i_done_addi  = len(words); words.append(0)
     i_done_jal   = len(words); words.append(0)
 
-    i_halt = len(words)
+    _i_halt = len(words)  # documents the halt address
     words.append(_jal(ZERO, 0))                                 # self-loop
 
     # === Subroutines ======================================================
@@ -647,7 +647,7 @@ if __name__ == "__main__":
 
     print(f"UART firmware: {len(fw)} words, {len(fw) * 4} bytes")
     assert len(fw) <= 256, f"UART firmware too large: {len(fw)} words > 256 (1 KB)"
-    print(f"  Fits in 1 KB ROM: ✓")
+    print("  Fits in 1 KB ROM: ✓")
 
     # Verify address split/reconstruction.
     upper, lower = _split_imm32(uart_base)
@@ -666,7 +666,7 @@ if __name__ == "__main__":
 
     print(f"\nSPI Flash firmware: {len(spi_fw)} words, {len(spi_fw) * 4} bytes")
     assert len(spi_fw) <= 256, f"SPI Flash firmware too large: {len(spi_fw)} words > 256 (1 KB)"
-    print(f"  Fits in 1 KB ROM: ✓")
+    print("  Fits in 1 KB ROM: ✓")
 
     # Verify SPI base address split.
     upper, lower = _split_imm32(spiflash_base)

@@ -14,24 +14,20 @@ openxc7 toolchain directories. The bitstream is written to:
     designs/uart/build/arty/gateware/digilent_arty.bit
 """
 
-import sys
 import pathlib
+import sys
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
-import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-
-from migen import *
-
 from litex.gen import *
-
-from litex_boards.platforms import digilent_arty
-
 from litex.soc.cores.clock import S7PLL
 from litex.soc.integration.soc_core import SoCCore
+from litex_boards.platforms import digilent_arty
+from migen import *
 
-from designs._shared.build_helpers import default_soc_kwargs, build_soc
+import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+from designs._shared.build_helpers import build_soc, default_soc_kwargs
 from designs._shared.yosys_workarounds import patch_yosys_template
-
 
 # CRG (Clock Reset Generator) ---------------------------------------------------------------------
 

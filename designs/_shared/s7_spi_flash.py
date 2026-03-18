@@ -13,10 +13,9 @@ CSR layout (identical to Ice40SPIFlash):
 This allows the same RV32I firmware to work on both iCE40 and 7-series.
 """
 
-from migen import *
-
 from litex.gen import LiteXModule
 from litex.soc.interconnect.csr import *
+from migen import *
 
 
 class S7BitbangSPIFlash(LiteXModule):

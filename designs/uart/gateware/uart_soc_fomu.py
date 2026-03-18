@@ -22,21 +22,19 @@ The bitstream is written to:
 """
 
 import argparse
-import sys
 import pathlib
+import sys
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
-import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-
+from litex.soc.cores.ram import Up5kSPRAM
+from litex.soc.integration.builder import Builder
+from litex.soc.integration.soc import SoCRegion
+from litex.soc.integration.soc_core import SoCCore
+from litex_boards.platforms import kosagi_fomu_evt
 from migen import *
 
-from litex_boards.platforms import kosagi_fomu_evt
-
-from litex.soc.cores.ram import Up5kSPRAM
-from litex.soc.integration.soc_core import SoCCore
-from litex.soc.integration.soc import SoCRegion
-from litex.soc.integration.builder import Builder
-
+import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
 from designs._shared.build_helpers import default_build_dir
 from designs._shared.fomu_crg import FomuCRG
 

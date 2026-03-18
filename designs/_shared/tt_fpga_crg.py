@@ -4,11 +4,10 @@ Derives a 12 MHz system clock from the 50 MHz RP2040-provided clock
 via the iCE40 PLL.  Includes power-on reset synchronisation.
 """
 
-from migen import *
-from migen.genlib.resetsync import AsyncResetSynchronizer
-
 from litex.gen import *
 from litex.soc.cores.clock import iCE40PLL
+from migen import *
+from migen.genlib.resetsync import AsyncResetSynchronizer
 
 
 class TtFpgaCRG(LiteXModule):

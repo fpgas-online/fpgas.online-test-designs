@@ -7,7 +7,6 @@ template and helpers to apply it.
 
 from litex.build.yosys_wrapper import YosysWrapper
 
-
 # The default LiteX Yosys template with an extra ``delete t:$scopeinfo``
 # step inserted just before the ``write_*`` command.
 YOSYS_TEMPLATE_STRIP_SCOPEINFO = list(YosysWrapper._default_template)

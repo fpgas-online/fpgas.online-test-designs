@@ -17,14 +17,13 @@ from pathlib import Path
 # Add repo root so designs._shared is importable.
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-
-from migen import *
-from litex.build.generic_platform import Pins, IOStandard, Subsignal
+from litex.build.generic_platform import IOStandard, Pins
 from litex_boards.platforms.digilent_arty import Platform
-
-from designs._shared.yosys_workarounds import YOSYS_TEMPLATE_STRIP_SCOPEINFO
+from migen import *
 from pmod_pin_id import UARTTxIdentifier
+
+import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+from designs._shared.yosys_workarounds import YOSYS_TEMPLATE_STRIP_SCOPEINFO
 
 # Connector names to scan (all PMOD connectors on the Arty).
 CONNECTORS = ["pmoda", "pmodb", "pmodc", "pmodd"]

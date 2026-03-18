@@ -7,11 +7,10 @@ Unlike the upstream Fomu CRG we omit USB clock domains since our test
 designs use GPIO-based serial UART instead of USB ACM.
 """
 
-from migen import *
-from migen.genlib.resetsync import AsyncResetSynchronizer
-
 from litex.gen import *
 from litex.soc.cores.clock import iCE40PLL
+from migen import *
+from migen.genlib.resetsync import AsyncResetSynchronizer
 
 
 class FomuCRG(LiteXModule):

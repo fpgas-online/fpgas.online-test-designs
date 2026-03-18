@@ -66,6 +66,13 @@ select = [
 # wildcard imports by convention. These are intentional patterns, not bugs.
 "designs/*/gateware/*.py" = ["E402", "F403", "F405"]
 "designs/_shared/*.py" = ["E402", "F403", "F405"]
+# ice40_firmware.py uses compact assembly-style formatting with semicolons.
+"designs/_shared/ice40_firmware.py" = ["E402", "F403", "F405", "E702", "SIM108"]
+# migen_compat.py patches migen internals — ternary suggestions reduce readability.
+"designs/_shared/migen_compat.py" = ["E402", "F403", "F405", "SIM108"]
+# platform_fixups.py: try/except FileExistsError is clearer than contextlib.suppress
+# for documenting the race condition.
+"designs/_shared/platform_fixups.py" = ["E402", "F403", "F405", "SIM105"]
 # test_uart.py runs on rpi3-netv2 (Python 3.5) — must use .format() not f-strings.
 "designs/uart/host/test_uart.py" = ["UP032"]
 

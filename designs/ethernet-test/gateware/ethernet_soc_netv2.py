@@ -15,18 +15,19 @@ Note on yosys+nextpnr toolchain:
   --integrated-main-ram-size=8192 and --sys-clk-freq=50e6 by default.
 """
 
-import pathlib, sys  # noqa: E401
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
+import pathlib
+import sys
 
-import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer for Python >= 3.11
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
 from litex.soc.integration.builder import Builder
 from litex_boards.platforms import kosagi_netv2
 from litex_boards.targets.kosagi_netv2 import BaseSoC
 
+import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer for Python >= 3.11
 from designs._shared.build_helpers import default_build_dir
-from designs._shared.platform_fixups import fix_openxc7_device_name, ensure_chipdb_symlink
-from designs._shared.yosys_workarounds import patch_yosys_template, apply_nodram_workaround
+from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
+from designs._shared.yosys_workarounds import apply_nodram_workaround, patch_yosys_template
 
 
 def main():

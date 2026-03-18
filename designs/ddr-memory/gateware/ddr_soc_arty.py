@@ -19,20 +19,16 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
-import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-
-from migen import *
-
+from litedram.modules import MT41K128M16
+from litedram.phy import s7ddrphy
 from litex.gen import *
-
-from litex_boards.platforms import digilent_arty
-
 from litex.soc.cores.clock import *
 from litex.soc.integration.builder import Builder
 from litex.soc.integration.soc_core import *
+from litex_boards.platforms import digilent_arty
+from migen import *
 
-from litedram.modules import MT41K128M16
-from litedram.phy import s7ddrphy
+import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
 
 # CRG ----------------------------------------------------------------------------------------------
 
@@ -106,8 +102,8 @@ def main():
         **parser.soc_argdict,
     )
 
-    from designs._shared.yosys_workarounds import patch_yosys_template
     from designs._shared.build_helpers import default_build_dir
+    from designs._shared.yosys_workarounds import patch_yosys_template
 
     patch_yosys_template(soc)
 

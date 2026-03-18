@@ -11,12 +11,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-
-from migen import *
-from litex.build.generic_platform import Pins, IOStandard
+from litex.build.generic_platform import IOStandard, Pins
 from litex_boards.platforms.kosagi_fomu_evt import Platform
+from migen import *
 
+import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
 
 _loopback_io = [
     ("loopback_in", 0,

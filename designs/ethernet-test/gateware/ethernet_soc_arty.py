@@ -27,17 +27,18 @@ Note on open-source toolchain (openxc7 / yosys+nextpnr):
     PRJXRAY_DB_DIR           - path to prjxray-db database
 """
 
-import pathlib, sys  # noqa: E401
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
+import pathlib
+import sys
 
-import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer for Python >= 3.11
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
 from litex.soc.integration.builder import Builder
 from litex_boards.platforms import digilent_arty
 from litex_boards.targets.digilent_arty import BaseSoC
 
+import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer for Python >= 3.11
 from designs._shared.build_helpers import default_build_dir
-from designs._shared.yosys_workarounds import patch_yosys_template, apply_nodram_workaround
+from designs._shared.yosys_workarounds import apply_nodram_workaround, patch_yosys_template
 
 
 def main():

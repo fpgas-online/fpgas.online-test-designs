@@ -12,13 +12,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-
-from migen import *
 from litex_boards.platforms.kosagi_netv2 import Platform
+from migen import *
 
+import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
 from designs._shared.yosys_workarounds import YOSYS_TEMPLATE_STRIP_SCOPEINFO
-from designs._shared.platform_fixups import fix_openxc7_device_name, ensure_chipdb_symlink
 
 
 class GPIOLoopback(Module):

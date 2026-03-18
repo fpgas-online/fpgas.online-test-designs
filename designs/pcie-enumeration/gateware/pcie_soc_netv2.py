@@ -36,10 +36,9 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer for Python >= 3.11
-
 from designs._shared.build_helpers import default_build_dir
-from designs._shared.platform_fixups import fix_openxc7_device_name, ensure_chipdb_symlink
-from designs._shared.yosys_workarounds import patch_yosys_template, apply_nodram_workaround
+from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
+from designs._shared.yosys_workarounds import apply_nodram_workaround, patch_yosys_template
 
 # Monkey-patch litex memory Verilog generator to handle write-only ports.
 # The migen git version (needed for Python 3.12) can create memory ports
@@ -55,12 +54,15 @@ def _patched_memory_generate_verilog(name, memory, namespace, add_data_file):
         return _orig_memory_generate_verilog(name, memory, namespace, add_data_file)
 
     # Import everything needed from the original module's scope.
-    from migen.fhdl.structure import Signal
     from migen.fhdl.bitcontainer import bits_for
-    from migen.fhdl.verilog import _printexpr as verilog_printexpr
     from migen.fhdl.specials import (
-        Memory, READ_FIRST, WRITE_FIRST, NO_CHANGE,
+        NO_CHANGE,
+        READ_FIRST,
+        WRITE_FIRST,
+        Memory,
     )
+    from migen.fhdl.structure import Signal
+    from migen.fhdl.verilog import _printexpr as verilog_printexpr
 
     def _get_name(e):
         if isinstance(e, Memory):
@@ -178,16 +180,12 @@ def _patched_memory_generate_verilog(name, memory, namespace, add_data_file):
 
 _litex_memory._memory_generate_verilog = _patched_memory_generate_verilog
 
-from migen import *
-
 from litex.gen import *
-
 from litex.soc.cores.clock import S7PLL
 from litex.soc.integration.builder import Builder
 from litex.soc.integration.soc_core import SoCCore
-
 from litex_boards.platforms import kosagi_netv2
-
+from migen import *
 
 # CRG (Clock Reset Generator) ---------------------------------------------------------------------
 
@@ -261,9 +259,9 @@ class PCIeEnumerationSoC(SoCCore):
 
         # LitePCIe endpoint -- requires Xilinx 7-Series hard IP (Vivado only)
         if is_vivado:
-            from litepcie.phy.s7pciephy import S7PCIEPHY
             from litepcie.core import LitePCIeEndpoint, LitePCIeMSI
             from litepcie.frontend.wishbone import LitePCIeWishboneBridge
+            from litepcie.phy.s7pciephy import S7PCIEPHY
 
             # PCIe PHY -- uses the Xilinx 7-Series integrated hard block
             self.pcie_phy = S7PCIEPHY(

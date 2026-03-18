@@ -17,20 +17,16 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
-import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-
-from migen import *
-
+from litedram.modules import MT41K256M16
+from litedram.phy import s7ddrphy
 from litex.gen import *
-
-from litex_boards.platforms import kosagi_netv2
-
 from litex.soc.cores.clock import *
 from litex.soc.integration.builder import Builder
 from litex.soc.integration.soc_core import *
+from litex_boards.platforms import kosagi_netv2
+from migen import *
 
-from litedram.modules import MT41K256M16
-from litedram.phy import s7ddrphy
+import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
 
 # CRG ----------------------------------------------------------------------------------------------
 
@@ -111,9 +107,9 @@ def main():
         **parser.soc_argdict,
     )
 
-    from designs._shared.yosys_workarounds import patch_yosys_template, apply_nodram_workaround
     from designs._shared.build_helpers import default_build_dir
     from designs._shared.platform_fixups import ensure_chipdb_symlink
+    from designs._shared.yosys_workarounds import apply_nodram_workaround, patch_yosys_template
 
     ensure_chipdb_symlink(soc.platform)
     patch_yosys_template(soc)

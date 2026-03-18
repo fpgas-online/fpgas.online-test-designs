@@ -20,23 +20,18 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
-import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-
+from common import add_spi_flash
+from litex.gen import *
+from litex.soc.cores.clock import S7PLL
+from litex.soc.integration.builder import Builder
+from litex.soc.integration.soc_core import SoCCore
+from litex_boards.platforms.kosagi_netv2 import Platform
 from migen import *
 
-from litex.gen import *
-
-from litex.soc.cores.clock import S7PLL
-from litex.soc.integration.soc_core import SoCCore
-from litex.soc.integration.builder import Builder
-
-from litex_boards.platforms.kosagi_netv2 import Platform
-
+import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
 from designs._shared.build_helpers import default_build_dir
-from designs._shared.platform_fixups import fix_openxc7_device_name, ensure_chipdb_symlink
+from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
 from designs._shared.yosys_workarounds import patch_yosys_template
-
-from common import add_spi_flash
 
 kB = 1024
 

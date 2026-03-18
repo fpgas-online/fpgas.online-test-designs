@@ -23,6 +23,7 @@ Requirements:
 
 import argparse
 import pathlib
+import re
 import subprocess
 import sys
 import time
@@ -222,7 +223,6 @@ def receive_label(reader, max_bytes=20, timeout=0.2):
 # Expected label format: FPGA pin names are 2-4 alphanumeric characters.
 # Examples: "G13", "B11", "A9", "K16", "V14" (Xilinx 7-series ball names)
 # Also accepts PMOD-style names like "JA01" for backwards compatibility.
-import re
 _LABEL_PATTERN = re.compile(r'^[A-Z][A-Za-z0-9]{1,3}$')
 
 
@@ -247,12 +247,12 @@ def identify_pin(reader, attempts=10):
                 valid_results.append(label)
     if valid_results:
         from collections import Counter
-        most_common, count = Counter(valid_results).most_common(1)[0]
+        most_common, _count = Counter(valid_results).most_common(1)[0]
         return most_common
     # Return raw data for debugging if we got signal but no valid decode.
     if raw_results:
         from collections import Counter
-        most_common, count = Counter(raw_results).most_common(1)[0]
+        most_common, _count = Counter(raw_results).most_common(1)[0]
         return f"?{most_common}"  # Prefix with ? to flag as unvalidated
     return None
 

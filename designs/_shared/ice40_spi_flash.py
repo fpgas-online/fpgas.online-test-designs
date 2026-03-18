@@ -12,10 +12,9 @@ CSR layout (from the spiflash CSR base address):
 The firmware controls SPI transactions by toggling these bits directly.
 """
 
-from migen import *
-
 from litex.gen import LiteXModule
 from litex.soc.interconnect.csr import *
+from migen import *
 
 
 class Ice40SPIFlash(LiteXModule):
