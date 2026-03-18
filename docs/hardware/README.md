@@ -9,15 +9,16 @@ Documentation for the FPGA boards, host infrastructure, and interconnects used i
 
 ## FPGA Boards
 
-| Board                              | Spec                       | Pin Mapping                                |
-| ---------------------------------- | -------------------------- | ------------------------------------------ |
-| Digilent Arty A7-35T               | [arty-a7.md](arty-a7.md)  | [arty-a7-pin-mapping.md](arty-a7-pin-mapping.md) |
-| Kosagi NeTV2                       | [netv2.md](netv2.md)       | [netv2-pin-mapping.md](netv2-pin-mapping.md)     |
-| Kosagi Fomu EVT                    | [fomu-evt.md](fomu-evt.md) | [fomu-pin-mapping.md](fomu-pin-mapping.md)       |
-| TinyTapeout FPGA Demo Board        | [tt-fpga.md](tt-fpga.md)   | [tt-fpga-pin-mapping.md](tt-fpga-pin-mapping.md) |
-| Sqrl Acorn CLE-215+               | [acorn-cle215.md](acorn-cle215.md) | —                                    |
-| 1BitSquared ButterStick            | [butterstick.md](butterstick.md)   | —                                    |
-| 1BitSquared ULX3S                  | [ulx3s.md](ulx3s.md)              | —                                    |
+| Board                       | Spec                               | Pin Mapping                                      | Welland | PS1 |
+| --------------------------- | ---------------------------------- | ------------------------------------------------ | ------- | --- |
+| Digilent Arty A7-35T        | [arty-a7.md](arty-a7.md)           | [arty-a7-pin-mapping.md](arty-a7-pin-mapping.md) | ×5      | ×8  |
+| Kosagi NeTV2                | [netv2.md](netv2.md)               | [netv2-pin-mapping.md](netv2-pin-mapping.md)     | ×5      | —   |
+| Kosagi Fomu EVT             | [fomu-evt.md](fomu-evt.md)         | [fomu-pin-mapping.md](fomu-pin-mapping.md)       | ×2      | —   |
+| TinyTapeout FPGA Demo Board | [tt-fpga.md](tt-fpga.md)           | [tt-fpga-pin-mapping.md](tt-fpga-pin-mapping.md) | ×4      | —   |
+| TinyTapeout ASIC (TT06/08)  | —                                  | —                                                | ×2–3    | —   |
+| Sqrl Acorn CLE-215+         | [acorn-cle215.md](acorn-cle215.md) | —                                                | ×1+3    | —   |
+| 1BitSquared ButterStick     | [butterstick.md](butterstick.md)   | —                                                | —       | —   |
+| 1BitSquared ULX3S           | [ulx3s.md](ulx3s.md)               | —                                                | —       | —   |
 
 ## PMOD Interconnects
 
