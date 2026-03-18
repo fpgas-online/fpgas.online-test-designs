@@ -97,7 +97,7 @@ openFPGALoader -c rp1pio --pins 27:22:4:17 design.bit
 
 This requires:
 - openFPGALoader with RP1 PIO JTAG support (pending upstream): [mithro/openFPGALoader (feature/rp1-jtag-netv2)](https://github.com/mithro/openFPGALoader/tree/feature/rp1-jtag-netv2)
-- RP1 JTAG kernel module: [mithro/rp1-jtag](https://github.com/mithro/rp1-jtag)
+- RP1 JTAG shared library: [mithro/rp1-jtag](https://github.com/mithro/rp1-jtag)
 
 #### Future: NeTV2 board definition in openFPGALoader
 
