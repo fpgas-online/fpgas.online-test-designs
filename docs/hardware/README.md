@@ -2,9 +2,10 @@
 
 Documentation for the FPGA boards, host infrastructure, and interconnects used in the fpgas.online test infrastructure.
 
-## Infrastructure
+## Sites
 
-- [infrastructure.md](infrastructure.md) — Host machines, network topology, SSH access, programming tools
+- [site-welland.md](site-welland.md) — Welland, Australia — Private test lab with Arty A7, NeTV2, Fomu EVT, TT FPGA, Acorn CLE-215+
+- [site-ps1.md](site-ps1.md) — Pumping Station: One, Chicago — Public-facing fpgas.online service with Arty A7 boards
 
 ## FPGA Boards
 

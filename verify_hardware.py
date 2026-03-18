@@ -26,7 +26,7 @@ import time
 
 REPO_DIR = os.path.dirname(os.path.abspath(__file__))
 ARTIFACTS_DIR = os.path.join(REPO_DIR, "artifacts")
-TWEED = "pi@fpgas.mithis.com"
+TWEED = "root@tweed.welland.mithis.com"
 
 
 # ---------------------------------------------------------------------------

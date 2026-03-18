@@ -62,7 +62,8 @@ See [docs/tests/](docs/tests/) for detailed test specifications.
 ## Documentation
 
 - **[Hardware Reference](docs/hardware/)** — Board specs, pin mappings, host connections
-  - [Infrastructure Overview](docs/hardware/infrastructure.md) — Host machines, SSH access, programming tools
+  - [Welland Site](docs/hardware/site-welland.md) — Private test lab (Arty, NeTV2, Fomu, TT FPGA, Acorn)
+  - [PS1 Site](docs/hardware/site-ps1.md) — Public fpgas.online service (Arty A7 boards)
   - [PMOD Interface Spec](docs/hardware/pmod.md) — Standard PMOD types and connector pinouts
   - [RPi PMOD HAT](docs/hardware/rpi-hat-pmod.md) — Raspberry Pi PMOD HAT adapter pin mapping
   - [TinyTapeout PMOD Standards](docs/hardware/pmod-tt.md) — TT-specific PMOD layouts and peripherals
