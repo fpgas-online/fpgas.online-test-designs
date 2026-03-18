@@ -1,6 +1,6 @@
 # Site: Pumping Station: One, Chicago
 
-Public-facing [fpgas.online](https://fpgas.online) service hosted at [Pumping Station: One](https://pumpingstationone.org/) (PS1), a hackerspace in Chicago, IL. Managed by Carl Karsten via the [CarlFK/pici](https://github.com/CarlFK/pici) repository.
+[ps1.fpgas.online](https://ps1.fpgas.online) — fpgas.online site hosted at [Pumping Station: One](https://pumpingstationone.org/) (PS1), a hackerspace in Chicago, IL. Managed by Carl Karsten via the [CarlFK/pici](https://github.com/CarlFK/pici) repository.
 
 This site provides public remote access to Arty A7 FPGA boards — anyone can program and interact with the boards through a web interface, with live camera feeds showing the board LEDs.
 

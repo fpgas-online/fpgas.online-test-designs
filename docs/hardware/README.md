@@ -4,8 +4,8 @@ Documentation for the FPGA boards, host infrastructure, and interconnects used i
 
 ## Sites
 
-- [site-welland.md](site-welland.md) — Welland, Australia — Private test lab with Arty A7, NeTV2, Fomu EVT, TT FPGA, Acorn CLE-215+
-- [site-ps1.md](site-ps1.md) — Pumping Station: One, Chicago — Public-facing fpgas.online service with Arty A7 boards
+- [site-welland.md](site-welland.md) — [welland.fpgas.online](https://welland.fpgas.online) — Welland, Australia — Arty A7, NeTV2, Fomu EVT, TT FPGA, Acorn CLE-215+
+- [site-ps1.md](site-ps1.md) — [ps1.fpgas.online](https://ps1.fpgas.online) — Pumping Station: One, Chicago — Arty A7 boards with live camera feeds
 
 ## FPGA Boards
 
