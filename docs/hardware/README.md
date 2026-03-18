@@ -9,29 +9,29 @@ Documentation for the FPGA boards, host infrastructure, and interconnects used i
 
 ## FPGA Boards
 
-| Board                       | Docs                                                  | Welland (deployed) | Welland (pending) | PS1 (deployed) | PS1 (pending) |
-| --------------------------- | ----------------------------------------------------- | ------------------ | ----------------- | -------------- | ------------- |
-| Digilent Arty A7-35T        | [spec](arty-a7.md), [pin map](arty-a7-pin-mapping.md) | ×5                 | —                 | ×8             | —             |
-| Kosagi NeTV2 — GPIO JTAG    | [spec](netv2.md), [pin map](netv2-pin-mapping.md)     | ×5                 | —                 | —              | —             |
-| Kosagi NeTV2 — RPi5 PCIe    | [spec](netv2.md), [pin map](netv2-pin-mapping.md)     | —                  | ×4                | —              | —             |
-| Kosagi Fomu EVT             | [spec](fomu-evt.md), [pin map](fomu-pin-mapping.md)   | ×2                 | —                 | —              | —             |
-| TinyTapeout FPGA Demo Board | [spec](tt-fpga.md), [pin map](tt-fpga-pin-mapping.md) | ×4                 | —                 | —              | ×4            |
-| TinyTapeout ASIC (TT02)     | —                                                     | —                  | ×1                | —              | ×1            |
-| TinyTapeout ASIC (TT03)     | —                                                     | —                  | ×1                | —              | ×1            |
-| TinyTapeout ASIC (TT04)     | —                                                     | —                  | ×1                | —              | ×1            |
-| TinyTapeout ASIC (TT05)     | —                                                     | —                  | ×1                | —              | ×1            |
-| TinyTapeout ASIC (TT06)     | —                                                     | ×1                 | —                 | ×1             | —             |
-| TinyTapeout ASIC (TT07)     | —                                                     | —                  | ×1                | —              | ×1            |
-| TinyTapeout ASIC (TT08)     | —                                                     | ×1                 | —                 | —              | ×1            |
-| TinyTapeout ASIC (TT09)     | —                                                     | —                  | ×1                | —              | ×1            |
-| Sqrl Acorn CLE-215+         | [spec](acorn-cle215.md)                               | ×1                 | ×3                | ×1             | ×3            |
-| 1BitSquared ButterStick     | [spec](butterstick.md)                                | —                  | ×4                | —              | —             |
-| 1BitSquared ULX3S           | [spec](ulx3s.md)                                      | —                  | ×4                | —              | —             |
+| Board                       | Docs                                                 | Welland (deployed) | Welland (pending) | PS1 (deployed) | PS1 (pending) |
+| --------------------------- | ---------------------------------------------------- | ------------------ | ----------------- | -------------- | ------------- |
+| Digilent Arty A7-35T        | [spec](arty-a7.md), [pinmap](arty-a7-pin-mapping.md) | ×5                 | —                 | ×8             | —             |
+| Kosagi NeTV2 — GPIO JTAG    | [spec](netv2.md), [pinmap](netv2-pin-mapping.md)     | ×5                 | —                 | —              | —             |
+| Kosagi NeTV2 — RPi5 PCIe    | [spec](netv2.md), [pinmap](netv2-pin-mapping.md)     | —                  | ×4                | —              | —             |
+| Kosagi Fomu EVT             | [spec](fomu-evt.md), [pinmap](fomu-pin-mapping.md)   | ×2                 | —                 | —              | —             |
+| TinyTapeout FPGA Demo Board | [spec](tt-fpga.md), [pinmap](tt-fpga-pin-mapping.md) | ×4                 | —                 | —              | ×4            |
+| TinyTapeout ASIC (TT02)     | —                                                    | —                  | ×1                | —              | ×1            |
+| TinyTapeout ASIC (TT03)     | —                                                    | —                  | ×1                | —              | ×1            |
+| TinyTapeout ASIC (TT04)     | —                                                    | —                  | ×1                | —              | ×1            |
+| TinyTapeout ASIC (TT05)     | —                                                    | —                  | ×1                | —              | ×1            |
+| TinyTapeout ASIC (TT06)     | —                                                    | ×1                 | —                 | ×1             | —             |
+| TinyTapeout ASIC (TT07)     | —                                                    | —                  | ×1                | —              | ×1            |
+| TinyTapeout ASIC (TT08)     | —                                                    | ×1                 | —                 | —              | ×1            |
+| TinyTapeout ASIC (TT09)     | —                                                    | —                  | ×1                | —              | ×1            |
+| Sqrl Acorn CLE-215+         | [spec](acorn-cle215.md)                              | ×1                 | ×3                | ×1             | ×3            |
+| 1BitSquared ButterStick     | [spec](butterstick.md)                               | —                  | ×4                | —              | —             |
+| 1BitSquared ULX3S           | [spec](ulx3s.md)                                     | —                  | ×4                | —              | —             |
 
 ## PMOD Interconnects
 
 - [pmod.md](pmod.md) — PMOD interface specification (standard Digilent types 1–6 + I2C extension)
-- [rpi-hat-pmod.md](rpi-hat-pmod.md) — Digilent PMOD HAT adapter for Raspberry Pi (RPi GPIO ↔ PMOD pin mapping, type conformance)
+- [rpi-hat-pmod.md](rpi-hat-pmod.md) — Digilent PMOD HAT adapter for Raspberry Pi (RPi GPIO ↔ PMOD pinmap, type conformance)
 - [pmod-tt.md](pmod-tt.md) — TinyTapeout PMOD connector standards (TT-specific layouts, RP2040/RP2350 GPIO mapping, community PMOD boards)
 
 ## Analysis
