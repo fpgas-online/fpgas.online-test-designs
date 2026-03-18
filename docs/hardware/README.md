@@ -9,18 +9,18 @@ Documentation for the FPGA boards, host infrastructure, and interconnects used i
 
 ## FPGA Boards
 
-| Board                       | Spec                               | Pin Mapping                                      | Welland (deployed) | Welland (pending) | PS1 (deployed) | PS1 (pending) |
-| --------------------------- | ---------------------------------- | ------------------------------------------------ | ------------------ | ----------------- | -------------- | ------------- |
-| Digilent Arty A7-35T        | [arty-a7.md](arty-a7.md)           | [arty-a7-pin-mapping.md](arty-a7-pin-mapping.md) | ×5                 | —                 | ×8             | —             |
-| Kosagi NeTV2 (GPIO JTAG)    | [netv2.md](netv2.md)               | [netv2-pin-mapping.md](netv2-pin-mapping.md)     | ×5                 | —                 | —              | —             |
-| Kosagi NeTV2 (RPi5 PCIe)    | [netv2.md](netv2.md)               | [netv2-pin-mapping.md](netv2-pin-mapping.md)     | —                  | ×4                | —              | —             |
-| Kosagi Fomu EVT             | [fomu-evt.md](fomu-evt.md)         | [fomu-pin-mapping.md](fomu-pin-mapping.md)       | ×2                 | —                 | —              | —             |
-| TinyTapeout FPGA Demo Board | [tt-fpga.md](tt-fpga.md)           | [tt-fpga-pin-mapping.md](tt-fpga-pin-mapping.md) | ×4                 | —                 | —              | ×4            |
-| TinyTapeout ASIC (TT06)     | —                                  | —                                                | ×1                 | ×1                | ×1             | ×1            |
-| TinyTapeout ASIC (TT08)     | —                                  | —                                                | ×1                 | ×1                | —              | ×1            |
-| Sqrl Acorn CLE-215+         | [acorn-cle215.md](acorn-cle215.md) | —                                                | ×1                 | ×3                | ×1             | ×3            |
-| 1BitSquared ButterStick     | [butterstick.md](butterstick.md)   | —                                                | —                  | ×4                | —              | —             |
-| 1BitSquared ULX3S           | [ulx3s.md](ulx3s.md)               | —                                                | —                  | ×4                | —              | —             |
+| Board                                                                               | Welland (deployed) | Welland (pending) | PS1 (deployed) | PS1 (pending) |
+| ----------------------------------------------------------------------------------- | ------------------ | ----------------- | -------------- | ------------- |
+| Digilent Arty A7-35T ([spec](arty-a7.md), [pin map](arty-a7-pin-mapping.md))        | ×5                 | —                 | ×8             | —             |
+| Kosagi NeTV2 — GPIO JTAG ([spec](netv2.md), [pin map](netv2-pin-mapping.md))        | ×5                 | —                 | —              | —             |
+| Kosagi NeTV2 — RPi5 PCIe ([spec](netv2.md), [pin map](netv2-pin-mapping.md))        | —                  | ×4                | —              | —             |
+| Kosagi Fomu EVT ([spec](fomu-evt.md), [pin map](fomu-pin-mapping.md))               | ×2                 | —                 | —              | —             |
+| TinyTapeout FPGA Demo Board ([spec](tt-fpga.md), [pin map](tt-fpga-pin-mapping.md)) | ×4                 | —                 | —              | ×4            |
+| TinyTapeout ASIC (TT06)                                                             | ×1                 | ×1                | ×1             | ×1            |
+| TinyTapeout ASIC (TT08)                                                             | ×1                 | ×1                | —              | ×1            |
+| Sqrl Acorn CLE-215+ ([spec](acorn-cle215.md))                                       | ×1                 | ×3                | ×1             | ×3            |
+| 1BitSquared ButterStick ([spec](butterstick.md))                                    | —                  | ×4                | —              | —             |
+| 1BitSquared ULX3S ([spec](ulx3s.md))                                                | —                  | ×4                | —              | —             |
 
 ## PMOD Interconnects
 
