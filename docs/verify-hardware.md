@@ -25,7 +25,7 @@ There are two types of SSH connections:
 **Tweed-connected hosts** (pi3, pi5, pi9, pi17, pi21, pi27, pi29, pi31, pi33): These RPis are on a private 10.21.0.0/16 network behind a gateway called `tweed.welland.mithis.com`. Every SSH command is a double-hop:
 
 ```
-local ──SSH──> pi@fpgas.mithis.com ──SSH──> pi@10.21.0.NNN
+local ──SSH──> root@tweed.welland.mithis.com ──SSH──> root@10.21.0.NNN
 ```
 
 The `_build_ssh_cmd()` function constructs this. The inner command is shell-escaped with `shlex.quote()` so it survives the tweed shell intact.
