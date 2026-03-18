@@ -104,7 +104,7 @@ Source: dnsmasq pibs.conf, `lsusb` on pi10.
 | pi6  | port 6      | 10.21.0.106 | RPi 5 8GB         | Acorn pending | —                                                                              |
 | pi8  | port 8      | 10.21.0.108 | RPi 5 8GB         | Acorn pending | —                                                                              |
 
-The Sqrl Acorn CLE-215+ is a PCIe FPGA accelerator card containing a Xilinx Kintex UltraScale KU115 FPGA. It connects to the RPi 5 via an mPCIe HAT. On pi2, the Acorn is visible on PCIe bus `0001:01:00.0` alongside the RPi 5's RP1 south bridge on bus `0002:01:00.0`.
+The Sqrl Acorn CLE-215+ is a PCIe FPGA accelerator card containing a Xilinx Artix-7 XC7A200T FPGA (215K logic cells). It connects to the RPi 5 via an mPCIe HAT. On pi2, the Acorn is visible on PCIe bus `0001:01:00.0` alongside the RPi 5's RP1 south bridge on bus `0002:01:00.0`.
 
 No USB serial devices — programming and communication is via PCIe.
 
