@@ -54,6 +54,12 @@ The iCE40 is programmed via the RP2350 over USB CDC, not directly from the RPi.
    - Start 50 MHz PWM clock on GPIO16
 3. Release all shared GPIOs to high-Z (input mode)
 
+### openFPGALoader Support (work in progress)
+
+Direct programming of the iCE40 via openFPGALoader (bypassing the MicroPython REPL) is being developed. This would allow faster, more reliable programming without needing `mpremote` or the RP2350 filesystem.
+
+- openFPGALoader fork with TT FPGA support: [mithro/openFPGALoader (tt-fpga-support)](https://github.com/mithro/openFPGALoader/tree/tt-fpga-support)
+
 ### RP2350 Considerations
 
 - The stock `main.py` calls `DemoBoard()` which probes I2C and can hang permanently. A safe `main.py` must be installed via `mpremote` to prevent this.
