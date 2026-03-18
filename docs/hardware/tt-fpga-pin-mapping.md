@@ -133,19 +133,34 @@ The 5 unaffected uio bits (uio[0], uio[4:7]) on JB pins 1 and 7-10 use unique RP
 
 ## UART Interface
 
-The FPGA's UART pins are routed through the PMOD HAT to RPi GPIOs. This is a direct connection — NOT through the RP2350.
+The TT standard UART uses ui_in[3] (RX) and uo_out[4] (TX), following the [TinyTapeout UART0 convention](pmod-tt.md#uart-via-rp2040rp2350-built-in-usb-bridge-no-pmod-needed).
 
-| Signal                    | iCE40 Pin | TT Signal | PMOD HAT Pin | RPi GPIO |
-| ------------------------- | --------- | --------- | ------------ | -------- |
-| Serial RX (FPGA receives) | 21        | ui_in[3]  | JC9          | 5        |
-| Serial TX (FPGA sends)    | 45        | uo_out[4] | JA4          | 11       |
+### Signal Routing
 
-| Parameter | Value                                   |
-| --------- | --------------------------------------- |
-| Baud rate | 115200                                  |
-| Test args | `--port <TBD> --board tt --skip-banner` |
+| Signal                    | iCE40 Pin | TT Signal | RP2350 GPIO | PMOD HAT Pin | RPi GPIO |
+| ------------------------- | --------- | --------- | ----------- | ------------ | -------- |
+| Serial RX (FPGA receives) | 21        | ui_in[3]  | GPIO20      | JC9          | 5        |
+| Serial TX (FPGA sends)    | 45        | uo_out[4] | GPIO37      | JA4          | 11       |
 
-**TODO**: RPi GPIO5 and GPIO11 are not standard hardware UART pins. A device tree overlay or alternative UART peripheral is needed to use these as a serial port. See task #10.
+### Access via RP2350 USB bridge (recommended)
+
+The RP2350 connects to the same FPGA pins via GPIO20/GPIO37 and can bridge UART data to the USB CDC serial port (`/dev/ttyACM0`). This is the recommended approach since:
+
+- RPi GPIO5/11 are **not hardware UART pins** — the BCM2711 has no UART peripheral assignable to this GPIO pair.
+- The NFS boot image has no device tree overlay files, and the root filesystem is read-only.
+- Software bit-bang UART at 115200 baud is unreliable under a non-RT Linux kernel.
+- The RP2350 has hardware UART peripherals that can be configured for these pins.
+
+| Parameter | Value                                                     |
+| --------- | --------------------------------------------------------- |
+| Device    | `/dev/ttyACM0` (via RP2350 USB CDC)                       |
+| Baud rate | 115200                                                    |
+| Test args | `--port /dev/ttyACM0 --board tt --skip-banner`            |
+| Requires  | RP2350 firmware configured to bridge UART0 on GPIO20/37   |
+
+### Access via RPi GPIO (not currently feasible)
+
+RPi GPIO5 and GPIO11 are not assignable to any BCM2711 hardware UART as a pair. The BCM2711 UART3 uses GPIO4/5 (TX/RX), and no UART uses GPIO11 for TX. Without hardware UART support, these pins cannot reliably serve as a serial port at 115200 baud.
 
 ## PMOD Loopback
 
