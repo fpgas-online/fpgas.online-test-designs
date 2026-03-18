@@ -62,9 +62,24 @@ Configuration: `bcm2835gpio_jtag_nums 4 17 27 22` and `bcm2835gpio_srst_num 24`
 
 The maximum reliable JTAG clock speed is approximately 5 MHz due to GPIO block clock-boundary crossing issues. The OpenOCD speed coefficients are tuned for the RPi3 (`bcm2835gpio_speed_coeffs 100000 5`).
 
-**RPi5 note**: The RPi5 uses a different GPIO peripheral base address (`0x1f000d0000` for RP1) and requires an updated OpenOCD configuration or the `linuxgpiod` interface instead of `bcm2835gpio`.
+**RPi5 note**: The RPi5 uses the RP1 I/O controller instead of BCM2835 GPIO. OpenOCD's `bcm2835gpio` interface does not work on RPi5. Use openFPGALoader with RP1 PIO JTAG support instead (see below).
 
 Source: [alphamax-rpi.cfg](https://github.com/alphamaxmedia/netv2mvp-scripts/blob/master/alphamax-rpi.cfg)
+
+### openFPGALoader with RP1 PIO JTAG (RPi5)
+
+On RPi5, openFPGALoader can drive JTAG through the RP1's PIO peripheral, which is significantly faster than GPIO bit-banging.
+
+```bash
+openFPGALoader -c rp1pio --pins 27:22:4:17 <bitstream>
+```
+
+Pin order: `TDI:TDO:TCK:TMS` (matching the same GPIO wiring as OpenOCD).
+
+This requires an openFPGALoader build with RP1 JTAG support and the `rp1-jtag` kernel module:
+
+- openFPGALoader fork with RP1 JTAG: [mithro/openFPGALoader (feature/rp1-jtag-netv2)](https://github.com/mithro/openFPGALoader/tree/feature/rp1-jtag-netv2)
+- RP1 JTAG kernel module: [mithro/rp1-jtag](https://github.com/mithro/rp1-jtag)
 
 ## Serial / UART
 
