@@ -233,5 +233,5 @@ This is how the Arty A7 mapping was verified in the fpgas.online infrastructure:
 - Gateware source: [`designs/pmod-pin-id/gateware/`](../../designs/pmod-pin-id/gateware/)
 - Host scanner: [`designs/pmod-pin-id/host/identify_pmod_pins.py`](../../designs/pmod-pin-id/host/identify_pmod_pins.py)
 - PMOD HAT pin mapping: [rpi-hat-pmod.md](rpi-hat-pmod.md)
-- Arty A7 pin mapping (with scan results): [arty-pin-mapping.md](arty-pin-mapping.md)
+- Arty A7 pin mapping (with scan results): [arty-a7-pin-mapping.md](arty-a7-pin-mapping.md)
 - TinyTapeout PMOD standards: [pmod-tt.md](pmod-tt.md)

@@ -128,7 +128,7 @@ Ribbon cables connect straight through between matching port names:
 
 The full RPi GPIO → PMOD pin → FPGA pin mappings for each board are documented in:
 
-- **Arty A7**: [arty-pin-mapping.md](arty-pin-mapping.md)
+- **Arty A7**: [arty-a7-pin-mapping.md](arty-a7-pin-mapping.md)
 - **TT FPGA Demo Board**: [tt-fpga-pin-mapping.md](tt-fpga-pin-mapping.md)
 
 ## References
