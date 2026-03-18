@@ -63,7 +63,9 @@ See [docs/tests/](docs/tests/) for detailed test specifications.
 
 - **[Hardware Reference](docs/hardware/)** — Board specs, pin mappings, host connections
   - [Infrastructure Overview](docs/hardware/infrastructure.md) — Host machines, SSH access, programming tools
-  - [PMOD HAT](docs/hardware/pmod-hat.md) — Raspberry Pi PMOD HAT adapter
+  - [PMOD Interface Spec](docs/hardware/pmod.md) — Standard PMOD types and connector pinouts
+  - [RPi PMOD HAT](docs/hardware/rpi-hat-pmod.md) — Raspberry Pi PMOD HAT adapter pin mapping
+  - [TinyTapeout PMOD Standards](docs/hardware/pmod-tt.md) — TT-specific PMOD layouts and peripherals
 - **[Test Specifications](docs/tests/)** — What each test verifies and how
 - **[Toolchain Guides](docs/toolchains/)** — Building bitstreams with open source tools
   - [openXC7](docs/toolchains/openxc7.md) — For Xilinx 7-Series (Arty, NeTV2)
