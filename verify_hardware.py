@@ -188,6 +188,7 @@ DESIGNS = {
                 "artifact": "gpio-loopback-tt-fpga/top.bin",
                 "test_args": "--board tt",
                 "pre_test": "rmmod spidev spi_bcm2835 2>&1; true",
+                "program_cmd": "python3 ~/tt_fpga_program.py /dev/ttyACM0 {bitstream} --gpio-release",
             },
         },
     },
@@ -340,8 +341,10 @@ def generate_tests():
             remote_bitstream = f"~/{design_name}_{board}{ext}"
             remote_script = f"~/test_{design_name}.py"
 
-            # Determine programming command
-            if host_name in HOST_PROGRAM_CMD:
+            # Determine programming command (priority: per-board-config > per-host > per-board)
+            if "program_cmd" in board_cfg:
+                prog_cmd = board_cfg["program_cmd"].format(bitstream=remote_bitstream)
+            elif host_name in HOST_PROGRAM_CMD:
                 prog_template = HOST_PROGRAM_CMD[host_name]
                 # rpi3-netv2 needs absolute path (openocd doesn't expand ~)
                 home_dir = "/home/pi" if host_name == "rpi3-netv2" else "/home/tim"
@@ -422,28 +425,6 @@ def run_single_test(test, skip_upload=False):
     # TT FPGA boards: RP2350 sits between RPi and FPGA.
     # UART/spiflash: combined program + bridge + test (UART goes through RP2350).
     # PMOD: program via RP2350 wrapper (handles reset/retry), then test via RPi GPIO.
-    if test["board"] == "tt" and test["test_type"] == "pmod":
-        wrapper_cmd = "python3 ~/tt_fpga_program.py /dev/ttyACM0 {} --gpio-release".format(test["remote_bitstream"])
-        print("  Programming FPGA and releasing GPIOs...")
-        rc, stdout, stderr = ssh_run(test["host"], wrapper_cmd, timeout=240)
-        output = stdout + stderr
-        if rc != 0:
-            print("  FAIL: FPGA programming/setup failed")
-            for line in output.strip().split("\n"):
-                print(f"    {line}")
-            return False
-        print("  FPGA programmed, running GPIO test via RPi...")
-        # Skip standard programming — wrapper already did it.
-        # Jump directly to test execution.
-        print("  Running test...")
-        rc, stdout, stderr = ssh_run(test["host"], test["test_cmd"], timeout=180)
-        output = stdout + stderr
-        for line in output.strip().split("\n"):
-            print(f"    {line}")
-        passed = check_test_result(output, rc)
-        print("  RESULT: {}".format("PASS" if passed else "FAIL"))
-        return passed
-
     if test["board"] == "tt" and test["test_type"] in ("uart", "spiflash"):
         wrapper_cmd = "python3 ~/tt_test_wrapper.py /dev/ttyACM0 {} {}".format(
             test["remote_bitstream"], test["test_cmd"]
