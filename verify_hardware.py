@@ -198,7 +198,6 @@ EXTRA_UPLOADS = {
     "tt": [
         ("designs/_host/tt_fpga_program.py", "~/tt_fpga_program.py"),
         ("designs/_host/tt_test_wrapper.py", "~/tt_test_wrapper.py"),
-        ("designs/_host/tt_pmod_wrapper.py", "~/tt_pmod_wrapper.py"),
     ],
 }
 
@@ -424,8 +423,8 @@ def run_single_test(test, skip_upload=False):
     # UART/spiflash: combined program + bridge + test (UART goes through RP2350).
     # PMOD: program via RP2350 wrapper (handles reset/retry), then test via RPi GPIO.
     if test["board"] == "tt" and test["test_type"] == "pmod":
-        wrapper_cmd = "python3 ~/tt_pmod_wrapper.py /dev/ttyACM0 {}".format(test["remote_bitstream"])
-        print("  Programming FPGA via RP2350 wrapper...")
+        wrapper_cmd = "python3 ~/tt_fpga_program.py /dev/ttyACM0 {} --gpio-release".format(test["remote_bitstream"])
+        print("  Programming FPGA and releasing GPIOs...")
         rc, stdout, stderr = ssh_run(test["host"], wrapper_cmd, timeout=240)
         output = stdout + stderr
         if rc != 0:

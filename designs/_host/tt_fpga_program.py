@@ -21,6 +21,30 @@ import tempfile
 
 BITSTREAM_DEVICE_PATH = "/bitstreams/custom.bin"
 
+# Appended to the programming script when --gpio-release is used.
+# Starts the 50 MHz clock and releases all ui_in/uo_out/uio GPIOs
+# to input (high-Z) so the RPi can drive/read them via the PMOD HAT.
+GPIO_RELEASE_SNIPPET = """
+# --- Start 50 MHz clock ---
+from machine import PWM, freq as cpu_freq
+cpu_freq(150_000_000)
+clk = PWM(Pin(16))
+clk.freq(50_000_000)
+clk.duty_u16(32768)
+# Workaround for RP2350 PWM bug: deinit and recreate
+clk.deinit()
+utime.sleep_ms(1)
+clk = PWM(Pin(16))
+clk.freq(50_000_000)
+clk.duty_u16(32768)
+print("CLK_OK")
+
+# --- Release all ui_in/uo_out/uio GPIOs to input (high-Z) ---
+for g in list(range(17, 41)):
+    Pin(g, Pin.IN)
+print("GPIO_RELEASED")
+"""
+
 # MicroPython scripts that run on the RP2350 to program the iCE40 FPGA.
 #
 # The ttboard SDK has two bugs:
@@ -192,6 +216,12 @@ def main():
         action="store_true",
         help="Just probe the RP2350, don't program",
     )
+    parser.add_argument(
+        "--gpio-release",
+        action="store_true",
+        help="After programming, start 50 MHz clock and release all "
+        "ui_in/uo_out/uio GPIOs to high-Z for RPi PMOD HAT access",
+    )
     args = parser.parse_args()
 
     # Validate bitstream exists
@@ -257,8 +287,10 @@ def main():
         return 1
     print("Upload complete.")
 
-    # Step 3: Program the FPGA
+    # Step 3: Program the FPGA (and optionally start clock + release GPIOs)
     script = PROGRAM_SCRIPT_PIO if args.method == "pio" else PROGRAM_SCRIPT_BITBANG
+    if args.gpio_release:
+        script += GPIO_RELEASE_SNIPPET
     print(f"Programming FPGA via {args.method} method...")
 
     # Write script to a temporary file for mpremote run.
@@ -290,12 +322,19 @@ def main():
     if err.strip():
         print(err, file=sys.stderr)
 
-    if "PROGRAM_OK" in out:
-        print("FPGA programming successful.")
-        return 0
-    else:
+    if "PROGRAM_OK" not in out:
         print("ERROR: FPGA programming may have failed (no PROGRAM_OK marker).", file=sys.stderr)
         return 1
+
+    if args.gpio_release:
+        if "GPIO_RELEASED" in out:
+            print("FPGA programmed, clock started, GPIOs released for RPi access.")
+        else:
+            print("ERROR: GPIO release failed (no GPIO_RELEASED marker).", file=sys.stderr)
+            return 1
+    else:
+        print("FPGA programming successful.")
+    return 0
 
 
 if __name__ == "__main__":
