@@ -40,6 +40,11 @@ HOSTS = {
     "pi9": {"ssh_type": "tweed", "target": "10.21.0.109", "board": "arty"},
     "pi17": {"ssh_type": "tweed", "target": "10.21.0.117", "board": "fomu"},
     "pi21": {"ssh_type": "tweed", "target": "10.21.0.121", "board": "fomu"},
+    "pi10": {"ssh_type": "tweed", "target": "10.21.0.110", "board": "netv2", "variant": "a7-35"},
+    "pi12": {"ssh_type": "tweed", "target": "10.21.0.112", "board": "netv2", "variant": "a7-35"},
+    "pi14": {"ssh_type": "tweed", "target": "10.21.0.114", "board": "netv2", "variant": "a7-35"},
+    "pi16": {"ssh_type": "tweed", "target": "10.21.0.116", "board": "netv2", "variant": "a7-35"},
+    "pi18": {"ssh_type": "tweed", "target": "10.21.0.118", "board": "netv2", "variant": "a7-35"},
     "pi27": {"ssh_type": "tweed", "target": "10.21.0.127", "board": "tt"},
     "pi29": {"ssh_type": "tweed", "target": "10.21.0.129", "board": "tt"},
     "pi31": {"ssh_type": "tweed", "target": "10.21.0.131", "board": "tt"},
@@ -70,9 +75,16 @@ PROGRAM_CMD = {
 }
 
 # Per-host overrides for programming command
+_NETV2_OPENOCD = "openocd -f ~/netv2/alphamax-rpi.cfg -c 'init; pld load 0 {bitstream_abs}; exit'"
 HOST_PROGRAM_CMD = {
     "rpi5-netv2": "sudo openFPGALoader -c rp1pio --pins 27:22:4:17 {bitstream}",
-    "rpi3-netv2": "sudo openocd -f ~/netv2/alphamax-rpi.cfg -c 'init; pld load 0 {bitstream_abs}; exit'",
+    "rpi3-netv2": f"sudo {_NETV2_OPENOCD}",
+    # NeTV2 pool hosts (RPi 3B+ with GPIO JTAG, same config as rpi3-netv2)
+    "pi10": _NETV2_OPENOCD,
+    "pi12": _NETV2_OPENOCD,
+    "pi14": _NETV2_OPENOCD,
+    "pi16": _NETV2_OPENOCD,
+    "pi18": _NETV2_OPENOCD,
 }
 
 
@@ -346,8 +358,15 @@ def generate_tests():
                 prog_cmd = board_cfg["program_cmd"].format(bitstream=remote_bitstream)
             elif host_name in HOST_PROGRAM_CMD:
                 prog_template = HOST_PROGRAM_CMD[host_name]
-                # rpi3-netv2 needs absolute path (openocd doesn't expand ~)
-                home_dir = "/home/pi" if host_name == "rpi3-netv2" else "/home/tim"
+                # OpenOCD doesn't expand ~ — resolve to absolute path.
+                # Direct-SSH hosts use their own user's home; tweed-connected
+                # hosts SSH as root to the RPi.
+                if host_name == "rpi3-netv2":
+                    home_dir = "/home/pi"
+                elif host_name == "rpi5-netv2":
+                    home_dir = "/home/tim"
+                else:
+                    home_dir = "/root"
                 bitstream_abs = remote_bitstream.replace("~", home_dir)
                 prog_cmd = prog_template.format(bitstream=remote_bitstream, bitstream_abs=bitstream_abs)
             else:
