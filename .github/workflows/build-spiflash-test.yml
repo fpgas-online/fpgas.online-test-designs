@@ -3,14 +3,7 @@ name: "Build: SPI Flash ID Test"
 
 on:
   push:
-    paths:
-      - "designs/spi-flash-id/**"
-      - "designs/_shared/**"
-      - ".github/workflows/build-spiflash-test.yml"
   pull_request:
-    paths:
-      - "designs/spi-flash-id/**"
-      - "designs/_shared/**"
   workflow_dispatch:
 
 jobs:

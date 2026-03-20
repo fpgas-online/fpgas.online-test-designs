@@ -3,14 +3,7 @@ name: "Build: DDR Memory Test"
 
 on:
   push:
-    paths:
-      - "designs/ddr-memory/**"
-      - "designs/_shared/**"
-      - ".github/workflows/build-ddr-test.yml"
   pull_request:
-    paths:
-      - "designs/ddr-memory/**"
-      - "designs/_shared/**"
   workflow_dispatch:
 
 jobs:

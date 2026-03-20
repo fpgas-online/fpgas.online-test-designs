@@ -3,14 +3,7 @@ name: "Build: GPIO Loopback (PMOD)"
 
 on:
   push:
-    paths:
-      - "designs/pmod-loopback/**"
-      - "designs/_shared/**"
-      - ".github/workflows/pmod-loopback-build.yml"
   pull_request:
-    paths:
-      - "designs/pmod-loopback/**"
-      - "designs/_shared/**"
   workflow_dispatch:
 
 jobs:

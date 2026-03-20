@@ -3,14 +3,7 @@ name: "Build: PMOD Pin Identification"
 
 on:
   push:
-    paths:
-      - "designs/pmod-pin-id/**"
-      - "designs/_shared/**"
-      - ".github/workflows/pmod-pin-id-build.yml"
   pull_request:
-    paths:
-      - "designs/pmod-pin-id/**"
-      - "designs/_shared/**"
   workflow_dispatch:
 
 jobs:

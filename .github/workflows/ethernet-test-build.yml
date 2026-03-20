@@ -3,14 +3,7 @@ name: "Build: Ethernet Test"
 
 on:
   push:
-    paths:
-      - "designs/ethernet-test/**"
-      - "designs/_shared/**"
-      - ".github/workflows/ethernet-test-build.yml"
   pull_request:
-    paths:
-      - "designs/ethernet-test/**"
-      - "designs/_shared/**"
   workflow_dispatch:
 
 jobs:

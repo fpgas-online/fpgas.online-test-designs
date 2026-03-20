@@ -3,14 +3,7 @@ name: "Build: PCIe Enumeration"
 
 on:
   push:
-    paths:
-      - "designs/pcie-enumeration/**"
-      - "designs/_shared/**"
-      - ".github/workflows/pcie-enumeration-build.yml"
   pull_request:
-    paths:
-      - "designs/pcie-enumeration/**"
-      - "designs/_shared/**"
   workflow_dispatch:
 
 jobs:

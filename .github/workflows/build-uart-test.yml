@@ -3,14 +3,7 @@ name: "Build: UART Test"
 
 on:
   push:
-    paths:
-      - "designs/uart/**"
-      - "designs/_shared/**"
-      - ".github/workflows/build-uart-test.yml"
   pull_request:
-    paths:
-      - "designs/uart/**"
-      - "designs/_shared/**"
   workflow_dispatch:
 
 jobs:

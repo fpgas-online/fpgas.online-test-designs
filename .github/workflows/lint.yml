@@ -3,16 +3,7 @@ name: "Lint"
 
 on:
   push:
-    paths:
-      - "designs/**/*.py"
-      - "verify_hardware.py"
-      - "pyproject.toml"
-      - ".github/workflows/lint.yml"
   pull_request:
-    paths:
-      - "designs/**/*.py"
-      - "verify_hardware.py"
-      - "pyproject.toml"
   workflow_dispatch:
 
 jobs:
