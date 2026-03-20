@@ -1,6 +1,8 @@
-# Sqrl Acorn CLE-215+
+# Sqrl Acorn CLE-215+ / LiteFury
 
-The Sqrl Acorn CLE-215+ is an M.2 form factor PCIe FPGA accelerator card. In the fpgas.online infrastructure, it connects to Raspberry Pi 5 hosts via an mPCIe HAT adapter.
+The Sqrl Acorn CLE-215+ is an M.2 form factor PCIe FPGA accelerator card, pin-compatible with the [NiteFury and LiteFury](https://github.com/RHSResearchLLC/NiteFury-and-LiteFury) boards. In the fpgas.online infrastructure, it connects to Raspberry Pi 5 hosts via an mPCIe HAT adapter, with JTAG and UART via adapted Pico-EZmate cables to the RPi GPIO header.
+
+See [acorn-cle215-pinmap.md](acorn-cle215-pinmap.md) for the full RPi GPIO pinmap.
 
 ## Key Specifications
 
@@ -22,13 +24,19 @@ The Sqrl Acorn CLE-215+ is an M.2 form factor PCIe FPGA accelerator card. In the
 
 Source: [LiteX sqrl_acorn.py](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/sqrl_acorn.py)
 
-## Variants
+## Compatible Boards
 
-| Model    | FPGA            | Speed Grade | DDR3   |
-|----------|-----------------|-------------|--------|
-| CLE-101  | XC7A100T-FBG484 | -2          | 512 MB |
-| CLE-215  | XC7A200T-FBG484 | -2          | 1 GB   |
-| CLE-215+ | XC7A200T-FBG484 | -3          | 1 GB   |
+All boards share the same PCB layout and pin assignments. The LiteX platform file `sqrl_acorn.py` works for all variants — change only the device string.
+
+| Board          | FPGA            | Speed Grade | DDR3   | PCIe    |
+|----------------|-----------------|-------------|--------|---------|
+| LiteFury       | XC7A100T-FBG484 | -2          | 512 MB | Gen2 x4 |
+| NiteFury       | XC7A200T-FBG484 | -2          | 512 MB | Gen2 x4 |
+| Acorn CLE-101  | XC7A100T-FBG484 | -2          | 512 MB | Gen2 x4 |
+| Acorn CLE-215  | XC7A200T-FBG484 | -2          | 1 GB   | Gen2 x4 |
+| Acorn CLE-215+ | XC7A200T-FBG484 | -3          | 1 GB   | Gen2 x4 |
+
+Source: [NiteFury and LiteFury](https://github.com/RHSResearchLLC/NiteFury-and-LiteFury), [LiteX Acorn CLE-215 wiki](https://github.com/enjoy-digital/litex/wiki/Use-LiteX-on-the-Acorn-CLE-215)
 
 The CLE-215+ is equivalent to the RHSResearchLLC NiteFury board but with 1 GB DDR3 (vs 512 MB).
 
