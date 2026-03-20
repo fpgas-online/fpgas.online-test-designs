@@ -1,0 +1,41 @@
+# .github/workflows/collect-bitstreams.yml
+name: "Collect Bitstreams"
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  collect:
+    name: "Bundle all bitstreams"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for build workflows to complete
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          # Match all build job names (but not Lint or this workflow)
+          check-regexp: "^(Arty|NeTV2|Fomu|TT FPGA|netv2)"
+          wait-interval: 30
+          allowed-conclusions: success
+
+      - name: Download artifacts from sibling workflow runs
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          commit: ${{ github.sha }}
+          path: bitstreams
+          skip_unpack: false
+          if_no_artifact_found: fail
+
+      - name: List collected bitstreams
+        run: find bitstreams -type f | sort
+
+      - name: Upload combined package
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-bitstreams
+          path: bitstreams/
+          if-no-files-found: error
