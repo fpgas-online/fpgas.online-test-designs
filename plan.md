@@ -88,7 +88,7 @@ Every phase follows this loop until its tests pass reliably:
 - If BIOS doesn't detect flash: may need to add custom C firmware (`main.c`) that reads JEDEC ID via bitbang CSRs, or fix the BIOS detection path
 - The `test_spiflash.py --bios` mode parsing may not match actual BIOS output format — compare actual output against expected patterns
 - Other liblitespi constants may also be missing — fix each as they appear
-- openXC7 timing may fail at 100MHz on Arty (seen before with UART) — may need to reduce sys_clk_freq
+- openXC7 build at 100MHz on Arty may need debugging if SPI flash test fails
 
 **Verification gate**: CI build green, `test_spiflash.py --bios` PASS on pi3 + rpi5-netv2, then all Arty/NeTV2 boards, then 3× consecutive.
 
@@ -219,7 +219,7 @@ Every phase follows this loop until its tests pass reliably:
 
 ## Phase 8: Vivado local build setup
 
-**Problem**: DDR3 and PCIe require Xilinx hard IP (ISERDES2/OSERDES2/IDELAYCTRL, GT transceivers) that openXC7 cannot synthesize. Vivado is proprietary and CANNOT be added to CI. Must set up local Vivado builds.
+**Problem**: DDR3 and PCIe use Xilinx hard IP (ISERDES2/OSERDES2/IDELAYCTRL, GT transceivers). These primitives are supported by openXC7 (nextpnr-xilinx), but DDR3 memtest has not yet passed with openXC7-built bitstreams. Root cause is unknown. Vivado builds may be needed as a fallback.
 
 **Steps:**
 1. Verify Vivado is installed locally (or install WebPack edition — free for 7-series)
@@ -246,9 +246,9 @@ Every phase follows this loop until its tests pass reliably:
 
 ## Phase 9: DDR3 (Arty + NeTV2)
 
-**Problem**: DDR3 memtest failed on previous attempts — timing failures and read-leveling zeros with openXC7 bitstreams.
+**Problem**: DDR3 memtest failed on previous attempts with openXC7 bitstreams. Root cause not yet identified.
 
-**Approach**: Use Vivado-built bitstreams from Phase 8. The hardware is correct — debug until memtest passes.
+**Approach**: Debug with openXC7-built bitstreams first. Fall back to Vivado if needed. The hardware is correct — debug until memtest passes.
 
 **Files to investigate/modify:**
 - `designs/ddr-test/gateware/ddr_soc_arty.py` — DDR3 SoC for Arty
