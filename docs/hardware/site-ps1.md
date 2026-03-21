@@ -43,9 +43,52 @@ Each RPi also has a separate USB Ethernet adapter for the Arty's Ethernet port.
 ### Notes
 
 - **pi21** (RPi 5): No FPGA board or USB serial devices detected. May be a test/development host or awaiting hardware.
-- **pi24**: Offline — does not respond to SSH. The dnsmasq entry uses a RPi 3B+ MAC (`b8:27:eb:85:ab:d9`).
+- **pi24**: Offline — registered in dnsmasq (MAC `b8:27:eb:85:ab:d9`) but not seen on switch. Not responding.
 - **pi2** uses an Apple Ethernet adapter (A1277) rather than the ASIX AX88179 used by other hosts.
 - There are commented-out entries for alternate MACs on pi21 and pi23 — previous hardware that was replaced.
+
+## PoE Switch Port Inventory
+
+Switch: **Netgear FS728TPv2** at 10.21.0.200 (24 Fast Ethernet + 4 Gigabit ports). Queried via SNMPv3 on 2026-03-21.
+
+LLDP: server (val2) connects on port g25. Upstream is a Ubiquiti US-24-G1 (`PS1-SW-MODEM`).
+
+| Port | Link | PoE         | MAC               | Device      | Host | Notes                    |
+|------|------|-------------|-------------------|-------------|------|--------------------------|
+| e1   | down | searching   |                   |             |      | Cable present, no device |
+| e2   | UP   | delivering  | b8:27:eb:2f:5d:08 | RPi 3B      | pi2  |                          |
+| e3   | UP   | delivering  | dc:a6:32:05:32:45 | RPi 4B      | pi3  |                          |
+| e4   | down | searching   |                   |             |      | Cable present, no device |
+| e5   | UP   | delivering  | b8:27:eb:d4:f1:74 | RPi 3B      | pi5  |                          |
+| e6   | down | disabled    |                   |             |      |                          |
+| e7   | UP   | delivering  | b8:27:eb:33:51:27 | RPi 3B+     | pi7  |                          |
+| e8   | down | disabled    |                   |             |      |                          |
+| e9   | UP   | delivering  | b8:27:eb:a3:51:b4 | RPi 3B+     | pi9  |                          |
+| e10  | down | disabled    |                   |             |      |                          |
+| e11  | UP   | delivering  | b8:27:eb:51:01:df | RPi 3B      | pi11 |                          |
+| e12  | down | disabled    |                   |             |      |                          |
+| e13  | UP   | delivering  | b8:27:eb:68:fc:e7 | RPi 3B      | pi13 |                          |
+| e14  | down | disabled    |                   |             |      |                          |
+| e15  | down | delivering  |                   |             |      | PoE on, no link          |
+| e16  | down | disabled    |                   |             |      |                          |
+| e17  | down | disabled    |                   |             |      |                          |
+| e18  | down | disabled    |                   |             |      |                          |
+| e19  | down | disabled    |                   |             |      |                          |
+| e20  | down | disabled    |                   |             |      |                          |
+| e21  | UP   | delivering  | 2c:cf:67:39:18:66 | RPi 5       | pi21 |                          |
+| e22  | down | disabled    |                   |             |      |                          |
+| e23  | down | searching   |                   |             |      | Cable present, no device |
+| e24  | down | searching   |                   |             |      | Cable present, no device |
+| g25  | UP   | —           | 00:25:90:22:c4:91 | Server NIC  | val2 | Uplink                   |
+| g26  | down | —           |                   |             |      |                          |
+| g27  | down | —           |                   |             |      |                          |
+| g28  | down | —           |                   |             |      |                          |
+
+### Interesting Ports
+
+- **e1, e4**: PoE searching — cables plugged in, devices not responding. Could be Pi Compute Blades that need PXE/TFTP boot configuration.
+- **e15**: PoE delivering power but no Ethernet link — device may be powered but not booting or has no network interface on this port.
+- **e23, e24**: PoE searching — cables plugged in at the end of the switch.
 
 ## Comparison with Welland Site
 
