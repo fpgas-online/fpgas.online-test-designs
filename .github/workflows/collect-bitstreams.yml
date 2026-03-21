@@ -21,7 +21,7 @@ jobs:
           wait-interval: 30
           allowed-conclusions: success
 
-      - name: Download artifacts from sibling workflow runs
+      - name: Download artifacts from all build workflows
         uses: dawidd6/action-download-artifact@v6
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -29,6 +29,8 @@ jobs:
           path: bitstreams
           skip_unpack: false
           if_no_artifact_found: fail
+          workflow_search: true
+          workflow_conclusion: success
 
       - name: List collected bitstreams
         run: find bitstreams -type f | sort
