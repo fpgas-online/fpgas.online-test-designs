@@ -26,7 +26,10 @@ import time
 
 REPO_DIR = os.path.dirname(os.path.abspath(__file__))
 ARTIFACTS_DIR = os.path.join(REPO_DIR, "artifacts")
-TWEED = "pi@tweed.welland.mithis.com"
+GATEWAYS = {
+    "welland": "pi@tweed.welland.mithis.com",
+    "ps1": "pi@ps1.fpgas.online",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -34,22 +37,30 @@ TWEED = "pi@tweed.welland.mithis.com"
 # ---------------------------------------------------------------------------
 
 HOSTS = {
-    # Tweed-connected (via double-hop SSH)
-    "pi3": {"ssh_type": "tweed", "target": "10.21.0.103", "board": "arty"},
-    "pi5": {"ssh_type": "tweed", "target": "10.21.0.105", "board": "arty"},
-    "pi9": {"ssh_type": "tweed", "target": "10.21.0.109", "board": "arty"},
-    "pi17": {"ssh_type": "tweed", "target": "10.21.0.117", "board": "fomu"},
-    "pi21": {"ssh_type": "tweed", "target": "10.21.0.121", "board": "fomu"},
-    "pi10": {"ssh_type": "tweed", "target": "10.21.0.110", "board": "netv2", "variant": "a7-35"},
-    "pi12": {"ssh_type": "tweed", "target": "10.21.0.112", "board": "netv2", "variant": "a7-35"},
-    "pi14": {"ssh_type": "tweed", "target": "10.21.0.114", "board": "netv2", "variant": "a7-35"},
-    "pi16": {"ssh_type": "tweed", "target": "10.21.0.116", "board": "netv2", "variant": "a7-35"},
-    "pi18": {"ssh_type": "tweed", "target": "10.21.0.118", "board": "netv2", "variant": "a7-35"},
-    "pi2": {"ssh_type": "tweed", "target": "10.21.0.102", "board": "acorn", "variant": "cle-215+"},
-    "pi27": {"ssh_type": "tweed", "target": "10.21.0.127", "board": "tt"},
-    "pi29": {"ssh_type": "tweed", "target": "10.21.0.129", "board": "tt"},
-    "pi31": {"ssh_type": "tweed", "target": "10.21.0.131", "board": "tt"},
-    "pi33": {"ssh_type": "tweed", "target": "10.21.0.133", "board": "tt"},
+    # Welland site (via pi@tweed.welland.mithis.com gateway)
+    "welland-pi3": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.103", "board": "arty"},
+    "welland-pi5": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.105", "board": "arty"},
+    "welland-pi9": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.109", "board": "arty"},
+    "welland-pi17": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.117", "board": "fomu"},
+    "welland-pi21": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.121", "board": "fomu"},
+    "welland-pi10": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.110", "board": "netv2", "variant": "a7-35"},
+    "welland-pi12": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.112", "board": "netv2", "variant": "a7-35"},
+    "welland-pi14": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.114", "board": "netv2", "variant": "a7-35"},
+    "welland-pi16": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.116", "board": "netv2", "variant": "a7-35"},
+    "welland-pi18": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.118", "board": "netv2", "variant": "a7-35"},
+    "welland-pi2": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.102", "board": "acorn", "variant": "cle-215+"},
+    "welland-pi27": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.127", "board": "tt"},
+    "welland-pi29": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.129", "board": "tt"},
+    "welland-pi31": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.131", "board": "tt"},
+    "welland-pi33": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.133", "board": "tt"},
+    # PS1 site (via pi@ps1.fpgas.online gateway)
+    "ps1-pi2": {"ssh_type": "gateway", "gateway": "ps1", "target": "10.21.0.102", "board": "arty"},
+    "ps1-pi3": {"ssh_type": "gateway", "gateway": "ps1", "target": "10.21.0.103", "board": "arty"},
+    "ps1-pi5": {"ssh_type": "gateway", "gateway": "ps1", "target": "10.21.0.105", "board": "arty"},
+    "ps1-pi7": {"ssh_type": "gateway", "gateway": "ps1", "target": "10.21.0.107", "board": "arty"},
+    "ps1-pi9": {"ssh_type": "gateway", "gateway": "ps1", "target": "10.21.0.109", "board": "arty"},
+    "ps1-pi11": {"ssh_type": "gateway", "gateway": "ps1", "target": "10.21.0.111", "board": "arty"},
+    "ps1-pi13": {"ssh_type": "gateway", "gateway": "ps1", "target": "10.21.0.113", "board": "arty"},
     # Direct SSH
     "rpi5-netv2": {
         "ssh_type": "direct",
@@ -83,11 +94,11 @@ HOST_PROGRAM_CMD = {
     "rpi5-netv2": "sudo openFPGALoader -c rp1pio --pins 27:22:4:17 {bitstream}",
     "rpi3-netv2": f"sudo {_NETV2_OPENOCD}",
     # NeTV2 pool hosts (RPi 3B+ with GPIO JTAG, same config as rpi3-netv2)
-    "pi10": _NETV2_OPENOCD,
-    "pi12": _NETV2_OPENOCD,
-    "pi14": _NETV2_OPENOCD,
-    "pi16": _NETV2_OPENOCD,
-    "pi18": _NETV2_OPENOCD,
+    "welland-pi10": _NETV2_OPENOCD,
+    "welland-pi12": _NETV2_OPENOCD,
+    "welland-pi14": _NETV2_OPENOCD,
+    "welland-pi16": _NETV2_OPENOCD,
+    "welland-pi18": _NETV2_OPENOCD,
 }
 
 
@@ -258,12 +269,13 @@ def _build_ssh_cmd(host_name, remote_cmd):
     Commands are properly shell-escaped at each hop to avoid quoting bugs.
     """
     host = HOSTS[host_name]
-    if host["ssh_type"] == "tweed":
-        # Double-hop: local -> tweed -> rpi
-        # The inner command must be shell-escaped for the tweed shell,
+    if host["ssh_type"] == "gateway":
+        # Double-hop: local -> gateway -> rpi
+        # The inner command must be shell-escaped for the gateway shell,
         # and the remote_cmd must be escaped for the rpi shell.
+        gateway = GATEWAYS[host["gateway"]]
         inner_cmd = "ssh root@{} {}".format(host["target"], shlex.quote(remote_cmd))
-        return ["ssh", TWEED, inner_cmd]
+        return ["ssh", gateway, inner_cmd]
     else:
         return ["ssh", host["target"], remote_cmd]
 
