@@ -31,8 +31,10 @@ Hosts are listed in natural sort order in `/etc/dnsmasq.d/pibs.conf`.
 | pi9  | 10.21.0.109 | RPi 3B+ Rev 1.3    | Arty A7    | 210319B58379 | ASIX AX88179 | Online  |
 | pi11 | 10.21.0.111 | RPi 3B Rev 1.2     | Arty A7    | 210319B5835B | ASIX AX88179 | Online  |
 | pi13 | 10.21.0.113 | RPi 3B Rev 1.2     | Arty A7    | 210319B3E5C3 | ASIX AX88179 | Online  |
+| pi17 | 10.21.0.117 | RPi 3B Rev 1.2     | Arty A7    | (TBD)        | ASIX AX88179 | Online  |
+| pi19 | 10.21.0.119 | RPi 3B             | (unknown)  | —            | —            | Dead    |
 | pi21 | 10.21.0.121 | RPi 5 Rev 1.0      | (none)     | —            | —            | Online  |
-| pi24 | 10.21.0.123 | (unknown)          | (unknown)  | —            | —            | Offline |
+| pi24 | 10.21.0.124 | (unknown)          | (unknown)  | —            | —            | Offline |
 
 All Arty boards connect via FTDI FT2232C/D/H (`0403:6010`). Each provides:
 - `/dev/ttyUSB0` — JTAG (openFPGALoader)
@@ -42,10 +44,11 @@ Each RPi also has a separate USB Ethernet adapter for the Arty's Ethernet port.
 
 ### Notes
 
+- **pi17** (port e17): Newly discovered 2026-03-21. RPi 3B with Arty A7 (FTDI + ASIX Ethernet). Successfully PXE booting. Was the old pi21 MAC before replacement.
+- **pi19** (port e19): Newly discovered 2026-03-21. RPi 3B, link UP but zero DHCP/TFTP activity after PoE cycle — appears dead. Was the old pi23 MAC.
 - **pi21** (RPi 5): No FPGA board or USB serial devices detected. May be a test/development host or awaiting hardware.
-- **pi24**: Offline — registered in dnsmasq (MAC `b8:27:eb:85:ab:d9`) but not seen on switch. Not responding.
+- **pi24**: Offline — registered in dnsmasq (MAC `b8:27:eb:85:ab:d9`) but not seen on switch.
 - **pi2** uses an Apple Ethernet adapter (A1277) rather than the ASIX AX88179 used by other hosts.
-- There are commented-out entries for alternate MACs on pi21 and pi23 — previous hardware that was replaced.
 
 ## PoE Switch Port Inventory
 
