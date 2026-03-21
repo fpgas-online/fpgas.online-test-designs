@@ -22,15 +22,29 @@ jobs:
           allowed-conclusions: success
 
       - name: Download artifacts from all build workflows
-        uses: dawidd6/action-download-artifact@v6
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          commit: ${{ github.sha }}
-          path: bitstreams
-          skip_unpack: false
-          if_no_artifact_found: fail
-          workflow_search: true
-          workflow_conclusion: success
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p bitstreams
+
+          # List all workflow runs for this commit
+          runs=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${{ github.sha }}&status=completed&per_page=100" \
+            --jq '.workflow_runs[] | select(.conclusion == "success") | .id')
+
+          for run_id in $runs; do
+            # List artifacts for this run
+            artifacts=$(gh api "repos/${{ github.repository }}/actions/runs/${run_id}/artifacts" \
+              --jq '.artifacts[] | "\(.id) \(.name)"')
+
+            while IFS=' ' read -r artifact_id artifact_name; do
+              [ -z "$artifact_id" ] && continue
+              echo "Downloading: ${artifact_name} (artifact ${artifact_id} from run ${run_id})"
+              gh api "repos/${{ github.repository }}/actions/artifacts/${artifact_id}/zip" > "/tmp/${artifact_name}.zip"
+              mkdir -p "bitstreams/${artifact_name}"
+              unzip -o "/tmp/${artifact_name}.zip" -d "bitstreams/${artifact_name}"
+              rm "/tmp/${artifact_name}.zip"
+            done <<< "$artifacts"
+          done
 
       - name: List collected bitstreams
         run: find bitstreams -type f | sort
