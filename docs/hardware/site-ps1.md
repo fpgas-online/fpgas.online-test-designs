@@ -86,9 +86,7 @@ LLDP: server (val2) connects on port g25. Upstream is a Ubiquiti US-24-G1 (`PS1-
 
 ### Interesting Ports
 
-- **e1, e4**: PoE searching — cables plugged in, devices not responding. Could be Pi Compute Blades that need PXE/TFTP boot configuration.
-- **e15**: PoE delivering power but no Ethernet link — device may be powered but not booting or has no network interface on this port.
-- **e23, e24**: PoE searching — cables plugged in at the end of the switch.
+- **e1, e4, e15, e23, e24**: PoE cycling and 120s broadcast capture (2026-03-21) found zero DHCP requests and no new MAC addresses. All 5 ports remain link-down after PoE power cycle. These cables are either disconnected at the device end or the devices are dead. No Pi Compute Blades are currently connected to this switch.
 
 ## Comparison with Welland Site
 
