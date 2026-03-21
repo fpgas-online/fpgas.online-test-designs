@@ -4,25 +4,39 @@
 
 This site provides public remote access to Arty A7 FPGA boards — anyone can program and interact with the boards through a web interface, with live camera feeds showing the board LEDs.
 
+## Gateway: val2 (ps1.fpgas.online)
+
+| Parameter   | Value                                                               |
+|-------------|---------------------------------------------------------------------|
+| Hostname    | val2                                                                |
+| OS          | Debian 12 (bookworm), kernel 6.1.0-40-amd64                        |
+| eth-uplink  | 76.227.131.147/25 (internet-facing)                                 |
+| eth-local   | 10.21.0.1/24 (RPi network)                                         |
+| Services    | dnsmasq (DHCP/DNS/TFTP/PXE), NFS, nginx, wssh                      |
+| SSH access  | `ssh pi@ps1.fpgas.online` (restricted jump-host, rbash, ssh-only)   |
+| PoE control | `poe.sh <port> <1=on/2=off>` via SNMP to Netgear S3300 at 10.21.0.200 |
+
 ## FPGA Board Inventory
 
-All boards are Digilent Arty A7-35T connected to Raspberry Pi hosts with PMOD HATs and USB cameras.
+Verified via SSH on 2026-03-21. All Arty boards connect via FTDI FT2232 (USB JTAG + UART). Each RPi also has a USB Ethernet adapter for the Arty Ethernet port.
 
-| Host | Board          | PMOD HAT | Camera | Live Stream                            |
-| ---- | -------------- | -------- | ------ | -------------------------------------- |
-| pi2  | Arty A7-35T    | Yes      | Yes    | `ps1.fpgas.online/live/pi2.m3u8`      |
-| pi3  | Arty A7-35T    | Yes      | Yes    | `ps1.fpgas.online/live/pi3.m3u8`      |
-| pi5  | Arty A7-35T    | Yes      | Yes    | `ps1.fpgas.online/live/pi5.m3u8`      |
-| pi7  | Arty A7-35T    | Yes      | Yes    | `ps1.fpgas.online/live/pi7.m3u8`      |
-| pi9  | Arty A7-35T    | Yes      | Yes    | `ps1.fpgas.online/live/pi9.m3u8`      |
-| pi11 | Arty A7-35T    | Yes      | Yes    | `ps1.fpgas.online/live/pi11.m3u8`     |
-| pi21 | Arty A7-35T    | Yes      | Yes    | `ps1.fpgas.online/live/pi21.m3u8`     |
-| pi23 | Arty A7-35T    | Yes      | Yes    | `ps1.fpgas.online/live/pi23.m3u8`     |
+| Host | Switch Port | RPi Model       | Board       | USB Ethernet     | Live Stream                        |
+|------|-------------|-----------------|-------------|------------------|------------------------------------|
+| pi2  | port 2      | RPi 3B Rev 1.2  | Arty A7-35T | Apple Ethernet   | `ps1.fpgas.online/live/pi2.m3u8`   |
+| pi3  | port 3      | RPi 4B Rev 1.1  | Arty A7-35T | ASIX AX88179     | `ps1.fpgas.online/live/pi3.m3u8`   |
+| pi5  | port 5      | RPi 3B Rev 1.2  | Arty A7-35T | ASIX AX88179     | `ps1.fpgas.online/live/pi5.m3u8`   |
+| pi7  | port 7      | RPi 3B+ Rev 1.3 | Arty A7-35T | ASIX AX88179     | `ps1.fpgas.online/live/pi7.m3u8`   |
+| pi9  | port 9      | RPi 3B+ Rev 1.3 | Arty A7-35T | ASIX AX88179     | `ps1.fpgas.online/live/pi9.m3u8`   |
+| pi11 | port 11     | RPi 3B Rev 1.2  | Arty A7-35T | ASIX AX88179     | `ps1.fpgas.online/live/pi11.m3u8`  |
+| pi13 | port 13     | RPi 3B Rev 1.2  | Arty A7-35T | ASIX AX88179     | `ps1.fpgas.online/live/pi13.m3u8`  |
+| pi21 | port 21     | RPi 5 Rev 1.0   | (none)      | —                | `ps1.fpgas.online/live/pi21.m3u8`  |
+
+pi21 is an RPi 5 with no FPGA board connected — available for future expansion.
 
 Each RPi has:
 - Digilent PMOD HAT connecting RPi GPIO to Arty PMOD ports (JA→JA, JB→JB, JC→JC)
 - USB camera pointed at the Arty board for live HLS video streaming
-- NFS netboot from the site server
+- NFS netboot from val2
 
 ## PMOD Wiring
 
