@@ -91,18 +91,19 @@ LLDP: server (val2) connects on port g25. Upstream is a Ubiquiti US-24-G1 (`PS1-
 
 After enabling PoE on all previously-disabled ports, 6 new devices appeared:
 
-| Port | MAC               | Type     | TFTP Serial | DHCP IP       | Boot Status                           |
-|------|-------------------|----------|-------------|---------------|---------------------------------------|
-| e14  | 2c:cf:67:37:d4:bd | RPi 5    | d00eb762    | 10.21.0.230   | PXE boot failing — no start4.elf      |
-| e16  | 2c:cf:67:fb:91:e5 | RPi 5    | cb291e63    | 10.21.0.253   | PXE boot failing — no config.txt      |
-| e17  | b8:27:eb:5f:de:85 | RPi 3B   | 7d5fde85    | 10.21.0.234   | Booting — kernel7.img loading          |
-| e18  | 2c:cf:67:37:d5:08 | RPi 5    | 4e45f174    | 10.21.0.243   | PXE boot failing — no start4.elf      |
-| e19  | b8:27:eb:0c:f8:43 | RPi 3B   | 9b0cf843    | 10.21.0.221   | Booting — bootcode.bin + config.txt    |
-| e20  | 2c:cf:67:fd:1e:be | RPi 5    | de59093d    | 10.21.0.185   | PXE boot failing — no config.txt      |
+| Port | MAC               | Type       | TFTP Serial | Name | IP            | Boot Status                     |
+|------|-------------------|------------|-------------|------|---------------|---------------------------------|
+| e14  | 2c:cf:67:37:d4:bd | RPi CM5 Lite | d00eb762  | pi14 | 10.21.0.114   | TFTP+NFS ok, kernel panic       |
+| e16  | 2c:cf:67:fb:91:e5 | RPi CM5 Lite | cb291e63  | pi16 | 10.21.0.116   | TFTP+NFS ok, kernel panic       |
+| e17  | b8:27:eb:5f:de:85 | RPi 3B     | 7d5fde85    | pi17 | 10.21.0.117   | Online (Arty A7)                |
+| e18  | 2c:cf:67:37:d5:08 | RPi CM5 Lite | 4e45f174  | pi18 | 10.21.0.118   | TFTP+NFS ok, kernel panic       |
+| e19  | b8:27:eb:0c:f8:43 | RPi 3B     | 9b0cf843    | pi19 | 10.21.0.119   | Dead (link UP, no PXE activity) |
+| e20  | 2c:cf:67:fd:1e:be | RPi CM5 Lite | de59093d  | pi20 | 10.21.0.120   | TFTP+NFS ok, kernel panic       |
 
-- **4 RPi 5s** (e14/e16/e18/e20): These are likely the Pi Compute Blades with PCIe FPGA cards. Their TFTP serial directories don't exist — need RPi 5 boot files (`start4.elf`, `fixup4.dat`, kernel, etc.).
-- **2 RPi 3Bs** (e17/e19): Previously in pibs.conf as commented-out alternate MACs for pi21/pi23. Successfully TFTP booting from existing boot files. Need dhcp-host entries with new names and fixed IPs.
-- **Ports e1, e4, e15, e23, e24**: Still no link after PoE cycling. Cables disconnected or dead hardware.
+- **4 RPi CM5 Lite** (e14/e16/e18/e20): Compute Module 5 Lite on CM5 IO Board (`bcm2712-rpi-cm5l-cm5io.dtb`). These are the Pi Compute Blades. TFTP serial dirs created, pibs.conf entries added. Kernel boots (`kernel8.img`) and NFS root mounts, but then kernel panics — likely missing CM5-specific kernel modules or config. Needs netconsole to debug (task #41).
+- **pi17** (e17): RPi 3B with Arty A7. Online and SSH-accessible. Added to pibs.conf.
+- **pi19** (e19): RPi 3B. Link UP but zero PXE/DHCP activity after PoE cycling. Dead hardware.
+- **Ports e1, e4, e15, e23, e24**: No link after PoE cycling. Cables disconnected or dead hardware.
 
 ### Port Status Notes
 
