@@ -91,16 +91,18 @@ LLDP: server (val2) connects on port g25. Upstream is a Ubiquiti US-24-G1 (`PS1-
 
 After enabling PoE on all previously-disabled ports, 6 new devices appeared:
 
-| Port | MAC               | Type       | TFTP Serial | Name | IP            | Boot Status                     |
-|------|-------------------|------------|-------------|------|---------------|---------------------------------|
-| e14  | 2c:cf:67:37:d4:bd | RPi CM5 Lite | d00eb762  | pi14 | 10.21.0.114   | TFTP+NFS ok, kernel panic       |
-| e16  | 2c:cf:67:fb:91:e5 | RPi CM5 Lite | cb291e63  | pi16 | 10.21.0.116   | TFTP+NFS ok, kernel panic       |
-| e17  | b8:27:eb:5f:de:85 | RPi 3B     | 7d5fde85    | pi17 | 10.21.0.117   | Online (Arty A7)                |
-| e18  | 2c:cf:67:37:d5:08 | RPi CM5 Lite | 4e45f174  | pi18 | 10.21.0.118   | TFTP+NFS ok, kernel panic       |
-| e19  | b8:27:eb:0c:f8:43 | RPi 3B     | 9b0cf843    | pi19 | 10.21.0.119   | Dead (link UP, no PXE activity) |
-| e20  | 2c:cf:67:fd:1e:be | RPi CM5 Lite | de59093d  | pi20 | 10.21.0.120   | TFTP+NFS ok, kernel panic       |
+| Port | MAC               | Type       | TFTP Serial | Name | IP            | FPGA          | Boot Status              |
+|------|-------------------|------------|-------------|------|---------------|---------------|--------------------------|
+| e14  | 2c:cf:67:37:d4:bd | RPi CM4    | d00eb762    | pi14 | 10.21.0.114   | Acorn CLE-101 | Boot-looping (CM4, needs bookworm) |
+| e16  | 2c:cf:67:fb:91:e5 | RPi CM5 Lite | cb291e63  | pi16 | 10.21.0.116   | Acorn CLE-101 | **Online** (Trixie 6.12.75) |
+| e17  | b8:27:eb:5f:de:85 | RPi 3B     | 7d5fde85    | pi17 | 10.21.0.117   | Arty A7       | Online (bookworm)        |
+| e18  | 2c:cf:67:37:d5:08 | RPi CM5 Lite | 4e45f174  | pi18 | 10.21.0.118   | Acorn CLE-101 | Boot-looping (needs debug) |
+| e19  | b8:27:eb:0c:f8:43 | RPi 3B     | 9b0cf843    | pi19 | 10.21.0.119   | —             | Dead                     |
+| e20  | 2c:cf:67:fd:1e:be | RPi CM5 Lite | de59093d  | pi20 | 10.21.0.120   | Acorn CLE-101 | Boot-looping (needs debug) |
 
-- **4 RPi CM5 Lite on Compute Blades** (e14/e16/e18/e20): Compute Module 5 Lite Rev 1.0 on Uptime Industries Compute Blade carrier boards (`bcm2712-rpi-cm5l-cm5io.dtb`). Each has an M.2 M-key slot (likely NiteFury/LiteFury FPGA). TFTP serial dirs, pibs.conf entries, and netconsole all configured. **Kernel 6.6.74 SErrors** (ARM SError 0xbe000411 — unrecoverable PCIe external abort during udev coldplug, known BCM2712 bug). Kernel 6.12.20 doesn't SError but boots silently without network. Blocked — needs aarch64 initramfs for 6.12.20 kernel, or serial console access for further debugging.
+- **pi16 (CM5 Lite + Acorn CLE-101)**: **ONLINE.** Booting Trixie arm64 with kernel 6.12.75+rpt-rpi-v8 via NFS. 8 GB RAM. Acorn CLE-101 (LiteFury, XC7A100T) on PCIe bus 0001. Required Trixie NFS root with kernel-matching DTBs (bookworm DTBs caused silent boot failure with 6.12 kernel).
+- **pi14 (CM4 + Acorn CLE-101)**: Reports as "Compute Module 4 Rev 1.1" (not CM5). Boots briefly then loops. May need bookworm root (CM4 has different kernel requirements) or separate config.
+- **pi18, pi20 (CM5 Lite + Acorn CLE-101)**: Ping but boot-loop. Need investigation — may need per-blade config or have hardware differences from pi16.
 - **pi17** (e17): RPi 3B with Arty A7. Online and SSH-accessible. Added to pibs.conf.
 - **pi19** (e19): RPi 3B. Link UP but zero PXE/DHCP activity after PoE cycling. Dead hardware.
 - **Ports e1, e4, e15, e23, e24**: No link after PoE cycling. Cables disconnected or dead hardware.
