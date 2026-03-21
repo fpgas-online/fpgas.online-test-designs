@@ -123,7 +123,7 @@ openocd -f openocd_xc7_ft232.cfg -c "init; pld load 0 <bitstream>; exit"
 
 ### Via SPI Flash
 
-Flash a persistent bitstream using OpenOCD or Vivado. The S25FL256S supports multiboot with fallback.
+Flash a persistent bitstream using OpenOCD or openFPGALoader. The S25FL256S supports multiboot with fallback.
 
 ### Via PCIe (LiteX)
 

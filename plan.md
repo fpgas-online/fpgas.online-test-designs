@@ -187,7 +187,7 @@ Every phase follows this loop until its tests pass reliably:
 
 ## Phase 7: Open-source toolchain test matrix validation (10× clean runs)
 
-**Goal**: Prove that ALL tests buildable with open-source tools pass reliably on all hardware before moving to Vivado-dependent tests. This covers: openXC7 (Arty/NeTV2 Xilinx 7-series), icestorm/nextpnr-ice40 (Fomu/TT iCE40).
+**Goal**: Prove that ALL tests pass reliably on all hardware using open-source toolchains. This covers: openXC7 (Arty/NeTV2/Acorn Xilinx 7-series), icestorm/nextpnr-ice40 (Fomu/TT iCE40).
 
 **Open-source test matrix** (38 tests):
 
@@ -213,34 +213,23 @@ Every phase follows this loop until its tests pass reliably:
 
 **Verification gate**: `uv run python verify_hardware.py --repeat 10 --download-artifacts` — all 38 open-source tests pass, 10 consecutive runs, zero failures, zero manual intervention. Not done until this passes. If run 9 of 10 fails, fix and start over from run 1.
 
-**STOP HERE after Phase 7 passes.** Report results to user and wait for approval before proceeding to Vivado phases.
+**STOP HERE after Phase 7 passes.** Report results to user and wait for approval before proceeding to DDR3/PCIe phases.
 
 ---
 
-## Phase 8: Vivado local build setup
+## Phase 8: DDR3 and PCIe with openXC7
 
-**Problem**: DDR3 and PCIe use Xilinx hard IP (ISERDES2/OSERDES2/IDELAYCTRL, GT transceivers). These primitives are supported by openXC7 (nextpnr-xilinx), but DDR3 memtest has not yet passed with openXC7-built bitstreams. Root cause is unknown. Vivado builds may be needed as a fallback.
+**Problem**: DDR3 and PCIe use Xilinx hard IP (ISERDES2/OSERDES2/IDELAYCTRL, GT transceivers). These primitives are supported by openXC7 (nextpnr-xilinx). DDR3 has been demonstrated working with openXC7 via UberDDR3 on Artix-7 boards. LiteDRAM + openXC7 has not yet passed memtest — root cause unknown.
 
 **Steps:**
-1. Verify Vivado is installed locally (or install WebPack edition — free for 7-series)
-2. Add `--toolchain vivado` support to the build scripts so designs can be built locally
-3. Build DDR3 and PCIe bitstreams locally with Vivado
-4. Create a workflow for manually-built bitstreams: local Vivado build → upload to test rigs → run tests
+1. Build DDR3 and PCIe bitstreams with openXC7 in CI
+2. Deploy to hardware and run tests
+3. Debug any failures on each board
 
 **Files to investigate/modify:**
-- `designs/_shared/build_helpers.py` — verify Vivado toolchain support exists (may already work via LiteX `--toolchain`)
-- `designs/ddr-test/gateware/ddr_soc_arty.py` — build with Vivado
-- `designs/ddr-test/gateware/ddr_soc_netv2.py` — build with Vivado
-- `designs/pcie-enumeration/gateware/pcie_soc_netv2.py` — build with Vivado (remove `if is_vivado:` guard or ensure it activates)
-
-**Likely issues to encounter:**
-- Vivado WebPack may need specific version for 7-series support — check compatibility
-- LiteX Vivado toolchain may need additional Python packages (e.g., `vivado` in PATH)
-- Build scripts may have openXC7-specific workarounds that break Vivado — conditionally apply them
-- Vivado builds are slow (30-60 min per design) — need patience, not parallelism hacks
-- Generated constraints may conflict with Vivado's timing engine — may need XDC adjustments
-
-**Verification gate**: Successfully build DDR3 Arty, DDR3 NeTV2, PCIe NeTV2 bitstreams with Vivado. Bitstreams are valid (non-zero size, correct format).
+- `designs/ddr-test/gateware/ddr_soc_arty.py` — ensure openXC7 build works
+- `designs/ddr-test/gateware/ddr_soc_netv2.py` — ensure openXC7 build works
+- `designs/pcie-enumeration/gateware/pcie_soc_netv2.py` — remove `if is_vivado:` guard, build with openXC7
 
 ---
 
@@ -248,7 +237,7 @@ Every phase follows this loop until its tests pass reliably:
 
 **Problem**: DDR3 memtest failed on previous attempts with openXC7 bitstreams. Root cause not yet identified.
 
-**Approach**: Debug with openXC7-built bitstreams first. Fall back to Vivado if needed. The hardware is correct — debug until memtest passes.
+**Approach**: Debug with openXC7-built bitstreams. The hardware is correct — debug until memtest passes.
 
 **Files to investigate/modify:**
 - `designs/ddr-test/gateware/ddr_soc_arty.py` — DDR3 SoC for Arty
@@ -256,7 +245,7 @@ Every phase follows this loop until its tests pass reliably:
 - `designs/ddr-test/host/test_ddr.py` — DDR3 test script
 
 **Likely issues to encounter:**
-- DDR3 timing is sensitive — even with Vivado, may need clock constraint tuning
+- DDR3 timing is sensitive — may need clock constraint tuning
 - Read leveling calibration may fail on specific boards — debug with BIOS `mem_test` command
 - A7DDRPHY has different configurations for Arty (DDR3) vs NeTV2 (DDR3L) — verify voltage and timing parameters
 - BIOS may boot but memtest fails — check training sequence output for clues
@@ -268,9 +257,9 @@ Every phase follows this loop until its tests pass reliably:
 
 ## Phase 10: PCIe enumeration (NeTV2)
 
-**Problem**: PCIe endpoint logic only built with Vivado (`if is_vivado:` guard). Uses GT transceivers (hard IP).
+**Problem**: PCIe endpoint logic has an `if is_vivado:` guard that needs removing. GT transceivers are supported by openXC7.
 
-**Approach**: Use Vivado-built bitstreams from Phase 8.
+**Approach**: Remove the guard, build with openXC7, debug on hardware.
 
 **Files to investigate/modify:**
 - `designs/pcie-enumeration/gateware/pcie_soc_netv2.py` — PCIe SoC
@@ -281,7 +270,7 @@ Every phase follows this loop until its tests pass reliably:
 - RPi5 external PCIe controller (`1000110000.pcie`) needs unbind/rebind to retrain link after FPGA programming — automate this
 - PCIe link training may fail intermittently — need proper FPGA reset + link retrain sequence
 - rpi3-netv2 may not have PCIe connectivity to NeTV2 — debug the physical connection, don't assume it's missing
-- Vivado synthesis for PCIe is complex (GT transceiver placement, clock routing) — may need specific constraints
+- GT transceiver placement and clock routing may need specific constraints
 - The NeTV2 PCIe connector may need specific initialization sequence before link comes up
 
 **Verification gate**: PCIe device `10ee:7011` visible in lspci, config space readable, link Gen2 x1, on both NeTV2 boards, then 3× consecutive.
@@ -291,7 +280,7 @@ Every phase follows this loop until its tests pass reliably:
 ## Phase 11: Full test matrix validation (10× clean runs)
 
 **Files to modify:**
-**Goal**: Same as Phase 7, but now including DDR3 and PCIe (Vivado-built bitstreams).
+**Goal**: Same as Phase 7, but now including DDR3 and PCIe.
 
 **Full test matrix** (45 tests):
 
