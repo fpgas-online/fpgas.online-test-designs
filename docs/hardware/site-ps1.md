@@ -100,7 +100,7 @@ After enabling PoE on all previously-disabled ports, 6 new devices appeared:
 | e19  | b8:27:eb:0c:f8:43 | RPi 3B     | 9b0cf843    | pi19 | 10.21.0.119   | Dead (link UP, no PXE activity) |
 | e20  | 2c:cf:67:fd:1e:be | RPi CM5 Lite | de59093d  | pi20 | 10.21.0.120   | TFTP+NFS ok, kernel panic       |
 
-- **4 RPi CM5 Lite** (e14/e16/e18/e20): Compute Module 5 Lite on CM5 IO Board (`bcm2712-rpi-cm5l-cm5io.dtb`). These are the Pi Compute Blades. TFTP serial dirs created, pibs.conf entries added. Kernel boots (`kernel8.img`) and NFS root mounts, but then kernel panics — likely missing CM5-specific kernel modules or config. Needs netconsole to debug (task #41).
+- **4 RPi CM5 Lite on Compute Blades** (e14/e16/e18/e20): Compute Module 5 Lite Rev 1.0 on Uptime Industries Compute Blade carrier boards (`bcm2712-rpi-cm5l-cm5io.dtb`). Each has an M.2 M-key slot (likely NiteFury/LiteFury FPGA). TFTP serial dirs, pibs.conf entries, and netconsole all configured. **Kernel 6.6.74 SErrors** (ARM SError 0xbe000411 — unrecoverable PCIe external abort during udev coldplug, known BCM2712 bug). Kernel 6.12.20 doesn't SError but boots silently without network. Blocked — needs aarch64 initramfs for 6.12.20 kernel, or serial console access for further debugging.
 - **pi17** (e17): RPi 3B with Arty A7. Online and SSH-accessible. Added to pibs.conf.
 - **pi19** (e19): RPi 3B. Link UP but zero PXE/DHCP activity after PoE cycling. Dead hardware.
 - **Ports e1, e4, e15, e23, e24**: No link after PoE cycling. Cables disconnected or dead hardware.
