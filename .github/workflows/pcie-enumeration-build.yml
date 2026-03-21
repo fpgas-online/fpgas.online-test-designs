@@ -135,7 +135,7 @@ jobs:
         with:
           name: pcie-test-acorn-cle-215plus
           path: |
-            designs/*/build/acorn/*.bit
+            designs/pcie-enumeration/build/acorn/gateware/*.bit
           if-no-files-found: error
 
   build-acorn-cle-215:
@@ -176,7 +176,7 @@ jobs:
         with:
           name: pcie-test-acorn-cle-215
           path: |
-            designs/*/build/acorn/*.bit
+            designs/pcie-enumeration/build/acorn/gateware/*.bit
           if-no-files-found: error
 
   build-acorn-cle-101:
@@ -217,5 +217,5 @@ jobs:
         with:
           name: pcie-test-acorn-cle-101
           path: |
-            designs/*/build/acorn/*.bit
+            designs/pcie-enumeration/build/acorn/gateware/*.bit
           if-no-files-found: error

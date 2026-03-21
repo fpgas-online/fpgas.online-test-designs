@@ -239,7 +239,7 @@ jobs:
         with:
           name: spiflash-test-acorn-cle-215plus
           path: |
-            designs/*/build/acorn/*.bit
+            designs/spi-flash-id/build/acorn/gateware/*.bit
           if-no-files-found: error
 
   build-acorn-cle-215:
@@ -280,7 +280,7 @@ jobs:
         with:
           name: spiflash-test-acorn-cle-215
           path: |
-            designs/*/build/acorn/*.bit
+            designs/spi-flash-id/build/acorn/gateware/*.bit
           if-no-files-found: error
 
   build-acorn-cle-101:
@@ -321,5 +321,5 @@ jobs:
         with:
           name: spiflash-test-acorn-cle-101
           path: |
-            designs/*/build/acorn/*.bit
+            designs/spi-flash-id/build/acorn/gateware/*.bit
           if-no-files-found: error
