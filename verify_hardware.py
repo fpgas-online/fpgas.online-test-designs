@@ -45,6 +45,7 @@ HOSTS = {
     "pi14": {"ssh_type": "tweed", "target": "10.21.0.114", "board": "netv2", "variant": "a7-35"},
     "pi16": {"ssh_type": "tweed", "target": "10.21.0.116", "board": "netv2", "variant": "a7-35"},
     "pi18": {"ssh_type": "tweed", "target": "10.21.0.118", "board": "netv2", "variant": "a7-35"},
+    "pi2": {"ssh_type": "tweed", "target": "10.21.0.102", "board": "acorn", "variant": "cle-215+"},
     "pi27": {"ssh_type": "tweed", "target": "10.21.0.127", "board": "tt"},
     "pi29": {"ssh_type": "tweed", "target": "10.21.0.129", "board": "tt"},
     "pi31": {"ssh_type": "tweed", "target": "10.21.0.131", "board": "tt"},
@@ -71,6 +72,8 @@ PROGRAM_CMD = {
     "arty": "openFPGALoader -b arty {bitstream}",
     "fomu": "openFPGALoader -b fomu {bitstream}",
     "tt": "python3 ~/tt_fpga_program.py /dev/ttyACM0 {bitstream}",
+    # Acorn: JTAG via RPi SPI0 pins (needs SPI modules unloaded)
+    "acorn": "rmmod spidev spi_bcm2835 2>&1; openFPGALoader -c rp1pio --pins 10:9:11:8 {bitstream}",
     # NeTV2 varies by host — handled per-host below
 }
 
@@ -126,6 +129,11 @@ DESIGNS = {
                 "artifact": "uart-test-tt-fpga/tt_fpga_platform.bin",
                 "test_args": "--port /dev/ttyACM0 --board tt --skip-banner",
             },
+            "acorn": {
+                "artifact": "uart-test-acorn-cle-215plus/sqrl_acorn.bit",
+                "test_args": "--port /dev/ttyAMA0 --board acorn --skip-banner",
+                "pre_test": "systemctl stop serial-getty@ttyAMA0 2>&1; true",
+            },
         },
     },
     "ddr": {
@@ -135,6 +143,11 @@ DESIGNS = {
             "netv2": {
                 "artifact": "ddr-test-netv2/kosagi_netv2.bit",
                 "test_args": "--port /dev/ttyAMA0 --board netv2",
+                "pre_test": "systemctl stop serial-getty@ttyAMA0 2>&1; true",
+            },
+            "acorn": {
+                "artifact": "ddr-test-acorn-cle-215plus/sqrl_acorn.bit",
+                "test_args": "--port /dev/ttyAMA0 --board acorn",
                 "pre_test": "systemctl stop serial-getty@ttyAMA0 2>&1; true",
             },
         },
@@ -180,6 +193,11 @@ DESIGNS = {
                 "artifact": "spiflash-test-tt-fpga/tt_fpga_platform.bin",
                 "test_args": "--port /dev/ttyACM0 --board tt",
             },
+            "acorn": {
+                "artifact": "spiflash-test-acorn-cle-215plus/sqrl_acorn.bit",
+                "test_args": "--port /dev/ttyAMA0 --board acorn",
+                "pre_test": "systemctl stop serial-getty@ttyAMA0 2>&1; true",
+            },
         },
     },
     "pmod": {
@@ -201,6 +219,19 @@ DESIGNS = {
                 "test_args": "--board tt",
                 "pre_test": "rmmod spidev spi_bcm2835 2>&1; true",
                 "program_cmd": "python3 ~/tt_fpga_program.py /dev/ttyACM0 {bitstream} --gpio-release",
+            },
+            "acorn": {
+                "artifact": "gpio-loopback-acorn-cle-215plus/sqrl_acorn.bit",
+                "test_args": "--board netv2",  # Same 1-bit serial loopback as NeTV2
+            },
+        },
+    },
+    "pcie": {
+        "test_script": "designs/pcie-enumeration/host/test_pcie_enumeration.py",
+        "boards": {
+            "acorn": {
+                "artifact": "pcie-test-acorn-cle-215plus/sqrl_acorn.bit",
+                "test_args": "--board acorn",
             },
         },
     },
