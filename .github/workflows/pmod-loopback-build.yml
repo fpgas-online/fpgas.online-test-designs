@@ -189,3 +189,125 @@ jobs:
             designs/pmod-loopback/build/tt/*.bin
           if-no-files-found: error
 
+  build-acorn-cle-215plus:
+    name: "Acorn CLE-215+"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install openXC7 toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys
+          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
+          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
+          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
+          sudo snap alias openxc7.fasm2frames fasm2frames
+          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
+          sudo snap alias openxc7.bbasm bbasm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build Acorn CLE-215+ bitstream
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
+        run: |
+          mkdir -p "$CHIPDB"
+          uv run python designs/pmod-loopback/gateware/gpio_loopback_acorn.py \
+            --variant cle-215+ \
+            --toolchain openxc7 \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpio-loopback-acorn-cle-215plus
+          path: |
+            designs/*/build/acorn/*.bit
+          if-no-files-found: error
+
+  build-acorn-cle-215:
+    name: "NiteFury (CLE-215)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install openXC7 toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys
+          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
+          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
+          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
+          sudo snap alias openxc7.fasm2frames fasm2frames
+          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
+          sudo snap alias openxc7.bbasm bbasm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build NiteFury (CLE-215) bitstream
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
+        run: |
+          mkdir -p "$CHIPDB"
+          uv run python designs/pmod-loopback/gateware/gpio_loopback_acorn.py \
+            --variant cle-215 \
+            --toolchain openxc7 \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpio-loopback-acorn-cle-215
+          path: |
+            designs/*/build/acorn/*.bit
+          if-no-files-found: error
+
+  build-acorn-cle-101:
+    name: "LiteFury (CLE-101)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install openXC7 toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys
+          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
+          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
+          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
+          sudo snap alias openxc7.fasm2frames fasm2frames
+          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
+          sudo snap alias openxc7.bbasm bbasm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build LiteFury (CLE-101) bitstream
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
+        run: |
+          mkdir -p "$CHIPDB"
+          uv run python designs/pmod-loopback/gateware/gpio_loopback_acorn.py \
+            --variant cle-101 \
+            --toolchain openxc7 \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpio-loopback-acorn-cle-101
+          path: |
+            designs/*/build/acorn/*.bit
+          if-no-files-found: error
