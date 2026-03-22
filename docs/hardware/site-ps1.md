@@ -95,16 +95,18 @@ After enabling PoE on all previously-disabled ports, 6 new devices appeared:
 
 | Port | MAC               | Type       | TFTP Serial | Name | IP            | FPGA          | Boot Status              |
 |------|-------------------|------------|-------------|------|---------------|---------------|--------------------------|
-| e14  | 2c:cf:67:37:d4:bd | RPi CM4    | d00eb762    | pi14 | 10.21.0.114   | Acorn CLE-101 | Boot-looping (CM4, needs bookworm) |
+| e14  | 2c:cf:67:37:d4:bd | RPi CM4    | d00eb762    | pi14 | 10.21.0.114   | Acorn CLE-101 | **Online** (Trixie 6.12.75) |
 | e16  | 2c:cf:67:fb:91:e5 | RPi CM5 Lite | cb291e63  | pi16 | 10.21.0.116   | Acorn CLE-101 | **Online** (Trixie 6.12.75) |
 | e17  | b8:27:eb:5f:de:85 | RPi 3B     | 7d5fde85    | pi17 | 10.21.0.117   | Arty A7       | Online (bookworm)        |
-| e18  | 2c:cf:67:37:d5:08 | RPi CM5 Lite | 4e45f174  | pi18 | 10.21.0.118   | Acorn CLE-101 | Boot-looping (needs debug) |
+| e18  | 2c:cf:67:37:d5:08 | RPi CM4    | 4e45f174    | pi18 | 10.21.0.118   | (empty M.2)   | **Online** (Trixie 6.12.75) |
 | e19  | b8:27:eb:0c:f8:43 | RPi 3B     | 9b0cf843    | pi19 | 10.21.0.119   | —             | Dead                     |
-| e20  | 2c:cf:67:fd:1e:be | RPi CM5 Lite | de59093d  | pi20 | 10.21.0.120   | Acorn CLE-101 | Boot-looping (needs debug) |
+| e20  | 2c:cf:67:fd:1e:be | RPi CM5 Lite | de59093d  | pi20 | 10.21.0.120   | (empty M.2)   | **Online** (Trixie 6.12.75) |
 
-- **pi16 (CM5 Lite + Acorn CLE-101)**: **ONLINE.** Booting Trixie arm64 (Debian 13) with kernel 6.12.75+rpt-rpi-v8 via NFS. 8 GB RAM. Acorn CLE-101 (LiteFury, XC7A100T) on PCIe bus 0001. Trixie NFS root has full package parity with bookworm (python3, openFPGALoader, openocd, picocom, build-essential, etc.). Required kernel-matching DTBs (bookworm DTBs caused silent boot failure with 6.12 kernel).
-- **pi14 (CM4 + Acorn CLE-101)**: Reports as "Compute Module 4 Rev 1.1" (not CM5). Boots briefly then loops. May need bookworm root (CM4 has different kernel requirements) or separate config.
-- **pi18, pi20 (CM5 Lite + Acorn CLE-101)**: Ping but boot-loop. Need investigation — may need per-blade config or have hardware differences from pi16.
+- **All Compute Blades**: Booting Trixie arm64 (Debian 13) with kernel 6.12.75+rpt-rpi-v8 via NFS. Overlayroot (tmpfs), netconsole, and eth-uplink interface naming all configured. Trixie NFS root has full package parity with bookworm.
+- **pi14 (CM4 + Acorn CLE-101)**: Online. Acorn CLE-101 detected on PCIe bus 0000:01. Device path `platform-fd580000.ethernet` (BCM2711).
+- **pi16 (CM5 Lite + Acorn CLE-101)**: Online. Acorn CLE-101 detected on PCIe bus 0001:01. Device path `platform-1f00100000.ethernet` (BCM2712).
+- **pi18 (CM4, no FPGA)**: Online. PCIe bridge present but M.2 slot appears empty — no FPGA detected. Device path `platform-fd580000.ethernet` (BCM2711).
+- **pi20 (CM5 Lite, no FPGA)**: Online. Only RP1 South Bridge on PCIe — M.2 slot appears empty. Device path `platform-1f00100000.ethernet` (BCM2712).
 - **pi17** (e17): RPi 3B with Arty A7. Online and SSH-accessible. Added to pibs.conf.
 - **pi19** (e19): RPi 3B. Link UP but zero PXE/DHCP activity after PoE cycling. Dead hardware.
 - **Ports e1, e4, e15, e23, e24**: No link after PoE cycling. Cables disconnected or dead hardware.
