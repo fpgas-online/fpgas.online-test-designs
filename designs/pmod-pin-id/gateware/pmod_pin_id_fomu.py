@@ -59,6 +59,11 @@ def build_io_extensions(pin_list):
 
 class PMODPinIdentifier(Module):
     def __init__(self, platform, pin_list):
+        # iCE40 needs an explicit clock domain — connect clk48 directly to sync.
+        clk48 = platform.request("clk48")
+        self.clock_domains.cd_sys = ClockDomain("sys")
+        self.comb += self.cd_sys.clk.eq(clk48)
+
         for i, (_resource_pin, label) in enumerate(pin_list):
             pin = platform.request(f"pin_id_{i}")
             tx = UARTTxIdentifier(pin, label, int(SYS_CLK_FREQ), baud=BAUD_RATE)
