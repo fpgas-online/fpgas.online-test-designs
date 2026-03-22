@@ -32,12 +32,16 @@ import time
 
 VENDOR_ID = "10ee"  # Xilinx Corporation
 DEVICE_ID = "7011"  # 7-Series PCIe endpoint (LitePCIe default)
-EXPECTED_LINK_WIDTH = "x1"
+EXPECTED_LINK_WIDTH = "x1"  # RPi 5 / CM4 / CM5 all provide x1 PCIe
 OPENOCD_CFG = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "openocd",
     "alphamax-rpi.cfg",
 )
+BOARD_NAMES = {
+    "netv2": "NeTV2",
+    "acorn": "Acorn CLE-215+",
+}
 
 
 # -- FPGA programming ----------------------------------------------------------
@@ -201,12 +205,13 @@ def check_config_space(bdf):
 # -- Main test runner -----------------------------------------------------------
 
 
-def run_test(program=False, bitstream=None, openocd_cfg=OPENOCD_CFG, skip_rescan=False):
+def run_test(program=False, bitstream=None, openocd_cfg=OPENOCD_CFG, skip_rescan=False, board="netv2"):
     """Run the full PCIe enumeration test."""
     total_tests = 0
     failures = []
 
-    print("=== PCIe Enumeration Test (NeTV2 on RPi5) ===")
+    board_name = BOARD_NAMES.get(board, board)
+    print(f"=== PCIe Enumeration Test ({board_name}) ===")
     print(f"Expected device: {VENDOR_ID}:{DEVICE_ID}")
     print()
 
@@ -342,6 +347,7 @@ def run_test(program=False, bitstream=None, openocd_cfg=OPENOCD_CFG, skip_rescan
 
 def main():
     parser = argparse.ArgumentParser(description="PCIe Enumeration Test (host-side)")
+    parser.add_argument("--board", default="netv2", help="Board type (netv2, acorn)")
     parser.add_argument("--program", action="store_true", help="Program FPGA before testing")
     parser.add_argument("--bitstream", default=None, help="Path to bitstream file")
     parser.add_argument("--openocd-cfg", default=OPENOCD_CFG, help="OpenOCD config file")
@@ -353,6 +359,7 @@ def main():
         bitstream=args.bitstream,
         openocd_cfg=args.openocd_cfg,
         skip_rescan=args.skip_rescan,
+        board=args.board,
     )
     sys.exit(0 if success else 1)
 

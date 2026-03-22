@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """LiteX SoC with LitePCIe endpoint for Acorn/LiteFury PCIe enumeration testing.
 
-Builds a SoC with CPU + BIOS + UART + PCIe Gen2 x4 endpoint.
+Builds a SoC with CPU + BIOS + UART + PCIe Gen2 x4 endpoint using openxc7.
 The host (RPi5 via mPCIe HAT) should see the FPGA as a PCIe device
 after programming and bus rescan.
+
+  - VexRiscv CPU + BIOS + UART (115200 baud)
+  - LitePCIe Gen2 x4 endpoint using the Xilinx 7-Series hard IP PCIe block
+    - Vendor ID: 0x10EE (Xilinx)
+    - Device ID: 0x7011 (+ nlanes)
+    - 128 KB BAR0 for Wishbone bridge access
 
 Build command:
     uv run python designs/pcie-enumeration/gateware/pcie_soc_acorn.py --toolchain openxc7 --build
@@ -23,7 +29,7 @@ from litepcie.core import LitePCIeEndpoint, LitePCIeMSI
 from litepcie.frontend.wishbone import LitePCIeWishboneBridge
 from litepcie.phy.s7pciephy import S7PCIEPHY
 from litex.gen import *
-from litex.soc.cores.clock import S7IDELAYCTRL, S7PLL
+from litex.soc.cores.clock import S7PLL
 from litex.soc.integration.builder import Builder
 from litex.soc.integration.soc_core import SoCCore
 from litex_boards.platforms import sqrl_acorn
@@ -38,14 +44,11 @@ from designs._shared.yosys_workarounds import patch_yosys_template
 
 
 class _CRG(LiteXModule):
-    """CRG for Acorn with DDR3 clock domains."""
+    """Minimal CRG for Acorn: generates sys clock from the 200 MHz on-board oscillator."""
 
     def __init__(self, platform, sys_clk_freq):
         self.rst = Signal()
         self.cd_sys = ClockDomain("sys")
-        self.cd_sys4x = ClockDomain("sys4x")
-        self.cd_sys4x_dqs = ClockDomain("sys4x_dqs")
-        self.cd_idelay = ClockDomain("idelay")
 
         # Clk.
         clk200 = platform.request("clk200")
@@ -55,13 +58,7 @@ class _CRG(LiteXModule):
         self.comb += pll.reset.eq(self.rst)
         pll.register_clkin(clk200, 200e6)
         pll.create_clkout(self.cd_sys, sys_clk_freq)
-        pll.create_clkout(self.cd_sys4x, 4 * sys_clk_freq)
-        pll.create_clkout(self.cd_sys4x_dqs, 4 * sys_clk_freq, phase=90)
-        pll.create_clkout(self.cd_idelay, 200e6)
         platform.add_false_path_constraints(self.cd_sys.clk, pll.clkin)
-
-        # IdelayCtrl.
-        self.idelayctrl = S7IDELAYCTRL(self.cd_idelay)
 
 
 # SoC ----------------------------------------------------------------------------------------------
@@ -73,6 +70,13 @@ class PCIeEnumerationSoC(SoCCore):
 
         if toolchain == "openxc7":
             fix_openxc7_device_name(platform)
+            # S7PCIEPHY.add_sources() appends Vivado-specific TCL commands to
+            # these toolchain attributes.  The openxc7 (yosys+nextpnr) toolchain
+            # doesn't have them, so provide empty lists — the TCL is silently
+            # dropped and the PCIe hard IP is handled natively by nextpnr-xilinx.
+            for attr in ("pre_synthesis_commands", "pre_placement_commands"):
+                if not hasattr(platform.toolchain, attr):
+                    setattr(platform.toolchain, attr, [])
 
         # CRG ----------------------------------------------------------------------------------
         self.crg = _CRG(platform, sys_clk_freq)
