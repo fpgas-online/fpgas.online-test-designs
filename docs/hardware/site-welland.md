@@ -314,6 +314,14 @@ The PMOD HAT provides 3 PMOD ports (JA, JB, JC) connecting RPi GPIO pins to stan
 └──────────────────────────────────────────────────────────────┘
 ```
 
+### Disconnected Hosts
+
+| Host | MAC               | IP          | Notes                                   |
+| ---- | ----------------- | ----------- | --------------------------------------- |
+| pi44 | dc:a6:32:b4:5e:c9 | 10.21.0.144 | Not connected (old MAC, may be reassigned) |
+
+Source: `pibs.conf` on tweed.
+
 ## Known Issues
 
 - **pi11** (port 11): Arty A7 FTDI USB disconnected — board cannot be programmed or tested.

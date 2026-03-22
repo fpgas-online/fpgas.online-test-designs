@@ -13,7 +13,7 @@ The PS1 site is the public-facing fpgas.online infrastructure, hosted at Pumping
 | eth-uplink | 76.227.131.147/25 (public internet)              |
 | eth-local  | 10.21.0.1/24 (RPi network)                       |
 | Web server | nginx (reverse proxy for web SSH + video streams) |
-| PoE switch | Netgear S3300 at 10.21.0.200                     |
+| PoE switch | Netgear FS728TPv2 at 10.21.0.200                 |
 | SSH access | `ssh root@ps1.fpgas.online`                      |
 
 NFS roots:
@@ -24,19 +24,23 @@ NFS roots:
 
 Hosts are listed in natural sort order in `/etc/dnsmasq.d/pibs.conf`.
 
-| Host | IP          | RPi Model          | FPGA Board | Arty Serial  | USB Ethernet | Status  |
-|------|-------------|--------------------|-----------:|--------------|--------------|---------|
-| pi2  | 10.21.0.102 | RPi 3B Rev 1.2     | Arty A7    | 210319B301E0 | Apple A1277  | Online  |
-| pi3  | 10.21.0.103 | RPi 4B Rev 1.1     | Arty A7    | 210319A43AD3 | ASIX AX88179 | Online  |
-| pi5  | 10.21.0.105 | RPi 3B Rev 1.2     | Arty A7    | 210319B58381 | ASIX AX88179 | Online  |
-| pi7  | 10.21.0.107 | RPi 3B+ Rev 1.3    | Arty A7    | 210319A764F5 | ASIX AX88179 | Online  |
-| pi9  | 10.21.0.109 | RPi 3B+ Rev 1.3    | Arty A7    | 210319B58379 | ASIX AX88179 | Online  |
-| pi11 | 10.21.0.111 | RPi 3B Rev 1.2     | Arty A7    | 210319B5835B | ASIX AX88179 | Online  |
-| pi13 | 10.21.0.113 | RPi 3B Rev 1.2     | Arty A7    | 210319B3E5C3 | ASIX AX88179 | Online  |
-| pi17 | 10.21.0.117 | RPi 3B Rev 1.2     | Arty A7    | (TBD)        | ASIX AX88179 | Online  |
-| pi19 | 10.21.0.119 | RPi 3B             | (unknown)  | —            | —            | Dead    |
-| pi21 | 10.21.0.121 | RPi 5 Rev 1.0      | (none)     | —            | —            | Online  |
-| pi24 | 10.21.0.124 | (unknown)          | (unknown)  | —            | —            | Offline |
+| Host | IP          | RPi Model            | FPGA Board    | Arty Serial  | USB Ethernet | Status  |
+|------|-------------|----------------------|---------------|--------------|--------------|---------|
+| pi2  | 10.21.0.102 | RPi 3B Rev 1.2       | Arty A7       | 210319B301E0 | Apple A1277  | Offline |
+| pi3  | 10.21.0.103 | RPi 4B Rev 1.1       | Arty A7       | 210319A43AD3 | ASIX AX88179 | Online  |
+| pi5  | 10.21.0.105 | RPi 3B Rev 1.2       | Arty A7       | 210319B58381 | ASIX AX88179 | Online  |
+| pi7  | 10.21.0.107 | RPi 3B+ Rev 1.3      | Arty A7       | 210319A764F5 | ASIX AX88179 | Online  |
+| pi9  | 10.21.0.109 | RPi 3B+ Rev 1.3      | Arty A7       | 210319B58379 | ASIX AX88179 | Online  |
+| pi11 | 10.21.0.111 | RPi 3B Rev 1.2       | Arty A7       | 210319B5835B | ASIX AX88179 | Online  |
+| pi13 | 10.21.0.113 | RPi 3B Rev 1.2       | Arty A7       | 210319B3E5C3 | ASIX AX88179 | Online  |
+| pi14 | 10.21.0.114 | CM4 Rev 1.1 4GB      | Acorn CLE-101 | —            | —            | Online  |
+| pi16 | 10.21.0.116 | CM5 Lite Rev 1.0 8GB | Acorn CLE-101 | —            | —            | Online  |
+| pi17 | 10.21.0.117 | RPi 3B Rev 1.2       | Arty A7       | 210319B58370 | ASIX AX88179 | Online  |
+| pi18 | 10.21.0.118 | CM4 Rev 1.1 4GB      | (empty M.2)   | —            | —            | Online  |
+| pi19 | 10.21.0.119 | RPi 3B               | (none)        | —            | —            | Dead    |
+| pi20 | 10.21.0.120 | CM5 Lite Rev 1.0 8GB | (empty M.2)   | —            | —            | Online  |
+| pi21 | 10.21.0.121 | RPi 5 Rev 1.0 4GB    | (none)        | —            | —            | Online  |
+| pi24 | 10.21.0.124 | (unknown)            | (unknown)     | —            | —            | Offline |
 
 All Arty boards connect via FTDI FT2232C/D/H (`0403:6010`). Each provides:
 - `/dev/ttyUSB0` — JTAG (openFPGALoader)
@@ -46,11 +50,11 @@ Each RPi also has a separate USB Ethernet adapter for the Arty's Ethernet port.
 
 ### Notes
 
-- **pi17** (port e17): Newly discovered 2026-03-21. RPi 3B with Arty A7 (FTDI + ASIX Ethernet). Successfully PXE booting. Was the old pi21 MAC before replacement.
-- **pi19** (port e19): Newly discovered 2026-03-21. RPi 3B, link UP but zero DHCP/TFTP activity after PoE cycle — appears dead. Was the old pi23 MAC.
-- **pi21** (RPi 5): No FPGA board or USB serial devices detected. May be a test/development host or awaiting hardware.
+- **pi2** (port e2): Uses Apple Ethernet adapter (A1277). Currently offline per pibs.conf.
+- **pi17** (port e17): RPi 3B with Arty A7 (serial 210319B58370, FTDI + ASIX Ethernet). Discovered 2026-03-21.
+- **pi19** (port e19): RPi 3B, dead. Link UP but no DHCP/TFTP activity.
+- **pi21** (port e21): RPi 5 Rev 1.0, 4 GB. No FPGA board. Running Trixie (arm64).
 - **pi24**: Offline — registered in dnsmasq (MAC `b8:27:eb:85:ab:d9`) but not seen on switch.
-- **pi2** uses an Apple Ethernet adapter (A1277) rather than the ASIX AX88179 used by other hosts.
 
 ## PoE Switch Port Inventory
 
@@ -73,13 +77,13 @@ LLDP: server (val2) connects on port g25. Upstream is a Ubiquiti US-24-G1 (`PS1-
 | e11  | UP   | delivering  | b8:27:eb:51:01:df | RPi 3B      | pi11 |                          |
 | e12  | down | disabled    |                   |             |      |                          |
 | e13  | UP   | delivering  | b8:27:eb:68:fc:e7 | RPi 3B      | pi13 |                          |
-| e14  | UP   | delivering  | 2c:cf:67:37:d4:bd | RPi 5       |      | NEW — PXE boot failing   |
+| e14  | UP   | delivering  | 2c:cf:67:37:d4:bd | CM4 4GB     | pi14 | Acorn CLE-101            |
 | e15  | down | delivering  |                   |             |      | PoE on, no link          |
-| e16  | UP   | delivering  | 2c:cf:67:fb:91:e5 | RPi 5       |      | NEW — PXE boot failing   |
-| e17  | UP   | delivering  | b8:27:eb:5f:de:85 | RPi 3B      |      | NEW — booting (ex-pi21)  |
-| e18  | UP   | delivering  | 2c:cf:67:37:d5:08 | RPi 5       |      | NEW — PXE boot failing   |
-| e19  | UP   | delivering  | b8:27:eb:0c:f8:43 | RPi 3B      |      | NEW — booting (ex-pi23)  |
-| e20  | down | delivering  | 2c:cf:67:fd:1e:be | RPi 5       |      | NEW — PXE boot failing   |
+| e16  | UP   | delivering  | 2c:cf:67:fb:91:e5 | CM5 Lite 8GB| pi16 | Acorn CLE-101            |
+| e17  | UP   | delivering  | b8:27:eb:5f:de:85 | RPi 3B      | pi17 | Arty A7                  |
+| e18  | UP   | delivering  | 2c:cf:67:37:d5:08 | CM4 4GB     | pi18 | Empty M.2 slot           |
+| e19  | UP   | delivering  | b8:27:eb:0c:f8:43 | RPi 3B      | pi19 | Dead                     |
+| e20  | down | delivering  | 2c:cf:67:fd:1e:be | CM5 Lite 8GB| pi20 | Empty M.2 slot           |
 | e21  | UP   | delivering  | 2c:cf:67:39:18:66 | RPi 5       | pi21 |                          |
 | e22  | down | disabled    |                   |             |      |                          |
 | e23  | down | searching   |                   |             |      | Cable present, no device |
@@ -91,7 +95,7 @@ LLDP: server (val2) connects on port g25. Upstream is a Ubiquiti US-24-G1 (`PS1-
 
 ### Discovered Devices (2026-03-21)
 
-After enabling PoE on all previously-disabled ports, 6 new devices appeared:
+Six devices discovered 2026-03-21 after enabling PoE on previously-disabled ports. All now registered in `pibs.conf`:
 
 | Port | MAC               | Type       | TFTP Serial | Name | IP            | FPGA          | Boot Status              |
 |------|-------------------|------------|-------------|------|---------------|---------------|--------------------------|
@@ -121,7 +125,7 @@ All even-numbered ports (e6/e8/e10/e12) between the registered Arty hosts were p
 |-----------------|-----------------------------|------------------------------------|
 | Location        | Chicago (PS1 hackerspace)   | Welland, Ontario                   |
 | Public access   | Yes (web SSH + video)       | VPN only (WireGuard)               |
-| RPi count       | 15 registered (7 Arty + 4 Compute Blade + 1 RPi5 + 3 offline) | 18+ (Arty + NeTV2 + Fomu + TT + Acorn) |
+| RPi count       | 15 registered (8 Arty + 4 Compute Blade + 1 RPi 5 + 2 offline) | 27 registered (5 Arty + 5 NeTV2 + 4 Acorn + 2 Fomu + 7 TT + 4 other) |
 | FPGA boards     | Arty A7, Acorn CLE-101      | Arty, NeTV2, Fomu, TT FPGA, Acorn |
 | Network         | 10.21.0.0/24                | 10.21.0.0/16                       |
 | NFS roots       | bookworm (armhf) + trixie (arm64) | /srv/nfs/rpi/bookworm/         |

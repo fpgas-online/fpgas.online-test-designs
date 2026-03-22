@@ -41,6 +41,8 @@ HOSTS = {
     "welland-pi3": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.103", "board": "arty"},
     "welland-pi5": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.105", "board": "arty"},
     "welland-pi9": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.109", "board": "arty"},
+    # welland-pi11: arty — FTDI disconnected, cannot program/test
+    "welland-pi13": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.113", "board": "arty"},
     "welland-pi17": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.117", "board": "fomu"},
     "welland-pi21": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.121", "board": "fomu"},
     "welland-pi10": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.110", "board": "netv2", "variant": "a7-35"},
@@ -54,13 +56,14 @@ HOSTS = {
     "welland-pi31": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.131", "board": "tt"},
     "welland-pi33": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.133", "board": "tt"},
     # PS1 site (via pi@ps1.fpgas.online gateway)
-    "ps1-pi2": {"ssh_type": "gateway", "gateway": "ps1", "target": "10.21.0.102", "board": "arty"},
+    "ps1-pi2": {"ssh_type": "gateway", "gateway": "ps1", "target": "10.21.0.102", "board": "arty"},  # [offline]
     "ps1-pi3": {"ssh_type": "gateway", "gateway": "ps1", "target": "10.21.0.103", "board": "arty"},
     "ps1-pi5": {"ssh_type": "gateway", "gateway": "ps1", "target": "10.21.0.105", "board": "arty"},
     "ps1-pi7": {"ssh_type": "gateway", "gateway": "ps1", "target": "10.21.0.107", "board": "arty"},
     "ps1-pi9": {"ssh_type": "gateway", "gateway": "ps1", "target": "10.21.0.109", "board": "arty"},
     "ps1-pi11": {"ssh_type": "gateway", "gateway": "ps1", "target": "10.21.0.111", "board": "arty"},
     "ps1-pi13": {"ssh_type": "gateway", "gateway": "ps1", "target": "10.21.0.113", "board": "arty"},
+    "ps1-pi17": {"ssh_type": "gateway", "gateway": "ps1", "target": "10.21.0.117", "board": "arty"},
     # Direct SSH
     "rpi5-netv2": {
         "ssh_type": "direct",
