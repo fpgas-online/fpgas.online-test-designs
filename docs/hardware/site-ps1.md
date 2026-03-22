@@ -16,7 +16,9 @@ The PS1 site is the public-facing fpgas.online infrastructure, hosted at Pumping
 | PoE switch | Netgear S3300 at 10.21.0.200                     |
 | SSH access | `ssh root@ps1.fpgas.online`                      |
 
-NFS root: `/srv/nfs/rpi/bookworm/{boot,root}` (read-only for all RPis).
+NFS roots:
+- **bookworm** (armhf): `/srv/nfs/rpi/bookworm/{boot,root}` — RPi 3B/3B+/4B (read-only with overlayroot)
+- **trixie** (arm64): `/srv/nfs/rpi/trixie/{boot,root}` — RPi CM5 Lite Compute Blades (kernel 6.12.75+rpt-rpi-v8)
 
 ## RPi Inventory
 
@@ -100,7 +102,7 @@ After enabling PoE on all previously-disabled ports, 6 new devices appeared:
 | e19  | b8:27:eb:0c:f8:43 | RPi 3B     | 9b0cf843    | pi19 | 10.21.0.119   | —             | Dead                     |
 | e20  | 2c:cf:67:fd:1e:be | RPi CM5 Lite | de59093d  | pi20 | 10.21.0.120   | Acorn CLE-101 | Boot-looping (needs debug) |
 
-- **pi16 (CM5 Lite + Acorn CLE-101)**: **ONLINE.** Booting Trixie arm64 with kernel 6.12.75+rpt-rpi-v8 via NFS. 8 GB RAM. Acorn CLE-101 (LiteFury, XC7A100T) on PCIe bus 0001. Required Trixie NFS root with kernel-matching DTBs (bookworm DTBs caused silent boot failure with 6.12 kernel).
+- **pi16 (CM5 Lite + Acorn CLE-101)**: **ONLINE.** Booting Trixie arm64 (Debian 13) with kernel 6.12.75+rpt-rpi-v8 via NFS. 8 GB RAM. Acorn CLE-101 (LiteFury, XC7A100T) on PCIe bus 0001. Trixie NFS root has full package parity with bookworm (python3, openFPGALoader, openocd, picocom, build-essential, etc.). Required kernel-matching DTBs (bookworm DTBs caused silent boot failure with 6.12 kernel).
 - **pi14 (CM4 + Acorn CLE-101)**: Reports as "Compute Module 4 Rev 1.1" (not CM5). Boots briefly then loops. May need bookworm root (CM4 has different kernel requirements) or separate config.
 - **pi18, pi20 (CM5 Lite + Acorn CLE-101)**: Ping but boot-loop. Need investigation — may need per-blade config or have hardware differences from pi16.
 - **pi17** (e17): RPi 3B with Arty A7. Online and SSH-accessible. Added to pibs.conf.
@@ -117,10 +119,10 @@ All even-numbered ports (e6/e8/e10/e12) between the registered Arty hosts were p
 |-----------------|-----------------------------|------------------------------------|
 | Location        | Chicago (PS1 hackerspace)   | Welland, Ontario                   |
 | Public access   | Yes (web SSH + video)       | VPN only (WireGuard)               |
-| RPi count       | 9 registered (7 Arty + 1 RPi5 + 1 offline) | 18+ (Arty + NeTV2 + Fomu + TT + Acorn) |
-| FPGA boards     | Arty A7 only                | Arty, NeTV2, Fomu, TT FPGA, Acorn |
+| RPi count       | 15 registered (7 Arty + 4 Compute Blade + 1 RPi5 + 3 offline) | 18+ (Arty + NeTV2 + Fomu + TT + Acorn) |
+| FPGA boards     | Arty A7, Acorn CLE-101      | Arty, NeTV2, Fomu, TT FPGA, Acorn |
 | Network         | 10.21.0.0/24                | 10.21.0.0/16                       |
-| NFS root        | /srv/nfs/rpi/bookworm/      | /srv/nfs/rpi/bookworm/             |
+| NFS roots       | bookworm (armhf) + trixie (arm64) | /srv/nfs/rpi/bookworm/         |
 | PoE switch      | Netgear S3300 (10.21.0.200) | Netgear S3300 (10.21.0.200)        |
 
 ## Public Web Interface
