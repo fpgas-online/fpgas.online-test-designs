@@ -118,6 +118,8 @@ jobs:
         run: uv sync --python 3.12 --extra build
 
       - name: Build Acorn CLE-215+ bitstream
+        env:
+          CHIPDB: /chipdb
         run: |
           uv run python designs/pcie-enumeration/gateware/pcie_soc_acorn.py \
             --variant cle-215+ \
@@ -153,6 +155,8 @@ jobs:
         run: uv sync --python 3.12 --extra build
 
       - name: Build NiteFury (CLE-215) bitstream
+        env:
+          CHIPDB: /chipdb
         run: |
           uv run python designs/pcie-enumeration/gateware/pcie_soc_acorn.py \
             --variant cle-215 \
@@ -188,6 +192,8 @@ jobs:
         run: uv sync --python 3.12 --extra build
 
       - name: Build LiteFury (CLE-101) bitstream
+        env:
+          CHIPDB: /chipdb
         run: |
           uv run python designs/pcie-enumeration/gateware/pcie_soc_acorn.py \
             --variant cle-101 \
