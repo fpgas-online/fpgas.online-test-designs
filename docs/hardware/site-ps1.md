@@ -37,16 +37,16 @@ Hosts are listed in natural sort order per `/etc/dnsmasq.d/pibs.conf`.
 
 ### Arty A7 Hosts
 
-| Host | Port | IP          | RPi Model       | Arty Serial  | USB Ethernet | Status  |
-|------|------|-------------|-----------------|--------------|--------------|---------|
-| pi2  | e2   | 10.21.0.102 | RPi 3B Rev 1.2  | 210319B301E0 | Apple A1277  | Offline |
-| pi3  | e3   | 10.21.0.103 | RPi 4B Rev 1.1  | 210319A43AD3 | ASIX AX88179 | Online  |
-| pi5  | e5   | 10.21.0.105 | RPi 3B Rev 1.2  | 210319B58381 | ASIX AX88179 | Online  |
-| pi7  | e7   | 10.21.0.107 | RPi 3B+ Rev 1.3 | 210319A764F5 | ASIX AX88179 | Online  |
-| pi9  | e9   | 10.21.0.109 | RPi 3B+ Rev 1.3 | 210319B58379 | ASIX AX88179 | Online  |
-| pi11 | e11  | 10.21.0.111 | RPi 3B Rev 1.2  | 210319B5835B | ASIX AX88179 | Online  |
-| pi13 | e13  | 10.21.0.113 | RPi 3B Rev 1.2  | 210319B3E5C3 | ASIX AX88179 | Online  |
-| pi17 | e17  | 10.21.0.117 | RPi 3B Rev 1.2  | 210319B58370 | ASIX AX88179 | Online  |
+| Host | Port | IP          | RPi MAC           | RPi Model       | Arty Serial  | USB Eth MAC       | USB Eth Type | Status  |
+|------|------|-------------|-------------------|-----------------|--------------|-------------------|--------------|---------|
+| pi2  | e2   | 10.21.0.102 | b8:27:eb:2f:5d:08 | RPi 3B Rev 1.2  | 210319B301E0 | —                 | Apple A1277  | Offline |
+| pi3  | e3   | 10.21.0.103 | dc:a6:32:05:32:45 | RPi 4B Rev 1.1  | 210319A43AD3 | 00:05:1b:b0:47:9d | ASIX AX88179 | Online  |
+| pi5  | e5   | 10.21.0.105 | b8:27:eb:d4:f1:74 | RPi 3B Rev 1.2  | 210319B58381 | f8:e4:3b:a6:a8:62 | ASIX AX88179 | Online  |
+| pi7  | e7   | 10.21.0.107 | b8:27:eb:33:51:27 | RPi 3B+ Rev 1.3 | 210319A764F5 | 00:05:1b:b0:46:51 | ASIX AX88179 | Online  |
+| pi9  | e9   | 10.21.0.109 | b8:27:eb:a3:51:b4 | RPi 3B+ Rev 1.3 | 210319B58379 | f8:e4:3b:a0:55:af | ASIX AX88179 | Online  |
+| pi11 | e11  | 10.21.0.111 | b8:27:eb:51:01:df | RPi 3B Rev 1.2  | 210319B5835B | f8:e4:3b:a6:c6:a9 | ASIX AX88179 | Online  |
+| pi13 | e13  | 10.21.0.113 | b8:27:eb:68:fc:e7 | RPi 3B Rev 1.2  | 210319B3E5C3 | f8:e4:3b:a6:cf:b1 | ASIX AX88179 | Online  |
+| pi17 | e17  | 10.21.0.117 | b8:27:eb:5f:de:85 | RPi 3B Rev 1.2  | 210319B58370 | f8:e4:3b:a6:c6:10 | ASIX AX88179 | Online  |
 
 All Arty boards connect via FTDI FT2232C/D/H (`0403:6010`). Each provides:
 - `/dev/ttyUSB0` — JTAG (openFPGALoader)
@@ -58,22 +58,22 @@ Each RPi also has a separate USB Ethernet adapter for the Arty's Ethernet port.
 
 ### LiteFury / Compute Blade Hosts
 
-| Host | Port | IP          | RPi Model            | Board    | PCIe Bus  | Status  |
-|------|------|-------------|----------------------|----------|-----------|---------|
-| pi14 | e14  | 10.21.0.114 | CM4 Rev 1.1 4GB      | LiteFury | 0000:01   | Online  |
-| pi16 | e16  | 10.21.0.116 | CM5 Lite Rev 1.0 8GB | LiteFury | 0001:01   | Online  |
-| pi18 | e18  | 10.21.0.118 | CM4 Rev 1.1 4GB      | (pending)| —         | Online  |
-| pi20 | e20  | 10.21.0.120 | CM5 Lite Rev 1.0 8GB | (pending)| —         | Online  |
+| Host | Port | IP          | RPi MAC           | RPi Model            | Board    | PCIe Bus | Status  |
+|------|------|-------------|-------------------|----------------------|----------|----------|---------|
+| pi14 | e14  | 10.21.0.114 | 2c:cf:67:37:d4:bd | CM4 Rev 1.1 4GB      | LiteFury | 0000:01  | Online  |
+| pi16 | e16  | 10.21.0.116 | 2c:cf:67:fb:91:e5 | CM5 Lite Rev 1.0 8GB | LiteFury | 0001:01  | Online  |
+| pi18 | e18  | 10.21.0.118 | 2c:cf:67:37:d5:08 | CM4 Rev 1.1 4GB      | (pending)| —        | Online  |
+| pi20 | e20  | 10.21.0.120 | 2c:cf:67:fd:1e:be | CM5 Lite Rev 1.0 8GB | (pending)| —        | Online  |
 
 All Compute Blades boot Trixie arm64 (Debian 13) via NFS with overlayroot. JTAG and UART via Pico-EZmate cables to RPi GPIO header, PCIe via M.2 slot. See [acorn-wiring-guide.md](acorn-wiring-guide.md).
 
 ### Other Hosts
 
-| Host | Port | IP          | RPi Model         | Notes                      | Status  |
-|------|------|-------------|--------------------|----------------------------|---------|
-| pi19 | e19  | 10.21.0.119 | RPi 3B             | Dead hardware              | Dead    |
-| pi21 | e21  | 10.21.0.121 | RPi 5 Rev 1.0 4GB  | No FPGA, development host  | Online  |
-| pi24 | —    | 10.21.0.124 | (unknown)          | Registered but not on switch | Offline |
+| Host | Port | IP          | RPi MAC           | RPi Model         | Notes                      | Status  |
+|------|------|-------------|-------------------|--------------------|----------------------------|---------|
+| pi19 | e19  | 10.21.0.119 | b8:27:eb:0c:f8:43 | RPi 3B             | Dead hardware              | Dead    |
+| pi21 | e21  | 10.21.0.121 | 2c:cf:67:39:18:66 | RPi 5 Rev 1.0 4GB  | No FPGA, development host  | Online  |
+| pi24 | —    | 10.21.0.124 | b8:27:eb:85:ab:d9  | (unknown)          | Registered but not on switch | Offline |
 
 ## PoE Switch Port Inventory
 
