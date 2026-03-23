@@ -30,25 +30,27 @@ The Acorn has two 6-pin Molex Pico-EZmate connectors: **P1** (JTAG) and **P2** (
 The P2 cable carries UART and 2 spare GPIOs. Solder or crimp Dupont connectors onto a 2×3 pin header arranged to plug directly into RPi header pins 5-10:
 
 ```
-RPi Header (pins 5-10, looking at the board from above):
+                     RPi Header
+                  (pins 5-10, top view)
 
-  Pin 5  Pin 6     ← GPIO3 (SDA1) / GND
-  Pin 7  Pin 8     ← GPIO4 (GPCLK0) / GPIO14 (TXD0)
-  Pin 9  Pin 10    ← GND / GPIO15 (RXD0)
+                   Pin 5      Pin 6
+  P2:3 Spare GPIO 0 → | (GPIO3)  (GND)   | ← P2:5 GND
+                   Pin 7      Pin 8
+  P2:4 Spare GPIO 1 → | (GPIO4)  (GPIO14)| ← P2:1 Serial TX
+                   Pin 9      Pin 10
+         (unused)  → | (GND)    (GPIO15)| ← P2:2 Serial RX
 ```
 
-Wire the P2 Pico-EZmate pins to the 2×3 header:
+| P2 Pin | Function     | → RPi Header Pin | RPi GPIO |
+|--------|--------------|-------------------|----------|
+| 1      | Serial TX    | Pin 8             | GPIO14   |
+| 2      | Serial RX    | Pin 10            | GPIO15   |
+| 3      | Spare GPIO 0 | Pin 5             | GPIO3    |
+| 4      | Spare GPIO 1 | Pin 7             | GPIO4    |
+| 5      | GND          | Pin 6             | GND      |
+| 6      | VCC (3.3V)   | **unconnected**   | —        |
 
-| P2 Pin | Wire Colour (typical) | Function     | → RPi Header Pin | RPi GPIO |
-|--------|-----------------------|--------------|-------------------|----------|
-| 1      | —                     | Serial TX    | Pin 8             | GPIO14   |
-| 2      | —                     | Serial RX    | Pin 10            | GPIO15   |
-| 3      | —                     | Spare GPIO 0 | Pin 5             | GPIO3    |
-| 4      | —                     | Spare GPIO 1 | Pin 7             | GPIO4    |
-| 5      | —                     | GND          | Pin 6             | GND      |
-| 6      | —                     | VCC (3.3V)   | Pin 9             | GND      |
-
-**Note**: P2 pin 6 is 3.3V from the Acorn. It connects to RPi pin 9 (GND) — this is intentional as a safety measure. Do NOT connect the Acorn's 3.3V to the RPi's 3.3V rail. If you need 3.3V reference, use a separate connection.
+**Warning**: P2 pin 6 is 3.3V output from the Acorn. Leave it **unconnected** — do NOT connect it to any RPi pin. Connecting two 3.3V regulators together can damage the RPi's power management chip. Pin 9 on the RPi header (GND) is left unused.
 
 **Important**: Verify the wire order of your specific Pico-EZmate cable with a multimeter before connecting. The pin numbering on the Pico-EZmate connector may not match the wire colour order.
 
@@ -57,24 +59,29 @@ Wire the P2 Pico-EZmate pins to the 2×3 header:
 The P1 cable carries JTAG signals. Solder or crimp Dupont connectors onto a 2×3 pin header arranged to plug into RPi header pins 19-26 (the SPI0 pin group):
 
 ```
-RPi Header (pins 19-26, looking at the board from above):
+                     RPi Header
+                 (pins 19-26, top view)
 
-  Pin 19 Pin 20    ← GPIO10 (SPI0_MOSI) / GND
-  Pin 21 Pin 22    ← GPIO9 (SPI0_MISO) / GPIO25
-  Pin 23 Pin 24    ← GPIO11 (SPI0_SCLK) / GPIO8 (SPI0_CE0)
-  Pin 25 Pin 26    ← GND / GPIO7 (SPI0_CE1)
+                   Pin 19     Pin 20
+       P1:2 TDI → | (GPIO10) (GND)   | ← (unused)
+                   Pin 21     Pin 22
+       P1:3 TDO → | (GPIO9)  (GPIO25)| ← (unused)
+                   Pin 23     Pin 24
+       P1:1 TCK → | (GPIO11) (GPIO8) | ← P1:4 TMS
+                   Pin 25     Pin 26
+       P1:5 GND → | (GND)    (GPIO7) | ← (unused)
 ```
 
-Wire the P1 Pico-EZmate pins to the 2×3 header:
+| P1 Pin | Function | → RPi Header Pin | RPi GPIO | BCM Function |
+|--------|----------|-------------------|----------|--------------|
+| 1      | TCK      | Pin 23            | GPIO11   | SPI0_SCLK    |
+| 2      | TDI      | Pin 19            | GPIO10   | SPI0_MOSI    |
+| 3      | TDO      | Pin 21            | GPIO9    | SPI0_MISO    |
+| 4      | TMS      | Pin 24            | GPIO8    | SPI0_CE0     |
+| 5      | GND      | Pin 25            | GND      | —            |
+| 6      | VCC      | **unconnected**   | —        | —            |
 
-| P1 Pin | Function | → RPi Header Pin | RPi GPIO | BCM Function  |
-|--------|----------|-------------------|----------|---------------|
-| 1      | TCK      | Pin 23            | GPIO11   | SPI0_SCLK     |
-| 2      | TDI      | Pin 19            | GPIO10   | SPI0_MOSI     |
-| 3      | TDO      | Pin 21            | GPIO9    | SPI0_MISO     |
-| 4      | TMS      | Pin 24            | GPIO8    | SPI0_CE0      |
-| 5      | GND      | Pin 25            | GND      | —             |
-| 6      | VCC      | Pin 26            | GPIO7    | SPI0_CE1      |
+**Warning**: P1 pin 6 is VCC (3.3V). Leave it **unconnected** — do NOT connect it to any RPi pin. Pin 20 (GND), pin 22 (GPIO25), and pin 26 (GPIO7) on the RPi header are left unused.
 
 **Warning**: P1 pin 6 is VCC (3.3V). In the current wiring it connects to RPi pin 26 (GPIO7/SPI0_CE1). This is a signal pin being used as a reference, not a power connection. Verify your wiring before powering on.
 
