@@ -13,7 +13,7 @@ See [acorn.md](acorn.md) for board specs and [acorn-pinmap.md](acorn-pinmap.md) 
 | Sqrl Acorn CLE-215+ | M.2 M-key PCIe FPGA accelerator | 1 |
 | Raspberry Pi 5 | 8 GB recommended | 1 |
 | M.2 PCIe HAT for RPi 5 | M.2 M-key to RPi PCIe adapter (e.g. Pimoroni NVMe Base, Geekworm X1001) | 1 |
-| Molex Pico-EZmate cable (6-pin) | [Molex 0369200601](https://www.digikey.fr/en/products/detail/molex/0369200601/10233018) | 2 |
+| Molex Pico-EZmate cable (6-pin) | [Molex 0369200601](https://www.digikey.fr/en/products/detail/molex/0369200601/10233018) | 1 |
 | 2×3 Dupont pin header (2.54 mm) | Male or female depending on your RPi header setup | 2 |
 | Solder + heat shrink | For cable termination | — |
 
@@ -21,9 +21,9 @@ See [acorn.md](acorn.md) for board specs and [acorn-pinmap.md](acorn-pinmap.md) 
 
 The Acorn has two 6-pin Molex Pico-EZmate connectors: **P1** (JTAG) and **P2** (UART/GPIO). Each needs a cable adapted to connect to the RPi GPIO header.
 
-1. Take two Pico-EZmate 6-pin cables.
-2. Cut each cable roughly in half — you only need the end with the Pico-EZmate plug.
-3. Strip ~3 mm of insulation from each wire.
+1. Take one Pico-EZmate 6-pin cable. It has a plug at each end.
+2. Cut the cable roughly in half — this gives you two cables, each with a Pico-EZmate plug on one end and bare wires on the other. One cable for P1 (JTAG), one for P2 (UART/GPIO).
+3. Strip ~3 mm of insulation from each wire on both cables.
 
 ## Step 2: Terminate the P2 Cable (UART + GPIO)
 
