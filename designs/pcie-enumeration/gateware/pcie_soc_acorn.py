@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 """LiteX SoC with LitePCIe endpoint for Acorn/LiteFury PCIe enumeration testing.
 
-Builds a SoC with CPU + BIOS + UART + PCIe Gen2 x4 endpoint using openxc7.
-The host (RPi5 via mPCIe HAT) should see the FPGA as a PCIe device
-after programming and bus rescan.
+Builds a SoC with CPU + BIOS + UART + PCIe Gen2 x1 endpoint using openxc7
+and the open-source pcie_7x core (github.com/regymm/pcie_7x) instead of
+Vivado's proprietary pcie_7x IP.
 
-  - VexRiscv CPU + BIOS + UART (115200 baud)
-  - LitePCIe Gen2 x4 endpoint using the Xilinx 7-Series hard IP PCIe block
-    - Vendor ID: 0x10EE (Xilinx)
-    - Device ID: 0x7011 (+ nlanes)
-    - 128 KB BAR0 for Wishbone bridge access
+The host (RPi5 via mPCIe HAT) provides a single PCIe Gen2 x1 lane.
+After programming the FPGA (SRAM only!) and triggering a bus rescan,
+the host should see the FPGA as a PCIe device (10ee:7022).
+
+SAFETY: The Acorn has NO JTAG or UART directly connected.  The flash
+contains a factory bitstream that enables PCIe programming.  NEVER use
+--write-flash — only volatile SRAM loads.
 
 Build command:
-    uv run python designs/pcie-enumeration/gateware/pcie_soc_acorn.py --toolchain openxc7 --build
+    uv run python designs/pcie-enumeration/gateware/pcie_soc_acorn.py \\
+        --toolchain openxc7 --build
 
 Variants:
     cle-215+ : Acorn CLE-215+ (XC7A200T-3)
@@ -20,6 +23,8 @@ Variants:
     cle-101  : LiteFury (XC7A100T-2)
 """
 
+import glob
+import os
 import pathlib
 import sys
 
@@ -39,6 +44,24 @@ import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
 from designs._shared.build_helpers import default_build_dir
 from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
 from designs._shared.yosys_workarounds import patch_yosys_template
+
+# Path to the open-source pcie_7x Verilog sources (git submodule).
+PCIE_7X_SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pcie_7x", "src")
+
+# PCIe x1 resource — uses lane 0 from the Acorn's x4 edge connector.
+# The RPi 5 mPCIe HAT provides a single Gen2 x1 lane.
+_pcie_x1_io = [
+    ("pcie_x1", 0,
+        Subsignal("rst_n", Pins("J1"), IOStandard("LVCMOS33"), Misc("PULLUP=TRUE")),
+        Subsignal("clk_p", Pins("F6")),
+        Subsignal("clk_n", Pins("E6")),
+        Subsignal("rx_p", Pins("B10")),
+        Subsignal("rx_n", Pins("A10")),
+        Subsignal("tx_p", Pins("B6")),
+        Subsignal("tx_n", Pins("A6")),
+    ),
+]
+
 
 # CRG (Clock Reset Generator) ---------------------------------------------------------------------
 
@@ -73,10 +96,21 @@ class PCIeEnumerationSoC(SoCCore):
             # S7PCIEPHY.add_sources() appends Vivado-specific TCL commands to
             # these toolchain attributes.  The openxc7 (yosys+nextpnr) toolchain
             # doesn't have them, so provide empty lists — the TCL is silently
-            # dropped and the PCIe hard IP is handled natively by nextpnr-xilinx.
+            # dropped and the PCIe hard IP is handled by pcie_7x Verilog sources.
             for attr in ("pre_synthesis_commands", "pre_placement_commands"):
                 if not hasattr(platform.toolchain, attr):
                     setattr(platform.toolchain, attr, [])
+
+        # Add PCIe x1 resource (lane 0 from the x4 connector).
+        platform.add_extension(_pcie_x1_io)
+
+        # Add pcie_7x open-source Verilog sources — provides the pcie_s7 module
+        # that S7PCIEPHY instantiates, replacing Vivado's proprietary pcie_7x IP.
+        for vfile in sorted(glob.glob(os.path.join(PCIE_7X_SRC, "*.v"))):
+            platform.add_source(vfile)
+
+        # Assert CLKREQ# to keep PCIe reference clock active.
+        self.comb += platform.request("pcie_clkreq_n").eq(0)
 
         # CRG ----------------------------------------------------------------------------------
         self.crg = _CRG(platform, sys_clk_freq)
@@ -94,11 +128,11 @@ class PCIeEnumerationSoC(SoCCore):
             **kwargs,
         )
 
-        # PCIe Gen2 x4 endpoint ---------------------------------------------------------------
+        # PCIe Gen2 x1 endpoint ---------------------------------------------------------------
         self.pcie_phy = S7PCIEPHY(
             platform,
-            platform.request("pcie_x4"),
-            data_width=128,
+            platform.request("pcie_x1"),
+            data_width=64,
             bar0_size=0x20000,  # 128 KB BAR0
         )
 

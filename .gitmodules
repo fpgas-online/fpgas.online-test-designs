@@ -1,0 +1,3 @@
+[submodule "designs/pcie-enumeration/gateware/pcie_7x"]
+	path = designs/pcie-enumeration/gateware/pcie_7x
+	url = https://github.com/regymm/pcie_7x.git
