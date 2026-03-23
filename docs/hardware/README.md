@@ -9,27 +9,27 @@ Documentation for the FPGA boards, host infrastructure, and interconnects used i
 
 ## FPGA Boards
 
-| Board | FPGA | Features | Docs | Welland | PS1 |
-|-------|------|----------|------|---------|-----|
-| [Digilent Arty A7-35T](https://digilent.com/shop/arty-a7-artix-7-fpga-development-board/) | Xilinx XC7A35T | DDR3, Ethernet, PMOD, USB JTAG+UART | [spec](arty-a7.md), [pinmap](arty-a7-pin-mapping.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/digilent_arty.py) | ×5 | ×8 |
-| [Kosagi NeTV2](https://www.crowdsupply.com/alphamax/netv2) (GPIO JTAG) | Xilinx XC7A35T | DDR3, Ethernet, PCIe, HDMI, GPIO JTAG+UART | [spec](netv2.md), [pinmap](netv2-pin-mapping.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/kosagi_netv2.py) | ×5 | — |
-| [Kosagi NeTV2](https://www.crowdsupply.com/alphamax/netv2) (RPi5 PCIe) | Xilinx XC7A35T | DDR3, Ethernet, PCIe, HDMI, GPIO JTAG+UART | [spec](netv2.md), [pinmap](netv2-pin-mapping.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/kosagi_netv2.py) | (+×4) | — |
-| [Sqrl Acorn CLE-215+](https://github.com/enjoy-digital/litex/wiki/Use-LiteX-on-the-Acorn-CLE-215) | Xilinx XC7A200T | DDR3, PCIe, SPI Flash, GPIO JTAG+UART | [spec](acorn.md), [pinmap](acorn-pinmap.md), [wiring](acorn-wiring-guide.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/sqrl_acorn.py) | ×1 (+×4) | — |
-| [LiteFury](https://github.com/RHSResearchLLC/NiteFury-and-LiteFury) | Xilinx XC7A100T | DDR3, PCIe, SPI Flash, GPIO JTAG+UART | [spec](acorn.md), [pinmap](acorn-pinmap.md), [wiring](acorn-wiring-guide.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/sqrl_acorn.py) | (+×1) | ×2 (+×4) |
-| [Fomu EVT](https://www.crowdsupply.com/sutajio-kosagi/fomu) | Lattice iCE40UP5K | USB 1.1, SPI Flash, PMOD, I2C | [spec](fomu-evt.md), [pinmap](fomu-pin-mapping.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/kosagi_fomu_evt.py) | ×2 | — |
-| [TT FPGA Demo Board](https://tinytapeout.com/guides/fpga-breakout/) | Lattice iCE40UP5K | PMOD, USB (RP2350), SPI Flash | [spec](tt-fpga.md), [pinmap](tt-fpga-pin-mapping.md), [platform](../../designs/_shared/tt_fpga_platform.py) | ×4 | (+×4) |
-| [ButterStick](https://butterstick.io/) | Lattice ECP5UM5G-85F | DDR3, GbE, USB 2.0, SYZYGY | [spec](butterstick.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/gsd_butterstick.py) | (+×4) | — |
-| [ULX3S](https://radiona.org/ulx3s/) | Lattice ECP5 (various) | SDRAM, USB, WiFi, PMOD | [spec](ulx3s.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/radiona_ulx3s.py) | (+×4) | — |
-| [TT02](https://tinytapeout.com/chips/tt02/) | SKY130 ASIC | PMOD, USB (RP2040) | — | (+×1) | (+×1) |
-| [TT03](https://tinytapeout.com/chips/tt03/) | SKY130 ASIC | PMOD, USB (RP2040) | — | (+×1) | (+×1) |
-| [TT04](https://tinytapeout.com/chips/tt04/) | SKY130 ASIC | PMOD, USB (RP2040) | — | (+×1) | (+×1) |
-| [TT05](https://tinytapeout.com/chips/tt05/) | SKY130 ASIC | PMOD, USB (RP2040) | — | (+×1) | (+×1) |
-| [TT06](https://tinytapeout.com/chips/tt06/) | SKY130 ASIC | PMOD, USB (RP2040) | — | ×1 | (+×1) |
-| [TT07](https://tinytapeout.com/chips/tt07/) | SKY130 ASIC | PMOD, USB (RP2040) | — | (+×1) | (+×1) |
-| [TT08](https://tinytapeout.com/chips/tt08/) | SKY130 ASIC | PMOD, USB (RP2040) | — | ×1 | (+×1) |
-| [TT09](https://tinytapeout.com/chips/tt09/) | SKY130 ASIC | PMOD, USB (RP2040) | — | (+×1) | (+×1) |
+| Board | Docs | [Welland](site-welland.md) | [PS1](site-ps1.md) | FPGA | Features |
+|-------|------|---------|-----|------|----------|
+| [Digilent Arty A7-35T](https://digilent.com/shop/arty-a7-artix-7-fpga-development-board/) | [spec](arty-a7.md), [pinmap](arty-a7-pin-mapping.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/digilent_arty.py) | ×5 | ×8 | Xilinx XC7A35T | DDR3, Ethernet, PMOD, USB&nbsp;JTAG+UART |
+| [Kosagi NeTV2](https://www.crowdsupply.com/alphamax/netv2) (GPIO&nbsp;JTAG) | [spec](netv2.md), [pinmap](netv2-pin-mapping.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/kosagi_netv2.py) | ×5 | — | Xilinx XC7A35T | DDR3, Ethernet, PCIe, HDMI, GPIO&nbsp;JTAG+UART |
+| [Kosagi NeTV2](https://www.crowdsupply.com/alphamax/netv2) (RPi5&nbsp;PCIe) | [spec](netv2.md), [pinmap](netv2-pin-mapping.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/kosagi_netv2.py) | —&nbsp;(+×4) | — | Xilinx XC7A35T | DDR3, Ethernet, PCIe, HDMI, GPIO&nbsp;JTAG+UART |
+| [Sqrl Acorn CLE-215+](https://github.com/enjoy-digital/litex/wiki/Use-LiteX-on-the-Acorn-CLE-215) | [spec](acorn.md), [pinmap](acorn-pinmap.md), [wiring](acorn-wiring-guide.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/sqrl_acorn.py) | ×1&nbsp;(+×4) | — | Xilinx XC7A200T | DDR3, PCIe, SPI&nbsp;Flash, GPIO&nbsp;JTAG+UART |
+| [LiteFury](https://github.com/RHSResearchLLC/NiteFury-and-LiteFury) | [spec](acorn.md), [pinmap](acorn-pinmap.md), [wiring](acorn-wiring-guide.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/sqrl_acorn.py) | —&nbsp;(+×1) | ×2&nbsp;(+×4) | Xilinx XC7A100T | DDR3, PCIe, SPI&nbsp;Flash, GPIO&nbsp;JTAG+UART |
+| [Fomu EVT](https://www.crowdsupply.com/sutajio-kosagi/fomu) | [spec](fomu-evt.md), [pinmap](fomu-pin-mapping.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/kosagi_fomu_evt.py) | ×2 | — | Lattice iCE40UP5K | USB&nbsp;1.1, SPI&nbsp;Flash, PMOD, I2C |
+| [TT FPGA Demo Board](https://tinytapeout.com/guides/fpga-breakout/) | [spec](tt-fpga.md), [pinmap](tt-fpga-pin-mapping.md), [platform](../../designs/_shared/tt_fpga_platform.py) | ×4 | —&nbsp;(+×4) | Lattice iCE40UP5K | PMOD, USB&nbsp;(RP2350), SPI&nbsp;Flash |
+| [ButterStick](https://butterstick.io/) | [spec](butterstick.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/gsd_butterstick.py) | —&nbsp;(+×4) | — | Lattice ECP5UM5G-85F | DDR3, GbE, USB&nbsp;2.0, SYZYGY |
+| [ULX3S](https://radiona.org/ulx3s/) | [spec](ulx3s.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/radiona_ulx3s.py) | —&nbsp;(+×4) | — | Lattice ECP5 (various) | SDRAM, USB, WiFi, PMOD |
+| [TT02](https://tinytapeout.com/chips/tt02/) | — | —&nbsp;(+×1) | —&nbsp;(+×1) | SKY130 ASIC | PMOD, USB&nbsp;(RP2040) |
+| [TT03](https://tinytapeout.com/chips/tt03/) | — | —&nbsp;(+×1) | —&nbsp;(+×1) | SKY130 ASIC | PMOD, USB&nbsp;(RP2040) |
+| [TT04](https://tinytapeout.com/chips/tt04/) | — | —&nbsp;(+×1) | —&nbsp;(+×1) | SKY130 ASIC | PMOD, USB&nbsp;(RP2040) |
+| [TT05](https://tinytapeout.com/chips/tt05/) | — | —&nbsp;(+×1) | —&nbsp;(+×1) | SKY130 ASIC | PMOD, USB&nbsp;(RP2040) |
+| [TT06](https://tinytapeout.com/chips/tt06/) | — | ×1 | —&nbsp;(+×1) | SKY130 ASIC | PMOD, USB&nbsp;(RP2040) |
+| [TT07](https://tinytapeout.com/chips/tt07/) | — | —&nbsp;(+×1) | —&nbsp;(+×1) | SKY130 ASIC | PMOD, USB&nbsp;(RP2040) |
+| [TT08](https://tinytapeout.com/chips/tt08/) | — | ×1 | —&nbsp;(+×1) | SKY130 ASIC | PMOD, USB&nbsp;(RP2040) |
+| [TT09](https://tinytapeout.com/chips/tt09/) | — | —&nbsp;(+×1) | —&nbsp;(+×1) | SKY130 ASIC | PMOD, USB&nbsp;(RP2040) |
 
-Deployment counts: `×N` = deployed, `(+×N)` = pending deployment.
+Deployment counts: `×N` = deployed, `(+×N)` = pending deployment, `—` = none.
 
 ## PMOD Interconnects
 
