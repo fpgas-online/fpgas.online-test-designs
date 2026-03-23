@@ -32,20 +32,20 @@ The P2 cable carries UART and 2 spare GPIOs. Solder or crimp Dupont connectors o
 ```
 RPi 40-pin header (top view, showing pins 3-12):
 
-                         Pin 3       Pin 4
-                         (GPIO2)     (5V)
-                        ┌───────────────────┐
-P2:3 Spare GPIO 0 ←     │ Pin 5       Pin 6 │     → P2:5 GND
-                        │ (GPIO3)     (GND) │
-                        │                   │
-P2:4 Spare GPIO 1 ←     │ Pin 7       Pin 8 │     → P2:1 Serial TX
-                        │ (GPIO4)   (GPIO14)│
-                        │                   │
-P2:6 VCC (N/C)    ←     │ Pin 9      Pin 10 │     → P2:2 Serial RX
-                        │ (GND)     (GPIO15)│
-                        └───────────────────┘
-                         Pin 11      Pin 12
-                         (GPIO17)    (GPIO18)
+                       Pin 3     Pin 4
+                      (GPIO2)   (  5V  )
+                    ┌────────────────────┐
+P2:3 Spare GPIO 0 ← │  Pin 5     Pin 6   │ → P2:5 GND
+                    │ (GPIO3)   ( GND  ) │
+                    │                    │
+P2:4 Spare GPIO 1 ← │  Pin 7     Pin 8   │ → P2:1 Serial TX
+                    │ (GPIO4)   (GPIO14) │
+                    │                    │
+P2:6 VCC (N/C)    ← │  Pin 9     Pin 10  │ → P2:2 Serial RX
+                    │ ( GND )   (GPIO15) │
+                    └────────────────────┘
+                      Pin 11     Pin 12
+                     (GPIO17)   (GPIO18)
 ```
 
 **P2 pin 6 (VCC 3.3V) must be left unconnected.** Do not connect pin 9 on the header — leave it empty or clip the VCC wire.
@@ -70,20 +70,20 @@ The P1 cable carries JTAG signals. Solder or crimp Dupont connectors onto a 2×3
 ```
 RPi 40-pin header (top view, showing pins 17-28):
 
-                         Pin 17      Pin 18
-                         (3.3V)      (GPIO24)
-                        ┌───────────────────┐
-       P1:2 TDI      ←  │ Pin 19      Pin 20│  → (unused)
-                        │ (GPIO10)    (GND) │
-                        │                   │
-       P1:3 TDO      ←  │ Pin 21      Pin 22│  → (unused)
-                        │ (GPIO9)   (GPIO25)│
-                        │                   │
-       P1:1 TCK      ←  │ Pin 23      Pin 24│  → P1:4 TMS
-                        │ (GPIO11)   (GPIO8)│
-                        └───────────────────┘
-                         Pin 25      Pin 26
-                         (GND)       (GPIO7)
+               Pin 17     Pin 18
+              ( 3.3V )   (GPIO24)
+            ┌─────────────────────┐
+ P1:2 TDI ← │  Pin 19      Pin 20 │ → (unused)
+            │ (GPIO10)   ( GND  ) │
+            │                     │
+ P1:3 TDO ← │  Pin 21     Pin 22  │ → (unused)
+            │ (GPIO9 )   (GPIO25) │
+            │                     │
+ P1:1 TCK ← │  Pin 23     Pin 24  │ → P1:4 TMS
+            │ (GPIO11)   (GPIO8 ) │
+            └─────────────────────┘
+               Pin 25     Pin 26
+              ( GND  )   (GPIO7 )
 ```
 
 P1:5 (GND) and P1:6 (VCC) are **not** part of the 2×3 header. Connect P1:5 GND to pin 25 with a separate wire. **P1:6 VCC must be left unconnected.**
