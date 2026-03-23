@@ -53,14 +53,14 @@ For tests that do not use UART as the primary interface (e.g., PCIe enumeration)
 
 ## Test Matrix
 
-| Test | Arty A7 | NeTV2 (RPi5) | NeTV2 (RPi3) | Fomu EVT | TT FPGA | ULX3S | ButterStick |
-|------|---------|--------------|--------------|----------|---------|-------|-------------|
-| [PMOD Loopback](pmod-loopback.md) | Yes | Yes | Yes | Yes | Yes | - | - |
-| [UART](uart.md) | Yes | Yes | Yes | - | TBD | - | - |
-| [Ethernet](ethernet.md) | Yes | Yes | - | - | - | - | Yes |
-| [PCIe Enumeration](pcie-enumeration.md) | - | Yes | - | - | - | - | - |
-| [DDR Memory](ddr-memory.md) | Yes | Yes | Yes | - | - | Yes | Yes |
-| [SPI Flash ID](spi-flash-id.md) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| Test | Arty A7 | NeTV2 | Fomu EVT | TT FPGA | Acorn / LiteFury |
+|------|---------|-------|----------|---------|------------------|
+| [PMOD Loopback](pmod-loopback.md) | Yes | Yes | Yes | Yes | Yes |
+| [UART](uart.md) | Yes | Yes | Yes | Yes | Yes |
+| [Ethernet](ethernet.md) | Yes | Yes | — | — | — |
+| [PCIe Enumeration](pcie-enumeration.md) | — | Yes | — | — | Yes |
+| [DDR Memory](ddr-memory.md) | Yes | Yes | — | — | Yes |
+| [SPI Flash ID](spi-flash-id.md) | Yes | Yes | Yes | Yes | Yes |
 
 Source: [Project README Test Matrix](../../README.md#test-matrix)
 
@@ -68,7 +68,7 @@ Source: [Project README Test Matrix](../../README.md#test-matrix)
 
 ### PMOD Loopback
 
-Verifies PMOD/GPIO pin connectivity between the RPi and the FPGA board using pure combinational gateware (`output = ~input`). The RPi drives known bit patterns on one set of GPIO pins and reads the inverted result on another set. No UART, no CPU, no firmware needed. Supports Arty A7 (8-bit), NeTV2 (1-bit), and Fomu EVT (4-bit).
+Verifies PMOD/GPIO pin connectivity between the RPi and the FPGA board using pure combinational gateware (`output = ~input`). The RPi drives known bit patterns on one set of GPIO pins and reads the inverted result on another set. No UART, no CPU, no firmware needed. Supports Arty A7 (8-bit), NeTV2 (1-bit), Fomu EVT (4-bit), TT FPGA (8-bit), and Acorn (1-bit serial loopback).
 
 See: [pmod-loopback.md](pmod-loopback.md)
 
@@ -80,13 +80,13 @@ See: [uart.md](uart.md)
 
 ### Ethernet
 
-Verifies Ethernet connectivity by reading the MAC address, responding to ARP requests, and passing ICMP ping tests. Optionally tests TFTP data transfer integrity. Applicable to boards with Ethernet PHYs (Arty A7, NeTV2, ButterStick).
+Verifies Ethernet connectivity by reading the MAC address, responding to ARP requests, and passing ICMP ping tests. Optionally tests TFTP data transfer integrity. Applicable to boards with Ethernet PHYs (Arty A7, NeTV2).
 
 See: [ethernet.md](ethernet.md)
 
 ### PCIe Enumeration
 
-Verifies that the FPGA's PCIe endpoint is detected and enumerated by the host. Checks vendor/device ID, link training, and BAR allocation. Only applicable to NeTV2 connected to RPi5 (which has an accessible PCIe Gen2 x1 interface).
+Verifies that the FPGA's PCIe endpoint is detected and enumerated by the host. Checks vendor/device ID, link training, and BAR allocation. Applicable to NeTV2 (PCIe Gen2 x1 on RPi5) and Acorn/LiteFury (PCIe Gen2 x4 via mPCIe HAT on RPi5/CM4/CM5).
 
 See: [pcie-enumeration.md](pcie-enumeration.md)
 

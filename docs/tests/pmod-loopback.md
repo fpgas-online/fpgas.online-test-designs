@@ -13,6 +13,8 @@ No CPU, no UART, no firmware required on the FPGA.
 | [Digilent Arty A7](../hardware/arty-a7.md) | PMOD A (input) / PMOD B (output) | 4-bit (of 8) | Active |
 | [Kosagi NeTV2](../hardware/netv2.md) | Serial pins E13 (input) / E14 (output) | 1-bit | Active |
 | [Fomu EVT](../hardware/fomu-evt.md) | Half-PMOD A (input) / Half-PMOD B (output) | 4-bit | Active |
+| [TT FPGA Demo Board](../hardware/tt-fpga.md) | ui_in (input) / uo_out (output) | 8-bit | Active |
+| [Sqrl Acorn CLE-215+](../hardware/acorn.md) | Serial pins K2 (output) / J2 (input) | 1-bit | Active |
 
 ## Prerequisites
 

@@ -10,9 +10,12 @@ Verify bidirectional UART serial communication between the FPGA and the host. Th
 |-------|---------------|-------------------|--------|
 | [Digilent Arty A7](../hardware/arty-a7.md) | USB-UART via FTDI FT2232HQ | `/dev/ttyUSBx` | Active |
 | [Kosagi NeTV2](../hardware/netv2.md) | GPIO UART via RPi GPIO14 (TX) / GPIO15 (RX) | `/dev/ttyAMA0` or `/dev/serial0` | Active |
-| [TT FPGA Demo Board](../hardware/tt-fpga.md) | USB via RP2040 intermediary | TBD | TBD |
+| [Fomu EVT](../hardware/fomu-evt.md) | GPIO UART via RPi GPIO14 (TX) / GPIO15 (RX) | `/dev/serial0` | Active |
+| [TT FPGA Demo Board](../hardware/tt-fpga.md) | USB via RP2350 bridge | `/dev/ttyACM0` | Active |
+| [Sqrl Acorn CLE-215+](../hardware/acorn.md) | GPIO UART via RPi GPIO14 (TX) / GPIO15 (RX) | `/dev/ttyAMA0` | Active |
+| [LiteFury](../hardware/acorn.md) | GPIO UART via RPi GPIO14 (TX) / GPIO15 (RX) | `/dev/ttyAMA0` | Active |
 
-**Note on TT FPGA:** The RP2040 sits between the iCE40 FPGA and the USB host, which complicates direct UART testing. The RP2040 firmware must bridge UART data between the FPGA and USB. Status is TBD pending RP2040 firmware support.
+**Note on TT FPGA:** The RP2350 sits between the iCE40 FPGA and the USB host. The RP2350 firmware bridges UART data between the FPGA and USB CDC serial (`/dev/ttyACM0`).
 
 ## Prerequisites
 

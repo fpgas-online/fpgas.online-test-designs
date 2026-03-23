@@ -9,6 +9,8 @@ Verify that the PCIe link between the NeTV2 FPGA and the Raspberry Pi 5 trains s
 | Board | PCIe Generation | Lane Width | Host | Status |
 |-------|----------------|------------|------|--------|
 | [Kosagi NeTV2](../hardware/netv2.md) | Gen2 | x1 | RPi5 only | Active |
+| [Sqrl Acorn CLE-215+](../hardware/acorn.md) | Gen2 | x4 | RPi5 (mPCIe HAT) | Active |
+| [LiteFury](../hardware/acorn.md) | Gen2 | x4 | RPi5 / CM4 / CM5 | Active |
 
 ### Why RPi5 Only
 

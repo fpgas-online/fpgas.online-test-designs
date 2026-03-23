@@ -12,8 +12,8 @@ Verify that the FPGA can communicate with its SPI configuration flash memory by 
 | [Kosagi NeTV2](../hardware/netv2.md) | TBD | To be verified | Active |
 | [Fomu EVT](../hardware/fomu-evt.md) | TBD | To be verified | Active |
 | [TT FPGA Demo Board](../hardware/tt-fpga.md) | TBD | To be verified | Active |
-| [Radiona ULX3S](../hardware/ulx3s.md) | TBD | To be verified | Planned |
-| [GSG ButterStick](../hardware/butterstick.md) | TBD | To be verified | Planned |
+| [Sqrl Acorn CLE-215+](../hardware/acorn.md) | Spansion S25FL256S | 0x010219 | Active |
+| [LiteFury](../hardware/acorn.md) | Spansion S25FL256S | 0x010219 | Active |
 
 **Note:** Exact JEDEC IDs need to be verified against the specific flash chip populated on each physical board, as different board revisions may use different flash vendors.
 

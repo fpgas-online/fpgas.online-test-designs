@@ -10,7 +10,6 @@ Verify Ethernet connectivity between the FPGA and the network. This test reads t
 |-------|----------|-----------|-------|--------|
 | [Digilent Arty A7](../hardware/arty-a7.md) | TI DP83848J | MII (4-bit) | 100 Mbps | Active |
 | [Kosagi NeTV2](../hardware/netv2.md) (RPi5) | RMII PHY | RMII (2-bit) | 100 Mbps | Active |
-| [GSG ButterStick](../hardware/butterstick.md) | TBD | RGMII | 1000 Mbps | Planned |
 
 ### NeTV2 Network Independence
 

@@ -37,25 +37,28 @@ This repository contains LiteX-based FPGA test designs that run automatically du
 
 ## Supported Boards
 
-| Board                                                | FPGA               | Toolchain              | Connection to Host                    | Status  |
-|------------------------------------------------------|--------------------|------------------------|---------------------------------------|---------|
-| [Digilent Arty A7](docs/hardware/arty-a7.md)         | Xilinx Artix-7     | openXC7                | USB-UART + PMOD HAT + Ethernet        | Active  |
-| [Kosagi NeTV2](docs/hardware/netv2.md)               | Xilinx Artix-7     | openXC7                | GPIO (JTAG+UART) + PCIe + Ethernet    | Active  |
-| [Fomu EVT](docs/hardware/fomu-evt.md)                | Lattice iCE40UP5K  | Yosys + nextpnr-ice40  | USB                                   | Active  |
-| [TT FPGA Demo Board](docs/hardware/tt-fpga.md)       | Lattice iCE40UP5K  | Yosys + nextpnr-ice40  | USB (via RP2040)                      | Active  |
-| [Radiona ULX3S](docs/hardware/ulx3s.md)              | Lattice ECP5       | Yosys + nextpnr-ecp5   | USB                                   | Planned |
-| [GSG ButterStick](docs/hardware/butterstick.md)      | Lattice ECP5       | Yosys + nextpnr-ecp5   | USB + Ethernet                        | Planned |
+| Board | FPGA | Toolchain | Connection to Host | Status |
+|-------|------|-----------|--------------------|--------|
+| [Digilent Arty A7](docs/hardware/arty-a7.md) | Xilinx XC7A35T | openXC7 | USB JTAG+UART, PMOD HAT, Ethernet | Active |
+| [Kosagi NeTV2](docs/hardware/netv2.md) | Xilinx XC7A35T | openXC7 | GPIO JTAG+UART, PCIe, Ethernet | Active |
+| [Sqrl Acorn CLE-215+](docs/hardware/acorn.md) | Xilinx XC7A200T | openXC7 | GPIO JTAG+UART, PCIe | Active |
+| [LiteFury](docs/hardware/acorn.md) | Xilinx XC7A100T | openXC7 | GPIO JTAG+UART, PCIe | Active |
+| [Fomu EVT](docs/hardware/fomu-evt.md) | Lattice iCE40UP5K | Yosys + nextpnr-ice40 | USB, GPIO header | Active |
+| [TT FPGA Demo Board](docs/hardware/tt-fpga.md) | Lattice iCE40UP5K | Yosys + nextpnr-ice40 | USB (via RP2350), PMOD HAT | Active |
+| [Radiona ULX3S](docs/hardware/ulx3s.md) | Lattice ECP5 | Yosys + nextpnr-ecp5 | USB | Planned |
+| [GSG ButterStick](docs/hardware/butterstick.md) | Lattice ECP5 | Yosys + nextpnr-ecp5 | USB, Ethernet | Planned |
 
 ## Test Matrix
 
-| Test                                                  | Arty A7 | NeTV2 (RPi5) | NeTV2 (RPi3) | Fomu EVT | TT FPGA | ULX3S | ButterStick |
-|-------------------------------------------------------|---------|--------------|--------------|----------|---------|-------|-------------|
-| [GPIO Loopback](docs/tests/pmod-loopback.md)          | Yes     | Yes          | Yes          | Yes      | Yes     | -     | -           |
-| [UART](docs/tests/uart.md)                            | Yes     | Yes          | Yes          | Yes      | Yes     | -     | -           |
-| [Ethernet](docs/tests/ethernet.md)                    | Yes     | Yes          | -            | -        | -       | -     | Plan        |
-| [PCIe Enumeration](docs/tests/pcie-enumeration.md)    | -       | Yes          | -            | -        | -       | -     | -           |
-| [DDR Memory](docs/tests/ddr-memory.md)                | Yes     | Yes          | Yes          | -        | -       | Plan  | Plan        |
-| [SPI Flash ID](docs/tests/spi-flash-id.md)            | Yes     | Yes          | Yes          | Yes      | Yes     | Plan  | Plan        |
+| Test | Arty A7 | NeTV2 | Fomu EVT | TT FPGA | Acorn / LiteFury | ULX3S | ButterStick |
+|------|---------|-------|----------|---------|------------------|-------|-------------|
+| [GPIO Loopback](docs/tests/pmod-loopback.md) | Yes | Yes | Yes | Yes | Yes | — | — |
+| [PMOD Pin ID](docs/tests/pmod-loopback.md) | Yes | Yes | Yes | Yes | Yes | — | — |
+| [UART](docs/tests/uart.md) | Yes | Yes | Yes | Yes | Yes | — | — |
+| [Ethernet](docs/tests/ethernet.md) | Yes | Yes | — | — | — | — | — |
+| [PCIe Enumeration](docs/tests/pcie-enumeration.md) | — | Yes | — | — | Yes | — | — |
+| [DDR Memory](docs/tests/ddr-memory.md) | Yes | Yes | — | — | Yes | — | — |
+| [SPI Flash ID](docs/tests/spi-flash-id.md) | Yes | Yes | Yes | Yes | Yes | — | — |
 
 See [docs/tests/](docs/tests/) for detailed test specifications.
 

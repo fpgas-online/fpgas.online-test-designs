@@ -10,8 +10,8 @@ Verify that DDR3 or SDRAM memory connected to the FPGA is functional and reliabl
 |-------|------------|------|------------|--------|
 | [Digilent Arty A7](../hardware/arty-a7.md) | DDR3 | 256 MB | 16-bit | Active |
 | [Kosagi NeTV2](../hardware/netv2.md) | DDR3 | 512 MB | 32-bit | Active |
-| [Radiona ULX3S](../hardware/ulx3s.md) | SDR SDRAM | 32 MB | 16-bit | Planned |
-| [GSG ButterStick](../hardware/butterstick.md) | DDR3 | TBD | TBD | Planned |
+| [Sqrl Acorn CLE-215+](../hardware/acorn.md) | DDR3 | 1 GB | 32-bit | Active |
+| [LiteFury](../hardware/acorn.md) | DDR3 | 512 MB | 32-bit | Active |
 
 ## Prerequisites
 
