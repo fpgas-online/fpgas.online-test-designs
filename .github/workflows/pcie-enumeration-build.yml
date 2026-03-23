@@ -113,6 +113,7 @@ jobs:
           apt-get install -y gcc-riscv64-unknown-elf curl git
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
+          echo "/prjxray/env/bin" >> $GITHUB_PATH
 
       - name: Install Python dependencies
         run: uv sync --python 3.12 --extra build
@@ -120,6 +121,8 @@ jobs:
       - name: Build Acorn CLE-215+ bitstream
         env:
           CHIPDB: /chipdb
+          PRJXRAY_DB_DIR: /nextpnr-xilinx/xilinx/external/prjxray-db
+          NEXTPNR_XILINX_PYTHON_DIR: /nextpnr-xilinx/xilinx/python
         run: |
           uv run python designs/pcie-enumeration/gateware/pcie_soc_acorn.py \
             --variant cle-215+ \
@@ -150,6 +153,7 @@ jobs:
           apt-get install -y gcc-riscv64-unknown-elf curl git
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
+          echo "/prjxray/env/bin" >> $GITHUB_PATH
 
       - name: Install Python dependencies
         run: uv sync --python 3.12 --extra build
@@ -157,6 +161,8 @@ jobs:
       - name: Build NiteFury (CLE-215) bitstream
         env:
           CHIPDB: /chipdb
+          PRJXRAY_DB_DIR: /nextpnr-xilinx/xilinx/external/prjxray-db
+          NEXTPNR_XILINX_PYTHON_DIR: /nextpnr-xilinx/xilinx/python
         run: |
           uv run python designs/pcie-enumeration/gateware/pcie_soc_acorn.py \
             --variant cle-215 \
@@ -187,6 +193,7 @@ jobs:
           apt-get install -y gcc-riscv64-unknown-elf curl git
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
+          echo "/prjxray/env/bin" >> $GITHUB_PATH
 
       - name: Install Python dependencies
         run: uv sync --python 3.12 --extra build
@@ -194,6 +201,8 @@ jobs:
       - name: Build LiteFury (CLE-101) bitstream
         env:
           CHIPDB: /chipdb
+          PRJXRAY_DB_DIR: /nextpnr-xilinx/xilinx/external/prjxray-db
+          NEXTPNR_XILINX_PYTHON_DIR: /nextpnr-xilinx/xilinx/python
         run: |
           uv run python designs/pcie-enumeration/gateware/pcie_soc_acorn.py \
             --variant cle-101 \
