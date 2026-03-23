@@ -123,7 +123,7 @@ All even-numbered ports (e6/e8/e10/e12) between the registered Arty hosts were p
 
 | Feature         | PS1 (ps1.fpgas.online)      | Welland (tweed.welland.mithis.com) |
 |-----------------|-----------------------------|------------------------------------|
-| Location        | Chicago (PS1 hackerspace)   | Welland, Ontario                   |
+| Location        | Chicago (PS1 hackerspace)   | Welland, South Australia                   |
 | Public access   | Yes (web SSH + video)       | VPN only (WireGuard)               |
 | RPi count       | 15 registered (8 Arty + 4 Compute Blade + 1 RPi 5 + 2 offline) | 27 registered (5 Arty + 5 NeTV2 + 4 Acorn + 2 Fomu + 7 TT + 4 other) |
 | FPGA boards     | Arty A7, Acorn CLE-101      | Arty, NeTV2, Fomu, TT FPGA, Acorn |
