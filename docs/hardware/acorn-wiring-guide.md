@@ -30,16 +30,25 @@ The Acorn has two 6-pin Molex Pico-EZmate connectors: **P1** (JTAG) and **P2** (
 The P2 cable carries UART and 2 spare GPIOs. Solder or crimp Dupont connectors onto a 2×3 pin header arranged to plug directly into RPi header pins 5-10:
 
 ```
-                     RPi Header
-                  (pins 5-10, top view)
+RPi 40-pin header (top view, showing pins 3-12):
 
-                   Pin 5      Pin 6
-  P2:3 Spare GPIO 0 → | (GPIO3)  (GND)   | ← P2:5 GND
-                   Pin 7      Pin 8
-  P2:4 Spare GPIO 1 → | (GPIO4)  (GPIO14)| ← P2:1 Serial TX
-                   Pin 9      Pin 10
-         (unused)  → | (GND)    (GPIO15)| ← P2:2 Serial RX
+                        Pin 3       Pin 4
+                        (GPIO2)     (5V)
+                       ┌───────────────────┐
+  P2:3 Spare GPIO 0 ← │ Pin 5       Pin 6 │ → P2:5 GND
+                       │ (GPIO3)     (GND) │
+                       │                   │
+  P2:4 Spare GPIO 1 ← │ Pin 7       Pin 8 │ → P2:1 Serial TX
+                       │ (GPIO4)   (GPIO14)│
+                       │                   │
+  P2:6 VCC — N/C    ← │ Pin 9      Pin 10 │ → P2:2 Serial RX
+                       │ (GND)     (GPIO15)│
+                       └───────────────────┘
+                        Pin 11      Pin 12
+                        (GPIO17)    (GPIO18)
 ```
+
+**P2 pin 6 (VCC 3.3V) must be left unconnected.** Do not connect pin 9 on the header — leave it empty or clip the VCC wire.
 
 | P2 Pin | Function     | → RPi Header Pin | RPi GPIO |
 |--------|--------------|-------------------|----------|
@@ -59,18 +68,25 @@ The P2 cable carries UART and 2 spare GPIOs. Solder or crimp Dupont connectors o
 The P1 cable carries JTAG signals. Solder or crimp Dupont connectors onto a 2×3 pin header arranged to plug into RPi header pins 19-26 (the SPI0 pin group):
 
 ```
-                     RPi Header
-                 (pins 19-26, top view)
+RPi 40-pin header (top view, showing pins 17-28):
 
-                   Pin 19     Pin 20
-       P1:2 TDI → | (GPIO10) (GND)   | ← (unused)
-                   Pin 21     Pin 22
-       P1:3 TDO → | (GPIO9)  (GPIO25)| ← (unused)
-                   Pin 23     Pin 24
-       P1:1 TCK → | (GPIO11) (GPIO8) | ← P1:4 TMS
-                   Pin 25     Pin 26
-       P1:5 GND → | (GND)    (GPIO7) | ← (unused)
+                        Pin 17      Pin 18
+                        (3.3V)      (GPIO24)
+                       ┌───────────────────┐
+       P1:2 TDI     ← │ Pin 19      Pin 20│ → (unused)
+                       │ (GPIO10)    (GND) │
+                       │                   │
+       P1:3 TDO     ← │ Pin 21      Pin 22│ → (unused)
+                       │ (GPIO9)   (GPIO25)│
+                       │                   │
+       P1:1 TCK     ← │ Pin 23      Pin 24│ → P1:4 TMS
+                       │ (GPIO11)   (GPIO8)│
+                       └───────────────────┘
+                        Pin 25      Pin 26
+                        (GND)       (GPIO7)
 ```
+
+P1:5 (GND) and P1:6 (VCC) are **not** part of the 2×3 header. Connect P1:5 GND to pin 25 with a separate wire. **P1:6 VCC must be left unconnected.**
 
 | P1 Pin | Function | → RPi Header Pin | RPi GPIO | BCM Function |
 |--------|----------|-------------------|----------|--------------|
@@ -81,7 +97,7 @@ The P1 cable carries JTAG signals. Solder or crimp Dupont connectors onto a 2×3
 | 5      | GND      | Pin 25            | GND      | —            |
 | 6      | VCC      | **unconnected**   | —        | —            |
 
-**Warning**: P1 pin 6 is VCC (3.3V). Leave it **unconnected** — do NOT connect it to any RPi pin. Pin 20 (GND), pin 22 (GPIO25), and pin 26 (GPIO7) on the RPi header are left unused.
+**Warning**: P1 pin 6 is VCC (3.3V). Leave it **unconnected** — do NOT connect it to any RPi pin. P1:5 GND connects to pin 25 with a separate wire (outside the 2×3 header block).
 
 **Warning**: P1 pin 6 is VCC (3.3V). In the current wiring it connects to RPi pin 26 (GPIO7/SPI0_CE1). This is a signal pin being used as a reference, not a power connection. Verify your wiring before powering on.
 
