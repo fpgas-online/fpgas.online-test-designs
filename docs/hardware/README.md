@@ -39,6 +39,10 @@ Documentation for the FPGA boards, host infrastructure, and interconnects used i
 
 - [acorn-wiring-guide.md](acorn-wiring-guide.md) — Step-by-step Acorn CLE-215+ setup: M.2 HAT, Pico-EZmate cable prep, JTAG/UART/GPIO wiring, PCIe verification
 
+## Processes
+
+- [deployment-checklist.md](deployment-checklist.md) — Files to update when deploying a new device of an existing type
+
 ## Analysis
 
 - [gpio-connectivity-analysis.md](gpio-connectivity-analysis.md) — GPIO scan results and connectivity verification across boards
