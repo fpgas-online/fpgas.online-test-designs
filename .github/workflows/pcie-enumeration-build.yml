@@ -10,31 +10,30 @@ jobs:
   build-netv2-a7-35:
     name: "NeTV2 A7-35T PCIe endpoint"
     runs-on: ubuntu-latest
+    container:
+      image: regymm/openxc7
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
-      - name: Install openXC7 toolchain and cross compiler
+      - name: Install cross compiler and Python tooling
         run: |
-          sudo apt-get update
-          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
-          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
-          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
-          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
-          sudo snap alias openxc7.fasm2frames fasm2frames
-          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
-          sudo snap alias openxc7.bbasm bbasm
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
+          apt-get update
+          apt-get install -y gcc-riscv64-unknown-elf curl git
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          echo "/prjxray/env/bin" >> $GITHUB_PATH
 
       - name: Install Python dependencies
         run: uv sync --python 3.12 --extra build
 
       - name: Build NeTV2 A7-35T PCIe SoC bitstream
         env:
-          CHIPDB: ${{ github.workspace }}/chipdb
+          CHIPDB: /chipdb
+          PRJXRAY_DB_DIR: /nextpnr-xilinx/xilinx/external/prjxray-db
+          NEXTPNR_XILINX_PYTHON_DIR: /nextpnr-xilinx/xilinx/python
         run: |
-          mkdir -p "$CHIPDB"
           uv run python designs/pcie-enumeration/gateware/pcie_soc_netv2.py \
             --variant a7-35 \
             --toolchain openxc7 \
@@ -49,31 +48,30 @@ jobs:
   build-netv2-a7-100:
     name: "NeTV2 A7-100T PCIe endpoint"
     runs-on: ubuntu-latest
+    container:
+      image: regymm/openxc7
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
-      - name: Install openXC7 toolchain and cross compiler
+      - name: Install cross compiler and Python tooling
         run: |
-          sudo apt-get update
-          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
-          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
-          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
-          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
-          sudo snap alias openxc7.fasm2frames fasm2frames
-          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
-          sudo snap alias openxc7.bbasm bbasm
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
+          apt-get update
+          apt-get install -y gcc-riscv64-unknown-elf curl git
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          echo "/prjxray/env/bin" >> $GITHUB_PATH
 
       - name: Install Python dependencies
         run: uv sync --python 3.12 --extra build
 
       - name: Build NeTV2 A7-100T PCIe SoC bitstream
         env:
-          CHIPDB: ${{ github.workspace }}/chipdb
+          CHIPDB: /chipdb
+          PRJXRAY_DB_DIR: /nextpnr-xilinx/xilinx/external/prjxray-db
+          NEXTPNR_XILINX_PYTHON_DIR: /nextpnr-xilinx/xilinx/python
         run: |
-          mkdir -p "$CHIPDB"
           uv run python designs/pcie-enumeration/gateware/pcie_soc_netv2.py \
             --variant a7-100 \
             --toolchain openxc7 \
