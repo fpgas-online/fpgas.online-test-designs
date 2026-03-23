@@ -33,6 +33,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 from litepcie.core import LitePCIeEndpoint, LitePCIeMSI
 from litepcie.frontend.wishbone import LitePCIeWishboneBridge
 from litepcie.phy.s7pciephy import S7PCIEPHY
+from litex.build.generic_platform import IOStandard, Misc, Pins, Subsignal
 from litex.gen import *
 from litex.soc.cores.clock import S7PLL
 from litex.soc.integration.builder import Builder
