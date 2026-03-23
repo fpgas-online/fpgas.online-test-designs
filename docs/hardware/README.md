@@ -24,7 +24,8 @@ Documentation for the FPGA boards, host infrastructure, and interconnects used i
 | TinyTapeout ASIC (TT07)     | —                                                    | —                  | ×1                | —              | ×1            |
 | TinyTapeout ASIC (TT08)     | —                                                    | ×1                 | —                 | —              | ×1            |
 | TinyTapeout ASIC (TT09)     | —                                                    | —                  | ×1                | —              | ×1            |
-| Sqrl Acorn CLE-215+         | [spec](acorn.md)                              | ×1                 | ×3                | ×1             | ×3            |
+| Sqrl Acorn CLE-215+         | [spec](acorn.md), [pinmap](acorn-pinmap.md)          | ×1                 | ×4                | —              | —             |
+| LiteFury (XC7A100T)         | [spec](acorn.md), [pinmap](acorn-pinmap.md)          | —                  | ×1                | ×2             | ×4            |
 | 1BitSquared ButterStick     | [spec](butterstick.md)                               | —                  | ×4                | —              | —             |
 | 1BitSquared ULX3S           | [spec](ulx3s.md)                                     | —                  | ×4                | —              | —             |
 
