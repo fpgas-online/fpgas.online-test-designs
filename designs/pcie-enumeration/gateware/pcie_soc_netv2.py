@@ -31,11 +31,6 @@ import sys
 # Add repo root to sys.path so shared modules can be imported.
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
-import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer for Python >= 3.11
-from designs._shared.build_helpers import default_build_dir
-from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
-from designs._shared.yosys_workarounds import patch_yosys_template
-
 from litedram.modules import MT41K256M16
 from litedram.phy import s7ddrphy
 from litepcie.core import LitePCIeEndpoint, LitePCIeMSI
@@ -47,6 +42,11 @@ from litex.soc.integration.builder import Builder
 from litex.soc.integration.soc_core import SoCCore
 from litex_boards.platforms import kosagi_netv2
 from migen import *
+
+import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer for Python >= 3.11
+from designs._shared.build_helpers import default_build_dir
+from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
+from designs._shared.yosys_workarounds import patch_yosys_template
 
 # Path to the open-source pcie_7x Verilog sources (git submodule).
 PCIE_7X_SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pcie_7x", "src")
