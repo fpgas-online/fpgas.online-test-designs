@@ -2,7 +2,7 @@
 
 Step-by-step instructions for wiring a Sqrl Acorn CLE-215+ (or LiteFury/NiteFury) to a Raspberry Pi 5 for use in the fpgas.online test infrastructure.
 
-See [acorn-cle215.md](acorn-cle215.md) for board specs and [acorn-cle215-pinmap.md](acorn-cle215-pinmap.md) for the full pin mapping.
+See [acorn.md](acorn.md) for board specs and [acorn-pinmap.md](acorn-pinmap.md) for the full pin mapping.
 
 ## Bill of Materials
 
@@ -215,7 +215,7 @@ Expected: a device with Xilinx vendor ID `10ee`.
 
 ## References
 
-- Board spec: [acorn-cle215.md](acorn-cle215.md)
-- Pin mapping: [acorn-cle215-pinmap.md](acorn-cle215-pinmap.md)
+- Board spec: [acorn.md](acorn.md)
+- Pin mapping: [acorn-pinmap.md](acorn-pinmap.md)
 - LiteX Acorn wiki: <https://github.com/enjoy-digital/litex/wiki/Use-LiteX-on-the-Acorn-CLE-215>
 - Molex Pico-EZmate cable: <https://www.digikey.fr/en/products/detail/molex/0369200601/10233018>

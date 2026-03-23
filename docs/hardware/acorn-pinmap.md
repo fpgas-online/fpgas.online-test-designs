@@ -121,4 +121,4 @@ LiteX platform files: `sqrl_acorn.py` works for all variants — change only the
 - NiteFury/LiteFury: [RHSResearchLLC/NiteFury-and-LiteFury](https://github.com/RHSResearchLLC/NiteFury-and-LiteFury)
 - LiteX platform: [sqrl_acorn.py](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/sqrl_acorn.py)
 - OpenOCD flashing: [NiteFury/Acorn flashing guide](https://github.com/Gbps/nitefury-openocd-flashing-guide)
-- Acorn hardware doc: [acorn-cle215.md](acorn-cle215.md)
+- Acorn hardware doc: [acorn.md](acorn.md)
