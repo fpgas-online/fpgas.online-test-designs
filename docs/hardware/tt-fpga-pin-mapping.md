@@ -72,31 +72,35 @@ Direct programming of the iCE40 via openFPGALoader (bypassing the MicroPython RE
 
 8-bit input bus. The RPi drives these through the PMOD HAT; the FPGA reads them.
 
-| Bit      | iCE40 Pin | RP2350 GPIO | PMOD HAT Pin | RPi GPIO |
-| -------- | --------- | ----------- | ------------ | -------- |
-| ui_in[0] | 13        | 17          | JC10         | 6        |
-| ui_in[1] | 19        | 18          | JC8          | 12       |
-| ui_in[2] | 18        | 19          | JC1          | 16       |
-| ui_in[3] | 21        | 20          | JC9          | 5        |
-| ui_in[4] | 23        | 21          | JC4          | 17       |
-| ui_in[5] | 25        | 22          | JC7          | 4        |
-| ui_in[6] | 26        | 23          | JC2          | 14       |
-| ui_in[7] | 27        | 24          | JC3          | 15       |
+| Bit      | iCE40 Pin | RP2350 GPIO | PMOD HAT Pin | RPi GPIO | Verified |
+| -------- | --------- | ----------- | ------------ | -------- | -------- |
+| ui_in[0] | 13        | 17          | JC1          | 16       | pin-id   |
+| ui_in[1] | 19        | 18          | JC2          | 14       | pin-id   |
+| ui_in[2] | 18        | 19          | JC3          | 15       | pin-id   |
+| ui_in[3] | 21        | 20          | JC4          | 17       | pin-id   |
+| ui_in[4] | 23        | 21          | JC7          | 4        | pin-id   |
+| ui_in[5] | 25        | 22          | JC8          | 12       | (*)      |
+| ui_in[6] | 26        | 23          | JC9          | 5        | (*)      |
+| ui_in[7] | 27        | 24          | JC10         | 6        | pin-id   |
+
+(\*) ui_in[5] and ui_in[6] were not decoded (initial=0, decoder sync issue). Positions inferred from the pattern — the JC connector pin numbering matches the TT bit ordering straight through (bit 0→pin 1, bit 7→pin 10).
 
 ### uo_out (User Outputs)
 
 8-bit output bus. The FPGA drives these; the RPi reads them through the PMOD HAT.
 
-| Bit       | iCE40 Pin | RP2350 GPIO | PMOD HAT Pin | RPi GPIO |
-| --------- | --------- | ----------- | ------------ | -------- |
-| uo_out[0] | 38        | 33          | JA10         | 18       |
-| uo_out[1] | 42        | 34          | JA8          | 21       |
-| uo_out[2] | 43        | 35          | JA1          | 8        |
-| uo_out[3] | 44        | 36          | JA9          | 20       |
-| uo_out[4] | 45        | 37          | JA4          | 11       |
-| uo_out[5] | 46        | 38          | JA7          | 19       |
-| uo_out[6] | 47        | 39          | JA2          | 10       |
-| uo_out[7] | 48        | 40          | JA3          | 9        |
+| Bit       | iCE40 Pin | RP2350 GPIO | PMOD HAT Pin | RPi GPIO | Verified |
+| --------- | --------- | ----------- | ------------ | -------- | -------- |
+| uo_out[0] | 38        | 33          | JA1          | 8        | pin-id   |
+| uo_out[1] | 42        | 34          | JA2          | 10       | (**)     |
+| uo_out[2] | 43        | 35          | JA3          | 9        | (**)     |
+| uo_out[3] | 44        | 36          | JA4          | 11       | (**)     |
+| uo_out[4] | 45        | 37          | JA7          | 19       | pin-id   |
+| uo_out[5] | 46        | 38          | JA8          | 21       | pin-id   |
+| uo_out[6] | 47        | 39          | JA9          | 20       | pin-id   |
+| uo_out[7] | 48        | 40          | JA10         | 18       | pin-id   |
+
+(\*\*) uo_out[1:3] are on JA pins 2-4 which share RPi GPIOs with JB pins 2-4. The pin-id decode on these GPIOs is corrupted by JA/JB contention. Positions inferred from the pattern — the JA connector pin numbering matches the TT bit ordering straight through (bit 0→pin 1, bit 7→pin 10).
 
 ### uio (Bidirectional I/O)
 
@@ -119,14 +123,14 @@ RP2350 GPIO numbers follow the sequential pattern (ui_in=17-24, uio=25-32, uo_ou
 
 | RPi GPIO | HAT JA Pin | TT Signal (uo_out) | HAT JB Pin | TT Signal (uio) | Conflict |
 | -------- | ---------- | ------------------ | ---------- | --------------- | -------- |
-| GPIO10   | JA2        | uo_out[6]          | JB2        | uio[1]          | Shorted  |
-| GPIO9    | JA3        | uo_out[7]          | JB3        | uio[2]          | Shorted  |
-| GPIO11   | JA4        | uo_out[4]          | JB4        | uio[3]          | Shorted  |
+| GPIO10   | JA2        | uo_out[1]          | JB2        | uio[1]          | Shorted  |
+| GPIO9    | JA3        | uo_out[2]          | JB3        | uio[2]          | Shorted  |
+| GPIO11   | JA4        | uo_out[3]          | JB4        | uio[3]          | Shorted  |
 
-When the FPGA drives uo_out[4,6,7] and uio[1,2,3] simultaneously with different values, the two FPGA outputs will fight each other through the shared RPi GPIO. This has several consequences:
+When the FPGA drives uo_out[1,2,3] and uio[1,2,3] simultaneously with different values, the two FPGA outputs will fight each other through the shared RPi GPIO. This has several consequences:
 
 - **GPIO loopback test**: Works because the test only drives ui_in (JC) and reads uo_out (JA). The uio pins (JB) are not driven during this test, so no conflict occurs.
-- **Bidirectional I/O test**: Cannot independently test uio[1,2,3] because they are shorted to uo_out[6,7,4] respectively. If the FPGA drives both buses, the conflicting outputs may cause contention or incorrect readings.
+- **Bidirectional I/O test**: Cannot independently test uio[1,2,3] because they are shorted to uo_out[1,2,3] respectively. If the FPGA drives both buses, the conflicting outputs may cause contention or incorrect readings.
 - **SPI kernel modules**: Must be unloaded (`rmmod spidev spi_bcm2835`) since GPIO7-11 overlap with HAT JA pins 1-4 and JB pins 1-4.
 
 The 5 unaffected uio bits (uio[0], uio[4:7]) on JB pins 1 and 7-10 use unique RPi GPIOs and work correctly.
@@ -151,12 +155,12 @@ The RP2350 connects to the same FPGA pins via GPIO20/GPIO37 and can bridge UART 
 - Software bit-bang UART at 115200 baud is unreliable under a non-RT Linux kernel.
 - The RP2350 has hardware UART peripherals that can be configured for these pins.
 
-| Parameter | Value                                                     |
-| --------- | --------------------------------------------------------- |
-| Device    | `/dev/ttyACM0` (via RP2350 USB CDC)                       |
-| Baud rate | 115200                                                    |
-| Test args | `--port /dev/ttyACM0 --board tt --skip-banner`            |
-| Requires  | RP2350 firmware configured to bridge UART0 on GPIO20/37   |
+| Parameter | Value                                                   |
+| --------- | ------------------------------------------------------- |
+| Device    | `/dev/ttyACM0` (via RP2350 USB CDC)                     |
+| Baud rate | 115200                                                  |
+| Test args | `--port /dev/ttyACM0 --board tt --skip-banner`          |
+| Requires  | RP2350 firmware configured to bridge UART0 on GPIO20/37 |
 
 ### Access via RPi GPIO (not currently feasible)
 
