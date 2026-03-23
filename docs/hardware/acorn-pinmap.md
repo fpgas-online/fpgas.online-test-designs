@@ -1,3 +1,5 @@
+\[[top](./README.md)\] \[[spec](./acorn.md)\] \[[wiring](./acorn-wiring-guide.md)\]
+
 # Sqrl Acorn CLE-215+ / LiteFury Pinmap
 
 Pinmap for the Sqrl Acorn CLE-215+ (and compatible NiteFury / LiteFury boards) as connected in the fpgas.online test infrastructure. The Acorn connects to the RPi 5 via an mPCIe HAT for PCIe, with two Pico-EZmate cables adapted to pin headers for JTAG and UART/GPIO access via the RPi's 40-pin GPIO header.

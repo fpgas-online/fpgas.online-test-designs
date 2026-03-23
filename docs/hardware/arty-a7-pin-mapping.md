@@ -1,3 +1,5 @@
+\[[top](./README.md)\] \[[spec](./arty-a7.md)\] \[[pmod hat](./rpi-hat-pmod.md)\]
+
 # Arty A7 Pin Mapping
 
 Pin mapping for the Digilent Arty A7-35T as connected in the fpgas.online test infrastructure. Three hosts: pi3 (10.21.0.103), pi5 (10.21.0.105), pi9 (10.21.0.109).

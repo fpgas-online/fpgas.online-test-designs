@@ -1,3 +1,5 @@
+\[[top](./README.md)\] \[[spec](./acorn.md)\] \[[pinmap](./acorn-pinmap.md)\]
+
 # Acorn CLE-215+ Wiring Guide
 
 Step-by-step instructions for wiring a Sqrl Acorn CLE-215+ (or LiteFury/NiteFury) to a Raspberry Pi 5 for use in the fpgas.online test infrastructure.

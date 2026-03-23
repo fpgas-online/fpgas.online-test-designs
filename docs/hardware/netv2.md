@@ -1,3 +1,5 @@
+\[[top](./README.md)\] \[[pinmap](./netv2-pin-mapping.md)\] \[[crowdsupply](https://www.crowdsupply.com/alphamax/netv2)\] \[[litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/kosagi_netv2.py)\]
+
 # Kosagi NeTV2
 
 The NeTV2 is a Xilinx Artix-7 based video overlay/processing board designed by bunnie (Andrew Huang) and produced by Alphamax/Kosagi. In the fpgas.online infrastructure, it connects to Raspberry Pi hosts via GPIO (JTAG + UART) and optionally PCIe.

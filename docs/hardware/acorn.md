@@ -1,3 +1,5 @@
+\[[top](./README.md)\] \[[pinmap](./acorn-pinmap.md)\] \[[wiring](./acorn-wiring-guide.md)\] \[[litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/sqrl_acorn.py)\]
+
 # Sqrl Acorn CLE-215+ / LiteFury
 
 The Sqrl Acorn CLE-215+ is an M.2 form factor PCIe FPGA accelerator card, pin-compatible with the [NiteFury and LiteFury](https://github.com/RHSResearchLLC/NiteFury-and-LiteFury) boards. In the fpgas.online infrastructure, it connects to Raspberry Pi 5 hosts via an mPCIe HAT adapter, with JTAG and UART via adapted Pico-EZmate cables to the RPi GPIO header.

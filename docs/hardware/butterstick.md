@@ -1,3 +1,5 @@
+\[[top](./README.md)\] \[[buy](https://butterstick.io/)\] \[[litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/gsd_butterstick.py)\]
+
 # GSG ButterStick
 
 > **Status: Future / Planned** -- This board is not yet deployed in the fpgas.online infrastructure.

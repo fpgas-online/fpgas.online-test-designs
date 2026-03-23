@@ -9,25 +9,46 @@ Documentation for the FPGA boards, host infrastructure, and interconnects used i
 
 ## FPGA Boards
 
-| Board                       | Docs                                                 | Welland (deployed) | Welland (pending) | PS1 (deployed) | PS1 (pending) |
-| --------------------------- | ---------------------------------------------------- | ------------------ | ----------------- | -------------- | ------------- |
-| Digilent Arty A7-35T        | [spec](arty-a7.md), [pinmap](arty-a7-pin-mapping.md) | ×5                 | —                 | ×8             | —             |
-| Kosagi NeTV2 — GPIO JTAG    | [spec](netv2.md), [pinmap](netv2-pin-mapping.md)     | ×5                 | —                 | —              | —             |
-| Kosagi NeTV2 — RPi5 PCIe    | [spec](netv2.md), [pinmap](netv2-pin-mapping.md)     | —                  | ×4                | —              | —             |
-| Kosagi Fomu EVT             | [spec](fomu-evt.md), [pinmap](fomu-pin-mapping.md)   | ×2                 | —                 | —              | —             |
-| TinyTapeout FPGA Demo Board | [spec](tt-fpga.md), [pinmap](tt-fpga-pin-mapping.md) | ×4                 | —                 | —              | ×4            |
-| TinyTapeout ASIC (TT02)     | —                                                    | —                  | ×1                | —              | ×1            |
-| TinyTapeout ASIC (TT03)     | —                                                    | —                  | ×1                | —              | ×1            |
-| TinyTapeout ASIC (TT04)     | —                                                    | —                  | ×1                | —              | ×1            |
-| TinyTapeout ASIC (TT05)     | —                                                    | —                  | ×1                | —              | ×1            |
-| TinyTapeout ASIC (TT06)     | —                                                    | ×1                 | —                 | —              | ×1            |
-| TinyTapeout ASIC (TT07)     | —                                                    | —                  | ×1                | —              | ×1            |
-| TinyTapeout ASIC (TT08)     | —                                                    | ×1                 | —                 | —              | ×1            |
-| TinyTapeout ASIC (TT09)     | —                                                    | —                  | ×1                | —              | ×1            |
-| Sqrl Acorn CLE-215+         | [spec](acorn.md), [pinmap](acorn-pinmap.md)          | ×1                 | ×4                | —              | —             |
-| LiteFury (XC7A100T)         | [spec](acorn.md), [pinmap](acorn-pinmap.md)          | —                  | ×1                | ×2             | ×4            |
-| 1BitSquared ButterStick     | [spec](butterstick.md)                               | —                  | ×4                | —              | —             |
-| 1BitSquared ULX3S           | [spec](ulx3s.md)                                     | —                  | ×4                | —              | —             |
+### Xilinx Artix-7
+
+| Board | FPGA | Features | Docs | Welland | PS1 |
+|-------|------|----------|------|---------|-----|
+| [Digilent Arty A7-35T](https://digilent.com/shop/arty-a7-artix-7-fpga-development-board/) | XC7A35T | DDR3, Ethernet, PMOD, USB JTAG+UART | [spec](arty-a7.md), [pinmap](arty-a7-pin-mapping.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/digilent_arty.py) | ×5 | ×8 |
+| [Kosagi NeTV2](https://www.crowdsupply.com/alphamax/netv2) (GPIO JTAG) | XC7A35T | DDR3, Ethernet, PCIe, HDMI, GPIO JTAG+UART | [spec](netv2.md), [pinmap](netv2-pin-mapping.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/kosagi_netv2.py) | ×5 | — |
+| Kosagi NeTV2 (RPi5 PCIe) | XC7A35T | (same as above, PCIe programming) | [spec](netv2.md), [pinmap](netv2-pin-mapping.md) | +(×4) | — |
+| [Sqrl Acorn CLE-215+](https://github.com/enjoy-digital/litex/wiki/Use-LiteX-on-the-Acorn-CLE-215) | XC7A200T | DDR3, PCIe, SPI Flash, GPIO JTAG+UART | [spec](acorn.md), [pinmap](acorn-pinmap.md), [wiring](acorn-wiring-guide.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/sqrl_acorn.py) | ×1 (+×4) | — |
+| [LiteFury](https://github.com/RHSResearchLLC/NiteFury-and-LiteFury) | XC7A100T | DDR3, PCIe, SPI Flash, GPIO JTAG+UART | [spec](acorn.md), [pinmap](acorn-pinmap.md), [wiring](acorn-wiring-guide.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/sqrl_acorn.py) | +(×1) | ×2 (+×4) |
+
+### Lattice iCE40
+
+| Board | FPGA | Features | Docs | Welland | PS1 |
+|-------|------|----------|------|---------|-----|
+| [Fomu EVT](https://www.crowdsupply.com/sutajio-kosagi/fomu) | iCE40UP5K | USB 1.1, SPI Flash, PMOD, I2C | [spec](fomu-evt.md), [pinmap](fomu-pin-mapping.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/kosagi_fomu_evt.py) | ×2 | — |
+| [TT FPGA Demo Board](https://tinytapeout.com/guides/fpga-breakout/) | iCE40UP5K | PMOD, USB (RP2350), SPI Flash | [spec](tt-fpga.md), [pinmap](tt-fpga-pin-mapping.md), [platform](../../designs/_shared/tt_fpga_platform.py) | ×4 | +(×4) |
+
+### Lattice ECP5
+
+| Board | FPGA | Features | Docs | Welland | PS1 |
+|-------|------|----------|------|---------|-----|
+| [ButterStick](https://butterstick.io/) | ECP5UM5G-85F | DDR3, GbE, USB 2.0, SYZYGY | [spec](butterstick.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/gsd_butterstick.py) | +(×4) | — |
+| [ULX3S](https://radiona.org/ulx3s/) | ECP5 (various) | SDRAM, USB, WiFi, PMOD | [spec](ulx3s.md), [litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/radiona_ulx3s.py) | +(×4) | — |
+
+### TinyTapeout ASIC Boards
+
+Each shipped [TinyTapeout run](https://tinytapeout.com/chips/) has a carrier board with RP2040 and PMOD headers.
+
+| Run | Chip Info | Welland | PS1 |
+|-----|-----------|---------|-----|
+| [TT02](https://tinytapeout.com/chips/tt02/) | SKY130 | +(×1) | +(×1) |
+| [TT03](https://tinytapeout.com/chips/tt03/) | SKY130 | +(×1) | +(×1) |
+| [TT04](https://tinytapeout.com/chips/tt04/) | SKY130 | +(×1) | +(×1) |
+| [TT05](https://tinytapeout.com/chips/tt05/) | SKY130 | +(×1) | +(×1) |
+| [TT06](https://tinytapeout.com/chips/tt06/) | SKY130 | ×1 | +(×1) |
+| [TT07](https://tinytapeout.com/chips/tt07/) | SKY130 | +(×1) | +(×1) |
+| [TT08](https://tinytapeout.com/chips/tt08/) | SKY130 | ×1 | +(×1) |
+| [TT09](https://tinytapeout.com/chips/tt09/) | SKY130 | +(×1) | +(×1) |
+
+Deployment counts: `×N` = deployed, `+(×N)` = pending deployment.
 
 ## PMOD Interconnects
 

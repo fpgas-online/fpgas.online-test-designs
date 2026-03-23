@@ -1,3 +1,5 @@
+\[[top](./README.md)\] \[[spec](./fomu-evt.md)\]
+
 # Fomu EVT Pin Mapping
 
 Pin mapping for the Kosagi Fomu EVT (iCE40UP5K-SG48) as connected in the fpgas.online test infrastructure. Two hosts: pi17 (10.21.0.117), pi21 (10.21.0.121).

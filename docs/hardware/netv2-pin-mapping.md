@@ -1,3 +1,5 @@
+\[[top](./README.md)\] \[[spec](./netv2.md)\]
+
 # NeTV2 Pin Mapping
 
 Pin mapping for the Kosagi NeTV2 as connected in the fpgas.online test infrastructure. Two hosts with different FPGA variants:

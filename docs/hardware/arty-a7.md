@@ -1,3 +1,5 @@
+\[[top](./README.md)\] \[[pinmap](./arty-a7-pin-mapping.md)\] \[[pmod hat](./rpi-hat-pmod.md)\] \[[buy](https://digilent.com/shop/arty-a7-artix-7-fpga-development-board/)\] \[[litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/digilent_arty.py)\]
+
 # Digilent Arty A7
 
 The Digilent Arty A7 is a Xilinx Artix-7 development board used in the fpgas.online test infrastructure. It connects to the host via USB (FTDI FT2232HQ providing both JTAG and UART) and optionally through PMOD connectors via a PMOD HAT adapter on a Raspberry Pi.

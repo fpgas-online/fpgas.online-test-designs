@@ -1,3 +1,5 @@
+\[[top](./README.md)\] \[[pinmap](./fomu-pin-mapping.md)\] \[[buy](https://www.crowdsupply.com/sutajio-kosagi/fomu)\] \[[litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/kosagi_fomu_evt.py)\]
+
 # Fomu EVT (Engineering Validation Test)
 
 The Fomu is a tiny FPGA board that fits inside a USB port, designed by Sean Cross (xobs) and Tim Ansell. The EVT (Engineering Validation Test) revision is used in the fpgas.online test infrastructure. It uses a Lattice iCE40UP5K FPGA with native USB connectivity.
