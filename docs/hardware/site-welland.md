@@ -24,7 +24,7 @@ Internet ─── eth-uplink ──│  Debian 12 (bookworm)              │
   │ +PMOD HAT │  │ (GPIO     │  │ +Acorn    │  │ +USB Anlzr│  │ Demo Board│
   │ +USB Eth  │  │  JTAG)    │  │  CLE-215+ │  │ +TT ASIC  │  │ +PMOD HAT │
   └───────────┘  └───────────┘  └───────────┘  └───────────┘  └───────────┘
-      (×5)           (×5)        (×1+3 TBD)      (various)        (×4)
+      (×5)           (×5)       (×1+4 pending)    (various)        (×4)
 ```
 
 All Raspberry Pis netboot via PXE/TFTP from tweed. They connect to a Netgear S3300 PoE switch with numbered ports. IP addresses follow the convention `10.21.0.1XX` where `XX` is the switch port number.
@@ -135,7 +135,7 @@ These boards contain **real fabricated TT ASIC silicon** on a carrier board with
 | ---- | ----------- | ----------- | ----------- | ----- | ----------- | ------------- |
 | pi23 | port 23     | 10.21.0.123 | RPi 3B+ 1GB | TT08  | 2e8a:0005   | /dev/ttyACM0  |
 | pi25 | port 25     | 10.21.0.125 | RPi 3B+ 1GB | TT06  | 2e8a:0005   | /dev/ttyACM0  |
-| pi19 | port 19     | 10.21.0.119 | RPi 3B+ 1GB | (TBD) | 2e8a:0005   | /dev/ttyACM0  |
+| pi19 | port 19     | 10.21.0.119 | RPi 3B+ 1GB | TT ASIC (version unconfirmed) | 2e8a:0005   | /dev/ttyACM0  |
 
 The TT ASIC boards appear as "MicroPython Board in FS mode" (RP2040, VID:PID `2e8a:0005`). Each presents a serial console on `/dev/ttyACM0`.
 
@@ -182,12 +182,10 @@ In addition to the 5 NeTV2 boards on the tweed network above, there are two NeTV
 
 Additional PMOD-related RPi hosts on a separate `iot.welland.mithis.com` network:
 
-| Host                             | RPi Model | Notes                       |
-| -------------------------------- | --------- | --------------------------- |
-| rpi5-pmod.iot.welland.mithis.com | RPi 5     | PMOD HAT host (details TBD) |
-| rpi4-pmod.iot.welland.mithis.com | RPi 4     | PMOD HAT host (details TBD) |
-
-These may be additional test infrastructure or development machines. SSH connectivity not yet verified.
+| Host                             | RPi Model | Notes             |
+| -------------------------------- | --------- | ----------------- |
+| rpi5-pmod.iot.welland.mithis.com | RPi 5     | PMOD HAT dev host |
+| rpi4-pmod.iot.welland.mithis.com | RPi 4     | PMOD HAT dev host |
 
 ## Programming Methods
 
@@ -325,8 +323,7 @@ Source: `pibs.conf` on tweed.
 ## Known Issues
 
 - **pi11** (port 11): Arty A7 FTDI USB disconnected — board cannot be programmed or tested.
-- **pi4, pi6, pi8** (ports 4, 6, 8): RPi 5s with mPCIe HATs installed but Sqrl Acorn cards not yet connected.
-- **pi19** (port 19): Listed as "Pmod HAT, MicroPython" in dnsmasq — specific TT ASIC version not yet confirmed.
-- **rpi5-netv2**: NeTV2 FPGA not currently visible on PCIe bus (may need bitstream loaded first).
-- **rpi3-netv2**: Accessible via `pi@rpi3-netv2.iot.welland.mithis.com` (previously had auth issues — resolved by using `pi` user instead of `tim`).
-- **rpi5-pmod / rpi4-pmod**: Discovered in known_hosts but not yet explored.
+- **pi4, pi6, pi8** (ports 4, 6, 8): RPi 5s with mPCIe HATs installed, Acorn CLE-215+ cards pending installation.
+- **pi19** (port 19): TT ASIC board, specific version (TT run number) unconfirmed.
+- **rpi5-netv2**: NeTV2 FPGA not visible on PCIe bus — needs bitstream loaded first.
+- **rpi3-netv2**: SSH access via `pi@rpi3-netv2.iot.welland.mithis.com`.
