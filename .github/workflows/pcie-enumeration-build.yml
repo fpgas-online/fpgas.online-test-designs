@@ -110,7 +110,7 @@ jobs:
       - name: Install cross compiler and Python tooling
         run: |
           apt-get update
-          apt-get install -y gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf curl git
+          apt-get install -y gcc-riscv64-unknown-elf curl git
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
@@ -145,7 +145,7 @@ jobs:
       - name: Install cross compiler and Python tooling
         run: |
           apt-get update
-          apt-get install -y gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf curl git
+          apt-get install -y gcc-riscv64-unknown-elf curl git
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
@@ -180,7 +180,7 @@ jobs:
       - name: Install cross compiler and Python tooling
         run: |
           apt-get update
-          apt-get install -y gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf curl git
+          apt-get install -y gcc-riscv64-unknown-elf curl git
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
