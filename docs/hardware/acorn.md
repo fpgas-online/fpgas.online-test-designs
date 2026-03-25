@@ -135,14 +135,14 @@ LiteX provides PCIe-based programming via `litepcie_util` when a LiteX bitstream
 
 ### Welland Site ([site-welland.md](site-welland.md))
 
-| Host | Port   | IP          | RPi Model         | Board          | Status   |
-| ---- | ------ | ----------- | ----------------- | -------------- | -------- |
-| pi2  | port 2 | 10.21.0.102 | RPi 5 8GB Rev 1.1 | Acorn CLE-215+ | Deployed |
-| pi4  | port 4 | 10.21.0.104 | RPi 5 8GB         | Acorn CLE-215+ | Pending  |
-| pi6  | port 6 | 10.21.0.106 | RPi 5 8GB         | Acorn CLE-215+ | Pending  |
-| pi8  | port 8 | 10.21.0.108 | RPi 5 8GB         | Acorn CLE-215+ | Pending  |
-| —    | —      | —           | RPi 5             | Acorn CLE-215+ | Pending  |
-| —    | —      | —           | RPi 5             | LiteFury       | Pending  |
+| Host | Port   | IP          | RPi MAC           | RPi Model | Board          | Status   |
+| ---- | ------ | ----------- | ----------------- | --------- | -------------- | -------- |
+| pi2  | port 2 | 10.21.0.102 | 88:a2:9e:45:c6:87 | RPi 5 8GB | Acorn CLE-215+ | Deployed |
+| pi4  | port 4 | 10.21.0.104 | 88:a2:9e:45:dd:be | RPi 5 8GB | Acorn CLE-215+ | Deployed |
+| pi6  | port 6 | 10.21.0.106 | 88:a2:9e:45:85:77 | RPi 5 8GB | Acorn CLE-215+ | Deployed |
+| —    | —      | —           | —                 | RPi 5     | Acorn CLE-215+ | Pending  |
+| —    | —      | —           | —                 | RPi 5     | Acorn CLE-215+ | Pending  |
+| —    | —      | —           | —                 | RPi 5     | LiteFury       | Pending  |
 
 ### PS1 Site ([site-ps1.md](site-ps1.md))
 
@@ -159,7 +159,7 @@ LiteX provides PCIe-based programming via `litepcie_util` when a LiteX bitstream
 
 | Variant        | FPGA          | DDR3   | Welland (deployed) | Welland (pending) | PS1 (deployed) | PS1 (pending) |
 | -------------- | ------------- | ------ | ------------------ | ----------------- | -------------- | ------------- |
-| Acorn CLE-215+ | XC7A200T (-3) | 1 GB   | ×1                 | ×4                | —              | —             |
+| Acorn CLE-215+ | XC7A200T (-3) | 1 GB   | ×3                 | ×2                | —              | —             |
 | LiteFury       | XC7A100T (-2) | 512 MB | —                  | ×1                | ×2             | ×4            |
 
 No USB serial devices on any host — JTAG and UART are connected via adapted Pico-EZmate cables to the RPi GPIO header (see [acorn-wiring-guide.md](acorn-wiring-guide.md)). PCIe is via the M.2 HAT.
