@@ -43,17 +43,47 @@ def _find_tilegrid(db_root, part):
 
     The --part from LiteX is the full device string (e.g. ``xc7a200tsbg484-3``),
     but prjxray-db directories use the die name only (e.g. ``xc7a200t/``).
-    Try progressively shorter forms: full → no speed grade → die only.
+    Try progressively shorter forms, then scan part.yaml files for die aliases
+    (e.g. xc7a35t shares a die with xc7a50t).
     """
     if part:
         for name in _part_name_variants(part):
             candidate = os.path.join(db_root, name, "tilegrid.json")
             if os.path.isfile(candidate):
                 return candidate
+        # Scan part.yaml files to resolve die aliases (e.g. xc7a35t → xc7a50t)
+        result = _scan_part_yamls(db_root, part)
+        if result:
+            return result
     # Fallback: tilegrid directly under db_root
     candidate = os.path.join(db_root, "tilegrid.json")
     if os.path.isfile(candidate):
         return candidate
+    return None
+
+
+def _scan_part_yamls(db_root, part):
+    """Find tilegrid by scanning part.yaml files for the device+package name.
+
+    Some dies are shared between parts (e.g. xc7a35t and xc7a50t). The
+    prjxray-db directory uses one name, but part.yaml lists all compatible
+    device+package combinations.
+    """
+    part_no_speed = re.sub(r"-\d+$", "", part)
+    try:
+        entries = os.listdir(db_root)
+    except OSError:
+        return None
+    for entry in sorted(entries):
+        entry_dir = os.path.join(db_root, entry)
+        if not os.path.isdir(entry_dir):
+            continue
+        part_yaml = os.path.join(entry_dir, "part.yaml")
+        tilegrid = os.path.join(entry_dir, "tilegrid.json")
+        if os.path.isfile(part_yaml) and os.path.isfile(tilegrid):
+            with open(part_yaml) as f:
+                if part_no_speed in f.read():
+                    return tilegrid
     return None
 
 

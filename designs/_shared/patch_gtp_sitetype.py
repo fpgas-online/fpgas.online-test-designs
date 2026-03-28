@@ -6,6 +6,21 @@ This mismatch causes "No wire found for port" errors during routing.
 
 This script adds bracket aliases so chipdb generation includes both forms.
 
+The site type JSON format nests pins under ``bels``::
+
+    {
+      "GTPE2_CHANNEL": {
+        "bels": {
+          "GTPE2_CHANNEL": {
+            "pins": {
+              "RXDATA0": {"dir": "OUTPUT", "wire": "RXDATA0"},
+              ...
+            }
+          }
+        }
+      }
+    }
+
 Usage::
 
     python patch_gtp_sitetype.py site_type_GTPE2_CHANNEL.json [site_type_GTPE2_COMMON.json ...]
@@ -20,7 +35,7 @@ _BUS_PORT_RE = re.compile(r"^([A-Z][A-Z_]*)(\d+)$")
 
 
 def _find_bus_aliases(names):
-    """Identify bus ports and return flat→bracket name mapping.
+    """Identify bus ports and return flat->bracket name mapping.
 
     Groups port names by alphabetic prefix.  Only prefixes with 2+
     numeric suffixes are treated as buses (avoids aliasing scalar ports
@@ -42,11 +57,23 @@ def _find_bus_aliases(names):
     }
 
 
+def _patch_pins_dict(pins):
+    """Add bracket aliases to a pins dict. Returns number of aliases added."""
+    aliases = _find_bus_aliases(pins.keys())
+    added = 0
+    for flat, bracket in aliases.items():
+        if bracket not in pins:
+            # Clone the pin entry but keep the original wire name
+            pins[bracket] = dict(pins[flat])
+            added += 1
+    return added
+
+
 def patch_site_type(path):
     """Add bracket-form aliases to a site type JSON and rewrite in place.
 
-    Handles both dict-keyed and list-of-dicts pin formats used across
-    different nextpnr-xilinx-meta versions.
+    Handles the nextpnr-xilinx-meta format where pins are nested under
+    ``bels.*.pins``, as well as top-level ``site_pins`` or ``pins`` keys.
 
     Returns the number of aliases added.
     """
@@ -55,28 +82,35 @@ def patch_site_type(path):
 
     added = 0
 
-    for key in ("site_pins", "pins"):
-        if key not in data:
+    # Handle nested format: top-level key is site type name, pins under bels
+    for _site_type_name, site_data in data.items():
+        if not isinstance(site_data, dict):
             continue
-        pins = data[key]
+        bels = site_data.get("bels", {})
+        if isinstance(bels, dict):
+            for _bel_name, bel_data in bels.items():
+                if isinstance(bel_data, dict) and "pins" in bel_data:
+                    pins = bel_data["pins"]
+                    if isinstance(pins, dict):
+                        added += _patch_pins_dict(pins)
 
-        if isinstance(pins, dict):
-            aliases = _find_bus_aliases(pins.keys())
-            for flat, bracket in aliases.items():
-                if bracket not in pins:
-                    pins[bracket] = dict(pins[flat])
-                    added += 1
+        # Also check for site_pins at the site type level
+        for key in ("site_pins", "pins"):
+            if key in site_data and isinstance(site_data[key], dict):
+                added += _patch_pins_dict(site_data[key])
 
-        elif isinstance(pins, list):
-            existing = {p["name"] for p in pins}
+    # Also check top-level site_pins/pins (alternative format)
+    for key in ("site_pins", "pins"):
+        if key in data and isinstance(data[key], dict):
+            added += _patch_pins_dict(data[key])
+        elif key in data and isinstance(data[key], list):
+            existing = {p["name"] for p in data[key]}
             aliases = _find_bus_aliases(existing)
             for flat, bracket in aliases.items():
                 if bracket not in existing:
-                    orig = next(p for p in pins if p["name"] == flat)
-                    pins.append({**orig, "name": bracket})
+                    orig = next(p for p in data[key] if p["name"] == flat)
+                    data[key].append({**orig, "name": bracket})
                     added += 1
-
-        break  # Only process the first matching key
 
     if not added:
         print(f"patch_gtp_sitetype: no bus ports to alias in {path}", file=sys.stderr)
