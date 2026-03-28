@@ -40,6 +40,7 @@ Deployment counts: `×N` = deployed, `(+×N)` = pending deployment, `—` = none
 ## Wiring Guides
 
 - [acorn-wiring-guide.md](acorn-wiring-guide.md) — Step-by-step Acorn CLE-215+ setup: M.2 HAT, Pico-EZmate cable prep, JTAG/UART/GPIO wiring, PCIe verification
+- [acorn-pcie-programming.md](acorn-pcie-programming.md) — PCIe-based bitstream programming, Xilinx 7-series multiboot, flash layout, recovery procedures
 
 ## Processes
 

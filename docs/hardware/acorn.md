@@ -1,4 +1,4 @@
-\[[top](./README.md)\] \[[pinmap](./acorn-pinmap.md)\] \[[wiring](./acorn-wiring-guide.md)\] \[[litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/sqrl_acorn.py)\]
+\[[top](./README.md)\] \[[pinmap](./acorn-pinmap.md)\] \[[wiring](./acorn-wiring-guide.md)\] \[[pcie programming](./acorn-pcie-programming.md)\] \[[litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/sqrl_acorn.py)\]
 
 # Sqrl Acorn CLE-215+ / LiteFury
 
