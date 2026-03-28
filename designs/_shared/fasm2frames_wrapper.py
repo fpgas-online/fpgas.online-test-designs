@@ -90,7 +90,7 @@ def _scan_part_yamls(db_root, part):
 def _part_name_variants(part):
     """Yield progressively shorter device name forms for directory lookup.
 
-    ``xc7a200tsbg484-3`` → ``xc7a200tsbg484-3``, ``xc7a200tsbg484``, ``xc7a200t``
+    ``xc7a35tfgg484-2`` → ``xc7a35tfgg484-2``, ``xc7a35tfgg484``, ``xc7a35t``, ``xc7a50t``
     """
     yield part
     # Strip speed grade suffix (-1, -2, -3)
@@ -99,8 +99,26 @@ def _part_name_variants(part):
         yield no_speed
     # Strip package to get die name only (xc7a200t)
     die_match = re.match(r"^(xc7[aksz]\d+t)", part)
-    if die_match and die_match.group(1) != no_speed:
-        yield die_match.group(1)
+    if die_match:
+        die = die_match.group(1)
+        if die != no_speed:
+            yield die
+        # Xilinx die equivalences: some parts share silicon
+        alias = _ARTIX7_DIE_ALIASES.get(die)
+        if alias:
+            yield alias
+
+
+# Artix-7 parts that share the same die (Xilinx uses die harvesting).
+# prjxray-db may only have one directory per physical die.
+_ARTIX7_DIE_ALIASES = {
+    "xc7a12t": "xc7a25t",
+    "xc7a25t": "xc7a12t",
+    "xc7a35t": "xc7a50t",
+    "xc7a50t": "xc7a35t",
+    "xc7a75t": "xc7a100t",
+    "xc7a100t": "xc7a75t",
+}
 
 
 def main():
