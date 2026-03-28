@@ -28,6 +28,21 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --python 3.12 --extra build
 
+      - name: Patch GTP site types for bracket-form port names
+        run: |
+          uv run python designs/_shared/patch_gtp_sitetype.py \
+            /nextpnr-xilinx/xilinx/external/nextpnr-xilinx-meta/artix7/site_type_GTPE2_CHANNEL.json \
+            /nextpnr-xilinx/xilinx/external/nextpnr-xilinx-meta/artix7/site_type_GTPE2_COMMON.json
+
+      - name: Clear stale chipdb cache
+        run: rm -f /chipdb/*.bin
+
+      - name: Install FASM GTP fixup wrapper
+        run: |
+          [ -f /prjxray/env/bin/fasm2frames.real ] || mv /prjxray/env/bin/fasm2frames /prjxray/env/bin/fasm2frames.real
+          cp designs/_shared/fasm2frames_wrapper.py /prjxray/env/bin/fasm2frames
+          chmod +x /prjxray/env/bin/fasm2frames
+
       - name: Build NeTV2 A7-35T PCIe SoC bitstream
         env:
           CHIPDB: /chipdb
@@ -65,6 +80,21 @@ jobs:
 
       - name: Install Python dependencies
         run: uv sync --python 3.12 --extra build
+
+      - name: Patch GTP site types for bracket-form port names
+        run: |
+          uv run python designs/_shared/patch_gtp_sitetype.py \
+            /nextpnr-xilinx/xilinx/external/nextpnr-xilinx-meta/artix7/site_type_GTPE2_CHANNEL.json \
+            /nextpnr-xilinx/xilinx/external/nextpnr-xilinx-meta/artix7/site_type_GTPE2_COMMON.json
+
+      - name: Clear stale chipdb cache
+        run: rm -f /chipdb/*.bin
+
+      - name: Install FASM GTP fixup wrapper
+        run: |
+          [ -f /prjxray/env/bin/fasm2frames.real ] || mv /prjxray/env/bin/fasm2frames /prjxray/env/bin/fasm2frames.real
+          cp designs/_shared/fasm2frames_wrapper.py /prjxray/env/bin/fasm2frames
+          chmod +x /prjxray/env/bin/fasm2frames
 
       - name: Build NeTV2 A7-100T PCIe SoC bitstream
         env:
@@ -116,6 +146,21 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --python 3.12 --extra build
 
+      - name: Patch GTP site types for bracket-form port names
+        run: |
+          uv run python designs/_shared/patch_gtp_sitetype.py \
+            /nextpnr-xilinx/xilinx/external/nextpnr-xilinx-meta/artix7/site_type_GTPE2_CHANNEL.json \
+            /nextpnr-xilinx/xilinx/external/nextpnr-xilinx-meta/artix7/site_type_GTPE2_COMMON.json
+
+      - name: Clear stale chipdb cache
+        run: rm -f /chipdb/*.bin
+
+      - name: Install FASM GTP fixup wrapper
+        run: |
+          [ -f /prjxray/env/bin/fasm2frames.real ] || mv /prjxray/env/bin/fasm2frames /prjxray/env/bin/fasm2frames.real
+          cp designs/_shared/fasm2frames_wrapper.py /prjxray/env/bin/fasm2frames
+          chmod +x /prjxray/env/bin/fasm2frames
+
       - name: Build Acorn CLE-215+ bitstream
         env:
           CHIPDB: /chipdb
@@ -156,6 +201,21 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --python 3.12 --extra build
 
+      - name: Patch GTP site types for bracket-form port names
+        run: |
+          uv run python designs/_shared/patch_gtp_sitetype.py \
+            /nextpnr-xilinx/xilinx/external/nextpnr-xilinx-meta/artix7/site_type_GTPE2_CHANNEL.json \
+            /nextpnr-xilinx/xilinx/external/nextpnr-xilinx-meta/artix7/site_type_GTPE2_COMMON.json
+
+      - name: Clear stale chipdb cache
+        run: rm -f /chipdb/*.bin
+
+      - name: Install FASM GTP fixup wrapper
+        run: |
+          [ -f /prjxray/env/bin/fasm2frames.real ] || mv /prjxray/env/bin/fasm2frames /prjxray/env/bin/fasm2frames.real
+          cp designs/_shared/fasm2frames_wrapper.py /prjxray/env/bin/fasm2frames
+          chmod +x /prjxray/env/bin/fasm2frames
+
       - name: Build NiteFury (CLE-215) bitstream
         env:
           CHIPDB: /chipdb
@@ -195,6 +255,21 @@ jobs:
 
       - name: Install Python dependencies
         run: uv sync --python 3.12 --extra build
+
+      - name: Patch GTP site types for bracket-form port names
+        run: |
+          uv run python designs/_shared/patch_gtp_sitetype.py \
+            /nextpnr-xilinx/xilinx/external/nextpnr-xilinx-meta/artix7/site_type_GTPE2_CHANNEL.json \
+            /nextpnr-xilinx/xilinx/external/nextpnr-xilinx-meta/artix7/site_type_GTPE2_COMMON.json
+
+      - name: Clear stale chipdb cache
+        run: rm -f /chipdb/*.bin
+
+      - name: Install FASM GTP fixup wrapper
+        run: |
+          [ -f /prjxray/env/bin/fasm2frames.real ] || mv /prjxray/env/bin/fasm2frames /prjxray/env/bin/fasm2frames.real
+          cp designs/_shared/fasm2frames_wrapper.py /prjxray/env/bin/fasm2frames
+          chmod +x /prjxray/env/bin/fasm2frames
 
       - name: Build LiteFury (CLE-101) bitstream
         env:
