@@ -7,6 +7,7 @@ exec's the real fasm2frames with the original arguments.
 """
 
 import os
+import re
 import subprocess
 import sys
 
@@ -38,11 +39,23 @@ def _find_args():
 
 
 def _find_tilegrid(db_root, part):
-    """Locate tilegrid.json under db_root, trying part-specific subdirectory first."""
+    """Locate tilegrid.json under db_root, trying part-specific subdirectory.
+
+    The --part from LiteX includes the speed grade suffix (e.g. ``xc7a200tsbg484-3``),
+    but prjxray-db directories omit it (``xc7a200tsbg484/``).  Try with the suffix
+    first, then without.
+    """
     if part:
+        # Try exact part name (with speed grade)
         candidate = os.path.join(db_root, part, "tilegrid.json")
         if os.path.isfile(candidate):
             return candidate
+        # Strip speed grade suffix (-1, -2, -3, etc.) and retry
+        part_no_speed = re.sub(r"-\d+$", "", part)
+        if part_no_speed != part:
+            candidate = os.path.join(db_root, part_no_speed, "tilegrid.json")
+            if os.path.isfile(candidate):
+                return candidate
     # Fallback: tilegrid directly under db_root
     candidate = os.path.join(db_root, "tilegrid.json")
     if os.path.isfile(candidate):
