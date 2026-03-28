@@ -15,10 +15,23 @@ The Acorn has two working programming paths:
 
 **Flash-via-JTAG (`--write-flash`) is not currently working** with openFPGALoader on the Acorn. JTAG can only load bitstreams to volatile SRAM. This has important implications for the recovery strategy.
 
+### Current Bitstream State
+
+The deployed Acorn boards currently have the **factory Sqrl cryptocurrency mining firmware** in SPI flash:
+
+- PCI vendor:device `1e24:021f` (Squirrels Research Labs)
+- BAR0: 128 KB — repeating mining parameter pattern, no LiteX CSRs
+- **Not a LiteX design** — `litepcie_util` cannot communicate with this firmware
+
+To enable PCIe→Flash programming, the factory firmware must be replaced with a **LiteX Acorn PCIe SoC** bitstream (vendor `10ee`) that includes PCIe+DMA, SPI Flash controller, and ICAP. Building this bitstream requires **Vivado** (the XC7A200T is too large for the openXC7 open source toolchain).
+
+The litepcie kernel module and `litepcie_util` have been built and are ready on pi2 — they just need a matching LiteX bitstream to bind to.
+
 ### What This Means
 
 - JTAG can always load a bitstream into SRAM (volatile), but it is lost on power cycle
 - The only way to write to SPI flash (persistent) is via PCIe using `litepcie_util`
+- PCIe→Flash requires a LiteX bitstream (not the factory Sqrl firmware)
 - The golden bitstream at flash address 0x0 is **irreplaceable without PCIe** — if it is corrupted, recovery requires the SRAM bootstrap procedure (see below)
 
 ## SPI Flash Layout
