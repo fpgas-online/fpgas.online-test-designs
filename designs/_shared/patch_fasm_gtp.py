@@ -32,7 +32,7 @@ def find_gtp_common_tile(tilegrid_path):
     gtp_tiles = sorted(
         (info["grid_y"], name)
         for name, info in tilegrid.items()
-        if info.get("type") == "GTP_COMMON"
+        if "GTP_COMMON" in info.get("type", "")
     )
 
     if not gtp_tiles:
