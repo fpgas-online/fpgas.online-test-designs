@@ -4,17 +4,22 @@
 
 How to program the Acorn CLE-215+ / LiteFury FPGA via PCIe, and how to use Xilinx 7-series multiboot for safe recovery from bad bitstreams.
 
-## Overview
+## Programming Paths
 
-The Acorn has three programming paths, listed from fastest to most resilient:
+The Acorn has two working programming paths:
 
-| Method | Speed | Requires | Recovery from bad bitstream? |
-|--------|-------|----------|------------------------------|
-| PCIe (litepcie_util) | Fast (~seconds) | Working LiteX PCIe bitstream | No — if PCIe is broken, can't use this |
-| GPIO JTAG (openFPGALoader) | Slow (~minutes) | RPi GPIO header wiring | Yes — works even with completely broken FPGA |
-| SPI Flash via JTAG | Slow | RPi GPIO header wiring | Yes — reprograms persistent flash |
+| Method | Speed | Persistent? | Requires | Notes |
+|--------|-------|-------------|----------|-------|
+| GPIO JTAG → SRAM | Slow (~minutes) | No (lost on power cycle) | RPi GPIO wiring | Works with any/no bitstream loaded |
+| PCIe → SPI Flash | Fast (~seconds) | Yes | Working LiteX PCIe bitstream | Requires PCIe-capable bitstream already running |
 
-**Multiboot** combines PCIe speed with JTAG safety: a golden bitstream at flash address 0x0 always boots first and enables PCIe, then chain-loads an operational bitstream from 0x400000. If the operational bitstream is bad, the watchdog falls back to the golden image automatically.
+**Flash-via-JTAG (`--write-flash`) is not currently working** with openFPGALoader on the Acorn. JTAG can only load bitstreams to volatile SRAM. This has important implications for the recovery strategy.
+
+### What This Means
+
+- JTAG can always load a bitstream into SRAM (volatile), but it is lost on power cycle
+- The only way to write to SPI flash (persistent) is via PCIe using `litepcie_util`
+- The golden bitstream at flash address 0x0 is **irreplaceable without PCIe** — if it is corrupted, recovery requires the SRAM bootstrap procedure (see below)
 
 ## SPI Flash Layout
 
@@ -26,7 +31,7 @@ The Acorn has a Spansion S25FL256S (256 Mbit = 32 MB) quad-SPI NOR flash.
 │             - Always boots first                 │
 │             - Sets NEXT_CONFIG_ADDR = 0x400000   │
 │             - Has PCIe + LiteX + SPI Flash       │
-│             - NEVER overwritten via PCIe         │
+│             - PROTECTED — see safety rules        │
 ├──────────────────────────────────────────────────┤
 │ 0x00400000  Operational bitstream (updatable)    │  ~4 MB
 │             - Chain-loaded by fallback           │
@@ -123,7 +128,7 @@ lspci -d 10ee: -vvv
 
 ## Recovery from Bad Bitstream
 
-### Automatic Recovery (Watchdog)
+### Automatic Recovery (Watchdog) — Operational Bitstream Bad
 
 If the operational bitstream at 0x400000 is corrupted or fails to configure:
 
@@ -136,24 +141,85 @@ If the operational bitstream at 0x400000 is corrupted or fails to configure:
 
 **No manual intervention required** — the system self-recovers.
 
-### Manual Recovery via GPIO JTAG
+### SRAM Bootstrap Recovery — Golden Bitstream Bad
 
-If the golden bitstream itself is corrupted (or PCIe is non-functional for any reason), use the GPIO JTAG connection through the P1 Pico-EZmate cable:
+If the golden bitstream at address 0x0 is corrupted, PCIe will not come up on boot and `litepcie_util` cannot be used. Since flash-via-JTAG is not currently working, recovery uses a **two-stage SRAM bootstrap**:
 
-```bash
-# Unload SPI kernel modules
-sudo rmmod spidev spi_bcm2835
+1. **Load a PCIe-capable bitstream to SRAM via JTAG** (volatile — lost on power cycle):
+   ```bash
+   sudo rmmod spidev spi_bcm2835
+   openFPGALoader --cable linuxgpiod_bitbang --pins 10:9:11:8 golden.bit
+   ```
 
-# Program SRAM (volatile — for testing)
-openFPGALoader --cable linuxgpiod_bitbang --pins 10:9:11:8 golden.bit
+2. **PCIe comes up from the SRAM-loaded bitstream**. Load the litepcie kernel module:
+   ```bash
+   modprobe litepcie
+   ```
 
-# Program SPI flash (persistent — full recovery)
-openFPGALoader --cable linuxgpiod_bitbang --pins 10:9:11:8 --write-flash golden.bit
-```
+3. **Write a new golden image to flash at address 0x0 via PCIe**:
+   ```bash
+   litepcie_util flash_write golden.bin 0x0
+   ```
 
-This works even if the FPGA has a completely broken bitstream — JTAG operates at the silicon level, independent of any loaded design.
+4. **Write the operational bitstream to 0x400000**:
+   ```bash
+   litepcie_util flash_write operational.bin 0x400000
+   ```
 
-See [acorn-wiring-guide.md](acorn-wiring-guide.md) for the P1 JTAG wiring.
+5. **Power cycle** the board. The FPGA boots from the new golden image in flash, chain-loads operational, and PCIe comes up persistently.
+
+**Critical**: Between steps 1 and 5, the board **must not lose power**. The SRAM-loaded bitstream is volatile — if power is lost before step 3 completes, the flash still has the corrupted golden image and you must restart from step 1.
+
+### Recovery Summary
+
+| Scenario | Golden OK? | Operational OK? | Recovery Method | Automatic? |
+|----------|-----------|----------------|-----------------|------------|
+| Bad operational | Yes | No | Watchdog fallback to golden, reprogram via PCIe | Yes |
+| Bad operational (PCIe broken) | Yes | No | Golden boots, reprogram via PCIe | Yes |
+| Bad golden | No | — | SRAM bootstrap: JTAG→SRAM, then PCIe→Flash | No (manual) |
+| Bad golden + no JTAG wiring | No | — | **Bricked** — requires physical JTAG reconnection | No |
+
+## Initial Setup (New Board)
+
+Since flash-via-JTAG is not working, initial multiboot setup uses the SRAM bootstrap method:
+
+1. **Build a golden bitstream** with Vivado (LiteX SoC with PCIe + SPI Flash + ICAP + NEXT_CONFIG_ADDR)
+
+2. **Load golden to SRAM via JTAG** (volatile):
+   ```bash
+   sudo rmmod spidev spi_bcm2835
+   openFPGALoader --cable linuxgpiod_bitbang --pins 10:9:11:8 golden.bit
+   ```
+
+3. **PCIe comes up**. Load the kernel module and write golden to flash:
+   ```bash
+   modprobe litepcie
+   litepcie_util flash_write golden.bin 0x0
+   ```
+
+4. **Write operational bitstream** to flash:
+   ```bash
+   litepcie_util flash_write operational.bin 0x400000
+   ```
+
+5. **Power cycle** — golden boots from flash, chain-loads operational, PCIe comes up persistently.
+
+6. **Verify** multiboot works by intentionally writing a bad operational image, confirming watchdog fallback, then reprogramming:
+   ```bash
+   # Write garbage to operational slot
+   dd if=/dev/urandom bs=1M count=4 of=/tmp/bad.bin
+   litepcie_util flash_write /tmp/bad.bin 0x400000
+   litepcie_util flash_reload
+   # Wait — watchdog should fall back to golden
+   sleep 10
+   echo 1 > /sys/bus/pci/rescan
+   # Verify golden is running (check ident string via UART)
+   # Reprogram good operational
+   litepcie_util flash_write operational.bin 0x400000
+   litepcie_util flash_reload
+   ```
+
+From this point on, operational updates only need `litepcie_util flash_write` + `flash_reload`.
 
 ## Generating Multiboot Bitstreams
 
@@ -185,32 +251,38 @@ write_cfgmem -force -format bin -interface spix4 -size 16 \
     -loadbit "up 0x0 operational.bit" -file operational.bin
 ```
 
-## Initial Setup
-
-To set up multiboot on a new Acorn board:
-
-1. **Build a golden bitstream** with Vivado (LiteX SoC with PCIe + SPI Flash + ICAP + NEXT_CONFIG_ADDR)
-2. **Program golden image via GPIO JTAG** to flash address 0x0:
-   ```bash
-   openFPGALoader --cable linuxgpiod_bitbang --pins 10:9:11:8 --write-flash golden.bin
-   ```
-3. **Power cycle** the board — golden image boots, PCIe comes up
-4. **Load litepcie kernel module** on the host
-5. **Write operational bitstream** via PCIe:
-   ```bash
-   litepcie_util flash_write operational.bin 0x400000
-   litepcie_util flash_reload
-   ```
-6. **Verify** the operational bitstream boots and PCIe works
-
-From this point on, operational updates only require step 5 — no JTAG needed.
-
 ## Safety Rules
 
-1. **NEVER overwrite the golden bitstream (address 0x0) via PCIe.** Always use `0x400000` as the target address for `flash_write`. Corrupting the golden image removes the automatic recovery path.
-2. **Always test new bitstreams via JTAG SRAM load first** before writing to flash. This validates the design without touching flash.
-3. **Keep JTAG wiring connected** on all deployed Acorn boards. It's the ultimate recovery path if both golden and operational images are corrupted.
-4. **The golden bitstream should be a minimal LiteX SoC** with only PCIe, SPI Flash, ICAP, and UART — no complex user logic that might fail.
+1. **NEVER write to flash address 0x0 via PCIe during normal operation.** The golden image is the recovery mechanism. Only write to 0x0 during initial setup or golden recovery. A wrapper script should validate the target address.
+
+2. **Always use 0x400000 for operational updates:**
+   ```bash
+   # CORRECT — writes to operational slot
+   litepcie_util flash_write design.bin 0x400000
+
+   # DANGEROUS — overwrites golden image
+   # litepcie_util flash_write design.bin 0x0   # DO NOT DO THIS
+   ```
+
+3. **Always test new bitstreams via JTAG SRAM load first** before writing to flash. This validates the design without touching flash:
+   ```bash
+   openFPGALoader --cable linuxgpiod_bitbang --pins 10:9:11:8 new_design.bit
+   # Test it works, then write to flash via PCIe
+   ```
+
+4. **Keep JTAG wiring connected** on all deployed Acorn boards. Without JTAG, a corrupted golden image means the board is **permanently bricked** until JTAG is reconnected.
+
+5. **The golden bitstream must be a minimal LiteX SoC** with only PCIe, SPI Flash, ICAP, and UART — no complex user logic that might fail.
+
+## Future: Flash-via-JTAG Support
+
+When openFPGALoader gains working `--write-flash` support for the Acorn (via GPIO JTAG), the recovery story simplifies significantly:
+
+- Initial setup becomes a single JTAG flash write instead of the SRAM bootstrap
+- Golden recovery no longer requires a volatile SRAM intermediate step
+- The "bricked" scenario in the recovery table disappears — JTAG can always reflash
+
+This is tracked as an openFPGALoader enhancement. The SRAM bootstrap procedure documented above works reliably in the meantime.
 
 ## References
 
