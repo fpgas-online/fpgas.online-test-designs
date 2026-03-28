@@ -14,8 +14,8 @@ _REAL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fasm2frames.re
 
 
 def _find_args():
-    """Extract --db-root value and the positional FASM file from argv."""
-    db_root = fasm_file = None
+    """Extract --db-root, --part, and the positional FASM file from argv."""
+    db_root = part = fasm_file = None
     skip = False
     for i in range(1, len(sys.argv)):
         if skip:
@@ -27,30 +27,56 @@ def _find_args():
             skip = True
         elif arg.startswith("--db-root="):
             db_root = arg.split("=", 1)[1]
-        elif arg == "--part":
-            skip = True  # --part takes a value, skip it
+        elif arg == "--part" and i + 1 < len(sys.argv):
+            part = sys.argv[i + 1]
+            skip = True
         elif arg.startswith("--part="):
-            pass
+            part = arg.split("=", 1)[1]
         elif not arg.startswith("-"):
             fasm_file = arg
-    return db_root, fasm_file
+    return db_root, part, fasm_file
+
+
+def _find_tilegrid(db_root, part):
+    """Locate tilegrid.json under db_root, trying part-specific subdirectory first."""
+    if part:
+        candidate = os.path.join(db_root, part, "tilegrid.json")
+        if os.path.isfile(candidate):
+            return candidate
+    # Fallback: tilegrid directly under db_root
+    candidate = os.path.join(db_root, "tilegrid.json")
+    if os.path.isfile(candidate):
+        return candidate
+    return None
 
 
 def main():
-    db_root, fasm_file = _find_args()
+    db_root, part, fasm_file = _find_args()
 
     if fasm_file and db_root:
-        tilegrid = os.path.join(db_root, "tilegrid.json")
+        tilegrid = _find_tilegrid(db_root, part)
         patch_script = os.path.join(
             os.environ.get("GITHUB_WORKSPACE", os.getcwd()),
             "designs", "_shared", "patch_fasm_gtp.py",
         )
-        if (
-            os.path.isfile(tilegrid)
-            and os.path.isfile(fasm_file)
-            and os.path.isfile(patch_script)
-        ):
-            print(f"[fasm2frames wrapper] patching {fasm_file}", file=sys.stderr)
+        if not tilegrid:
+            print(
+                f"[fasm2frames wrapper] tilegrid.json not found under {db_root} "
+                f"(part={part}) — skipping FASM patch",
+                file=sys.stderr,
+            )
+        elif not os.path.isfile(fasm_file):
+            print(
+                f"[fasm2frames wrapper] FASM file {fasm_file} not found — skipping patch",
+                file=sys.stderr,
+            )
+        elif not os.path.isfile(patch_script):
+            print(
+                f"[fasm2frames wrapper] patch script not found at {patch_script}",
+                file=sys.stderr,
+            )
+        else:
+            print(f"[fasm2frames wrapper] patching {fasm_file} (tilegrid: {tilegrid})", file=sys.stderr)
             subprocess.run(
                 [sys.executable, patch_script, fasm_file, tilegrid],
                 check=True,
