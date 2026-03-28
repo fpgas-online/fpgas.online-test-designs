@@ -41,19 +41,13 @@ def _find_args():
 def _find_tilegrid(db_root, part):
     """Locate tilegrid.json under db_root, trying part-specific subdirectory.
 
-    The --part from LiteX includes the speed grade suffix (e.g. ``xc7a200tsbg484-3``),
-    but prjxray-db directories omit it (``xc7a200tsbg484/``).  Try with the suffix
-    first, then without.
+    The --part from LiteX is the full device string (e.g. ``xc7a200tsbg484-3``),
+    but prjxray-db directories use the die name only (e.g. ``xc7a200t/``).
+    Try progressively shorter forms: full → no speed grade → die only.
     """
     if part:
-        # Try exact part name (with speed grade)
-        candidate = os.path.join(db_root, part, "tilegrid.json")
-        if os.path.isfile(candidate):
-            return candidate
-        # Strip speed grade suffix (-1, -2, -3, etc.) and retry
-        part_no_speed = re.sub(r"-\d+$", "", part)
-        if part_no_speed != part:
-            candidate = os.path.join(db_root, part_no_speed, "tilegrid.json")
+        for name in _part_name_variants(part):
+            candidate = os.path.join(db_root, name, "tilegrid.json")
             if os.path.isfile(candidate):
                 return candidate
     # Fallback: tilegrid directly under db_root
@@ -61,6 +55,22 @@ def _find_tilegrid(db_root, part):
     if os.path.isfile(candidate):
         return candidate
     return None
+
+
+def _part_name_variants(part):
+    """Yield progressively shorter device name forms for directory lookup.
+
+    ``xc7a200tsbg484-3`` → ``xc7a200tsbg484-3``, ``xc7a200tsbg484``, ``xc7a200t``
+    """
+    yield part
+    # Strip speed grade suffix (-1, -2, -3)
+    no_speed = re.sub(r"-\d+$", "", part)
+    if no_speed != part:
+        yield no_speed
+    # Strip package to get die name only (xc7a200t)
+    die_match = re.match(r"^(xc7[aksz]\d+t)", part)
+    if die_match and die_match.group(1) != no_speed:
+        yield die_match.group(1)
 
 
 def main():
