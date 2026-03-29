@@ -158,25 +158,33 @@ The TT FPGA board does not have a dedicated LiteX platform file in litex-boards.
 
 ## Deployment
 
-Four TT FPGA Demo Boards are deployed at the Welland site, each connected
-to a Raspberry Pi 4 via USB-C. The RPis are powered and networked through
-a Netgear S3300 PoE switch on the `tweed` network.
+Eight TT FPGA Demo Boards across two sites. Four are deployed at
+Welland, four are pending deployment at PS1.
 
-| Site    | Host | RPi       | IP          | Switch Port | RP2040 Serial        |
-|---------|------|-----------|-------------|-------------|----------------------|
-| Welland | pi27 | RPi 4 2GB | 10.21.0.127 | 27          | `4df39a7a6856f86f`   |
-| Welland | pi29 | RPi 4 2GB | 10.21.0.129 | 29          | `fd1a167bd863a198`   |
-| Welland | pi31 | RPi 4 2GB | 10.21.0.131 | 31          | `8c46329b33590ecb`   |
-| Welland | pi33 | RPi 4 8GB | 10.21.0.133 | 33          | `a2961e5cac65b25f`   |
+| Site    | Host | RPi       | IP          | Switch Port | RP2040 Serial      |
+|---------|------|-----------|-------------|-------------|---------------------|
+| Welland | pi27 | RPi 4 2GB | 10.21.0.127 | 27          | `4df39a7a6856f86f` |
+| Welland | pi29 | RPi 4 2GB | 10.21.0.129 | 29          | `fd1a167bd863a198` |
+| Welland | pi31 | RPi 4 2GB | 10.21.0.131 | 31          | `8c46329b33590ecb` |
+| Welland | pi33 | RPi 4 8GB | 10.21.0.133 | 33          | `a2961e5cac65b25f` |
+| PS1     | TBD  | TBD       | TBD         | TBD         | TBD                |
+| PS1     | TBD  | TBD       | TBD         | TBD         | TBD                |
+| PS1     | TBD  | TBD       | TBD         | TBD         | TBD                |
+| PS1     | TBD  | TBD       | TBD         | TBD         | TBD                |
 
-**Gateway:** `tweed.welland.mithis.com` (10.21.0.1) — dnsmasq/TFTP/PXE boot server.
+Each RPi connects to a TT FPGA board via USB-C and has a PMOD HAT for
+GPIO-level control of the TT I/O pins. RPis are powered and networked
+through PoE switches at each site.
 
 **USB device:** `/dev/ttyACM0` (VID:PID `2e8a:0005` — RP2040 MicroPython).
 
-Each RPi has a PMOD HAT for GPIO-level control of the TT I/O pins. SSH
-access is via the tweed gateway: `ssh pi@pi33.tweed.welland.mithis.com`.
+| Site    | Gateway                               | Network       |
+|---------|---------------------------------------|---------------|
+| Welland | `tweed.welland.mithis.com` (10.21.0.1) | 10.21.0.0/16 |
+| PS1     | `ps1.fpgas.online` (10.21.0.1)        | 10.21.0.0/24 |
 
-No TT FPGA boards are deployed at the PS1 site.
+See the [deployment checklist](deployment-checklist.md) for the steps
+to bring up the PS1 boards.
 
 ## Test Infrastructure
 
