@@ -99,7 +99,9 @@ Source: [TinyTapeout PCB Specs](https://tinytapeout.com/specs/pcb/)
 
 ## Clock
 
-The FPGA can be clocked at up to approximately 66 MHz. The clock signal is provided by the RP2040 or an on-board oscillator on the FPGA breakout board. The exact maximum frequency depends on the design complexity and routing.
+The RP2040 generates a 50 MHz clock via PWM on GPIO16 (`RP_PROJCLK`). The
+iCE40UP5K's internal PLL divides this down to a 12 MHz system clock for
+LiteX SoC designs (see `designs/_shared/tt_fpga_crg.py`).
 
 ## 7-Segment Display
 
@@ -124,14 +126,26 @@ The demo PCB has DIP switches connected to the `ui_in` pins, allowing manual inp
 
 ## Programming
 
-The FPGA breakout board is programmed through the RP2040 on the demo PCB. The RP2040 acts as a USB bridge and can load bitstreams into the iCE40UP5K.
+The RP2040 programs the iCE40UP5K over SPI using the `fabricfox` MicroPython
+module (PIO-accelerated or bitbang fallback).
 
 ```bash
-# Programming is typically done via the RP2040's USB interface
-# The exact command depends on the RP2040 firmware
+python3 designs/_host/tt_fpga_program.py /dev/ttyACM0 bitstream.bin
 ```
 
-The FPGA breakout board also has SPI flash for persistent bitstream storage.
+**Programming workflow:**
+
+1. Upload `.bin` to `/bitstreams/custom.bin` on the RP2040 via `mpremote`
+2. Enter raw REPL and execute a MicroPython script that:
+   - Asserts `CRESET` (GPIO1) to reset the FPGA
+   - Transfers the bitstream over SPI (SCK=GPIO6, MOSI=GPIO3, SS=GPIO5)
+   - Releases `CRESET` and waits for FPGA `CDONE`
+   - Starts the 50 MHz clock on GPIO16
+3. For PMOD tests: release all GPIO pins to high-Z (`--gpio-release`)
+
+**SPI Flash:** The breakout board also has SPI flash (CS_N=pin 16, CLK=pin 15,
+MOSI=pin 14, MISO=pin 17) for persistent bitstream storage, used by
+the SPI Flash ID test.
 
 ## LiteX Integration
 
@@ -142,17 +156,91 @@ The FPGA breakout board also has SPI flash for persistent bitstream storage.
 
 The TT FPGA board does not have a dedicated LiteX platform file in litex-boards. Designs target the iCE40UP5K with a custom pin constraint file matching the TinyTapeout I/O interface.
 
-## Test Infrastructure Usage
+## Deployment
 
-In the fpgas.online setup, the TT FPGA Demo Board connects to the host (`tweed.welland.mithis.com`) via USB-C. The RP2040 provides:
+Four TT FPGA Demo Boards are deployed at the Welland site, each connected
+to a Raspberry Pi 4 via USB-C. The RPis are powered and networked through
+a Netgear S3300 PoE switch on the `tweed` network.
 
-1. USB-to-UART bridge for serial communication with the FPGA
-2. Bitstream loading capability
-3. Clock generation for the FPGA
+| Host | RPi | IP | Switch Port | RP2040 Serial | Status |
+|------|-----|------------|-------------|---------------|--------|
+| pi27 | RPi 4 2GB | 10.21.0.127 | 27 | `4df39a7a6856f86f` | Needs physical reset |
+| pi29 | RPi 4 2GB | 10.21.0.129 | 29 | `fd1a167bd863a198` | Needs physical reset |
+| pi31 | RPi 4 2GB | 10.21.0.131 | 31 | `8c46329b33590ecb` | Needs physical reset |
+| pi33 | RPi 4 8GB | 10.21.0.133 | 33 | `a2961e5cac65b25f` | Operational |
 
-Available tests:
-- **PMOD Loopback**: Verifies signal integrity through the PMOD headers
-- **SPI Flash ID**: Reads and verifies the SPI flash JEDEC ID
+**Gateway:** `tweed.welland.mithis.com` (10.21.0.1) — dnsmasq/TFTP/PXE boot server.
+
+**USB device:** `/dev/ttyACM0` (VID:PID `2e8a:0005` — RP2040 MicroPython).
+
+Each RPi has a PMOD HAT for GPIO-level control of the TT I/O pins. SSH
+access is via the tweed gateway: `ssh pi@pi33.tweed.welland.mithis.com`.
+
+No TT FPGA boards are deployed at the PS1 site.
+
+## Test Infrastructure
+
+The RP2040 provides bitstream loading, clock generation, and USB-to-UART
+bridging. Three host-side wrapper scripts handle the RP2040 interaction:
+
+| Script | Purpose |
+|--------|---------|
+| `designs/_host/tt_fpga_program.py` | Upload and program bitstream via mpremote |
+| `designs/_host/tt_test_wrapper.py` | Program + UART bridge (PTY) + run test |
+| `designs/_host/tt_pmod_wrapper.py` | Program + release GPIOs + hand off to RPi GPIO test |
+
+### Available Tests
+
+| Test | Bitstream | Wrapper | What it verifies |
+|------|-----------|---------|-----------------|
+| UART echo | `uart/build/tt/gateware/tt_fpga_platform.bin` | `tt_test_wrapper.py` | Serial TX/RX via RP2040 bridge |
+| SPI Flash ID | `spi-flash-id/build/tt/gateware/tt_fpga_platform.bin` | `tt_test_wrapper.py` | JEDEC ID readback from on-board flash |
+| PMOD loopback | `pmod-loopback/build/tt/top.bin` | `tt_pmod_wrapper.py` | GPIO inversion across wired pin pairs |
+| PMOD pin ID | `pmod-pin-id/build/tt/top.bin` | `tt_pmod_wrapper.py` | UART TX on each GPIO pin |
+
+### Test Execution
+
+Tests are orchestrated by `verify_hardware.py`, which uploads the wrapper
+scripts and bitstreams to the RPi, then runs the appropriate test:
+
+```bash
+uv run python verify_hardware.py --board tt --host pi33.tweed.welland.mithis.com
+```
+
+## Known Workarounds
+
+### GPIOMap firmware mismatch
+
+All deployed boards load `GPIOMapTT04` firmware, but the TTDBv3 hardware
+uses different GPIO assignments. The `pin_indices()` function returns
+wrong pin numbers. **Workaround:** all host scripts hardcode the correct
+GPIO pins (SPI: SCK=6, MOSI=3, SS=5, CRESET=1; UART: TX=GPIO20, RX=GPIO37).
+
+### DemoBoard() hang on boot
+
+The stock RP2040 `main.py` calls `DemoBoard()` which probes I2C and can
+hang permanently, making the board unrecoverable without a physical reset.
+**Workaround:** `tt_test_wrapper.py` installs a safe no-op `main.py` after
+each test run. Boards pi27, pi29, and pi31 are currently hung from earlier
+runs before this workaround was added — they need a physical board reset.
+
+### RP2040 PWM first-call bug
+
+The first `PWM()` call on GPIO16 produces a stuck-HIGH output instead of
+oscillation. **Workaround:** deinit and recreate the PWM object:
+
+```python
+clk = PWM(Pin(16))
+clk.deinit()
+utime.sleep_ms(1)
+clk = PWM(Pin(16))  # Second call oscillates correctly
+```
+
+### SPI kernel module conflict
+
+RPi GPIO7-11 overlap with the SPI0 bus and conflict with PMOD HAT pins
+(JA/JB pins 2-4). **Workaround:** unload `spidev` and `spi_bcm2835`
+kernel modules before running PMOD tests.
 
 ## References
 
