@@ -162,12 +162,12 @@ Four TT FPGA Demo Boards are deployed at the Welland site, each connected
 to a Raspberry Pi 4 via USB-C. The RPis are powered and networked through
 a Netgear S3300 PoE switch on the `tweed` network.
 
-| Host | RPi | IP | Switch Port | RP2040 Serial | Status |
-|------|-----|------------|-------------|---------------|--------|
-| pi27 | RPi 4 2GB | 10.21.0.127 | 27 | `4df39a7a6856f86f` | Needs physical reset |
-| pi29 | RPi 4 2GB | 10.21.0.129 | 29 | `fd1a167bd863a198` | Needs physical reset |
-| pi31 | RPi 4 2GB | 10.21.0.131 | 31 | `8c46329b33590ecb` | Needs physical reset |
-| pi33 | RPi 4 8GB | 10.21.0.133 | 33 | `a2961e5cac65b25f` | Operational |
+| Host | RPi | IP | Switch Port | RP2040 Serial |
+|------|-----|------------|-------------|---------------|
+| pi27 | RPi 4 2GB | 10.21.0.127 | 27 | `4df39a7a6856f86f` |
+| pi29 | RPi 4 2GB | 10.21.0.129 | 29 | `fd1a167bd863a198` |
+| pi31 | RPi 4 2GB | 10.21.0.131 | 31 | `8c46329b33590ecb` |
+| pi33 | RPi 4 8GB | 10.21.0.133 | 33 | `a2961e5cac65b25f` |
 
 **Gateway:** `tweed.welland.mithis.com` (10.21.0.1) — dnsmasq/TFTP/PXE boot server.
 
