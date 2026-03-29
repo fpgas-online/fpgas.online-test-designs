@@ -183,20 +183,20 @@ No TT FPGA boards are deployed at the PS1 site.
 The RP2040 provides bitstream loading, clock generation, and USB-to-UART
 bridging. Three host-side wrapper scripts handle the RP2040 interaction:
 
-| Script | Purpose |
-|--------|---------|
-| `designs/_host/tt_fpga_program.py` | Upload and program bitstream via mpremote |
-| `designs/_host/tt_test_wrapper.py` | Program + UART bridge (PTY) + run test |
-| `designs/_host/tt_pmod_wrapper.py` | Program + release GPIOs + hand off to RPi GPIO test |
+| Script                                                              | Purpose                                          |
+|---------------------------------------------------------------------|--------------------------------------------------|
+| [`tt_fpga_program.py`](../../designs/_host/tt_fpga_program.py)      | Upload and program bitstream via mpremote         |
+| [`tt_test_wrapper.py`](../../designs/_host/tt_test_wrapper.py)      | Program + UART bridge (PTY) + run test            |
+| [`tt_pmod_wrapper.py`](../../designs/_host/tt_pmod_wrapper.py)      | Program + release GPIOs + hand off to RPi GPIO test |
 
 ### Available Tests
 
-| Test | Bitstream | Wrapper | What it verifies |
-|------|-----------|---------|-----------------|
-| UART echo | `uart/build/tt/gateware/tt_fpga_platform.bin` | `tt_test_wrapper.py` | Serial TX/RX via RP2040 bridge |
-| SPI Flash ID | `spi-flash-id/build/tt/gateware/tt_fpga_platform.bin` | `tt_test_wrapper.py` | JEDEC ID readback from on-board flash |
-| PMOD loopback | `pmod-loopback/build/tt/top.bin` | `tt_pmod_wrapper.py` | GPIO inversion across wired pin pairs |
-| PMOD pin ID | `pmod-pin-id/build/tt/top.bin` | `tt_pmod_wrapper.py` | UART TX on each GPIO pin |
+| Test           | Bitstream                                                                            | Wrapper                                                            | What it verifies                     |
+|----------------|--------------------------------------------------------------------------------------|--------------------------------------------------------------------|--------------------------------------|
+| UART echo      | [`uart/.../tt_fpga_platform.bin`](../../designs/uart/build/tt/gateware/)              | [`tt_test_wrapper.py`](../../designs/_host/tt_test_wrapper.py)     | Serial TX/RX via RP2040 bridge       |
+| SPI Flash ID   | [`spi-flash-id/.../tt_fpga_platform.bin`](../../designs/spi-flash-id/build/tt/gateware/) | [`tt_test_wrapper.py`](../../designs/_host/tt_test_wrapper.py) | JEDEC ID readback from on-board flash |
+| PMOD loopback  | [`pmod-loopback/.../top.bin`](../../designs/pmod-loopback/build/tt/)                  | [`tt_pmod_wrapper.py`](../../designs/_host/tt_pmod_wrapper.py)     | GPIO inversion across wired pin pairs |
+| PMOD pin ID    | [`pmod-pin-id/.../top.bin`](../../designs/pmod-pin-id/build/tt/)                      | [`tt_pmod_wrapper.py`](../../designs/_host/tt_pmod_wrapper.py)     | UART TX on each GPIO pin             |
 
 ### Test Execution
 
