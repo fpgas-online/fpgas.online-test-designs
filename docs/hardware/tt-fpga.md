@@ -200,7 +200,7 @@ bridging. Three host-side wrapper scripts handle the RP2040 interaction:
 
 ### Test Execution
 
-Tests are orchestrated by `verify_hardware.py`, which uploads the wrapper
+Tests are orchestrated by [`verify_hardware.py`](../../verify_hardware.py), which uploads the wrapper
 scripts and bitstreams to the RPi, then runs the appropriate test:
 
 ```bash
