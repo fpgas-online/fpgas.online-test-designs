@@ -163,10 +163,10 @@ Welland, four are pending deployment at PS1.
 
 | Site    | Host | RPi       | IP          | Switch Port | RP2040 Serial      |
 |---------|------|-----------|-------------|-------------|---------------------|
-| Welland | pi27 | RPi 4 2GB | 10.21.0.127 | 27          | `4df39a7a6856f86f` |
-| Welland | pi29 | RPi 4 2GB | 10.21.0.129 | 29          | `fd1a167bd863a198` |
-| Welland | pi31 | RPi 4 2GB | 10.21.0.131 | 31          | `8c46329b33590ecb` |
-| Welland | pi33 | RPi 4 8GB | 10.21.0.133 | 33          | `a2961e5cac65b25f` |
+| Welland | [pi27](https://welland.fpgas.online/pi27/) | RPi 4 2GB | 10.21.0.127 | 27          | `4df39a7a6856f86f` |
+| Welland | [pi29](https://welland.fpgas.online/pi29/) | RPi 4 2GB | 10.21.0.129 | 29          | `fd1a167bd863a198` |
+| Welland | [pi31](https://welland.fpgas.online/pi31/) | RPi 4 2GB | 10.21.0.131 | 31          | `8c46329b33590ecb` |
+| Welland | [pi33](https://welland.fpgas.online/pi33/) | RPi 4 8GB | 10.21.0.133 | 33          | `a2961e5cac65b25f` |
 | PS1     | TBD  | TBD       | TBD         | TBD         | TBD                |
 | PS1     | TBD  | TBD       | TBD         | TBD         | TBD                |
 | PS1     | TBD  | TBD       | TBD         | TBD         | TBD                |
