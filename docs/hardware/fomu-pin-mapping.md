@@ -58,8 +58,8 @@ Each Fomu host has an inline USB protocol analyzer between the Fomu and the RPi 
 
 | Host | Analyzer       | USB VID:PID |
 |------|----------------|-------------|
-| pi17 | OpenVizsla     | `1d50:607c` |
-| pi21 | Cythion/LUNA   | `16d0:05a5` |
+| [pi17](https://welland.fpgas.online/fpgas/pi17.html) | OpenVizsla     | `1d50:607c` |
+| [pi21](https://welland.fpgas.online/fpgas/pi21.html) | Cythion/LUNA   | `16d0:05a5` |
 
 ## UART Interface
 

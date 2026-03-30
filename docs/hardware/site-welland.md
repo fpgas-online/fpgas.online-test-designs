@@ -65,11 +65,11 @@ All data verified via SSH on 2026-03-17 from live hardware and dnsmasq configura
 
 | Host | Switch Port | IP          | RPi MAC           | RPi Model   | Arty Serial         | Arty DNA           | USB Ethernet                     | Serial Devices   |
 | ---- | ----------- | ----------- | ----------------- | ----------- | ------------------- | ------------------ | -------------------------------- | ---------------- |
-| pi5  | port 5      | 10.21.0.105 | e4:5f:01:97:1f:7e | RPi 4 2GB   | 210319B0C238        | 0x0144cd2a47442854 | Linksys GbE (60:38:e0:e3:56:4f)  | ttyUSB0, ttyUSB1 |
+| [pi5](https://welland.fpgas.online/fpgas/pi5.html)   | port 5      | 10.21.0.105 | e4:5f:01:97:1f:7e | RPi 4 2GB   | 210319B0C238        | 0x0144cd2a47442854 | Linksys GbE (60:38:e0:e3:56:4f)  | ttyUSB0, ttyUSB1 |
 | pi7  | port 7      | 10.21.0.107 | e4:5f:01:96:f8:a5 | RPi 4 2GB   | 210319B301DE        | 0x00628502251ea85c | ASIX AX88179 (f8:e4:3b:0f:c1:e6) | ttyUSB0, ttyUSB1 |
-| pi9  | port 9      | 10.21.0.109 | b8:27:eb:86:39:63 | RPi 3B+ 1GB | (FTDI disconnected) | —                  | Apple Eth (48:d7:05:e9:40:52)    | **none**         |
-| pi11 | port 11     | 10.21.0.111 | e4:5f:01:8d:f7:17 | RPi 4 8GB   | 210319B3E5C5        | 0x002c8d02251ea854 | DM9601 (00:e0:4c:53:44:58)       | ttyUSB0, ttyUSB1 |
-| pi13 | port 13     | 10.21.0.113 | b8:27:eb:6d:27:f6 | RPi 3B+ 1GB | 210319A43ADB        | 0x0002f54832290854 | ASIX (8a:ce:4c:ff:ae:83)         | ttyUSB0, ttyUSB1 |
+| [pi9](https://welland.fpgas.online/fpgas/pi9.html)   | port 9      | 10.21.0.109 | b8:27:eb:86:39:63 | RPi 3B+ 1GB | (FTDI disconnected) | —                  | Apple Eth (48:d7:05:e9:40:52)    | **none**         |
+| [pi11](https://welland.fpgas.online/fpgas/pi11.html) | port 11     | 10.21.0.111 | e4:5f:01:8d:f7:17 | RPi 4 8GB   | 210319B3E5C5        | 0x002c8d02251ea854 | DM9601 (00:e0:4c:53:44:58)       | ttyUSB0, ttyUSB1 |
+| [pi13](https://welland.fpgas.online/fpgas/pi13.html) | port 13     | 10.21.0.113 | b8:27:eb:6d:27:f6 | RPi 3B+ 1GB | 210319A43ADB        | 0x0002f54832290854 | ASIX (8a:ce:4c:ff:ae:83)         | ttyUSB0, ttyUSB1 |
 
 Each working Arty A7 connects via FTDI FT2232C/D/H (USB VID:PID `0403:6010`, labelled "Digilent USB Device"). The FT2232 provides two interfaces:
 - **if00** → `/dev/ttyUSB0` — JTAG (used by openFPGALoader)
@@ -93,6 +93,7 @@ Source: `lsusb` and `ls /dev/serial/by-id/` output from each RPi, dnsmasq pibs.c
 | pi16 | port 16     | 10.21.0.116 | b8:27:eb:c6:29:79 | RPi 3B+ 1GB | XC7A35T | 0x2a11a4c662372a53 |
 | pi18 | port 18     | 10.21.0.118 | b8:27:eb:2c:e8:de | RPi 3B+ 1GB | XC7A35T | 0x3a11dcc864241c0b |
 
+
 Each NeTV2 is programmed via OpenOCD GPIO bitbang JTAG through the RPi's GPIO header. No USB serial devices — the NeTV2 uses GPIO UART for communication (FPGA TX→GPIO15/RXD, FPGA RX→GPIO14/TXD via `/dev/ttyAMA0`).
 
 Source: dnsmasq pibs.conf, `lsusb` on pi10.
@@ -115,8 +116,8 @@ Source: `lspci` and `lsusb` on pi2, dnsmasq pibs.conf.
 
 | Host | Switch Port | IP          | RPi MAC           | RPi Model   | Fomu USB VID:PID | DFU Version | USB Analyzer             |
 | ---- | ----------- | ----------- | ----------------- | ----------- | ---------------- | ----------- | ------------------------ |
-| pi17 | port 17     | 10.21.0.117 | b8:27:eb:47:9f:d1 | RPi 3B+ 1GB | 1209:5bf0        | v2.0.4      | OpenVizsla (1d50:607c)   |
-| pi21 | port 21     | 10.21.0.121 | b8:27:eb:fc:4d:f8 | RPi 3B+ 1GB | 1209:5bf0        | v2.0.4      | Cythion/LUNA (16d0:05a5) |
+| [pi17](https://welland.fpgas.online/fpgas/pi17.html) | port 17     | 10.21.0.117 | b8:27:eb:47:9f:d1 | RPi 3B+ 1GB | 1209:5bf0        | v2.0.4      | OpenVizsla (1d50:607c)   |
+| [pi21](https://welland.fpgas.online/fpgas/pi21.html) | port 21     | 10.21.0.121 | b8:27:eb:fc:4d:f8 | RPi 3B+ 1GB | 1209:5bf0        | v2.0.4      | Cythion/LUNA (16d0:05a5) |
 
 Each Fomu EVT appears as "Generic Fomu EVT running DFU Bootloader v2.0.4". No serial devices — the Fomu uses native USB (ValentyUSB) for communication.
 
@@ -132,9 +133,9 @@ These boards contain **real fabricated TT ASIC silicon** on a carrier board with
 
 | Host | Switch Port | IP          | RPi MAC           | RPi Model   | Board | USB VID:PID | Serial Device |
 | ---- | ----------- | ----------- | ----------------- | ----------- | ----- | ----------- | ------------- |
-| pi23 | port 23     | 10.21.0.123 | b8:27:eb:71:78:cc | RPi 3B+ 1GB | TT08  | 2e8a:0005   | /dev/ttyACM0  |
-| pi25 | port 25     | 10.21.0.125 | b8:27:eb:44:46:e9 | RPi 3B+ 1GB | TT06  | 2e8a:0005   | /dev/ttyACM0  |
-| pi19 | port 19     | 10.21.0.119 | b8:27:eb:19:43:cd | RPi 3B+ 1GB | TT ASIC (version unconfirmed) | 2e8a:0005 | /dev/ttyACM0 |
+| [pi23](https://welland.fpgas.online/fpgas/pi23.html) | port 23     | 10.21.0.123 | b8:27:eb:71:78:cc | RPi 3B+ 1GB | TT08  | 2e8a:0005   | /dev/ttyACM0  |
+| [pi25](https://welland.fpgas.online/fpgas/pi25.html) | port 25     | 10.21.0.125 | b8:27:eb:44:46:e9 | RPi 3B+ 1GB | TT06  | 2e8a:0005   | /dev/ttyACM0  |
+| [pi19](https://welland.fpgas.online/fpgas/pi19.html) | port 19     | 10.21.0.119 | b8:27:eb:19:43:cd | RPi 3B+ 1GB | TT ASIC (version unconfirmed) | 2e8a:0005 | /dev/ttyACM0 |
 
 The TT ASIC boards appear as "MicroPython Board in FS mode" (RP2040, VID:PID `2e8a:0005`). Each presents a serial console on `/dev/ttyACM0`.
 
@@ -150,10 +151,10 @@ These boards contain an **iCE40 FPGA** that emulates Tiny Tapeout designs, paire
 
 | Host | Switch Port | IP          | RPi MAC           | RPi Model         | USB VID:PID | Serial Device | RP2040 Serial    |
 | ---- | ----------- | ----------- | ----------------- | ----------------- | ----------- | ------------- | ---------------- |
-| pi27 | port 27     | 10.21.0.127 | e4:5f:01:97:0e:77 | RPi 4 2GB Rev 1.5 | 2e8a:0005   | /dev/ttyACM0  | 4df39a7a6856f86f |
-| pi29 | port 29     | 10.21.0.129 | e4:5f:01:97:27:f2 | RPi 4 2GB Rev 1.5 | 2e8a:0005   | /dev/ttyACM0  | fd1a167bd863a198 |
-| pi31 | port 31     | 10.21.0.131 | e4:5f:01:97:0c:e3 | RPi 4 2GB Rev 1.5 | 2e8a:0005   | /dev/ttyACM0  | 8c46329b33590ecb |
-| pi33 | port 33     | 10.21.0.133 | e4:5f:01:8e:02:27 | RPi 4 8GB Rev 1.5 | 2e8a:0005   | /dev/ttyACM0  | a2961e5cac65b25f |
+| [pi27](https://welland.fpgas.online/fpgas/pi27.html) | port 27     | 10.21.0.127 | e4:5f:01:97:0e:77 | RPi 4 2GB Rev 1.5 | 2e8a:0005   | /dev/ttyACM0  | 4df39a7a6856f86f |
+| [pi29](https://welland.fpgas.online/fpgas/pi29.html) | port 29     | 10.21.0.129 | e4:5f:01:97:27:f2 | RPi 4 2GB Rev 1.5 | 2e8a:0005   | /dev/ttyACM0  | fd1a167bd863a198 |
+| [pi31](https://welland.fpgas.online/fpgas/pi31.html) | port 31     | 10.21.0.131 | e4:5f:01:97:0c:e3 | RPi 4 2GB Rev 1.5 | 2e8a:0005   | /dev/ttyACM0  | 8c46329b33590ecb |
+| [pi33](https://welland.fpgas.online/fpgas/pi33.html) | port 33     | 10.21.0.133 | e4:5f:01:8e:02:27 | RPi 4 8GB Rev 1.5 | 2e8a:0005   | /dev/ttyACM0  | a2961e5cac65b25f |
 
 Like the ASIC boards, these appear as "MicroPython Board in FS mode" (RP2040, VID:PID `2e8a:0005`). The serial device path is `/dev/serial/by-id/usb-MicroPython_Board_in_FS_mode_<RP2040_SERIAL>-if00`.
 

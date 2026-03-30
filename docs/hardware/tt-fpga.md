@@ -180,8 +180,8 @@ through PoE switches at each site.
 
 | Site    | Gateway                               | Network       |
 |---------|---------------------------------------|---------------|
-| Welland | `tweed.welland.mithis.com` (10.21.0.1) | 10.21.0.0/16 |
-| PS1     | `ps1.fpgas.online` (10.21.0.1)        | 10.21.0.0/24 |
+| Welland | [welland.fpgas.online](https://welland.fpgas.online) (10.21.0.1) | 10.21.0.0/16 |
+| PS1     | [ps1.fpgas.online](https://ps1.fpgas.online) (10.21.0.1)         | 10.21.0.0/24 |
 
 See the [deployment checklist](deployment-checklist.md) for the steps
 to bring up the PS1 boards.

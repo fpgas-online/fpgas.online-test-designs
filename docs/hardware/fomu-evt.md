@@ -186,8 +186,8 @@ The Fomu EVT boards are hosted on RPi 3B+ systems on the tweed network. Each hos
 
 | Host | IP          | Fomu USB VID:PID | DFU Version | USB Analyzer                  |
 |------|-------------|------------------|-------------|-------------------------------|
-| pi17 | 10.21.0.117 | 1209:5bf0        | v2.0.4      | OpenVizsla (VID:PID 1d50:607c) |
-| pi21 | 10.21.0.121 | 1209:5bf0        | v2.0.4      | Cythion/LUNA (VID:PID 16d0:05a5) |
+| [pi17](https://welland.fpgas.online/fpgas/pi17.html) | 10.21.0.117 | 1209:5bf0        | v2.0.4      | OpenVizsla (VID:PID 1d50:607c) |
+| [pi21](https://welland.fpgas.online/fpgas/pi21.html) | 10.21.0.121 | 1209:5bf0        | v2.0.4      | Cythion/LUNA (VID:PID 16d0:05a5) |
 
 ### OpenVizsla (pi17)
 
