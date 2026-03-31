@@ -45,12 +45,30 @@ HOSTS = {
     "welland-pi13": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.113", "board": "arty"},
     "welland-pi17": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.117", "board": "fomu"},
     "welland-pi21": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.121", "board": "fomu"},
-    "welland-pi10": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.110", "board": "netv2", "variant": "a7-35"},
-    "welland-pi12": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.112", "board": "netv2", "variant": "a7-35"},
-    "welland-pi14": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.114", "board": "netv2", "variant": "a7-35"},
-    "welland-pi16": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.116", "board": "netv2", "variant": "a7-35"},
-    "welland-pi18": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.118", "board": "netv2", "variant": "a7-35"},
-    "welland-pi2": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.102", "board": "acorn", "variant": "cle-215+"},
+    "welland-pi10": {
+        "ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.110",
+        "board": "netv2", "variant": "a7-35",
+    },
+    "welland-pi12": {
+        "ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.112",
+        "board": "netv2", "variant": "a7-35",
+    },
+    "welland-pi14": {
+        "ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.114",
+        "board": "netv2", "variant": "a7-35",
+    },
+    "welland-pi16": {
+        "ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.116",
+        "board": "netv2", "variant": "a7-35",
+    },
+    "welland-pi18": {
+        "ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.118",
+        "board": "netv2", "variant": "a7-35",
+    },
+    "welland-pi2": {
+        "ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.102",
+        "board": "acorn", "variant": "cle-215+",
+    },
     "welland-pi27": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.127", "board": "tt"},
     "welland-pi29": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.129", "board": "tt"},
     "welland-pi31": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.131", "board": "tt"},
@@ -339,13 +357,13 @@ def poe_reset(host_name, off_seconds=5):
     port = m.group(1)
     print(f"  PoE reset: port {port} off...")
     try:
-        subprocess.run(["ssh", TWEED, f"poe.sh {port} 2"], timeout=15, capture_output=True)
+        subprocess.run(["ssh", GATEWAYS["welland"], f"poe.sh {port} 2"], timeout=15, capture_output=True)
         # Poll until host is unreachable (confirms power is off)
         for _ in range(off_seconds * 2):
             if not ssh_check_connectivity(host_name, timeout=1):
                 break
             time.sleep(0.5)
-        subprocess.run(["ssh", TWEED, f"poe.sh {port} 1"], timeout=15, capture_output=True)
+        subprocess.run(["ssh", GATEWAYS["welland"], f"poe.sh {port} 1"], timeout=15, capture_output=True)
     except (subprocess.TimeoutExpired, OSError) as e:
         print(f"  PoE reset failed: {e}")
         return False
