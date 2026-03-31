@@ -25,7 +25,6 @@ from pmod_pin_id import UARTTxIdentifier
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
 from designs._shared.tt_fpga_platform import Platform
 
-
 # Use connector names (not _io resource names) to avoid conflicts
 # with the pre-defined ui_in/uo_out/uio bus resources.
 CONNECTORS = ["tt_input", "tt_output", "tt_bidir"]

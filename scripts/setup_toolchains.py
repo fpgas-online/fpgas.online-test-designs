@@ -18,7 +18,6 @@ Usage:
 """
 
 import argparse
-import hashlib
 import os
 import platform
 import shutil
@@ -28,7 +27,6 @@ import tarfile
 import urllib.request
 import zipfile
 from pathlib import Path
-
 
 # ---------------------------------------------------------------------------
 # Toolchain release URLs and metadata
@@ -129,7 +127,7 @@ def download_file(url: str, dest: Path, description: str = "") -> Path:
     except urllib.error.HTTPError as e:
         print(f"    ERROR: HTTP {e.code} — {e.reason}")
         print(f"    URL: {url}")
-        raise SystemExit(1)
+        raise SystemExit(1) from e
 
     return dest
 
@@ -558,7 +556,7 @@ def _verify_all_tools(toolchains_dir: Path) -> None:
                 extra_paths.append(str(candidate))
                 break
 
-    combined_path = os.pathsep.join(extra_paths + [os.environ.get("PATH", "")])
+    combined_path = os.pathsep.join([*extra_paths, os.environ.get("PATH", "")])
 
     required_tools = [
         # RISC-V GCC (needed for LiteX BIOS and firmware compilation)

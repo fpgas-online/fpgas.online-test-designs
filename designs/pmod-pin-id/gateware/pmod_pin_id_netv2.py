@@ -24,7 +24,6 @@ import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
 from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
 from designs._shared.yosys_workarounds import YOSYS_TEMPLATE_STRIP_SCOPEINFO
 
-
 # NeTV2 GPIO header pins connected to RPi (hardcoded, not from connector table).
 # These are the serial pins used for UART communication with the RPi.
 _pin_id_io = [

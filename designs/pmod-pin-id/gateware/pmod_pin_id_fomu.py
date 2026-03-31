@@ -25,7 +25,6 @@ from pmod_pin_id import UARTTxIdentifier
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
 
-
 CONNECTORS = ["pmoda_n", "pmodb_n"]
 
 BAUD_RATE = 1200
