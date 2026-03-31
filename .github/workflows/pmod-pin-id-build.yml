@@ -85,7 +85,7 @@ jobs:
         with:
           name: pmod-pin-id-acorn-cle-215plus
           path: |
-            designs/pmod-pin-id/build/acorn/gateware/*.bit
+            designs/pmod-pin-id/build/acorn/*.bit
           if-no-files-found: error
 
   build-acorn-cle-215:
@@ -126,7 +126,7 @@ jobs:
         with:
           name: pmod-pin-id-acorn-cle-215
           path: |
-            designs/pmod-pin-id/build/acorn/gateware/*.bit
+            designs/pmod-pin-id/build/acorn/*.bit
           if-no-files-found: error
 
   build-acorn-cle-101:
@@ -167,7 +167,7 @@ jobs:
         with:
           name: pmod-pin-id-acorn-cle-101
           path: |
-            designs/pmod-pin-id/build/acorn/gateware/*.bit
+            designs/pmod-pin-id/build/acorn/*.bit
           if-no-files-found: error
 
   build-fomu:
