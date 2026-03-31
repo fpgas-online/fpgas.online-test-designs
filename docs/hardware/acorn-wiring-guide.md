@@ -6,6 +6,14 @@ Step-by-step instructions for wiring a Sqrl Acorn CLE-215+ (or LiteFury/NiteFury
 
 See [acorn.md](acorn.md) for board specs and [acorn-pinmap.md](acorn-pinmap.md) for the full pin mapping.
 
+## Wiring Diagram
+
+![Acorn to RPi wiring diagram](acorn-wiring-diagram.png)
+
+([Edit diagram](https://docs.google.com/drawings/d/1HCOHrvFzj1fIf6DqDMzcqoQgjaD5ZvM39MtgvrAjqEU/edit))
+
+**CRITICAL: The VCC (3.3V) wire on both P1 and P2 must NEVER be connected to the RPi header. Leave VCC wires unconnected or clipped. Connecting VCC between the Acorn and RPi can damage the RPi's power management chip.**
+
 ## Bill of Materials
 
 | Item | Description | Qty |
@@ -59,7 +67,7 @@ P2:6 VCC (N/C)    ← │  Pin 9     Pin 10  │ → P2:2 Serial RX
 | 5      | GND          | Pin 6             | GND      |
 | 6      | VCC (3.3V)   | **unconnected**   | —        |
 
-**Warning**: P2 pin 6 is 3.3V output from the Acorn. Leave it **unconnected** — do NOT connect it to any RPi pin. Connecting two 3.3V regulators together can damage the RPi's power management chip. Pin 9 on the RPi header (GND) is left unused.
+**CRITICAL: P2 pin 6 is VCC (3.3V). It must be left UNCONNECTED.** Never connect VCC between the FPGA board and the RPi. Clip or insulate the VCC wire. Pin 9 on the RPi header (GND) is left unused.
 
 **Important**: Verify the wire order of your specific Pico-EZmate cable with a multimeter before connecting. The pin numbering on the Pico-EZmate connector may not match the wire colour order.
 
@@ -97,9 +105,7 @@ P1:5 (GND) and P1:6 (VCC) are **not** part of the 2×3 header. Connect P1:5 GND 
 | 5      | GND      | Pin 25            | GND      | —            |
 | 6      | VCC      | **unconnected**   | —        | —            |
 
-**Warning**: P1 pin 6 is VCC (3.3V). Leave it **unconnected** — do NOT connect it to any RPi pin. P1:5 GND connects to pin 25 with a separate wire (outside the 2×3 header block).
-
-**Warning**: P1 pin 6 is VCC (3.3V). In the current wiring it connects to RPi pin 26 (GPIO7/SPI0_CE1). This is a signal pin being used as a reference, not a power connection. Verify your wiring before powering on.
+**CRITICAL: P1 pin 6 is VCC (3.3V). It must be left UNCONNECTED.** Never connect VCC between the FPGA board and the RPi. Clip or insulate the VCC wire. P1:5 GND connects to pin 25 with a separate wire (outside the 2×3 header block).
 
 ## Step 4: Connect Cables to the Acorn
 

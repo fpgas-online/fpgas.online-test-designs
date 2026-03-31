@@ -41,7 +41,7 @@ The P2 pin header connects to RPi header pins 5-10 (adjacent to the mPCIe HAT):
 | 3      | Spare GPIO 0 | J5       | 5              | GPIO3        | I2C1_SCL     |
 | 4      | Spare GPIO 1 | H5       | 7              | GPIO4        | GPCLK0       |
 | 5      | GND          | —        | 6              | GND          | —            |
-| 6      | VCC (3.3V)   | —        | 9              | GND          | —            |
+| 6      | VCC (3.3V)   | —        | **unconnected** | —            | —            |
 
 The UART pins (K2/J2) connect to the RPi's hardware UART (GPIO14/15 = `/dev/ttyAMA0`), enabling direct serial communication without USB adapters.
 
@@ -66,9 +66,11 @@ The P1 pin header connects to RPi SPI0 pins (header pins 19-26):
 | 3      | TDO         | 21             | GPIO9    | SPI0_MISO    |
 | 4      | TMS         | 24             | GPIO8    | SPI0_CE0     |
 | 5      | GND         | 25             | GND      | —            |
-| 6      | VCC (3.3V)  | 26             | GPIO7    | SPI0_CE1     |
+| 6      | VCC (3.3V)  | **unconnected** | —        | —            |
 
 JTAG signals are mapped to the RPi's SPI0 pins for compatibility with openFPGALoader's SPI-based JTAG transport. The SPI kernel modules must be unloaded before use (`rmmod spidev spi_bcm2835`).
+
+**CRITICAL: VCC (3.3V) on both P1 and P2 must NEVER be connected to the RPi header. Connecting VCC between the FPGA board and RPi can damage the RPi's power management chip. Clip or insulate the VCC wires.** See [acorn-wiring-guide.md](acorn-wiring-guide.md) for the full wiring procedure.
 
 ### Additional JTAG Header Pins
 
