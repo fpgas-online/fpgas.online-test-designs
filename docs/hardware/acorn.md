@@ -1,4 +1,4 @@
-\[[top](./README.md)\] \[[pinmap](./acorn-pinmap.md)\] \[[wiring](./acorn-wiring-guide.md)\] \[[pcie programming](./acorn-pcie-programming.md)\] \[[litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/sqrl_acorn.py)\]
+\[[top](./README.md)\] \[[pinmap](./acorn-pinmap.md)\] \[[wiring](./acorn-pinmap.md)\] \[[pcie programming](./acorn-pcie-programming.md)\] \[[litex](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/sqrl_acorn.py)\]
 
 # Sqrl Acorn CLE-215+ / LiteFury
 
@@ -162,7 +162,7 @@ LiteX provides PCIe-based programming via `litepcie_util` when a LiteX bitstream
 | Acorn CLE-215+ | XC7A200T (-3) | 1 GB   | ×3                 | ×2                | —              | —             |
 | LiteFury       | XC7A100T (-2) | 512 MB | —                  | ×1                | ×2             | ×4            |
 
-No USB serial devices on any host — JTAG and UART are connected via adapted Pico-EZmate cables to the RPi GPIO header (see [acorn-wiring-guide.md](acorn-wiring-guide.md)). PCIe is via the M.2 HAT.
+No USB serial devices on any host — JTAG and UART are connected via adapted Pico-EZmate cables to the RPi GPIO header (see [acorn-pinmap.md](acorn-pinmap.md)). PCIe is via the M.2 HAT.
 
 ## LiteX Support
 

@@ -65,7 +65,7 @@ Each RPi also has a separate USB Ethernet adapter for the Arty's Ethernet port.
 | pi18 | e18  | 10.21.0.118 | 2c:cf:67:37:d5:08 | CM4 Rev 1.1 4GB      | (pending)| —        | Online  |
 | pi20 | e20  | 10.21.0.120 | 2c:cf:67:fd:1e:be | CM5 Lite Rev 1.0 8GB | (pending)| —        | Online  |
 
-All Compute Blades boot Trixie arm64 (Debian 13) via NFS with overlayroot. JTAG and UART via Pico-EZmate cables to RPi GPIO header, PCIe via M.2 slot. See [acorn-wiring-guide.md](acorn-wiring-guide.md).
+All Compute Blades boot Trixie arm64 (Debian 13) via NFS with overlayroot. JTAG and UART via Pico-EZmate cables to RPi GPIO header, PCIe via M.2 slot. See [acorn-pinmap.md](acorn-pinmap.md).
 
 ### Other Hosts
 
@@ -138,5 +138,5 @@ The PS1 site serves the fpgas.online web interface at `https://ps1.fpgas.online/
 - Getting started: [CarlFK/pici wiki](https://github.com/CarlFK/pici/wiki/Getting-Started)
 - Ansible playbooks: [CarlFK/pici](https://github.com/CarlFK/pici)
 - Acorn/LiteFury board spec: [acorn.md](acorn.md)
-- Acorn wiring guide: [acorn-wiring-guide.md](acorn-wiring-guide.md)
+- Acorn wiring guide: [acorn-pinmap.md](acorn-pinmap.md)
 - Arty A7 board spec: [arty-a7.md](arty-a7.md)

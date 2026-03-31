@@ -1,4 +1,4 @@
-\[[top](./README.md)\] \[[spec](./acorn.md)\] \[[pinmap](./acorn-pinmap.md)\] \[[wiring](./acorn-wiring-guide.md)\]
+\[[top](./README.md)\] \[[spec](./acorn.md)\] \[[pinmap](./acorn-pinmap.md)\] \[[wiring](./acorn-pinmap.md)\]
 
 # Acorn PCIe Programming & Multiboot
 
@@ -305,4 +305,4 @@ This is tracked as an openFPGALoader enhancement. The SRAM bootstrap procedure d
 - LiteX ICAP core: <https://github.com/enjoy-digital/litex/blob/master/litex/soc/cores/icap.py>
 - Acorn board spec: [acorn.md](acorn.md)
 - Acorn pinmap: [acorn-pinmap.md](acorn-pinmap.md)
-- GPIO JTAG wiring: [acorn-wiring-guide.md](acorn-wiring-guide.md)
+- GPIO JTAG wiring: [acorn-pinmap.md](acorn-pinmap.md)
