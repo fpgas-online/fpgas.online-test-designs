@@ -220,6 +220,120 @@ lspci | grep -i xilinx
 # Expected: device with Xilinx vendor ID 10ee
 ```
 
+## Compute Blade Wiring Variant
+
+The [Compute Blade](https://computeblade.com/) carrier board for CM4/CM5 does **not** expose the full RPi 40-pin GPIO header. Only a subset of GPIOs are available on physical connectors. This requires a different pin mapping from the standard RPi 5 wiring above.
+
+### Available Connectors
+
+| Connector | GPIOs | Physical Pins |
+|-----------|-------|---------------|
+| Expansion Module Port | GPIO2, GPIO3, GPIO4, GPIO14, GPIO15 | RPi header pins 1-10 |
+| UART Front (3-pin) | GPIO14, GPIO15 | TX, RX, GND |
+| UART Back (4-pin) | GPIO14, GPIO15 | TX, RX, GND, V5 |
+| Fan Unit (4-pin) | GPIO12, GPIO13 | PWM0/UART5-TX, PWM1/UART5-RX |
+
+GPIO14/15 are shared across the Expansion Port, UART Front, and UART Back — they are the same electrical lines. GPIO8-11 (SPI0) are **not** exposed on the Compute Blade.
+
+Source: [Compute Blade GPIO documentation](https://docs.computeblade.com/blade/guides/gpio)
+
+### Pin Mapping
+
+Since JTAG and UART are never active simultaneously (JTAG programs the FPGA first, then UART communicates with the running design), GPIO14 can be time-shared between TMS (during JTAG) and UART TX (during testing).
+
+Both P1 (JTAG) and P2 (UART/GPIO) connect to the **Expansion Module Port** (pins 1-10):
+
+```
+Compute Blade Expansion Module Port
+(RPi header pins 1-10, top view):
+
+                     Pin 1      Pin 2
+                    ( 3.3V )   (  5V  )
+                  ┌──────────────────────┐
+  P1:2 TDI     ← │  Pin 3      Pin 4    │ → (unused, 5V)
+                  │ (GPIO2)    (  5V  )  │
+                  │                      │
+  P1:3 TDO     ← │  Pin 5      Pin 6    │ → P1:5 GND
+                  │ (GPIO3)    ( GND  )  │
+                  │                      │
+  P1:1 TCK     ← │  Pin 7      Pin 8    │ → P1:4 TMS / P2:1 TX
+                  │ (GPIO4)    (GPIO14)  │
+                  │                      │
+  P2:5 GND     ← │  Pin 9      Pin 10   │ → P2:2 RX
+                  │ ( GND  )   (GPIO15)  │
+                  └──────────────────────┘
+```
+
+**P1 (JTAG) → Expansion Port:**
+
+| P1 Pin | Function   | → Expansion Port Pin | GPIO   |
+|--------|------------|----------------------|--------|
+| 1      | TCK        | Pin 7                | GPIO4  |
+| 2      | TDI        | Pin 3                | GPIO2  |
+| 3      | TDO        | Pin 5                | GPIO3  |
+| 4      | TMS        | Pin 8                | GPIO14 |
+| 5      | GND        | Pin 6                | GND    |
+| 6      | VCC (3.3V) | **unconnected**      | —      |
+
+**P2 (UART) → Expansion Port:**
+
+| P2 Pin | Function     | → Expansion Port Pin | GPIO   |
+|--------|--------------|----------------------|--------|
+| 1      | Serial TX    | Pin 8                | GPIO14 |
+| 2      | Serial RX    | Pin 10               | GPIO15 |
+| 3      | Spare GPIO 0 | (not connected)      | —      |
+| 4      | Spare GPIO 1 | (not connected)      | —      |
+| 5      | GND          | Pin 9                | GND    |
+| 6      | VCC (3.3V)   | **unconnected**      | —      |
+
+**CRITICAL: VCC (3.3V) on both P1 and P2 must NEVER be connected.** Clip or insulate the VCC wires.
+
+Note: P2 spare GPIOs (J5, H5) are not connected on the Compute Blade variant — only 5 GPIOs are available. P2:1 (TX) and P1:4 (TMS) share GPIO14 (pin 8) — see switching procedure below.
+
+### Shared Pin Switching (GPIO14)
+
+GPIO14 (Expansion Port pin 8) is shared between JTAG TMS and UART TX. Since JTAG programming and UART testing are sequential operations, no physical rewiring is needed — the pin direction is controlled by software:
+
+**Step 1: JTAG programming** — openFPGALoader configures GPIO14 as TMS output:
+
+```bash
+# Compute Blade JTAG pin order: TDI(GPIO2):TDO(GPIO3):TCK(GPIO4):TMS(GPIO14)
+openFPGALoader --cable linuxgpiod_bitbang --pins 2:3:4:14 <bitstream.bit>
+```
+
+openFPGALoader releases all GPIOs when it exits.
+
+**Step 2: UART testing** — the serial driver reclaims GPIO14 as UART TX:
+
+```bash
+# Stop serial-getty if running
+sudo systemctl stop serial-getty@ttyAMA0
+
+# GPIO14/15 revert to UART function for /dev/ttyAMA0
+stty -F /dev/ttyAMA0 115200 raw -echo
+```
+
+No manual GPIO reconfiguration is needed — openFPGALoader uses `linuxgpiod` which releases the GPIO lines on exit, and the kernel UART driver automatically reclaims GPIO14/15 when `/dev/ttyAMA0` is opened.
+
+### Physical Wiring
+
+Since both P1 and P2 share the same Expansion Module Port, the Pico-EZmate wires are soldered to a single connector (or individual Dupont wires) that plugs into Expansion Port pins 3-10:
+
+| Expansion Port Pin | Wire 1 (P1 JTAG) | Wire 2 (P2 UART) |
+|--------------------|-------------------|-------------------|
+| Pin 3 (GPIO2)      | P1:2 TDI          | —                 |
+| Pin 4 (5V)         | —                 | —                 |
+| Pin 5 (GPIO3)      | P1:3 TDO          | —                 |
+| Pin 6 (GND)        | P1:5 GND          | P2:5 GND          |
+| Pin 7 (GPIO4)      | P1:1 TCK          | —                 |
+| Pin 8 (GPIO14)     | P1:4 TMS          | P2:1 Serial TX    |
+| Pin 9 (GND)        | —                 | (extra GND)       |
+| Pin 10 (GPIO15)    | —                 | P2:2 Serial RX    |
+
+Pin 8 (GPIO14) has two wires: TMS from P1 and TX from P2. These are soldered/crimped to the same header pin. Since JTAG and UART never run simultaneously, this is safe.
+
+**Important**: Pin 4 is 5V power — do NOT connect anything to it. VCC wires from both P1 and P2 must be left unconnected.
+
 ## Troubleshooting
 
 | Problem | Likely Cause | Fix |
@@ -229,6 +343,8 @@ lspci | grep -i xilinx
 | No UART output | serial-getty holding port, wrong baud | Mask serial-getty, use 115200 |
 | GPIO pins don't respond | Cable wired incorrectly | Check Pico-EZmate pin order with multimeter |
 | PCIe device not appearing after programming | Need PCIe rescan | `echo 1 > /sys/bus/pci/rescan` |
+| JTAG fails on Compute Blade | Wrong pin order | Use `--pins 2:3:4:14` not `--pins 10:9:11:8` |
+| UART not working after JTAG on Compute Blade | GPIO14 still held by gpiod | Ensure openFPGALoader exited cleanly, then open `/dev/ttyAMA0` |
 
 ## Compatible Boards
 
@@ -249,3 +365,6 @@ All boards share the same PCB layout and pin assignments. The LiteX platform fil
 - NiteFury/LiteFury: [RHSResearchLLC/NiteFury-and-LiteFury](https://github.com/RHSResearchLLC/NiteFury-and-LiteFury)
 - OpenOCD flashing: [NiteFury/Acorn flashing guide](https://github.com/Gbps/nitefury-openocd-flashing-guide)
 - Molex Pico-EZmate cable: <https://www.digikey.fr/en/products/detail/molex/0369200601/10233018>
+- Compute Blade: <https://computeblade.com/>
+- Compute Blade GPIO docs: <https://docs.computeblade.com/blade/guides/gpio>
+- Compute Blade GitHub: <https://github.com/uptime-lab/compute-blade>
