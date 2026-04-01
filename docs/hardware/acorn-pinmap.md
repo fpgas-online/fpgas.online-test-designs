@@ -8,7 +8,7 @@ See [acorn.md](acorn.md) for board specs and deployment inventory.
 
 ## Wiring Diagram
 
-![Acorn to RPi wiring diagram](acorn-wiring-diagram.png)
+![Acorn to RPi wiring diagram](acorn-pinmap-rpi5-wiring.png)
 
 ([Edit diagram](https://docs.google.com/drawings/d/1HCOHrvFzj1fIf6DqDMzcqoQgjaD5ZvM39MtgvrAjqEU/edit))
 
@@ -224,7 +224,7 @@ lspci | grep -i xilinx
 
 The [Compute Blade](https://computeblade.com/) carrier board for CM4/CM5 does **not** expose the full RPi 40-pin GPIO header. Only a subset of GPIOs are available on physical connectors. This requires a different pin mapping from the standard RPi 5 wiring above.
 
-![Acorn to Compute Blade wiring diagram](acorn-computeblade-wiring-diagram.png)
+![Acorn to Compute Blade wiring diagram](acorn-pinmap-computeblade-wiring.png)
 
 ([Edit diagram](https://docs.google.com/drawings/d/1hKt7O_IR60R6uT8VOg2O9PEAp4a8fNmp7BFqi3YYjgQ/edit))
 
