@@ -161,7 +161,7 @@ If the golden bitstream at address 0x0 is corrupted, PCIe will not come up on bo
 1. **Load a PCIe-capable bitstream to SRAM via JTAG** (volatile — lost on power cycle):
    ```bash
    sudo rmmod spidev spi_bcm2835
-   openFPGALoader --cable linuxgpiod_bitbang --pins 10:9:11:8 golden.bit
+   openFPGALoader --cable libgpiod --pins 10:9:11:8 golden.bit
    ```
 
 2. **PCIe comes up from the SRAM-loaded bitstream**. Load the litepcie kernel module:
@@ -201,7 +201,7 @@ Since flash-via-JTAG is not working, initial multiboot setup uses the SRAM boots
 2. **Load golden to SRAM via JTAG** (volatile):
    ```bash
    sudo rmmod spidev spi_bcm2835
-   openFPGALoader --cable linuxgpiod_bitbang --pins 10:9:11:8 golden.bit
+   openFPGALoader --cable libgpiod --pins 10:9:11:8 golden.bit
    ```
 
 3. **PCIe comes up**. Load the kernel module and write golden to flash:
@@ -279,7 +279,7 @@ write_cfgmem -force -format bin -interface spix4 -size 16 \
 
 3. **Always test new bitstreams via JTAG SRAM load first** before writing to flash. This validates the design without touching flash:
    ```bash
-   openFPGALoader --cable linuxgpiod_bitbang --pins 10:9:11:8 new_design.bit
+   openFPGALoader --cable libgpiod --pins 10:9:11:8 new_design.bit
    # Test it works, then write to flash via PCIe
    ```
 

@@ -174,7 +174,7 @@ sudo rmmod spidev spi_bcm2835
 
 # Program using GPIO bitbang JTAG
 # Pin order: TDI(GPIO10):TDO(GPIO9):TCK(GPIO11):TMS(GPIO8)
-openFPGALoader --cable linuxgpiod_bitbang --pins 10:9:11:8 <bitstream.bit>
+openFPGALoader --cable libgpiod --pins 10:9:11:8 <bitstream.bit>
 
 # On RPi 5 with RP1 PIO support (faster, when available):
 openFPGALoader -c rp1pio --pins 10:9:11:8 <bitstream.bit>
@@ -187,7 +187,7 @@ sudo systemctl stop serial-getty@ttyAMA0
 sudo systemctl mask serial-getty@ttyAMA0
 
 # Program loopback bitstream
-openFPGALoader --cable linuxgpiod_bitbang --pins 10:9:11:8 gpio-loopback-acorn.bit
+openFPGALoader --cable libgpiod --pins 10:9:11:8 gpio-loopback-acorn.bit
 
 # Test UART (loopback inverts)
 stty -F /dev/ttyAMA0 115200 raw -echo
@@ -202,7 +202,7 @@ gpioget gpiochip0 4
 ### Step 4: Test PMOD Pin ID
 
 ```bash
-openFPGALoader --cable linuxgpiod_bitbang --pins 10:9:11:8 pmod-pin-id-acorn.bit
+openFPGALoader --cable libgpiod --pins 10:9:11:8 pmod-pin-id-acorn.bit
 
 # Each pin transmits its FPGA ball name at 1200 baud:
 # GPIO14 → "K2" (serial TX)
@@ -214,7 +214,7 @@ openFPGALoader --cable linuxgpiod_bitbang --pins 10:9:11:8 pmod-pin-id-acorn.bit
 ### Step 5: Test PCIe Bitstream
 
 ```bash
-openFPGALoader --cable linuxgpiod_bitbang --pins 10:9:11:8 pcie-acorn.bit
+openFPGALoader --cable libgpiod --pins 10:9:11:8 pcie-acorn.bit
 echo 1 > /sys/bus/pci/rescan
 lspci | grep -i xilinx
 # Expected: device with Xilinx vendor ID 10ee
@@ -302,7 +302,7 @@ GPIO14 (Expansion Port pin 8) is shared between JTAG TMS and UART TX. Since JTAG
 
 ```bash
 # Compute Blade JTAG pin order: TDI(GPIO2):TDO(GPIO3):TCK(GPIO4):TMS(GPIO14)
-openFPGALoader --cable linuxgpiod_bitbang --pins 2:3:4:14 <bitstream.bit>
+openFPGALoader --cable libgpiod --pins 2:3:4:14 <bitstream.bit>
 ```
 
 openFPGALoader releases all GPIOs when it exits.

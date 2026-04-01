@@ -66,14 +66,14 @@ openFPGALoader is the primary tool for programming the NeTV2. It supports multip
 
 #### RPi 3B+ (GPIO bitbang — current deployed hosts)
 
-On RPi 3B+ hosts (pi10, pi12, pi14, pi16, pi18), openFPGALoader uses `linuxgpiod_bitbang` to drive the JTAG signals through the Linux GPIO subsystem:
+On RPi 3B+ hosts (pi10, pi12, pi14, pi16, pi18), openFPGALoader uses `libgpiod` to drive the JTAG signals through the Linux GPIO subsystem:
 
 ```bash
 # Volatile load
-openFPGALoader --cable linuxgpiod_bitbang --pins 27:22:4:17 design.bit
+openFPGALoader --cable libgpiod --pins 27:22:4:17 design.bit
 
 # Persistent SPI flash
-openFPGALoader --cable linuxgpiod_bitbang --pins 27:22:4:17 --write-flash design.bit
+openFPGALoader --cable libgpiod --pins 27:22:4:17 --write-flash design.bit
 ```
 
 Pin order: `TDI:TDO:TCK:TMS`.
@@ -82,11 +82,11 @@ This works but is slow (~5 MHz effective JTAG clock) due to GPIO bitbang overhea
 
 #### RPi 5 (GPIO bitbang — works today, slow)
 
-On RPi 5 hosts, the same `linuxgpiod_bitbang` cable works but is even slower because the RPi 5's RP1 I/O controller adds latency to sysfs GPIO access:
+On RPi 5 hosts, the same `libgpiod` cable works but is even slower because the RPi 5's RP1 I/O controller adds latency to sysfs GPIO access:
 
 ```bash
 # Same command as RPi 3B+, works but slow
-openFPGALoader --cable linuxgpiod_bitbang --pins 27:22:4:17 design.bit
+openFPGALoader --cable libgpiod --pins 27:22:4:17 design.bit
 ```
 
 #### RPi 5 (RP1 PIO JTAG — future, fast)
@@ -279,10 +279,10 @@ See the [JTAG via RPi GPIO](#jtag-via-rpi-gpio) section above for the full openF
 
 ```bash
 # Volatile load (RPi 3B+ or RPi 5, GPIO bitbang)
-openFPGALoader --cable linuxgpiod_bitbang --pins 27:22:4:17 design.bit
+openFPGALoader --cable libgpiod --pins 27:22:4:17 design.bit
 
 # Persistent SPI flash (RPi 3B+ or RPi 5, GPIO bitbang)
-openFPGALoader --cable linuxgpiod_bitbang --pins 27:22:4:17 --write-flash design.bit
+openFPGALoader --cable libgpiod --pins 27:22:4:17 --write-flash design.bit
 
 # Future: with NeTV2 board definition upstream
 openFPGALoader -b netv2 design.bit
@@ -295,7 +295,7 @@ openFPGALoader -b netv2 design.bit
 | Platform module | `litex_boards.platforms.kosagi_netv2`                  |
 | Target module   | `litex_boards.targets.kosagi_netv2`                    |
 | Default clock   | `clk50` (50 MHz, pin J19)                              |
-| Programmer      | openFPGALoader (`linuxgpiod_bitbang`, pins 27:22:4:17) |
+| Programmer      | openFPGALoader (`libgpiod`, pins 27:22:4:17) |
 | Toolchain       | Vivado (proprietary) or openXC7 (open source)          |
 
 Source: [kosagi_netv2.py](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/kosagi_netv2.py)
