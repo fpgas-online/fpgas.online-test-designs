@@ -338,6 +338,14 @@ Pin 8 (GPIO14) has two wires: TMS from P1 and TX from P2. These are soldered/cri
 
 **Important**: Pin 4 is 5V power — do NOT connect anything to it. VCC wires from both P1 and P2 must be left unconnected.
 
+### Known Issue: Kernel Console on GPIO14
+
+**WARNING**: If the Compute Blade's kernel cmdline includes `console=ttyAMA0`, loading any FPGA design that drives serial TX (K2→GPIO14) will feed data into the kernel console input and **crash the system**. This affects all designs with serial output (UART SoC, Pin-ID, GPIO loopback).
+
+**Fix**: Remove `console=ttyAMA0,115200` from the kernel cmdline in `/boot/firmware/cmdline.txt` on the NFS root for Compute Blades with FPGAs connected. Use `console=tty1` instead.
+
+See [fpgas-online/todo#22](https://github.com/fpgas-online/todo/issues/22) for tracking.
+
 ## Troubleshooting
 
 | Problem | Likely Cause | Fix |
