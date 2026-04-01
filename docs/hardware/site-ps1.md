@@ -58,14 +58,14 @@ Each RPi also has a separate USB Ethernet adapter for the Arty's Ethernet port.
 
 ### LiteFury / Compute Blade Hosts
 
-| Host | Port | IP          | RPi MAC           | RPi Model            | Board    | PCIe Bus | Status  |
-|------|------|-------------|-------------------|----------------------|----------|----------|---------|
-| pi14 | e14  | 10.21.0.114 | 2c:cf:67:37:d4:bd | CM4 Rev 1.1 4GB      | LiteFury | 0000:01  | Online  |
-| pi16 | e16  | 10.21.0.116 | 2c:cf:67:fb:91:e5 | CM5 Lite Rev 1.0 8GB | LiteFury | 0001:01  | Online  |
-| pi18 | e18  | 10.21.0.118 | 2c:cf:67:37:d5:08 | CM4 Rev 1.1 4GB      | (pending)| —        | Online  |
-| pi20 | e20  | 10.21.0.120 | 2c:cf:67:fd:1e:be | CM5 Lite Rev 1.0 8GB | (pending)| —        | Online  |
+| Host | Port | IP          | RPi MAC           | RPi Model            | Board    | FPGA DNA           | PCIe Bus | Status  |
+|------|------|-------------|-------------------|----------------------|----------|--------------------|----------|---------|
+| pi14 | e14  | 10.21.0.114 | 2c:cf:67:37:d4:bd | CM4 Rev 1.1 4GB      | LiteFury | 0x0028e5c45e304854 | 0000:01  | Online  |
+| pi16 | e16  | 10.21.0.116 | 2c:cf:67:fb:91:e5 | CM5 Lite Rev 1.0 8GB | LiteFury | —                  | 0001:01  | Online  |
+| pi18 | e18  | 10.21.0.118 | 2c:cf:67:37:d5:08 | CM4 Rev 1.1 4GB      | (pending)| —                  | —        | Online  |
+| pi20 | e20  | 10.21.0.120 | 2c:cf:67:fd:1e:be | CM5 Lite Rev 1.0 8GB | (pending)| —                  | —        | Online  |
 
-All Compute Blades boot Trixie arm64 (Debian 13) via NFS with overlayroot. JTAG and UART via Pico-EZmate cables to RPi GPIO header, PCIe via M.2 slot. See [acorn-pinmap.md](acorn-pinmap.md).
+All Compute Blades boot Trixie arm64 (Debian 13) via NFS with overlayroot. JTAG via Expansion Module Port using [Compute Blade wiring](acorn-pinmap.md#compute-blade-wiring-variant): `openFPGALoader --cable libgpiod --pins 2:3:4:14`. UART via GPIO14/15 (`/dev/ttyAMA0`). PCIe via M.2 slot.
 
 ### Other Hosts
 
