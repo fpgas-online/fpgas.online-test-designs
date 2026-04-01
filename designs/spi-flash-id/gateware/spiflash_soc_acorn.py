@@ -21,7 +21,6 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
-from common import add_spi_flash
 from litex.gen import *
 from litex.soc.cores.clock import S7PLL
 from litex.soc.integration.builder import Builder
@@ -79,7 +78,16 @@ class BaseSoC(SoCCore):
         SoCCore.__init__(self, platform, sys_clk_freq, **kwargs)
 
         # SPI Flash (bitbang via STARTUPE2) ----------------------------------------------------
-        add_spi_flash(self, platform)
+        # The sqrl_acorn platform defines "flash" + "flash_cs_n" rather than
+        # the standard "spiflash" resource. Build a combined pads record from
+        # the platform's existing resources.
+        from designs._shared.s7_spi_flash import S7BitbangSPIFlash
+
+        flash_pads = platform.request("flash")
+        flash_cs_n = platform.request("flash_cs_n")
+        flash_pads.cs_n = flash_cs_n
+        self.submodules.spiflash = S7BitbangSPIFlash(pads=flash_pads)
+        self.add_csr("spiflash")
 
 
 # Build --------------------------------------------------------------------------------------------
