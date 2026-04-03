@@ -314,7 +314,6 @@ jobs:
           uv run python designs/uart/gateware/uart_soc_acorn.py \
             --variant cle-101 \
             --toolchain openxc7 \
-            --no-pll \
             --build
 
       - name: Upload bitstream and build artifacts
