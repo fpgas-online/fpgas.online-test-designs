@@ -52,12 +52,24 @@ class _CRG(LiteXModule):
             pll.create_clkout(self.cd_sys, sys_clk_freq)
             platform.add_false_path_constraints(self.cd_sys.clk, pll.clkin)
         else:
-            # Direct 200 MHz clock (bypass PLL for debugging).
-            clk200_buf = Signal()
-            self.specials += Instance("IBUFDS",
-                i_I=clk200.p, i_IB=clk200.n,
-                o_O=clk200_buf)
-            self.comb += self.cd_sys.clk.eq(clk200_buf)
+            # Bypass PLL: IBUFDS → BUFG → toggle FF (÷2) → BUFG → sys_clk.
+            # This gives a clean 100 MHz clock without relying on MMCM/PLL.
+            clk200_ibuf = Signal()
+            clk200_bufg = Signal()
+            clk100 = Signal()
+            clk100_bufg = Signal()
+            self.specials += [
+                Instance("IBUFDS",
+                    i_I=clk200.p, i_IB=clk200.n,
+                    o_O=clk200_ibuf),
+                Instance("BUFG", i_I=clk200_ibuf, o_O=clk200_bufg),
+            ]
+            # Toggle flip-flop: divide 200 MHz by 2 → 100 MHz
+            self.sync.rawclk = clk100.eq(~clk100)
+            self.clock_domains.cd_rawclk = ClockDomain("rawclk", reset_less=True)
+            self.comb += self.cd_rawclk.clk.eq(clk200_bufg)
+            self.specials += Instance("BUFG", i_I=clk100, o_O=clk100_bufg)
+            self.comb += self.cd_sys.clk.eq(clk100_bufg)
 
 
 # BaseSoC -----------------------------------------------------------------------------------------
@@ -95,9 +107,9 @@ def main():
     parser.add_target_argument("--no-pll", action="store_true", help="Bypass PLL, use 200 MHz oscillator directly.")
     args = parser.parse_args()
 
-    # When bypassing PLL, force sys_clk to 200 MHz (raw oscillator frequency).
+    # When bypassing PLL, force sys_clk to 100 MHz (200 MHz oscillator ÷ 2).
     if args.no_pll:
-        args.sys_clk_freq = 200e6
+        args.sys_clk_freq = 100e6
 
     soc_kwargs = default_soc_kwargs(parser, ident="fpgas-online UART Test SoC -- Acorn/LiteFury")
 
