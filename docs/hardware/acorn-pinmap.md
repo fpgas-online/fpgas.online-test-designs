@@ -281,7 +281,10 @@ Compute Blade Expansion Module Port
 
 **P2 (UART) → Expansion Port (with null modem crossover):**
 
-The FPGA TX (K2) must connect to the RPi RX (GPIO15), and FPGA RX (J2) to RPi TX (GPIO14). This is a standard null modem crossover — **P2 pins 1 and 2 are swapped** relative to the standard RPi 5 wiring.
+The FPGA TX (K2) must connect to the RPi RX (GPIO15), and FPGA RX (J2) to RPi TX (GPIO14). The RP1's hardwired pin mux makes GPIO14 always TXD0 and GPIO15 always RXD0 — these cannot be swapped via software. Two options:
+
+1. **Physical crossover** (simplest): Swap P2 pins 1 and 2 on the Pico-EZmate cable relative to the standard RPi 5 wiring.
+2. **RP1 PIO UART** (future): Use the RP1's PIO (`/dev/pio0`, `rp1_pio` module) to implement a software UART with TX on GPIO15 and RX on GPIO14. The PIO can implement any serial protocol on any GPIO pin. No ready-made PIO UART driver exists yet — this would need to be written (similar to the RP2040 pico-sdk PIO UART example).
 
 | P2 Pin | Function     | → Expansion Port Pin | GPIO   | RPi UART0 Function |
 |--------|--------------|----------------------|--------|--------------------|
