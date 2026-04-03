@@ -45,8 +45,12 @@ class _CRG(LiteXModule):
         clk200 = platform.request("clk200")
 
         if use_pll:
-            # PLL.
+            # PLL.  Force VCO away from the 1600 MHz maximum: with a 200 MHz
+            # input and default margin=0, LiteX picks MULT=8 → VCO=1600 MHz
+            # (the absolute spec limit) which fails to lock on -2 speed grade.
+            # Setting vco_margin=0.25 keeps VCO ≤ 1200 MHz (comfortable).
             self.pll = pll = S7PLL()
+            pll.vco_margin = 0.25
             self.comb += pll.reset.eq(self.rst)
             pll.register_clkin(clk200, 200e6)
             pll.create_clkout(self.cd_sys, sys_clk_freq)
