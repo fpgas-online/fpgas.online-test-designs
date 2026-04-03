@@ -338,11 +338,15 @@ Pin 8 (GPIO14) has two wires: TMS from P1 and TX from P2. These are soldered/cri
 
 **Important**: Pin 4 is 5V power — do NOT connect anything to it. VCC wires from both P1 and P2 must be left unconnected.
 
-### Known Issue: Kernel Console on GPIO14
+### Known Issue: Kernel Console SysRq on GPIO14
 
-**WARNING**: If the Compute Blade's kernel cmdline includes `console=ttyAMA0`, loading any FPGA design that drives serial TX (K2→GPIO14) will feed data into the kernel console input and **crash the system**. This affects all designs with serial output (UART SoC, Pin-ID, GPIO loopback).
+**WARNING**: If the Compute Blade's kernel cmdline includes `console=ttyAMA0`, loading any FPGA design that drives serial TX (K2→GPIO14) will **reboot/crash the system**. This affects all designs with serial output (UART SoC, Pin-ID, GPIO loopback).
 
-**Fix**: Remove `console=ttyAMA0,115200` from the kernel cmdline in `/boot/firmware/cmdline.txt` on the NFS root for Compute Blades with FPGAs connected. Use `console=tty1` instead.
+**Root cause**: The FPGA drives K2 at the design's baud rate (e.g. 1200 for pin-id, 115200 for UART SoC). The kernel console receives this as garbage bytes due to baud rate mismatch or because the FPGA output starts before the UART framing is established. These garbage bytes trigger **SysRq commands** — including `reboot(b)`, `crash(c)`, `poweroff(o)`, and `kill-all-tasks(i)` — which destroy the running system.
+
+**Fix** (apply both):
+1. Remove `console=ttyAMA0,115200` from the kernel cmdline in `/boot/firmware/cmdline.txt` on the NFS root for Compute Blades with FPGAs. Use `console=tty1` instead.
+2. Disable SysRq: add `kernel.sysrq=0` to the kernel cmdline or `/etc/sysctl.d/`.
 
 See [fpgas-online/todo#22](https://github.com/fpgas-online/todo/issues/22) for tracking.
 
