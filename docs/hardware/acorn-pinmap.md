@@ -279,62 +279,64 @@ Compute Blade Expansion Module Port
 | 5      | GND        | Pin 6                | GND    |
 | 6      | VCC (3.3V) | **unconnected**      | —      |
 
-**P2 (UART) → Expansion Port:**
+**P2 (UART) → Expansion Port (with null modem crossover):**
 
-| P2 Pin | Function     | → Expansion Port Pin | GPIO   |
-|--------|--------------|----------------------|--------|
-| 1      | Serial TX    | Pin 8                | GPIO14 |
-| 2      | Serial RX    | Pin 10               | GPIO15 |
-| 3      | Spare GPIO 0 | (not connected)      | —      |
-| 4      | Spare GPIO 1 | (not connected)      | —      |
-| 5      | GND          | Pin 9                | GND    |
-| 6      | VCC (3.3V)   | **unconnected**      | —      |
+The FPGA TX (K2) must connect to the RPi RX (GPIO15), and FPGA RX (J2) to RPi TX (GPIO14). This is a standard null modem crossover — **P2 pins 1 and 2 are swapped** relative to the standard RPi 5 wiring.
+
+| P2 Pin | Function     | → Expansion Port Pin | GPIO   | RPi UART0 Function |
+|--------|--------------|----------------------|--------|--------------------|
+| 1      | Serial TX    | Pin 10               | GPIO15 | RXD0 (RPi receives)|
+| 2      | Serial RX    | Pin 8                | GPIO14 | TXD0 (RPi sends)  |
+| 3      | Spare GPIO 0 | (not connected)      | —      | —                  |
+| 4      | Spare GPIO 1 | (not connected)      | —      | —                  |
+| 5      | GND          | Pin 9                | GND    | —                  |
+| 6      | VCC (3.3V)   | **unconnected**      | —      | —                  |
 
 **CRITICAL: VCC (3.3V) on both P1 and P2 must NEVER be connected.** Clip or insulate the VCC wires.
 
-Note: P2 spare GPIOs (J5, H5) are not connected on the Compute Blade variant — only 5 GPIOs are available. P2:1 (TX) and P1:4 (TMS) share GPIO14 (pin 8) — see switching procedure below.
+Note: P2 spare GPIOs (J5, H5) are not connected on the Compute Blade variant — only 5 GPIOs are available. P1:4 (TMS) and P2:2 (FPGA RX/J2) share GPIO14 (pin 8) — see switching procedure below.
 
-### Shared Pin Switching (GPIO14)
+### Shared Pin: GPIO14 (TMS + FPGA RX)
 
-GPIO14 (Expansion Port pin 8) is shared between JTAG TMS and UART TX. Since JTAG programming and UART testing are sequential operations, no physical rewiring is needed — the pin direction is controlled by software:
+GPIO14 (Expansion Port pin 8) is shared between JTAG TMS and FPGA RX (J2). With the null modem crossover, FPGA RX (J2) is an **input** on the FPGA side, so it does not drive GPIO14 and does not conflict with JTAG TMS. This is a significant improvement over the non-crossover wiring where FPGA TX (K2) was on GPIO14 and actively drove the pin, preventing JTAG re-programming.
 
-**Step 1: JTAG programming** — openFPGALoader configures GPIO14 as TMS output:
+**JTAG programming:**
 
 ```bash
 # Compute Blade JTAG pin order: TDI(GPIO2):TDO(GPIO3):TCK(GPIO4):TMS(GPIO14)
 openFPGALoader --cable libgpiod --pins 2:3:4:14 <bitstream.bit>
 ```
 
-openFPGALoader releases all GPIOs when it exits.
-
-**Step 2: UART testing** — the serial driver reclaims GPIO14 as UART TX:
+**UART testing** (after openFPGALoader exits and releases GPIOs):
 
 ```bash
-# Stop serial-getty if running
-sudo systemctl stop serial-getty@ttyAMA0
+# Restore GPIO14/15 to UART function
+pinctrl set 14 a4  # GPIO14 = TXD0
+pinctrl set 15 a4  # GPIO15 = RXD0
 
-# GPIO14/15 revert to UART function for /dev/ttyAMA0
 stty -F /dev/ttyAMA0 115200 raw -echo
 ```
 
-No manual GPIO reconfiguration is needed — openFPGALoader uses `linuxgpiod` which releases the GPIO lines on exit, and the kernel UART driver automatically reclaims GPIO14/15 when `/dev/ttyAMA0` is opened.
+After openFPGALoader exits, GPIO14 may be left as a plain GPIO output. Use `pinctrl set 14 a4` to restore TXD0 function before opening the serial port.
 
 ### Physical Wiring
 
 Since both P1 and P2 share the same Expansion Module Port, the Pico-EZmate wires are soldered to a single connector (or individual Dupont wires) that plugs into Expansion Port pins 3-10:
 
-| Expansion Port Pin | Wire 1 (P1 JTAG) | Wire 2 (P2 UART) |
-|--------------------|-------------------|-------------------|
-| Pin 3 (GPIO2)      | P1:2 TDI          | —                 |
-| Pin 4 (5V)         | —                 | —                 |
-| Pin 5 (GPIO3)      | P1:3 TDO          | —                 |
-| Pin 6 (GND)        | P1:5 GND          | P2:5 GND          |
-| Pin 7 (GPIO4)      | P1:1 TCK          | —                 |
-| Pin 8 (GPIO14)     | P1:4 TMS          | P2:1 Serial TX    |
-| Pin 9 (GND)        | —                 | (extra GND)       |
-| Pin 10 (GPIO15)    | —                 | P2:2 Serial RX    |
+| Expansion Port Pin | Wire 1 (P1 JTAG) | Wire 2 (P2 UART)              |
+|--------------------|-------------------|-------------------------------|
+| Pin 3 (GPIO2)      | P1:2 TDI          | —                             |
+| Pin 4 (5V)         | —                 | —                             |
+| Pin 5 (GPIO3)      | P1:3 TDO          | —                             |
+| Pin 6 (GND)        | P1:5 GND          | P2:5 GND                     |
+| Pin 7 (GPIO4)      | P1:1 TCK          | —                             |
+| Pin 8 (GPIO14)     | P1:4 TMS          | P2:2 Serial RX (FPGA J2→RPi TXD0) |
+| Pin 9 (GND)        | —                 | (extra GND)                   |
+| Pin 10 (GPIO15)    | —                 | P2:1 Serial TX (FPGA K2→RPi RXD0) |
 
-Pin 8 (GPIO14) has two wires: TMS from P1 and TX from P2. These are soldered/crimped to the same header pin. Since JTAG and UART never run simultaneously, this is safe.
+Pin 8 (GPIO14) has two wires: TMS from P1 and FPGA RX (J2) from P2. These are soldered/crimped to the same header pin. Since JTAG and UART never run simultaneously, this is safe.
+
+**Note the crossover**: P2:1 (FPGA TX/K2) goes to pin 10 (GPIO15/RXD0), and P2:2 (FPGA RX/J2) goes to pin 8 (GPIO14/TXD0). This is the opposite of the standard RPi 5 wiring where P2:1→pin 8 and P2:2→pin 10. The crossover is required because the RP1 does not support swapping TX/RX pin assignments.
 
 **Important**: Pin 4 is 5V power — do NOT connect anything to it. VCC wires from both P1 and P2 must be left unconnected.
 
