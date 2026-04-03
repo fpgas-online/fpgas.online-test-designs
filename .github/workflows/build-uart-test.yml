@@ -326,8 +326,15 @@ jobs:
             --toolchain openxc7 \
             --build
 
-      # Official target can't be built with openXC7 (hardcodes Vivado in Platform).
-      # Our CRG now matches the official one exactly (4 PLL outputs + IDELAYCTRL).
+      - name: Build BRAM init diagnostic bitstream
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
+        run: |
+          mkdir -p "$CHIPDB"
+          uv run python tmp/diag_bram.py \
+            --variant cle-101 \
+            --toolchain openxc7 \
+            --build
 
       - name: Upload bitstream and build artifacts
         uses: actions/upload-artifact@v4
@@ -339,4 +346,5 @@ jobs:
             designs/uart/build/acorn/gateware/*.init
             designs/uart/build/acorn/software/bios/bios.bin
             tmp/build/diag_pll/*.bit
+            tmp/build/diag_bram/*.bit
           if-no-files-found: error
