@@ -316,6 +316,16 @@ jobs:
             --toolchain openxc7 \
             --build
 
+      - name: Build PLL diagnostic bitstream
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
+        run: |
+          mkdir -p "$CHIPDB"
+          uv run python tmp/diag_pll.py \
+            --variant cle-101 \
+            --toolchain openxc7 \
+            --build
+
       - name: Upload bitstream and build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -325,4 +335,5 @@ jobs:
             designs/uart/build/acorn/gateware/*.fasm
             designs/uart/build/acorn/gateware/*.init
             designs/uart/build/acorn/software/bios/bios.bin
+            tmp/build/diag_pll/*.bit
           if-no-files-found: error
