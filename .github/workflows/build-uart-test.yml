@@ -314,6 +314,7 @@ jobs:
           uv run python designs/uart/gateware/uart_soc_acorn.py \
             --variant cle-101 \
             --toolchain openxc7 \
+            --sys-clk-freq 50000000 \
             --build
 
       - name: Build PLL diagnostic bitstream
