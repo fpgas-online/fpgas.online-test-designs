@@ -317,10 +317,13 @@ jobs:
             --no-pll \
             --build
 
-      - name: Upload bitstream
+      - name: Upload bitstream and build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: uart-test-acorn-cle-101
           path: |
             designs/uart/build/acorn/gateware/*.bit
+            designs/uart/build/acorn/gateware/*.fasm
+            designs/uart/build/acorn/gateware/*.init
+            designs/uart/build/acorn/software/bios/bios.bin
           if-no-files-found: error
