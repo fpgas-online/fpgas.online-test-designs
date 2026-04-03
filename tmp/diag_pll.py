@@ -18,6 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
+from litex.build.generic_platform import Pins, IOStandard, Misc
 from litex_boards.platforms.sqrl_acorn import Platform
 from litex.soc.cores.clock import S7PLL
 from migen import *
