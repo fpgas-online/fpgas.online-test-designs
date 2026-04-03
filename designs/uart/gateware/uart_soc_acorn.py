@@ -21,7 +21,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
 from litex.gen import *
-from litex.soc.cores.clock import S7IDELAYCTRL, S7PLL
+from litex.soc.cores.clock import S7PLL
 from litex.soc.integration.soc_core import SoCCore
 from litex_boards.platforms import sqrl_acorn
 from migen import *
@@ -35,29 +35,21 @@ from designs._shared.yosys_workarounds import patch_yosys_template
 
 
 class _CRG(LiteXModule):
-    """CRG for Acorn — matches the official litex_boards.targets.sqrl_acorn CRG exactly."""
+    """CRG for Acorn — based on official sqrl_acorn CRG, without IDELAYCTRL (no DDR)."""
 
     def __init__(self, platform, sys_clk_freq):
-        self.rst          = Signal()
-        self.cd_sys       = ClockDomain()
-        self.cd_sys4x     = ClockDomain()
-        self.cd_sys4x_dqs = ClockDomain()
-        self.cd_idelay    = ClockDomain()
+        self.rst    = Signal()
+        self.cd_sys = ClockDomain()
 
         # Clk/Rst.
         clk200 = platform.request("clk200")
 
-        # PLL — identical to official sqrl_acorn target.
+        # PLL.
         self.pll = pll = S7PLL()
         self.comb += pll.reset.eq(self.rst)
         pll.register_clkin(clk200, 200e6)
-        pll.create_clkout(self.cd_sys,       sys_clk_freq)
-        pll.create_clkout(self.cd_sys4x,     4*sys_clk_freq)
-        pll.create_clkout(self.cd_sys4x_dqs, 4*sys_clk_freq, phase=90)
-        pll.create_clkout(self.cd_idelay,    200e6)
+        pll.create_clkout(self.cd_sys, sys_clk_freq)
         platform.add_false_path_constraints(self.cd_sys.clk, pll.clkin)
-
-        self.idelayctrl = S7IDELAYCTRL(self.cd_idelay)
 
 
 # BaseSoC -----------------------------------------------------------------------------------------
