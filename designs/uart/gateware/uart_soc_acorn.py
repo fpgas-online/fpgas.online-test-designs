@@ -37,26 +37,34 @@ from designs._shared.yosys_workarounds import patch_yosys_template
 class _CRG(LiteXModule):
     """Minimal CRG for Acorn: generates sys clock from the 200 MHz differential oscillator."""
 
-    def __init__(self, platform, sys_clk_freq):
+    def __init__(self, platform, sys_clk_freq, use_pll=True):
         self.rst = Signal()
         self.cd_sys = ClockDomain("sys")
 
         # Clk.
         clk200 = platform.request("clk200")
 
-        # PLL.
-        self.pll = pll = S7PLL()
-        self.comb += pll.reset.eq(self.rst)
-        pll.register_clkin(clk200, 200e6)
-        pll.create_clkout(self.cd_sys, sys_clk_freq)
-        platform.add_false_path_constraints(self.cd_sys.clk, pll.clkin)
+        if use_pll:
+            # PLL.
+            self.pll = pll = S7PLL()
+            self.comb += pll.reset.eq(self.rst)
+            pll.register_clkin(clk200, 200e6)
+            pll.create_clkout(self.cd_sys, sys_clk_freq)
+            platform.add_false_path_constraints(self.cd_sys.clk, pll.clkin)
+        else:
+            # Direct 200 MHz clock (bypass PLL for debugging).
+            clk200_buf = Signal()
+            self.specials += Instance("IBUFDS",
+                i_I=clk200.p, i_IB=clk200.n,
+                o_O=clk200_buf)
+            self.comb += self.cd_sys.clk.eq(clk200_buf)
 
 
 # BaseSoC -----------------------------------------------------------------------------------------
 
 
 class BaseSoC(SoCCore):
-    def __init__(self, variant="cle-215+", toolchain="openxc7", sys_clk_freq=100e6, **kwargs):
+    def __init__(self, variant="cle-215+", toolchain="openxc7", sys_clk_freq=100e6, use_pll=True, **kwargs):
         platform = sqrl_acorn.Platform(variant=variant, toolchain=toolchain)
 
         # Fix dashed device name for openXC7 compatibility.
@@ -64,7 +72,7 @@ class BaseSoC(SoCCore):
             fix_openxc7_device_name(platform)
 
         # CRG ----------------------------------------------------------------------------------
-        self.crg = _CRG(platform, sys_clk_freq)
+        self.crg = _CRG(platform, sys_clk_freq, use_pll=use_pll)
 
         # SoCCore ------------------------------------------------------------------------------
         SoCCore.__init__(self, platform, sys_clk_freq, **kwargs)
@@ -84,7 +92,12 @@ def main():
         help="Board variant: cle-215+ (Acorn), cle-215 (NiteFury), cle-101 (LiteFury).",
     )
     parser.add_target_argument("--sys-clk-freq", default=100e6, type=float, help="System clock frequency.")
+    parser.add_target_argument("--no-pll", action="store_true", help="Bypass PLL, use 200 MHz oscillator directly.")
     args = parser.parse_args()
+
+    # When bypassing PLL, force sys_clk to 200 MHz (raw oscillator frequency).
+    if args.no_pll:
+        args.sys_clk_freq = 200e6
 
     soc_kwargs = default_soc_kwargs(parser, ident="fpgas-online UART Test SoC -- Acorn/LiteFury")
 
@@ -92,6 +105,7 @@ def main():
         variant=args.variant,
         toolchain=args.toolchain,
         sys_clk_freq=int(args.sys_clk_freq),
+        use_pll=not args.no_pll,
         **soc_kwargs,
     )
 
