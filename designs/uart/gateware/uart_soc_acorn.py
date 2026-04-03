@@ -65,9 +65,9 @@ class _CRG(LiteXModule):
                 Instance("BUFG", i_I=clk200_ibuf, o_O=clk200_bufg),
             ]
             # Toggle flip-flop: divide 200 MHz by 2 → 100 MHz
-            self.sync.rawclk = clk100.eq(~clk100)
             self.clock_domains.cd_rawclk = ClockDomain("rawclk", reset_less=True)
             self.comb += self.cd_rawclk.clk.eq(clk200_bufg)
+            self.sync.rawclk += clk100.eq(~clk100)
             self.specials += Instance("BUFG", i_I=clk100, o_O=clk100_bufg)
             self.comb += self.cd_sys.clk.eq(clk100_bufg)
 
