@@ -326,17 +326,8 @@ jobs:
             --toolchain openxc7 \
             --build
 
-      - name: Build official LiteX sqrl_acorn target (reference)
-        env:
-          CHIPDB: ${{ github.workspace }}/chipdb
-        run: |
-          mkdir -p "$CHIPDB"
-          uv run python -m litex_boards.targets.sqrl_acorn \
-            --variant cle-101 \
-            --toolchain openxc7 \
-            --integrated-main-ram-size 8192 \
-            --build \
-            --output-dir ${{ github.workspace }}/build_official
+      # Official target can't be built with openXC7 (hardcodes Vivado in Platform).
+      # Our CRG now matches the official one exactly (4 PLL outputs + IDELAYCTRL).
 
       - name: Upload bitstream and build artifacts
         uses: actions/upload-artifact@v4
@@ -348,5 +339,4 @@ jobs:
             designs/uart/build/acorn/gateware/*.init
             designs/uart/build/acorn/software/bios/bios.bin
             tmp/build/diag_pll/*.bit
-            build_official/gateware/*.bit
           if-no-files-found: error

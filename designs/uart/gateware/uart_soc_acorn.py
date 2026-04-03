@@ -21,7 +21,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
 from litex.gen import *
-from litex.soc.cores.clock import S7PLL
+from litex.soc.cores.clock import S7IDELAYCTRL, S7PLL
 from litex.soc.integration.soc_core import SoCCore
 from litex_boards.platforms import sqrl_acorn
 from migen import *
@@ -35,54 +35,36 @@ from designs._shared.yosys_workarounds import patch_yosys_template
 
 
 class _CRG(LiteXModule):
-    """Minimal CRG for Acorn: generates sys clock from the 200 MHz differential oscillator."""
+    """CRG for Acorn — matches the official litex_boards.targets.sqrl_acorn CRG exactly."""
 
-    def __init__(self, platform, sys_clk_freq, use_pll=True):
-        self.rst = Signal()
-        self.cd_sys = ClockDomain("sys")
+    def __init__(self, platform, sys_clk_freq):
+        self.rst          = Signal()
+        self.cd_sys       = ClockDomain()
+        self.cd_sys4x     = ClockDomain()
+        self.cd_sys4x_dqs = ClockDomain()
+        self.cd_idelay    = ClockDomain()
 
-        # Clk.
+        # Clk/Rst.
         clk200 = platform.request("clk200")
 
-        if use_pll:
-            # PLL.  Force VCO away from the 1600 MHz maximum: with a 200 MHz
-            # input and default margin=0, LiteX picks MULT=8 → VCO=1600 MHz
-            # (the absolute spec limit) which fails to lock on -2 speed grade.
-            # Setting vco_margin=0.25 keeps VCO ≤ 1200 MHz (comfortable).
-            self.pll = pll = S7PLL()
-            pll.vco_margin = 0.25
-            self.comb += pll.reset.eq(self.rst)
-            pll.register_clkin(clk200, 200e6)
-            pll.create_clkout(self.cd_sys, sys_clk_freq)
-            platform.add_false_path_constraints(self.cd_sys.clk, pll.clkin)
-        else:
-            # Bypass PLL: IBUFDS → BUFG → 2-bit counter (÷4) → BUFG → sys_clk.
-            # This gives a clean 50 MHz clock without relying on MMCM/PLL.
-            clk200_ibuf = Signal()
-            clk200_bufg = Signal()
-            clk_cnt = Signal(2)
-            clk50 = Signal()
-            clk50_bufg = Signal()
-            self.specials += [
-                Instance("IBUFDS",
-                    i_I=clk200.p, i_IB=clk200.n,
-                    o_O=clk200_ibuf),
-                Instance("BUFG", i_I=clk200_ibuf, o_O=clk200_bufg),
-            ]
-            # 2-bit counter: MSB toggles at 200/4 = 50 MHz
-            self.clock_domains.cd_rawclk = ClockDomain("rawclk", reset_less=True)
-            self.comb += self.cd_rawclk.clk.eq(clk200_bufg)
-            self.sync.rawclk += clk_cnt.eq(clk_cnt + 1)
-            self.comb += clk50.eq(clk_cnt[1])
-            self.specials += Instance("BUFG", i_I=clk50, o_O=clk50_bufg)
-            self.comb += self.cd_sys.clk.eq(clk50_bufg)
+        # PLL — identical to official sqrl_acorn target.
+        self.pll = pll = S7PLL()
+        self.comb += pll.reset.eq(self.rst)
+        pll.register_clkin(clk200, 200e6)
+        pll.create_clkout(self.cd_sys,       sys_clk_freq)
+        pll.create_clkout(self.cd_sys4x,     4*sys_clk_freq)
+        pll.create_clkout(self.cd_sys4x_dqs, 4*sys_clk_freq, phase=90)
+        pll.create_clkout(self.cd_idelay,    200e6)
+        platform.add_false_path_constraints(self.cd_sys.clk, pll.clkin)
+
+        self.idelayctrl = S7IDELAYCTRL(self.cd_idelay)
 
 
 # BaseSoC -----------------------------------------------------------------------------------------
 
 
 class BaseSoC(SoCCore):
-    def __init__(self, variant="cle-215+", toolchain="openxc7", sys_clk_freq=100e6, use_pll=True, **kwargs):
+    def __init__(self, variant="cle-215+", toolchain="openxc7", sys_clk_freq=100e6, **kwargs):
         platform = sqrl_acorn.Platform(variant=variant, toolchain=toolchain)
 
         # Fix dashed device name for openXC7 compatibility.
@@ -90,7 +72,7 @@ class BaseSoC(SoCCore):
             fix_openxc7_device_name(platform)
 
         # CRG ----------------------------------------------------------------------------------
-        self.crg = _CRG(platform, sys_clk_freq, use_pll=use_pll)
+        self.crg = _CRG(platform, sys_clk_freq)
 
         # SoCCore ------------------------------------------------------------------------------
         SoCCore.__init__(self, platform, sys_clk_freq, **kwargs)
@@ -109,13 +91,8 @@ def main():
         choices=["cle-215+", "cle-215", "cle-101"],
         help="Board variant: cle-215+ (Acorn), cle-215 (NiteFury), cle-101 (LiteFury).",
     )
-    parser.add_target_argument("--sys-clk-freq", default=50e6, type=float, help="System clock frequency.")
-    parser.add_target_argument("--no-pll", action="store_true", help="Bypass PLL, use 200 MHz oscillator directly.")
+    parser.add_target_argument("--sys-clk-freq", default=100e6, type=float, help="System clock frequency.")
     args = parser.parse_args()
-
-    # When bypassing PLL, force sys_clk to 50 MHz (200 MHz oscillator ÷ 4).
-    if args.no_pll:
-        args.sys_clk_freq = 50e6
 
     soc_kwargs = default_soc_kwargs(parser, ident="fpgas-online UART Test SoC -- Acorn/LiteFury")
 
@@ -123,7 +100,6 @@ def main():
         variant=args.variant,
         toolchain=args.toolchain,
         sys_clk_freq=int(args.sys_clk_freq),
-        use_pll=not args.no_pll,
         **soc_kwargs,
     )
 
