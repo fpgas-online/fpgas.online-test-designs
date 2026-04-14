@@ -11,6 +11,29 @@ from pathlib import Path
 from litex.soc.integration.builder import Builder
 
 
+def flow_suffix(toolchain, synth_mode=None):
+    """Return the ``build/<board>`` directory suffix for a toolchain flow.
+
+    Three flows are supported across the Xilinx designs:
+
+    - ``openxc7`` / ``yosys+nextpnr`` (fully open-source synth + P&R)
+      → ``""``. Bare board name preserves every existing
+      ``build/<board>/gateware/…`` path so existing Makefile
+      ``program-*`` rules and host tests keep working unchanged.
+    - ``vivado`` with ``synth_mode="vivado"`` (pure proprietary)
+      → ``"-vivado"``.
+    - ``vivado`` with ``synth_mode="yosys"`` (Yosys synth + Vivado P&R
+      hybrid; see the ``synth_mode`` branch in
+      ``litex/build/xilinx/vivado.py``) → ``"-yosys-vivado"``.
+
+    Keeping the three flows in distinct directories prevents them from
+    clobbering each other's output when run back-to-back.
+    """
+    if toolchain == "vivado":
+        return "-yosys-vivado" if synth_mode == "yosys" else "-vivado"
+    return ""
+
+
 def default_soc_kwargs(parser, ident):
     """Return common SoC keyword arguments with the given *ident* string.
 
@@ -66,7 +89,9 @@ def build_soc(soc, parser, board_name, gateware_file=None, args=None):
     """Configure the Builder and run the build if requested.
 
     *board_name* is the board-specific subdirectory name under ``build/``
-    (e.g. ``"arty"`` or ``"netv2"``).
+    (e.g. ``"arty"`` or ``"netv2"``). A flow-specific suffix is appended
+    automatically so the three supported toolchain flows write to
+    distinct directories — see :func:`flow_suffix` for the mapping.
 
     If *gateware_file* is provided, the output directory is resolved
     relative to that file's design directory.  Otherwise falls back to
@@ -79,10 +104,17 @@ def build_soc(soc, parser, board_name, gateware_file=None, args=None):
     if args is None:
         args = parser.parse_args()
 
+    toolchain_argdict = parser.toolchain_argdict
+    # ``toolchain_argdict`` is ``{"synth_mode": ...}`` for the Vivado
+    # toolchain and an empty dict for openxc7/yosys+nextpnr — both cases
+    # are handled by ``flow_suffix``.
+    board_name = board_name + flow_suffix(parser._toolchain,
+                                          toolchain_argdict.get("synth_mode"))
+
     builder_kwargs = parser.builder_argdict
     if gateware_file is not None:
         builder_kwargs["output_dir"] = default_build_dir(gateware_file, board_name)
 
     builder = Builder(soc, **builder_kwargs)
     if args.build:
-        builder.build(**parser.toolchain_argdict)
+        builder.build(**toolchain_argdict)
