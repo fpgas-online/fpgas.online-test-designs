@@ -39,14 +39,17 @@ gateware-fomu:
 
 # -- Program -------------------------------------------------------------------
 
+# pmod-loopback gateware files use platform.build() directly (not
+# LiteX's Builder), so bitstreams land flat in build_dir/top.bit
+# rather than build_dir/gateware/<board>.bit.
 program-arty:
-	openFPGALoader -b arty build/arty-$(VARIANT)-$(PROGRAM_FLOW)/gateware/digilent_arty.bit
+	openFPGALoader -b arty build/arty-$(VARIANT)-$(PROGRAM_FLOW)/top.bit
 
 program-netv2:
-	openFPGALoader -b netv2 build/netv2-$(VARIANT)-$(PROGRAM_FLOW)/gateware/kosagi_netv2.bit
+	openFPGALoader -b netv2 build/netv2-$(VARIANT)-$(PROGRAM_FLOW)/top.bit
 
 program-fomu:
-	openFPGALoader -b fomu_evt build/fomu/gateware/kosagi_fomu_evt.bin
+	openFPGALoader -b fomu_evt build/fomu/top.bin
 
 # -- Tests ---------------------------------------------------------------------
 
