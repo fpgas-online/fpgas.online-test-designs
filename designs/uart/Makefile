@@ -64,7 +64,7 @@ program-netv2:
 	openocd -f alphamax-rpi.cfg -c "pld load 0 build/netv2-a7-35-$(PROGRAM_FLOW)/gateware/kosagi_netv2.bit; exit"
 
 program-fomu:
-	openFPGALoader -b fomu_evt build/fomu/gateware/kosagi_fomu_evt.bit
+	openFPGALoader -b fomu_evt build/fomu-evt-yosys-nextpnr/gateware/kosagi_fomu_evt.bin
 
 # --------------------------------------------------------------------------- #
 # Utilities
