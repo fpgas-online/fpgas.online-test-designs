@@ -16,45 +16,41 @@ VIVADO_ENV      := . $(VIVADO_SETTINGS) &&
 # --------------------------------------------------------------------------- #
 
 .PHONY: uart-arty uart-netv2 uart-fomu uart-all \
-        gateware-arty-vivado gateware-netv2-vivado gateware-acorn-vivado \
+        gateware-arty-vivado-vivado gateware-netv2-vivado-vivado gateware-acorn-vivado-vivado \
         gateware-arty-yosys-vivado gateware-netv2-yosys-vivado gateware-acorn-yosys-vivado \
-        gateware-arty-openxc7 gateware-netv2-openxc7 gateware-acorn-openxc7 \
-        gateware-vivado-all gateware-yosys-vivado-all gateware-openxc7-all \
+        gateware-arty-yosys-nextpnr gateware-netv2-yosys-nextpnr gateware-acorn-yosys-nextpnr \
+        gateware-vivado-vivado-all gateware-yosys-vivado-all gateware-yosys-nextpnr-all \
         gateware-all-flows check-vivado
 
-# -- Flow C (existing): Yosys + nextpnr via openxc7 --------------------------
+# -- Flow C: Yosys → nextpnr (openxc7) ---------------------------------------
 
-uart-arty:
-	$(PYTHON) gateware/uart_soc_arty.py --toolchain openxc7 --build
-
-uart-netv2:
-	$(PYTHON) gateware/uart_soc_netv2.py --toolchain openxc7 --build
-
+uart-arty: gateware-arty-yosys-nextpnr
+uart-netv2: gateware-netv2-yosys-nextpnr
 uart-fomu:
 	$(PYTHON) gateware/uart_soc_fomu.py --build
 
 uart-all: uart-arty uart-netv2 uart-fomu
 
-# Explicit per-board openxc7 targets so the aggregators below can depend
-# on them uniformly (old names stay as backwards-compat targets above).
-gateware-arty-openxc7: uart-arty
-gateware-netv2-openxc7: uart-netv2
-gateware-acorn-openxc7:
+gateware-arty-yosys-nextpnr:
+	$(PYTHON) gateware/uart_soc_arty.py --toolchain openxc7 --build
+gateware-netv2-yosys-nextpnr:
+	$(PYTHON) gateware/uart_soc_netv2.py --toolchain openxc7 --build
+gateware-acorn-yosys-nextpnr:
 	$(PYTHON) gateware/uart_soc_acorn.py --toolchain openxc7 --build
 
-# -- Flow A: pure Vivado -----------------------------------------------------
+# -- Flow A: pure Vivado (synth + P&R) ---------------------------------------
 
-gateware-arty-vivado:
+gateware-arty-vivado-vivado:
 	$(VIVADO_ENV) $(PYTHON) gateware/uart_soc_arty.py \
 	    --toolchain vivado --synth-mode vivado --build
-gateware-netv2-vivado:
+gateware-netv2-vivado-vivado:
 	$(VIVADO_ENV) $(PYTHON) gateware/uart_soc_netv2.py \
 	    --toolchain vivado --synth-mode vivado --build
-gateware-acorn-vivado:
+gateware-acorn-vivado-vivado:
 	$(VIVADO_ENV) $(PYTHON) gateware/uart_soc_acorn.py \
 	    --toolchain vivado --synth-mode vivado --build
 
-# -- Flow B: Yosys → Vivado hybrid -------------------------------------------
+# -- Flow B: Yosys → Vivado (hybrid) -----------------------------------------
 
 gateware-arty-yosys-vivado:
 	$(VIVADO_ENV) $(PYTHON) gateware/uart_soc_arty.py \
@@ -68,10 +64,10 @@ gateware-acorn-yosys-vivado:
 
 # -- Aggregators per flow ----------------------------------------------------
 
-gateware-vivado-all: gateware-arty-vivado gateware-netv2-vivado gateware-acorn-vivado
-gateware-yosys-vivado-all: gateware-arty-yosys-vivado gateware-netv2-yosys-vivado gateware-acorn-yosys-vivado
-gateware-openxc7-all: gateware-arty-openxc7 gateware-netv2-openxc7 gateware-acorn-openxc7
-gateware-all-flows: gateware-vivado-all gateware-yosys-vivado-all gateware-openxc7-all
+gateware-vivado-vivado-all: gateware-arty-vivado-vivado gateware-netv2-vivado-vivado gateware-acorn-vivado-vivado
+gateware-yosys-vivado-all:  gateware-arty-yosys-vivado  gateware-netv2-yosys-vivado  gateware-acorn-yosys-vivado
+gateware-yosys-nextpnr-all: gateware-arty-yosys-nextpnr gateware-netv2-yosys-nextpnr gateware-acorn-yosys-nextpnr
+gateware-all-flows: gateware-vivado-vivado-all gateware-yosys-vivado-all gateware-yosys-nextpnr-all
 
 check-vivado:
 	@test -f $(VIVADO_SETTINGS) || (echo "Vivado not found at $(VIVADO_SETTINGS)"; exit 1)
@@ -95,14 +91,21 @@ test-uart-fomu:
 # --------------------------------------------------------------------------- #
 # Programming (run on RPi with FPGA attached)
 # --------------------------------------------------------------------------- #
+#
+# program-* targets default to the Yosys→nextpnr (openxc7) flow. To
+# program a different flow, override PROGRAM_FLOW, e.g.
+#
+#   make program-arty PROGRAM_FLOW=vivado-vivado
+
+PROGRAM_FLOW ?= yosys-nextpnr
 
 .PHONY: program-arty program-netv2 program-fomu
 
 program-arty:
-	openFPGALoader -b arty build/arty/gateware/digilent_arty.bit
+	openFPGALoader -b arty build/arty-$(PROGRAM_FLOW)/gateware/digilent_arty.bit
 
 program-netv2:
-	openocd -f alphamax-rpi.cfg -c "pld load 0 build/netv2/gateware/kosagi_netv2.bit; exit"
+	openocd -f alphamax-rpi.cfg -c "pld load 0 build/netv2-$(PROGRAM_FLOW)/gateware/kosagi_netv2.bit; exit"
 
 program-fomu:
 	openFPGALoader -b fomu_evt build/fomu/gateware/kosagi_fomu_evt.bit
