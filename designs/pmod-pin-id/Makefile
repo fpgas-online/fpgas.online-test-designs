@@ -30,10 +30,8 @@ gateware-arty:
 
 # -- Program -------------------------------------------------------------------
 
-# pmod-pin-id gateware files use platform.build() directly (not
-# LiteX's Builder), so bitstreams land flat in build_dir/top.bit.
 program-arty:
-	openFPGALoader -b arty build/arty-$(VARIANT)-$(PROGRAM_FLOW)/top.bit
+	openFPGALoader -b arty build/arty-$(VARIANT)-$(PROGRAM_FLOW)/gateware/digilent_arty.bit
 
 # -- Scan (host-side pin identification) ---------------------------------------
 

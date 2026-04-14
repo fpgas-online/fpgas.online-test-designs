@@ -48,8 +48,12 @@ def main():
 
     require_timing(platform, {})  # no clock: strict mode only
     if args.build:
-        build_dir = str(Path(__file__).resolve().parent.parent / "build" / "fomu")
-        platform.build(module, build_dir=build_dir)
+        # Write to build/fomu/gateware/kosagi_fomu_evt.bin to match
+        # LiteX Builder's layout used by the other designs.
+        build_dir = str(
+            Path(__file__).resolve().parent.parent / "build" / "fomu" / "gateware"
+        )
+        platform.build(module, build_dir=build_dir, build_name=platform.name)
 
 
 if __name__ == "__main__":

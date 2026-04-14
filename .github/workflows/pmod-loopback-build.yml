@@ -53,7 +53,7 @@ jobs:
         with:
           name: gpio-loopback-arty-a7-35t
           path: |
-            designs/pmod-loopback/build/arty-a7-35-yosys-nextpnr/*.bit
+            designs/pmod-loopback/build/arty-a7-35-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-netv2-a7-35:
@@ -94,7 +94,7 @@ jobs:
         with:
           name: gpio-loopback-netv2-a7-35t
           path: |
-            designs/pmod-loopback/build/netv2-a7-35-yosys-nextpnr/*.bit
+            designs/pmod-loopback/build/netv2-a7-35-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-netv2-a7-100:
@@ -135,7 +135,7 @@ jobs:
         with:
           name: gpio-loopback-netv2-a7-100t
           path: |
-            designs/pmod-loopback/build/netv2-a7-100-yosys-nextpnr/*.bit
+            designs/pmod-loopback/build/netv2-a7-100-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-fomu:
@@ -165,7 +165,7 @@ jobs:
         with:
           name: gpio-loopback-fomu-evt
           path: |
-            designs/pmod-loopback/build/fomu/*.bin
+            designs/pmod-loopback/build/fomu/gateware/*.bin
           if-no-files-found: error
 
   build-tt:
@@ -195,7 +195,7 @@ jobs:
         with:
           name: gpio-loopback-tt-fpga
           path: |
-            designs/pmod-loopback/build/tt/*.bin
+            designs/pmod-loopback/build/tt/gateware/*.bin
           if-no-files-found: error
 
   build-acorn-cle-215plus:
@@ -236,7 +236,7 @@ jobs:
         with:
           name: gpio-loopback-acorn-cle-215plus
           path: |
-            designs/pmod-loopback/build/acorn-cle-215p-yosys-nextpnr/*.bit
+            designs/pmod-loopback/build/acorn-cle-215p-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-acorn-cle-215:
@@ -277,7 +277,7 @@ jobs:
         with:
           name: gpio-loopback-acorn-cle-215
           path: |
-            designs/pmod-loopback/build/acorn-cle-215-yosys-nextpnr/*.bit
+            designs/pmod-loopback/build/acorn-cle-215-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-acorn-cle-101:
@@ -318,5 +318,5 @@ jobs:
         with:
           name: gpio-loopback-acorn-cle-101
           path: |
-            designs/pmod-loopback/build/acorn-cle-101-yosys-nextpnr/*.bit
+            designs/pmod-loopback/build/acorn-cle-101-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
