@@ -14,7 +14,15 @@
 
 include ../../mk/common.mk
 
-.PHONY: all arty netv2 fomu test-arty test-netv2 test-fomu program-arty program-netv2 program-fomu clean
+VIVADO_SETTINGS ?= /opt/Xilinx/2025.2/Vivado/settings64.sh
+VIVADO_ENV      := . $(VIVADO_SETTINGS) &&
+
+.PHONY: all arty netv2 fomu test-arty test-netv2 test-fomu program-arty program-netv2 program-fomu clean \
+        gateware-arty-vivado gateware-netv2-vivado gateware-acorn-vivado \
+        gateware-arty-yosys-vivado gateware-netv2-yosys-vivado gateware-acorn-yosys-vivado \
+        gateware-arty-openxc7 gateware-netv2-openxc7 gateware-acorn-openxc7 \
+        gateware-vivado-all gateware-yosys-vivado-all gateware-openxc7-all \
+        gateware-all-flows check-vivado
 
 all: arty netv2 fomu
 
@@ -26,6 +34,36 @@ netv2:
 
 fomu:
 	$(PYTHON) gateware/spiflash_soc_fomu.py --build
+
+# -- Three-flow targets ------------------------------------------------------
+
+gateware-arty-openxc7: arty
+gateware-netv2-openxc7: netv2
+gateware-acorn-openxc7:
+	$(PYTHON) gateware/spiflash_soc_acorn.py --toolchain openxc7 --build
+
+gateware-arty-vivado:
+	$(VIVADO_ENV) $(PYTHON) gateware/spiflash_soc_arty.py --toolchain vivado --synth-mode vivado --build
+gateware-netv2-vivado:
+	$(VIVADO_ENV) $(PYTHON) gateware/spiflash_soc_netv2.py --toolchain vivado --synth-mode vivado --build
+gateware-acorn-vivado:
+	$(VIVADO_ENV) $(PYTHON) gateware/spiflash_soc_acorn.py --toolchain vivado --synth-mode vivado --build
+
+gateware-arty-yosys-vivado:
+	$(VIVADO_ENV) $(PYTHON) gateware/spiflash_soc_arty.py --toolchain vivado --synth-mode yosys --build
+gateware-netv2-yosys-vivado:
+	$(VIVADO_ENV) $(PYTHON) gateware/spiflash_soc_netv2.py --toolchain vivado --synth-mode yosys --build
+gateware-acorn-yosys-vivado:
+	$(VIVADO_ENV) $(PYTHON) gateware/spiflash_soc_acorn.py --toolchain vivado --synth-mode yosys --build
+
+gateware-vivado-all: gateware-arty-vivado gateware-netv2-vivado gateware-acorn-vivado
+gateware-yosys-vivado-all: gateware-arty-yosys-vivado gateware-netv2-yosys-vivado gateware-acorn-yosys-vivado
+gateware-openxc7-all: gateware-arty-openxc7 gateware-netv2-openxc7 gateware-acorn-openxc7
+gateware-all-flows: gateware-vivado-all gateware-yosys-vivado-all gateware-openxc7-all
+
+check-vivado:
+	@test -f $(VIVADO_SETTINGS) || (echo "Vivado not found at $(VIVADO_SETTINGS)"; exit 1)
+	@$(VIVADO_ENV) vivado -version
 
 # --------------------------------------------------------------------------- #
 # Host-side tests (run on RPi with FPGA attached)
