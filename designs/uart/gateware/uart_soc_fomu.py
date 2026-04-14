@@ -18,7 +18,7 @@ Build command (from repo root):
     uv run python designs/uart/gateware/uart_soc_fomu.py --build
 
 The bitstream is written to:
-    designs/uart/build/fomu/gateware/kosagi_fomu_evt.bit
+    designs/uart/build/fomu-evt-yosys-nextpnr/gateware/kosagi_fomu_evt.bin
 """
 
 import argparse
@@ -35,7 +35,7 @@ from litex_boards.platforms import kosagi_fomu_evt
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-from designs._shared.build_helpers import default_build_dir
+from designs._shared.build_helpers import board_dir, default_build_dir, flow_suffix
 from designs._shared.fomu_crg import FomuCRG
 
 kB = 1024
@@ -93,7 +93,8 @@ def main():
         integrated_main_ram_size = 0,  # Provided by SPRAM above.
     )
 
-    output_dir = default_build_dir(__file__, "fomu")
+    output_dir = default_build_dir(
+        __file__, board_dir("fomu", "evt") + flow_suffix("icestorm"))
     # Skip BIOS compilation — LiteX BIOS (~24 KB) does not fit in iCE40 EBR (15 KB).
     # Instead, install minimal custom firmware (< 200 bytes) after SoC finalization.
     builder = Builder(soc, output_dir=output_dir, compile_software=False)
