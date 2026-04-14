@@ -4,13 +4,21 @@ Branch: `vivado-xilinx-flows` (worktree `.worktrees/vivado-xilinx-flows/`)
 Base: `main` @ `ea85682`
 Date: 2026-04-14
 
-**Note**: paths and target names in this report reflect the *final*
-post-rename state on the branch, where the three flows follow the
-uniform `<synthesis>-<pnr>` shape (`vivado-vivado`, `yosys-vivado`,
-`yosys-nextpnr`). The verification fan-outs were originally run
-against an earlier naming (`-vivado`, bare `<board>`, `-yosys-vivado`)
-and re-run post-rename for R7; the 18-bitstream pure-Vivado and 2/18
-hybrid counts are unchanged.
+**Note**: paths and target names in this report reflect the *original*
+post-Phase-6 state on the branch, before the V1–V4 "variant in the
+path" refactor. The directory names above (`arty-vivado-vivado`,
+`netv2-yosys-vivado`, `acorn-cle-215p-vivado-vivado`) now all include
+the variant as well:
+
+    arty-vivado-vivado        → arty-a7-35-vivado-vivado
+    netv2-yosys-vivado        → netv2-a7-35-yosys-vivado (or -a7-100-)
+    acorn-cle-215p-vivado-vivado (unchanged — was already variant-in-path)
+
+All 18 pure-Vivado bitstreams and 2 hybrid bitstreams still build
+successfully after the rename; the only difference is the output
+directory name. `make` targets follow the same pattern:
+`gateware-<board>-<variant>-<flow>`. See
+`docs/toolchains/vivado.md` for the current target and path layout.
 
 ## Verification gate status
 
