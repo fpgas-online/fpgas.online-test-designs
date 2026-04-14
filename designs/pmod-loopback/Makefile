@@ -46,7 +46,7 @@ program-netv2:
 	openFPGALoader -b netv2 build/netv2-$(VARIANT)-$(PROGRAM_FLOW)/gateware/kosagi_netv2.bit
 
 program-fomu:
-	openFPGALoader -b fomu_evt build/fomu/gateware/kosagi_fomu_evt.bin
+	openFPGALoader -b fomu_evt build/fomu-evt-yosys-nextpnr/gateware/kosagi_fomu_evt.bin
 
 # -- Tests ---------------------------------------------------------------------
 

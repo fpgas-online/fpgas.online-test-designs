@@ -58,7 +58,7 @@ program-netv2:
 	openocd -f alphamax-rpi.cfg -c "pld load 0 build/netv2-a7-35-$(PROGRAM_FLOW)/gateware/netv2_spiflash_test.bit; exit"
 
 program-fomu:
-	iceprog build/fomu/gateware/fomu_spiflash_test.bin
+	iceprog build/fomu-evt-yosys-nextpnr/gateware/kosagi_fomu_evt.bin
 
 # --------------------------------------------------------------------------- #
 # Clean
