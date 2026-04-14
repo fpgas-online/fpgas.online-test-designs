@@ -90,8 +90,12 @@ def main():
     module = PMODPinIdentifier(platform, pin_list)
 
     if args.build:
-        build_dir = str(Path(__file__).resolve().parent.parent / "build" / "tt")
-        platform.build(module, build_dir=build_dir)
+        # Write to build/tt/gateware/<platform>.bin to match LiteX
+        # Builder's layout used by the other designs.
+        build_dir = str(
+            Path(__file__).resolve().parent.parent / "build" / "tt" / "gateware"
+        )
+        platform.build(module, build_dir=build_dir, build_name=platform.name)
 
 
 if __name__ == "__main__":

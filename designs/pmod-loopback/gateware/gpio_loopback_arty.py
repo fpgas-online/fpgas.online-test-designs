@@ -63,12 +63,17 @@ def main():
         platform.toolchain._yosys_template = list(YOSYS_TEMPLATE_STRIP_SCOPEINFO)
 
     if args.build:
+        # Write to build/<board>-<variant>-<flow>/gateware/<platform>.bit
+        # so the path matches LiteX Builder's layout (what the other
+        # designs in this repo use). platform.name is "digilent_arty"
+        # here (the litex_boards module basename).
         build_dir = str(
             Path(__file__).resolve().parent.parent
             / "build"
             / f"{board_dir('arty', args.variant)}{flow_suffix(args.toolchain, args.synth_mode)}"
+            / "gateware"
         )
-        build_kwargs = {"build_dir": build_dir}
+        build_kwargs = {"build_dir": build_dir, "build_name": platform.name}
         if args.toolchain == "vivado":
             build_kwargs["synth_mode"] = args.synth_mode or "vivado"
         platform.build(module, **build_kwargs)
