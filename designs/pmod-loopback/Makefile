@@ -6,6 +6,7 @@ include ../../mk/common.mk
 
 VIVADO_SETTINGS ?= /opt/Xilinx/2025.2/Vivado/settings64.sh
 VIVADO_ENV      := . $(VIVADO_SETTINGS) &&
+PROGRAM_FLOW    ?= yosys-nextpnr
 
 # Per-board default variants for the three-flow targets. Override if
 # you want to exercise a non-default variant.
@@ -15,10 +16,10 @@ NETV2_VARIANT ?= a7-100
 .PHONY: gateware gateware-arty gateware-netv2 gateware-fomu \
         test test-arty test-netv2 test-fomu \
         program-arty program-netv2 program-fomu clean \
-        gateware-arty-vivado gateware-netv2-vivado gateware-acorn-vivado \
+        gateware-arty-vivado-vivado gateware-netv2-vivado-vivado gateware-acorn-vivado-vivado \
         gateware-arty-yosys-vivado gateware-netv2-yosys-vivado gateware-acorn-yosys-vivado \
-        gateware-arty-openxc7 gateware-netv2-openxc7 gateware-acorn-openxc7 \
-        gateware-vivado-all gateware-yosys-vivado-all gateware-openxc7-all \
+        gateware-arty-yosys-nextpnr gateware-netv2-yosys-nextpnr gateware-acorn-yosys-nextpnr \
+        gateware-vivado-vivado-all gateware-yosys-vivado-all gateware-yosys-nextpnr-all \
         gateware-all-flows check-vivado
 
 # -- Gateware builds ----------------------------------------------------------
@@ -43,20 +44,20 @@ gateware-fomu:
 
 # -- Three-flow targets ------------------------------------------------------
 
-gateware-arty-openxc7:
+gateware-arty-yosys-nextpnr:
 	$(PYTHON) gateware/gpio_loopback_arty.py --variant $(VARIANT) --toolchain openxc7 --build
-gateware-netv2-openxc7:
+gateware-netv2-yosys-nextpnr:
 	$(PYTHON) gateware/gpio_loopback_netv2.py --variant $(NETV2_VARIANT) --toolchain openxc7 --build
-gateware-acorn-openxc7:
+gateware-acorn-yosys-nextpnr:
 	$(PYTHON) gateware/gpio_loopback_acorn.py --variant $(ACORN_VARIANT) --toolchain openxc7 --build
 
-gateware-arty-vivado:
+gateware-arty-vivado-vivado:
 	$(VIVADO_ENV) $(PYTHON) gateware/gpio_loopback_arty.py \
 	    --variant $(VARIANT) --toolchain vivado --synth-mode vivado --build
-gateware-netv2-vivado:
+gateware-netv2-vivado-vivado:
 	$(VIVADO_ENV) $(PYTHON) gateware/gpio_loopback_netv2.py \
 	    --variant $(NETV2_VARIANT) --toolchain vivado --synth-mode vivado --build
-gateware-acorn-vivado:
+gateware-acorn-vivado-vivado:
 	$(VIVADO_ENV) $(PYTHON) gateware/gpio_loopback_acorn.py \
 	    --variant $(ACORN_VARIANT) --toolchain vivado --synth-mode vivado --build
 
@@ -70,10 +71,10 @@ gateware-acorn-yosys-vivado:
 	$(VIVADO_ENV) $(PYTHON) gateware/gpio_loopback_acorn.py \
 	    --variant $(ACORN_VARIANT) --toolchain vivado --synth-mode yosys --build
 
-gateware-vivado-all: gateware-arty-vivado gateware-netv2-vivado gateware-acorn-vivado
-gateware-yosys-vivado-all: gateware-arty-yosys-vivado gateware-netv2-yosys-vivado gateware-acorn-yosys-vivado
-gateware-openxc7-all: gateware-arty-openxc7 gateware-netv2-openxc7 gateware-acorn-openxc7
-gateware-all-flows: gateware-vivado-all gateware-yosys-vivado-all gateware-openxc7-all
+gateware-vivado-vivado-all: gateware-arty-vivado-vivado gateware-netv2-vivado-vivado gateware-acorn-vivado-vivado
+gateware-yosys-vivado-all:  gateware-arty-yosys-vivado  gateware-netv2-yosys-vivado  gateware-acorn-yosys-vivado
+gateware-yosys-nextpnr-all: gateware-arty-yosys-nextpnr gateware-netv2-yosys-nextpnr gateware-acorn-yosys-nextpnr
+gateware-all-flows: gateware-vivado-vivado-all gateware-yosys-vivado-all gateware-yosys-nextpnr-all
 
 check-vivado:
 	@test -f $(VIVADO_SETTINGS) || (echo "Vivado not found at $(VIVADO_SETTINGS)"; exit 1)
@@ -82,10 +83,10 @@ check-vivado:
 # -- Program -------------------------------------------------------------------
 
 program-arty:
-	openFPGALoader -b arty build/arty/gateware/digilent_arty.bit
+	openFPGALoader -b arty build/arty-$(PROGRAM_FLOW)/gateware/digilent_arty.bit
 
 program-netv2:
-	openFPGALoader -b netv2 build/netv2/gateware/kosagi_netv2.bit
+	openFPGALoader -b netv2 build/netv2-$(PROGRAM_FLOW)/gateware/kosagi_netv2.bit
 
 program-fomu:
 	openFPGALoader -b fomu_evt build/fomu/gateware/kosagi_fomu_evt.bin
