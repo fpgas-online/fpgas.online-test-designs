@@ -1,9 +1,19 @@
 #!/usr/bin/env python3
 """LiteX SoC with LitePCIe endpoint for Acorn/LiteFury PCIe enumeration testing.
 
-Builds a SoC with CPU + BIOS + UART + PCIe Gen2 x1 endpoint using openxc7
-and the open-source pcie_7x core (github.com/regymm/pcie_7x) instead of
-Vivado's proprietary pcie_7x IP.
+Builds a SoC with CPU + BIOS + UART + PCIe Gen2 x1 endpoint targeting
+the Acorn CLE-215+ / CLE-215 / LiteFury board family. Three toolchain
+flows are supported (see Phase 3 of the plan for the rationale):
+
+    Pure Vivado (proprietary):
+        --toolchain vivado --synth-mode vivado
+        Uses Vivado's proprietary pcie_7x IP from the Xilinx catalog.
+    Yosys→Vivado (hybrid — open-source synth, proprietary P&R):
+        --toolchain vivado --synth-mode yosys
+        Uses the open-source pcie_7x core (github.com/regymm/pcie_7x).
+    Yosys→nextpnr (fully open-source):
+        --toolchain openxc7
+        Uses the open-source pcie_7x core.
 
 The host (RPi5 via mPCIe HAT) provides a single PCIe Gen2 x1 lane.
 After programming the FPGA (SRAM only!) and triggering a bus rescan,
@@ -15,7 +25,7 @@ contains a factory bitstream that enables PCIe programming.  NEVER use
 
 Build command:
     uv run python designs/pcie-enumeration/gateware/pcie_soc_acorn.py \\
-        --toolchain openxc7 --build
+        --toolchain <openxc7|vivado> [--synth-mode <vivado|yosys>] --build
 
 Variants:
     cle-215+ : Acorn CLE-215+ (XC7A200T-3)
@@ -113,11 +123,11 @@ class PCIeEnumerationSoC(SoCCore):
             # and the Yosys→Vivado hybrid flow.
             for vfile in sorted(glob.glob(os.path.join(PCIE_7X_SRC, "*.v"))):
                 platform.add_source(vfile)
-        # else: pure Vivado — S7PCIEPHY.add_sources() has emitted Vivado
-        # TCL into pre_synthesis_commands that instantiates the
-        # proprietary pcie_7x core from the Xilinx IP catalog. Adding the
-        # open-source sources here would create duplicate module
-        # definitions at synth_design time.
+        # else: pure Vivado — S7PCIEPHY (instantiated below) will emit
+        # Vivado TCL into platform.toolchain.pre_synthesis_commands that
+        # instantiates the proprietary pcie_7x core from the Xilinx IP
+        # catalog. Adding the open-source sources here would create
+        # duplicate module definitions at synth_design time.
 
         # Assert CLKREQ# to keep PCIe reference clock active.
         self.comb += platform.request("pcie_clkreq_n").eq(0)
