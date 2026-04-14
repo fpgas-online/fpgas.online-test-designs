@@ -119,14 +119,12 @@ test-pcie-enumeration:
 # through for each Xilinx design and provide top-level aggregators
 # that build every Xilinx design in a given flow (or all flows).
 
-XILINX_DESIGNS := uart ethernet-test ddr-memory pmod-loopback spi-flash-id pcie-enumeration
-
 .PHONY: build-uart-vivado build-uart-yosys-vivado build-uart-openxc7 \
         build-ethernet-vivado build-ethernet-yosys-vivado build-ethernet-openxc7 \
         build-ddr-vivado build-ddr-yosys-vivado build-ddr-openxc7 \
         build-pmod-loopback-vivado build-pmod-loopback-yosys-vivado build-pmod-loopback-openxc7 \
         build-spi-flash-id-vivado build-spi-flash-id-yosys-vivado build-spi-flash-id-openxc7 \
-        build-pcie-vivado build-pcie-yosys-vivado build-pcie-openxc7 \
+        build-pcie-enumeration-vivado build-pcie-enumeration-yosys-vivado build-pcie-enumeration-openxc7 \
         build-all-xilinx-vivado build-all-xilinx-yosys-vivado \
         build-all-xilinx-openxc7 build-all-xilinx-all-flows \
         check-vivado
@@ -168,11 +166,11 @@ build-spi-flash-id-yosys-vivado:
 build-spi-flash-id-openxc7:
 	$(MAKE) -C designs/spi-flash-id gateware-openxc7-all
 
-build-pcie-vivado:
+build-pcie-enumeration-vivado:
 	$(MAKE) -C designs/pcie-enumeration gateware-vivado-all
-build-pcie-yosys-vivado:
+build-pcie-enumeration-yosys-vivado:
 	$(MAKE) -C designs/pcie-enumeration gateware-yosys-vivado-all
-build-pcie-openxc7:
+build-pcie-enumeration-openxc7:
 	$(MAKE) -C designs/pcie-enumeration gateware-openxc7-all
 
 # -- All-Xilinx aggregators --------------------------------------------------
@@ -183,7 +181,7 @@ build-all-xilinx-vivado: \
     build-ddr-vivado \
     build-pmod-loopback-vivado \
     build-spi-flash-id-vivado \
-    build-pcie-vivado
+    build-pcie-enumeration-vivado
 
 build-all-xilinx-yosys-vivado: \
     build-uart-yosys-vivado \
@@ -191,7 +189,7 @@ build-all-xilinx-yosys-vivado: \
     build-ddr-yosys-vivado \
     build-pmod-loopback-yosys-vivado \
     build-spi-flash-id-yosys-vivado \
-    build-pcie-yosys-vivado
+    build-pcie-enumeration-yosys-vivado
 
 build-all-xilinx-openxc7: \
     build-uart-openxc7 \
@@ -199,7 +197,7 @@ build-all-xilinx-openxc7: \
     build-ddr-openxc7 \
     build-pmod-loopback-openxc7 \
     build-spi-flash-id-openxc7 \
-    build-pcie-openxc7
+    build-pcie-enumeration-openxc7
 
 build-all-xilinx-all-flows: \
     build-all-xilinx-vivado \
