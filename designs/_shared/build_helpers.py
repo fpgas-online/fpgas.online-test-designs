@@ -38,29 +38,35 @@ def board_dir(base, variant):
 def flow_suffix(toolchain, synth_mode=None):
     """Return the ``build/<board>`` directory suffix for a toolchain flow.
 
-    Three flows are supported across the Xilinx designs. The suffix
-    follows the uniform ``-<synth>-<pnr>`` shape so the three flows
-    sit side by side without special cases:
+    Four flows are supported across the designs. The suffix follows
+    the uniform ``-<synth>-<pnr>`` shape so every flow sits side by
+    side with no special cases:
 
     - ``vivado`` + ``synth_mode="vivado"`` (pure proprietary) →
       ``"-vivado-vivado"``. Vivado does both synthesis and P&R.
     - ``vivado`` + ``synth_mode="yosys"`` (hybrid; see the
       ``synth_mode`` branch in ``litex/build/xilinx/vivado.py``) →
       ``"-yosys-vivado"``. Yosys does synthesis, Vivado does P&R.
-    - ``openxc7`` / ``yosys+nextpnr`` (fully open-source) →
+    - ``openxc7`` / ``yosys+nextpnr`` (fully open-source Xilinx) →
       ``"-yosys-nextpnr"``. Yosys does synthesis, nextpnr-xilinx
       does P&R.
+    - ``icestorm`` (fully open-source iCE40 — Fomu, TT FPGA) →
+      ``"-yosys-nextpnr"``. Same synth-pnr family as openxc7 but
+      uses nextpnr-ice40 + icestorm bitgen. The directory suffix is
+      identical because the tool family is identical; the platform
+      name in the bitstream path already identifies which FPGA
+      target it built for.
 
-    Keeping the three flows in distinct directories prevents them from
-    clobbering each other's output when run back-to-back.
+    Keeping every flow in its own directory prevents back-to-back
+    runs from clobbering each other's output.
     """
     if toolchain == "vivado":
         return "-yosys-vivado" if synth_mode == "yosys" else "-vivado-vivado"
-    if toolchain in ("openxc7", "yosys+nextpnr"):
+    if toolchain in ("openxc7", "yosys+nextpnr", "icestorm"):
         return "-yosys-nextpnr"
     raise ValueError(
         f"flow_suffix: unknown toolchain {toolchain!r}; expected one of "
-        "'vivado', 'openxc7', 'yosys+nextpnr'"
+        "'vivado', 'openxc7', 'yosys+nextpnr', 'icestorm'"
     )
 
 
