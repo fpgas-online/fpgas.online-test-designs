@@ -152,14 +152,20 @@ upstream Yosys EDIF writer.
 
 For now:
 
-- Flow B is verified to work for `pmod-loopback/gpio_loopback_*`
-  (Arty and Acorn) — pure combinational loopback.
-- Flow B is expected-fail for every other Xilinx design in the
-  repo matrix.
+- Flow B is verified to work for `pmod-loopback/gpio_loopback_{arty,netv2}`
+  (pure combinational loopback, no CPU).
+- `pmod-loopback/gpio_loopback_acorn` hybrid build fails for a
+  different reason — an IOStandard mismatch on the unused `clk200_p`
+  pin in the Acorn platform. Acorn-specific, unrelated to the VexRiscv
+  EDIF issue.
+- Flow B is expected-fail for every other Xilinx design in the repo
+  matrix (uart, ethernet, ddr, spi-flash, pcie) — every one of them
+  instantiates a VexRiscv soft-CPU and hits the EDIF interop bug.
 
 This limitation is the reason the `build-all-xilinx-yosys-vivado`
 target should be considered best-effort: it currently only produces
-bitstreams for the pmod-loopback design.
+bitstreams for pmod-loopback Arty and NeTV2 (2 of the 17 Xilinx
+design/variant targets in the matrix).
 
 ### Flow A (pure Vivado) requires `cpu_reset_n` fix for uart_soc_arty
 
