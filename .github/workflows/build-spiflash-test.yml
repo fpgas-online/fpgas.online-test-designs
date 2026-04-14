@@ -165,7 +165,7 @@ jobs:
         with:
           name: spiflash-test-fomu
           path: |
-            designs/spi-flash-id/build/fomu/gateware/*.bin
+            designs/spi-flash-id/build/fomu-evt-yosys-nextpnr/gateware/*.bin
           if-no-files-found: error
 
   build-tt:
@@ -195,7 +195,7 @@ jobs:
         with:
           name: spiflash-test-tt-fpga
           path: |
-            designs/spi-flash-id/build/tt/gateware/*.bin
+            designs/spi-flash-id/build/tt-fpga-yosys-nextpnr/gateware/*.bin
           if-no-files-found: error
 
   lint:
