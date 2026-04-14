@@ -34,7 +34,10 @@ def flow_suffix(toolchain, synth_mode=None):
         return "-yosys-vivado" if synth_mode == "yosys" else "-vivado-vivado"
     if toolchain in ("openxc7", "yosys+nextpnr"):
         return "-yosys-nextpnr"
-    return ""
+    raise ValueError(
+        f"flow_suffix: unknown toolchain {toolchain!r}; expected one of "
+        "'vivado', 'openxc7', 'yosys+nextpnr'"
+    )
 
 
 def default_soc_kwargs(parser, ident):
