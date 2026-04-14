@@ -80,27 +80,28 @@ does not understand.
 
 ## Three toolchain flows
 
-Every Xilinx-targeting design exposes three flows:
+Every Xilinx-targeting design exposes three flows, named uniformly
+`<synthesis>-<pnr>`:
 
-| Flow | `--toolchain`        | `--synth-mode` | Makefile suffix      | Synthesis        | P&R            | IP strategy (PCIe)    |
-|------|----------------------|----------------|----------------------|------------------|----------------|------------------------|
-| A    | `vivado`             | `vivado`       | `-vivado`            | Vivado           | Vivado         | Proprietary `pcie_7x` |
-| B    | `vivado`             | `yosys`        | `-yosys-vivado`      | Yosys            | Vivado         | Open-source `pcie_7x` |
-| C    | `openxc7` / `yosys+nextpnr` | —      | (none)               | Yosys            | nextpnr-xilinx | Open-source `pcie_7x` |
+| Flow name       | `--toolchain`               | `--synth-mode` | Synthesis | P&R            | IP strategy (PCIe)    |
+|-----------------|-----------------------------|----------------|-----------|----------------|------------------------|
+| `vivado-vivado` | `vivado`                    | `vivado` (default) | Vivado    | Vivado         | Proprietary `pcie_7x` |
+| `yosys-vivado`  | `vivado`                    | `yosys`        | Yosys     | Vivado         | Open-source `pcie_7x` |
+| `yosys-nextpnr` | `openxc7` / `yosys+nextpnr` | —              | Yosys     | nextpnr-xilinx | Open-source `pcie_7x` |
 
 ### Per-design targets
 
 Every design Makefile exposes, for each of its supported board variants:
 
-- `gateware-<board>-vivado`
+- `gateware-<board>-vivado-vivado`
 - `gateware-<board>-yosys-vivado`
-- `gateware-<board>-openxc7`
+- `gateware-<board>-yosys-nextpnr`
 
 Plus these aggregators:
 
-- `gateware-vivado-all`
+- `gateware-vivado-vivado-all`
 - `gateware-yosys-vivado-all`
-- `gateware-openxc7-all`
+- `gateware-yosys-nextpnr-all`
 - `gateware-all-flows`
 - `check-vivado`
 
@@ -109,24 +110,45 @@ Plus these aggregators:
 From the repo root:
 
 ```sh
-make build-<design>-{vivado,yosys-vivado,openxc7}   # per design
-make build-all-xilinx-{vivado,yosys-vivado,openxc7} # every Xilinx design
-make build-all-xilinx-all-flows                     # all three flows
-make check-vivado                                   # sanity check
+# Per-design, per-flow:
+make build-<design>-{vivado-vivado,yosys-vivado,yosys-nextpnr}
+
+# Every Xilinx design in one flow:
+make build-all-xilinx-{vivado-vivado,yosys-vivado,yosys-nextpnr}
+
+# All three flows across every Xilinx design:
+make build-all-xilinx-all-flows
+
+# Vivado install sanity check:
+make check-vivado
 ```
 
-Build output directories:
+Build output directories mirror the flow name:
 
-- `designs/<design>/build/<board>/`              — flow C (openxc7)
-- `designs/<design>/build/<board>-vivado/`       — flow A (pure Vivado)
-- `designs/<design>/build/<board>-yosys-vivado/` — flow B (hybrid)
+- `designs/<design>/build/<board>-vivado-vivado/` — pure Vivado
+- `designs/<design>/build/<board>-yosys-vivado/`  — Yosys → Vivado hybrid
+- `designs/<design>/build/<board>-yosys-nextpnr/` — Yosys → nextpnr (openxc7)
 
-Keeping flow C at the bare `<board>` path preserves every existing
-`program-*` rule and host test that hardcoded `build/<board>/gateware/*.bit`.
+### Programming a built bitstream
+
+The `program-*` Makefile rules default to programming the
+`yosys-nextpnr` flow's output. Override via the `PROGRAM_FLOW`
+variable to program a different flow:
+
+```sh
+# Program the openxc7 build (default):
+make -C designs/uart program-arty
+
+# Program the pure-Vivado build:
+make -C designs/uart program-arty PROGRAM_FLOW=vivado-vivado
+
+# Program the hybrid build:
+make -C designs/uart program-arty PROGRAM_FLOW=yosys-vivado
+```
 
 ## Known limitations
 
-### Flow B (Yosys → Vivado hybrid) is broken for SoCs with VexRiscv
+### `yosys-vivado` hybrid flow is broken for SoCs with VexRiscv
 
 The Yosys → Vivado hybrid flow builds successfully for designs without
 a CPU (e.g. `pmod-loopback`). For any design that instantiates a
@@ -152,29 +174,21 @@ upstream Yosys EDIF writer.
 
 For now:
 
-- Flow B is verified to work for `pmod-loopback/gpio_loopback_{arty,netv2}`
-  (pure combinational loopback, no CPU).
+- `yosys-vivado` is verified to work for
+  `pmod-loopback/gpio_loopback_{arty,netv2}` (pure combinational
+  loopback, no CPU).
 - `pmod-loopback/gpio_loopback_acorn` hybrid build fails for a
   different reason — an IOStandard mismatch on the unused `clk200_p`
   pin in the Acorn platform. Acorn-specific, unrelated to the VexRiscv
   EDIF issue.
-- Flow B is expected-fail for every other Xilinx design in the repo
-  matrix (uart, ethernet, ddr, spi-flash, pcie) — every one of them
-  instantiates a VexRiscv soft-CPU and hits the EDIF interop bug.
+- `yosys-vivado` is expected-fail for every other Xilinx design in the
+  repo matrix (uart, ethernet, ddr, spi-flash, pcie) — every one of
+  them instantiates a VexRiscv soft-CPU and hits the EDIF interop bug.
 
 This limitation is the reason the `build-all-xilinx-yosys-vivado`
 target should be considered best-effort: it currently only produces
-bitstreams for pmod-loopback Arty and NeTV2 (2 of the 17 Xilinx
+bitstreams for pmod-loopback Arty and NeTV2 (2 of the 18 Xilinx
 design/variant targets in the matrix).
-
-### Flow A (pure Vivado) requires `cpu_reset_n` fix for uart_soc_arty
-
-`designs/uart/gateware/uart_soc_arty.py` requests the
-`cpu_reset` resource, but current `litex-boards` `digilent_arty.Platform`
-exposes it as `cpu_reset_n`. This is a **pre-existing** bug unrelated
-to the three-flow refactor — it affects all flows (openxc7, vivado,
-hybrid) equally and was already broken on `main` before this plan.
-Fix is out of scope for this plan; file a separate issue.
 
 ### `make install-litex` is incomplete for CPU-based SoCs
 
