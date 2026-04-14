@@ -28,8 +28,7 @@ from litex_boards.platforms.digilent_arty import Platform
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-from designs._shared.build_helpers import default_build_dir
-from designs._shared.build_helpers import board_dir, flow_suffix
+from designs._shared.build_helpers import board_dir, default_build_dir, flow_suffix
 from designs._shared.yosys_workarounds import patch_yosys_template
 
 kB = 1024
