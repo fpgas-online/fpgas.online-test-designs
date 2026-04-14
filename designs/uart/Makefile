@@ -7,71 +7,29 @@
 #       and Python dependencies.
 
 include ../../mk/common.mk
+include ../../mk/three-flows.mk
 
-VIVADO_SETTINGS ?= /opt/Xilinx/2025.2/Vivado/settings64.sh
-VIVADO_ENV      := . $(VIVADO_SETTINGS) &&
+ARTY_VARIANTS  := a7-35 a7-100
+NETV2_VARIANTS := a7-35 a7-100
+ACORN_VARIANTS := cle-101 cle-215 cle-215+
 
 # --------------------------------------------------------------------------- #
 # UART Test
 # --------------------------------------------------------------------------- #
 
-.PHONY: uart-arty uart-netv2 uart-fomu uart-all \
-        gateware-arty-vivado-vivado gateware-netv2-vivado-vivado gateware-acorn-vivado-vivado \
-        gateware-arty-yosys-vivado gateware-netv2-yosys-vivado gateware-acorn-yosys-vivado \
-        gateware-arty-yosys-nextpnr gateware-netv2-yosys-nextpnr gateware-acorn-yosys-nextpnr \
-        gateware-vivado-vivado-all gateware-yosys-vivado-all gateware-yosys-nextpnr-all \
-        gateware-all-flows check-vivado
+$(eval $(call flow_rules,arty,uart_soc_arty.py,$(ARTY_VARIANTS)))
+$(eval $(call flow_rules,netv2,uart_soc_netv2.py,$(NETV2_VARIANTS)))
+$(eval $(call flow_rules,acorn,uart_soc_acorn.py,$(ACORN_VARIANTS)))
 
-# -- Flow C: Yosys → nextpnr (openxc7) ---------------------------------------
+.PHONY: uart-arty uart-netv2 uart-fomu uart-all
 
-uart-arty: gateware-arty-yosys-nextpnr
-uart-netv2: gateware-netv2-yosys-nextpnr
+# Legacy aliases — pick the default variant for each board.
+uart-arty: gateware-arty-a7-35-yosys-nextpnr
+uart-netv2: gateware-netv2-a7-35-yosys-nextpnr
 uart-fomu:
 	$(PYTHON) gateware/uart_soc_fomu.py --build
 
 uart-all: uart-arty uart-netv2 uart-fomu
-
-gateware-arty-yosys-nextpnr:
-	$(PYTHON) gateware/uart_soc_arty.py --toolchain openxc7 --build
-gateware-netv2-yosys-nextpnr:
-	$(PYTHON) gateware/uart_soc_netv2.py --toolchain openxc7 --build
-gateware-acorn-yosys-nextpnr:
-	$(PYTHON) gateware/uart_soc_acorn.py --toolchain openxc7 --build
-
-# -- Flow A: pure Vivado (synth + P&R) ---------------------------------------
-
-gateware-arty-vivado-vivado:
-	$(VIVADO_ENV) $(PYTHON) gateware/uart_soc_arty.py \
-	    --toolchain vivado --synth-mode vivado --build
-gateware-netv2-vivado-vivado:
-	$(VIVADO_ENV) $(PYTHON) gateware/uart_soc_netv2.py \
-	    --toolchain vivado --synth-mode vivado --build
-gateware-acorn-vivado-vivado:
-	$(VIVADO_ENV) $(PYTHON) gateware/uart_soc_acorn.py \
-	    --toolchain vivado --synth-mode vivado --build
-
-# -- Flow B: Yosys → Vivado (hybrid) -----------------------------------------
-
-gateware-arty-yosys-vivado:
-	$(VIVADO_ENV) $(PYTHON) gateware/uart_soc_arty.py \
-	    --toolchain vivado --synth-mode yosys --build
-gateware-netv2-yosys-vivado:
-	$(VIVADO_ENV) $(PYTHON) gateware/uart_soc_netv2.py \
-	    --toolchain vivado --synth-mode yosys --build
-gateware-acorn-yosys-vivado:
-	$(VIVADO_ENV) $(PYTHON) gateware/uart_soc_acorn.py \
-	    --toolchain vivado --synth-mode yosys --build
-
-# -- Aggregators per flow ----------------------------------------------------
-
-gateware-vivado-vivado-all: gateware-arty-vivado-vivado gateware-netv2-vivado-vivado gateware-acorn-vivado-vivado
-gateware-yosys-vivado-all:  gateware-arty-yosys-vivado  gateware-netv2-yosys-vivado  gateware-acorn-yosys-vivado
-gateware-yosys-nextpnr-all: gateware-arty-yosys-nextpnr gateware-netv2-yosys-nextpnr gateware-acorn-yosys-nextpnr
-gateware-all-flows: gateware-vivado-vivado-all gateware-yosys-vivado-all gateware-yosys-nextpnr-all
-
-check-vivado:
-	@test -f $(VIVADO_SETTINGS) || (echo "Vivado not found at $(VIVADO_SETTINGS)"; exit 1)
-	@$(VIVADO_ENV) vivado -version
 
 # --------------------------------------------------------------------------- #
 # Host-side tests (run on RPi with FPGA attached)
