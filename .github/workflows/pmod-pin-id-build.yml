@@ -52,7 +52,7 @@ jobs:
         with:
           name: pmod-pin-id-arty-a7-35t
           path: |
-            designs/pmod-pin-id/build/arty/*.bit
+            designs/pmod-pin-id/build/arty-yosys-nextpnr/*.bit
           if-no-files-found: error
 
   build-acorn-cle-215plus:
@@ -93,7 +93,7 @@ jobs:
         with:
           name: pmod-pin-id-acorn-cle-215plus
           path: |
-            designs/pmod-pin-id/build/acorn/*.bit
+            designs/pmod-pin-id/build/acorn-yosys-nextpnr/*.bit
           if-no-files-found: error
 
   build-acorn-cle-215:
@@ -134,7 +134,7 @@ jobs:
         with:
           name: pmod-pin-id-acorn-cle-215
           path: |
-            designs/pmod-pin-id/build/acorn/*.bit
+            designs/pmod-pin-id/build/acorn-yosys-nextpnr/*.bit
           if-no-files-found: error
 
   build-acorn-cle-101:
@@ -175,7 +175,7 @@ jobs:
         with:
           name: pmod-pin-id-acorn-cle-101
           path: |
-            designs/pmod-pin-id/build/acorn/*.bit
+            designs/pmod-pin-id/build/acorn-yosys-nextpnr/*.bit
           if-no-files-found: error
 
   build-fomu:
@@ -276,7 +276,7 @@ jobs:
         with:
           name: pmod-pin-id-netv2-a7-35t
           path: |
-            designs/pmod-pin-id/build/netv2/*.bit
+            designs/pmod-pin-id/build/netv2-yosys-nextpnr/*.bit
           if-no-files-found: error
 
   build-netv2-a7-100:
@@ -317,5 +317,5 @@ jobs:
         with:
           name: pmod-pin-id-netv2-a7-100t
           path: |
-            designs/pmod-pin-id/build/netv2/*.bit
+            designs/pmod-pin-id/build/netv2-yosys-nextpnr/*.bit
           if-no-files-found: error
