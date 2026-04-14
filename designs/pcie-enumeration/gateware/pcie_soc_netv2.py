@@ -54,7 +54,7 @@ from litex_boards.platforms import kosagi_netv2
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer for Python >= 3.11
-from designs._shared.build_helpers import default_build_dir, flow_suffix
+from designs._shared.build_helpers import board_dir, default_build_dir, flow_suffix
 from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
 from designs._shared.yosys_workarounds import patch_yosys_template
 
@@ -234,7 +234,7 @@ def main():
     # attr); safe to call unconditionally since Phase 3a.
     patch_yosys_template(soc)
 
-    board_name = "netv2" + flow_suffix(args.toolchain, args.synth_mode)
+    board_name = board_dir("netv2", args.variant) + flow_suffix(args.toolchain, args.synth_mode)
     builder = Builder(soc, output_dir=default_build_dir(__file__, board_name))
 
     if args.toolchain == "vivado":

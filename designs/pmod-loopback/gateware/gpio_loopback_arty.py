@@ -20,7 +20,7 @@ from litex_boards.platforms.digilent_arty import Platform
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-from designs._shared.build_helpers import flow_suffix
+from designs._shared.build_helpers import board_dir, flow_suffix
 from designs._shared.yosys_workarounds import YOSYS_TEMPLATE_STRIP_SCOPEINFO
 
 # Pin extension: use PMOD A as input, PMOD B as output.
@@ -63,8 +63,11 @@ def main():
         platform.toolchain._yosys_template = list(YOSYS_TEMPLATE_STRIP_SCOPEINFO)
 
     if args.build:
-        build_dir = str(Path(__file__).resolve().parent.parent
-                        / "build" / f"arty{flow_suffix(args.toolchain, args.synth_mode)}")
+        build_dir = str(
+            Path(__file__).resolve().parent.parent
+            / "build"
+            / f"{board_dir('arty', args.variant)}{flow_suffix(args.toolchain, args.synth_mode)}"
+        )
         build_kwargs = {"build_dir": build_dir}
         if args.toolchain == "vivado":
             build_kwargs["synth_mode"] = args.synth_mode or "vivado"

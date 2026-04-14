@@ -11,6 +11,30 @@ from pathlib import Path
 from litex.soc.integration.builder import Builder
 
 
+def variant_dir(variant):
+    """Normalise a board variant string for use in a build-directory name.
+
+    Most variant strings (``a7-35``, ``a7-100``, ``cle-101``, ``cle-215``)
+    are already directory-safe. The one special case is the Acorn
+    CLE-215**+** variant whose ``+`` character is awkward in paths and
+    shell-quoted Makefile targets; map it to ``p`` to match the pcie
+    convention (``cle-215p``). All other characters pass through
+    unchanged so the result matches the user-visible ``--variant`` arg.
+    """
+    return variant.replace("+", "p")
+
+
+def board_dir(base, variant):
+    """Return the ``build/<board-variant>`` base name for a design.
+
+    Combines the board family (``arty``/``netv2``/``acorn``/…) with a
+    normalised variant so every build lands in a uniquely-named
+    directory. Every Xilinx design in the repo uses this — there are
+    no special cases.
+    """
+    return f"{base}-{variant_dir(variant)}"
+
+
 def flow_suffix(toolchain, synth_mode=None):
     """Return the ``build/<board>`` directory suffix for a toolchain flow.
 

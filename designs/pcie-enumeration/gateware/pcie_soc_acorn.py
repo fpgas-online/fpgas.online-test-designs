@@ -52,7 +52,7 @@ from litex_boards.platforms import sqrl_acorn
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-from designs._shared.build_helpers import default_build_dir, flow_suffix
+from designs._shared.build_helpers import board_dir, default_build_dir, flow_suffix
 from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
 from designs._shared.yosys_workarounds import patch_yosys_template
 
@@ -227,11 +227,8 @@ def main():
     # attr); safe to call unconditionally since Phase 3a.
     patch_yosys_template(soc)
 
-    # Include the variant in the board name so that builds for cle-215+,
-    # cle-215 and cle-101 don't clobber each other. (The acorn Makefile
-    # targets loop through all three variants via gateware-vivado-all.)
-    variant_tag = args.variant.replace("+", "p")
-    board_name = f"acorn-{variant_tag}" + flow_suffix(args.toolchain, args.synth_mode)
+    # Variant in the path so cle-215+, cle-215, cle-101 don't clobber.
+    board_name = board_dir("acorn", args.variant) + flow_suffix(args.toolchain, args.synth_mode)
     builder = Builder(soc, output_dir=default_build_dir(__file__, board_name))
 
     if args.toolchain == "vivado":
