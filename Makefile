@@ -108,6 +108,110 @@ test-pcie-enumeration:
 	sudo $(MAKE) -C designs/pcie-enumeration test
 
 # ---------------------------------------------------------------------------
+# Three-flow Vivado / hybrid / openxc7 cross-design aggregators
+# ---------------------------------------------------------------------------
+#
+# Each Xilinx-targeting design exposes three per-flow aggregators:
+#   gateware-vivado-all        (pure Vivado)
+#   gateware-yosys-vivado-all  (Yosys → Vivado hybrid)
+#   gateware-openxc7-all       (Yosys → nextpnr, fully open)
+# and a combined gateware-all-flows. The targets below pass those
+# through for each Xilinx design and provide top-level aggregators
+# that build every Xilinx design in a given flow (or all flows).
+
+XILINX_DESIGNS := uart ethernet-test ddr-memory pmod-loopback spi-flash-id pcie-enumeration
+
+.PHONY: build-uart-vivado build-uart-yosys-vivado build-uart-openxc7 \
+        build-ethernet-vivado build-ethernet-yosys-vivado build-ethernet-openxc7 \
+        build-ddr-vivado build-ddr-yosys-vivado build-ddr-openxc7 \
+        build-pmod-loopback-vivado build-pmod-loopback-yosys-vivado build-pmod-loopback-openxc7 \
+        build-spi-flash-id-vivado build-spi-flash-id-yosys-vivado build-spi-flash-id-openxc7 \
+        build-pcie-vivado build-pcie-yosys-vivado build-pcie-openxc7 \
+        build-all-xilinx-vivado build-all-xilinx-yosys-vivado \
+        build-all-xilinx-openxc7 build-all-xilinx-all-flows \
+        check-vivado
+
+# -- Per-design flow passthroughs --------------------------------------------
+
+build-uart-vivado:
+	$(MAKE) -C designs/uart gateware-vivado-all
+build-uart-yosys-vivado:
+	$(MAKE) -C designs/uart gateware-yosys-vivado-all
+build-uart-openxc7:
+	$(MAKE) -C designs/uart gateware-openxc7-all
+
+build-ethernet-vivado:
+	$(MAKE) -C designs/ethernet-test gateware-vivado-all
+build-ethernet-yosys-vivado:
+	$(MAKE) -C designs/ethernet-test gateware-yosys-vivado-all
+build-ethernet-openxc7:
+	$(MAKE) -C designs/ethernet-test gateware-openxc7-all
+
+build-ddr-vivado:
+	$(MAKE) -C designs/ddr-memory gateware-vivado-all
+build-ddr-yosys-vivado:
+	$(MAKE) -C designs/ddr-memory gateware-yosys-vivado-all
+build-ddr-openxc7:
+	$(MAKE) -C designs/ddr-memory gateware-openxc7-all
+
+build-pmod-loopback-vivado:
+	$(MAKE) -C designs/pmod-loopback gateware-vivado-all
+build-pmod-loopback-yosys-vivado:
+	$(MAKE) -C designs/pmod-loopback gateware-yosys-vivado-all
+build-pmod-loopback-openxc7:
+	$(MAKE) -C designs/pmod-loopback gateware-openxc7-all
+
+build-spi-flash-id-vivado:
+	$(MAKE) -C designs/spi-flash-id gateware-vivado-all
+build-spi-flash-id-yosys-vivado:
+	$(MAKE) -C designs/spi-flash-id gateware-yosys-vivado-all
+build-spi-flash-id-openxc7:
+	$(MAKE) -C designs/spi-flash-id gateware-openxc7-all
+
+build-pcie-vivado:
+	$(MAKE) -C designs/pcie-enumeration gateware-vivado-all
+build-pcie-yosys-vivado:
+	$(MAKE) -C designs/pcie-enumeration gateware-yosys-vivado-all
+build-pcie-openxc7:
+	$(MAKE) -C designs/pcie-enumeration gateware-openxc7-all
+
+# -- All-Xilinx aggregators --------------------------------------------------
+
+build-all-xilinx-vivado: \
+    build-uart-vivado \
+    build-ethernet-vivado \
+    build-ddr-vivado \
+    build-pmod-loopback-vivado \
+    build-spi-flash-id-vivado \
+    build-pcie-vivado
+
+build-all-xilinx-yosys-vivado: \
+    build-uart-yosys-vivado \
+    build-ethernet-yosys-vivado \
+    build-ddr-yosys-vivado \
+    build-pmod-loopback-yosys-vivado \
+    build-spi-flash-id-yosys-vivado \
+    build-pcie-yosys-vivado
+
+build-all-xilinx-openxc7: \
+    build-uart-openxc7 \
+    build-ethernet-openxc7 \
+    build-ddr-openxc7 \
+    build-pmod-loopback-openxc7 \
+    build-spi-flash-id-openxc7 \
+    build-pcie-openxc7
+
+build-all-xilinx-all-flows: \
+    build-all-xilinx-vivado \
+    build-all-xilinx-yosys-vivado \
+    build-all-xilinx-openxc7
+
+# -- Sanity check ------------------------------------------------------------
+
+check-vivado:
+	@$(MAKE) -C designs/uart check-vivado
+
+# ---------------------------------------------------------------------------
 # Cleanup
 # ---------------------------------------------------------------------------
 
