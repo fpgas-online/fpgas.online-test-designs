@@ -44,7 +44,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ethernet-test-arty-a7-35t
-          path: designs/ethernet-test/build/arty-yosys-nextpnr/gateware/digilent_arty.bit
+          path: designs/ethernet-test/build/arty-a7-35-yosys-nextpnr/gateware/digilent_arty.bit
 
   build-netv2-a7-35:
     name: "NeTV2 A7-35T (RMII Ethernet)"
@@ -83,7 +83,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ethernet-test-netv2-a7-35t
-          path: designs/ethernet-test/build/netv2-yosys-nextpnr/gateware/kosagi_netv2.bit
+          path: designs/ethernet-test/build/netv2-a7-35-yosys-nextpnr/gateware/kosagi_netv2.bit
 
   build-netv2-a7-100:
     name: "NeTV2 A7-100T (RMII Ethernet)"
@@ -122,7 +122,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ethernet-test-netv2-a7-100t
-          path: designs/ethernet-test/build/netv2-yosys-nextpnr/gateware/kosagi_netv2.bit
+          path: designs/ethernet-test/build/netv2-a7-100-yosys-nextpnr/gateware/kosagi_netv2.bit
 
   lint:
     name: "Lint Python"

@@ -36,6 +36,7 @@ jobs:
         run: |
           mkdir -p "$CHIPDB"
           uv run python designs/pmod-pin-id/gateware/pmod_pin_id_arty.py \
+            --variant a7-35 \
             --toolchain openxc7 \
             --build
 
@@ -44,7 +45,7 @@ jobs:
         with:
           name: pmod-pin-id-arty-a7-35t
           path: |
-            designs/pmod-pin-id/build/arty-yosys-nextpnr/*.bit
+            designs/pmod-pin-id/build/arty-a7-35-yosys-nextpnr/*.bit
           if-no-files-found: error
 
   build-acorn-cle-215plus:
@@ -85,7 +86,7 @@ jobs:
         with:
           name: pmod-pin-id-acorn-cle-215plus
           path: |
-            designs/pmod-pin-id/build/acorn-yosys-nextpnr/*.bit
+            designs/pmod-pin-id/build/acorn-cle-215p-yosys-nextpnr/*.bit
           if-no-files-found: error
 
   build-acorn-cle-215:
@@ -126,7 +127,7 @@ jobs:
         with:
           name: pmod-pin-id-acorn-cle-215
           path: |
-            designs/pmod-pin-id/build/acorn-yosys-nextpnr/*.bit
+            designs/pmod-pin-id/build/acorn-cle-215-yosys-nextpnr/*.bit
           if-no-files-found: error
 
   build-acorn-cle-101:
@@ -167,7 +168,7 @@ jobs:
         with:
           name: pmod-pin-id-acorn-cle-101
           path: |
-            designs/pmod-pin-id/build/acorn-yosys-nextpnr/*.bit
+            designs/pmod-pin-id/build/acorn-cle-101-yosys-nextpnr/*.bit
           if-no-files-found: error
 
   build-fomu:
@@ -268,7 +269,7 @@ jobs:
         with:
           name: pmod-pin-id-netv2-a7-35t
           path: |
-            designs/pmod-pin-id/build/netv2-yosys-nextpnr/*.bit
+            designs/pmod-pin-id/build/netv2-a7-35-yosys-nextpnr/*.bit
           if-no-files-found: error
 
   build-netv2-a7-100:
@@ -309,5 +310,5 @@ jobs:
         with:
           name: pmod-pin-id-netv2-a7-100t
           path: |
-            designs/pmod-pin-id/build/netv2-yosys-nextpnr/*.bit
+            designs/pmod-pin-id/build/netv2-a7-100-yosys-nextpnr/*.bit
           if-no-files-found: error
