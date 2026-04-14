@@ -91,11 +91,25 @@ Every Xilinx-targeting design exposes three flows, named uniformly
 
 ### Per-design targets
 
-Every design Makefile exposes, for each of its supported board variants:
+Per-design Makefiles share `mk/three-flows.mk` which provides a
+`flow_rules` macro. Each design declares its supported variant lists
+and calls the macro once per board family; the macro emits three
+per-flow pattern rules that match every variant:
 
-- `gateware-<board>-vivado-vivado`
-- `gateware-<board>-yosys-vivado`
-- `gateware-<board>-yosys-nextpnr`
+- `gateware-<board>-<variant>-vivado-vivado`
+- `gateware-<board>-<variant>-yosys-vivado`
+- `gateware-<board>-<variant>-yosys-nextpnr`
+
+For example, `designs/uart/` exposes:
+
+    gateware-arty-a7-35-vivado-vivado       gateware-arty-a7-100-vivado-vivado
+    gateware-arty-a7-35-yosys-vivado        gateware-arty-a7-100-yosys-vivado
+    gateware-arty-a7-35-yosys-nextpnr       gateware-arty-a7-100-yosys-nextpnr
+    gateware-netv2-a7-35-vivado-vivado      gateware-netv2-a7-100-vivado-vivado
+    gateware-netv2-a7-35-yosys-vivado       gateware-netv2-a7-100-yosys-vivado
+    gateware-netv2-a7-35-yosys-nextpnr      gateware-netv2-a7-100-yosys-nextpnr
+    gateware-acorn-cle-101-vivado-vivado    gateware-acorn-cle-215-vivado-vivado
+    gateware-acorn-cle-215+-vivado-vivado   (and similarly for yosys-vivado / yosys-nextpnr)
 
 Plus these aggregators:
 
@@ -104,6 +118,11 @@ Plus these aggregators:
 - `gateware-yosys-nextpnr-all`
 - `gateware-all-flows`
 - `check-vivado`
+
+Adding a new variant to the `ARTY_VARIANTS` / `NETV2_VARIANTS` /
+`ACORN_VARIANTS` list in a per-design Makefile automatically creates
+matching targets thanks to Make pattern rules — no per-variant
+boilerplate required.
 
 ### Top-level aggregators
 
@@ -123,27 +142,39 @@ make build-all-xilinx-all-flows
 make check-vivado
 ```
 
-Build output directories mirror the flow name:
+Build output directories include the variant as well as the flow name.
+Every board has multiple variants (Arty/NeTV2 have `a7-35`/`a7-100`,
+Acorn has `cle-101`/`cle-215`/`cle-215+` → `cle-215p` in paths) so
+every build writes to its own uniquely-named directory:
 
-- `designs/<design>/build/<board>-vivado-vivado/` — pure Vivado
-- `designs/<design>/build/<board>-yosys-vivado/`  — Yosys → Vivado hybrid
-- `designs/<design>/build/<board>-yosys-nextpnr/` — Yosys → nextpnr (openxc7)
+- `designs/<design>/build/<board>-<variant>-vivado-vivado/`
+- `designs/<design>/build/<board>-<variant>-yosys-vivado/`
+- `designs/<design>/build/<board>-<variant>-yosys-nextpnr/`
+
+Concrete examples:
+
+- `designs/uart/build/arty-a7-35-vivado-vivado/gateware/digilent_arty.bit`
+- `designs/uart/build/netv2-a7-100-yosys-vivado/gateware/kosagi_netv2.bit`
+- `designs/pcie-enumeration/build/acorn-cle-215p-yosys-nextpnr/gateware/sqrl_acorn.bit`
 
 ### Programming a built bitstream
 
 The `program-*` Makefile rules default to programming the
-`yosys-nextpnr` flow's output. Override via the `PROGRAM_FLOW`
-variable to program a different flow:
+`yosys-nextpnr` flow's output for the default variant of each board.
+Override via the `PROGRAM_FLOW` variable to program a different flow,
+or invoke `openFPGALoader` / `openocd` directly to target a specific
+`(board, variant, flow)` combination:
 
 ```sh
-# Program the openxc7 build (default):
+# Program the openxc7 build for the default Arty variant:
 make -C designs/uart program-arty
 
-# Program the pure-Vivado build:
+# Program the pure-Vivado build for the default Arty variant:
 make -C designs/uart program-arty PROGRAM_FLOW=vivado-vivado
 
-# Program the hybrid build:
-make -C designs/uart program-arty PROGRAM_FLOW=yosys-vivado
+# Program a non-default variant manually:
+openFPGALoader -b arty \
+    designs/uart/build/arty-a7-100-vivado-vivado/gateware/digilent_arty.bit
 ```
 
 ## Known limitations
