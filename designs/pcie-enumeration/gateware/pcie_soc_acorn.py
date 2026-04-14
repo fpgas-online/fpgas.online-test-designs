@@ -227,7 +227,11 @@ def main():
     # attr); safe to call unconditionally since Phase 3a.
     patch_yosys_template(soc)
 
-    board_name = "acorn" + flow_suffix(args.toolchain, args.synth_mode)
+    # Include the variant in the board name so that builds for cle-215+,
+    # cle-215 and cle-101 don't clobber each other. (The acorn Makefile
+    # targets loop through all three variants via gateware-vivado-all.)
+    variant_tag = args.variant.replace("+", "p")
+    board_name = f"acorn-{variant_tag}" + flow_suffix(args.toolchain, args.synth_mode)
     builder = Builder(soc, output_dir=default_build_dir(__file__, board_name))
 
     if args.toolchain == "vivado":
