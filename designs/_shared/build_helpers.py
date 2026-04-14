@@ -104,14 +104,17 @@ def build_soc(soc, parser, board_name, gateware_file=None, args=None):
     if args is None:
         args = parser.parse_args()
 
-    toolchain_argdict = parser.toolchain_argdict
     # ``toolchain_argdict`` is ``{"synth_mode": ...}`` for the Vivado
     # toolchain and an empty dict for openxc7/yosys+nextpnr — both cases
-    # are handled by ``flow_suffix``.
-    board_name = board_name + flow_suffix(parser._toolchain,
+    # are handled by ``flow_suffix``. ``getattr`` keeps the helper usable
+    # from a plain ``argparse.ArgumentParser`` caller (in which case we
+    # assume openxc7 semantics: no suffix, no toolchain kwargs).
+    toolchain = getattr(parser, "_toolchain", None)
+    toolchain_argdict = getattr(parser, "toolchain_argdict", {})
+    board_name = board_name + flow_suffix(toolchain,
                                           toolchain_argdict.get("synth_mode"))
 
-    builder_kwargs = parser.builder_argdict
+    builder_kwargs = getattr(parser, "builder_argdict", {})
     if gateware_file is not None:
         builder_kwargs["output_dir"] = default_build_dir(gateware_file, board_name)
 
