@@ -16,6 +16,7 @@ from litex_boards.platforms.kosagi_fomu_evt import Platform
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+from designs._shared.build_helpers import board_dir, flow_suffix
 from designs._shared.platform_fixups import require_timing
 
 _loopback_io = [
@@ -48,10 +49,11 @@ def main():
 
     require_timing(platform, {})  # no clock: strict mode only
     if args.build:
-        # Write to build/fomu/gateware/kosagi_fomu_evt.bin to match
-        # LiteX Builder's layout used by the other designs.
+        # Write to build/fomu-evt-yosys-nextpnr/gateware/kosagi_fomu_evt.bin
+        # to match LiteX Builder's layout used by the other designs.
+        board = board_dir("fomu", "evt") + flow_suffix("icestorm")
         build_dir = str(
-            Path(__file__).resolve().parent.parent / "build" / "fomu" / "gateware"
+            Path(__file__).resolve().parent.parent / "build" / board / "gateware"
         )
         platform.build(module, build_dir=build_dir, build_name=platform.name)
 
