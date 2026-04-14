@@ -12,7 +12,8 @@ UART: RX=ui_in[3] (pin 21), TX=uo_out[4] (pin 45), via RP2040 USB bridge.
 Build command:
     uv run python designs/spi-flash-id/gateware/spiflash_soc_tt.py --build
 
-The bitstream is written to: designs/spi-flash-id/build/tt/gateware/ice40up5ksg48.bit
+The bitstream is written to:
+    designs/spi-flash-id/build/tt-fpga-yosys-nextpnr/gateware/tt_fpga_platform.bin
 """
 
 import argparse
@@ -28,7 +29,7 @@ from litex.soc.integration.soc_core import SoCCore
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-from designs._shared.build_helpers import default_build_dir
+from designs._shared.build_helpers import board_dir, default_build_dir, flow_suffix
 from designs._shared.ice40_spi_flash import Ice40SPIFlash
 from designs._shared.tt_fpga_crg import TtFpgaCRG
 from designs._shared.tt_fpga_platform import Platform
@@ -95,7 +96,8 @@ def main():
         uart_baudrate = 115200,
     )
 
-    output_dir = args.output_dir or default_build_dir(__file__, "tt")
+    output_dir = args.output_dir or default_build_dir(
+        __file__, board_dir("tt", "fpga") + flow_suffix("icestorm"))
     # Skip BIOS compilation — LiteX BIOS (~24 KB) does not fit in iCE40 EBR (15 KB).
     builder = Builder(soc, output_dir=output_dir, compile_software=False)
 
