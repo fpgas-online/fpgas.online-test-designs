@@ -50,20 +50,18 @@ test-uart-fomu:
 # Programming (run on RPi with FPGA attached)
 # --------------------------------------------------------------------------- #
 #
-# program-* targets default to the Yosys→nextpnr (openxc7) flow. To
-# program a different flow, override PROGRAM_FLOW, e.g.
-#
-#   make program-arty PROGRAM_FLOW=vivado-vivado
-
-PROGRAM_FLOW ?= yosys-nextpnr
+# program-* targets default to the Yosys→nextpnr (openxc7) flow of the
+# default a7-35 variant. Override PROGRAM_FLOW to program a different
+# flow, or invoke openFPGALoader / openocd directly to target a
+# different variant (e.g. a7-100).
 
 .PHONY: program-arty program-netv2 program-fomu
 
 program-arty:
-	openFPGALoader -b arty build/arty-$(PROGRAM_FLOW)/gateware/digilent_arty.bit
+	openFPGALoader -b arty build/arty-a7-35-$(PROGRAM_FLOW)/gateware/digilent_arty.bit
 
 program-netv2:
-	openocd -f alphamax-rpi.cfg -c "pld load 0 build/netv2-$(PROGRAM_FLOW)/gateware/kosagi_netv2.bit; exit"
+	openocd -f alphamax-rpi.cfg -c "pld load 0 build/netv2-a7-35-$(PROGRAM_FLOW)/gateware/kosagi_netv2.bit; exit"
 
 program-fomu:
 	openFPGALoader -b fomu_evt build/fomu/gateware/kosagi_fomu_evt.bit
