@@ -16,7 +16,7 @@ from litex_boards.platforms.kosagi_netv2 import Platform
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-from designs._shared.build_helpers import flow_suffix
+from designs._shared.build_helpers import board_dir, flow_suffix
 from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name, require_timing
 from designs._shared.yosys_workarounds import YOSYS_TEMPLATE_STRIP_SCOPEINFO
 
@@ -54,8 +54,11 @@ def main():
 
     require_timing(platform, {})  # no clock: strict mode only
     if args.build:
-        build_dir = str(Path(__file__).resolve().parent.parent
-                        / "build" / f"netv2{flow_suffix(args.toolchain, args.synth_mode)}")
+        build_dir = str(
+            Path(__file__).resolve().parent.parent
+            / "build"
+            / f"{board_dir('netv2', args.variant)}{flow_suffix(args.toolchain, args.synth_mode)}"
+        )
         build_kwargs = {"build_dir": build_dir}
         if args.toolchain == "vivado":
             build_kwargs["synth_mode"] = args.synth_mode or "vivado"

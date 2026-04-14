@@ -23,7 +23,7 @@ from migen import *
 from pmod_pin_id import UARTTxIdentifier
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-from designs._shared.build_helpers import flow_suffix
+from designs._shared.build_helpers import board_dir, flow_suffix
 from designs._shared.platform_fixups import require_timing
 from designs._shared.yosys_workarounds import YOSYS_TEMPLATE_STRIP_SCOPEINFO
 
@@ -97,8 +97,11 @@ def main():
 
     require_timing(platform, {})  # runs on the board clock, which the platform constrains
     if args.build:
-        build_dir = str(Path(__file__).resolve().parent.parent
-                        / "build" / f"arty{flow_suffix(args.toolchain, args.synth_mode)}")
+        build_dir = str(
+            Path(__file__).resolve().parent.parent
+            / "build"
+            / f"{board_dir('arty', args.variant)}{flow_suffix(args.toolchain, args.synth_mode)}"
+        )
         build_kwargs = {"build_dir": build_dir}
         if args.toolchain == "vivado":
             build_kwargs["synth_mode"] = args.synth_mode or "vivado"
