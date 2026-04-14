@@ -10,7 +10,8 @@ Arty A7 SPI Flash: Quad SPI, CS=L13.  Clock routed via STARTUPE2.
 Build command:
     uv run python designs/spi-flash-id/gateware/spiflash_soc_arty.py --toolchain openxc7 --build
 
-The bitstream is written to: designs/spi-flash-id/build/arty/gateware/arty_spiflash_test.bit
+The bitstream is written to:
+    designs/spi-flash-id/build/arty-<variant>-<flow>/gateware/digilent_arty.bit
 """
 
 import pathlib

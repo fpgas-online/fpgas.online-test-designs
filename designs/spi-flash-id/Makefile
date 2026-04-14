@@ -52,10 +52,10 @@ test-fomu:
 # --------------------------------------------------------------------------- #
 
 program-arty:
-	openFPGALoader -b arty build/arty-a7-35-$(PROGRAM_FLOW)/gateware/arty_spiflash_test.bit
+	openFPGALoader -b arty build/arty-a7-35-$(PROGRAM_FLOW)/gateware/digilent_arty.bit
 
 program-netv2:
-	openocd -f alphamax-rpi.cfg -c "pld load 0 build/netv2-a7-35-$(PROGRAM_FLOW)/gateware/netv2_spiflash_test.bit; exit"
+	openocd -f alphamax-rpi.cfg -c "pld load 0 build/netv2-a7-35-$(PROGRAM_FLOW)/gateware/kosagi_netv2.bit; exit"
 
 program-fomu:
 	iceprog build/fomu-evt-yosys-nextpnr/gateware/kosagi_fomu_evt.bin
