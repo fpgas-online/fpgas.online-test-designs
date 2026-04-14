@@ -198,7 +198,7 @@ jobs:
         with:
           name: pmod-pin-id-fomu-evt
           path: |
-            designs/pmod-pin-id/build/fomu/gateware/*.bin
+            designs/pmod-pin-id/build/fomu-evt-yosys-nextpnr/gateware/*.bin
           if-no-files-found: error
 
   build-tt:
@@ -228,7 +228,7 @@ jobs:
         with:
           name: pmod-pin-id-tt-fpga
           path: |
-            designs/pmod-pin-id/build/tt/gateware/*.bin
+            designs/pmod-pin-id/build/tt-fpga-yosys-nextpnr/gateware/*.bin
           if-no-files-found: error
 
   build-netv2-a7-35:

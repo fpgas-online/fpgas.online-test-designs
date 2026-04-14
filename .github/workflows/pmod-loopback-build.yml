@@ -157,7 +157,7 @@ jobs:
         with:
           name: gpio-loopback-fomu-evt
           path: |
-            designs/pmod-loopback/build/fomu/gateware/*.bin
+            designs/pmod-loopback/build/fomu-evt-yosys-nextpnr/gateware/*.bin
           if-no-files-found: error
 
   build-tt:
@@ -187,7 +187,7 @@ jobs:
         with:
           name: gpio-loopback-tt-fpga
           path: |
-            designs/pmod-loopback/build/tt/gateware/*.bin
+            designs/pmod-loopback/build/tt-fpga-yosys-nextpnr/gateware/*.bin
           if-no-files-found: error
 
   build-acorn-cle-215plus:
