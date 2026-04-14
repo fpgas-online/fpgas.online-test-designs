@@ -7,7 +7,7 @@ include ../../mk/common.mk
 VIVADO_SETTINGS ?= /opt/Xilinx/2025.2/Vivado/settings64.sh
 VIVADO_ENV      := . $(VIVADO_SETTINGS) &&
 
-.PHONY: build-arty build-netv2 build-all \
+.PHONY: build-arty build-netv2 build-all clean \
         gateware-arty-vivado gateware-netv2-vivado gateware-acorn-vivado \
         gateware-arty-yosys-vivado gateware-netv2-yosys-vivado gateware-acorn-yosys-vivado \
         gateware-arty-openxc7 gateware-netv2-openxc7 gateware-acorn-openxc7 \
@@ -51,6 +51,9 @@ gateware-all-flows: gateware-vivado-all gateware-yosys-vivado-all gateware-openx
 check-vivado:
 	@test -f $(VIVADO_SETTINGS) || (echo "Vivado not found at $(VIVADO_SETTINGS)"; exit 1)
 	@$(VIVADO_ENV) vivado -version
+
+clean:
+	rm -rf build/
 
 # --------------------------------------------------------------------------- #
 # DDR Host-side tests (run on RPi with FPGA attached)

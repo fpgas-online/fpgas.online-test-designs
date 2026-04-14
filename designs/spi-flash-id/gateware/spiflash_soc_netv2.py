@@ -118,7 +118,7 @@ def main():
     ident = "fpgas-online SPI Flash Test SoC -- NeTV2"
     install_spiflash_firmware(soc, ident)
 
-    builder.build(run=args.build)
+    builder.build(run=args.build, **parser.toolchain_argdict)
 
 
 if __name__ == "__main__":
