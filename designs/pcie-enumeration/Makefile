@@ -2,7 +2,8 @@ include ../../mk/common.mk
 
 TOOLCHAIN      ?= yosys+nextpnr
 VARIANT        ?= a7-35
-BUILD_DIR      ?= build/netv2
+PROGRAM_FLOW   ?= yosys-nextpnr
+BUILD_DIR      ?= build/netv2-$(PROGRAM_FLOW)
 OPENOCD_CFG    ?= openocd/alphamax-rpi.cfg
 BITSTREAM      ?= $(BUILD_DIR)/gateware/kosagi_netv2.bit
 UART_PORT      ?= /dev/ttyAMA0
@@ -17,22 +18,19 @@ VIVADO_ENV      := . $(VIVADO_SETTINGS) &&
 #   - Acorn cle-101   (XC7A100T-2, LiteFury)
 
 .PHONY: gateware program test clean \
-        gateware-netv2-vivado gateware-acorn-cle215p-vivado \
-        gateware-acorn-cle215-vivado gateware-acorn-cle101-vivado \
+        gateware-netv2-vivado-vivado gateware-acorn-cle215p-vivado-vivado \
+        gateware-acorn-cle215-vivado-vivado gateware-acorn-cle101-vivado-vivado \
         gateware-netv2-yosys-vivado gateware-acorn-cle215p-yosys-vivado \
         gateware-acorn-cle215-yosys-vivado gateware-acorn-cle101-yosys-vivado \
-        gateware-netv2-openxc7 gateware-acorn-cle215p-openxc7 \
-        gateware-acorn-cle215-openxc7 gateware-acorn-cle101-openxc7 \
-        gateware-vivado-all gateware-yosys-vivado-all gateware-openxc7-all \
+        gateware-netv2-yosys-nextpnr gateware-acorn-cle215p-yosys-nextpnr \
+        gateware-acorn-cle215-yosys-nextpnr gateware-acorn-cle101-yosys-nextpnr \
+        gateware-vivado-vivado-all gateware-yosys-vivado-all gateware-yosys-nextpnr-all \
         gateware-all-flows check-vivado
 
-# -- Flow C (existing default): Yosys + nextpnr via openxc7 -----------------
+# -- Legacy default `gateware` target: Yosys → nextpnr on NeTV2 --------------
+# Preserved for backwards compat with plan.md Phase 10 commands.
 
-gateware:
-	$(PYTHON) gateware/pcie_soc_netv2.py \
-		--variant $(VARIANT) \
-		--toolchain $(TOOLCHAIN) \
-		--build
+gateware: gateware-netv2-yosys-nextpnr
 
 program:
 	openocd -f $(OPENOCD_CFG) -c "init; pld load 0 $(BITSTREAM); exit"
@@ -43,29 +41,29 @@ test:
 clean:
 	rm -rf build/
 
-# -- Flow C: explicit openxc7 targets for aggregators ----------------------
+# -- Flow C: Yosys → nextpnr (openxc7) -------------------------------------
 
-gateware-netv2-openxc7:
+gateware-netv2-yosys-nextpnr:
 	$(PYTHON) gateware/pcie_soc_netv2.py --variant $(VARIANT) --toolchain openxc7 --build
-gateware-acorn-cle215p-openxc7:
+gateware-acorn-cle215p-yosys-nextpnr:
 	$(PYTHON) gateware/pcie_soc_acorn.py --variant cle-215+ --toolchain openxc7 --build
-gateware-acorn-cle215-openxc7:
+gateware-acorn-cle215-yosys-nextpnr:
 	$(PYTHON) gateware/pcie_soc_acorn.py --variant cle-215 --toolchain openxc7 --build
-gateware-acorn-cle101-openxc7:
+gateware-acorn-cle101-yosys-nextpnr:
 	$(PYTHON) gateware/pcie_soc_acorn.py --variant cle-101 --toolchain openxc7 --build
 
 # -- Flow A: pure Vivado ---------------------------------------------------
 
-gateware-netv2-vivado:
+gateware-netv2-vivado-vivado:
 	$(VIVADO_ENV) $(PYTHON) gateware/pcie_soc_netv2.py \
 	    --variant $(VARIANT) --toolchain vivado --synth-mode vivado --build
-gateware-acorn-cle215p-vivado:
+gateware-acorn-cle215p-vivado-vivado:
 	$(VIVADO_ENV) $(PYTHON) gateware/pcie_soc_acorn.py \
 	    --variant cle-215+ --toolchain vivado --synth-mode vivado --build
-gateware-acorn-cle215-vivado:
+gateware-acorn-cle215-vivado-vivado:
 	$(VIVADO_ENV) $(PYTHON) gateware/pcie_soc_acorn.py \
 	    --variant cle-215 --toolchain vivado --synth-mode vivado --build
-gateware-acorn-cle101-vivado:
+gateware-acorn-cle101-vivado-vivado:
 	$(VIVADO_ENV) $(PYTHON) gateware/pcie_soc_acorn.py \
 	    --variant cle-101 --toolchain vivado --synth-mode vivado --build
 
@@ -86,11 +84,11 @@ gateware-acorn-cle101-yosys-vivado:
 
 # -- Aggregators per flow --------------------------------------------------
 
-gateware-vivado-all: \
-    gateware-netv2-vivado \
-    gateware-acorn-cle215p-vivado \
-    gateware-acorn-cle215-vivado \
-    gateware-acorn-cle101-vivado
+gateware-vivado-vivado-all: \
+    gateware-netv2-vivado-vivado \
+    gateware-acorn-cle215p-vivado-vivado \
+    gateware-acorn-cle215-vivado-vivado \
+    gateware-acorn-cle101-vivado-vivado
 
 gateware-yosys-vivado-all: \
     gateware-netv2-yosys-vivado \
@@ -98,13 +96,13 @@ gateware-yosys-vivado-all: \
     gateware-acorn-cle215-yosys-vivado \
     gateware-acorn-cle101-yosys-vivado
 
-gateware-openxc7-all: \
-    gateware-netv2-openxc7 \
-    gateware-acorn-cle215p-openxc7 \
-    gateware-acorn-cle215-openxc7 \
-    gateware-acorn-cle101-openxc7
+gateware-yosys-nextpnr-all: \
+    gateware-netv2-yosys-nextpnr \
+    gateware-acorn-cle215p-yosys-nextpnr \
+    gateware-acorn-cle215-yosys-nextpnr \
+    gateware-acorn-cle101-yosys-nextpnr
 
-gateware-all-flows: gateware-vivado-all gateware-yosys-vivado-all gateware-openxc7-all
+gateware-all-flows: gateware-vivado-vivado-all gateware-yosys-vivado-all gateware-yosys-nextpnr-all
 
 check-vivado:
 	@test -f $(VIVADO_SETTINGS) || (echo "Vivado not found at $(VIVADO_SETTINGS)"; exit 1)
