@@ -58,7 +58,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pcie-enumeration-netv2-a7-35t
-          path: designs/pcie-enumeration/build/netv2-yosys-nextpnr/gateware/kosagi_netv2.bit
+          path: designs/pcie-enumeration/build/netv2-a7-35-yosys-nextpnr/gateware/kosagi_netv2.bit
 
   build-netv2-a7-100:
     name: "NeTV2 A7-100T PCIe endpoint"
@@ -111,7 +111,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pcie-enumeration-netv2-a7-100t
-          path: designs/pcie-enumeration/build/netv2-yosys-nextpnr/gateware/kosagi_netv2.bit
+          path: designs/pcie-enumeration/build/netv2-a7-100-yosys-nextpnr/gateware/kosagi_netv2.bit
 
   lint:
     name: "Lint Python"
