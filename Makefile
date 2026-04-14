@@ -108,80 +108,86 @@ test-pcie-enumeration:
 	sudo $(MAKE) -C designs/pcie-enumeration test
 
 # ---------------------------------------------------------------------------
-# Three-flow Vivado / hybrid / openxc7 cross-design aggregators
+# Three-flow synth→P&R cross-design aggregators
 # ---------------------------------------------------------------------------
 #
+# Three toolchain flows are supported, named uniformly <synth>-<pnr>:
+#
+#   vivado-vivado   — pure proprietary Vivado (synth + P&R)
+#   yosys-vivado    — Yosys synthesis + Vivado P&R (hybrid)
+#   yosys-nextpnr   — Yosys synthesis + nextpnr-xilinx P&R (openxc7)
+#
 # Each Xilinx-targeting design exposes three per-flow aggregators:
-#   gateware-vivado-all        (pure Vivado)
-#   gateware-yosys-vivado-all  (Yosys → Vivado hybrid)
-#   gateware-openxc7-all       (Yosys → nextpnr, fully open)
-# and a combined gateware-all-flows. The targets below pass those
+#   gateware-vivado-vivado-all
+#   gateware-yosys-vivado-all
+#   gateware-yosys-nextpnr-all
+# plus a combined gateware-all-flows. The targets below pass those
 # through for each Xilinx design and provide top-level aggregators
 # that build every Xilinx design in a given flow (or all flows).
 
-.PHONY: build-uart-vivado build-uart-yosys-vivado build-uart-openxc7 \
-        build-ethernet-vivado build-ethernet-yosys-vivado build-ethernet-openxc7 \
-        build-ddr-vivado build-ddr-yosys-vivado build-ddr-openxc7 \
-        build-pmod-loopback-vivado build-pmod-loopback-yosys-vivado build-pmod-loopback-openxc7 \
-        build-spi-flash-id-vivado build-spi-flash-id-yosys-vivado build-spi-flash-id-openxc7 \
-        build-pcie-enumeration-vivado build-pcie-enumeration-yosys-vivado build-pcie-enumeration-openxc7 \
-        build-all-xilinx-vivado build-all-xilinx-yosys-vivado \
-        build-all-xilinx-openxc7 build-all-xilinx-all-flows \
+.PHONY: build-uart-vivado-vivado build-uart-yosys-vivado build-uart-yosys-nextpnr \
+        build-ethernet-vivado-vivado build-ethernet-yosys-vivado build-ethernet-yosys-nextpnr \
+        build-ddr-vivado-vivado build-ddr-yosys-vivado build-ddr-yosys-nextpnr \
+        build-pmod-loopback-vivado-vivado build-pmod-loopback-yosys-vivado build-pmod-loopback-yosys-nextpnr \
+        build-spi-flash-id-vivado-vivado build-spi-flash-id-yosys-vivado build-spi-flash-id-yosys-nextpnr \
+        build-pcie-enumeration-vivado-vivado build-pcie-enumeration-yosys-vivado build-pcie-enumeration-yosys-nextpnr \
+        build-all-xilinx-vivado-vivado build-all-xilinx-yosys-vivado \
+        build-all-xilinx-yosys-nextpnr build-all-xilinx-all-flows \
         check-vivado
 
 # -- Per-design flow passthroughs --------------------------------------------
 
-build-uart-vivado:
-	$(MAKE) -C designs/uart gateware-vivado-all
+build-uart-vivado-vivado:
+	$(MAKE) -C designs/uart gateware-vivado-vivado-all
 build-uart-yosys-vivado:
 	$(MAKE) -C designs/uart gateware-yosys-vivado-all
-build-uart-openxc7:
-	$(MAKE) -C designs/uart gateware-openxc7-all
+build-uart-yosys-nextpnr:
+	$(MAKE) -C designs/uart gateware-yosys-nextpnr-all
 
-build-ethernet-vivado:
-	$(MAKE) -C designs/ethernet-test gateware-vivado-all
+build-ethernet-vivado-vivado:
+	$(MAKE) -C designs/ethernet-test gateware-vivado-vivado-all
 build-ethernet-yosys-vivado:
 	$(MAKE) -C designs/ethernet-test gateware-yosys-vivado-all
-build-ethernet-openxc7:
-	$(MAKE) -C designs/ethernet-test gateware-openxc7-all
+build-ethernet-yosys-nextpnr:
+	$(MAKE) -C designs/ethernet-test gateware-yosys-nextpnr-all
 
-build-ddr-vivado:
-	$(MAKE) -C designs/ddr-memory gateware-vivado-all
+build-ddr-vivado-vivado:
+	$(MAKE) -C designs/ddr-memory gateware-vivado-vivado-all
 build-ddr-yosys-vivado:
 	$(MAKE) -C designs/ddr-memory gateware-yosys-vivado-all
-build-ddr-openxc7:
-	$(MAKE) -C designs/ddr-memory gateware-openxc7-all
+build-ddr-yosys-nextpnr:
+	$(MAKE) -C designs/ddr-memory gateware-yosys-nextpnr-all
 
-build-pmod-loopback-vivado:
-	$(MAKE) -C designs/pmod-loopback gateware-vivado-all
+build-pmod-loopback-vivado-vivado:
+	$(MAKE) -C designs/pmod-loopback gateware-vivado-vivado-all
 build-pmod-loopback-yosys-vivado:
 	$(MAKE) -C designs/pmod-loopback gateware-yosys-vivado-all
-build-pmod-loopback-openxc7:
-	$(MAKE) -C designs/pmod-loopback gateware-openxc7-all
+build-pmod-loopback-yosys-nextpnr:
+	$(MAKE) -C designs/pmod-loopback gateware-yosys-nextpnr-all
 
-build-spi-flash-id-vivado:
-	$(MAKE) -C designs/spi-flash-id gateware-vivado-all
+build-spi-flash-id-vivado-vivado:
+	$(MAKE) -C designs/spi-flash-id gateware-vivado-vivado-all
 build-spi-flash-id-yosys-vivado:
 	$(MAKE) -C designs/spi-flash-id gateware-yosys-vivado-all
-build-spi-flash-id-openxc7:
-	$(MAKE) -C designs/spi-flash-id gateware-openxc7-all
+build-spi-flash-id-yosys-nextpnr:
+	$(MAKE) -C designs/spi-flash-id gateware-yosys-nextpnr-all
 
-build-pcie-enumeration-vivado:
-	$(MAKE) -C designs/pcie-enumeration gateware-vivado-all
+build-pcie-enumeration-vivado-vivado:
+	$(MAKE) -C designs/pcie-enumeration gateware-vivado-vivado-all
 build-pcie-enumeration-yosys-vivado:
 	$(MAKE) -C designs/pcie-enumeration gateware-yosys-vivado-all
-build-pcie-enumeration-openxc7:
-	$(MAKE) -C designs/pcie-enumeration gateware-openxc7-all
+build-pcie-enumeration-yosys-nextpnr:
+	$(MAKE) -C designs/pcie-enumeration gateware-yosys-nextpnr-all
 
 # -- All-Xilinx aggregators --------------------------------------------------
 
-build-all-xilinx-vivado: \
-    build-uart-vivado \
-    build-ethernet-vivado \
-    build-ddr-vivado \
-    build-pmod-loopback-vivado \
-    build-spi-flash-id-vivado \
-    build-pcie-enumeration-vivado
+build-all-xilinx-vivado-vivado: \
+    build-uart-vivado-vivado \
+    build-ethernet-vivado-vivado \
+    build-ddr-vivado-vivado \
+    build-pmod-loopback-vivado-vivado \
+    build-spi-flash-id-vivado-vivado \
+    build-pcie-enumeration-vivado-vivado
 
 build-all-xilinx-yosys-vivado: \
     build-uart-yosys-vivado \
@@ -191,18 +197,18 @@ build-all-xilinx-yosys-vivado: \
     build-spi-flash-id-yosys-vivado \
     build-pcie-enumeration-yosys-vivado
 
-build-all-xilinx-openxc7: \
-    build-uart-openxc7 \
-    build-ethernet-openxc7 \
-    build-ddr-openxc7 \
-    build-pmod-loopback-openxc7 \
-    build-spi-flash-id-openxc7 \
-    build-pcie-enumeration-openxc7
+build-all-xilinx-yosys-nextpnr: \
+    build-uart-yosys-nextpnr \
+    build-ethernet-yosys-nextpnr \
+    build-ddr-yosys-nextpnr \
+    build-pmod-loopback-yosys-nextpnr \
+    build-spi-flash-id-yosys-nextpnr \
+    build-pcie-enumeration-yosys-nextpnr
 
 build-all-xilinx-all-flows: \
-    build-all-xilinx-vivado \
+    build-all-xilinx-vivado-vivado \
     build-all-xilinx-yosys-vivado \
-    build-all-xilinx-openxc7
+    build-all-xilinx-yosys-nextpnr
 
 # -- Sanity check ------------------------------------------------------------
 
