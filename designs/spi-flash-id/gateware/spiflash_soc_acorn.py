@@ -131,7 +131,7 @@ def main():
     ident = "fpgas-online SPI Flash Test SoC -- Acorn/LiteFury"
     install_spiflash_firmware(soc, ident)
 
-    builder.build(run=args.build)
+    builder.build(run=args.build, **parser.toolchain_argdict)
 
 
 if __name__ == "__main__":
