@@ -14,23 +14,26 @@ from litex.soc.integration.builder import Builder
 def flow_suffix(toolchain, synth_mode=None):
     """Return the ``build/<board>`` directory suffix for a toolchain flow.
 
-    Three flows are supported across the Xilinx designs:
+    Three flows are supported across the Xilinx designs. The suffix
+    follows the uniform ``-<synth>-<pnr>`` shape so the three flows
+    sit side by side without special cases:
 
-    - ``openxc7`` / ``yosys+nextpnr`` (fully open-source synth + P&R)
-      → ``""``. Bare board name preserves every existing
-      ``build/<board>/gateware/…`` path so existing Makefile
-      ``program-*`` rules and host tests keep working unchanged.
-    - ``vivado`` with ``synth_mode="vivado"`` (pure proprietary)
-      → ``"-vivado"``.
-    - ``vivado`` with ``synth_mode="yosys"`` (Yosys synth + Vivado P&R
-      hybrid; see the ``synth_mode`` branch in
-      ``litex/build/xilinx/vivado.py``) → ``"-yosys-vivado"``.
+    - ``vivado`` + ``synth_mode="vivado"`` (pure proprietary) →
+      ``"-vivado-vivado"``. Vivado does both synthesis and P&R.
+    - ``vivado`` + ``synth_mode="yosys"`` (hybrid; see the
+      ``synth_mode`` branch in ``litex/build/xilinx/vivado.py``) →
+      ``"-yosys-vivado"``. Yosys does synthesis, Vivado does P&R.
+    - ``openxc7`` / ``yosys+nextpnr`` (fully open-source) →
+      ``"-yosys-nextpnr"``. Yosys does synthesis, nextpnr-xilinx
+      does P&R.
 
     Keeping the three flows in distinct directories prevents them from
     clobbering each other's output when run back-to-back.
     """
     if toolchain == "vivado":
-        return "-yosys-vivado" if synth_mode == "yosys" else "-vivado"
+        return "-yosys-vivado" if synth_mode == "yosys" else "-vivado-vivado"
+    if toolchain in ("openxc7", "yosys+nextpnr"):
+        return "-yosys-nextpnr"
     return ""
 
 
