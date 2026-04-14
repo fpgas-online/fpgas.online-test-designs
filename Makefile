@@ -129,6 +129,7 @@ test-pcie-enumeration:
         build-ethernet-vivado-vivado build-ethernet-yosys-vivado build-ethernet-yosys-nextpnr \
         build-ddr-vivado-vivado build-ddr-yosys-vivado build-ddr-yosys-nextpnr \
         build-pmod-loopback-vivado-vivado build-pmod-loopback-yosys-vivado build-pmod-loopback-yosys-nextpnr \
+        build-pmod-pin-id-vivado-vivado build-pmod-pin-id-yosys-vivado build-pmod-pin-id-yosys-nextpnr \
         build-spi-flash-id-vivado-vivado build-spi-flash-id-yosys-vivado build-spi-flash-id-yosys-nextpnr \
         build-pcie-enumeration-vivado-vivado build-pcie-enumeration-yosys-vivado build-pcie-enumeration-yosys-nextpnr \
         build-all-xilinx-vivado-vivado build-all-xilinx-yosys-vivado \
@@ -165,6 +166,13 @@ build-pmod-loopback-yosys-vivado:
 build-pmod-loopback-yosys-nextpnr:
 	$(MAKE) -C designs/pmod-loopback gateware-yosys-nextpnr-all
 
+build-pmod-pin-id-vivado-vivado:
+	$(MAKE) -C designs/pmod-pin-id gateware-vivado-vivado-all
+build-pmod-pin-id-yosys-vivado:
+	$(MAKE) -C designs/pmod-pin-id gateware-yosys-vivado-all
+build-pmod-pin-id-yosys-nextpnr:
+	$(MAKE) -C designs/pmod-pin-id gateware-yosys-nextpnr-all
+
 build-spi-flash-id-vivado-vivado:
 	$(MAKE) -C designs/spi-flash-id gateware-vivado-vivado-all
 build-spi-flash-id-yosys-vivado:
@@ -186,6 +194,7 @@ build-all-xilinx-vivado-vivado: \
     build-ethernet-vivado-vivado \
     build-ddr-vivado-vivado \
     build-pmod-loopback-vivado-vivado \
+    build-pmod-pin-id-vivado-vivado \
     build-spi-flash-id-vivado-vivado \
     build-pcie-enumeration-vivado-vivado
 
@@ -194,6 +203,7 @@ build-all-xilinx-yosys-vivado: \
     build-ethernet-yosys-vivado \
     build-ddr-yosys-vivado \
     build-pmod-loopback-yosys-vivado \
+    build-pmod-pin-id-yosys-vivado \
     build-spi-flash-id-yosys-vivado \
     build-pcie-enumeration-yosys-vivado
 
@@ -202,6 +212,7 @@ build-all-xilinx-yosys-nextpnr: \
     build-ethernet-yosys-nextpnr \
     build-ddr-yosys-nextpnr \
     build-pmod-loopback-yosys-nextpnr \
+    build-pmod-pin-id-yosys-nextpnr \
     build-spi-flash-id-yosys-nextpnr \
     build-pcie-enumeration-yosys-nextpnr
 
