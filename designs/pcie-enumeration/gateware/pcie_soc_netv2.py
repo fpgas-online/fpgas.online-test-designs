@@ -4,11 +4,20 @@
 Builds a LiteX SoC targeting the NeTV2 board (Xilinx 7-Series) with:
   - VexRiscv CPU + BIOS + UART (115200 baud)
   - DDR3 SDRAM (512 MB) via Xilinx A7DDRPHY
-  - LitePCIe endpoint using the open-source pcie_7x core
-    - Vendor ID: 0x10EE (Xilinx)
-    - Device ID: 0x7011
-    - PCIe Gen2 x1
-    - BAR0 for Wishbone bridge access
+  - LitePCIe endpoint (PCIe Gen2 x1, BAR0 for Wishbone bridge access)
+    Vendor ID 0x10EE (Xilinx), Device ID 0x7011.
+
+Three toolchain flows are supported (Phase 3 of the plan):
+
+    Pure Vivado (proprietary):
+        --toolchain vivado --synth-mode vivado
+        Uses Vivado's proprietary pcie_7x IP from the Xilinx catalog.
+    Yosys→Vivado (hybrid — open-source synth, proprietary P&R):
+        --toolchain vivado --synth-mode yosys
+        Uses the open-source pcie_7x core (github.com/regymm/pcie_7x).
+    Yosys→nextpnr (fully open-source):
+        --toolchain openxc7
+        Uses the open-source pcie_7x core.
 
 The FPGA must be programmed via JTAG (OpenOCD) BEFORE the RPi5 scans
 the PCIe bus.  After programming, the host triggers a bus rescan.
@@ -20,7 +29,8 @@ NeTV2 PCIe pinout:
 
 Build command:
     uv run python designs/pcie-enumeration/gateware/pcie_soc_netv2.py \\
-        --variant a7-35 --toolchain openxc7 --build
+        --variant a7-35 --toolchain <openxc7|vivado> \\
+        [--synth-mode <vivado|yosys>] --build
 """
 
 import glob
@@ -104,11 +114,11 @@ class PCIeEnumerationSoC(SoCCore):
             # and the Yosys→Vivado hybrid flow.
             for vfile in sorted(glob.glob(os.path.join(PCIE_7X_SRC, "*.v"))):
                 platform.add_source(vfile)
-        # else: pure Vivado — S7PCIEPHY.add_sources() has emitted Vivado
-        # TCL into pre_synthesis_commands that instantiates the
-        # proprietary pcie_7x core from the Xilinx IP catalog. Adding the
-        # open-source sources here would create duplicate module
-        # definitions at synth_design time.
+        # else: pure Vivado — S7PCIEPHY (instantiated below) will emit
+        # Vivado TCL into platform.toolchain.pre_synthesis_commands that
+        # instantiates the proprietary pcie_7x core from the Xilinx IP
+        # catalog. Adding the open-source sources here would create
+        # duplicate module definitions at synth_design time.
 
         # CRG ----------------------------------------------------------------------------------
         self.crg = _CRG(platform, sys_clk_freq)
