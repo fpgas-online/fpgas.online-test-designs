@@ -4,6 +4,14 @@ Branch: `vivado-xilinx-flows` (worktree `.worktrees/vivado-xilinx-flows/`)
 Base: `main` @ `ea85682`
 Date: 2026-04-14
 
+**Note**: paths and target names in this report reflect the *final*
+post-rename state on the branch, where the three flows follow the
+uniform `<synthesis>-<pnr>` shape (`vivado-vivado`, `yosys-vivado`,
+`yosys-nextpnr`). The verification fan-outs were originally run
+against an earlier naming (`-vivado`, bare `<board>`, `-yosys-vivado`)
+and re-run post-rename for R7; the 18-bitstream pure-Vivado and 2/18
+hybrid counts are unchanged.
+
 ## Verification gate status
 
 All gates from the plan (`/home/tim/.claude/plans/mutable-squishing-octopus.md`
@@ -38,30 +46,30 @@ section "Phase 6") cleared or documented.
   `make install-litex`): `pythondata-cpu-vexriscv`,
   `pythondata-software-picolibc`, `pythondata-software-compiler_rt`
 
-## Pure Vivado fan-out: `make build-all-xilinx-vivado` — 18/18 ✓
+## Pure Vivado fan-out: `make build-all-xilinx-vivado-vivado` — 18/18 ✓
 
 All 18 default-variant targets built successfully:
 
-| Design            | Bitstream                                                         | Size     |
-|-------------------|-------------------------------------------------------------------|---------:|
-| uart              | `uart/build/arty-vivado/gateware/digilent_arty.bit`               |   2.2 MB |
-| uart              | `uart/build/netv2-vivado/gateware/kosagi_netv2.bit`               |   3.8 MB |
-| uart              | `uart/build/acorn-vivado/gateware/sqrl_acorn.bit`                 |   1.6 MB |
-| ethernet-test     | `ethernet-test/build/arty-vivado/gateware/digilent_arty.bit`      |   2.2 MB |
-| ethernet-test     | `ethernet-test/build/netv2-vivado/gateware/kosagi_netv2.bit`      |   3.8 MB |
-| ddr-memory        | `ddr-memory/build/arty-vivado/gateware/digilent_arty.bit`         |   2.2 MB |
-| ddr-memory        | `ddr-memory/build/netv2-vivado/gateware/kosagi_netv2.bit`         |   3.8 MB |
-| ddr-memory        | `ddr-memory/build/acorn-vivado/gateware/sqrl_acorn.bit`           |   1.6 MB |
-| pmod-loopback     | `pmod-loopback/build/arty-vivado/top.bit`                         |   2.2 MB |
-| pmod-loopback     | `pmod-loopback/build/netv2-vivado/top.bit`                        |   3.8 MB |
-| pmod-loopback     | `pmod-loopback/build/acorn-vivado/top.bit`                        | 0.88 MB |
-| spi-flash-id      | `spi-flash-id/build/arty-vivado/gateware/digilent_arty.bit`       |   2.2 MB |
-| spi-flash-id      | `spi-flash-id/build/netv2-vivado/gateware/kosagi_netv2.bit`       |   3.8 MB |
-| spi-flash-id      | `spi-flash-id/build/acorn-vivado/gateware/sqrl_acorn.bit`         |   1.6 MB |
-| pcie-enumeration  | `pcie-enumeration/build/netv2-vivado/gateware/kosagi_netv2.bit`   |   3.8 MB |
-| pcie-enumeration  | `pcie-enumeration/build/acorn-cle-215p-vivado/gateware/sqrl_acorn.bit` | 1.6 MB |
-| pcie-enumeration  | `pcie-enumeration/build/acorn-cle-215-vivado/gateware/sqrl_acorn.bit`  | 1.6 MB |
-| pcie-enumeration  | `pcie-enumeration/build/acorn-cle-101-vivado/gateware/sqrl_acorn.bit`  | 1.6 MB |
+| Design            | Bitstream                                                                     | Size     |
+|-------------------|-------------------------------------------------------------------------------|---------:|
+| uart              | `uart/build/arty-vivado-vivado/gateware/digilent_arty.bit`                    |   2.2 MB |
+| uart              | `uart/build/netv2-vivado-vivado/gateware/kosagi_netv2.bit`                    |   3.8 MB |
+| uart              | `uart/build/acorn-vivado-vivado/gateware/sqrl_acorn.bit`                      |   1.6 MB |
+| ethernet-test     | `ethernet-test/build/arty-vivado-vivado/gateware/digilent_arty.bit`           |   2.2 MB |
+| ethernet-test     | `ethernet-test/build/netv2-vivado-vivado/gateware/kosagi_netv2.bit`           |   3.8 MB |
+| ddr-memory        | `ddr-memory/build/arty-vivado-vivado/gateware/digilent_arty.bit`              |   2.2 MB |
+| ddr-memory        | `ddr-memory/build/netv2-vivado-vivado/gateware/kosagi_netv2.bit`              |   3.8 MB |
+| ddr-memory        | `ddr-memory/build/acorn-vivado-vivado/gateware/sqrl_acorn.bit`                |   1.6 MB |
+| pmod-loopback     | `pmod-loopback/build/arty-vivado-vivado/top.bit`                              |   2.2 MB |
+| pmod-loopback     | `pmod-loopback/build/netv2-vivado-vivado/top.bit`                             |   3.8 MB |
+| pmod-loopback     | `pmod-loopback/build/acorn-vivado-vivado/top.bit`                             |   0.88 MB |
+| spi-flash-id      | `spi-flash-id/build/arty-vivado-vivado/gateware/digilent_arty.bit`            |   2.2 MB |
+| spi-flash-id      | `spi-flash-id/build/netv2-vivado-vivado/gateware/kosagi_netv2.bit`            |   3.8 MB |
+| spi-flash-id      | `spi-flash-id/build/acorn-vivado-vivado/gateware/sqrl_acorn.bit`              |   1.6 MB |
+| pcie-enumeration  | `pcie-enumeration/build/netv2-vivado-vivado/gateware/kosagi_netv2.bit`        |   3.8 MB |
+| pcie-enumeration  | `pcie-enumeration/build/acorn-cle-215p-vivado-vivado/gateware/sqrl_acorn.bit` |   1.6 MB |
+| pcie-enumeration  | `pcie-enumeration/build/acorn-cle-215-vivado-vivado/gateware/sqrl_acorn.bit`  |   1.6 MB |
+| pcie-enumeration  | `pcie-enumeration/build/acorn-cle-101-vivado-vivado/gateware/sqrl_acorn.bit`  |   1.6 MB |
 
 Serial fan-out wall-clock: ~30 minutes total.
 
@@ -93,7 +101,7 @@ not forward `synth_mode` through to `builder.build()`. CR-7 caught
 this; commit `c03ee04` fixed the spi-flash files and the re-run
 confirmed the expected failures.
 
-## openxc7 fan-out: `make build-all-xilinx-openxc7` — 0/18 (environmental)
+## Yosys→nextpnr fan-out: `make build-all-xilinx-yosys-nextpnr` — 0/18 (environmental)
 
 Every openxc7 build fails at nextpnr-xilinx invocation with:
 
@@ -109,9 +117,10 @@ environmental gap, **not a refactor regression**:
   --build` end-to-end: BIOS compile succeeds, SoC elaboration succeeds,
   and the failure happens inside the nextpnr-xilinx binary — exactly the
   same symptom `main` would exhibit on this environment.
-- `flow_suffix("openxc7", None)` returns `""`, so openxc7 continues to
-  write to `build/<board>/` — existing `program-*` rules and host tests
-  unchanged.
+- Post-rename, `flow_suffix("openxc7", None)` returns `"-yosys-nextpnr"`,
+  so openxc7 builds now write to `build/<board>-yosys-nextpnr/` instead
+  of the bare `build/<board>/` used previously. CI workflows and
+  `program-*` rules have been updated to the new path (see R3/R4/R8).
 
 Not a blocker for Phase 6. Full resolution is covered by Phase 10 of
 the parent `plan.md` (which explicitly tracks openxc7 PCIe convergence).
