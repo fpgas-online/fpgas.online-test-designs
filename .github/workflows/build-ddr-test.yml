@@ -44,7 +44,7 @@ jobs:
         with:
           name: ddr-test-arty
           path: |
-            designs/ddr-memory/build/arty/gateware/*.bit
+            designs/ddr-memory/build/arty-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-netv2-a7-35:
@@ -85,7 +85,7 @@ jobs:
         with:
           name: ddr-test-netv2-a7-35t
           path: |
-            designs/ddr-memory/build/netv2/gateware/*.bit
+            designs/ddr-memory/build/netv2-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-netv2-a7-100:
@@ -126,7 +126,7 @@ jobs:
         with:
           name: ddr-test-netv2-a7-100t
           path: |
-            designs/ddr-memory/build/netv2/gateware/*.bit
+            designs/ddr-memory/build/netv2-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   lint:
@@ -179,7 +179,7 @@ jobs:
         with:
           name: ddr-test-acorn-cle-215plus
           path: |
-            designs/ddr-memory/build/acorn/gateware/*.bit
+            designs/ddr-memory/build/acorn-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-acorn-cle-215:
@@ -220,7 +220,7 @@ jobs:
         with:
           name: ddr-test-acorn-cle-215
           path: |
-            designs/ddr-memory/build/acorn/gateware/*.bit
+            designs/ddr-memory/build/acorn-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-acorn-cle-101:
@@ -261,5 +261,5 @@ jobs:
         with:
           name: ddr-test-acorn-cle-101
           path: |
-            designs/ddr-memory/build/acorn/gateware/*.bit
+            designs/ddr-memory/build/acorn-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error

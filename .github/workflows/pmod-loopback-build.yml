@@ -44,7 +44,7 @@ jobs:
         with:
           name: gpio-loopback-arty-a7-35t
           path: |
-            designs/pmod-loopback/build/arty/*.bit
+            designs/pmod-loopback/build/arty-yosys-nextpnr/*.bit
           if-no-files-found: error
 
   build-netv2-a7-35:
@@ -85,7 +85,7 @@ jobs:
         with:
           name: gpio-loopback-netv2-a7-35t
           path: |
-            designs/pmod-loopback/build/netv2/*.bit
+            designs/pmod-loopback/build/netv2-yosys-nextpnr/*.bit
           if-no-files-found: error
 
   build-netv2-a7-100:
@@ -126,7 +126,7 @@ jobs:
         with:
           name: gpio-loopback-netv2-a7-100t
           path: |
-            designs/pmod-loopback/build/netv2/*.bit
+            designs/pmod-loopback/build/netv2-yosys-nextpnr/*.bit
           if-no-files-found: error
 
   build-fomu:
@@ -227,7 +227,7 @@ jobs:
         with:
           name: gpio-loopback-acorn-cle-215plus
           path: |
-            designs/pmod-loopback/build/acorn/*.bit
+            designs/pmod-loopback/build/acorn-yosys-nextpnr/*.bit
           if-no-files-found: error
 
   build-acorn-cle-215:
@@ -268,7 +268,7 @@ jobs:
         with:
           name: gpio-loopback-acorn-cle-215
           path: |
-            designs/pmod-loopback/build/acorn/*.bit
+            designs/pmod-loopback/build/acorn-yosys-nextpnr/*.bit
           if-no-files-found: error
 
   build-acorn-cle-101:
@@ -309,5 +309,5 @@ jobs:
         with:
           name: gpio-loopback-acorn-cle-101
           path: |
-            designs/pmod-loopback/build/acorn/*.bit
+            designs/pmod-loopback/build/acorn-yosys-nextpnr/*.bit
           if-no-files-found: error
