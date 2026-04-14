@@ -157,7 +157,7 @@ jobs:
         with:
           name: uart-test-fomu
           path: |
-            designs/uart/build/fomu/gateware/*.bin
+            designs/uart/build/fomu-evt-yosys-nextpnr/gateware/*.bin
           if-no-files-found: error
 
   build-tt:
@@ -187,7 +187,7 @@ jobs:
         with:
           name: uart-test-tt-fpga
           path: |
-            designs/uart/build/tt/gateware/*.bin
+            designs/uart/build/tt-fpga-yosys-nextpnr/gateware/*.bin
           if-no-files-found: error
 
   lint:
