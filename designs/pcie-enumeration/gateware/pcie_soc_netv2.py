@@ -44,7 +44,7 @@ from litex_boards.platforms import kosagi_netv2
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer for Python >= 3.11
-from designs._shared.build_helpers import default_build_dir
+from designs._shared.build_helpers import default_build_dir, flow_suffix
 from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
 from designs._shared.yosys_workarounds import patch_yosys_template
 
@@ -85,7 +85,8 @@ class _CRG(LiteXModule):
 
 
 class PCIeEnumerationSoC(SoCCore):
-    def __init__(self, variant="a7-35", toolchain="openxc7", sys_clk_freq=50e6, **kwargs):
+    def __init__(self, variant="a7-35", toolchain="openxc7",
+                 uses_opensource_pcie=True, sys_clk_freq=50e6, **kwargs):
         platform = kosagi_netv2.Platform(variant=variant, toolchain=toolchain)
 
         if toolchain in ("openxc7", "yosys+nextpnr"):
@@ -96,10 +97,18 @@ class PCIeEnumerationSoC(SoCCore):
                 if not hasattr(platform.toolchain, attr):
                     setattr(platform.toolchain, attr, [])
 
-        # Add pcie_7x open-source Verilog sources — provides the pcie_s7 module
-        # that S7PCIEPHY instantiates, replacing Vivado's proprietary pcie_7x IP.
-        for vfile in sorted(glob.glob(os.path.join(PCIE_7X_SRC, "*.v"))):
-            platform.add_source(vfile)
+        if uses_opensource_pcie:
+            # Add pcie_7x open-source Verilog sources — provides the pcie_s7
+            # module that S7PCIEPHY instantiates, replacing Vivado's
+            # proprietary pcie_7x IP. Used by the openxc7/yosys+nextpnr flow
+            # and the Yosys→Vivado hybrid flow.
+            for vfile in sorted(glob.glob(os.path.join(PCIE_7X_SRC, "*.v"))):
+                platform.add_source(vfile)
+        # else: pure Vivado — S7PCIEPHY.add_sources() has emitted Vivado
+        # TCL into pre_synthesis_commands that instantiates the
+        # proprietary pcie_7x core from the Xilinx IP catalog. Adding the
+        # open-source sources here would create duplicate module
+        # definitions at synth_design time.
 
         # CRG ----------------------------------------------------------------------------------
         self.crg = _CRG(platform, sys_clk_freq)
@@ -178,7 +187,15 @@ def main():
     parser.add_argument(
         "--toolchain",
         default="openxc7",
-        help="openxc7 or yosys+nextpnr",
+        choices=["openxc7", "yosys+nextpnr", "vivado"],
+        help="Synthesis + P&R toolchain. See Phase 3 of the plan.",
+    )
+    parser.add_argument(
+        "--synth-mode",
+        default=None,
+        choices=["vivado", "yosys"],
+        help="Vivado synthesis mode (only honoured with --toolchain=vivado; "
+             "default vivado. Use 'yosys' for the Yosys→Vivado hybrid flow).",
     )
     parser.add_argument(
         "--build",
@@ -187,14 +204,33 @@ def main():
     )
     args = parser.parse_args()
 
-    soc = PCIeEnumerationSoC(variant=args.variant, toolchain=args.toolchain)
+    # Flows that run Yosys for synthesis inject the open-source pcie_7x
+    # Verilog sources; pure Vivado uses its proprietary pcie_7x IP from
+    # the catalog instead.
+    uses_opensource_pcie = (
+        args.toolchain in ("openxc7", "yosys+nextpnr")
+        or (args.toolchain == "vivado" and args.synth_mode == "yosys")
+    )
+
+    soc = PCIeEnumerationSoC(
+        variant=args.variant,
+        toolchain=args.toolchain,
+        uses_opensource_pcie=uses_opensource_pcie,
+    )
 
     if args.toolchain in ("openxc7", "yosys+nextpnr"):
         ensure_chipdb_symlink(soc.platform)
+    # patch_yosys_template is a no-op on pure Vivado (no _yosys_template
+    # attr); safe to call unconditionally since Phase 3a.
     patch_yosys_template(soc)
 
-    builder = Builder(soc, output_dir=default_build_dir(__file__, "netv2"))
-    builder.build(run=args.build)
+    board_name = "netv2" + flow_suffix(args.toolchain, args.synth_mode)
+    builder = Builder(soc, output_dir=default_build_dir(__file__, board_name))
+
+    if args.toolchain == "vivado":
+        builder.build(run=args.build, synth_mode=args.synth_mode or "vivado")
+    else:
+        builder.build(run=args.build)
 
 
 if __name__ == "__main__":
