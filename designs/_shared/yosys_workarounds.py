@@ -17,15 +17,18 @@ for _i, _line in enumerate(YOSYS_TEMPLATE_STRIP_SCOPEINFO):
 
 
 def patch_yosys_template(soc):
-    """Apply the ``$scopeinfo`` workaround to *soc*'s platform toolchain.
+    """Apply the ``$scopeinfo`` workaround when the toolchain exposes a
+    ``YosysWrapper``-derived ``_yosys_template``.
 
-    Asserts that the toolchain exposes the expected ``_yosys_template``
-    attribute so we fail early if the LiteX internals change.
+    Pure Vivado (``XilinxVivadoToolchain``) never runs Yosys at all and
+    has no such attribute — do nothing in that case. The Yosys→Vivado
+    hybrid flow (``--toolchain vivado --synth-mode yosys``) runs Yosys
+    via ``litex.build.xilinx.common._run_yosys``, which builds its own
+    Yosys script directly and likewise does not consult
+    ``_yosys_template``, so the no-op is correct for both Vivado flows.
     """
-    assert hasattr(soc.platform.toolchain, "_yosys_template"), (
-        "Toolchain does not have '_yosys_template' attribute — "
-        "the LiteX API may have changed"
-    )
+    if not hasattr(soc.platform.toolchain, "_yosys_template"):
+        return
     soc.platform.toolchain._yosys_template = list(YOSYS_TEMPLATE_STRIP_SCOPEINFO)
 
 
