@@ -16,8 +16,11 @@ jobs:
         with:
           ref: ${{ github.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          # Match all build job names (but not Lint or this workflow)
-          check-regexp: "^(Arty|NeTV2|Fomu|TT FPGA|netv2)"
+          # Match all build job names (but not Lint or this workflow).
+          # Includes Acorn/NiteFury/LiteFury job names added when the
+          # vivado-xilinx-flows branch expanded the CI matrix to every
+          # board variant.
+          check-regexp: "^(Arty|NeTV2|Fomu|TT FPGA|netv2|Acorn|NiteFury|LiteFury)"
           wait-interval: 30
           allowed-conclusions: success
 
