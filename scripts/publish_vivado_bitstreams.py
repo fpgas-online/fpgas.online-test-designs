@@ -322,7 +322,13 @@ def collect_artifacts(repo_root: Path, requested_flows: set[str]) -> list[Artifa
                     continue
                 board = m.group("board")
                 variant = m.group("variant")
-                staged_name = f"{design}_{board}-{variant}_{flow}{f.suffix}"
+                # Include the source file stem in the staged name because
+                # some boards produce multiple distinct bitstream flavors
+                # per variant (Acorn emits default / fallback / operational
+                # — all with the same extension). Appending the stem keeps
+                # them disambiguated while preserving the
+                # design_board-variant_flow grouping.
+                staged_name = f"{design}_{board}-{variant}_{flow}_{f.stem}{f.suffix}"
                 artifacts.append(Artifact(
                     source_path=f,
                     design=design,

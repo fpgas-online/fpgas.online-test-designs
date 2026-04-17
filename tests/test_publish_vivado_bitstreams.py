@@ -176,13 +176,15 @@ def test_collect_artifacts_only_requested_flows(tmp_path):
     artifacts = pvb.collect_artifacts(tmp_path, {"vivado-vivado", "yosys-vivado"})
     names = sorted(a.staged_name for a in artifacts)
     assert names == [
-        "uart_arty-a7-35_vivado-vivado.bit",
-        "uart_arty-a7-35_yosys-vivado.bit",
+        "uart_arty-a7-35_vivado-vivado_digilent_arty.bit",
+        "uart_arty-a7-35_yosys-vivado_digilent_arty.bit",
     ]
 
 
 def test_collect_artifacts_handles_acorn_plus_variant(tmp_path):
     # The '+' in 'cle-215+' is the edge case that BUILD_DIR_RE must not choke on.
+    # (Note: in practice LiteX translates '+' to 'p' in directory names, but
+    # the regex must still handle the literal case defensively.)
     _make_fake_repo(tmp_path, {
         "uart/acorn-cle-215+-vivado-vivado": ["sqrl_acorn.bit"],
     })
@@ -192,7 +194,36 @@ def test_collect_artifacts_handles_acorn_plus_variant(tmp_path):
     assert a.board == "acorn"
     assert a.variant == "cle-215+"
     assert a.flow == "vivado-vivado"
-    assert a.staged_name == "uart_acorn-cle-215+_vivado-vivado.bit"
+    assert a.staged_name == "uart_acorn-cle-215+_vivado-vivado_sqrl_acorn.bit"
+
+
+def test_collect_artifacts_disambiguates_multiple_flavors(tmp_path):
+    # Acorn boards produce three distinct bitstream flavors per variant
+    # (default, fallback, operational) — all with the same .bit extension.
+    # The staged_name must include the file stem so these don't collide
+    # when staged, or the release would attach only one of them.
+    _make_fake_repo(tmp_path, {
+        "uart/acorn-cle-101-vivado-vivado": [
+            "sqrl_acorn.bit",
+            "sqrl_acorn_fallback.bit",
+            "sqrl_acorn_operational.bit",
+            "sqrl_acorn.bin",
+            "sqrl_acorn_fallback.bin",
+            "sqrl_acorn_operational.bin",
+        ],
+    })
+    artifacts = pvb.collect_artifacts(tmp_path, {"vivado-vivado"})
+    names = sorted(a.staged_name for a in artifacts)
+    assert names == [
+        "uart_acorn-cle-101_vivado-vivado_sqrl_acorn.bin",
+        "uart_acorn-cle-101_vivado-vivado_sqrl_acorn.bit",
+        "uart_acorn-cle-101_vivado-vivado_sqrl_acorn_fallback.bin",
+        "uart_acorn-cle-101_vivado-vivado_sqrl_acorn_fallback.bit",
+        "uart_acorn-cle-101_vivado-vivado_sqrl_acorn_operational.bin",
+        "uart_acorn-cle-101_vivado-vivado_sqrl_acorn_operational.bit",
+    ]
+    # All six must be unique — the whole point of including the stem.
+    assert len(set(names)) == len(names)
 
 
 def test_collect_artifacts_ignores_non_bitstream_extensions(tmp_path):
@@ -208,7 +239,7 @@ def test_collect_artifacts_ignores_non_bitstream_extensions(tmp_path):
     })
     artifacts = pvb.collect_artifacts(tmp_path, {"vivado-vivado"})
     assert [a.staged_name for a in artifacts] == [
-        "uart_arty-a7-35_vivado-vivado.bit",
+        "uart_arty-a7-35_vivado-vivado_digilent_arty.bit",
     ]
 
 
