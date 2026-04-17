@@ -360,10 +360,10 @@ def get_vivado_version(settings_path: str) -> str:
     """Return the `vivado -version` first line, or an explanation on failure."""
     if not Path(settings_path).is_file():
         return "(settings file missing)"
-    # We shell out via /bin/sh so we can source the settings file first — the
-    # Vivado binary needs those env vars to find its own libs.
+    # Xilinx's settings64.sh uses the bash-only `source` builtin internally,
+    # so we must invoke bash (not /bin/sh, which is dash on Debian/Ubuntu).
     r = run_capture(
-        ["/bin/sh", "-c", f". {settings_path} && vivado -version | head -n 1"],
+        ["bash", "-c", f". {settings_path} && vivado -version | head -n 1"],
     )
     if r.returncode != 0:
         return f"(vivado -version failed: {r.stderr.strip() or r.stdout.strip()})"
