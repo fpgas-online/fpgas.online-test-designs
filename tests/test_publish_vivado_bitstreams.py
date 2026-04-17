@@ -267,6 +267,86 @@ def test_write_sha256sums_format(tmp_path):
     assert content == f"{'a' * 64}  a_design.bit\n{'b' * 64}  b_design.bit\n"
 
 
+# ---------------------------------------------------------------------------
+# resolve_existing_release_action — the safety-critical overwrite guard
+# ---------------------------------------------------------------------------
+
+def test_resolve_action_no_existing_release_proceeds():
+    action, _ = pvb.resolve_existing_release_action(
+        tag="vivado-bitstreams-v1", exists=False,
+        git_dirty=False, allow_dirty=False,
+    )
+    assert action == "proceed"
+
+
+def test_resolve_action_clean_tree_existing_release_aborts():
+    # Existing release, clean tree: a clean release is immutable. Must abort
+    # even if --allow-dirty is passed (it wouldn't apply anyway; tag is clean).
+    action, msg = pvb.resolve_existing_release_action(
+        tag="vivado-bitstreams-v1", exists=True,
+        git_dirty=False, allow_dirty=False,
+    )
+    assert action == "abort"
+    assert "vivado-bitstreams-v1" in msg
+    assert "Refusing to overwrite" in msg
+
+
+def test_resolve_action_clean_tree_allow_dirty_still_aborts():
+    # --allow-dirty must NOT enable overwriting a clean release — the guard
+    # applies regardless of the flag when the tree is clean.
+    action, _ = pvb.resolve_existing_release_action(
+        tag="vivado-bitstreams-v1", exists=True,
+        git_dirty=False, allow_dirty=True,
+    )
+    assert action == "abort"
+
+
+def test_resolve_action_dirty_with_allow_dirty_replaces():
+    # Dirty tag + --allow-dirty is the only path that deletes an existing
+    # release. Dirty tags are explicitly mutable by construction.
+    action, msg = pvb.resolve_existing_release_action(
+        tag="vivado-bitstreams-v1-dirty", exists=True,
+        git_dirty=True, allow_dirty=True,
+    )
+    assert action == "replace_dirty"
+    assert "vivado-bitstreams-v1-dirty" in msg
+
+
+def test_resolve_action_dirty_without_allow_dirty_aborts():
+    # Dirty tree without --allow-dirty: preflight would normally abort first,
+    # but if somehow we got here this is the defence-in-depth.
+    action, _ = pvb.resolve_existing_release_action(
+        tag="vivado-bitstreams-v1-dirty", exists=True,
+        git_dirty=True, allow_dirty=False,
+    )
+    assert action == "abort"
+
+
+# ---------------------------------------------------------------------------
+# write_release_notes — commit URL uses the repo argument
+# ---------------------------------------------------------------------------
+
+def test_release_notes_use_repo_arg_for_commit_url(tmp_path):
+    # Verifies the fix for the hardcoded URL bug: `--repo other/fork` must
+    # produce release notes that link to the fork's commit, not the canonical
+    # repo.
+    git = pvb.GitInfo(
+        describe="v0.0-1-gabcdef0", sha="abcdef0" + "0" * 33,
+        branch="vivado-xilinx-flows", dirty=False,
+    )
+    build = pvb.BuildSummary(
+        flows=["vivado-vivado"], jobs=1,
+        vivado_settings="/opt/Xilinx/2025.2/Vivado/settings64.sh",
+        vivado_version="vivado v2025.2 (64-bit)",
+    )
+    a = _one_artifact()
+    pvb.write_release_notes([a], git, build, tmp_path, "someone/a-fork")
+
+    body = (tmp_path / "RELEASE_NOTES.md").read_text()
+    assert "https://github.com/someone/a-fork/commit/" in body
+    assert "fpgas-online/fpgas.online-test-designs" not in body
+
+
 def test_write_manifest_schema(tmp_path):
     git = pvb.GitInfo(
         describe="v0.0-490-g99f0785", sha="99f0785" + "0" * 33,
