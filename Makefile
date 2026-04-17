@@ -227,6 +227,22 @@ check-vivado:
 	@$(MAKE) -C designs/uart check-vivado
 
 # ---------------------------------------------------------------------------
+# Release publishing
+# ---------------------------------------------------------------------------
+#
+# Vivado cannot run in GitHub Actions CI, so the vivado-vivado and
+# yosys-vivado flows must be built locally and published as a GitHub Release.
+# See scripts/publish_vivado_bitstreams.py and
+# docs/toolchains/vivado-release-workflow.md for the full workflow.
+#
+# Pass extra flags through via ARGS, e.g.:
+#     make publish-vivado-bitstreams ARGS="--dry-run"
+
+.PHONY: publish-vivado-bitstreams
+publish-vivado-bitstreams:
+	$(PYTHON) scripts/publish_vivado_bitstreams.py $(ARGS)
+
+# ---------------------------------------------------------------------------
 # Cleanup
 # ---------------------------------------------------------------------------
 
