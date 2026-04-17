@@ -33,6 +33,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -48,7 +49,7 @@ from pathlib import Path
 VIVADO_FLOWS: tuple[str, ...] = ("vivado-vivado", "yosys-vivado")
 
 # Every supported flow — used only to validate directory-name parses. Keeps
-# us from silently silently accepting typos in future flow names.
+# us from silently accepting typos in future flow names.
 ALL_KNOWN_FLOWS: tuple[str, ...] = ("vivado-vivado", "yosys-vivado", "yosys-nextpnr")
 
 DEFAULT_VIVADO_SETTINGS = "/opt/Xilinx/2025.2/Vivado/settings64.sh"
@@ -362,9 +363,10 @@ def get_vivado_version(settings_path: str) -> str:
         return "(settings file missing)"
     # Xilinx's settings64.sh uses the bash-only `source` builtin internally,
     # so we must invoke bash (not /bin/sh, which is dash on Debian/Ubuntu).
-    r = run_capture(
-        ["bash", "-c", f". {settings_path} && vivado -version | head -n 1"],
-    )
+    # `shlex.quote` protects against paths containing spaces or shell
+    # metacharacters since settings_path comes from a CLI argument.
+    cmd = f". {shlex.quote(settings_path)} && vivado -version | head -n 1"
+    r = run_capture(["bash", "-c", cmd])
     if r.returncode != 0:
         return f"(vivado -version failed: {r.stderr.strip() or r.stdout.strip()})"
     return r.stdout.strip() or "(no output)"
@@ -420,13 +422,13 @@ def write_sha256sums(artifacts: list[Artifact], staging_dir: Path) -> Path:
 
 def write_release_notes(artifacts: list[Artifact], git: GitInfo,
                         build: BuildSummary, staging_dir: Path,
-                        release_tag: str) -> Path:
+                        repo: str) -> Path:
     lines: list[str] = []
     lines.append(f"# Vivado-built bitstreams — `{git.describe}`")
     lines.append("")
     lines.append(f"Built from commit [`{git.sha[:7]}`]"
-                 f"(https://github.com/fpgas-online/fpgas.online-test-designs"
-                 f"/commit/{git.sha}) on branch `{git.branch}`.")
+                 f"(https://github.com/{repo}/commit/{git.sha}) on branch "
+                 f"`{git.branch}`.")
     if git.dirty:
         lines.append("")
         lines.append("> **Warning:** this build was made from a **dirty** "
@@ -484,6 +486,30 @@ def write_release_notes(artifacts: list[Artifact], git: GitInfo,
 # ---------------------------------------------------------------------------
 # GitHub release
 # ---------------------------------------------------------------------------
+
+def resolve_existing_release_action(
+    tag: str, exists: bool, git_dirty: bool, allow_dirty: bool,
+) -> tuple[str, str]:
+    """Decide how to handle an existing release whose tag collides with ours.
+
+    Returns (action, message) where action is one of:
+      - "proceed"       — no existing release; publish normally
+      - "replace_dirty" — existing dirty release to delete + recreate
+      - "abort"         — clean release exists, never overwrite
+
+    Split from main() so the safety-critical decision is directly unit-testable.
+    """
+    if not exists:
+        return ("proceed", "")
+    if git_dirty and allow_dirty:
+        return ("replace_dirty", f"Existing dirty release {tag} — will replace.")
+    return (
+        "abort",
+        f"Release {tag} already exists. Refusing to overwrite a clean "
+        "release. If this is intentional, delete it manually with "
+        "`gh release delete`.",
+    )
+
 
 def release_exists(repo: str, tag: str) -> bool:
     r = run_capture(["gh", "release", "view", tag, "--repo", repo])
@@ -607,14 +633,18 @@ def main(argv: list[str] | None = None) -> int:
     # Guard against accidentally overwriting a clean, immutable release. We
     # allow the dirty case because a -dirty tag is already a "this is
     # provisional" marker by construction.
-    if not args.dry_run and release_exists(repo, release_tag):
-        if git.dirty and args.allow_dirty:
-            print(f"  Existing dirty release {release_tag} — will replace.")
+    if not args.dry_run:
+        action, msg = resolve_existing_release_action(
+            release_tag,
+            release_exists(repo, release_tag),
+            git.dirty,
+            args.allow_dirty,
+        )
+        if action == "replace_dirty":
+            print(f"  {msg}")
             delete_release(repo, release_tag)
-        else:
-            die(f"Release {release_tag} already exists on {repo}. Refusing to "
-                "overwrite a clean release. If this is intentional, delete it "
-                "manually with `gh release delete`.")
+        elif action == "abort":
+            die(msg)
 
     build = BuildSummary(
         flows=list(args.flows),
@@ -643,7 +673,7 @@ def main(argv: list[str] | None = None) -> int:
     stage_artifacts(artifacts, staging_dir)
     manifest_path = write_manifest(artifacts, git, build, staging_dir)
     sums_path = write_sha256sums(artifacts, staging_dir)
-    notes_path = write_release_notes(artifacts, git, build, staging_dir, release_tag)
+    notes_path = write_release_notes(artifacts, git, build, staging_dir, repo)
     print(f"  Wrote {manifest_path.name}, {sums_path.name}, {notes_path.name}")
 
     if args.dry_run:
