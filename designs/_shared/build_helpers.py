@@ -182,60 +182,6 @@ def patch_vivado_toolchain_for_yosys_edif():
 patch_vivado_toolchain_for_yosys_edif()
 
 
-def patch_yosys_wrapper_noiopad_for_xilinx():
-    """Disable Yosys's IBUF/OBUF auto-insertion when synthesising for Xilinx.
-
-    `synth_xilinx` (via `iopadmap`) wraps every top-level primary port in
-    a single-ended `IBUF`/`OBUF` by default. For differential I/O (e.g.
-    Acorn's `clk200_p`/`clk200_n` at `DIFF_SSTL15`), LiteX's generated
-    Verilog already instantiates the correct `IBUFDS`:
-
-        IBUFDS IBUFDS (.I(clk200_p), .IB(clk200_n), ...);
-
-    Yosys's iopadmap pass then inserts a redundant `IBUF` between each
-    top-level port and the IBUFDS input, turning `clk200_p`/`clk200_n`
-    into single-ended nets in the EDIF. Vivado's DRC later fails with
-
-        [DRC IOSTDTYPE-1] IOStandard Type: I/O port clk200_p is
-        Single-Ended but has an IOStandard of DIFF_SSTL15 which can only
-        support Differential
-
-    and `write_bitstream` aborts. The pure vivado-vivado flow doesn't
-    hit this because Vivado's own synth understands IBUFDS inputs and
-    skips IBUF insertion.
-
-    Fix: append `-noiopad` to the `synth_xilinx` options when
-    `YosysWrapper` is invoked with `target="xilinx"`. Vivado's
-    `link_design` (and later the `opt_design` flow) auto-inserts the
-    missing single-ended IBUF/OBUF for the remaining non-differential
-    ports, so no buffer is lost; only the incorrect ones are avoided.
-
-    Only affects the `target="xilinx"` call path (used by
-    `_build_yosys_project` in `litex.build.xilinx.common`). Lattice and
-    other targets that share `YosysWrapper` are untouched.
-    """
-    from litex.build import yosys_wrapper as _yw
-
-    if getattr(_yw.YosysWrapper.__init__,
-               "_fpgas_online_noiopad_patched", False):
-        return
-
-    orig_init = _yw.YosysWrapper.__init__
-
-    def patched_init(self, platform, build_name, **kwargs):
-        if kwargs.get("target") == "xilinx":
-            opts = kwargs.get("yosys_opts", "") or ""
-            if "-noiopad" not in opts.split():
-                kwargs["yosys_opts"] = (opts + " -noiopad").strip()
-        orig_init(self, platform, build_name, **kwargs)
-
-    patched_init._fpgas_online_noiopad_patched = True
-    _yw.YosysWrapper.__init__ = patched_init
-
-
-patch_yosys_wrapper_noiopad_for_xilinx()
-
-
 def patch_builder_for_ice40(builder):
     """Patch Builder to minimise BIOS binary size for iCE40UP5K.
 
