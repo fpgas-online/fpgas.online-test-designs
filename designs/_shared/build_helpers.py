@@ -6,9 +6,18 @@ these helpers.
 """
 
 import os
+import sys
 from pathlib import Path
 
 from litex.soc.integration.builder import Builder
+
+# Monkey-patch the Vivado toolchain so yosys-vivado builds don't hit the
+# EDIF libraryRef bug. See patch_vivado_toolchain_for_yosys_edif() below
+# for the full rationale — applying at import time is the same idiom the
+# rest of this module uses (patch_builder_for_ice40 etc.).
+_FIX_EDIF_SCRIPT = (
+    Path(__file__).resolve().parents[2] / "scripts" / "fix_yosys_edif_libref.py"
+)
 
 
 def variant_dir(variant):
@@ -96,6 +105,73 @@ def default_build_dir(gateware_file, board_name):
     """
     design_dir = Path(os.path.realpath(gateware_file)).parent.parent
     return str(design_dir / "build" / board_name)
+
+
+def patch_vivado_toolchain_for_yosys_edif():
+    """Patch XilinxVivadoToolchain.build_script to fix Yosys-emitted EDIFs.
+
+    Yosys 0.64+68 writes non-top user modules (VexRiscv, InstructionCache,
+    DataCache, …) as port-only black-box stubs in the EDIF's ``external LIB``
+    library AND as full synthesized netlists in ``library DESIGN``, while
+    every instance reference points to ``(libraryRef LIB)``. Vivado binds
+    the instances to the stubs and ``opt_design`` dies with
+    ``[DRC INBB-3] Black Box Instances``. See issue #6 and
+    ``scripts/fix_yosys_edif_libref.py`` for the full story.
+
+    This patch inserts a post-Yosys / pre-Vivado step into the generated
+    build script that rewrites the EDIF's instance references from LIB
+    to DESIGN. Only active when ``synth_mode=="yosys"`` — pure Vivado
+    builds don't hit the bug and aren't touched.
+
+    Applied unconditionally at import time because every yosys-vivado
+    build is affected; there is no build-time kwarg that would want to
+    opt out. Guarded against double-patching so repeated imports are
+    safe.
+    """
+    from litex.build.xilinx.vivado import XilinxVivadoToolchain
+
+    if getattr(XilinxVivadoToolchain.build_script,
+               "_fpgas_online_yosys_edif_patched", False):
+        return
+
+    orig = XilinxVivadoToolchain.build_script
+
+    def patched(self):
+        script_file = orig(self)
+        if self._synth_mode != "yosys":
+            return script_file
+        # Splice the EDIF fixer between the yosys invocation and the
+        # vivado invocation in the generated build_*.sh / build_*.bat.
+        # Use the absolute path to sys.executable so the fix runs in
+        # the same Python interpreter as the rest of the LiteX build —
+        # no reliance on `uv` or `python` being first on $PATH when the
+        # build script is later executed by bash.
+        path = Path(script_file)
+        content = path.read_text()
+        fix_cmd = (
+            f"{sys.executable} {_FIX_EDIF_SCRIPT} "
+            f"{self._build_name}.edif\n"
+        )
+        marker = f"vivado -mode batch -source {self._build_name}.tcl"
+        if marker not in content:
+            raise RuntimeError(
+                f"patch_vivado_toolchain_for_yosys_edif: expected marker "
+                f"{marker!r} in generated build script {path}; LiteX may "
+                "have changed its template and the patch needs updating."
+            )
+        content = content.replace(marker, fix_cmd + marker, 1)
+        path.write_text(content)
+        return script_file
+
+    patched._fpgas_online_yosys_edif_patched = True
+    XilinxVivadoToolchain.build_script = patched
+
+
+# Apply the patch at import time. Every gateware script that uses these
+# helpers will benefit; standalone scripts that don't import this module
+# are expected to be openxc7/yosys+nextpnr/icestorm-only and won't hit
+# the bug anyway.
+patch_vivado_toolchain_for_yosys_edif()
 
 
 def patch_builder_for_ice40(builder):
