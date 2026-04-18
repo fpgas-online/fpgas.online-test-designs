@@ -218,3 +218,34 @@ def test_cli_in_place(tmp_path):
 def test_cli_exits_nonzero_on_missing_source(tmp_path):
     with pytest.raises(SystemExit):
         fixer.run_cli([str(tmp_path / "nonexistent.edif")])
+
+
+# ---------------------------------------------------------------------------
+# Malformed-EDIF error paths — must raise loudly, not silently no-op
+# ---------------------------------------------------------------------------
+
+def test_find_duplicated_cells_raises_on_missing_lib_block():
+    # If a future Yosys template change drops the `(external LIB ...)`
+    # block, the fixer must not silently return an empty duplicate set —
+    # that would let a broken EDIF through to Vivado with the original
+    # INBB-3 failure and no clue that the post-processor ran.
+    no_lib = """(edif top
+  (library DESIGN (cell top (view V)))
+  (design top (cellRef top (libraryRef DESIGN)))
+)
+"""
+    with pytest.raises(ValueError, match="external LIB"):
+        fixer.find_duplicated_cells(no_lib)
+
+
+def test_find_duplicated_cells_raises_on_missing_design_block():
+    no_design = """(edif top
+  (external LIB
+    (cell BUFG (view V))
+  )
+  (library PRIMITIVES (cell X (view V)))
+  (design top (cellRef BUFG (libraryRef LIB)))
+)
+"""
+    with pytest.raises(ValueError, match="library DESIGN"):
+        fixer.find_duplicated_cells(no_design)
