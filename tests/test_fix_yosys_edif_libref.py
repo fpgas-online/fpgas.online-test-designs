@@ -221,6 +221,133 @@ def test_cli_exits_nonzero_on_missing_source(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Bug 2 — unused iopad removal (IBUF/OBUF wrapping dont_touch'd ports)
+# ---------------------------------------------------------------------------
+
+# Minimal fixture mirroring the real shape: pmod-loopback Acorn emits an
+# unused IBUF on clk200_p (DCE removed the IBUFDS, but LiteX's
+# (* dont_touch *) preserved the port, and Yosys's iopadmap then wrapped
+# it). The iopad instance, its dangling output net (with unused_bits),
+# and the port-side net that joined it back to the primary input all
+# need to be cleaned up. A second IBUF on serial_rx (USED — its output
+# feeds real logic) must survive untouched.
+UNUSED_IOPAD_EDIF = """(edif top
+  (edifVersion 2 0 0)
+  (external LIB
+    (cell IBUF (view V (interface (port I (direction INPUT)) (port O (direction OUTPUT)))))
+  )
+  (library DESIGN
+    (cell top
+      (view V
+        (interface
+          (port clk200_p (direction INPUT))
+          (port serial_rx (direction INPUT))
+        )
+        (contents
+          (instance (rename id00006 "$iopadmap$top.clk200_p")
+            (viewRef VIEW_NETLIST (cellRef IBUF (libraryRef LIB)))
+            (property keep (integer 1)))
+          (instance (rename id00007 "$iopadmap$top.serial_rx")
+            (viewRef VIEW_NETLIST (cellRef IBUF (libraryRef LIB)))
+            (property keep (integer 1)))
+          (net clk200_p (joined
+              (portRef I (instanceRef id00006))
+              (portRef clk200_p)
+            )
+            (property dont_touch (string "true"))
+          )
+          (net serial_rx (joined
+              (portRef I (instanceRef id00007))
+              (portRef serial_rx)
+            )
+          )
+          (net (rename id00010 "$iopadmap$clk200_p") (joined
+              (portRef O (instanceRef id00006))
+            )
+            (property unused_bits (string "0"))
+          )
+          (net (rename id00011 "$real_logic$serial_rx_sink") (joined
+              (portRef O (instanceRef id00007))
+              (portRef some_fabric_port (instanceRef real_cell))
+            )
+          )
+        )
+      )
+    )
+  )
+  (design top (cellRef top (libraryRef DESIGN)))
+)
+"""
+
+
+def test_find_unused_iopads_only_reports_unused():
+    unused = fixer.find_unused_iopads(UNUSED_IOPAD_EDIF)
+    # Only the clk200_p iopad is "unused" (its output net has unused_bits);
+    # the serial_rx iopad drives real logic and must NOT be identified.
+    assert unused == {"id00006"}
+
+
+def test_remove_unused_iopads_deletes_the_right_bits():
+    fixed, n = fixer.remove_unused_iopads(UNUSED_IOPAD_EDIF)
+    assert n == 1
+
+    # The dead iopad instance is gone.
+    assert '"$iopadmap$top.clk200_p"' not in fixed
+    # The dangling output net is gone.
+    assert '"$iopadmap$clk200_p"' not in fixed
+    # The port-side net lost its IBUF reference but the primary port
+    # reference remains.
+    assert "(portRef I (instanceRef id00006))" not in fixed
+    assert "(portRef clk200_p)" in fixed
+    # The still-used iopad on serial_rx survives.
+    assert '"$iopadmap$top.serial_rx"' in fixed
+    assert "(portRef I (instanceRef id00007))" in fixed
+    # dont_touch property on the port-side net is preserved.
+    assert '(property dont_touch (string "true"))' in fixed
+
+
+def test_remove_unused_iopads_is_idempotent():
+    once, n1 = fixer.remove_unused_iopads(UNUSED_IOPAD_EDIF)
+    twice, n2 = fixer.remove_unused_iopads(once)
+    assert once == twice
+    assert n1 == 1 and n2 == 0
+
+
+def test_remove_unused_iopads_no_op_on_clean_edif():
+    # An EDIF with no iopadmap nets at all must be returned unchanged.
+    clean = """(edif top
+  (external LIB (cell IBUF (view V)))
+  (library DESIGN (cell top (view V (contents (instance x (viewRef V (cellRef IBUF (libraryRef LIB))))))))
+  (design top (cellRef top (libraryRef DESIGN)))
+)
+"""
+    fixed, n = fixer.remove_unused_iopads(clean)
+    assert fixed == clean
+    assert n == 0
+
+
+def test_remove_unused_iopads_leaves_primitives_alone():
+    # A BUFG cell (not IBUF/OBUF) on a similarly-named unused_bits net
+    # must NOT be removed — we only target iopadmap instances, not any
+    # random primitive.
+    non_iopad = UNUSED_IOPAD_EDIF.replace(
+        "$iopadmap$top.clk200_p",
+        "$iopadmap$top.clk200_p",
+    ).replace(
+        "(cellRef IBUF (libraryRef LIB)))\n"
+        "            (property keep (integer 1))",
+        "(cellRef BUFG (libraryRef LIB)))\n"
+        "            (property keep (integer 1))",
+        1,
+    )
+    unused = fixer.find_unused_iopads(non_iopad)
+    # The regex explicitly matches `(cellRef (IBUF|OBUF) (libraryRef LIB))`,
+    # so BUFG instances are excluded from the candidate set. id00006 is
+    # now a BUFG; id00007 is still IBUF but has no unused_bits net.
+    assert unused == set()
+
+
+# ---------------------------------------------------------------------------
 # Malformed-EDIF error paths — must raise loudly, not silently no-op
 # ---------------------------------------------------------------------------
 
