@@ -18,6 +18,14 @@ from litex.soc.integration.builder import Builder
 _FIX_EDIF_SCRIPT = (
     Path(__file__).resolve().parents[2] / "scripts" / "fix_yosys_edif_libref.py"
 )
+# Surface a missing fixer at import time rather than mid-build, where it
+# would appear as a confusing "script not found" error several minutes
+# into a Vivado run. If the repo layout ever changes (extra nesting,
+# renamed scripts/), this assertion catches it immediately.
+assert _FIX_EDIF_SCRIPT.is_file(), (
+    f"fix_yosys_edif_libref.py not found at {_FIX_EDIF_SCRIPT}. "
+    "If designs/_shared/ has been moved, update the `parents[2]` index."
+)
 
 
 def variant_dir(variant):
