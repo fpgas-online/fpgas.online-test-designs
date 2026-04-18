@@ -1,25 +1,43 @@
 #!/usr/bin/env python3
 """Post-process a Yosys-generated EDIF so Vivado can route hierarchical designs.
 
-**The bug**: When Yosys 0.64 writes EDIF for a design that keeps user-module
-hierarchy (like the LiteX + VexRiscv flow used here), non-top modules end up
-defined TWICE — once as a port-only black-box stub in the ``external LIB``
-library, and once as the fully-elaborated netlist in ``library DESIGN``.
-Every instance of those modules in the parent netlist references
-``(libraryRef LIB)``, which points at the stub. When Vivado later reads the
-EDIF and runs ``opt_design``, it sees the stub and fails with::
+Applies two independent fixes to the EDIF that the Yosys 0.64 + synth_xilinx
+flow produces for the LiteX SoCs in this repo:
+
+**Bug 1 — dual library declarations (libraryRef LIB vs DESIGN).** Yosys
+writes non-top user modules (VexRiscv, InstructionCache, DataCache, ...)
+TWICE: once as a port-only black-box stub in the ``external LIB`` library,
+and once as the fully-elaborated netlist in ``library DESIGN``. Every
+instance references ``(libraryRef LIB)`` — the stub — so Vivado's
+``opt_design`` fails with::
 
     ERROR: [DRC INBB-3] Black Box Instances: Cell 'VexRiscv' of type
     'VexRiscv' has undefined contents and is considered a black box.
 
-The full netlist is right there in the same EDIF file — just one token
-over in ``library DESIGN``.
+Fix: rewrite ``(cellRef X (libraryRef LIB))`` → ``(cellRef X (libraryRef
+DESIGN))`` for any cell name X that is defined in both libraries. Xilinx
+primitives (BUFG, DSP48E1, LUT*, RAMB*, IBUF, ...) appear only in LIB and
+are left alone.
 
-**The fix**: For any cell name that appears as a definition in BOTH ``LIB``
-and ``DESIGN``, rewrite every ``(cellRef X (libraryRef LIB))`` to
-``(cellRef X (libraryRef DESIGN))`` so Vivado resolves to the real netlist.
-Cells that appear only in ``LIB`` (Xilinx primitives: BUFG, DSP48E1, BRAM,
-…) are left alone.
+**Bug 2 — redundant IBUFs on unused differential-pair inputs.** Yosys's
+default ``iopadmap`` pass wraps every top-level primary port in a
+single-ended ``IBUF``/``OBUF``. For differential inputs (e.g. Acorn's
+``clk200_p``/``clk200_n`` at DIFF_SSTL15), LiteX's Verilog explicitly
+instantiates an ``IBUFDS`` — and when the design doesn't actually use that
+clock (pmod-loopback on Acorn is purely combinational), Yosys's DCE
+deletes the IBUFDS but iopadmap still wraps the top-level ports in IBUFs
+because the ``(* dont_touch *)`` attribute preserves them. Vivado's DRC
+then fails with::
+
+    ERROR: [DRC IOSTDTYPE-1] IOStandard Type: I/O port clk200_p is
+    Single-Ended but has an IOStandard of DIFF_SSTL15 which can only
+    support Differential
+
+Fix: remove IBUF/OBUF instances whose output (IBUF) or input (OBUF) is on
+a net that Yosys marked ``(property unused_bits ...)``. After removal the
+top-level port is connected to only its port declaration — an unused
+port — which Vivado accepts as a no-op for that pin (a warning, but
+not an error).
 
 Usage::
 
@@ -121,6 +139,111 @@ def fix_edif(edif_text: str) -> tuple[str, int]:
     return text, total
 
 
+# ---------------------------------------------------------------------------
+# Bug 2 — unused IBUF/OBUF instances on dont-touched top ports
+# ---------------------------------------------------------------------------
+
+# Match a complete `(instance (rename ID ...) ... (cellRef TYPE (libraryRef
+# LIB)) ... )` block — three lines, consistent 10-space outer indent in the
+# Yosys EDIF emitter output. The `(?:...)?` around the trailing property
+# line tolerates iopads emitted without the `keep` property.
+_IOPAD_INSTANCE_RE = re.compile(
+    r"          \(instance \(rename (\S+) \"\$iopadmap\$[^\"]+\"\)\n"
+    r"            \(viewRef VIEW_NETLIST \(cellRef (IBUF|OBUF) \(libraryRef LIB\)\)\)"
+    r"(?:\n            \(property keep \(integer 1\)\))?\)\n"
+)
+
+# Match a complete `(net ... (joined (portRef X (instanceRef ID))) (property
+# unused_bits ...))` block — six lines, the telltale shape Yosys writes when
+# iopadmap wraps a top-level port whose synthesized usage was removed by
+# DCE.
+_UNUSED_IOPAD_NET_RE = re.compile(
+    r"          \(net \(rename \S+ \"\$iopadmap\$[^\"]+\"\) \(joined\n"
+    r"              \(portRef [IO] \(instanceRef (\S+)\)\)\n"
+    r"            \)\n"
+    r"            \(property unused_bits \(string \"0\"\)\)\n"
+    r"          \)\n"
+)
+
+# Strip a single `(portRef X (instanceRef ID))` line (with trailing newline)
+# from inside a (joined ...) block — used to clean up the port-side net
+# after the IBUF/OBUF it referenced is deleted.
+def _strip_port_ref_line(text: str, inst_id: str) -> tuple[str, int]:
+    pattern = re.compile(
+        rf"              \(portRef [IO] \(instanceRef {re.escape(inst_id)}\)\)\n"
+    )
+    return pattern.subn("", text)
+
+
+def find_unused_iopads(edif_text: str) -> set[str]:
+    """Return instance IDs of IBUF/OBUF cells whose output sits on an
+    ``(property unused_bits ...)`` net.
+
+    These are the redundant iopads that Yosys adds around top-level ports
+    whose driven logic was removed by DCE but whose port declaration
+    was preserved (typically because LiteX marked the port with
+    ``(* dont_touch *)``).
+    """
+    # First: gather the set of IDs that are IBUF/OBUF instances. The same
+    # RegEx that finds the instance block also names the cell type — we
+    # could filter at the same time, but separating keeps the two passes
+    # independent and easy to reason about.
+    iopad_ids = {m.group(1) for m in _IOPAD_INSTANCE_RE.finditer(edif_text)}
+
+    # Second: find `unused_bits` nets and record which iopad IDs they
+    # reference. The intersection is exactly what we want.
+    unused_ids = {m.group(1) for m in _UNUSED_IOPAD_NET_RE.finditer(edif_text)}
+
+    return iopad_ids & unused_ids
+
+
+def remove_unused_iopads(edif_text: str) -> tuple[str, int]:
+    """Delete redundant iopad instances and their dangling nets.
+
+    For every IBUF/OBUF identified by :func:`find_unused_iopads`:
+
+    - Delete the `(instance (rename ID ...) ... IBUF|OBUF ...)` block.
+    - Delete the `(net ... (portRef O (instanceRef ID))) ... unused_bits)`
+      net that Yosys emitted as a placeholder for the dangling output.
+    - Remove the `(portRef I (instanceRef ID))` reference from the
+      port-side net that joined the top-level port to the now-deleted
+      iopad's input. The port itself stays declared in the cell's
+      interface — Vivado tolerates the resulting "declared but unused"
+      port, treating the associated XDC constraints as a no-op.
+
+    Returns ``(fixed_text, number_of_iopads_removed)``.
+    """
+    to_remove = find_unused_iopads(edif_text)
+    if not to_remove:
+        return edif_text, 0
+
+    text = edif_text
+    for inst_id in to_remove:
+        # Narrowly scoped regexes — each is keyed on the specific ID so
+        # we can't accidentally delete a sibling iopad that happens to
+        # share the pattern skeleton.
+        inst_pat = re.compile(
+            r"          \(instance \(rename " + re.escape(inst_id) + r" "
+            r"\"\$iopadmap\$[^\"]+\"\)\n"
+            r"            \(viewRef VIEW_NETLIST "
+            r"\(cellRef (?:IBUF|OBUF) \(libraryRef LIB\)\)\)"
+            r"(?:\n            \(property keep \(integer 1\)\))?\)\n"
+        )
+        net_pat = re.compile(
+            r"          \(net \(rename \S+ \"\$iopadmap\$[^\"]+\"\) "
+            r"\(joined\n"
+            r"              \(portRef [IO] \(instanceRef "
+            + re.escape(inst_id) + r"\)\)\n"
+            r"            \)\n"
+            r"            \(property unused_bits \(string \"0\"\)\)\n"
+            r"          \)\n"
+        )
+        text, _ = inst_pat.subn("", text, count=1)
+        text, _ = net_pat.subn("", text, count=1)
+        text, _ = _strip_port_ref_line(text, inst_id)
+    return text, len(to_remove)
+
+
 def run_cli(argv: list[str]) -> int:
     if not argv or len(argv) > 2:
         print(
@@ -136,20 +259,35 @@ def run_cli(argv: list[str]) -> int:
 
     dst = Path(argv[1]) if len(argv) == 2 else src
 
-    # Read once, reuse for both the fix and the log summary — avoids a
-    # stale re-read in the in-place case where `dst == src` and the second
-    # read would see the already-fixed content.
+    # Read once, reuse for summary so the in-place case (dst == src)
+    # doesn't stale-read the already-fixed content after writing.
     original = src.read_text()
-    fixed, n = fix_edif(original)
+
+    # Apply bug-1 fix first (libraryRef rewrite). Bug-2's unused-iopad
+    # detection doesn't depend on it, but doing libref first keeps the
+    # output deterministic and the summary consistent.
+    fixed, n_libref = fix_edif(original)
+    fixed, n_iopads = remove_unused_iopads(fixed)
+
     dst.write_text(fixed)
 
+    # Summary keyed off the ORIGINAL text so messages describe what was
+    # present in the input file, not what's left after the rewrites.
     duplicated = find_duplicated_cells(original)
-    if n == 0:
-        print(f"  {src}: no duplicated user-module cells found; nothing to fix.")
-    else:
+    unused = find_unused_iopads(original)
+    if n_libref == 0 and n_iopads == 0:
+        print(f"  {src}: no Yosys-EDIF bugs found; nothing to fix.")
+        return 0
+    if n_libref > 0:
         print(
-            f"  {src}: rewrote {n} instance reference(s) for "
-            f"{len(duplicated)} duplicated cell(s): {', '.join(sorted(duplicated))}"
+            f"  {src}: rewrote {n_libref} instance reference(s) for "
+            f"{len(duplicated)} duplicated cell(s): "
+            f"{', '.join(sorted(duplicated))}"
+        )
+    if n_iopads > 0:
+        print(
+            f"  {src}: removed {n_iopads} unused iopad(s) "
+            f"(instance IDs: {', '.join(sorted(unused))})"
         )
     return 0
 
