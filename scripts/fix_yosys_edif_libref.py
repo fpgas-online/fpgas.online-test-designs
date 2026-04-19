@@ -55,19 +55,24 @@ import re
 import sys
 from pathlib import Path
 
-# Parse cell definitions:  "    (cell NAME"  (NAME is the capture group).
-# Yosys indents cells with four spaces in both ``external LIB`` and
-# ``library DESIGN``.
+# Parse cell definitions. Yosys indents cells with four spaces in both
+# ``external LIB`` and ``library DESIGN``, and uses two forms:
 #
-# NOTE: EDIF 2 0 0 allows ``(cell (rename INTERNAL "external name"))`` for
-# Verilog identifiers containing special characters. Yosys only emits these
-# when a user Verilog module has a name like ``foo\bar`` — the LiteX +
-# VexRiscv + LiteDRAM hierarchy used in this repo uses plain-ASCII
-# identifiers, so the simple ``(\S+)`` capture is sufficient. If a future
-# design introduces a module whose name requires a rename pair, this regex
-# will miss it and the fixer will silently no-op on that cell. Add a
-# ``(?:\(rename \S+ "[^"]+"\)|\S+)`` alternation at that point.
-_CELL_DEF_RE = re.compile(r"^    \(cell (\S+)$", re.MULTILINE)
+#   (1) Plain:     ``    (cell VexRiscv``
+#   (2) Rename:    ``    (cell (rename id00001 "$paramod$HASH\pcie_7x")``
+#
+# Form (2) is EDIF 2 0 0's escape for Verilog identifiers containing
+# characters EDIF can't put directly in an identifier — pcie-enumeration
+# triggers it for every parameterized module (pcie_7x, pipe_wrapper,
+# pcie_block, two_beats, …). The *internal* id in the rename pair is what
+# ``(cellRef ...)`` references use throughout the file, so both forms must
+# be captured here and the substitution in ``fix_edif`` uses whichever
+# token the alternation matched. Group 1 captures the rename internal id;
+# group 2 captures a plain name.
+_CELL_DEF_RE = re.compile(
+    r'^    \(cell (?:\(rename (\S+) "[^"]+"\)|(\S+)\s*$)',
+    re.MULTILINE,
+)
 
 # Library section boundaries. Yosys writes exactly one ``external LIB`` and
 # exactly one ``library DESIGN``; this regex captures the body of each up
@@ -77,10 +82,19 @@ _DESIGN_BLOCK_RE = re.compile(r"\(library DESIGN\b.*?(?=\n  \(design\b)", re.DOT
 
 
 def _cells_in(block_match: re.Match | None) -> set[str]:
-    """Return the set of cell names defined inside a library-block match."""
+    """Return the set of cell identifiers defined inside a library-block match.
+
+    For plain ``(cell NAME`` the identifier is NAME; for rename-syntax
+    ``(cell (rename ID "EXTERNAL"))`` the identifier is the internal ID,
+    because that's what ``(cellRef ID ...)`` references use throughout the
+    EDIF — matching by ID is what lets the substitution wire up correctly.
+    """
     if not block_match:
         return set()
-    return set(_CELL_DEF_RE.findall(block_match.group(0)))
+    return {
+        m.group(1) or m.group(2)
+        for m in _CELL_DEF_RE.finditer(block_match.group(0))
+    }
 
 
 def find_duplicated_cells(edif_text: str) -> set[str]:
