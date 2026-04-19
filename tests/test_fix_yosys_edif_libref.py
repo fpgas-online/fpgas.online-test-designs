@@ -192,6 +192,155 @@ def test_fix_does_not_touch_word_boundary_neighbours():
 
 
 # ---------------------------------------------------------------------------
+# Rename-syntax cells (paramod'd modules like pcie_7x)
+# ---------------------------------------------------------------------------
+
+# Yosys emits parameterized modules with EDIF rename syntax:
+#     (cell (rename id00001 "$paramod$HASH\\pcie_7x") ...)
+# because the external name contains characters EDIF can't put directly in
+# an identifier. The internal id00001 is what instance references use
+# ((cellRef id00001 (libraryRef LIB))), and Yosys double-declares these
+# cells in both LIB and DESIGN exactly like it does with plain-name cells.
+# Seen in pcie-enumeration (pcie_7x + pipe_wrapper + pcie_block + ...).
+RENAME_SYNTAX_BROKEN_EDIF = r"""(edif top
+  (edifVersion 2 0 0)
+  (edifLevel 0)
+  (keywordMap (keywordLevel 0))
+  (external LIB
+    (edifLevel 0)
+    (technology (numberDefinition))
+    (cell BUFG
+      (cellType GENERIC)
+      (view VIEW_NETLIST
+        (viewType NETLIST)
+        (interface (port I (direction INPUT)))
+      )
+    )
+    (cell (rename id00001 "$paramod$1a0e78990f48fe175a1df9b8601fbffb844268c9\pcie_7x")
+      (cellType GENERIC)
+      (view VIEW_NETLIST
+        (viewType NETLIST)
+        (interface (port sys_clk (direction INPUT)))
+      )
+    )
+    (cell (rename id00002 "$paramod$0100cf3830e5a3c0200dcbf6367bcb83f5758c75\pipe_wrapper")
+      (cellType GENERIC)
+      (view VIEW_NETLIST
+        (viewType NETLIST)
+        (interface (port clk (direction INPUT)))
+      )
+    )
+  )
+  (library DESIGN
+    (edifLevel 0)
+    (technology (numberDefinition))
+    (cell (rename id00001 "$paramod$1a0e78990f48fe175a1df9b8601fbffb844268c9\pcie_7x")
+      (cellType GENERIC)
+      (view VIEW_NETLIST
+        (viewType NETLIST)
+        (interface (port sys_clk (direction INPUT)))
+        (contents (instance pw (viewRef VIEW_NETLIST (cellRef id00002 (libraryRef LIB)))))
+      )
+    )
+    (cell (rename id00002 "$paramod$0100cf3830e5a3c0200dcbf6367bcb83f5758c75\pipe_wrapper")
+      (cellType GENERIC)
+      (view VIEW_NETLIST
+        (viewType NETLIST)
+        (interface (port clk (direction INPUT)))
+      )
+    )
+    (cell top
+      (cellType GENERIC)
+      (view VIEW_NETLIST
+        (viewType NETLIST)
+        (interface (port clk (direction INPUT)))
+        (contents
+          (instance pcie (viewRef VIEW_NETLIST (cellRef id00001 (libraryRef LIB))))
+          (instance buf (viewRef VIEW_NETLIST (cellRef BUFG (libraryRef LIB))))
+        )
+      )
+    )
+  )
+  (design top (cellRef top (libraryRef DESIGN)))
+)
+"""
+
+
+def test_find_duplicated_cells_handles_rename_syntax():
+    # Yosys emits pcie_7x / pipe_wrapper / pcie_block / ... with rename
+    # syntax because the external name contains `$paramod$HASH\\...` which
+    # isn't a legal EDIF identifier. Duplication detection must capture the
+    # *internal* id (which is what `(cellRef ...)` references use) for the
+    # substitution to wire up correctly.
+    dup = fixer.find_duplicated_cells(RENAME_SYNTAX_BROKEN_EDIF)
+    assert dup == {"id00001", "id00002"}
+
+
+def test_fix_rewrites_rename_syntax_cellrefs():
+    # The pcie_7x instance references (cellRef id00001 (libraryRef LIB)) —
+    # id00001 being the internal id from the rename pair. Fix must flip
+    # these to DESIGN. BUFG (primitive, LIB-only) stays put.
+    fixed, n = fixer.fix_edif(RENAME_SYNTAX_BROKEN_EDIF)
+    assert n == 2  # one pcie (id00001) + one pipe_wrapper (id00002) refs
+    assert "(cellRef id00001 (libraryRef DESIGN))" in fixed
+    assert "(cellRef id00002 (libraryRef DESIGN))" in fixed
+    assert "(cellRef BUFG (libraryRef LIB))" in fixed
+    assert "(cellRef id00001 (libraryRef LIB))" not in fixed
+    assert "(cellRef id00002 (libraryRef LIB))" not in fixed
+
+
+def test_fix_rewrites_mixed_plain_and_rename_cells():
+    # Real EDIFs from this repo mix plain names (VexRiscv, DataCache, top)
+    # and rename-syntax paramod'd cells. Both forms must be detected and
+    # substituted in a single pass.
+    mixed = MINIMAL_BROKEN_EDIF.replace(
+        "  )\n  (library DESIGN",
+        r"""    (cell (rename id00042 "$paramod$abc\pcie_7x")
+      (cellType GENERIC)
+      (view VIEW_NETLIST
+        (viewType NETLIST)
+        (interface (port clk (direction INPUT)))
+      )
+    )
+  )
+  (library DESIGN""",
+    ).replace(
+        (
+            "    (cell top\n"
+            "      (cellType GENERIC)\n"
+            "      (view VIEW_NETLIST\n"
+            "        (viewType NETLIST)\n"
+            "        (interface (port clk (direction INPUT)))\n"
+            "        (contents\n"
+            "          (instance cpu (viewRef VIEW_NETLIST "
+            "(cellRef VexRiscv (libraryRef LIB))))"
+        ),
+        r"""    (cell (rename id00042 "$paramod$abc\pcie_7x")
+      (cellType GENERIC)
+      (view VIEW_NETLIST
+        (viewType NETLIST)
+        (interface (port clk (direction INPUT)))
+      )
+    )
+    (cell top
+      (cellType GENERIC)
+      (view VIEW_NETLIST
+        (viewType NETLIST)
+        (interface (port clk (direction INPUT)))
+        (contents
+          (instance pcie (viewRef VIEW_NETLIST (cellRef id00042 (libraryRef LIB))))
+          (instance cpu (viewRef VIEW_NETLIST (cellRef VexRiscv (libraryRef LIB))))""",
+    )
+    dup = fixer.find_duplicated_cells(mixed)
+    assert dup == {"DataCache", "VexRiscv", "id00042"}
+    fixed, _ = fixer.fix_edif(mixed)
+    assert "(cellRef VexRiscv (libraryRef DESIGN))" in fixed
+    assert "(cellRef id00042 (libraryRef DESIGN))" in fixed
+    # Primitives (BUFG) stay in LIB — they're not duplicated.
+    assert "(cellRef BUFG (libraryRef LIB))" in fixed
+
+
+# ---------------------------------------------------------------------------
 # CLI entry — files in, files out
 # ---------------------------------------------------------------------------
 
