@@ -267,6 +267,25 @@ DESIGNS = {
             },
         },
     },
+    # Pin identification — each FPGA ball transmits its own name at 1200 baud.
+    # The host script reads RPi GPIOs and validates the decoded names against
+    # the expected wiring (verifies the RPi<->FPGA cabling itself, not a SoC).
+    "pin-id": {
+        "test_script": "designs/pmod-pin-id/host/identify_pmod_pins.py",
+        "boards": {
+            "acorn": {
+                "artifact": "pmod-pin-id-acorn-cle-215plus/sqrl_acorn.bit",
+                "test_args": "--board acorn",
+                # Free GPIO14/15 from the UART login console so the host script
+                # can bit-bang them as inputs to read K2/J2.
+                "pre_test": (
+                    "systemctl stop serial-getty@ttyAMA0 2>&1;"
+                    " systemctl stop serial-getty@serial0 2>&1;"
+                    " true"
+                ),
+            },
+        },
+    },
 }
 
 # Extra files that certain boards need uploaded
