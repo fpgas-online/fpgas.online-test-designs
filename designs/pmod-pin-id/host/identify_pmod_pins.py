@@ -28,7 +28,14 @@ import subprocess
 import sys
 import time
 
-import gpiod
+# gpiod only exists on the Raspberry Pi (it wraps libgpiod). Guard the import
+# so the board mapping + validation logic in this module can be imported and
+# unit-tested on a development machine without the native library present.
+# Any code path that actually reads GPIO raises a clear error if gpiod is None.
+try:
+    import gpiod
+except ImportError:  # pragma: no cover - exercised only off-target
+    gpiod = None
 
 # -- PMOD HAT GPIO definitions ------------------------------------------------
 
@@ -58,6 +65,51 @@ for port_name, gpios in PMOD_HAT_PORTS.items():
     for gpio, phys in zip(gpios, pmod_phys):
         HAT_GPIO_LABELS[gpio] = f"HAT {port_name} pin {phys:02d}"
 
+# -- Board pin maps (for --board validation mode) ------------------------------
+
+# Expected RPi-BCM-GPIO -> FPGA-ball mappings used by `--board` mode to *verify*
+# physical wiring (not just discover it). Each pin is (gpio, fpga_ball, label).
+# When the FPGA runs the matching pmod_pin_id bitstream, the ball connected to
+# each GPIO transmits its own name, so a correct decode == correct wiring.
+BOARDS = {
+    # Sqrl Acorn CLE-215+ / LiteFury P2 header, wired to the RPi 5 GPIO header
+    # via an adapted Pico-EZmate cable. See docs/hardware/acorn-pinmap.md.
+    "acorn": {
+        "description": "Acorn CLE-215+ / LiteFury P2 header -> RPi 5 GPIO",
+        "pins": [
+            (14, "K2", "P2.1 Serial TX"),
+            (15, "J2", "P2.2 Serial RX"),
+            (3, "J5", "P2.3 Spare GPIO 0"),
+            (4, "H5", "P2.4 Spare GPIO 1"),
+        ],
+    },
+}
+
+
+def evaluate_board(board_name, results):
+    """Validate decoded pin labels against a board's expected wiring.
+
+    *results* maps ``gpio -> decoded_label`` as produced by :func:`scan_gpios`
+    (a clean ball name like ``"K2"``, a ``"?garbled"`` string, or ``None`` for
+    no signal). Returns ``(all_ok, rows)`` where each row is a dict with
+    ``gpio``, ``label``, ``expected``, ``got`` and ``ok``. A pin passes only on
+    an exact clean match — garbled and missing decodes both fail, because a
+    miswired or unprogrammed board must not be reported as good.
+    """
+    spec = BOARDS[board_name]
+    rows = []
+    all_ok = True
+    for gpio, expected, label in spec["pins"]:
+        got = results.get(gpio)
+        ok = got == expected
+        if not ok:
+            all_ok = False
+        rows.append(
+            {"gpio": gpio, "label": label, "expected": expected, "got": got, "ok": ok}
+        )
+    return all_ok, rows
+
+
 # -- UART bit-bang parameters --------------------------------------------------
 
 BAUD_RATE = 1200
@@ -77,6 +129,11 @@ _GPIOD_V2 = hasattr(gpiod, "request_lines")
 
 def detect_gpio_chip():
     """Find the gpiochip device for RPi GPIO by label."""
+    if gpiod is None:
+        raise RuntimeError(
+            "python3-libgpiod (the `gpiod` module) is not installed. "
+            "Pin scanning requires it; install it on the Raspberry Pi."
+        )
     for chip_path in sorted(pathlib.Path("/dev").glob("gpiochip*")):
         try:
             chip = gpiod.Chip(str(chip_path))
@@ -349,11 +406,33 @@ def release_kernel_gpio_drivers():
         print("No kernel modules needed unloading.")
 
 
+# -- Board validation output ---------------------------------------------------
+
+def print_validation(board_name, rows):
+    """Print a per-pin expected-vs-decoded table for `--board` mode."""
+    spec = BOARDS[board_name]
+    print(f"\n=== Wiring check: {board_name} ({spec['description']}) ===\n")
+    print("| RPi GPIO | Header pin         | Expect | Got    | OK |")
+    print("|----------|--------------------|--------|--------|----|")
+    for r in rows:
+        got = r["got"] if r["got"] is not None else "(none)"
+        mark = "✓" if r["ok"] else "✗"
+        print(
+            f"| GPIO{r['gpio']:<4d} | {r['label']:<18s} | {r['expected']:<6s}"
+            f" | {got:<6s} | {mark}  |"
+        )
+
+
 # -- Main ----------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(
         description="Identify FPGA pins via UART transmission at 1200 baud"
+    )
+    parser.add_argument(
+        "--board", choices=sorted(BOARDS),
+        help="Validate wiring for a known board against its expected GPIO->ball "
+             "map (prints RESULT: PASS/FAIL). Overrides --gpios/--hat-port.",
     )
     parser.add_argument(
         "--gpios", type=int, nargs="+",
@@ -369,7 +448,9 @@ def main():
     )
     args = parser.parse_args()
 
-    if args.gpios:
+    if args.board:
+        gpio_list = [gpio for gpio, _ball, _label in BOARDS[args.board]["pins"]]
+    elif args.gpios:
         gpio_list = args.gpios
     elif args.hat_port:
         gpio_list = PMOD_HAT_PORTS[args.hat_port]
@@ -388,6 +469,17 @@ def main():
     print()
 
     results = scan_gpios(gpio_list, chip_path)
+
+    # `--board` mode: validate against the expected wiring and emit a single
+    # RESULT: marker so verify_hardware.py can score it pass/fail.
+    if args.board:
+        all_ok, rows = evaluate_board(args.board, results)
+        print_validation(args.board, rows)
+        n_ok = sum(1 for r in rows if r["ok"])
+        print(f"\n{n_ok}/{len(rows)} pins match expected wiring.")
+        print(f"RESULT: {'PASS' if all_ok else 'FAIL'}")
+        sys.exit(0 if all_ok else 1)
+
     print_mapping_table(results)
 
     valid_count = sum(1 for v in results.values() if v and not v.startswith("?"))
