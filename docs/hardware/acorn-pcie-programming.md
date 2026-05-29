@@ -13,7 +13,9 @@ The Acorn has two working programming paths:
 | GPIO JTAG → SRAM | Slow (~minutes) | No (lost on power cycle) | RPi GPIO wiring | Works with any/no bitstream loaded |
 | PCIe → SPI Flash | Fast (~seconds) | Yes | Working LiteX PCIe bitstream | Requires PCIe-capable bitstream already running |
 
-**Flash-via-JTAG (`--write-flash`) is not currently working** with openFPGALoader on the Acorn. JTAG can only load bitstreams to volatile SRAM. This has important implications for the recovery strategy.
+**Flash-via-JTAG (`--write-flash`) is not currently working** with openFPGALoader on the Acorn, BUT there is now a working JTAG-only bootstrap path via the `flash_writer` LiteX SoC — see "Bootstrap via flash_writer SoC" below. JTAG can also still load bitstreams to volatile SRAM. This has important implications for the recovery strategy.
+
+The openFPGALoader `--write-flash` path needs a `spiOverJtag_xc7a200tfbg484.bit.gz` bridge bitstream with `STARTUPE2 PERSIST_CCLK / USRCCLKO` configured to drive `CCLK` after configuration. The openxc7 build of the open-source spiOverJtag source does NOT honor those Vivado-only XDC properties, so post-startup `CCLK` never toggles and SPI flash JEDEC ID reads fail. A Vivado-built bridge bitstream would work — but Vivado isn't required if you use the `flash_writer` SoC path described below.
 
 ### Current Bitstream State
 
@@ -153,6 +155,30 @@ If the operational bitstream at 0x400000 is corrupted or fails to configure:
 6. Host can reprogram operational slot via `litepcie_util flash_write`
 
 **No manual intervention required** — the system self-recovers.
+
+### Bootstrap via `flash_writer` SoC — recommended for greenfield Acorns
+
+This is the path used to put a LiteX bitstream into flash on an Acorn that currently has the Sqrl factory firmware (`1e24:021f`) at flash 0x0 and has never had a LiteX golden image installed. The Acorn at welland-pi4 falls into this category as of 2026-05-30.
+
+The trick: a non-PCIe LiteX SoC (`flash_writer` — see `designs/pcie-enumeration/gateware/flash_writer_soc_acorn.py`) JTAG-loaded into SRAM stays loaded indefinitely. PCIe-aware bitstreams trigger the Acorn's PERST→PROG_B auto-revert circuit; a JTAGBone-only bitstream does not. So we use `flash_writer` as the JTAG-mediated host control channel, and it has S7SPIFlash + ICAP CSRs that we drive from the host via JTAGBone.
+
+```bash
+# From inside the repo
+bash scripts/deploy_litepcie_to_flash.sh
+```
+
+That driver script:
+1. SCPs the patched `flash_writer.bit` and the LitePCIe `operational.bit` to welland-pi4.
+2. JTAG-loads `flash_writer.bit` (it stays loaded because no PCIe).
+3. Runs `native_jtagbone.py` on the Pi to write `operational.bit` to flash slot `0x400000` via the bridge's S7SPIFlash CSRs.
+4. Triggers ICAP IPROG via the `icap.iprog` CSR.
+5. PCI rescan + lspci verification.
+
+After IPROG, the FPGA loads operational.bit from flash. Because the FPGA is now booting from flash rather than from a JTAG-volatile load, the PERST→PROG_B circuit does NOT revert anything — the flash IS the new image.
+
+**Prerequisites for this path:**
+- LiteX 2025.12 has a bug in the xc7 JTAGPHY where the RX-side signals (`rx_data`, `rx_valid`, `ready`, `update_*`, `ready_value`) are declared but never wired to the output stream. Apply `scripts/apply_litex_jtag_patch.py` to the LiteX install before building `flash_writer`. Upstream LiteX 2026.04 has the fix.
+- Sqrl factory firmware in flash slot 0x0 doesn't have NEXT_CONFIG_ADDR set to chain-load 0x400000. After flash 0x400000 is written, the *first* PROG_B will still load Sqrl from 0x0. ICAP IPROG bypasses this by explicitly loading from 0x400000.
 
 ### SRAM Bootstrap Recovery — Golden Bitstream Bad
 
