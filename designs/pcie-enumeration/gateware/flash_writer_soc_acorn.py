@@ -49,6 +49,13 @@ from litex.soc.integration.soc_core import SoCCore
 from litex_boards.platforms import sqrl_acorn
 from migen import *
 
+# IMPORTANT — before building this design, run
+# `scripts/apply_litex_jtag_patch.py .venv/lib/python3.12/site-packages/litex/soc/cores/jtag.py`
+# to install the LiteX xc7 JTAGPHY rx-wiring fix. The 2025.12 release in
+# uv.lock has the broken FSM (signals declared but never wired to the
+# output stream); upstream fixed it in 2026.04. Without the patch the
+# host-to-target JTAGBone stream is silently dropped.
+
 import designs._shared.migen_compat  # noqa: F401
 from designs._shared.build_helpers import default_build_dir
 from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
