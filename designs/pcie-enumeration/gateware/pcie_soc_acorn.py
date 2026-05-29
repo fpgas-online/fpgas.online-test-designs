@@ -36,6 +36,9 @@ from litepcie.phy.s7pciephy import S7PCIEPHY
 from litex.build.generic_platform import IOStandard, Misc, Pins, Subsignal
 from litex.gen import *
 from litex.soc.cores.clock import S7PLL
+from litex.soc.cores.gpio import GPIOOut
+from litex.soc.cores.icap import ICAP
+from litex.soc.cores.spi_flash import S7SPIFlash
 from litex.soc.integration.builder import Builder
 from litex.soc.integration.soc_core import SoCCore
 from litex_boards.platforms import sqrl_acorn
@@ -157,6 +160,26 @@ class PCIeEnumerationSoC(SoCCore):
             self.pcie_phy.cd_pcie.clk,
             1e9 / 125e6,  # Gen2 reference clock
         )
+
+        # ICAP — FPGA reload over PCIe ----------------------------------------------------------
+        # Provides the `icap.iprog` CSR that triggers a fundamental
+        # reconfiguration of the FPGA from QSPI flash (loads whatever bitstream
+        # is currently programmed in the flash's operational slot). This is the
+        # PCIe-side counterpart of pulsing PROG_B externally.
+        self.icap = ICAP()
+        self.icap.add_reload()
+        self.icap.add_timing_constraints(platform, sys_clk_freq, self.crg.cd_sys.clk)
+
+        # SPI flash — write new bitstream over PCIe --------------------------------------------
+        # Two CSRs: `flash_cs_n.out` (manual chip-select) and `flash.bitbang`
+        # (4-wire SPI bit-bang over MOSI/MISO/WP/HOLD). Combined with ICAP this
+        # gives end-to-end PCIe-only gateware update:
+        #   1. Write new bitstream bytes into flash via S7SPIFlash CSRs
+        #   2. Toggle icap.iprog to reload from flash
+        # The clock to the flash goes through the FPGA's STARTUPE2 primitive
+        # (a hard block in 7-series for accessing the config-clock pin).
+        self.flash_cs_n = GPIOOut(platform.request("flash_cs_n"))
+        self.flash = S7SPIFlash(platform.request("flash"), sys_clk_freq, 25e6)
 
 
 # Build --------------------------------------------------------------------------------------------
