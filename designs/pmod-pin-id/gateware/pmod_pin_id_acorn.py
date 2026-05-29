@@ -59,6 +59,29 @@ _pin_id_io = [
 
 class AcornPinIdentifier(Module):
     def __init__(self, platform):
+        # Clock setup: differential 200 MHz oscillator -> IBUFDS -> BUFG -> sys.
+        #
+        # Without an explicit BUFG, nextpnr-xilinx (openxc7) does not route the
+        # IBUFDS output onto the global clock network — the clock can't fan out
+        # to all registers, so sync logic appears static. Auto-BUFG insertion
+        # only happens for clocks that come directly from a single-ended port
+        # (e.g. the Arty's clk100), not for IBUFDS outputs.
+        clk200 = platform.request("clk200")
+        clk_se = Signal()
+        self.clock_domains.cd_sys = ClockDomain()
+
+        self.specials += Instance("IBUFDS",
+            i_I=clk200.p,
+            i_IB=clk200.n,
+            o_O=clk_se,
+        )
+        self.specials += Instance("BUFG",
+            i_I=clk_se,
+            o_O=self.cd_sys.clk,
+        )
+        # No external reset wire — just tie cd_sys.rst low.
+        self.comb += self.cd_sys.rst.eq(0)
+
         for i, (fpga_pin, _resource) in enumerate(P2_PINS):
             pin = platform.request(f"pin_id_{i}")
             label = f"{fpga_pin}\r\n"

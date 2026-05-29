@@ -4,7 +4,12 @@ TOOLCHAIN   ?= openxc7
 
 include ../../mk/common.mk
 
-.PHONY: gateware gateware-arty \
+# openXC7 chipdb cache directory (.bin files for nextpnr-xilinx).
+# Lives at the repo root so multiple designs can share the cache.
+CHIPDB ?= $(REPO_ROOT)/chipdb
+export CHIPDB
+
+.PHONY: gateware gateware-arty gateware-acorn \
         program-arty \
         scan scan-arty \
         clean
@@ -15,6 +20,13 @@ gateware: gateware-$(BOARD)
 
 gateware-arty:
 	$(PYTHON) gateware/pmod_pin_id_arty.py \
+		--variant $(VARIANT) \
+		--toolchain $(TOOLCHAIN) \
+		--build
+
+gateware-acorn:
+	mkdir -p $(CHIPDB)
+	$(PYTHON) gateware/pmod_pin_id_acorn.py \
 		--variant $(VARIANT) \
 		--toolchain $(TOOLCHAIN) \
 		--build
