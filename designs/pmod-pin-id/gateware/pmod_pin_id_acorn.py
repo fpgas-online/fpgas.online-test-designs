@@ -28,6 +28,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from litex.build.generic_platform import IOStandard, Pins
+from litex.gen import LiteXModule
+from litex.soc.cores.clock import S7PLL
 from litex_boards.platforms.sqrl_acorn import Platform
 from migen import *
 from pmod_pin_id import UARTTxIdentifier
@@ -46,7 +48,9 @@ P2_PINS = [
 ]
 
 BAUD_RATE = 1200
-SYS_CLK_FREQ = 200e6  # Use the raw 200 MHz oscillator directly (no PLL needed)
+# Driven by the PLL in _CRG below, not by the raw oscillator. The Acorn's 200 MHz
+# input is a differential pair and cannot be used directly as a clock -- see _CRG.
+SYS_CLK_FREQ = 100e6
 
 # Define each pin as a standalone output for the identifier.
 _pin_id_io = [
@@ -57,12 +61,44 @@ _pin_id_io = [
 ]
 
 
+class _CRG(LiteXModule):
+    """Clock/reset generator — mirrors designs/uart/gateware/uart_soc_acorn.py.
+
+    This design previously had no CRG at all, relying on migen's implicit
+    default-clock wiring. That does not work on this board: the platform's
+    `default_clk_name` is `clk200`, which the Acorn brings out as a DIFFERENTIAL
+    pair (J19/H19, DIFF_SSTL15). The implicit path cannot turn that Record into a
+    usable single-ended `sys` clock, so `UARTTxIdentifier`'s `self.sync` logic had
+    no clock: the bitstream built and configured cleanly, and then every pin sat
+    idle forever. On real hardware (Acorn CLE-215+ on a Pi 5, 2026-08-31) all four
+    P2 pins measured silent, which was misread as "the P2 cable is not connected"
+    until the clocked UART SoC proved the wiring was fine.
+
+    Feeding the pair through the PLL fixes it: S7PLL.register_clkin() instantiates
+    the differential input buffer for a p/n Record, and `sys` is driven from its
+    output.
+    """
+
+    def __init__(self, platform, sys_clk_freq):
+        self.rst = Signal()
+        self.cd_sys = ClockDomain()
+
+        clk200 = platform.request("clk200")
+
+        self.pll = pll = S7PLL()
+        self.comb += pll.reset.eq(self.rst)
+        pll.register_clkin(clk200, 200e6)
+        pll.create_clkout(self.cd_sys, sys_clk_freq)
+        platform.add_false_path_constraints(self.cd_sys.clk, pll.clkin)
+
+
 class AcornPinIdentifier(Module):
-    def __init__(self, platform):
+    def __init__(self, platform, sys_clk_freq=SYS_CLK_FREQ):
+        self.submodules.crg = _CRG(platform, sys_clk_freq)
         for i, (fpga_pin, _resource) in enumerate(P2_PINS):
             pin = platform.request(f"pin_id_{i}")
             label = f"{fpga_pin}\r\n"
-            tx = UARTTxIdentifier(pin, label, int(SYS_CLK_FREQ), baud=BAUD_RATE)
+            tx = UARTTxIdentifier(pin, label, int(sys_clk_freq), baud=BAUD_RATE)
             self.submodules += tx
 
 
