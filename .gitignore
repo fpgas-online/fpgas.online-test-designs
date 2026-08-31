@@ -223,3 +223,6 @@ tmp/
 
 # uv.lock — tracked for reproducible CI builds
 # uv.lock
+
+# git worktrees
+.worktrees/
