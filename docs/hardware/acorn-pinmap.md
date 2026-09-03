@@ -10,8 +10,9 @@ See [acorn.md](acorn.md) for board specs and deployment inventory.
 > pin-ID design was run on the Welland boards on 2026-08-31 (see
 > [Measured P2 wiring](#measured-p2-wiring-welland-2026-08-31)). The earlier
 > revision of this page wired FPGA TX (K2) to the Pi's TXD0, i.e. transmitter
-> into transmitter, which cannot work on any RP1 host. The crossover is **not**
-> a Compute Blade special case.
+> into transmitter, which cannot work with the hardware UART (`/dev/ttyAMA0`)
+> that every host and test script uses. The crossover is the fleet standard,
+> not a Compute Blade special case.
 
 ## Wiring Diagram
 
@@ -64,12 +65,27 @@ The P2 connector provides UART and 2 spare GPIO pins. Solder or crimp Dupont con
 
 ### RPi GPIO Header Connection
 
-The serial pair is a **null-modem crossover**: the FPGA's transmitter (K2) must
-land on the Pi's receiver (GPIO15 / RXD0) and the FPGA's receiver (J2) on the
-Pi's transmitter (GPIO14 / TXD0). This is forced by silicon — the RP1 hardwires
-GPIO14 = TXD0 and GPIO15 = RXD0 and they cannot be swapped in software — and it
-is the same convention the NeTV2 boards on this site use
+The serial pair is a **null-modem crossover**: the FPGA's transmitter (K2) lands
+on the Pi's receiver (GPIO15 / RXD0) and the FPGA's receiver (J2) on the Pi's
+transmitter (GPIO14 / TXD0). This follows the Raspberry Pi header convention
+(pin 8 = TXD, pin 10 = RXD) that `/dev/ttyAMA0` uses on every Pi generation,
+and it is the same convention the NeTV2 boards on this site use
 ([site-welland.md](site-welland.md#gpio-uart): FPGA TX → GPIO15, FPGA RX → GPIO14).
+
+How hard that convention is depends on the host:
+
+- **BCM2711 / BCM2837 hosts (Pi 3, Pi 4, CM4):** the PL011 mux is fixed —
+  GPIO14 can only be a UART transmitter and GPIO15 only a receiver — so the
+  crossover is the one wiring that can work.
+- **RP1 hosts (Pi 5, CM5):** the hardware UART0 is likewise only offered as
+  GPIO14 = `TXD0`, GPIO15 = `RXD0` (`pinctrl funcs 14,15` on pi-sw2-p29 lists
+  no alt where they swap), so a non-crossover cable cannot use `/dev/ttyAMA0`
+  either. But the RP1 also exposes `PIO14`/`PIO15` (`/dev/pio0`, `rp1_pio`
+  module loaded on the fleet), and a PIO UART program can put TX or RX on any
+  header pin — see option 2 under the
+  [Compute Blade wiring variant](#compute-blade-wiring-variant). Nobody has written that driver for the test
+  scripts, so the fleet standardises on the crossover and one cable design
+  works on every host.
 
 ```
 RPi 40-pin header (top view, showing pins 3-12):
@@ -431,10 +447,10 @@ Compute Blade Expansion Module Port
 
 **P2 (UART) → Expansion Port (with null modem crossover):**
 
-The FPGA TX (K2) must connect to the RPi RX (GPIO15), and FPGA RX (J2) to RPi TX (GPIO14) — the same crossover as the standard RPi 5 wiring above (on a CM4 the BCM2711 pin mux is fixed the same way; on CM5/RP1 it could be worked around, but is not). Two options:
+To use the hardware UART (`/dev/ttyAMA0`), the FPGA TX (K2) must connect to the RPi RX (GPIO15) and FPGA RX (J2) to RPi TX (GPIO14) — the same crossover as the standard RPi 5 wiring above. On a CM4 the BCM2711 mux is fixed, so this is the only option; on a CM5 the RP1 offers a second one. Two options:
 
 1. **Physical crossover** (simplest, and what the fleet uses): P2:1 (K2) to the RXD0 pin, P2:2 (J2) to the TXD0 pin.
-2. **RP1 PIO UART** (future): Use the RP1's PIO (`/dev/pio0`, `rp1_pio` module) to implement a software UART with TX on GPIO15 and RX on GPIO14. The PIO can implement any serial protocol on any GPIO pin. No ready-made PIO UART driver exists yet — this would need to be written (similar to the RP2040 pico-sdk PIO UART example).
+2. **RP1 PIO UART** (Pi 5 / CM5 only, future): Use the RP1's PIO (`/dev/pio0`, `rp1_pio` module — both present on the Welland Pi 5s; `pinctrl set 14 a7` / `pinctrl set 15 a7` select `PIO14`/`PIO15`) to implement a software UART with TX on GPIO15 and RX on GPIO14, or on any other header pins. The [raspberrypi/utils piolib](https://github.com/raspberrypi/utils/tree/master/piolib) user-space API clones the Pico SDK PIO API, so the pico-sdk `uart_rx.pio` / `uart_tx.pio` programs should port with little change. No ready-made driver or PTY bridge exists yet — this would need to be written (test-designs issue #4).
 
 | P2 Pin | Function     | → Expansion Port Pin | GPIO   | RPi UART0 Function |
 |--------|--------------|----------------------|--------|--------------------|
@@ -510,8 +526,10 @@ float exactly like pi18, which has no FPGA at all. Reseating P1 is the fix.
 
 **CM4 has one correct wiring.** On a CM4 `GPIO14 = TXD0` and `GPIO15 = RXD0` are
 alt0 on the BCM2711 and no mux option makes GPIO15 a transmitter, so FPGA TX
-*must* land on GPIO15. CM5/Pi 5 (RP1) could in principle reassign UART pins or
-use PIO, but the fleet uses the same crossover everywhere.
+*must* land on GPIO15. On CM5/Pi 5 the RP1's hardware UART0 has the same
+pin assignment, but its PIO block could implement a UART with either direction
+on either pin; the fleet uses the same crossover everywhere so one cable design
+works on both module types.
 
 **Loading a TX-driving design costs JTAG until a PoE cycle** (issue #4 item 1):
 after pin-ID the FPGA drives J2 → GPIO14, which is also TMS on the blade. A PoE
