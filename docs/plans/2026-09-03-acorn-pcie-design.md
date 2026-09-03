@@ -1,10 +1,12 @@
 # Acorn PCIe test designs on welland.fpgas.online — design and phased plan
 
 **Date:** 2026-09-03
-**Status:** Draft for review (nothing in this document has been built yet)
-**Scope:** The six Sqrl Acorn CLE-215+ hosts at Welland (`pi-sw2-p{29,43,44,46,47,48}`).
-PS1 Compute Blade hosts (CLE-101 / LiteFury) are a follow-on and only mentioned
-where the design must not preclude them.
+**Status:** Approved 2026-09-03 (decisions in §7); implementation starts with Phase 0
+**Scope:** The six Sqrl Acorn CLE-215+ hosts at Welland (`pi-sw2-p{29,43,44,46,47,48}`)
+first, then the PS1 Compute Blade hosts carrying Acorn CLE-101 boards
+(`pi14`, `pi16`, `pi20`; decided 2026-09-03). The blades differ in JTAG pins,
+the shared GPIO14 (TMS and FPGA RX), the absence of the two spare GPIOs, and
+the `cle-101` variant (XC7A100T, 512 MB); see Phase 3b.
 
 > **Standing principle (from the task brief):** the hardware works. Every
 > failure is our gateware, host software, configuration, or documentation.
@@ -371,9 +373,34 @@ Per board, in this order, each step a `verify_hardware.py` test:
    (ident is the golden one), then restore.
 9. Repeat 7–8 on the other boards with working JTAG.
 
-**Gate:** `verify_hardware.py --board acorn` passes every Acorn test three
-times in a row on every board whose wiring is canonical. Boards excluded for
-wiring reasons are listed in the run summary with the reason.
+**Gate:** `verify_hardware.py --board acorn` passes every Acorn test N
+times in a row (N per §7 decision 11) on every board whose wiring is
+canonical. Boards excluded for wiring reasons are listed in the run summary
+with the reason.
+
+### Phase 3b — PS1 Compute Blade bring-up (after Phase 3, same branches)
+
+The PS1 blades (`pi14` CM4, `pi16` CM5 Lite, `pi20` CM5 Lite; gateway
+`pi@ps1.fpgas.online`, to be re-verified the way tweed was) carry Acorn
+CLE-101 boards. Differences the harness must encode, all from
+`acorn-pinmap.md` "Compute Blade Wiring Variant":
+
+- `--variant cle-101` bitstreams (XC7A100T, `MT41K256M16`, 512 MB) from the
+  same `acorn_pcie_soc.py`; the CI matrix already builds all three variants.
+- JTAG: `openFPGALoader --cable libgpiod --pins 2:3:4:14` (pi20 already runs
+  openFPGALoader 0.13.1, so `--read-dna` is a bonus cross-check of R1 there).
+- GPIO14 is both TMS and the FPGA's RX (J2). Our SoC treats J2 as an input, so
+  it does not contend with TMS; the harness still restores `pinctrl set 14 a4`
+  after every load, and never runs pin-ID on a blade without a PoE cycle after.
+- No spare GPIOs on the blade connector: `pcie-gpio` is reported as `SKIP`
+  (not FAIL) for the `cle-101`-on-blade host class, with the reason. It still
+  runs on the FPGA side (CSR write/read-back) so the core is exercised.
+- Console is `tty1` on the blades (issue #3); `serial-getty` handling as today.
+- pi14/pi16 currently do not answer JTAG (P1 unmated). They join once reseated;
+  pi20 goes first. The board order and the "no JTAG, no flashing" rule are
+  the same as Welland.
+
+**Gate:** same as Phase 3, on pi20 and on pi14/pi16 once their JTAG answers.
 
 ### Phase 4 — release and CI (branch `acorn-pcie/04-release`)
 
@@ -456,7 +483,8 @@ which boards each phase can use:
 | p29   | Re-terminate the J5 (P2 pin 3) wire to GPIO3                        | `pcie-gpio`                    |
 | p43   | Check/reseat P1 (JTAG) cable; TCK pull-up test from the PS1 notes   | everything (no JTAG = no safe flashing) |
 | p44   | Same as p43. Also find out what LiteX design is in its flash (ident via UART once JTAG works) | everything |
-| all   | Update `~/.ssh/known_hosts` for tweed's new host key                | `verify_hardware.py`           |
+| pi14, pi16 (PS1) | Reseat the P1 (JTAG) cable; TCK pull-up test as on pi20            | Phase 3b on those two blades   |
+| all   | ~~Update `~/.ssh/known_hosts` for tweed's new host key~~ done 2026-09-03 | `verify_hardware.py`       |
 | infra | Merge fpgas.online-infra #48 (openFPGALoader with `rp1pio`, `--read-dna`) when the deb is published; add kernel headers or a `litepcie` package to the NFS root | removes the `gpiochip0` symlink and the cross-compile step |
 
 ## 6. Test definitions (pass/fail)
@@ -492,16 +520,21 @@ which boards each phase can use:
    than the kernel ID table being extended.
 10. **Golden and operational images share one driver** by pinning CSR indices,
     rather than building a driver per image.
+11. **Consecutive-clean-run gate (decided 2026-09-03):** N = 3 per board for
+    each bring-up phase (3, 3b, 5); a final acceptance run of N = 10 across
+    every board in scope, restarted from run 1 on any failure, before the work
+    is declared done. Rationale: after N clean runs the 95 % upper bound on the
+    per-run failure rate is about 3/N, so 3 runs only rule out gross breakage
+    while 10 rule out ~1-in-3 flakiness; a full run is ~10 min per board.
+12. **Golden keeps the CPU and UART** (decided 2026-09-03) so a board that fell
+    back to golden is diagnosable on `/dev/ttyAMA0` and prints its ident.
+13. **PS1 CLE-101 blades are in scope** (decided 2026-09-03) as Phase 3b,
+    after the Welland boards.
 
 ## 8. Open questions
 
-1. Should the golden image keep the CPU + UART (so a board that fell back is
-   still diagnosable on the serial console), or be CSR-only to be as small and
-   simple as possible? Draft says keep CPU + UART.
-2. Is 3× consecutive clean runs per phase the right gate here, or should this
-   reuse `plan.md`'s 10× rule?
-3. Do you want the PS1 CLE-101 blades (pi14/pi16/pi20) included in Phase 3
-   once their P1 cables are reseated, or is Welland the only target for now?
+None outstanding as of 2026-09-03; all three original questions are recorded
+as decisions 11–13 in §7.
 
 ## References
 
