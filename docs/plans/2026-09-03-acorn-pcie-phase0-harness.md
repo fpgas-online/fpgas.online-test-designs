@@ -40,7 +40,7 @@ Everything else (other boards' host entries) is left as it is; PR #11 flagged th
 
 **Files:** none
 
-- [ ] **Step 1: Install the dev extras in the worktree**
+- [x] **Step 1: Install the dev extras in the worktree**
 
 Run from `.worktrees/acorn-pcie-00-prereqs`:
 ```bash
@@ -48,7 +48,7 @@ uv sync --extra dev
 ```
 Expected: ends with `Installed N packages` (ruff and pytest present).
 
-- [ ] **Step 2: Baseline lint**
+- [x] **Step 2: Baseline lint**
 
 Run: `uv run --extra dev ruff check designs/ verify_hardware.py`
 Expected: `All checks passed!`
@@ -62,14 +62,14 @@ Expected: `All checks passed!`
 - Create (via cherry-pick): `designs/pmod-pin-id/host/test_identify_pmod_pins.py`
 - Modify (via cherry-pick): `verify_hardware.py` (adds the `pin-id` design entry)
 
-- [ ] **Step 1: Cherry-pick the two commits**
+- [x] **Step 1: Cherry-pick the two commits**
 
 ```bash
 git cherry-pick -x 8ef1bf3 9eec4d9
 ```
 Expected: two commits applied cleanly (both touch files unchanged since May on `main`). If `verify_hardware.py` conflicts, resolve by keeping both the existing `pcie` entry and the new `pin-id` entry.
 
-- [ ] **Step 2: Run the cherry-picked tests to establish the baseline**
+- [x] **Step 2: Run the cherry-picked tests to establish the baseline**
 
 Run: `uv run --extra dev pytest designs/pmod-pin-id/host/test_identify_pmod_pins.py -v`
 Expected: 6 passed.
@@ -82,7 +82,7 @@ Expected: 6 passed.
 - Modify: `designs/pmod-pin-id/host/test_identify_pmod_pins.py`
 - Modify: `designs/pmod-pin-id/host/identify_pmod_pins.py` (`BOARDS["acorn"]`)
 
-- [ ] **Step 1: Change the map test to the canonical crossover**
+- [x] **Step 1: Change the map test to the canonical crossover**
 
 Replace `test_acorn_board_map_matches_p2_header` with:
 ```python
@@ -103,12 +103,12 @@ def test_evaluate_p47_reversed_connector_fails_all_four():
     assert {r["gpio"] for r in rows if not r["ok"]} == {3, 4, 14, 15}
 ```
 
-- [ ] **Step 2: Run the tests, expect the map test and the p47 test to fail**
+- [x] **Step 2: Run the tests, expect the map test and the p47 test to fail**
 
 Run: `uv run --extra dev pytest designs/pmod-pin-id/host/test_identify_pmod_pins.py -v`
 Expected: 6 FAILED, 1 passed. Only `test_evaluate_unprogrammed_board_all_none_fails` passes; every test that encodes the canonical decode fails against the old map (the map test, the p47 test, and the four `evaluate_*` tests whose "correct" decode is now `{15: "K2", 14: "J2", ...}`).
 
-- [ ] **Step 3: Fix the map**
+- [x] **Step 3: Fix the map**
 
 In `identify_pmod_pins.py`, replace the `"acorn"` entry's `pins` with:
 ```python
@@ -121,12 +121,12 @@ In `identify_pmod_pins.py`, replace the `"acorn"` entry's `pins` with:
 ```
 and change the comment above `BOARDS` to cite `docs/hardware/acorn-pinmap.md` "Measured P2 wiring (Welland, 2026-08-31)".
 
-- [ ] **Step 4: Run the tests, expect all green**
+- [x] **Step 4: Run the tests, expect all green**
 
 Run: `uv run --extra dev pytest designs/pmod-pin-id/host/test_identify_pmod_pins.py -v`
 Expected: 7 passed.
 
-- [ ] **Step 5: Lint and commit**
+- [x] **Step 5: Lint and commit**
 
 ```bash
 uv run --extra dev ruff check designs/pmod-pin-id/
@@ -142,7 +142,7 @@ git commit -m "pmod-pin-id(acorn): expected wiring is the K2->GPIO15 / J2->GPIO1
 - Create: `tests/__init__.py` (empty)
 - Modify: `pyproject.toml`
 
-- [ ] **Step 1: Add pytest config**
+- [x] **Step 1: Add pytest config**
 
 Append to `pyproject.toml`:
 ```toml
@@ -154,12 +154,12 @@ testpaths = ["tests", "designs/pmod-pin-id/host"]
 python_files = ["test_*.py"]
 ```
 
-- [ ] **Step 2: Verify discovery picks up the pin-id tests from the repo root**
+- [x] **Step 2: Verify discovery picks up the pin-id tests from the repo root**
 
 Run: `uv run --extra dev pytest -q`
 Expected: `7 passed`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add pyproject.toml tests/__init__.py
@@ -174,7 +174,7 @@ git commit -m "build: pytest discovers tests/ and designs/*/host tests"
 - Create: `tests/test_verify_hardware.py`
 - Modify: `verify_hardware.py` (`GATEWAYS`, `_build_ssh_cmd`, new `remote_home`, `ssh_run`, `ssh_upload`)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/test_verify_hardware.py`:
 ```python
@@ -222,12 +222,12 @@ def test_remote_home_follows_login_user():
     assert vh.remote_home("rpi5-netv2") == "/home/tim"
 ```
 
-- [ ] **Step 2: Run, expect failures**
+- [x] **Step 2: Run, expect failures**
 
 Run: `uv run --extra dev pytest tests/test_verify_hardware.py -v`
 Expected: all 5 FAIL (`KeyError: 'welland-sw2-p29'` / `TypeError: unexpected keyword 'as_root'` / `AttributeError: remote_home`).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `verify_hardware.py`:
 
@@ -302,12 +302,12 @@ Update `ssh_run(host_name, cmd, timeout=180, as_root=True)` to pass `as_root` th
 
 `ssh_check_connectivity` calls `ssh_run(..., as_root=False)`.
 
-- [ ] **Step 4: Run tests, expect green**
+- [x] **Step 4: Run tests, expect green**
 
 Run: `uv run --extra dev pytest tests/test_verify_hardware.py -v`
 Expected: 5 passed.
 
-- [ ] **Step 5: Lint and commit**
+- [x] **Step 5: Lint and commit**
 
 ```bash
 uv run --extra dev ruff check verify_hardware.py tests/
@@ -323,7 +323,7 @@ git commit -m "verify_hardware: ProxyJump transport, per-host login user, sudo w
 - Modify: `tests/test_verify_hardware.py`
 - Modify: `verify_hardware.py` (`POE_SWITCHES`, `poe_snmp_cmd`, `poe_reset`)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/test_verify_hardware.py`:
 ```python
@@ -343,12 +343,12 @@ def test_poe_snmp_cmd_rejects_host_without_poe_info():
         vh.poe_snmp_cmd("welland-pi3", enable=False, community="secret")
 ```
 
-- [ ] **Step 2: Run, expect failures**
+- [x] **Step 2: Run, expect failures**
 
 Run: `uv run --extra dev pytest tests/test_verify_hardware.py -v -k poe`
 Expected: 2 FAIL (`AttributeError: poe_snmp_cmd`).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add after `GATEWAYS`:
 ```python
@@ -424,12 +424,12 @@ def poe_reset(host_name, off_seconds=5, boot_timeout_s=240):
     return False
 ```
 
-- [ ] **Step 4: Run tests, expect green**
+- [x] **Step 4: Run tests, expect green**
 
 Run: `uv run --extra dev pytest tests/test_verify_hardware.py -v`
 Expected: 7 passed.
 
-- [ ] **Step 5: Lint and commit**
+- [x] **Step 5: Lint and commit**
 
 ```bash
 uv run --extra dev ruff check verify_hardware.py tests/
@@ -445,7 +445,7 @@ git commit -m "verify_hardware: PoE reset via SNMP pethPsePortAdminEnable on the
 - Modify: `tests/test_verify_hardware.py`
 - Modify: `verify_hardware.py` (`PROGRAM_CMD["acorn"]`, `generate_tests` remote paths, `pin-id` entry)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append:
 ```python
@@ -479,12 +479,12 @@ def test_acorn_pin_id_artifact_matches_ci_upload_name():
     assert t["artifact"] == "pmod-pin-id-acorn-cle-215plus/top.bit"
 ```
 
-- [ ] **Step 2: Run, expect failures**
+- [x] **Step 2: Run, expect failures**
 
 Run: `uv run --extra dev pytest tests/test_verify_hardware.py -v -k acorn`
 Expected: 3 FAIL (paths start with `~`, program_cmd uses `rp1pio`, artifact still says `sqrl_acorn.bit`).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Replace the `"acorn"` line in `PROGRAM_CMD` with:
 ```python
@@ -527,12 +527,12 @@ the cherry-picked `sqrl_acorn.bit` never matched) and replace `pre_test` with:
                 ),
 ```
 
-- [ ] **Step 4: Run all tests**
+- [x] **Step 4: Run all tests**
 
 Run: `uv run --extra dev pytest -q`
 Expected: `17 passed` (7 pin-id + 10 verify_hardware).
 
-- [ ] **Step 5: Lint and commit**
+- [x] **Step 5: Lint and commit**
 
 ```bash
 uv run --extra dev ruff check verify_hardware.py tests/
@@ -548,7 +548,7 @@ git commit -m "verify_hardware(acorn): detach PCIe, gpiochip15 symlink, libgpiod
 - Modify: `tests/test_verify_hardware.py`
 - Modify: `verify_hardware.py` (`main`)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 def test_cli_repeat_and_dry_run_flags_exist():
@@ -559,12 +559,12 @@ def test_cli_repeat_and_dry_run_flags_exist():
     assert args.repeat == 3 and args.dry_run is True
 ```
 
-- [ ] **Step 2: Run, expect failure**
+- [x] **Step 2: Run, expect failure**
 
 Run: `uv run --extra dev pytest tests/test_verify_hardware.py -v -k cli`
 Expected: FAIL (`AttributeError: build_arg_parser`).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Extract the parser into `build_arg_parser()` and add:
 ```python
@@ -575,13 +575,13 @@ Extract the parser into `build_arg_parser()` and add:
 ```
 In `main`, after filtering: if `args.dry_run`, print for each test the `_build_ssh_cmd` argv for the pre-test, program and test commands, rendered with `shlex.join(argv)` so each line is a copy-pasteable shell command, and return 0. Otherwise loop `for run in range(1, args.repeat + 1)`, printing `=== Run {run}/{args.repeat} ===`, collecting results per run, and breaking out (exit 1) on the first run with any failure. The summary prints the number of complete clean runs.
 
-- [ ] **Step 4: Run tests and a dry run**
+- [x] **Step 4: Run tests and a dry run**
 
 Run: `uv run --extra dev pytest -q` → `18 passed`.
 Run: `uv run python verify_hardware.py --dry-run --host welland-sw2-p46 --test pin-id`
 Expected output contains a line starting `ssh -o BatchMode=yes -o ConnectTimeout=15 -o ProxyJump=tim@10.21.0.1 pi@10.21.2.46 'sudo -n sh -c '"'"'` and containing `openFPGALoader --cable libgpiod --pins 10:9:11:8 /home/pi/pin-id_acorn.bit` (the nested quoting is `shlex.join` rendering the sudo wrapper; it is correct shell).
 
-- [ ] **Step 5: Lint and commit**
+- [x] **Step 5: Lint and commit**
 
 ```bash
 uv run --extra dev ruff check verify_hardware.py tests/
@@ -596,11 +596,11 @@ git commit -m "verify_hardware: --repeat N and --dry-run"
 **Files:**
 - Modify: `docs/verify-hardware.md`
 
-- [ ] **Step 1: Rewrite the "Network Topology" and "PoE Reset" sections**
+- [x] **Step 1: Rewrite the "Network Topology" and "PoE Reset" sections**
 
 Network Topology: replace the double-hop description with the ProxyJump one (`ssh -o ProxyJump=tim@10.21.0.1 pi@10.21.2.<port>`), the `user` field and the `sudo -n sh -c` wrapper, and note that only the six Welland Acorn hosts have been migrated to VLAN names (link to `docs/hardware/site-welland.md`). PoE Reset: SNMP `pethPsePortAdminEnable`, the `poe` host field, `FPGAS_POE_COMMUNITY`, and that a Pi 5 needs more than 90 s to return. FPGA Programming: replace the Acorn line with the four-step sequence from Task 6 and the reason for each step.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add docs/verify-hardware.md
@@ -609,9 +609,24 @@ git commit -m "docs(verify-hardware): ProxyJump transport, sudo, SNMP PoE reset,
 
 ---
 
+### Task 8b (added during execution): edge-timestamp UART decoder
+
+**Why:** the first hardware run of Task 11 on p46 decoded K2/J2/H5 but
+returned a repeating 4-byte garbage pattern for J5 (GPIO3), and a re-run
+garbled GPIO4 too. `gpiomon` on the same line showed a clean `J5\r\n` with
+828–833 µs edge gaps, i.e. the wire and the FPGA were fine and the Python
+polling sampler was mis-framing bytes. Per the standing principle, the code
+is fixed, not the wiring.
+
+**Files:**
+- Modify: `designs/pmod-pin-id/host/identify_pmod_pins.py` — `GpioReader` requests both-edge events (v1 `LINE_REQ_EV_BOTH_EDGES`, v2 `Edge.BOTH`) and exposes `capture_edges(duration_s)`; new pure `decode_edges(events, baud)` and `label_from_frames(frames)`; `identify_pin` captures 250 ms and decodes; `receive_byte`/`receive_label` deleted.
+- Modify: `designs/pmod-pin-id/host/test_identify_pmod_pins.py` — six tests with synthesised edge streams (clean, 2 % baud error + ±40 µs jitter, mid-byte capture start, vote, garbled marker, silence).
+
+- [x] Tests written and red, implementation, green (26 total), lint, commit `00d990d`.
+
 ### Task 9: Code review checkpoint
 
-- [ ] Dispatch `feature-dev:code-reviewer` on `git diff origin/main...HEAD` with this plan and the spec's §3.3 as context. Fix findings in follow-up commits (one per finding) or record why not in the PR description.
+- [x] Dispatched `feature-dev:code-reviewer` on `git diff origin/main...HEAD`. Two findings, both fixed in `c14a36f` with regression tests: (1) `subprocess.TimeoutExpired`'s text embeds the argv including the SNMP community — `poe_reset` now prints only the exception type and gateway; (2) the `sudo -n sh -c` wrapper applied to direct-SSH hosts too, which would have moved `rpi3-netv2`'s `~/netv2/alphamax-rpi.cfg` to `/root` — the wrapper is now gateway-only.
 
 ---
 
@@ -619,7 +634,7 @@ git commit -m "docs(verify-hardware): ProxyJump transport, sudo, SNMP PoE reset,
 
 **Files:** none committed (`artifacts/` is gitignored)
 
-- [ ] **Step 1: Install build extras and build the Acorn pin-ID design with Vivado**
+- [x] **Step 1: Install build extras and build the Acorn pin-ID design with Vivado**
 
 ```bash
 uv sync --extra build
@@ -628,7 +643,7 @@ uv run python designs/pmod-pin-id/gateware/pmod_pin_id_acorn.py --variant cle-21
 ```
 Expected: `designs/pmod-pin-id/build/acorn/top.bit` exists (the script calls `platform.build()` directly, so LiteX's default `build_name` is `top` and there is no `gateware/` subdirectory; the header reads `7a200tfbg484`; the Vivado log shows no critical warnings about the `clk200` IBUFDS/PLL path).
 
-- [ ] **Step 2: Stage it where `verify_hardware.py` looks**
+- [x] **Step 2: Stage it where `verify_hardware.py` looks**
 
 ```bash
 mkdir -p artifacts/pmod-pin-id-acorn-cle-215plus
@@ -639,7 +654,7 @@ cp designs/pmod-pin-id/build/acorn/top.bit artifacts/pmod-pin-id-acorn-cle-215pl
 
 ### Task 11: The gate — run pin-ID on hardware
 
-- [ ] **Step 1: Listing and read-only preflight on p46**
+- [x] **Step 1: Listing and read-only preflight on p46**
 
 ```bash
 uv run python verify_hardware.py --list --board acorn
@@ -647,14 +662,14 @@ ssh -o ProxyJump=tim@10.21.0.1 pi@10.21.2.46 'lspci -nn -s 0001:01:00.0; sudo -n
 ```
 Expected: the listing shows six `welland-sw2-p*` hosts for every Acorn design; Sqrl `1e24:021f` enumerated; `--detect` reports idcode `0x3636093`.
 
-- [ ] **Step 2: Run the test on p46**
+- [x] **Step 2: Run the test on p46**
 
 ```bash
 uv run python verify_hardware.py --host welland-sw2-p46 --test pin-id
 ```
 Expected: `RESULT: PASS` with the table showing GPIO15→K2, GPIO14→J2, GPIO3→J5, GPIO4→H5. If the JTAG load completes but the table is empty, the Pi is fine and the bitstream/decoder is wrong — check the gateware built after PR #10 (clock) and that `pinctrl get 14 15` shows inputs before scanning.
 
-- [ ] **Step 3: Repeat three times, then survey the other boards**
+- [x] **Step 3: Repeat three times, then survey the other boards**
 
 ```bash
 uv run python verify_hardware.py --host welland-sw2-p46 --test pin-id --repeat 3
@@ -664,9 +679,27 @@ done
 ```
 Expected per the 2026-08-31 survey: p48 PASS; p29 FAIL on GPIO3 only (J5 open); p47 FAIL on all four (reversed); p43/p44 FAIL at programming (`found 0 devices`). Each of those FAILs is a wiring fault already in `docs/hardware/acorn-pinmap.md`, not a harness bug; anything *different* from that table is a finding to investigate before opening the PR.
 
-- [ ] **Step 4: Record the run in the PR**
+- [x] **Step 4: Record the run in the PR**
 
-Paste the p46 ×3 output and the one-line verdict per other board into the PR description.
+Results, 2026-09-03 (after Task 8b and the exit-status fix below):
+
+| Host | Result | Matches 2026-08-31 survey? |
+|------|--------|----------------------------|
+| welland-sw2-p46 | PASS 4/4, `--repeat 3` → 3/3 consecutive clean runs | yes |
+| welland-sw2-p48 | PASS 4/4 | yes |
+| welland-sw2-p29 | FAIL 3/4 — GPIO3 (J5) no signal | yes (J5 wire open) |
+| welland-sw2-p47 | FAIL 0/4 — GPIO15→J2, GPIO14→K2, GPIO3→H5, GPIO4→J5 | yes (both pairs transposed) |
+| welland-sw2-p43 | FAIL at programming: `Error: no device found` | yes (empty JTAG chain) |
+| welland-sw2-p44 | FAIL at programming: `Error: no device found` | yes (empty JTAG chain) |
+
+Two more harness bugs surfaced and were fixed during this step:
+- The Acorn program command ended with the PCIe rescan, whose exit status 0
+  masked a failed openFPGALoader; p44 was reported "programmed successfully"
+  and then tested. Fixed in `79a4ce2` (`rc=$?` … `exit $rc`, with a test).
+- Running two `verify_hardware.py` instances at once through the same jump
+  host produced spurious "unreachable"/rc 255 failures on the boards the
+  second instance touched. Hardware runs are sequential; documented in
+  `docs/verify-hardware.md`.
 
 ---
 

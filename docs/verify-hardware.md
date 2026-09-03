@@ -52,6 +52,10 @@ hostname; the login user is part of `target`.
 Use `--dry-run` to print the exact argv for every selected test before
 touching hardware.
 
+Run **one `verify_hardware.py` at a time**. Two instances going through the
+same jump host concurrently produced spurious "Host … is unreachable" and
+rc 255 failures on 2026-09-03; the same boards passed when run sequentially.
+
 ## Host and Board Definitions
 
 The `HOSTS` dict maps host names to their properties:
