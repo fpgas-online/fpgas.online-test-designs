@@ -318,10 +318,13 @@ openFPGALoader --cable libgpiod --pins 10:9:11:8 pmod-pin-id-acorn.bit
 ```
 
 Only GPIO15 can be a hardware UART receiver on a Pi 5, so decode the other
-three from sampled GPIO values (the repo scanner
-`designs/pmod-pin-id/host/identify_pmod_pins.py` bit-bangs 1200 baud over
-gpiod and finds the header chip by label, so it works on a Pi 5) or from
-`gpiomon` edge timestamps (833 µs per bit against nanosecond stamps). Keep
+three from edge timestamps: the repo scanner
+`designs/pmod-pin-id/host/identify_pmod_pins.py` requests both-edge events
+through gpiod (v1 or v2), reconstructs the 1200-baud frames from the kernel
+timestamps (833 µs per bit against nanosecond stamps) and finds the header
+chip by label, so it works on a Pi 5. Do not sample the pins by polling from
+Python — that mis-framed bytes on pi-sw2-p46 on 2026-09-03 while `gpiomon`
+showed a clean signal on the same wire. Keep
 GPIO14 as an input throughout — see the hazard above. Validate the method on
 a positive control before trusting a negative: drive a spare Pi GPIO and
 confirm the monitor sees it.
