@@ -2,7 +2,7 @@
 
 # TT FPGA Demo Board v3 Pin Mapping
 
-Pin mapping for the TinyTapeout FPGA Demo Board v3 (TTDBv3) as connected in the fpgas.online test infrastructure. Four hosts: pi27 (10.21.0.127), pi29 (10.21.0.129), pi31 (10.21.0.131), pi33 (10.21.0.133).
+Pin mapping for the TinyTapeout FPGA Demo Board v3 (TTDBv3) as connected in the fpgas.online test infrastructure. Four hosts on the Welland S3300 (switch 2): pi-sw2-p33 (10.21.2.33, `fpga-1`), pi-sw2-p34 (10.21.2.34, `fpga-2`), pi-sw2-p35 (10.21.2.35, `fpga-3`), pi-sw2-p36 (10.21.2.36, `fpga-4`) — formerly pi27/pi29/pi31/pi33 at 10.21.0.1xx. See [tt-fpga.md](tt-fpga.md#deployment) for MACs, RP2350 serials and the serial-port ownership rule.
 
 ## Hardware Overview
 
@@ -64,9 +64,10 @@ Direct programming of the iCE40 via openFPGALoader (bypassing the MicroPython RE
 
 ### RP2350 Considerations
 
-- The stock `main.py` calls `DemoBoard()` which probes I2C and can hang permanently. A safe `main.py` must be installed via `mpremote` to prevent this.
+- The boards run TT SDK 3.1.0 since 2026-08-23 (the shipped build hung in `DemoBoard()`); the public site depends on the SDK booting, so do **not** replace `main.py` with a no-op on deployed boards (see [tt-fpga.md](tt-fpga.md#known-workarounds)).
+- The `fpgas-tt` daemon owns `/dev/ttboard` (→ `/dev/ttyACM0`) on every deployed host; stop it before using `mpremote` directly.
 - If the RP2350 is unresponsive, USB power cycle via `uhubctl` or PoE reset can recover it.
-- The RP2350 firmware loads `GPIOMapTT04` instead of `GPIOMapTTDBv3`, returning incorrect GPIO numbers. All pin numbers in this document are the correct TTDBv3 values (empirically confirmed), not the firmware-reported values.
+- The shipped RP2350 firmware loaded `GPIOMapTT04` instead of `GPIOMapTTDBv3`, returning incorrect GPIO numbers. All pin numbers in this document are the correct TTDBv3 values (empirically confirmed), not the firmware-reported values.
 
 ## TinyTapeout I/O Signals
 
