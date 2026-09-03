@@ -314,12 +314,38 @@ jobs:
           uv run python designs/uart/gateware/uart_soc_acorn.py \
             --variant cle-101 \
             --toolchain openxc7 \
+            --sys-clk-freq 50000000 \
             --build
 
-      - name: Upload bitstream
+      - name: Build PLL diagnostic bitstream
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
+        run: |
+          mkdir -p "$CHIPDB"
+          uv run python tmp/diag_pll.py \
+            --variant cle-101 \
+            --toolchain openxc7 \
+            --build
+
+      - name: Build BRAM init diagnostic bitstream
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
+        run: |
+          mkdir -p "$CHIPDB"
+          uv run python tmp/diag_bram.py \
+            --variant cle-101 \
+            --toolchain openxc7 \
+            --build
+
+      - name: Upload bitstream and build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: uart-test-acorn-cle-101
           path: |
             designs/uart/build/acorn/gateware/*.bit
+            designs/uart/build/acorn/gateware/*.fasm
+            designs/uart/build/acorn/gateware/*.init
+            designs/uart/build/acorn/software/bios/bios.bin
+            tmp/build/diag_pll/*.bit
+            tmp/build/diag_bram/*.bit
           if-no-files-found: error

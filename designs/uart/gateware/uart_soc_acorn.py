@@ -35,13 +35,13 @@ from designs._shared.yosys_workarounds import patch_yosys_template
 
 
 class _CRG(LiteXModule):
-    """Minimal CRG for Acorn: generates sys clock from the 200 MHz differential oscillator."""
+    """CRG for Acorn — based on official sqrl_acorn CRG, without IDELAYCTRL (no DDR)."""
 
     def __init__(self, platform, sys_clk_freq):
-        self.rst = Signal()
-        self.cd_sys = ClockDomain("sys")
+        self.rst    = Signal()
+        self.cd_sys = ClockDomain()
 
-        # Clk.
+        # Clk/Rst.
         clk200 = platform.request("clk200")
 
         # PLL.

@@ -27,7 +27,7 @@ NFS roots:
 | Board Type    | Deployed | Pending | Hosts                     |
 |---------------|----------|---------|---------------------------|
 | Arty A7-35T   | ×8       | —       | [pi2](https://ps1.fpgas.online/fpgas/pi2.html), [pi3](https://ps1.fpgas.online/fpgas/pi3.html), [pi5](https://ps1.fpgas.online/fpgas/pi5.html), [pi7](https://ps1.fpgas.online/fpgas/pi7.html), [pi9](https://ps1.fpgas.online/fpgas/pi9.html), [pi11](https://ps1.fpgas.online/fpgas/pi11.html), [pi13](https://ps1.fpgas.online/fpgas/pi13.html), pi17 |
-| LiteFury      | ×2       | ×4      | pi14, pi16 (pending: pi18, pi20, +2 TBD)  |
+| LiteFury / Acorn CLE-101 | ×3 | ×1 | pi14, pi16, pi20 (pending: pi18, M.2 empty) |
 | TT FPGA Demo  | —        | ×4      | TBD                       |
 | TT ASIC       | —        | ×7      | TBD (one each: TT02-TT09 except TT08) |
 
@@ -58,14 +58,22 @@ Each RPi also has a separate USB Ethernet adapter for the Arty's Ethernet port.
 
 ### LiteFury / Compute Blade Hosts
 
-| Host | Port | IP          | RPi MAC           | RPi Model            | Board    | FPGA DNA           | PCIe Bus | Status  |
-|------|------|-------------|-------------------|----------------------|----------|--------------------|----------|---------|
-| pi14 | e14  | 10.21.0.114 | 2c:cf:67:37:d4:bd | CM4 Rev 1.1 4GB      | LiteFury | 0x0028e5c45e304854 | 0000:01  | Online  |
-| pi16 | e16  | 10.21.0.116 | 2c:cf:67:fb:91:e5 | CM5 Lite Rev 1.0 8GB | LiteFury | —                  | 0001:01  | Online  |
-| pi18 | e18  | 10.21.0.118 | 2c:cf:67:37:d5:08 | CM4 Rev 1.1 4GB      | (pending)| —                  | —        | Online  |
-| pi20 | e20  | 10.21.0.120 | 2c:cf:67:fd:1e:be | CM5 Lite Rev 1.0 8GB | (pending)| —                  | —        | Online  |
+| Host | Port | IP          | RPi MAC           | RPi Model            | Board (PCIe ID)                    | FPGA DNA           | PCIe Bus | JTAG                    | Status  |
+|------|------|-------------|-------------------|----------------------|------------------------------------|--------------------|----------|-------------------------|---------|
+| pi14 | e14  | 10.21.0.114 | 2c:cf:67:37:d4:bd | CM4 Rev 1.1 4GB      | Acorn CLE-101 `1e24:0101`          | unreadable         | 0000:01  | no response (P1 unmated) | Online  |
+| pi16 | e16  | 10.21.0.116 | 2c:cf:67:fb:91:e5 | CM5 Lite Rev 1.0 8GB | Acorn CLE-101 `1e24:0101`          | unreadable         | 0001:01  | no response (P1 unmated) | Online  |
+| pi18 | e18  | 10.21.0.118 | 2c:cf:67:37:d5:08 | CM4 Rev 1.1 4GB      | (pending) — M.2 empty              | —                  | —        | n/a                     | Online  |
+| pi20 | e20  | 10.21.0.120 | 2c:cf:67:fd:1e:be | CM5 Lite Rev 1.0 8GB | XC7A100T design `10ee:7011`        | 0x0028e5c45e304854 | 0001:01  | OK                      | Online  |
 
-All Compute Blades boot Trixie arm64 (Debian 13) via NFS with overlayroot. JTAG via Expansion Module Port using [Compute Blade wiring](acorn-pinmap.md#compute-blade-wiring-variant): `openFPGALoader --cable libgpiod --pins 2:3:4:14`. UART via GPIO14/15 (`/dev/ttyAMA0`). PCIe via M.2 slot.
+Probed 2026-08-31 (all four up, 37 days uptime). Earlier revisions of this
+table put pi20's DNA in pi14's row (commit c5322ad wrote it one row up) and
+listed pi20 as pending; pi14's JTAG has never answered, so no DNA can have come
+from it. pi14/pi16 enumerate on PCIe with the Sqrl CLE-101 factory ID but do not
+answer JTAG — GPIO4 (TCK) shows the Acorn's JTAG pull-up only on pi20, so their
+P1 cables are unmated. Details in
+[acorn-pinmap.md](acorn-pinmap.md#measured-state-of-the-ps1-blades-2026-08-31).
+
+All Compute Blades boot Trixie arm64 (Debian 13) via NFS with overlayroot. JTAG via Expansion Module Port using [Compute Blade wiring](acorn-pinmap.md#compute-blade-wiring-variant): `openFPGALoader --cable libgpiod --pins 2:3:4:14` (openFPGALoader **0.13.1** on all four, so `--read-dna` works). UART via GPIO14/15 (`/dev/ttyAMA0`, crossover confirmed on pi20 with the pin-ID design: K2→GPIO15, J2→GPIO14). All four have `console=tty1` and `serial-getty@ttyAMA0` inactive, so the SysRq crash of issue #3 cannot recur. PCIe via M.2 slot. Loading a design that drives J2 (pin-ID does) contends with TMS on GPIO14 and costs JTAG until a PoE cycle of the port; PoE control on the FS728TPv2 works only via the Netgear-proprietary OID over SNMPv3 (see `fpgas.online-poe/scripts/poe.sh`).
 
 ### Other Hosts
 
@@ -102,7 +110,7 @@ LLDP: server (val2) connects on port g25. Upstream is a Ubiquiti US-24-G1 (`PS1-
 | e17  | UP   | delivering | pi17 | Arty A7    |                             |
 | e18  | UP   | delivering | pi18 | (pending)  | CM4 Compute Blade, M.2 empty |
 | e19  | UP   | delivering | pi19 |            | Dead hardware              |
-| e20  | down | delivering | pi20 | (pending)  | CM5 Lite, M.2 empty        |
+| e20  | UP   | delivering | pi20 | LiteFury   | CM5 Lite Compute Blade (up since 2026-07) |
 | e21  | UP   | delivering | [pi21](https://ps1.fpgas.online/fpgas/pi21.html) |            | RPi 5, no FPGA             |
 | e22  | down | disabled   |      |            |                            |
 | e23  | down | searching  |      |            | Cable present, no device   |

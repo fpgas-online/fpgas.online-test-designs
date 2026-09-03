@@ -26,10 +26,37 @@ import time
 
 REPO_DIR = os.path.dirname(os.path.abspath(__file__))
 ARTIFACTS_DIR = os.path.join(REPO_DIR, "artifacts")
+# Jump hosts. Welland's tweed was reinstalled 2026-08-30; the old restricted
+# `pi@tweed.welland.mithis.com` account is gone and the public name now resolves
+# to a reverse proxy. tweed's eth-local address is reachable over WireGuard
+# (wg-desktop) and accepts the operator's own key. PS1 is unchanged (unverified
+# since 2026-03).
 GATEWAYS = {
-    "welland": "pi@tweed.welland.mithis.com",
+    "welland": "tim@10.21.0.1",
     "ps1": "pi@ps1.fpgas.online",
 }
+SSH_BASE_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=15"]
+
+# PoE switches, keyed by the `switch` field of a host's `poe` entry. The S3300
+# at Welland answers SNMP from tweed (read community `public` verified
+# 2026-09-03). Port power is POWER-ETHERNET-MIB pethPsePortAdminEnable
+# (.1.3.6.1.2.1.105.1.1.1.3.<group>.<port>): 1 = enable, 2 = disable.
+POE_SWITCHES = {
+    "sw2": {"address": "10.1.5.11", "group": 1},
+}
+POE_ADMIN_ENABLE_OID = "1.3.6.1.2.1.105.1.1.1.3"
+# The SNMP write community is deliberately not in the repo. Export it as
+# FPGAS_POE_COMMUNITY (it lives in fpgas.online-infra) before running tests
+# that need a power cycle; without it poe_reset() reports and returns False.
+POE_COMMUNITY_ENV = "FPGAS_POE_COMMUNITY"
+
+
+def poe_snmp_cmd(host_name, enable, community):
+    """snmpset argv (run on the gateway) that turns a host's PoE port on/off."""
+    poe = HOSTS[host_name]["poe"]  # KeyError for hosts without PoE info
+    sw = POE_SWITCHES[poe["switch"]]
+    oid = f"{POE_ADMIN_ENABLE_OID}.{sw['group']}.{poe['port']}"
+    return ["snmpset", "-v2c", "-c", community, sw["address"], oid, "i", "1" if enable else "2"]
 
 
 # ---------------------------------------------------------------------------
@@ -37,7 +64,9 @@ GATEWAYS = {
 # ---------------------------------------------------------------------------
 
 HOSTS = {
-    # Welland site (via pi@tweed.welland.mithis.com gateway)
+    # Welland site (via the tweed gateway, see GATEWAYS).
+    # Legacy 10.21.0.1NN addresses from the 2026-03 survey — not re-probed since
+    # the VLAN-per-port move (2026-08-23); see docs/hardware/site-welland.md.
     "welland-pi3": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.103", "board": "arty"},
     "welland-pi5": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.105", "board": "arty"},
     "welland-pi9": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.109", "board": "arty"},
@@ -65,9 +94,17 @@ HOSTS = {
         "ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.118",
         "board": "netv2", "variant": "a7-35",
     },
-    "welland-pi2": {
-        "ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.102",
-        "board": "acorn", "variant": "cle-215+",
+    # Sqrl Acorn CLE-215+ on RPi 5 (VLAN-per-port names since 2026-08-23, see
+    # docs/hardware/site-welland.md). Login is the `pi` user with passwordless
+    # sudo; root login is refused. PoE port = switch port = host suffix.
+    **{
+        f"welland-sw2-p{port}": {
+            "ssh_type": "gateway", "gateway": "welland",
+            "target": f"10.21.2.{port}", "user": "pi",
+            "board": "acorn", "variant": "cle-215+",
+            "poe": {"switch": "sw2", "port": port},
+        }
+        for port in (29, 43, 44, 46, 47, 48)
     },
     "welland-pi27": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.127", "board": "tt"},
     "welland-pi29": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.129", "board": "tt"},
@@ -104,8 +141,22 @@ PROGRAM_CMD = {
     "arty": "openFPGALoader -b arty {bitstream}",
     "fomu": "openFPGALoader -b fomu {bitstream}",
     "tt": "python3 ~/tt_fpga_program.py /dev/ttyACM0 {bitstream}",
-    # Acorn: JTAG via RPi SPI0 pins (needs SPI modules unloaded)
-    "acorn": "rmmod spidev spi_bcm2835 2>&1; openFPGALoader -c rp1pio --pins 10:9:11:8 {bitstream}",
+    # Acorn on RPi 5 (docs/hardware/acorn-pinmap.md, "Pi 5" notes):
+    #  1. detach the PCIe endpoint — reconfiguring an enumerated endpoint
+    #     crashes the Pi 5 (2026-08-31, pi-sw2-p47);
+    #  2. openFPGALoader 0.10.0 opens /dev/gpiochip0 but the header is
+    #     gpiochip15 (devtmpfs symlink, lost at reboot);
+    #  3. libgpiod bit-bang JTAG, pin order TDI:TDO:TCK:TMS (~16 s);
+    #  4. rescan so the flash-resident endpoint (or the new design's) is back,
+    #     but exit with openFPGALoader's status so a failed load (e.g. an
+    #     empty JTAG chain) is not masked by the rescan's 0.
+    "acorn": (
+        "if [ -e /sys/bus/pci/devices/0001:01:00.0 ]; then"
+        " echo 1 > /sys/bus/pci/devices/0001:01:00.0/remove; fi;"
+        " ln -sfn /dev/gpiochip15 /dev/gpiochip0;"
+        " openFPGALoader --cable libgpiod --pins 10:9:11:8 {bitstream}; rc=$?;"
+        " echo 1 > /sys/bus/pci/rescan; exit $rc"
+    ),
     # NeTV2 varies by host — handled per-host below
 }
 
@@ -274,13 +325,16 @@ DESIGNS = {
         "test_script": "designs/pmod-pin-id/host/identify_pmod_pins.py",
         "boards": {
             "acorn": {
-                "artifact": "pmod-pin-id-acorn-cle-215plus/sqrl_acorn.bit",
+                # pmod_pin_id_acorn.py calls platform.build() directly, so the
+                # bitstream is build/acorn/top.bit and CI uploads that name.
+                "artifact": "pmod-pin-id-acorn-cle-215plus/top.bit",
                 "test_args": "--board acorn",
-                # Free GPIO14/15 from the UART login console so the host script
-                # can bit-bang them as inputs to read K2/J2.
+                # Stop the login console so the host script can read GPIO14/15,
+                # and make sure GPIO14 is a plain input: with pin-ID loaded
+                # every P2 ball is an FPGA *output*, so the Pi must not drive it.
                 "pre_test": (
                     "systemctl stop serial-getty@ttyAMA0 2>&1;"
-                    " systemctl stop serial-getty@serial0 2>&1;"
+                    " pinctrl set 14 ip pn; pinctrl set 15 ip pn;"
                     " true"
                 ),
             },
@@ -302,27 +356,46 @@ EXTRA_UPLOADS = {
 # ---------------------------------------------------------------------------
 
 
-def _build_ssh_cmd(host_name, remote_cmd):
-    """Build the full SSH command list for a given host.
+def host_user(host_name):
+    """Login user on the target. Gateway hosts default to root (legacy);
+    direct hosts carry the user in `target`."""
+    host = HOSTS[host_name]
+    if host["ssh_type"] == "direct":
+        return host["target"].split("@", 1)[0]
+    return host.get("user", "root")
 
-    For tweed-connected hosts, this produces a double-hop SSH command.
-    Commands are properly shell-escaped at each hop to avoid quoting bugs.
+
+def remote_home(host_name):
+    user = host_user(host_name)
+    return "/root" if user == "root" else f"/home/{user}"
+
+
+def _build_ssh_cmd(host_name, remote_cmd, as_root=True):
+    """Build the ssh argv for *remote_cmd* on *host_name*.
+
+    Gateway hosts go through OpenSSH ProxyJump (one hop, no nested quoting).
+    When the login user is not root and *as_root* is set, the command is run
+    under `sudo -n sh -c` so rmmod, PCI sysfs writes and openFPGALoader work.
     """
     host = HOSTS[host_name]
+    user = host_user(host_name)
+    # Only gateway hosts get the wrapper: the direct-SSH NeTV2 hosts place
+    # their own `sudo` inside HOST_PROGRAM_CMD and rely on `~` meaning the
+    # login user's home, which an outer `sudo` would change to /root.
+    if as_root and host["ssh_type"] == "gateway" and user != "root":
+        remote_cmd = f"sudo -n sh -c {shlex.quote(remote_cmd)}"
+    cmd = ["ssh", *SSH_BASE_OPTS]
     if host["ssh_type"] == "gateway":
-        # Double-hop: local -> gateway -> rpi
-        # The inner command must be shell-escaped for the gateway shell,
-        # and the remote_cmd must be escaped for the rpi shell.
-        gateway = GATEWAYS[host["gateway"]]
-        inner_cmd = "ssh root@{} {}".format(host["target"], shlex.quote(remote_cmd))
-        return ["ssh", gateway, inner_cmd]
+        cmd += ["-o", f"ProxyJump={GATEWAYS[host['gateway']]}"]
+        cmd += [f"{user}@{host['target']}", remote_cmd]
     else:
-        return ["ssh", host["target"], remote_cmd]
+        cmd += [host["target"], remote_cmd]
+    return cmd
 
 
-def ssh_run(host_name, cmd, timeout=180):
+def ssh_run(host_name, cmd, timeout=180, as_root=True):
     """Run a command on a remote RPi. Returns (returncode, stdout, stderr)."""
-    full_cmd = _build_ssh_cmd(host_name, cmd)
+    full_cmd = _build_ssh_cmd(host_name, cmd, as_root=as_root)
     result = subprocess.run(
         full_cmd,
         capture_output=True,
@@ -342,8 +415,10 @@ def ssh_upload(host_name, local_path, remote_path, timeout=120):
     with open(local_path, "rb") as f:
         file_data = f.read()
 
+    # Uploads land in the login user's home (no sudo); commands that read
+    # them later use absolute paths, so root can find them too.
     write_cmd = f"cat > {remote_path}"
-    full_cmd = _build_ssh_cmd(host_name, write_cmd)
+    full_cmd = _build_ssh_cmd(host_name, write_cmd, as_root=False)
 
     result = subprocess.run(
         full_cmd,
@@ -357,39 +432,61 @@ def ssh_upload(host_name, local_path, remote_path, timeout=120):
 def ssh_check_connectivity(host_name, timeout=10):
     """Quick connectivity check. Returns True if host responds."""
     try:
-        rc, stdout, _ = ssh_run(host_name, "echo ok", timeout=timeout)
+        rc, stdout, _ = ssh_run(host_name, "echo ok", timeout=timeout, as_root=False)
         return rc == 0 and "ok" in stdout
     except (subprocess.TimeoutExpired, OSError):
         return False
 
 
-def poe_reset(host_name, off_seconds=5):
-    """Power-cycle a PoE-powered RPi via the managed switch.
+def poe_reset(host_name, off_seconds=5, boot_timeout_s=240):
+    """Power-cycle a PoE-powered RPi by toggling its switch port over SNMP.
 
-    Only works for tweed-connected hosts (piNN naming convention).
-    The PoE switch port number matches the host suffix: pi27 → port 27.
+    The snmpset runs on the site gateway (which can reach the switch's
+    management address). Needs FPGAS_POE_COMMUNITY in the environment.
+    Returns True once the host answers ssh again.
     """
-    m = re.match(r"pi(\d+)$", host_name)
-    if not m:
-        print(f"  Cannot PoE-reset {host_name}: not a piNN host")
+    host = HOSTS[host_name]
+    if "poe" not in host or host["ssh_type"] != "gateway":
+        print(f"  Cannot PoE-reset {host_name}: no PoE port recorded for this host")
         return False
-    port = m.group(1)
-    print(f"  PoE reset: port {port} off...")
+    community = os.environ.get(POE_COMMUNITY_ENV)
+    if not community:
+        print(f"  Cannot PoE-reset {host_name}: {POE_COMMUNITY_ENV} is not set — power-cycle by hand")
+        return False
+    gateway = GATEWAYS[host["gateway"]]
+
+    def on_gateway(argv):
+        return subprocess.run(
+            ["ssh", *SSH_BASE_OPTS, gateway, shlex.join(argv)],
+            timeout=20,
+            capture_output=True,
+            text=True,
+        )
+
+    print(f"  PoE reset: {host['poe']['switch']} port {host['poe']['port']} off...")
     try:
-        subprocess.run(["ssh", GATEWAYS["welland"], f"poe.sh {port} 2"], timeout=15, capture_output=True)
-        # Poll until host is unreachable (confirms power is off)
+        r = on_gateway(poe_snmp_cmd(host_name, enable=False, community=community))
+        if r.returncode != 0:
+            print(f"  snmpset failed: {r.stderr.strip()}")
+            return False
+        # Poll until the host is unreachable (confirms power is off).
         for _ in range(off_seconds * 2):
             if not ssh_check_connectivity(host_name, timeout=1):
                 break
             time.sleep(0.5)
-        subprocess.run(["ssh", GATEWAYS["welland"], f"poe.sh {port} 1"], timeout=15, capture_output=True)
+        r = on_gateway(poe_snmp_cmd(host_name, enable=True, community=community))
+        if r.returncode != 0:
+            print(f"  snmpset failed: {r.stderr.strip()}")
+            return False
     except (subprocess.TimeoutExpired, OSError) as e:
-        print(f"  PoE reset failed: {e}")
+        # Never print str(e): TimeoutExpired embeds the full argv, which
+        # carries the SNMP write community.
+        print(f"  PoE reset failed: {type(e).__name__} talking to {gateway}")
         return False
-    # Poll for host to come back (RPi 3 PXE boot can take ~2 minutes).
-    # ssh_check_connectivity timeout provides the poll interval.
-    print(f"  Waiting for {host_name} to boot...")
-    for _ in range(24):
+    # Poll for the host to come back; a Pi 5 needs more than 90 s.
+    print(f"  Waiting for {host_name} to boot (a Pi 5 needs > 90 s)...")
+    deadline = time.monotonic() + boot_timeout_s
+    while time.monotonic() < deadline:
         if ssh_check_connectivity(host_name, timeout=10):
             print(f"  {host_name} is back online")
             return True
@@ -431,27 +528,20 @@ def generate_tests():
                 if os.path.exists(os.path.join(ARTIFACTS_DIR, variant_artifact)):
                     artifact = variant_artifact
 
-            # Determine remote paths
+            # Remote paths are absolute in the login user's home: uploads run
+            # as that user while program/test commands may run under sudo,
+            # where `~` would resolve to /root instead.
+            home = remote_home(host_name)
             ext = os.path.splitext(artifact)[1]
-            remote_bitstream = f"~/{design_name}_{board}{ext}"
-            remote_script = f"~/test_{design_name}.py"
+            remote_bitstream = f"{home}/{design_name}_{board}{ext}"
+            remote_script = f"{home}/test_{design_name}.py"
 
             # Determine programming command (priority: per-board-config > per-host > per-board)
             if "program_cmd" in board_cfg:
                 prog_cmd = board_cfg["program_cmd"].format(bitstream=remote_bitstream)
             elif host_name in HOST_PROGRAM_CMD:
                 prog_template = HOST_PROGRAM_CMD[host_name]
-                # OpenOCD doesn't expand ~ — resolve to absolute path.
-                # Direct-SSH hosts use their own user's home; tweed-connected
-                # hosts SSH as root to the RPi.
-                if host_name == "rpi3-netv2":
-                    home_dir = "/home/pi"
-                elif host_name == "rpi5-netv2":
-                    home_dir = "/home/tim"
-                else:
-                    home_dir = "/root"
-                bitstream_abs = remote_bitstream.replace("~", home_dir)
-                prog_cmd = prog_template.format(bitstream=remote_bitstream, bitstream_abs=bitstream_abs)
+                prog_cmd = prog_template.format(bitstream=remote_bitstream, bitstream_abs=remote_bitstream)
             else:
                 prog_cmd = PROGRAM_CMD[board].format(bitstream=remote_bitstream)
 
@@ -615,20 +705,59 @@ def check_test_result(output, returncode):
 # ---------------------------------------------------------------------------
 
 
-def main():
+def build_arg_parser():
     parser = argparse.ArgumentParser(description="Automated hardware verification runner")
     parser.add_argument(
-        "--test", default=None, help="Run only tests of this type (uart, ddr, ethernet, pmod, spiflash, pcie)"
+        "--test", default=None, help="Run only tests of this type (uart, ddr, ethernet, pmod, spiflash, pcie, pin-id)"
     )
     parser.add_argument(
-        "--host", default=None, help="Run only tests on this host (pi3, pi5, pi9, pi17, pi21, pi27, etc.)"
+        "--host", default=None, help="Run only tests on this host (welland-pi3, welland-sw2-p46, rpi5-netv2, etc.)"
     )
-    parser.add_argument("--board", default=None, help="Run only tests for this board (arty, netv2, fomu, tt)")
+    parser.add_argument("--board", default=None, help="Run only tests for this board (arty, netv2, fomu, tt, acorn)")
     parser.add_argument("--list", action="store_true", help="List all tests without running them")
     parser.add_argument(
         "--skip-upload", action="store_true", help="Skip uploading files (use already-uploaded files on RPis)"
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--repeat", type=int, default=1,
+        help="Run the selected tests N times in a row; stop at the first failing run",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Print the ssh/program/test commands for each test without running them",
+    )
+    return parser
+
+
+def print_dry_run(tests):
+    """Show exactly what would be executed for each test, as pasteable shell."""
+    for t in tests:
+        print(f"\n# {t['name']}")
+        print(f"#   artifact: {t['artifact']} -> {t['remote_bitstream']}")
+        print(f"#   script:   {t['test_script']} -> {t['remote_script']}")
+        if t.get("pre_test"):
+            print(shlex.join(_build_ssh_cmd(t["host"], t["pre_test"])))
+        print(shlex.join(_build_ssh_cmd(t["host"], t["program_cmd"])))
+        print(shlex.join(_build_ssh_cmd(t["host"], t["test_cmd"])))
+
+
+def run_tests_once(tests, skip_upload):
+    """Run every test once. Returns {name: True|False|None}."""
+    results = {}
+    for test in tests:
+        try:
+            results[test["name"]] = run_single_test(test, skip_upload=skip_upload)
+        except subprocess.TimeoutExpired:
+            print("  TIMEOUT: Test exceeded time limit")
+            results[test["name"]] = False
+        except Exception as e:
+            print(f"  ERROR: {e}")
+            results[test["name"]] = False
+    return results
+
+
+def main():
+    args = build_arg_parser().parse_args()
 
     all_tests = generate_tests()
     tests = [t for t in all_tests if t["enabled"]]
@@ -650,21 +779,25 @@ def main():
         print("No tests match the given filters.")
         return 1
 
+    if args.dry_run:
+        print_dry_run(tests)
+        return 0
+
     start = time.strftime("%Y-%m-%d %H:%M:%S")
-    print(f"Running {len(tests)} tests...")
+    print(f"Running {len(tests)} tests, {args.repeat} run(s)...")
     print(f"Start: {start}")
 
+    clean_runs = 0
     results = {}
-    for test in tests:
-        try:
-            result = run_single_test(test, skip_upload=args.skip_upload)
-            results[test["name"]] = result
-        except subprocess.TimeoutExpired:
-            print("  TIMEOUT: Test exceeded time limit")
-            results[test["name"]] = False
-        except Exception as e:
-            print(f"  ERROR: {e}")
-            results[test["name"]] = False
+    for run in range(1, args.repeat + 1):
+        if args.repeat > 1:
+            print("\n" + "#" * 60)
+            print(f"# Run {run}/{args.repeat}")
+            print("#" * 60)
+        results = run_tests_once(tests, skip_upload=args.skip_upload)
+        if any(v is False for v in results.values()):
+            break
+        clean_runs += 1
 
     # Summary
     end = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -683,9 +816,11 @@ def main():
         print(f"  [{status}] {name}")
 
     print()
-    print(f"{passed} passed, {failed} failed, {skipped} skipped (out of {len(results)})")
+    print(f"{passed} passed, {failed} failed, {skipped} skipped (out of {len(results)}) in the last run")
+    if args.repeat > 1:
+        print(f"{clean_runs}/{args.repeat} consecutive clean runs")
 
-    return 0 if failed == 0 else 1
+    return 0 if failed == 0 and clean_runs == args.repeat else 1
 
 
 if __name__ == "__main__":

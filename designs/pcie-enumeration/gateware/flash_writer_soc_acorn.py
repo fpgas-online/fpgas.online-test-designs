@@ -38,7 +38,6 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
-from litex.build.generic_platform import IOStandard, Misc, Pins, Subsignal
 from litex.gen import *
 from litex.soc.cores.clock import S7PLL
 from litex.soc.cores.gpio import GPIOOut
@@ -55,7 +54,6 @@ from migen import *
 # uv.lock has the broken FSM (signals declared but never wired to the
 # output stream); upstream fixed it in 2026.04. Without the patch the
 # host-to-target JTAGBone stream is silently dropped.
-
 import designs._shared.migen_compat  # noqa: F401
 from designs._shared.build_helpers import default_build_dir
 from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
