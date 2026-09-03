@@ -6,11 +6,21 @@ Pinmap and step-by-step wiring instructions for connecting a Sqrl Acorn CLE-215+
 
 See [acorn.md](acorn.md) for board specs and deployment inventory.
 
+> **Revised 2026-09-03.** The P2 serial wiring below was corrected after the
+> pin-ID design was run on the Welland boards on 2026-08-31 (see
+> [Measured P2 wiring](#measured-p2-wiring-welland-2026-08-31)). The earlier
+> revision of this page wired FPGA TX (K2) to the Pi's TXD0, i.e. transmitter
+> into transmitter, which cannot work on any RP1 host. The crossover is **not**
+> a Compute Blade special case.
+
 ## Wiring Diagram
 
 ![Acorn to RPi wiring diagram](acorn-pinmap-rpi5-wiring.png)
 
 ([Edit diagram](https://docs.google.com/drawings/d/1HCOHrvFzj1fIf6DqDMzcqoQgjaD5ZvM39MtgvrAjqEU/edit))
+
+**The diagram still shows the old, non-crossover P2 serial wiring (P2:1 → pin 8).
+Follow the tables below, not the picture, until the drawing is updated.**
 
 **CRITICAL: The VCC (3.3V) wire on both P1 and P2 must NEVER be connected to the RPi header. Leave VCC wires unconnected or clipped. Connecting VCC between the Acorn and RPi can damage the RPi's power management chip.**
 
@@ -43,16 +53,23 @@ The P2 connector provides UART and 2 spare GPIO pins. Solder or crimp Dupont con
 
 ### FPGA Pins
 
-| P2 Pin | FPGA Pin | Function     | I/O Standard |
-|--------|----------|--------------|--------------|
-| 1      | K2       | Serial TX    | LVCMOS33     |
-| 2      | J2       | Serial RX    | LVCMOS33     |
-| 3      | J5       | Spare GPIO 0 | LVCMOS33     |
-| 4      | H5       | Spare GPIO 1 | LVCMOS33     |
-| 5      | GND      | Ground       | —            |
-| 6      | VCC      | 3.3V         | —            |
+| P2 Pin | FPGA Pin | Function                    | I/O Standard |
+|--------|----------|-----------------------------|--------------|
+| 1      | K2       | Serial TX (FPGA drives)     | LVCMOS33     |
+| 2      | J2       | Serial RX (FPGA input)      | LVCMOS33     |
+| 3      | J5       | Spare GPIO 0                | LVCMOS33     |
+| 4      | H5       | Spare GPIO 1                | LVCMOS33     |
+| 5      | GND      | Ground                      | —            |
+| 6      | VCC      | 3.3V                        | —            |
 
 ### RPi GPIO Header Connection
+
+The serial pair is a **null-modem crossover**: the FPGA's transmitter (K2) must
+land on the Pi's receiver (GPIO15 / RXD0) and the FPGA's receiver (J2) on the
+Pi's transmitter (GPIO14 / TXD0). This is forced by silicon — the RP1 hardwires
+GPIO14 = TXD0 and GPIO15 = RXD0 and they cannot be swapped in software — and it
+is the same convention the NeTV2 boards on this site use
+([site-welland.md](site-welland.md#gpio-uart): FPGA TX → GPIO15, FPGA RX → GPIO14).
 
 ```
 RPi 40-pin header (top view, showing pins 3-12):
@@ -63,11 +80,11 @@ RPi 40-pin header (top view, showing pins 3-12):
 P2:3 Spare GPIO 0 ← │  Pin 5     Pin 6   │ → P2:5 GND
                     │ (GPIO3)   ( GND  ) │
                     │                    │
-P2:4 Spare GPIO 1 ← │  Pin 7     Pin 8   │ → P2:1 Serial TX
-                    │ (GPIO4)   (GPIO14) │
+P2:4 Spare GPIO 1 ← │  Pin 7     Pin 8   │ → P2:2 Serial RX (J2)
+                    │ (GPIO4)   (GPIO14) │     Pi TXD0 → FPGA
                     │                    │
-P2:6 VCC (N/C)    ← │  Pin 9     Pin 10  │ → P2:2 Serial RX
-                    │ ( GND )   (GPIO15) │
+P2:6 VCC (N/C)    ← │  Pin 9     Pin 10  │ → P2:1 Serial TX (K2)
+                    │ ( GND )   (GPIO15) │     FPGA → Pi RXD0
                     └────────────────────┘
                       Pin 11     Pin 12
                      (GPIO17)   (GPIO18)
@@ -75,20 +92,43 @@ P2:6 VCC (N/C)    ← │  Pin 9     Pin 10  │ → P2:2 Serial RX
 
 **CRITICAL: P2 pin 6 (VCC 3.3V) must be left UNCONNECTED.** Clip or insulate the VCC wire. Pin 9 on the RPi header is left unused.
 
-| P2 Pin | Function     | FPGA Pin | → RPi Header Pin | RPi GPIO | BCM Function |
-|--------|--------------|----------|-------------------|----------|--------------|
-| 1      | Serial TX    | K2       | Pin 8             | GPIO14   | TXD0         |
-| 2      | Serial RX    | J2       | Pin 10            | GPIO15   | RXD0         |
-| 3      | Spare GPIO 0 | J5       | Pin 5             | GPIO3    | I2C1_SCL     |
-| 4      | Spare GPIO 1 | H5       | Pin 7             | GPIO4    | GPCLK0       |
-| 5      | GND          | —        | Pin 6             | GND      | —            |
-| 6      | VCC (3.3V)   | —        | **unconnected**   | —        | —            |
+| P2 Pin | Function     | FPGA Pin | → RPi Header Pin | RPi GPIO | BCM Function | Direction        |
+|--------|--------------|----------|-------------------|----------|--------------|------------------|
+| 1      | Serial TX    | K2       | Pin 10            | GPIO15   | RXD0         | FPGA → Pi        |
+| 2      | Serial RX    | J2       | Pin 8             | GPIO14   | TXD0         | Pi → FPGA        |
+| 3      | Spare GPIO 0 | J5       | Pin 5             | GPIO3    | I2C1_SCL     | either           |
+| 4      | Spare GPIO 1 | H5       | Pin 7             | GPIO4    | GPCLK0       | either           |
+| 5      | GND          | —        | Pin 6             | GND      | —            | —                |
+| 6      | VCC (3.3V)   | —        | **unconnected**   | —        | —            | —                |
 
-| Parameter | Value                                   |
-|-----------|-----------------------------------------|
-| Device    | `/dev/ttyAMA0`                          |
-| Baud rate | 115200                                  |
-| Pre-test  | `systemctl stop serial-getty@ttyAMA0`   |
+| Parameter | Value                                                                 |
+|-----------|-----------------------------------------------------------------------|
+| Device    | `/dev/ttyAMA0` (RP1 uart0; see the Pi 5 note below)                   |
+| Baud rate | 115200                                                                |
+| Pre-test  | `systemctl stop serial-getty@ttyAMA0` (already inactive on the fleet) |
+
+**Pi 5 needs an explicit overlay for this UART.** `bcm2712-rpi-5-b.dtb` ships the
+RP1 header UART (`serial0`) as `status="disabled"`, and `dtoverlay=disable-bt`
+— which frees the header UART on Pi 0–4 as a side effect — resolves to
+`disable-bt-pi5.dtbo` on a Pi 5, whose only fragment targets `bluetooth`. So
+without `[pi5] dtoverlay=uart0-pi5` in `config.txt` there is no `/dev/ttyAMA0`
+at all. Enabling it also makes the firmware resolve `console=serial0` to
+`ttyAMA0`, which would put the kernel console (and its getty) on the FPGA's
+serial pins — see [Kernel console SysRq](#known-issue-kernel-console-sysrq-on-the-fpga-uart)
+— so the Pi 5s are pinned to `console=ttyAMA10` (the dedicated debug connector)
+via `[pi5] cmdline=cmdline-pi5.txt`. Both are applied to the Welland NFS root by
+fpgas.online-infra PR #32 (rolled out 2026-08-30) and asserted by its
+`verify-pi.yml --tags uart` play. Verified live 2026-09-03 on all six Welland
+Acorn hosts: `/dev/ttyAMA0` present, `console=ttyAMA10`, `serial-getty@ttyAMA0`
+inactive.
+
+**Hazard — never drive a Pi GPIO against an FPGA output.** With the pin-ID design
+loaded every P2 ball is an FPGA *output* (J2 included), so setting GPIO14 to
+`a4` (TXD0) or `op` while pin-ID is running is output-vs-output contention on
+the J2 wire. Doing exactly that crashed **both** pi-sw2-p47 and pi-sw2-p48
+instantly on 2026-08-31 (p47 needed a PoE cycle). Probe with
+`pinctrl set 14 ip pn` (input, no pull) and only restore `pinctrl set 14 a4`
+once a design that treats J2 as an input is loaded.
 
 ## P1: JTAG (2×4 header → RPi pins 19-26)
 
@@ -140,7 +180,35 @@ RPi 40-pin header (top view, showing pins 17-28):
 | 5      | GND        | —        | Pin 25            | GND      | —            |
 | 6      | VCC (3.3V) | —        | **unconnected**   | —        | —            |
 
-JTAG signals are mapped to the RPi's SPI0 pins for compatibility with openFPGALoader's SPI-based JTAG transport. The SPI kernel modules must be unloaded before use (`rmmod spidev spi_bcm2835`).
+JTAG signals are mapped to the RPi's SPI0 pins for compatibility with openFPGALoader's SPI-based JTAG transport. On Pi 0–4 the SPI kernel modules must be unloaded before use (`rmmod spidev spi_bcm2835`). On the Pi 5 fleet this is not needed — `pinctrl` shows GPIO8–11 as `none` (unclaimed) even with the modules loaded — but it is harmless.
+
+### Pi 5: openFPGALoader and `gpiochip0`
+
+The 40-pin header on a Pi 5 is **`/dev/gpiochip15`** on the deployed kernel
+(6.12.x: only `gpiochip11`–`gpiochip15` exist; verified 2026-09-03). The
+Welland NFS root ships Debian's openFPGALoader **v0.10.0**, whose libgpiod
+backend opens `/dev/gpiochip0` unconditionally and fails with:
+
+```
+JTAG init failed with: Unable to open gpio chip
+```
+
+Workaround used in the field (devtmpfs, so it vanishes on reboot):
+
+```bash
+sudo ln -sfn /dev/gpiochip15 /dev/gpiochip0
+```
+
+The proper fix is a newer openFPGALoader: v0.12+ adds the `rp1pio` cable
+(RP1 PIO-driven JTAG) and v0.13.1 (already on the PS1 blades) adds
+`--read-dna`, `--read-xadc` and `--read-register`, all read-only. Shipping the
+`openfpgaloader-rp1pio` build from
+[mithro/rp1-jtag](https://github.com/mithro/rp1-jtag) in the NFS root is
+fpgas.online-infra PR #48 (open; blocked on the package reaching the apt repo).
+
+`--detect` is read-only and safe to run against a live PCIe endpoint. Loading a
+bitstream is not — see the PCIe detach rule under
+[Step 2](#step-2-test-jtag-programming).
 
 ## Assembly
 
@@ -160,25 +228,47 @@ JTAG signals are mapped to the RPi's SPI0 pins for compatibility with openFPGALo
 ### Step 1: Boot and Verify PCIe
 
 ```bash
-lspci
-# Expected: 0001:01:00.0 Processing accelerators: Squirrels Research Labs Acorn CLE-215+
+lspci -nn -s 0001:01:00.0
+# Factory Sqrl firmware in flash:
+#   0001:01:00.0 Processing accelerators [1200]: Squirrels Research Labs Acorn CLE-215+ [1e24:021f]
+# A LiteX/Vivado design in flash (pi-sw2-p44 today):
+#   0001:01:00.0 Processing accelerators [1200]: Xilinx Corporation 7-Series FPGA Hard PCIe block (AXI/debug) [10ee:7011]
 ```
 
 If the Acorn doesn't appear: check M.2 seating, FPC cable, `dmesg | grep -i pci`.
 
 ### Step 2: Test JTAG Programming
 
+**Detach the PCIe endpoint before every JTAG reconfiguration.** Reconfiguring
+the FPGA while its endpoint is enumerated is a surprise removal that the
+BCM2712 root complex does not survive: on 2026-08-31 it crashed pi-sw2-p47
+outright mid-load (SSH dropped, Pi rebooted). With the endpoint removed first
+the same load completes cleanly and the host is unaffected.
+
 ```bash
-# Unload SPI modules that claim GPIO7-11
-sudo rmmod spidev spi_bcm2835
+# 0. Detach the endpoint (restore later with a rescan, or just reboot)
+echo 1 | sudo tee /sys/bus/pci/devices/0001:01:00.0/remove
 
-# Program using GPIO bitbang JTAG
-# Pin order: TDI(GPIO10):TDO(GPIO9):TCK(GPIO11):TMS(GPIO8)
+# 1. Read-only sanity check (safe even without step 0)
+sudo ln -sfn /dev/gpiochip15 /dev/gpiochip0   # openFPGALoader 0.10.0 on Pi 5 only
+openFPGALoader --cable libgpiod --pins 10:9:11:8 --detect
+# Expected: idcode 0x3636093 (XC7A200T; the .bit header reads 7a200tfbg484)
+
+# 2. Load to SRAM (volatile). Pin order: TDI(GPIO10):TDO(GPIO9):TCK(GPIO11):TMS(GPIO8)
 openFPGALoader --cable libgpiod --pins 10:9:11:8 <bitstream.bit>
+# ~16 s for a 1.6 MB XC7A200T bitstream over bit-banged libgpiod (measured 2026-08-31)
 
-# On RPi 5 with RP1 PIO support (faster, when available):
+# With the rp1pio build (openFPGALoader 0.12+, infra PR #48):
 openFPGALoader -c rp1pio --pins 10:9:11:8 <bitstream.bit>
 ```
+
+Never pass `--write-flash` here: SRAM loads are lost on power cycle, so a
+reboot always restores whatever is in flash, which makes every experiment safe.
+See [acorn-pcie-programming.md](acorn-pcie-programming.md) for the flash story.
+
+**Files staged under `/home/pi` do not survive a reboot.** The Pi root is
+`overlayroot=tmpfs` on a read-only NFS root. The symptom is openFPGALoader
+printing `Open file … FAIL` in under 0.1 s — re-copy the bitstream.
 
 ### Step 3: Test UART and GPIO
 
@@ -186,16 +276,16 @@ openFPGALoader -c rp1pio --pins 10:9:11:8 <bitstream.bit>
 sudo systemctl stop serial-getty@ttyAMA0
 sudo systemctl mask serial-getty@ttyAMA0
 
-# Program loopback bitstream
+# Program loopback bitstream (detach PCIe first, see Step 2)
 openFPGALoader --cable libgpiod --pins 10:9:11:8 gpio-loopback-acorn.bit
 
 # Test UART (loopback inverts)
 stty -F /dev/ttyAMA0 115200 raw -echo
 echo "test" > /dev/ttyAMA0
 
-# Test GPIO (loopback inverts)
-gpioset gpiochip0 3=1
-gpioget gpiochip0 4
+# Test GPIO (loopback inverts). The header is gpiochip15 on a Pi 5 (line N == GPIO N).
+gpioset gpiochip15 3=1
+gpioget gpiochip15 4
 # Expected: 0 (inverted)
 ```
 
@@ -204,21 +294,81 @@ gpioget gpiochip0 4
 ```bash
 openFPGALoader --cable libgpiod --pins 10:9:11:8 pmod-pin-id-acorn.bit
 
-# Each pin transmits its FPGA ball name at 1200 baud:
-# GPIO14 → "K2" (serial TX)
-# GPIO15 → "J2" (serial RX)
+# Each pin transmits its FPGA ball name at 1200 baud. With correct wiring:
+# GPIO15 → "K2" (serial TX, on the Pi's RXD0)
+# GPIO14 → "J2" (serial RX, on the Pi's TXD0)
 # GPIO3  → "J5" (spare GPIO 0)
 # GPIO4  → "H5" (spare GPIO 1)
 ```
 
+Only GPIO15 can be a hardware UART receiver on a Pi 5, so decode the other
+three from sampled GPIO values (the repo scanner
+`designs/pmod-pin-id/host/identify_pmod_pins.py` bit-bangs 1200 baud over
+gpiod and finds the header chip by label, so it works on a Pi 5) or from
+`gpiomon` edge timestamps (833 µs per bit against nanosecond stamps). Keep
+GPIO14 as an input throughout — see the hazard above. Validate the method on
+a positive control before trusting a negative: drive a spare Pi GPIO and
+confirm the monitor sees it.
+
+**Historical note:** the Acorn pin-ID design had no clock until test-designs
+PR #10 (merged 2026-08-31). The Acorn's default clock is the differential
+200 MHz `clk200` pair (J19/H19), which migen's implicit default-clock wiring
+cannot turn into a usable `sys` clock, so the design built, configured and
+every pin sat idle — which read as "cable not connected" and hid the real
+wiring for a day. Use the release bitstreams built after that fix.
+
 ### Step 5: Test PCIe Bitstream
 
 ```bash
+echo 1 | sudo tee /sys/bus/pci/devices/0001:01:00.0/remove   # detach first
 openFPGALoader --cable libgpiod --pins 10:9:11:8 pcie-acorn.bit
-echo 1 > /sys/bus/pci/rescan
-lspci | grep -i xilinx
-# Expected: device with Xilinx vendor ID 10ee
+echo 1 | sudo tee /sys/bus/pci/rescan
+lspci -nn | grep -i xilinx
+# Expected: device with Xilinx vendor ID 10ee (LitePCIe default 10ee:7011)
 ```
+
+## Measured P2 wiring (Welland, 2026-08-31)
+
+Read off each wire with the fixed pin-ID bitstream
+(`pmod-pin-id_acorn-cle-215p_vivado-vivado_sqrl_acorn.bit`, see
+[acorn-pcie-programming.md](acorn-pcie-programming.md#prebuilt-vivado-bitstreams)):
+GPIO15 decoded through `/dev/ttyAMA0`, the other three lines decoded in software
+from `gpiomon` edge timestamps.
+
+| Host       | GPIO14 | GPIO15 | GPIO3 | GPIO4 | Verdict                                              |
+|------------|--------|--------|-------|-------|------------------------------------------------------|
+| pi-sw2-p29 | J2     | K2     | dead  | H5    | Serial pair correct; **J5 wire dead** (0 edges)       |
+| pi-sw2-p46 | J2     | K2     | J5    | H5    | Correct                                              |
+| pi-sw2-p48 | J2     | K2     | J5    | H5    | Correct                                              |
+| pi-sw2-p47 | K2     | J2     | H5    | J5    | **Both pairs transposed** — reversed connector        |
+| pi-sw2-p43 | —      | —      | —     | —     | Not testable: JTAG scans an empty chain (see below)   |
+| pi-sw2-p44 | —      | —      | —     | —     | Not testable: JTAG scans an empty chain (see below)   |
+
+- **p47 fix:** transpose *both* pairs (K2↔J2 and J5↔H5) so that K2 → GPIO15,
+  J2 → GPIO14, J5 → GPIO3, H5 → GPIO4. This is **not** a 180° re-seat of the
+  2×3 header — rotating it maps pin 5↔10 and 7↔8, which does not give the
+  target. Only the serial pair is functionally critical; the J5/H5 order is
+  cosmetic.
+- **p43 / p44:** both enumerate on PCIe (p43 with the Sqrl factory ID, p44
+  with `10ee:7011`), but `openFPGALoader --detect` reports `found 0 devices`
+  on both, so nothing can be loaded. The P1 (JTAG) cable or its wiring needs
+  a physical check; the same "TCK has no pull-up when P1 is unmated" test used
+  on the PS1 blades applies.
+- P2 was previously believed to be unconnected on these boards; that
+  conclusion came from the clockless pin-ID design and was wrong.
+
+Before the pin-ID run, a zero-risk passive check gives the same answer with no
+bitstream loaded: toggle the Pi's internal pull-up then pull-down on each line
+and see whether it follows. A ~50 kΩ internal pull loses to any real driver, so
+a line that follows is floating (far end is an FPGA input, i.e. J2), and a line
+that stays put is driven (far end is an FPGA output, i.e. K2). Do not read
+GPIO2/GPIO3 this way — they are SDA1/SCL1 and carry board pull-ups.
+
+**Device DNA is not readable on the Welland boards yet.** With openFPGALoader
+0.10.0 (no `--read-dna`) a hand-rolled `ISC_ENABLE` + `ISC_DNA` openocd
+sequence returned `ffffffffffffffff` on both configured and unconfigured
+devices while IDCODE/USERCODE read fine, so the value has to wait for the
+openFPGALoader upgrade (PR #48), where `--read-dna` works first time on PS1.
 
 ## Compute Blade Wiring Variant
 
@@ -281,9 +431,9 @@ Compute Blade Expansion Module Port
 
 **P2 (UART) → Expansion Port (with null modem crossover):**
 
-The FPGA TX (K2) must connect to the RPi RX (GPIO15), and FPGA RX (J2) to RPi TX (GPIO14). The RP1's hardwired pin mux makes GPIO14 always TXD0 and GPIO15 always RXD0 — these cannot be swapped via software. Two options:
+The FPGA TX (K2) must connect to the RPi RX (GPIO15), and FPGA RX (J2) to RPi TX (GPIO14) — the same crossover as the standard RPi 5 wiring above (on a CM4 the BCM2711 pin mux is fixed the same way; on CM5/RP1 it could be worked around, but is not). Two options:
 
-1. **Physical crossover** (simplest): Swap P2 pins 1 and 2 on the Pico-EZmate cable relative to the standard RPi 5 wiring.
+1. **Physical crossover** (simplest, and what the fleet uses): P2:1 (K2) to the RXD0 pin, P2:2 (J2) to the TXD0 pin.
 2. **RP1 PIO UART** (future): Use the RP1's PIO (`/dev/pio0`, `rp1_pio` module) to implement a software UART with TX on GPIO15 and RX on GPIO14. The PIO can implement any serial protocol on any GPIO pin. No ready-made PIO UART driver exists yet — this would need to be written (similar to the RP2040 pico-sdk PIO UART example).
 
 | P2 Pin | Function     | → Expansion Port Pin | GPIO   | RPi UART0 Function |
@@ -301,7 +451,7 @@ Note: P2 spare GPIOs (J5, H5) are not connected on the Compute Blade variant —
 
 ### Shared Pin: GPIO14 (TMS + FPGA RX)
 
-GPIO14 (Expansion Port pin 8) is shared between JTAG TMS and FPGA RX (J2). With the null modem crossover, FPGA RX (J2) is an **input** on the FPGA side, so it does not drive GPIO14 and does not conflict with JTAG TMS. This is a significant improvement over the non-crossover wiring where FPGA TX (K2) was on GPIO14 and actively drove the pin, preventing JTAG re-programming.
+GPIO14 (Expansion Port pin 8) is shared between JTAG TMS and FPGA RX (J2). With the null modem crossover, FPGA RX (J2) is an **input** on the FPGA side for normal designs, so it does not drive GPIO14 and does not conflict with JTAG TMS. Designs that drive J2 as an output (pin-ID drives every P2 ball) do contend with TMS and cost JTAG until a PoE cycle — see the measured state above.
 
 **JTAG programming:**
 
@@ -339,21 +489,55 @@ Since both P1 and P2 share the same Expansion Module Port, the Pico-EZmate wires
 
 Pin 8 (GPIO14) has two wires: TMS from P1 and FPGA RX (J2) from P2. These are soldered/crimped to the same header pin. Since JTAG and UART never run simultaneously, this is safe.
 
-**Note the crossover**: P2:1 (FPGA TX/K2) goes to pin 10 (GPIO15/RXD0), and P2:2 (FPGA RX/J2) goes to pin 8 (GPIO14/TXD0). This is the opposite of the standard RPi 5 wiring where P2:1→pin 8 and P2:2→pin 10. The crossover is required because the RP1 does not support swapping TX/RX pin assignments.
+**Note the crossover**: P2:1 (FPGA TX/K2) goes to pin 10 (GPIO15/RXD0), and P2:2 (FPGA RX/J2) goes to pin 8 (GPIO14/TXD0). This is the same serial crossover as the standard RPi 5 wiring; the only Compute Blade differences are the JTAG pins and the absence of the two spare GPIOs.
 
 **Important**: Pin 4 is 5V power — do NOT connect anything to it. VCC wires from both P1 and P2 must be left unconnected.
 
-### Known Issue: Kernel Console SysRq on GPIO14
+### Measured state of the PS1 blades (2026-08-31)
 
-**WARNING**: If the Compute Blade's kernel cmdline includes `console=ttyAMA0`, loading any FPGA design that drives serial TX (K2→GPIO14) will **reboot/crash the system**. This affects all designs with serial output (UART SoC, Pin-ID, GPIO loopback).
+| Host | Module   | PCIe                              | JTAG                         | P2 serial                          |
+|------|----------|-----------------------------------|------------------------------|------------------------------------|
+| pi14 | CM4      | Acorn CLE-101 `1e24:0101`         | no response — P1 unmated     | untested (needs JTAG)              |
+| pi16 | CM5 Lite | Acorn CLE-101 `1e24:0101`         | no response — P1 unmated     | untested (needs JTAG)              |
+| pi18 | CM4      | none (M.2 empty)                  | n/a — negative control       | n/a                                |
+| pi20 | CM5 Lite | XC7A100T design `10ee:7011`       | OK, DNA `0x0028e5c45e304854` | **crossover present**: K2→GPIO15, J2→GPIO14 |
 
-**Root cause**: The FPGA drives K2 at the design's baud rate (e.g. 1200 for pin-id, 115200 for UART SoC). The kernel console receives this as garbage bytes due to baud rate mismatch or because the FPGA output starts before the UART framing is established. These garbage bytes trigger **SysRq commands** — including `reboot(b)`, `crash(c)`, `poweroff(o)`, and `kill-all-tasks(i)` — which destroy the running system.
+pi20's wiring was read with the pin-ID design (`GPIO14 ← "J2"`, `GPIO15 ← "K2"`),
+i.e. exactly the table above; test-designs issue #4 recorded the opposite and
+the cable was evidently swapped after it was filed. "P1 unmated" comes from
+GPIO4 (TCK): the Acorn's own JTAG pull-up shows only on pi20, while pi14/pi16
+float exactly like pi18, which has no FPGA at all. Reseating P1 is the fix.
+
+**CM4 has one correct wiring.** On a CM4 `GPIO14 = TXD0` and `GPIO15 = RXD0` are
+alt0 on the BCM2711 and no mux option makes GPIO15 a transmitter, so FPGA TX
+*must* land on GPIO15. CM5/Pi 5 (RP1) could in principle reassign UART pins or
+use PIO, but the fleet uses the same crossover everywhere.
+
+**Loading a TX-driving design costs JTAG until a PoE cycle** (issue #4 item 1):
+after pin-ID the FPGA drives J2 → GPIO14, which is also TMS on the blade. A PoE
+cycle of the blade's switch port restores everything in about 60 s (flash
+bitstream reloads, `--detect` and DNA read again, PCIe endpoint back).
+
+### Known Issue: Kernel Console SysRq on the FPGA UART
+
+**WARNING**: If the host's kernel cmdline puts the console on the FPGA's UART
+(`console=ttyAMA0`, or `console=serial0` on a Pi 5 once `uart0-pi5` is enabled),
+loading any FPGA design that drives serial TX will **reboot/crash the system**.
+This affects all designs with serial output (UART SoC, Pin-ID, GPIO loopback)
+and applies to Pi 5 hosts as much as to Compute Blades.
+
+**Root cause**: The FPGA drives K2 at the design's baud rate (e.g. 1200 for pin-id, 115200 for UART SoC). The kernel console receives this as garbage bytes due to baud rate mismatch or because the FPGA output starts before the UART framing is established. These garbage bytes trigger **SysRq commands** — including `reboot(b)`, `crash(c)`, `poweroff(o)`, and `kill-all-tasks(i)` — which destroy the running system. Netconsole from pi20 showed `sysrq: HELP` flooding every ~400 ms after programming until a destructive command hit.
 
 **Fix** (apply both):
-1. Remove `console=ttyAMA0,115200` from the kernel cmdline in `/boot/firmware/cmdline.txt` on the NFS root for Compute Blades with FPGAs. Use `console=tty1` instead.
+1. Move the kernel console off the FPGA UART. PS1 Compute Blades: `console=tty1`
+   (all four blades, verified 2026-08-31). Welland Pi 5s: `console=ttyAMA10`
+   (the debug connector) via `[pi5] cmdline=cmdline-pi5.txt`, so the getty
+   systemd derives from the console lands there too (infra PR #32, verified
+   2026-09-03 on all six hosts).
 2. Disable SysRq: add `kernel.sysrq=0` to the kernel cmdline or `/etc/sysctl.d/`.
 
-See [fpgas-online/todo#22](https://github.com/fpgas-online/todo/issues/22) for tracking.
+See [fpgas-online/todo#22](https://github.com/fpgas-online/todo/issues/22) and
+test-designs issue #3 for tracking.
 
 ## Troubleshooting
 
@@ -361,11 +545,19 @@ See [fpgas-online/todo#22](https://github.com/fpgas-online/todo/issues/22) for t
 |---------|-------------|-----|
 | Acorn not on PCIe | M.2 not seated, FPC cable loose | Reseat M.2, check FPC |
 | JTAG programming fails | SPI modules loaded, wrong pins | `rmmod spidev spi_bcm2835`, verify pin order |
-| No UART output | serial-getty holding port, wrong baud | Mask serial-getty, use 115200 |
+| `JTAG init failed with: Unable to open gpio chip` (Pi 5) | openFPGALoader 0.10.0 opens `/dev/gpiochip0`; header is `gpiochip15` | `ln -sfn /dev/gpiochip15 /dev/gpiochip0`, or upgrade to the rp1pio build (infra PR #48) |
+| `--detect` says `found 0 devices` but PCIe enumerates | P1 (JTAG) cable unmated or miswired (pi-sw2-p43/p44, PS1 pi14/pi16) | Check TCK for the board's pull-up; reseat P1 |
+| Pi reboots / SSH drops during a JTAG load | FPGA reconfigured while its PCIe endpoint was enumerated | `echo 1 > /sys/bus/pci/devices/0001:01:00.0/remove` before loading |
+| `Open file … FAIL` in < 0.1 s | Bitstream vanished — `/home/pi` is tmpfs overlay, lost on reboot | Re-copy the file |
+| Pi crashes the instant a Pi GPIO is set to output | Contention with an FPGA output on the same wire (pin-ID drives all four P2 balls) | Keep GPIO14 as input (`pinctrl set 14 ip pn`) while pin-ID runs |
+| No `/dev/ttyAMA0` on a Pi 5 | RP1 uart0 disabled; `disable-bt` does not enable it on bcm2712 | `[pi5] dtoverlay=uart0-pi5` (infra PR #32) |
+| No UART output | serial-getty holding port, wrong baud, or K2/J2 not crossed over | Mask serial-getty, use 115200, run pin-ID and check GPIO15 reads `K2` |
+| Pi reboots when a serial design loads | Kernel console on the FPGA UART; SysRq | Console to `ttyAMA10` (Pi 5) / `tty1` (blade), `kernel.sysrq=0` |
 | GPIO pins don't respond | Cable wired incorrectly | Check Pico-EZmate pin order with multimeter |
 | PCIe device not appearing after programming | Need PCIe rescan | `echo 1 > /sys/bus/pci/rescan` |
 | JTAG fails on Compute Blade | Wrong pin order | Use `--pins 2:3:4:14` not `--pins 10:9:11:8` |
 | UART not working after JTAG on Compute Blade | GPIO14 still held by gpiod | Ensure openFPGALoader exited cleanly, then open `/dev/ttyAMA0` |
+| Board hung, ~0.4 W on PoE instead of ~8 W | Wedged Pi 5 | PoE cycle the switch port (S3300 write community via gdoc2netcfg); a Pi 5 needs > 90 s to come back |
 
 ## Compatible Boards
 
