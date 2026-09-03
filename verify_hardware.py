@@ -26,10 +26,16 @@ import time
 
 REPO_DIR = os.path.dirname(os.path.abspath(__file__))
 ARTIFACTS_DIR = os.path.join(REPO_DIR, "artifacts")
+# Jump hosts. Welland's tweed was reinstalled 2026-08-30; the old restricted
+# `pi@tweed.welland.mithis.com` account is gone and the public name now resolves
+# to a reverse proxy. tweed's eth-local address is reachable over WireGuard
+# (wg-desktop) and accepts the operator's own key. PS1 is unchanged (unverified
+# since 2026-03).
 GATEWAYS = {
-    "welland": "pi@tweed.welland.mithis.com",
+    "welland": "tim@10.21.0.1",
     "ps1": "pi@ps1.fpgas.online",
 }
+SSH_BASE_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=15"]
 
 
 # ---------------------------------------------------------------------------
@@ -37,7 +43,9 @@ GATEWAYS = {
 # ---------------------------------------------------------------------------
 
 HOSTS = {
-    # Welland site (via pi@tweed.welland.mithis.com gateway)
+    # Welland site (via the tweed gateway, see GATEWAYS).
+    # Legacy 10.21.0.1NN addresses from the 2026-03 survey — not re-probed since
+    # the VLAN-per-port move (2026-08-23); see docs/hardware/site-welland.md.
     "welland-pi3": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.103", "board": "arty"},
     "welland-pi5": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.105", "board": "arty"},
     "welland-pi9": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.109", "board": "arty"},
@@ -65,9 +73,17 @@ HOSTS = {
         "ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.118",
         "board": "netv2", "variant": "a7-35",
     },
-    "welland-pi2": {
-        "ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.102",
-        "board": "acorn", "variant": "cle-215+",
+    # Sqrl Acorn CLE-215+ on RPi 5 (VLAN-per-port names since 2026-08-23, see
+    # docs/hardware/site-welland.md). Login is the `pi` user with passwordless
+    # sudo; root login is refused. PoE port = switch port = host suffix.
+    **{
+        f"welland-sw2-p{port}": {
+            "ssh_type": "gateway", "gateway": "welland",
+            "target": f"10.21.2.{port}", "user": "pi",
+            "board": "acorn", "variant": "cle-215+",
+            "poe": {"switch": "sw2", "port": port},
+        }
+        for port in (29, 43, 44, 46, 47, 48)
     },
     "welland-pi27": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.127", "board": "tt"},
     "welland-pi29": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.129", "board": "tt"},
@@ -302,27 +318,43 @@ EXTRA_UPLOADS = {
 # ---------------------------------------------------------------------------
 
 
-def _build_ssh_cmd(host_name, remote_cmd):
-    """Build the full SSH command list for a given host.
+def host_user(host_name):
+    """Login user on the target. Gateway hosts default to root (legacy);
+    direct hosts carry the user in `target`."""
+    host = HOSTS[host_name]
+    if host["ssh_type"] == "direct":
+        return host["target"].split("@", 1)[0]
+    return host.get("user", "root")
 
-    For tweed-connected hosts, this produces a double-hop SSH command.
-    Commands are properly shell-escaped at each hop to avoid quoting bugs.
+
+def remote_home(host_name):
+    user = host_user(host_name)
+    return "/root" if user == "root" else f"/home/{user}"
+
+
+def _build_ssh_cmd(host_name, remote_cmd, as_root=True):
+    """Build the ssh argv for *remote_cmd* on *host_name*.
+
+    Gateway hosts go through OpenSSH ProxyJump (one hop, no nested quoting).
+    When the login user is not root and *as_root* is set, the command is run
+    under `sudo -n sh -c` so rmmod, PCI sysfs writes and openFPGALoader work.
     """
     host = HOSTS[host_name]
+    user = host_user(host_name)
+    if as_root and user != "root":
+        remote_cmd = f"sudo -n sh -c {shlex.quote(remote_cmd)}"
+    cmd = ["ssh", *SSH_BASE_OPTS]
     if host["ssh_type"] == "gateway":
-        # Double-hop: local -> gateway -> rpi
-        # The inner command must be shell-escaped for the gateway shell,
-        # and the remote_cmd must be escaped for the rpi shell.
-        gateway = GATEWAYS[host["gateway"]]
-        inner_cmd = "ssh root@{} {}".format(host["target"], shlex.quote(remote_cmd))
-        return ["ssh", gateway, inner_cmd]
+        cmd += ["-o", f"ProxyJump={GATEWAYS[host['gateway']]}"]
+        cmd += [f"{user}@{host['target']}", remote_cmd]
     else:
-        return ["ssh", host["target"], remote_cmd]
+        cmd += [host["target"], remote_cmd]
+    return cmd
 
 
-def ssh_run(host_name, cmd, timeout=180):
+def ssh_run(host_name, cmd, timeout=180, as_root=True):
     """Run a command on a remote RPi. Returns (returncode, stdout, stderr)."""
-    full_cmd = _build_ssh_cmd(host_name, cmd)
+    full_cmd = _build_ssh_cmd(host_name, cmd, as_root=as_root)
     result = subprocess.run(
         full_cmd,
         capture_output=True,
@@ -342,8 +374,10 @@ def ssh_upload(host_name, local_path, remote_path, timeout=120):
     with open(local_path, "rb") as f:
         file_data = f.read()
 
+    # Uploads land in the login user's home (no sudo); commands that read
+    # them later use absolute paths, so root can find them too.
     write_cmd = f"cat > {remote_path}"
-    full_cmd = _build_ssh_cmd(host_name, write_cmd)
+    full_cmd = _build_ssh_cmd(host_name, write_cmd, as_root=False)
 
     result = subprocess.run(
         full_cmd,
@@ -357,7 +391,7 @@ def ssh_upload(host_name, local_path, remote_path, timeout=120):
 def ssh_check_connectivity(host_name, timeout=10):
     """Quick connectivity check. Returns True if host responds."""
     try:
-        rc, stdout, _ = ssh_run(host_name, "echo ok", timeout=timeout)
+        rc, stdout, _ = ssh_run(host_name, "echo ok", timeout=timeout, as_root=False)
         return rc == 0 and "ok" in stdout
     except (subprocess.TimeoutExpired, OSError):
         return False
