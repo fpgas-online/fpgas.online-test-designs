@@ -698,20 +698,59 @@ def check_test_result(output, returncode):
 # ---------------------------------------------------------------------------
 
 
-def main():
+def build_arg_parser():
     parser = argparse.ArgumentParser(description="Automated hardware verification runner")
     parser.add_argument(
-        "--test", default=None, help="Run only tests of this type (uart, ddr, ethernet, pmod, spiflash, pcie)"
+        "--test", default=None, help="Run only tests of this type (uart, ddr, ethernet, pmod, spiflash, pcie, pin-id)"
     )
     parser.add_argument(
-        "--host", default=None, help="Run only tests on this host (pi3, pi5, pi9, pi17, pi21, pi27, etc.)"
+        "--host", default=None, help="Run only tests on this host (welland-pi3, welland-sw2-p46, rpi5-netv2, etc.)"
     )
-    parser.add_argument("--board", default=None, help="Run only tests for this board (arty, netv2, fomu, tt)")
+    parser.add_argument("--board", default=None, help="Run only tests for this board (arty, netv2, fomu, tt, acorn)")
     parser.add_argument("--list", action="store_true", help="List all tests without running them")
     parser.add_argument(
         "--skip-upload", action="store_true", help="Skip uploading files (use already-uploaded files on RPis)"
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--repeat", type=int, default=1,
+        help="Run the selected tests N times in a row; stop at the first failing run",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Print the ssh/program/test commands for each test without running them",
+    )
+    return parser
+
+
+def print_dry_run(tests):
+    """Show exactly what would be executed for each test, as pasteable shell."""
+    for t in tests:
+        print(f"\n# {t['name']}")
+        print(f"#   artifact: {t['artifact']} -> {t['remote_bitstream']}")
+        print(f"#   script:   {t['test_script']} -> {t['remote_script']}")
+        if t.get("pre_test"):
+            print(shlex.join(_build_ssh_cmd(t["host"], t["pre_test"])))
+        print(shlex.join(_build_ssh_cmd(t["host"], t["program_cmd"])))
+        print(shlex.join(_build_ssh_cmd(t["host"], t["test_cmd"])))
+
+
+def run_tests_once(tests, skip_upload):
+    """Run every test once. Returns {name: True|False|None}."""
+    results = {}
+    for test in tests:
+        try:
+            results[test["name"]] = run_single_test(test, skip_upload=skip_upload)
+        except subprocess.TimeoutExpired:
+            print("  TIMEOUT: Test exceeded time limit")
+            results[test["name"]] = False
+        except Exception as e:
+            print(f"  ERROR: {e}")
+            results[test["name"]] = False
+    return results
+
+
+def main():
+    args = build_arg_parser().parse_args()
 
     all_tests = generate_tests()
     tests = [t for t in all_tests if t["enabled"]]
@@ -733,21 +772,25 @@ def main():
         print("No tests match the given filters.")
         return 1
 
+    if args.dry_run:
+        print_dry_run(tests)
+        return 0
+
     start = time.strftime("%Y-%m-%d %H:%M:%S")
-    print(f"Running {len(tests)} tests...")
+    print(f"Running {len(tests)} tests, {args.repeat} run(s)...")
     print(f"Start: {start}")
 
+    clean_runs = 0
     results = {}
-    for test in tests:
-        try:
-            result = run_single_test(test, skip_upload=args.skip_upload)
-            results[test["name"]] = result
-        except subprocess.TimeoutExpired:
-            print("  TIMEOUT: Test exceeded time limit")
-            results[test["name"]] = False
-        except Exception as e:
-            print(f"  ERROR: {e}")
-            results[test["name"]] = False
+    for run in range(1, args.repeat + 1):
+        if args.repeat > 1:
+            print("\n" + "#" * 60)
+            print(f"# Run {run}/{args.repeat}")
+            print("#" * 60)
+        results = run_tests_once(tests, skip_upload=args.skip_upload)
+        if any(v is False for v in results.values()):
+            break
+        clean_runs += 1
 
     # Summary
     end = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -766,9 +809,11 @@ def main():
         print(f"  [{status}] {name}")
 
     print()
-    print(f"{passed} passed, {failed} failed, {skipped} skipped (out of {len(results)})")
+    print(f"{passed} passed, {failed} failed, {skipped} skipped (out of {len(results)}) in the last run")
+    if args.repeat > 1:
+        print(f"{clean_runs}/{args.repeat} consecutive clean runs")
 
-    return 0 if failed == 0 else 1
+    return 0 if failed == 0 and clean_runs == args.repeat else 1
 
 
 if __name__ == "__main__":

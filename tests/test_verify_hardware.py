@@ -86,3 +86,11 @@ def test_acorn_pin_id_artifact_matches_ci_upload_name():
     # output build/acorn/top.bit, and the CI job uploads build/acorn/*.bit.
     t = _pin_id_test_for("welland-sw2-p46")
     assert t["artifact"] == "pmod-pin-id-acorn-cle-215plus/top.bit"
+
+
+def test_cli_repeat_and_dry_run_flags_exist():
+    import argparse
+    parser = vh.build_arg_parser()
+    assert isinstance(parser, argparse.ArgumentParser)
+    args = parser.parse_args(["--repeat", "3", "--dry-run", "--host", "welland-sw2-p46"])
+    assert args.repeat == 3 and args.dry_run is True
