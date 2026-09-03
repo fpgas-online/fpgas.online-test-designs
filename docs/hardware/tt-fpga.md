@@ -159,28 +159,57 @@ The TT FPGA board does not have a dedicated LiteX platform file in litex-boards.
 ## Deployment
 
 Eight TT FPGA Demo Boards across two sites. Four are deployed at
-Welland, four are pending deployment at PS1.
+Welland on S3300 ports 33–36 (Tim's rule for that switch: port N carries
+Tiny Tapeout board N; the FPGA emulation boards take the 33–36 block), four
+are pending deployment at PS1. The Welland four are the public
+**fpga-1 … fpga-4** boards on [tinytapeout.fpgas.online](https://tinytapeout.fpgas.online)
+(live since 2026-08-24). Probed live 2026-09-03.
 
-| Site    | Host | RPi       | IP          | Switch Port | RP2040 Serial      |
-|---------|------|-----------|-------------|-------------|---------------------|
-| Welland | [pi27](https://welland.fpgas.online/fpgas/pi27.html) | RPi 4 2GB | 10.21.0.127 | 27          | `4df39a7a6856f86f` |
-| Welland | [pi29](https://welland.fpgas.online/fpgas/pi29.html) | RPi 4 2GB | 10.21.0.129 | 29          | `fd1a167bd863a198` |
-| Welland | [pi31](https://welland.fpgas.online/fpgas/pi31.html) | RPi 4 2GB | 10.21.0.131 | 31          | `8c46329b33590ecb` |
-| Welland | [pi33](https://welland.fpgas.online/fpgas/pi33.html) | RPi 4 8GB | 10.21.0.133 | 33          | `a2961e5cac65b25f` |
-| PS1     | TBD  | TBD       | TBD         | TBD         | TBD                |
-| PS1     | TBD  | TBD       | TBD         | TBD         | TBD                |
-| PS1     | TBD  | TBD       | TBD         | TBD         | TBD                |
-| PS1     | TBD  | TBD       | TBD         | TBD         | TBD                |
+| Site    | Host       | Board page | RPi (rev)                | IP         | Switch Port | RPi MAC           | RP2350 Serial      | Old name |
+|---------|------------|------------|--------------------------|------------|-------------|-------------------|--------------------|----------|
+| Welland | pi-sw2-p33 | [fpga-1](https://tinytapeout.fpgas.online/board/fpga-1/) | RPi 4 2 GB Rev 1.5 (b03115) | 10.21.2.33 | S3300 33 | e4:5f:01:97:0e:77 | `4df39a7a6856f86f` | pi27 |
+| Welland | pi-sw2-p34 | [fpga-2](https://tinytapeout.fpgas.online/board/fpga-2/) | RPi 4 2 GB Rev 1.5 (b03115) | 10.21.2.34 | S3300 34 | e4:5f:01:97:27:f2 | `fd1a167bd863a198` | pi29 |
+| Welland | pi-sw2-p35 | [fpga-3](https://tinytapeout.fpgas.online/board/fpga-3/) | RPi 4 2 GB Rev 1.5 (b03115) | 10.21.2.35 | S3300 35 | e4:5f:01:97:0c:e3 | `8c46329b33590ecb` | pi31 |
+| Welland | pi-sw2-p36 | [fpga-4](https://tinytapeout.fpgas.online/board/fpga-4/) | RPi 4 8 GB Rev 1.5 (d03115) | 10.21.2.36 | S3300 36 | e4:5f:01:8e:02:27 | `a2961e5cac65b25f` | pi33 |
+| PS1     | TBD        | —          | TBD                      | TBD        | TBD         | TBD               | TBD                | —        |
+| PS1     | TBD        | —          | TBD                      | TBD        | TBD         | TBD               | TBD                | —        |
+| PS1     | TBD        | —          | TBD                      | TBD        | TBD         | TBD               | TBD                | —        |
+| PS1     | TBD        | —          | TBD                      | TBD        | TBD         | TBD               | TBD                | —        |
 
-Each RPi connects to a TT FPGA board via USB-C and has a PMOD HAT for
-GPIO-level control of the TT I/O pins. RPis are powered and networked
-through PoE switches at each site.
+Each RPi connects to a TT FPGA board via USB-C, has a Digilent Pmod HAT for
+GPIO-level control of the TT I/O pins, and an ov5647 camera publishing a live
+feed of the board. RPis are powered and networked through PoE switches at
+each site. Each board's `status.json` (e.g.
+`https://tinytapeout.fpgas.online/board/fpga-1/status.json`) reports the Pi
+daemon's `/health` plus `reachable`, and is the quickest liveness check.
 
-**USB device:** `/dev/ttyACM0` (VID:PID `2e8a:0005` — RP2040 MicroPython).
+**Board firmware (2026-08-23):** all four were reflashed to TT SDK **3.1.0**
+(the shipped `ttdbv3` build stalled at boot). With 3.1.0 the SDK's `tt` object
+comes up as `Shuttle FPGA` and the Commander connects. The custom bitstreams
+that were on the boards (`custom.bin`, `fabfox_mirror.bin`, …) were backed up to
+tweed `/root/fpgas-tt-setup/fpga-backup/<host>/` and pushed back.
+
+**USB device:** `/dev/ttyACM0` (VID:PID `2e8a:0005` — MicroPython Board in FS
+mode), with a udev symlink **`/dev/ttboard`** that the Pi daemon opens.
+
+**The serial port has a permanent owner.** Every TT host runs the
+[`fpgas-tt`](https://github.com/fpgas-online/fpgas.online-tt) daemon
+(`fpgas-online-tt` 0.0.post52, reports version 0.1.0), which holds
+`/dev/ttboard` open at 115200 baud and fans it out as a WebSocket on port 8765
+(`WS /serial`, `GET /health`, reachable only from the gateway thanks to the
+per-port VLANs). Verified 2026-09-03: `fuser /dev/ttyACM0` shows the daemon's
+python3 process on all ten TT hosts. Consequences for this repo's tooling:
+
+- `mpremote` / `tt_fpga_program.py` cannot open `/dev/ttyACM0` while the
+  daemon runs. Stop it first (`sudo systemctl stop fpgas-tt`) and start it
+  again afterwards, or drive the board through the daemon's `/serial` socket.
+- The bitstream-loading and design-listing features now live in the daemon
+  (`/designs`, `/bitstream`, demos via the `fpgas-online-tt-demos` package),
+  which is what the public site uses.
 
 | Site    | Gateway                               | Network       |
 |---------|---------------------------------------|---------------|
-| Welland | [welland.fpgas.online](https://welland.fpgas.online) (10.21.0.1) | 10.21.0.0/16 |
+| Welland | [welland.fpgas.online](https://welland.fpgas.online) / [tinytapeout.fpgas.online](https://tinytapeout.fpgas.online) (10.21.0.1) | 10.21.0.0/16, one VLAN per switch port: Pi = `10.21.<switch>.<port>` |
 | PS1     | [ps1.fpgas.online](https://ps1.fpgas.online) (10.21.0.1)         | 10.21.0.0/24 |
 
 See the [deployment checklist](deployment-checklist.md) for the steps
@@ -212,25 +241,41 @@ Tests are orchestrated by [`verify_hardware.py`](../../verify_hardware.py), whic
 scripts and bitstreams to the RPi, then runs the appropriate test:
 
 ```bash
-uv run python verify_hardware.py --board tt --host pi33.tweed.welland.mithis.com
+uv run python verify_hardware.py --board tt --host welland-pi33
 ```
+
+`verify_hardware.py`'s `HOSTS` table still carries the pre-2026-08-23 names
+and `10.21.0.1xx` addresses (`welland-pi27` … `welland-pi33`); the boards are
+now `pi-sw2-p33` … `pi-sw2-p36` at `10.21.2.33` … `10.21.2.36`, and the
+`fpgas-tt` daemon must be stopped before the wrapper can open the serial port
+(see [Deployment](#deployment)).
 
 ## Known Workarounds
 
 ### GPIOMap firmware mismatch
 
-All deployed boards load `GPIOMapTT04` firmware, but the TTDBv3 hardware
-uses different GPIO assignments. The `pin_indices()` function returns
-wrong pin numbers. **Workaround:** all host scripts hardcode the correct
-GPIO pins (SPI: SCK=6, MOSI=3, SS=5, CRESET=1; UART: TX=GPIO20, RX=GPIO37).
+Observed on the firmware the boards shipped with: it loaded `GPIOMapTT04`, but
+the TTDBv3 hardware uses different GPIO assignments, so `pin_indices()`
+returned wrong pin numbers. **Workaround:** all host scripts hardcode the
+correct GPIO pins (SPI: SCK=6, MOSI=3, SS=5, CRESET=1; UART: TX=GPIO20,
+RX=GPIO37). Not re-checked since the 2026-08-23 reflash to SDK 3.1.0; the
+hardcoded pins are correct either way.
 
 ### DemoBoard() hang on boot
 
 The stock RP2040 `main.py` calls `DemoBoard()` which probes I2C and can
 hang permanently, making the board unrecoverable without a physical reset.
-**Workaround:** `tt_test_wrapper.py` installs a safe no-op `main.py` after
-each test run. Boards pi27, pi29, and pi31 are currently hung from earlier
-runs before this workaround was added — they need a physical board reset.
+The shipped `ttdbv3` firmware did exactly this on all four boards; SDK 3.1.0
+boots cleanly and all four report `board present` as of 2026-09-03.
+
+**Do not install a no-op `main.py` on the deployed boards any more.**
+`tt_test_wrapper.py` still does this after each run as a workaround, but the
+public site (and the `fpgas-tt` daemon's design list) depends on the SDK
+booting into `DemoBoard()`, so a no-op `main.py` takes the board off
+tinytapeout.fpgas.online until the SDK files are restored. If a board does hang,
+a PoE cycle of its switch port (the S3300 write community is in gdoc2netcfg)
+resets it; the RP2's mass-storage bootloader path stalls on Pi 3B+ hosts, so
+reflashing from a Pi 3B+ needs the PICOBOOT path rather than MSC.
 
 ### RP2040 PWM first-call bug
 

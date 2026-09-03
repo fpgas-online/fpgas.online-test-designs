@@ -8,9 +8,12 @@ This checklist does NOT cover adding a new device type — that requires new gat
 
 ### 1. Site dnsmasq configuration (on the gateway server)
 
-**File**: `/etc/dnsmasq.d/pibs.conf` on the gateway (tweed for Welland, val2 for PS1)
+**PS1 (val2)** — `/etc/dnsmasq.d/pibs.conf`: add a `dhcp-host` entry for the new RPi's MAC address with hostname, IP, and a comment describing the board type.
 
-Add a `dhcp-host` entry for the new RPi's MAC address with hostname, IP, and a comment describing the board type.
+**Welland (tweed)** — nothing to add for the network: since 2026-08-23 every switch port is its own VLAN and the Pi plugged into switch `s` port `p` becomes `pi-sw<s>-p<p>` at `10.21.s.p` automatically. Instead:
+- Plug the board into the right port (S3300 port N = Tiny Tapeout N for ports 1–10; TT FPGA boards on 33–36; Acorns on 29/43–48).
+- For a Tiny Tapeout board, add or enable its row in the `tt_boards` catalogue in fpgas.online-infra `ansible/inventory/host_vars/fpgas.online.yml` and run `ansible/web.yml --tags ttsite` (which also renders `/etc/fpgas-online/tt-boards.yaml` for the Pi NFS root).
+- For the welland.fpgas.online board list, update the packaged fixture in fpgas.online-site.
 
 ### 2. Site documentation
 

@@ -50,10 +50,9 @@ The CLE-215+ is equivalent to the RHSResearchLLC NiteFury board but with 1 GB DD
 | Connector       | M.2 M-key                                |
 | Reference clock | Differential (FPGA pins F6/E6)           |
 | Reset           | LVCMOS33 (FPGA pin J1, internal pull-up) |
-| Vendor ID       | `10ee` (Xilinx)                          |
-| Device ID       | (design-dependent)                       |
+| Vendor:Device   | `1e24:021f` Squirrels Research Labs "Acorn CLE-215+" with the factory (mining) firmware in flash; `1e24:0101` for a CLE-101; `10ee:7011` (Xilinx) once a LiteX/Vivado design is in flash |
 
-On RPi 5, the Acorn connects via an mPCIe HAT and appears on PCIe bus `0001:01:00.0`.
+On RPi 5, the Acorn connects via an mPCIe HAT and appears on PCIe bus `0001:01:00.0` (the RP1 south bridge is `0002:01:00.0`). Reconfiguring the FPGA over JTAG while that endpoint is enumerated crashes a Pi 5 host — detach it first, see [acorn-pcie-programming.md](acorn-pcie-programming.md#detach-the-pcie-endpoint-before-any-jtag-reconfiguration).
 
 ## Clock
 
@@ -115,9 +114,27 @@ Flash part: Spansion S25FL256S (256 Mbit). Supports multiboot with separate fall
 
 ## Programming
 
+### Via GPIO JTAG (openFPGALoader) — what the fleet uses
+
+P1 is wired to the Pi's SPI0 pins; openFPGALoader bit-bangs JTAG through libgpiod
+(about 16 s for a full XC7A200T bitstream). The load goes to SRAM only and is
+lost at power cycle, which is what makes it safe to experiment with.
+
+```bash
+echo 1 | sudo tee /sys/bus/pci/devices/0001:01:00.0/remove   # MUST detach the endpoint first on a Pi 5
+sudo ln -sfn /dev/gpiochip15 /dev/gpiochip0                   # openFPGALoader 0.10.0 on a Pi 5 only
+openFPGALoader --cable libgpiod --pins 10:9:11:8 <bitstream.bit>
+```
+
+Pin order, the Pi 5 `gpiochip15` trap, the PCIe detach rule and the
+`overlayroot=tmpfs` gotcha are all in [acorn-pinmap.md](acorn-pinmap.md).
+Prebuilt Vivado bitstreams for every test design and Acorn variant are on the
+`vivado-bitstreams-v0.0-496-gf162f60` release — see
+[acorn-pcie-programming.md](acorn-pcie-programming.md#prebuilt-vivado-bitstreams).
+
 ### Via JTAG (OpenOCD + FT232H)
 
-Uses an FT232H USB adapter with a BSCAN_SPI proxy bitstream:
+Alternative for a bench setup — uses an FT232H USB adapter with a BSCAN_SPI proxy bitstream:
 
 ```bash
 openocd -f openocd_xc7_ft232.cfg -c "init; pld load 0 <bitstream>; exit"
@@ -125,42 +142,57 @@ openocd -f openocd_xc7_ft232.cfg -c "init; pld load 0 <bitstream>; exit"
 
 ### Via SPI Flash
 
-Flash a persistent bitstream using OpenOCD or openFPGALoader. The S25FL256S supports multiboot with fallback.
+Flash a persistent bitstream using OpenOCD or openFPGALoader. The S25FL256S supports multiboot with fallback. `openFPGALoader --write-flash` does **not** currently work over the GPIO JTAG wiring (the open-source spiOverJtag bridge never toggles CCLK after configuration); see [acorn-pcie-programming.md](acorn-pcie-programming.md).
 
 ### Via PCIe (LiteX)
 
-LiteX provides PCIe-based programming via `litepcie_util` when a LiteX bitstream with PCIe support is already loaded.
+LiteX provides PCIe-based programming via `litepcie_util` when a LiteX bitstream with PCIe support is already loaded. Only pi-sw2-p44 currently boots such a design; the other Welland boards still carry the Sqrl factory firmware.
 
 ## Host Inventory
 
 ### Welland Site ([site-welland.md](site-welland.md))
 
-| Host | Port   | IP          | RPi MAC           | RPi Model | Board          | Status   |
-| ---- | ------ | ----------- | ----------------- | --------- | -------------- | -------- |
-| pi2  | port 2 | 10.21.0.102 | 88:a2:9e:45:c6:87 | RPi 5 8GB | Acorn CLE-215+ | Deployed |
-| pi4  | port 4 | 10.21.0.104 | 88:a2:9e:45:dd:be | RPi 5 8GB | Acorn CLE-215+ | Deployed |
-| pi6  | port 6 | 10.21.0.106 | 88:a2:9e:45:85:77 | RPi 5 8GB | Acorn CLE-215+ | Deployed |
-| —    | —      | —           | —                 | RPi 5     | Acorn CLE-215+ | Pending  |
-| —    | —      | —           | —                 | RPi 5     | Acorn CLE-215+ | Pending  |
-| —    | —      | —           | —                 | RPi 5     | LiteFury       | Pending  |
+Six Acorn CLE-215+ hosts, all Raspberry Pi 5 Rev 1.1, all on the S3300 switch
+(switch index 2) under the [VLAN-per-port scheme](site-welland.md#network-topology):
+hostname `pi-sw2-p<port>`, IP `10.21.2.<port>`. Probed live 2026-09-03; JTAG /
+P2 columns from the 2026-08-31 pin-ID survey in
+[acorn-pinmap.md](acorn-pinmap.md#measured-p2-wiring-welland-2026-08-31).
+
+| Host       | Port | IP         | RPi MAC           | RPi (rev)          | Flash contents        | JTAG (P1)          | P2 serial            | Camera | Old name |
+| ---------- | ---- | ---------- | ----------------- | ------------------ | --------------------- | ------------------ | -------------------- | ------ | -------- |
+| pi-sw2-p29 | 29   | 10.21.2.29 | 88:a2:9e:45:dd:be | Pi 5 2 GB (b04171) | Sqrl `1e24:021f`      | OK                 | OK (J5 wire dead)    | ov5647 | pi4      |
+| pi-sw2-p43 | 43   | 10.21.2.43 | 98:fe:54:13:e0:75 | Pi 5 1 GB (a04171) | Sqrl `1e24:021f`      | **empty chain**    | untestable           | ov5647 | —        |
+| pi-sw2-p44 | 44   | 10.21.2.44 | 98:fe:54:13:e0:f5 | Pi 5 1 GB (a04171) | LiteX `10ee:7011`     | **empty chain**    | untestable           | ov5647 | —        |
+| pi-sw2-p46 | 46   | 10.21.2.46 | 88:a2:9e:45:85:77 | Pi 5 2 GB (b04171) | Sqrl `1e24:021f`      | OK                 | OK                   | ov5647 | pi6      |
+| pi-sw2-p47 | 47   | 10.21.2.47 | 98:fe:54:13:f5:75 | Pi 5 1 GB (a04171) | Sqrl `1e24:021f`      | OK                 | **reversed** (K2↔J2) | ov5647 | —        |
+| pi-sw2-p48 | 48   | 10.21.2.48 | 88:a2:9e:45:c6:87 | Pi 5 2 GB (b04171) | Sqrl `1e24:021f`      | OK                 | OK                   | ov5647 | pi2      |
+
+All six run the shared bookworm NFS root (kernel 6.12.96, `overlayroot=tmpfs`),
+have `/dev/ttyAMA0` enabled with the kernel console on `ttyAMA10`, and publish a
+camera feed. The earlier revision of this table listed the first three as
+"RPi 5 8GB"; the revision codes say 2 GB.
 
 ### PS1 Site ([site-ps1.md](site-ps1.md))
 
-| Host | Port | IP          | RPi Model    | Board    | Status   |
-| ---- | ---- | ----------- | ------------ | -------- | -------- |
-| pi14 | e14  | 10.21.0.114 | RPi CM4      | LiteFury | Deployed |
-| pi16 | e16  | 10.21.0.116 | RPi CM5 Lite | LiteFury | Deployed |
-| —    | —    | —           | —            | LiteFury | Pending  |
-| —    | —    | —           | —            | LiteFury | Pending  |
-| —    | —    | —           | —            | LiteFury | Pending  |
-| —    | —    | —           | —            | LiteFury | Pending  |
+Four Compute Blades (val2 gateway, legacy `10.21.0.1xx` addressing). Probed
+2026-08-31.
+
+| Host | Port | IP          | Module               | Flash contents                                   | JTAG (P1)                     | P2 serial                   |
+| ---- | ---- | ----------- | -------------------- | ------------------------------------------------ | ----------------------------- | --------------------------- |
+| pi14 | e14  | 10.21.0.114 | CM4 Rev 1.1 4 GB     | Sqrl Acorn CLE-101 `1e24:0101`                   | no response — P1 unmated      | untested                    |
+| pi16 | e16  | 10.21.0.116 | CM5 Lite Rev 1.0 8 GB| Sqrl Acorn CLE-101 `1e24:0101`                   | no response — P1 unmated      | untested                    |
+| pi18 | e18  | 10.21.0.118 | CM4 Rev 1.1 4 GB     | none — M.2 slot empty                            | n/a                           | n/a                         |
+| pi20 | e20  | 10.21.0.120 | CM5 Lite Rev 1.0 8 GB| XC7A100T design `10ee:7011`, DNA `0x0028e5c45e304854` | OK (openFPGALoader 0.13.1) | OK, crossover present       |
+
+These boards have been documented as LiteFury; the factory PCI ID on pi14/pi16
+identifies them as Sqrl Acorn CLE-101 (same PCB family, XC7A100T, 512 MB).
 
 ### Deployment Summary
 
-| Variant        | FPGA          | DDR3   | Welland (deployed) | Welland (pending) | PS1 (deployed) | PS1 (pending) |
-| -------------- | ------------- | ------ | ------------------ | ----------------- | -------------- | ------------- |
-| Acorn CLE-215+ | XC7A200T (-3) | 1 GB   | ×3                 | ×2                | —              | —             |
-| LiteFury       | XC7A100T (-2) | 512 MB | —                  | ×1                | ×2             | ×4            |
+| Variant                  | FPGA          | DDR3   | Welland (deployed) | Welland (pending) | PS1 (deployed) | PS1 (pending)        |
+| ------------------------ | ------------- | ------ | ------------------ | ----------------- | -------------- | -------------------- |
+| Acorn CLE-215+           | XC7A200T (-3) | 1 GB   | ×6                 | —                 | —              | —                    |
+| LiteFury / Acorn CLE-101 | XC7A100T (-2) | 512 MB | —                  | —                 | ×3             | ×1 host (pi18) empty |
 
 No USB serial devices on any host — JTAG and UART are connected via adapted Pico-EZmate cables to the RPi GPIO header (see [acorn-pinmap.md](acorn-pinmap.md)). PCIe is via the M.2 HAT.
 
