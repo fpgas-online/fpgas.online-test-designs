@@ -18,32 +18,44 @@ ident = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(ident)
 
 
+# Canonical fleet wiring (docs/hardware/acorn-pinmap.md, revised 2026-09-03):
+# FPGA TX K2 -> Pi RXD0 (GPIO15), FPGA RX J2 <- Pi TXD0 (GPIO14),
+# J5 -> GPIO3, H5 -> GPIO4.
+CANONICAL = {15: "K2", 14: "J2", 3: "J5", 4: "H5"}
+
+
 def test_acorn_board_map_matches_p2_header():
-    # The Acorn P2 connector wiring documented in docs/hardware/acorn-pinmap.md.
     pins = {gpio: ball for gpio, ball, _label in ident.BOARDS["acorn"]["pins"]}
-    assert pins == {14: "K2", 15: "J2", 3: "J5", 4: "H5"}
+    assert pins == CANONICAL
 
 
 def test_evaluate_all_correct_passes():
-    decoded = {14: "K2", 15: "J2", 3: "J5", 4: "H5"}
-    all_ok, rows = ident.evaluate_board("acorn", decoded)
+    all_ok, rows = ident.evaluate_board("acorn", dict(CANONICAL))
     assert all_ok is True
     assert all(r["ok"] for r in rows)
     assert len(rows) == 4
 
 
 def test_evaluate_one_miswired_fails():
-    # GPIO14 and GPIO15 swapped -> both wrong -> overall FAIL.
-    decoded = {14: "J2", 15: "K2", 3: "J5", 4: "H5"}
+    # Serial pair swapped (K2 on GPIO14, J2 on GPIO15) -> both wrong -> FAIL.
+    decoded = {15: "J2", 14: "K2", 3: "J5", 4: "H5"}
     all_ok, rows = ident.evaluate_board("acorn", decoded)
     assert all_ok is False
     bad = {r["gpio"] for r in rows if not r["ok"]}
     assert bad == {14, 15}
 
 
+def test_evaluate_p47_reversed_connector_fails_all_four():
+    # pi-sw2-p47 on 2026-08-31: both pairs transposed.
+    decoded = {14: "K2", 15: "J2", 3: "H5", 4: "J5"}
+    all_ok, rows = ident.evaluate_board("acorn", decoded)
+    assert all_ok is False
+    assert {r["gpio"] for r in rows if not r["ok"]} == {3, 4, 14, 15}
+
+
 def test_evaluate_missing_signal_fails():
     # GPIO4 reads nothing (None) -> that pin fails, overall FAIL.
-    decoded = {14: "K2", 15: "J2", 3: "J5", 4: None}
+    decoded = {15: "K2", 14: "J2", 3: "J5", 4: None}
     all_ok, rows = ident.evaluate_board("acorn", decoded)
     assert all_ok is False
     failed = [r for r in rows if not r["ok"]]
@@ -53,7 +65,7 @@ def test_evaluate_missing_signal_fails():
 
 def test_evaluate_garbled_decode_fails():
     # A "?"-prefixed garbled decode must not be treated as a match.
-    decoded = {14: "K2", 15: "J2", 3: "?Jx", 4: "H5"}
+    decoded = {15: "K2", 14: "J2", 3: "?Jx", 4: "H5"}
     all_ok, rows = ident.evaluate_board("acorn", decoded)
     assert all_ok is False
     failed = [r for r in rows if not r["ok"]]

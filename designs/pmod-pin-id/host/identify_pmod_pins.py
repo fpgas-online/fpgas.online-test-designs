@@ -73,12 +73,15 @@ for port_name, gpios in PMOD_HAT_PORTS.items():
 # each GPIO transmits its own name, so a correct decode == correct wiring.
 BOARDS = {
     # Sqrl Acorn CLE-215+ / LiteFury P2 header, wired to the RPi 5 GPIO header
-    # via an adapted Pico-EZmate cable. See docs/hardware/acorn-pinmap.md.
+    # via an adapted Pico-EZmate cable with the fleet's null-modem crossover:
+    # FPGA TX (K2) lands on the Pi's RXD0 (GPIO15) and FPGA RX (J2) on the
+    # Pi's TXD0 (GPIO14). See docs/hardware/acorn-pinmap.md, "Measured P2
+    # wiring (Welland, 2026-08-31)".
     "acorn": {
         "description": "Acorn CLE-215+ / LiteFury P2 header -> RPi 5 GPIO",
         "pins": [
-            (14, "K2", "P2.1 Serial TX"),
-            (15, "J2", "P2.2 Serial RX"),
+            (15, "K2", "P2.1 Serial TX -> Pi RXD0"),
+            (14, "J2", "P2.2 Serial RX <- Pi TXD0"),
             (3, "J5", "P2.3 Spare GPIO 0"),
             (4, "H5", "P2.4 Spare GPIO 1"),
         ],
