@@ -40,3 +40,19 @@ def test_remote_home_follows_login_user():
     assert vh.remote_home("welland-sw2-p29") == "/home/pi"
     assert vh.remote_home("welland-pi3") == "/root"
     assert vh.remote_home("rpi5-netv2") == "/home/tim"
+
+
+def test_poe_snmp_cmd_builds_admin_enable_write():
+    off = vh.poe_snmp_cmd("welland-sw2-p29", enable=False, community="secret")
+    assert off == [
+        "snmpset", "-v2c", "-c", "secret", "10.1.5.11",
+        "1.3.6.1.2.1.105.1.1.1.3.1.29", "i", "2",
+    ]
+    on = vh.poe_snmp_cmd("welland-sw2-p29", enable=True, community="secret")
+    assert on[-1] == "1"
+
+
+def test_poe_snmp_cmd_rejects_host_without_poe_info():
+    import pytest
+    with pytest.raises(KeyError):
+        vh.poe_snmp_cmd("welland-pi3", enable=False, community="secret")

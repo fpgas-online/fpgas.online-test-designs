@@ -37,6 +37,27 @@ GATEWAYS = {
 }
 SSH_BASE_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=15"]
 
+# PoE switches, keyed by the `switch` field of a host's `poe` entry. The S3300
+# at Welland answers SNMP from tweed (read community `public` verified
+# 2026-09-03). Port power is POWER-ETHERNET-MIB pethPsePortAdminEnable
+# (.1.3.6.1.2.1.105.1.1.1.3.<group>.<port>): 1 = enable, 2 = disable.
+POE_SWITCHES = {
+    "sw2": {"address": "10.1.5.11", "group": 1},
+}
+POE_ADMIN_ENABLE_OID = "1.3.6.1.2.1.105.1.1.1.3"
+# The SNMP write community is deliberately not in the repo. Export it as
+# FPGAS_POE_COMMUNITY (it lives in fpgas.online-infra) before running tests
+# that need a power cycle; without it poe_reset() reports and returns False.
+POE_COMMUNITY_ENV = "FPGAS_POE_COMMUNITY"
+
+
+def poe_snmp_cmd(host_name, enable, community):
+    """snmpset argv (run on the gateway) that turns a host's PoE port on/off."""
+    poe = HOSTS[host_name]["poe"]  # KeyError for hosts without PoE info
+    sw = POE_SWITCHES[poe["switch"]]
+    oid = f"{POE_ADMIN_ENABLE_OID}.{sw['group']}.{poe['port']}"
+    return ["snmpset", "-v2c", "-c", community, sw["address"], oid, "i", "1" if enable else "2"]
+
 
 # ---------------------------------------------------------------------------
 # Host definitions — each RPi we can reach
@@ -397,33 +418,53 @@ def ssh_check_connectivity(host_name, timeout=10):
         return False
 
 
-def poe_reset(host_name, off_seconds=5):
-    """Power-cycle a PoE-powered RPi via the managed switch.
+def poe_reset(host_name, off_seconds=5, boot_timeout_s=240):
+    """Power-cycle a PoE-powered RPi by toggling its switch port over SNMP.
 
-    Only works for tweed-connected hosts (piNN naming convention).
-    The PoE switch port number matches the host suffix: pi27 → port 27.
+    The snmpset runs on the site gateway (which can reach the switch's
+    management address). Needs FPGAS_POE_COMMUNITY in the environment.
+    Returns True once the host answers ssh again.
     """
-    m = re.match(r"pi(\d+)$", host_name)
-    if not m:
-        print(f"  Cannot PoE-reset {host_name}: not a piNN host")
+    host = HOSTS[host_name]
+    if "poe" not in host or host["ssh_type"] != "gateway":
+        print(f"  Cannot PoE-reset {host_name}: no PoE port recorded for this host")
         return False
-    port = m.group(1)
-    print(f"  PoE reset: port {port} off...")
+    community = os.environ.get(POE_COMMUNITY_ENV)
+    if not community:
+        print(f"  Cannot PoE-reset {host_name}: {POE_COMMUNITY_ENV} is not set — power-cycle by hand")
+        return False
+    gateway = GATEWAYS[host["gateway"]]
+
+    def on_gateway(argv):
+        return subprocess.run(
+            ["ssh", *SSH_BASE_OPTS, gateway, shlex.join(argv)],
+            timeout=20,
+            capture_output=True,
+            text=True,
+        )
+
+    print(f"  PoE reset: {host['poe']['switch']} port {host['poe']['port']} off...")
     try:
-        subprocess.run(["ssh", GATEWAYS["welland"], f"poe.sh {port} 2"], timeout=15, capture_output=True)
-        # Poll until host is unreachable (confirms power is off)
+        r = on_gateway(poe_snmp_cmd(host_name, enable=False, community=community))
+        if r.returncode != 0:
+            print(f"  snmpset failed: {r.stderr.strip()}")
+            return False
+        # Poll until the host is unreachable (confirms power is off).
         for _ in range(off_seconds * 2):
             if not ssh_check_connectivity(host_name, timeout=1):
                 break
             time.sleep(0.5)
-        subprocess.run(["ssh", GATEWAYS["welland"], f"poe.sh {port} 1"], timeout=15, capture_output=True)
+        r = on_gateway(poe_snmp_cmd(host_name, enable=True, community=community))
+        if r.returncode != 0:
+            print(f"  snmpset failed: {r.stderr.strip()}")
+            return False
     except (subprocess.TimeoutExpired, OSError) as e:
         print(f"  PoE reset failed: {e}")
         return False
-    # Poll for host to come back (RPi 3 PXE boot can take ~2 minutes).
-    # ssh_check_connectivity timeout provides the poll interval.
-    print(f"  Waiting for {host_name} to boot...")
-    for _ in range(24):
+    # Poll for the host to come back; a Pi 5 needs more than 90 s.
+    print(f"  Waiting for {host_name} to boot (a Pi 5 needs > 90 s)...")
+    deadline = time.monotonic() + boot_timeout_s
+    while time.monotonic() < deadline:
         if ssh_check_connectivity(host_name, timeout=10):
             print(f"  {host_name} is back online")
             return True
