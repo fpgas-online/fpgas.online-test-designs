@@ -164,20 +164,31 @@ on this board:
 | Block            | Choice                                                                                          | Notes |
 |------------------|-------------------------------------------------------------------------------------------------|-------|
 | CRG              | S7PLL from `clk200` → `sys` (100 MHz), `sys4x`, `sys4x_dqs`, `idelay` (200 MHz) + `S7IDELAYCTRL` | Same as upstream target |
-| CPU / BIOS / UART| VexRiscv (standard), BIOS in ROM, `serial` on K2/J2 at 115200                                   | R4. UART is *also* exposed over PCIe (`uart_name="crossover"` is **not** used; we want the real pins) |
+| CPU / BIOS / UART| VexRiscv (standard), BIOS in ROM, `serial` on K2/J2 at 115200                                   | R4. The real P2 pins, not `uart_name="crossover"`. No second (PCIe) console in this plan |
 | DDR3             | `A7DDRPHY` + `MT41K512M16(sys_clk_freq, "1:4")`, L2 8 KiB                                       | R5a. `cle-101` variant gets `MT41K256M16` (512 MB) |
-| PCIe             | `S7PCIEPHY` on a `pcie_x1` extension (lane 0: RX B10/A10, TX B6/A6, refclk F6/E6, PERST J1), `data_width=64`, BAR0 128 KiB; `add_pcie(ndmas=1, with_dma_loopback=True)` | Pi 5 gives exactly one lane. x1 also matches what the open `pcie_7x` core supports, so the same resource is used in every flow. `pcie_clkreq_n` driven low |
+| PCIe             | `S7PCIEPHY` on a `pcie_x1` extension (lane 0: RX B10/A10, TX B6/A6, refclk F6/E6, PERST J1), `data_width=64`, BAR0 128 KiB; `add_pcie(ndmas=1, address_width=64, with_dma_loopback=True)` | Pi 5 gives exactly one lane. x1 also matches what the open `pcie_7x` core supports, so the same resource is used in every flow. `pcie_clkreq_n` driven low. **`address_width=64` is mandatory**: the BCM2712 root complex maps host RAM above 4 GiB on the bus and `litepcie.ko` does `dma_set_mask(DMA_ADDR_WIDTH)` at probe, so a 32-bit build fails probe and takes even `litepcie_util info` with it |
+| PCI IDs          | Vendor `10ee`. Device ID **differs by flow**: LitePCIe's Vivado PHY sets `7020 + nlanes` = **`7021`** for x1, and the generated `litepcie.ko` binds only `7021` for 7-series; the open `pcie_7x` core hard-codes **`7011`** (`CFG_DEV_ID`) and `S7PCIEPHY` does not override it | Tests match on vendor `10ee` + the LiteX ident string, never a fixed device ID. Phase 5 parameterises the open core to `7021` (see Phase 5 step 3) so one kernel module serves both flows |
 | DNA, XADC        | `DNA()` + timing constraints, `XADC()`                                                          | R1 |
 | Flash + ICAP     | `GPIOOut(flash_cs_n)`, `S7SPIFlash(flash, sys_clk_freq, 25e6)`, `ICAP()` + `add_reload()`       | R2. Exactly the CSR names `liblitepcie` expects (`CSR_FLASH_*`, `CSR_ICAP_*`) |
 | Spare GPIO       | `GPIOTristate` on a new `p2_gpio` resource `Pins("J5 H5")`, LVCMOS33                            | R3. Tristate so the Pi can drive them too |
-| DDR DMA bridge   | New module `PCIeDRAMBridge`: `LiteDRAMDMAWriter` fed from `pcie_dma0.source`, `LiteDRAMDMAReader` feeding `pcie_dma0.sink`, CSRs `base`, `length`, `mode` (loopback / to-dram / from-dram), `start`, `done` | R5b. LitePCIe's built-in loopback stays selectable so the plain `litepcie_util dma_test` still works |
+| DDR DMA bridge   | New module `PCIeDRAMBridge`: `LiteDRAMDMAWriter` fed from `pcie_dma0.source`, `LiteDRAMDMAReader` feeding `pcie_dma0.sink`, on a 64-bit LiteDRAM port (`crossbar.get_port(data_width=64)`, so no manual width converter against the 128-bit native port), CSRs `base`, `length`, `mode` (loopback / to-dram / from-dram), `start`, `done` | R5b. LitePCIe's `add_plugin_module` rebinds `pcie_dma0.sink/source` to the loopback plugin's `next_sink/next_source`, so the bridge sees the streams when loopback is disabled and the plain `litepcie_util dma_test` still works when it is enabled |
 | LEDs             | `LedChaser` on the four user LEDs                                                               | Free "design is alive" indicator on camera feeds |
 | Ident            | `"fpgas-online Acorn PCIe SoC <variant>"` + LiteX version                                       | Read back by `litepcie_util info` and by the BIOS banner |
 
-`--golden` builds the recovery image: same CRG, PCIe, flash, ICAP, DNA/XADC,
-UART, **no DDR, no DMA bridge, no GPIO**. Smaller and with nothing that can
-fail calibration. It goes to flash 0x0 once and is rarely touched
-(`acorn-pcie-programming.md` safety rule 6).
+`--golden` builds the recovery image: same CRG, PCIe (**including
+`pcie_dma0` + MSI**, because `litepcie.ko` touches `CSR_PCIE_DMA0_BASE` at
+probe), flash, ICAP, DNA/XADC, UART, **no DDR, no DMA bridge, no GPIO**.
+Smaller and with nothing that can fail calibration. It goes to flash 0x0 once
+and is rarely touched (`acorn-pcie-programming.md` safety rule 6).
+
+**One driver for both images.** LiteX allocates CSR banks in sorted
+module-name order, so dropping modules would move every CSR the host tools
+use. Both builds therefore pin the shared modules to fixed CSR indices via
+`SoCCore.csr_map` (`ctrl`, `identifier_mem`, `uart`, `timer0`, `dna`, `xadc`,
+`flash`, `flash_cs_n`, `icap`, `pcie_phy`, `pcie_msi`, `pcie_dma0`), and Phase
+1's gate diffs the two generated `csr.h` files to prove those addresses are
+identical. Modules only in the operational image (`sdram`, `ddrphy`,
+`p2_gpio`, `pcie_dram`) take indices above the pinned block.
 
 Multiboot bitstream flavours come from the platform (`with_multiboot=True`)
 in the Vivado flows; see §5 for how the open flow gets them.
@@ -193,17 +204,28 @@ in the Vivado flows; see §5 for how the open flow gets them.
   `verify_hardware.py` uploads both per test run (they are lost at reboot).
   Longer term this moves to an `fpgas-online/apt` package (`litepcie-dkms`
   or prebuilt-per-kernel) via fpgas.online-infra; that is out of this repo.
-- **R1/R2/R3 do not strictly need the kernel module**: `litex_server --pcie`
+- **R1 and R3 do not strictly need the kernel module**: `litex_server --pcie`
   maps BAR0 directly and every CSR is reachable. The tests use the kernel
   module path first (it is the documented, upstream-supported one) and fall
   back to BAR0 mmap for R1/R3 when the module is absent, so board health can
   be read on a Pi that has only the bitstream.
-- **R5b needs the kernel module** (DMA into host memory). No fallback.
+- **R2 and R5b need the kernel module**: `flash_write`/`flash_read`/
+  `flash_reload` go through `LITEPCIE_IOCTL_FLASH`/`_ICAP`, and DMA needs host
+  memory. No fallback.
 - **Pre-test on every Acorn host**: `echo 1 > /sys/bus/pci/devices/0001:01:00.0/remove`
   before any JTAG load; `ln -sfn /dev/gpiochip15 /dev/gpiochip0` while the
   fleet is on openFPGALoader 0.10.0; `systemctl stop serial-getty@ttyAMA0`;
-  rescan after the load. All of this lives in one `acorn` `pre_test`/
-  `program_cmd` pair in `verify_hardware.py`.
+  program with `openFPGALoader --cable libgpiod --pins 10:9:11:8 <bit>` (the
+  `-c rp1pio` cable in today's `verify_hardware.py` does not exist in 0.10.0;
+  switch back to it when infra PR #48 lands); rescan after the load. All of
+  this lives in one `acorn` `pre_test`/`program_cmd` pair in
+  `verify_hardware.py`.
+- **PoE power cycles**: `verify_hardware.py`'s `poe_reset()` runs `poe.sh` on
+  the old `pi@tweed` account and matches only `piNN` names; `poe.sh` no longer
+  exists on the reinstalled tweed (checked today; `snmpset` does). Phase 0
+  rewrites it to talk SNMP to the S3300 (`10.1.5.11`, port = host suffix,
+  write community from fpgas.online-infra) via `tim@10.21.0.1`. Until that
+  lands, power cycles in Phase 3 are done by hand and the run log says so.
 - **`verify_hardware.py` transport update**: gateway `tim@10.21.0.1`, target
   `pi@10.21.2.<port>` with `sudo` in commands, hosts renamed to the VLAN
   scheme (`welland-sw2-p29` …). Other Welland boards keep working because only
@@ -219,16 +241,21 @@ in the Vivado flows; see §5 for how the open flow gets them.
 
 Initial install on a factory board (per board, once):
 
-1. `flash_read` **the whole 32 MiB of factory flash first** and keep the image
+1. Detach endpoint → JTAG-load the plain operational `.bit` into SRAM →
+   rescan → `litepcie_util info` shows our ident and DNA. (`litepcie_util`
+   cannot talk to the Sqrl firmware, so nothing can be read from flash before
+   this step.)
+2. `flash_read` **the whole 32 MiB of factory flash** and keep the image
    off-repo (tweed `~tim/acorn-factory-flash/<host>-<date>.bin`). The Sqrl
    firmware is the only thing that has ever booted on these boards; we do not
-   throw it away.
-2. Detach endpoint → JTAG-load the operational `.bit` into SRAM → rescan →
-   `litepcie_util info` shows our ident and DNA.
+   throw it away. `litepcie_util flash_read` is one ioctl round-trip per byte;
+   Phase 2 measures it on hardware and, if 32 MiB takes more than ~15 min,
+   adds a buffered reader in `test_pcie_flash.py` (page reads via the SPI
+   bit-bang CSRs) before Phase 3 step 7 is run.
 3. `flash_write golden.bin 0x0`, `flash_write operational.bin 0x400000`,
    `flash_read` back and compare.
 4. Power cycle (PoE) → the board boots golden → chain-loads operational →
-   enumerates `10ee:7011` with our ident. From then on R2 is
+   enumerates `10ee:7021` with our ident. From then on R2 is
    `flash_write … 0x400000` + `flash_reload` + rescan.
 
 Boards whose JTAG is not working (**p43, p44**) are **never flashed** until
@@ -247,26 +274,30 @@ from `main`.
 
 1. Merge PR #11 (docs) and PR #7 (CI) as they are.
 2. Open a PR for `vivado-xilinx-flows` rebased onto `main` (60 commits; the
-   rebase is mostly mechanical, the one real conflict is `pcie_soc_acorn.py`
-   vs PR #10's CRG change). This is the infrastructure every Vivado build in
-   this plan uses. Its `yosys-vivado` hybrid is nice-to-have; only
-   `vivado-vivado` and `yosys-nextpnr` are on this plan's critical path.
+   rebase is mostly mechanical, the one real conflict is
+   `pmod_pin_id_acorn.py`, which both PR #10 and that branch touch). This is
+   the infrastructure every Vivado build in this plan uses. Its `yosys-vivado`
+   hybrid is nice-to-have; only `vivado-vivado` and `yosys-nextpnr` are on this
+   plan's critical path.
 3. Rebase PR #9 on top of that, fix its lint failure, drop the parts this plan
    replaces (the ICAP/flash edit to `pcie_soc_acorn.py` moves into the new
-   SoC), keep `flash_writer_soc_acorn.py` + the LiteX JTAG patch as the
-   documented JTAG-only fallback path, and either commit a `native_jtagbone.py`
-   or delete the deploy script that references it.
+   SoC), **keep** its `pin-id` `DESIGNS` entry and the `--board acorn` decoder
+   in `identify_pmod_pins.py`, keep `flash_writer_soc_acorn.py` + the LiteX
+   JTAG patch as the documented JTAG-only fallback path, and either commit a
+   `native_jtagbone.py` or delete the deploy script that references it.
 4. Close PR #8 as superseded by PR #10, cherry-picking `static_high_acorn.py`
    if it is still wanted.
 5. `verify_hardware.py`: new gateway/user/sudo transport, VLAN host names for
-   the six Acorns, Acorn pre-test/program commands per §3.3. Add `--dry-run`.
+   the six Acorns, Acorn pre-test/program commands per §3.3, `poe_reset()`
+   over SNMP per §3.3, `--repeat N` (the gates below need it), `--dry-run`.
    Update `docs/verify-hardware.md`.
 
 **Gate:** `uv run python verify_hardware.py --list` shows the six Acorn hosts;
-`--host welland-sw2-p46 --test pmod-pin-id` runs end-to-end against the
-already-released Vivado pin-ID bitstream and reports the canonical wiring
-(`K2` on GPIO15, `J2` on GPIO14, `J5` on GPIO3, `H5` on GPIO4). That proves the
-transport, the detach rule, the symlink, and the pin-ID decoder in one shot.
+`--host welland-sw2-p46 --test pin-id` runs end-to-end against a Vivado pin-ID
+bitstream **rebuilt after PR #10** (the released one predates the clock fix)
+and reports the canonical wiring (`K2` on GPIO15, `J2` on GPIO14, `J5` on
+GPIO3, `H5` on GPIO4). That proves the transport, the detach rule, the
+symlink, and the pin-ID decoder in one shot.
 
 ### Phase 1 — the SoC, Vivado flow (branch `acorn-pcie/01-soc`)
 
@@ -283,7 +314,8 @@ transport, the detach rule, the symlink, and the pin-ID decoder in one shot.
 
 **Gate:** `make -C designs/acorn-pcie gateware-acorn-cle-215+-vivado-vivado`
 produces `sqrl_acorn{,_operational,_fallback}.{bit,bin}` and the golden set;
-`ruff` clean; the bridge simulation passes.
+the pinned CSR addresses in the operational and golden `csr.h` are identical
+(a unit test diffs them); `ruff` clean; the bridge simulation passes.
 
 ### Phase 2 — host tools and driver (branch `acorn-pcie/02-host`)
 
@@ -309,9 +341,10 @@ connector is re-wired, then p43/p44 after their P1 cables are fixed.
 
 Per board, in this order, each step a `verify_hardware.py` test:
 
-1. Detach → JTAG SRAM load of operational `.bit` → rescan → `lspci` shows
-   `10ee:7011`. **Record whether the design survives 60 s with PCIe up**
-   (§2.5). If it reverts, fall back to PR #9's `flash_writer` path for step 6
+1. Detach → JTAG SRAM load of the plain `.bit` (not `_operational.bit`, so
+   the watchdog/fallback properties are not a variable) → rescan → `lspci`
+   shows `10ee:7021`. **Record whether the design survives 60 s with PCIe up**
+   (§2.5). If it reverts, fall back to PR #9's `flash_writer` path for step 7
    and open an issue with the evidence.
 2. `pcie-info`: ident, DNA (57-bit), temperature in a sane range (20–80 °C),
    VCCINT ≈ 1.0 V, VCCAUX ≈ 1.8 V, VCCBRAM ≈ 1.0 V (±10 %).
@@ -345,7 +378,8 @@ wiring reasons are listed in the run summary with the reason.
    Acorn matrix job for `acorn-pcie` is added but `continue-on-error` until
    Phase 5 makes it green.
 3. Docs: `docs/tests/acorn-pcie.md`, update `acorn.md` / `acorn-pcie-programming.md`
-   per-board flash state table, `README.md` test matrix.
+   per-board flash state table and expected PCI IDs, remove the "XC7A200T is
+   too large for openXC7" claim (CI builds it), `README.md` test matrix.
 
 ### Phase 5 — the same thing with the open-source flow (branch `acorn-pcie/05-openxc7`)
 
@@ -362,6 +396,13 @@ much breaks. Steps, in the order that isolates faults:
    `vivado-xilinx-flows` branch.
 3. PCIe: `pcie_7x` is designed for exactly this (openXC7, Gen2 x1, 7-series).
    Known risk is `IBUFDS_GTE2` / GTP FASM (issue #1, already worked around).
+   Two things the open core hard-codes must be made to match the Vivado
+   build before the host tools can be shared: `CFG_DEV_ID` (`7011` → `7021`,
+   overridden from the `pcie_s7` wrapper or the submodule's Verilog
+   parameters) and `BAR0 = 32'hFC000000` (a 64 MiB BAR versus 128 KiB; the
+   Pi root complex may refuse to re-assign a larger BAR on rescan without a
+   reboot, and the Sqrl firmware's BAR0 is 128 KiB). Both are one-line
+   parameter changes in the submodule or its wrapper.
 4. DDR3: the historically failing piece. Attack order: build the `ddr-memory`
    SoC (no PCIe) with openXC7 and drive BIOS `sdram_cal` / `mem_test` over the
    UART; compare calibration windows with the Vivado build of the same SoC;
@@ -386,7 +427,8 @@ every canonical-wiring board, three consecutive runs.
 
 Only if time allows and only for the bricked-board recovery story: get
 `openFPGALoader --write-flash` working through an openXC7-built `spiOverJtag`
-(the `tmp/spi_over_jtag_fbg484` experiment exists; the missing piece is
+(an untracked `tmp/spi_over_jtag_fbg484` experiment exists in the main
+checkout only, not in git; the missing piece is
 `STARTUPE2 USRCCLKO` actually driving CCLK after configuration, which
 `designs/_shared/s7_spi_flash.py` already does for the SPI-flash-ID test), or
 finish PR #9's `flash_writer`. Not on the critical path because Phase 3 step 7
@@ -410,7 +452,7 @@ which boards each phase can use:
 
 | Test         | PASS when                                                                                                       | FAIL / notes |
 |--------------|-----------------------------------------------------------------------------------------------------------------|--------------|
-| `pcie-info`  | `10ee:7011` at `0001:01:00.0`, ident matches the built bitstream, DNA is non-zero and not all-ones and stable across two reads, XADC values in range (§4 Phase 3 step 2) | DNA `0xffffffffffffffff` means DNA port not clocked; out-of-range XADC means wrong scaling or unpowered rail |
+| `pcie-info`  | vendor `10ee` at `0001:01:00.0` with the device ID the flow is expected to produce (`7021`), ident matches the built bitstream, DNA is non-zero and not all-ones and stable across two reads, XADC values in range (§4 Phase 3 step 2) | DNA `0xffffffffffffffff` means DNA port not clocked; out-of-range XADC means wrong scaling or unpowered rail |
 | `pcie-gpio`  | For each of J5,H5 and each direction, the far side reads the driven value for 0 and 1                          | Pi side uses `gpiochip15` by label lookup, never a fixed number; never drives against an FPGA output (tristate the FPGA side first) |
 | `uart`       | BIOS banner with the expected ident, then echo test                                                             | Reuses `test_uart.py` semantics |
 | `ddr`        | BIOS prints `Memtest OK` for the full main RAM size for the variant                                             | Calibration lines captured for diagnostics |
@@ -434,6 +476,11 @@ which boards each phase can use:
    Acorns now; other boards are migrated when their sections are re-probed.
 8. **PR #9's `flash_writer` becomes the fallback path**, not the primary,
    pending the §2.5 re-test.
+9. **PCI device ID is `10ee:7021` in every flow** (LitePCIe's x1 default, and
+   what `litepcie.ko` binds); the open core is parameterised to match rather
+   than the kernel ID table being extended.
+10. **Golden and operational images share one driver** by pinning CSR indices,
+    rather than building a driver per image.
 
 ## 8. Open questions
 
