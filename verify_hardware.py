@@ -26,13 +26,14 @@ import time
 
 REPO_DIR = os.path.dirname(os.path.abspath(__file__))
 ARTIFACTS_DIR = os.path.join(REPO_DIR, "artifacts")
-# Jump hosts. Welland's tweed was reinstalled 2026-08-30; the old restricted
-# `pi@tweed.welland.mithis.com` account is gone and the public name now resolves
-# to a reverse proxy. tweed's eth-local address is reachable over WireGuard
-# (wg-desktop) and accepts the operator's own key. PS1 is unchanged (unverified
-# since 2026-03).
+# Jump hosts: the restricted `pi` account on each site gateway (rbash, only
+# ssh/ssh-keyscan, sshd ForceCommand; fpgas.online-infra roles/jump). Its
+# only job is the ProxyJump TCP forward; the target Pi authenticates the
+# caller's own key. tweed's account was lost in the 2026-08-26 reinstall and
+# restored from Ansible on 2026-09-03 (infra PR #61). The name resolves to
+# 10.21.0.1 over WireGuard (A record) and to tweed's public IPv6.
 GATEWAYS = {
-    "welland": "tim@10.21.0.1",
+    "welland": "pi@tweed.welland.mithis.com",
     "ps1": "pi@ps1.fpgas.online",
 }
 SSH_BASE_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=15"]

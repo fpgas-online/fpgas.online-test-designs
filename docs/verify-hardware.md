@@ -27,13 +27,16 @@ gateway (`GATEWAYS`). Every command is one OpenSSH hop through the gateway
 with `ProxyJump`, so there is no nested quoting:
 
 ```
-local ──ssh -o ProxyJump=tim@10.21.0.1──> pi@10.21.2.46 'sudo -n sh -c ...'
+local ──ssh -o ProxyJump=pi@tweed.welland.mithis.com──> pi@10.21.2.46 'sudo -n sh -c ...'
 ```
 
-- Welland's gateway is `tim@10.21.0.1` (tweed's eth-local address, reached
-  over the `wg-desktop` WireGuard route). tweed was reinstalled on
-  2026-08-30; the old restricted `pi@tweed.welland.mithis.com` jump account
-  is gone and that public name now points at a reverse proxy.
+- The gateway login is the restricted `pi` jump account (rbash, only `ssh`
+  and `ssh-keyscan`, an sshd `ForceCommand` wrapper, no sudo), managed by
+  fpgas.online-infra `roles/jump`. It only provides the TCP forward; the
+  Pi authenticates your own key. tweed's copy was lost in the 2026-08-26
+  reinstall and restored from Ansible on 2026-09-03 (infra PR #61).
+  `tweed.welland.mithis.com` resolves to `10.21.0.1` over WireGuard and to
+  tweed's public IPv6; see the DNS notes in that PR if the IPv6 path hangs.
 - Each host entry names its **login user** (`user`, default `root`). The
   Welland Acorn Pi 5s only allow `pi` (pubkey) with passwordless sudo, so
   `_build_ssh_cmd(..., as_root=True)` wraps the command in

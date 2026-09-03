@@ -67,21 +67,23 @@ pi user: pubkey login works, passwordless sudo works; root login: denied
 
 ### 2.2 Access path from this machine
 
-`tweed.welland.mithis.com` was reinstalled 2026-08-30 (PR #11). The old
-`pi@tweed` jump account is gone. What works now, verified today:
+tweed was reinstalled on 2026-08-26 (Debian 13, new disk; the Debian 12 root
+is still on `sda1`). The `pi@tweed` jump account that `verify_hardware.py`
+and the docs relied on had been built by hand on 2026-03-18 and was not in
+Ansible, so the reinstall dropped it. It is now fpgas.online-infra
+`roles/jump` (PR #61), applied to tweed on 2026-09-03. What works:
 
 ```
-ssh tim@10.21.0.1                                  # tweed, over the wg-desktop WireGuard route
-ssh -o ProxyJump=tim@10.21.0.1 pi@10.21.2.<port>   # any Welland Pi, pubkey auth, sudo -n OK
+ssh -o ProxyJump=pi@tweed.welland.mithis.com pi@10.21.2.<port>   # any Welland Pi, your key, sudo -n OK
+ssh tim@10.21.0.1                                               # operator login over wg-desktop
 ```
 
-`~/.ssh/known_hosts` line 44 still holds tweed's pre-reinstall RSA key for both
-`tweed.welland.mithis.com` and `10.21.0.1`; the new ED25519 fingerprint is
-`SHA256:8JMaRRnmbng14uL3q4fD3SvXo00k+mA/wUge9gLN2Ps`. This must be fixed
-(`ssh-keygen -R`) before `verify_hardware.py` can run; I used a scratch
-`known_hosts` for today's probes and did not touch the real file.
-`verify_hardware.py` on `main` still uses `pi@tweed.welland.mithis.com` →
-`root@10.21.0.1NN`, which no longer exists at all.
+Known DNS defects (infra PR #61): stale SSHFP records for the name, and the
+AAAA `2404:e80:a137:9921::2` accepts TCP 22 without ever answering, so an
+IPv6 client hangs when the resolver returns that address first. Over WireGuard
+the `10.21.0.1` A record is deterministic. The old
+`pi@tweed` → `root@10.21.0.1NN` double hop in `verify_hardware.py` is gone
+regardless: root login on the Pis is refused and the addresses changed.
 
 ### 2.3 Toolchains
 
@@ -229,9 +231,10 @@ in the Vivado flows; see §5 for how the open flow gets them.
   the old `pi@tweed` account and matches only `piNN` names; `poe.sh` no longer
   exists on the reinstalled tweed (checked today; `snmpset` does). Phase 0
   rewrites it to talk SNMP to the S3300 (`10.1.5.11`, port = host suffix,
-  write community from fpgas.online-infra) via `tim@10.21.0.1`. Until that
+  write community from fpgas.online-infra) on the gateway. Until that
   lands, power cycles in Phase 3 are done by hand and the run log says so.
-- **`verify_hardware.py` transport update**: gateway `tim@10.21.0.1`, target
+- **`verify_hardware.py` transport update**: gateway
+  `pi@tweed.welland.mithis.com` (the restored jump account), target
   `pi@10.21.2.<port>` with `sudo` in commands, hosts renamed to the VLAN
   scheme (`welland-sw2-p29` …). Other Welland boards keep working because only
   the Acorn entries change in this pass; the rest are flagged in PR #11 as not
