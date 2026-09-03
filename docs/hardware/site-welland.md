@@ -79,9 +79,10 @@ ssh -o ProxyCommand='ssh -i ~/.ssh/fpgas.online-ansible -o IdentityAgent=none -W
 ```
 
 The old restricted `pi@tweed.welland.mithis.com` jump account (rbash) did not
-survive the 2026-08-30 reinstall of tweed. For a scripted example see the
-probe used for this page's 2026-09-03 refresh (`tmp/probe.py` in the PR that
-made it) or the `sh()` helpers in the repo's host scripts.
+survive the 2026-08-30 reinstall of tweed (`getent passwd pi` is empty there;
+only `ansible`, `carl`, `piroot`, `tim` and `videoteam` remain). Note that the
+public name `tweed.welland.mithis.com` resolves to ten64's reverse proxy, so
+ssh to it never reached tweed anyway — use the 10.99.21.2 uplink address.
 
 **Public access** (for end users): `ssh pi@fpgas.mithis.com -p 13422` provides port-forwarded access to individual RPis. See [Getting Started](https://github.com/CarlFK/pici/wiki/Getting-Started).
 
