@@ -22,6 +22,14 @@ verify_hardware.py
 
 There are two types of SSH connections:
 
+> **Stale since 2026-08-23.** The Welland site moved to VLAN-per-port
+> addressing (Pi = `pi-sw<switch>-p<port>` at `10.21.<switch>.<port>`), the
+> `pi@tweed` rbash jump account went away with tweed's 2026-08-30 reinstall
+> (use the `ansible@10.99.21.2` key from ten64 as a ProxyCommand), and the
+> TT hosts now run the `fpgas-tt` daemon that holds `/dev/ttyACM0`. The
+> `HOSTS` table in `verify_hardware.py` still has the old names/addresses.
+> Current host names and addresses: [docs/hardware/site-welland.md](hardware/site-welland.md).
+
 **Tweed-connected hosts** (pi3, pi5, pi9, pi17, pi21, pi27, pi29, pi31, pi33): These RPis are on a private 10.21.0.0/16 network behind a gateway called `tweed.welland.mithis.com`. Every SSH command is a double-hop:
 
 ```
