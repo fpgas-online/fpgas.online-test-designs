@@ -77,7 +77,7 @@ def test_acorn_program_cmd_detaches_pcie_and_uses_libgpiod():
     assert cmd.index("0001:01:00.0/remove") < cmd.index("openFPGALoader")
     assert "ln -sfn /dev/gpiochip15 /dev/gpiochip0" in cmd
     assert "--cable libgpiod --pins 10:9:11:8 /home/pi/pin-id_acorn.bit" in cmd
-    assert cmd.rstrip().endswith("/sys/bus/pci/rescan")
+    assert cmd.index("openFPGALoader") < cmd.index("/sys/bus/pci/rescan")
     assert "rp1pio" not in cmd
 
 
@@ -117,3 +117,12 @@ def test_poe_reset_failure_message_never_contains_community(monkeypatch, capsys)
     out = capsys.readouterr().out
     assert "s3cret-community" not in out
     assert "PoE reset failed" in out
+
+
+def test_acorn_program_cmd_exit_status_is_openfpgaloaders():
+    # The rescan after openFPGALoader must not mask a failed load: p44 (empty
+    # JTAG chain) reported "FPGA programmed successfully" because the trailing
+    # `echo 1 > rescan` returned 0.
+    cmd = _pin_id_test_for("welland-sw2-p46")["program_cmd"]
+    assert "rc=$?" in cmd
+    assert cmd.rstrip().endswith("exit $rc")

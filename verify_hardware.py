@@ -147,13 +147,15 @@ PROGRAM_CMD = {
     #  2. openFPGALoader 0.10.0 opens /dev/gpiochip0 but the header is
     #     gpiochip15 (devtmpfs symlink, lost at reboot);
     #  3. libgpiod bit-bang JTAG, pin order TDI:TDO:TCK:TMS (~16 s);
-    #  4. rescan so the flash-resident endpoint (or the new design's) is back.
+    #  4. rescan so the flash-resident endpoint (or the new design's) is back,
+    #     but exit with openFPGALoader's status so a failed load (e.g. an
+    #     empty JTAG chain) is not masked by the rescan's 0.
     "acorn": (
         "if [ -e /sys/bus/pci/devices/0001:01:00.0 ]; then"
         " echo 1 > /sys/bus/pci/devices/0001:01:00.0/remove; fi;"
         " ln -sfn /dev/gpiochip15 /dev/gpiochip0;"
-        " openFPGALoader --cable libgpiod --pins 10:9:11:8 {bitstream};"
-        " echo 1 > /sys/bus/pci/rescan"
+        " openFPGALoader --cable libgpiod --pins 10:9:11:8 {bitstream}; rc=$?;"
+        " echo 1 > /sys/bus/pci/rescan; exit $rc"
     ),
     # NeTV2 varies by host — handled per-host below
 }
