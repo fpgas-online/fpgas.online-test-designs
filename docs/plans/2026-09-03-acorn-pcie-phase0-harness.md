@@ -106,7 +106,7 @@ def test_evaluate_p47_reversed_connector_fails_all_four():
 - [ ] **Step 2: Run the tests, expect the map test and the p47 test to fail**
 
 Run: `uv run --extra dev pytest designs/pmod-pin-id/host/test_identify_pmod_pins.py -v`
-Expected: `test_acorn_board_map_matches_p2_header` FAILED, `test_evaluate_p47_reversed_connector_fails_all_four` FAILED (it currently reports only 3 and 4 wrong), others pass.
+Expected: 6 FAILED, 1 passed. Only `test_evaluate_unprogrammed_board_all_none_fails` passes; every test that encodes the canonical decode fails against the old map (the map test, the p47 test, and the four `evaluate_*` tests whose "correct" decode is now `{15: "K2", 14: "J2", ...}`).
 
 - [ ] **Step 3: Fix the map**
 
@@ -147,7 +147,10 @@ git commit -m "pmod-pin-id(acorn): expected wiring is the K2->GPIO15 / J2->GPIO1
 Append to `pyproject.toml`:
 ```toml
 [tool.pytest.ini_options]
-testpaths = ["tests", "designs"]
+# Only the pure host-side unit tests. The other designs/*/host/test_*.py are
+# hardware test *scripts* (they import gpiod, take CLI args, define
+# fixture-less test_* functions) and must not be collected.
+testpaths = ["tests", "designs/pmod-pin-id/host"]
 python_files = ["test_*.py"]
 ```
 
@@ -469,15 +472,17 @@ def test_acorn_program_cmd_detaches_pcie_and_uses_libgpiod():
     assert "rp1pio" not in cmd
 
 
-def test_acorn_pin_id_artifact_is_variant_specific():
+def test_acorn_pin_id_artifact_matches_ci_upload_name():
+    # pmod_pin_id_acorn.py calls platform.build() directly, so LiteX names the
+    # output build/acorn/top.bit, and the CI job uploads build/acorn/*.bit.
     t = _pin_id_test_for("welland-sw2-p46")
-    assert t["artifact"] == "pmod-pin-id-acorn-cle-215plus/sqrl_acorn.bit"
+    assert t["artifact"] == "pmod-pin-id-acorn-cle-215plus/top.bit"
 ```
 
 - [ ] **Step 2: Run, expect failures**
 
 Run: `uv run --extra dev pytest tests/test_verify_hardware.py -v -k acorn`
-Expected: 3 FAIL (paths start with `~`, program_cmd uses `rp1pio`).
+Expected: 3 FAIL (paths start with `~`, program_cmd uses `rp1pio`, artifact still says `sqrl_acorn.bit`).
 
 - [ ] **Step 3: Implement**
 
@@ -508,7 +513,9 @@ In `generate_tests`, replace the remote path lines with:
 ```
 and simplify the `HOST_PROGRAM_CMD` branch to `prog_cmd = prog_template.format(bitstream=remote_bitstream, bitstream_abs=remote_bitstream)` (the `~`-resolution special case is gone; `home_dir` logic deleted).
 
-In the `pin-id` design's `acorn` entry, replace `pre_test` with:
+In the `pin-id` design's `acorn` entry, change `"artifact"` to
+`"pmod-pin-id-acorn-cle-215plus/top.bit"` (the name CI actually uploads —
+the cherry-picked `sqrl_acorn.bit` never matched) and replace `pre_test` with:
 ```python
                 # Stop the login console so the host script can read GPIO14/15,
                 # and make sure GPIO14 is a plain input: with pin-ID loaded
@@ -566,13 +573,13 @@ Extract the parser into `build_arg_parser()` and add:
     parser.add_argument("--dry-run", action="store_true",
                         help="Print the ssh/program/test commands for each test without running them")
 ```
-In `main`, after filtering: if `args.dry_run`, print for each test the `_build_ssh_cmd` argv for the pre-test, program and test commands and return 0. Otherwise loop `for run in range(1, args.repeat + 1)`, printing `=== Run {run}/{args.repeat} ===`, collecting results per run, and breaking out (exit 1) on the first run with any failure. The summary prints the number of complete clean runs.
+In `main`, after filtering: if `args.dry_run`, print for each test the `_build_ssh_cmd` argv for the pre-test, program and test commands, rendered with `shlex.join(argv)` so each line is a copy-pasteable shell command, and return 0. Otherwise loop `for run in range(1, args.repeat + 1)`, printing `=== Run {run}/{args.repeat} ===`, collecting results per run, and breaking out (exit 1) on the first run with any failure. The summary prints the number of complete clean runs.
 
 - [ ] **Step 4: Run tests and a dry run**
 
 Run: `uv run --extra dev pytest -q` → `18 passed`.
 Run: `uv run python verify_hardware.py --dry-run --host welland-sw2-p46 --test pin-id`
-Expected output contains `ssh -o BatchMode=yes -o ConnectTimeout=15 -o ProxyJump=tim@10.21.0.1 pi@10.21.2.46 sudo -n sh -c '...openFPGALoader --cable libgpiod --pins 10:9:11:8 /home/pi/pin-id_acorn.bit...'`.
+Expected output contains a line starting `ssh -o BatchMode=yes -o ConnectTimeout=15 -o ProxyJump=tim@10.21.0.1 pi@10.21.2.46 'sudo -n sh -c '"'"'` and containing `openFPGALoader --cable libgpiod --pins 10:9:11:8 /home/pi/pin-id_acorn.bit` (the nested quoting is `shlex.join` rendering the sudo wrapper; it is correct shell).
 
 - [ ] **Step 5: Lint and commit**
 
@@ -619,25 +626,26 @@ uv sync --extra build
 . /opt/Xilinx/2025.2/Vivado/settings64.sh && \
 uv run python designs/pmod-pin-id/gateware/pmod_pin_id_acorn.py --variant cle-215+ --toolchain vivado --build
 ```
-Expected: `designs/pmod-pin-id/build/acorn/gateware/sqrl_acorn.bit` exists (header reads `7a200tfbg484`; Vivado log shows no critical warnings about the `clk200` IBUFDS/PLL path).
+Expected: `designs/pmod-pin-id/build/acorn/top.bit` exists (the script calls `platform.build()` directly, so LiteX's default `build_name` is `top` and there is no `gateware/` subdirectory; the header reads `7a200tfbg484`; the Vivado log shows no critical warnings about the `clk200` IBUFDS/PLL path).
 
 - [ ] **Step 2: Stage it where `verify_hardware.py` looks**
 
 ```bash
 mkdir -p artifacts/pmod-pin-id-acorn-cle-215plus
-cp designs/pmod-pin-id/build/acorn/gateware/sqrl_acorn.bit artifacts/pmod-pin-id-acorn-cle-215plus/
+cp designs/pmod-pin-id/build/acorn/top.bit artifacts/pmod-pin-id-acorn-cle-215plus/top.bit
 ```
 
 ---
 
 ### Task 11: The gate — run pin-ID on hardware
 
-- [ ] **Step 1: Read-only preflight on p46**
+- [ ] **Step 1: Listing and read-only preflight on p46**
 
 ```bash
+uv run python verify_hardware.py --list --board acorn
 ssh -o ProxyJump=tim@10.21.0.1 pi@10.21.2.46 'lspci -nn -s 0001:01:00.0; sudo -n ln -sfn /dev/gpiochip15 /dev/gpiochip0; sudo -n openFPGALoader --cable libgpiod --pins 10:9:11:8 --detect'
 ```
-Expected: Sqrl `1e24:021f` enumerated; `--detect` reports idcode `0x3636093`.
+Expected: the listing shows six `welland-sw2-p*` hosts for every Acorn design; Sqrl `1e24:021f` enumerated; `--detect` reports idcode `0x3636093`.
 
 - [ ] **Step 2: Run the test on p46**
 
