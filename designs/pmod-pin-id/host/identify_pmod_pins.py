@@ -244,16 +244,18 @@ def _level_at(events, i, ts):
     return level
 
 
-def decode_edges(events, baud=BAUD_RATE):
-    """Decode 8N1 frames from ``(level_after_edge, timestamp_ns)`` edges.
+def _decode_from(events, start, bit_ns):
+    """Decode frames beginning the search at events[start].
 
-    Every falling edge that is not inside a frame already being decoded is
-    taken as a start bit; data bits are reconstructed at the centre of each
-    bit period from the edge history. Returns ``[(byte, stop_bit_ok)]``.
+    A falling edge is tried as a start bit; if the stop bit reads low the
+    frame is rejected and the search moves to the very next edge (standard
+    UART resynchronisation), otherwise the frame is kept and the search
+    resumes after it. Without the reject-and-step rule a capture that begins
+    mid-byte can alias onto the wrong falling edge of a periodic message and
+    stay there for the whole capture.
     """
-    bit_ns = 1e9 / baud
     frames = []
-    i = 0
+    i = start
     while i < len(events):
         level, t0 = events[i]
         if level != 0:  # only a falling edge can start a frame
@@ -263,11 +265,38 @@ def decode_edges(events, baud=BAUD_RATE):
         for k in range(8):
             byte |= _level_at(events, i, t0 + (1.5 + k) * bit_ns) << k
         stop_ok = _level_at(events, i, t0 + 9.5 * bit_ns) == 1
-        frames.append((byte, stop_ok))
+        if not stop_ok:
+            frames.append((byte, False))
+            i += 1
+            continue
+        frames.append((byte, True))
         frame_end = t0 + 9.5 * bit_ns
         while i < len(events) and events[i][1] < frame_end:
             i += 1
     return frames
+
+
+def decode_edges(events, baud=BAUD_RATE, max_start_candidates=12):
+    """Decode 8N1 frames from ``(level_after_edge, timestamp_ns)`` edges.
+
+    The capture may begin at any phase of the transmitted message, and some
+    wrong phases still yield frames with a plausible stop bit. So the decode
+    is attempted from each of the first *max_start_candidates* falling edges
+    and the attempt with the most clean frames (fewest rejected ones) wins.
+    Returns ``[(byte, stop_bit_ok)]`` for the winning attempt.
+    """
+    bit_ns = 1e9 / baud
+    starts = [i for i, (level, _t) in enumerate(events) if level == 0][:max_start_candidates]
+    best = []
+    best_score = None
+    for start in starts:
+        frames = _decode_from(events, start, bit_ns)
+        good = sum(1 for _b, ok in frames if ok)
+        bad = len(frames) - good
+        score = (good, -bad)
+        if best_score is None or score > best_score:
+            best, best_score = frames, score
+    return best
 
 
 # Expected label format: FPGA pin names are 2-4 alphanumeric characters.

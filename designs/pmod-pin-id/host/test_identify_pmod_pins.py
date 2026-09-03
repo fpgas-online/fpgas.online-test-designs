@@ -118,13 +118,17 @@ def test_decode_edges_tolerates_baud_error_and_jitter():
     assert [b for b, _ok in frames] == list(b"K2\r\n" * 3)
 
 
-def test_decode_edges_ignores_leading_partial_frame():
-    # Capture started mid-byte: the first falling edge is inside a data byte.
-    events = _edges_for("H5\r\n" * 3)
-    events = events[3:]  # drop the first three edges
-    frames = ident.decode_edges(events, baud=1200)
-    text = bytes(b for b, ok in frames if ok)
-    assert b"H5\r\n" in text
+def test_decode_edges_resyncs_from_any_capture_phase():
+    # A capture can start on any edge of the periodic "XX\r\n" stream. From
+    # every possible starting edge the decoder must lock onto the real start
+    # bits, not alias onto a wrong falling edge for the whole capture (which
+    # is what happened on pi-sw2-p46 GPIO3: a stable 4-byte garbage pattern
+    # with no newline ever decoded).
+    full = _edges_for("J5\r\n" * 6)
+    for drop in range(0, 12):
+        frames = ident.decode_edges(full[drop:], baud=1200)
+        text = bytes(b for b, ok in frames if ok)
+        assert b"J5\r\nJ5\r\nJ5\r\n" in text, f"drop={drop}: {text!r}"
 
 
 def test_labels_from_frames_votes_on_valid_labels():
