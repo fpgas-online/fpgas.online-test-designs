@@ -94,3 +94,26 @@ def test_cli_repeat_and_dry_run_flags_exist():
     assert isinstance(parser, argparse.ArgumentParser)
     args = parser.parse_args(["--repeat", "3", "--dry-run", "--host", "welland-sw2-p46"])
     assert args.repeat == 3 and args.dry_run is True
+
+
+def test_direct_host_is_never_sudo_wrapped():
+    # rpi3-netv2 logs in as pi and puts its own `sudo` in HOST_PROGRAM_CMD;
+    # an outer `sudo -n sh -c` would make its `~/netv2/...` config path resolve
+    # to /root.
+    cmd = vh._build_ssh_cmd("rpi3-netv2", "sudo openocd -f ~/netv2/x.cfg", as_root=True)
+    assert cmd[-1] == "sudo openocd -f ~/netv2/x.cfg"
+
+
+def test_poe_reset_failure_message_never_contains_community(monkeypatch, capsys):
+    import subprocess
+
+    monkeypatch.setenv(vh.POE_COMMUNITY_ENV, "s3cret-community")
+
+    def fake_run(argv, **kwargs):
+        raise subprocess.TimeoutExpired(argv, kwargs.get("timeout", 0))
+
+    monkeypatch.setattr(vh.subprocess, "run", fake_run)
+    assert vh.poe_reset("welland-sw2-p29") is False
+    out = capsys.readouterr().out
+    assert "s3cret-community" not in out
+    assert "PoE reset failed" in out

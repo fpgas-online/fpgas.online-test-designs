@@ -377,7 +377,10 @@ def _build_ssh_cmd(host_name, remote_cmd, as_root=True):
     """
     host = HOSTS[host_name]
     user = host_user(host_name)
-    if as_root and user != "root":
+    # Only gateway hosts get the wrapper: the direct-SSH NeTV2 hosts place
+    # their own `sudo` inside HOST_PROGRAM_CMD and rely on `~` meaning the
+    # login user's home, which an outer `sudo` would change to /root.
+    if as_root and host["ssh_type"] == "gateway" and user != "root":
         remote_cmd = f"sudo -n sh -c {shlex.quote(remote_cmd)}"
     cmd = ["ssh", *SSH_BASE_OPTS]
     if host["ssh_type"] == "gateway":
@@ -474,7 +477,9 @@ def poe_reset(host_name, off_seconds=5, boot_timeout_s=240):
             print(f"  snmpset failed: {r.stderr.strip()}")
             return False
     except (subprocess.TimeoutExpired, OSError) as e:
-        print(f"  PoE reset failed: {e}")
+        # Never print str(e): TimeoutExpired embeds the full argv, which
+        # carries the SNMP write community.
+        print(f"  PoE reset failed: {type(e).__name__} talking to {gateway}")
         return False
     # Poll for the host to come back; a Pi 5 needs more than 90 s.
     print(f"  Waiting for {host_name} to boot (a Pi 5 needs > 90 s)...")
