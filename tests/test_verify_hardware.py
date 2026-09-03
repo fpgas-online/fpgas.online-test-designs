@@ -56,3 +56,33 @@ def test_poe_snmp_cmd_rejects_host_without_poe_info():
     import pytest
     with pytest.raises(KeyError):
         vh.poe_snmp_cmd("welland-pi3", enable=False, community="secret")
+
+
+def _pin_id_test_for(host):
+    tests = [t for t in vh.generate_tests() if t["host"] == host and t["test_type"] == "pin-id"]
+    assert len(tests) == 1
+    return tests[0]
+
+
+def test_acorn_pin_id_test_uses_absolute_paths_in_login_home():
+    t = _pin_id_test_for("welland-sw2-p46")
+    assert t["remote_bitstream"] == "/home/pi/pin-id_acorn.bit"
+    assert t["remote_script"] == "/home/pi/test_pin-id.py"
+    assert t["test_cmd"] == "python3 /home/pi/test_pin-id.py --board acorn"
+
+
+def test_acorn_program_cmd_detaches_pcie_and_uses_libgpiod():
+    t = _pin_id_test_for("welland-sw2-p46")
+    cmd = t["program_cmd"]
+    assert cmd.index("0001:01:00.0/remove") < cmd.index("openFPGALoader")
+    assert "ln -sfn /dev/gpiochip15 /dev/gpiochip0" in cmd
+    assert "--cable libgpiod --pins 10:9:11:8 /home/pi/pin-id_acorn.bit" in cmd
+    assert cmd.rstrip().endswith("/sys/bus/pci/rescan")
+    assert "rp1pio" not in cmd
+
+
+def test_acorn_pin_id_artifact_matches_ci_upload_name():
+    # pmod_pin_id_acorn.py calls platform.build() directly, so LiteX names the
+    # output build/acorn/top.bit, and the CI job uploads build/acorn/*.bit.
+    t = _pin_id_test_for("welland-sw2-p46")
+    assert t["artifact"] == "pmod-pin-id-acorn-cle-215plus/top.bit"

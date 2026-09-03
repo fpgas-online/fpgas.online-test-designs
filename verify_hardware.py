@@ -141,8 +141,20 @@ PROGRAM_CMD = {
     "arty": "openFPGALoader -b arty {bitstream}",
     "fomu": "openFPGALoader -b fomu {bitstream}",
     "tt": "python3 ~/tt_fpga_program.py /dev/ttyACM0 {bitstream}",
-    # Acorn: JTAG via RPi SPI0 pins (needs SPI modules unloaded)
-    "acorn": "rmmod spidev spi_bcm2835 2>&1; openFPGALoader -c rp1pio --pins 10:9:11:8 {bitstream}",
+    # Acorn on RPi 5 (docs/hardware/acorn-pinmap.md, "Pi 5" notes):
+    #  1. detach the PCIe endpoint — reconfiguring an enumerated endpoint
+    #     crashes the Pi 5 (2026-08-31, pi-sw2-p47);
+    #  2. openFPGALoader 0.10.0 opens /dev/gpiochip0 but the header is
+    #     gpiochip15 (devtmpfs symlink, lost at reboot);
+    #  3. libgpiod bit-bang JTAG, pin order TDI:TDO:TCK:TMS (~16 s);
+    #  4. rescan so the flash-resident endpoint (or the new design's) is back.
+    "acorn": (
+        "if [ -e /sys/bus/pci/devices/0001:01:00.0 ]; then"
+        " echo 1 > /sys/bus/pci/devices/0001:01:00.0/remove; fi;"
+        " ln -sfn /dev/gpiochip15 /dev/gpiochip0;"
+        " openFPGALoader --cable libgpiod --pins 10:9:11:8 {bitstream};"
+        " echo 1 > /sys/bus/pci/rescan"
+    ),
     # NeTV2 varies by host — handled per-host below
 }
 
@@ -311,13 +323,16 @@ DESIGNS = {
         "test_script": "designs/pmod-pin-id/host/identify_pmod_pins.py",
         "boards": {
             "acorn": {
-                "artifact": "pmod-pin-id-acorn-cle-215plus/sqrl_acorn.bit",
+                # pmod_pin_id_acorn.py calls platform.build() directly, so the
+                # bitstream is build/acorn/top.bit and CI uploads that name.
+                "artifact": "pmod-pin-id-acorn-cle-215plus/top.bit",
                 "test_args": "--board acorn",
-                # Free GPIO14/15 from the UART login console so the host script
-                # can bit-bang them as inputs to read K2/J2.
+                # Stop the login console so the host script can read GPIO14/15,
+                # and make sure GPIO14 is a plain input: with pin-ID loaded
+                # every P2 ball is an FPGA *output*, so the Pi must not drive it.
                 "pre_test": (
                     "systemctl stop serial-getty@ttyAMA0 2>&1;"
-                    " systemctl stop serial-getty@serial0 2>&1;"
+                    " pinctrl set 14 ip pn; pinctrl set 15 ip pn;"
                     " true"
                 ),
             },
@@ -506,27 +521,20 @@ def generate_tests():
                 if os.path.exists(os.path.join(ARTIFACTS_DIR, variant_artifact)):
                     artifact = variant_artifact
 
-            # Determine remote paths
+            # Remote paths are absolute in the login user's home: uploads run
+            # as that user while program/test commands may run under sudo,
+            # where `~` would resolve to /root instead.
+            home = remote_home(host_name)
             ext = os.path.splitext(artifact)[1]
-            remote_bitstream = f"~/{design_name}_{board}{ext}"
-            remote_script = f"~/test_{design_name}.py"
+            remote_bitstream = f"{home}/{design_name}_{board}{ext}"
+            remote_script = f"{home}/test_{design_name}.py"
 
             # Determine programming command (priority: per-board-config > per-host > per-board)
             if "program_cmd" in board_cfg:
                 prog_cmd = board_cfg["program_cmd"].format(bitstream=remote_bitstream)
             elif host_name in HOST_PROGRAM_CMD:
                 prog_template = HOST_PROGRAM_CMD[host_name]
-                # OpenOCD doesn't expand ~ — resolve to absolute path.
-                # Direct-SSH hosts use their own user's home; tweed-connected
-                # hosts SSH as root to the RPi.
-                if host_name == "rpi3-netv2":
-                    home_dir = "/home/pi"
-                elif host_name == "rpi5-netv2":
-                    home_dir = "/home/tim"
-                else:
-                    home_dir = "/root"
-                bitstream_abs = remote_bitstream.replace("~", home_dir)
-                prog_cmd = prog_template.format(bitstream=remote_bitstream, bitstream_abs=bitstream_abs)
+                prog_cmd = prog_template.format(bitstream=remote_bitstream, bitstream_abs=remote_bitstream)
             else:
                 prog_cmd = PROGRAM_CMD[board].format(bitstream=remote_bitstream)
 
