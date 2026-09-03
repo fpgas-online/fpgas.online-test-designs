@@ -25,7 +25,7 @@ from litex_boards.platforms import kosagi_netv2
 from litex_boards.targets.kosagi_netv2 import BaseSoC
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer for Python >= 3.11
-from designs._shared.build_helpers import default_build_dir
+from designs._shared.build_helpers import board_dir, default_build_dir, flow_suffix
 from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
 from designs._shared.yosys_workarounds import apply_nodram_workaround, patch_yosys_template
 
@@ -68,8 +68,10 @@ def main():
     patch_yosys_template(soc)
     apply_nodram_workaround(soc)
 
+    board_name = board_dir("netv2", args.variant) + flow_suffix(
+        parser._toolchain, parser.toolchain_argdict.get("synth_mode"))
     builder_kwargs = parser.builder_argdict
-    builder_kwargs["output_dir"] = default_build_dir(__file__, "netv2")
+    builder_kwargs["output_dir"] = default_build_dir(__file__, board_name)
     builder = Builder(soc, **builder_kwargs)
     if args.build:
         builder.build(**parser.toolchain_argdict)

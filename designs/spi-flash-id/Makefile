@@ -1,10 +1,11 @@
 # Makefile for SPI Flash ID test design.
 #
 # Usage:
-#   make arty      — Build bitstream for Arty A7
-#   make netv2     — Build bitstream for NeTV2
+#   make arty      — Build bitstream for Arty A7 (a7-35, yosys-nextpnr)
+#   make netv2     — Build bitstream for NeTV2 (a7-35, yosys-nextpnr)
 #   make fomu      — Build bitstream for Fomu EVT (iCE40UP5K)
-#   make all       — Build all bitstreams
+#   make all       — Build default-variant bitstreams for every board
+#   make gateware-all-flows  — Build every (board × variant × flow)
 #   make test-arty — Run host-side test (Arty, requires FPGA attached)
 #   make test-netv2— Run host-side test (NeTV2, requires FPGA attached)
 #   make test-fomu — Run host-side test (Fomu, requires FPGA attached)
@@ -13,17 +14,23 @@
 # NOTE: Firmware is built separately after gateware. See firmware/Makefile.
 
 include ../../mk/common.mk
+include ../../mk/three-flows.mk
 
-.PHONY: all arty netv2 fomu test-arty test-netv2 test-fomu program-arty program-netv2 program-fomu clean
+ARTY_VARIANTS  := a7-35 a7-100
+NETV2_VARIANTS := a7-35 a7-100
+ACORN_VARIANTS := cle-101 cle-215 cle-215+
+
+$(eval $(call flow_rules,arty,spiflash_soc_arty.py,$(ARTY_VARIANTS)))
+$(eval $(call flow_rules,netv2,spiflash_soc_netv2.py,$(NETV2_VARIANTS)))
+$(eval $(call flow_rules,acorn,spiflash_soc_acorn.py,$(ACORN_VARIANTS)))
+
+.PHONY: all arty netv2 fomu test-arty test-netv2 test-fomu \
+        program-arty program-netv2 program-fomu clean
 
 all: arty netv2 fomu
 
-arty:
-	$(PYTHON) gateware/spiflash_soc_arty.py --toolchain openxc7 --build
-
-netv2:
-	$(PYTHON) gateware/spiflash_soc_netv2.py --toolchain openxc7 --build
-
+arty: gateware-arty-a7-35-yosys-nextpnr
+netv2: gateware-netv2-a7-35-yosys-nextpnr
 fomu:
 	$(PYTHON) gateware/spiflash_soc_fomu.py --build
 
@@ -45,13 +52,13 @@ test-fomu:
 # --------------------------------------------------------------------------- #
 
 program-arty:
-	openFPGALoader -b arty build/arty/gateware/arty_spiflash_test.bit
+	openFPGALoader -b arty build/arty-a7-35-$(PROGRAM_FLOW)/gateware/digilent_arty.bit
 
 program-netv2:
-	openocd -f alphamax-rpi.cfg -c "pld load 0 build/netv2/gateware/netv2_spiflash_test.bit; exit"
+	openocd -f alphamax-rpi.cfg -c "pld load 0 build/netv2-a7-35-$(PROGRAM_FLOW)/gateware/kosagi_netv2.bit; exit"
 
 program-fomu:
-	iceprog build/fomu/gateware/fomu_spiflash_test.bin
+	iceprog build/fomu-evt-yosys-nextpnr/gateware/kosagi_fomu_evt.bin
 
 # --------------------------------------------------------------------------- #
 # Clean

@@ -14,7 +14,8 @@ UART: Serial RX=pin 21, TX=pin 13 (LVCMOS33).
 Build command:
     uv run python designs/spi-flash-id/gateware/spiflash_soc_fomu.py --build
 
-The bitstream is written to: designs/spi-flash-id/build/fomu/gateware/fomu_spiflash_test.bit
+The bitstream is written to:
+    designs/spi-flash-id/build/fomu-evt-yosys-nextpnr/gateware/kosagi_fomu_evt.bin
 """
 
 import argparse
@@ -31,7 +32,7 @@ from litex_boards.platforms.kosagi_fomu_evt import Platform
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-from designs._shared.build_helpers import default_build_dir
+from designs._shared.build_helpers import board_dir, default_build_dir, flow_suffix
 from designs._shared.fomu_crg import FomuCRG
 from designs._shared.ice40_spi_flash import Ice40SPIFlash
 
@@ -97,7 +98,8 @@ def main():
         uart_baudrate = 115200,
     )
 
-    output_dir = args.output_dir or default_build_dir(__file__, "fomu")
+    output_dir = args.output_dir or default_build_dir(
+        __file__, board_dir("fomu", "evt") + flow_suffix("icestorm"))
     # Skip BIOS compilation — LiteX BIOS (~24 KB) does not fit in iCE40 EBR (15 KB).
     builder = Builder(soc, output_dir=output_dir, compile_software=False)
 

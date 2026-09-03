@@ -1,25 +1,29 @@
 include ../../mk/common.mk
+include ../../mk/three-flows.mk
 
-TOOLCHAIN   ?= openxc7
-BAUD_RATE   ?= 115200
+BAUD_RATE ?= 115200
+
+# ethernet-test targets only Arty and NeTV2 (Acorn has no Ethernet PHY).
+ARTY_VARIANTS  := a7-35 a7-100
+NETV2_VARIANTS := a7-35 a7-100
+ACORN_VARIANTS :=
+
+$(eval $(call flow_rules,arty,ethernet_soc_arty.py,$(ARTY_VARIANTS)))
+$(eval $(call flow_rules,netv2,ethernet_soc_netv2.py,$(NETV2_VARIANTS)))
 
 # ---- Arty A7 ----------------------------------------------------------------
-ARTY_VARIANT   ?= a7-35
 ARTY_UART      ?= /dev/ttyUSB1
-ARTY_BUILD_DIR ?= build/arty
+ARTY_BUILD_DIR ?= build/arty-a7-35-$(PROGRAM_FLOW)
 
 # ---- NeTV2 -------------------------------------------------------------------
 NETV2_UART     ?= /dev/ttyAMA0
-NETV2_BUILD_DIR?= build/netv2
+NETV2_BUILD_DIR?= build/netv2-a7-35-$(PROGRAM_FLOW)
 
 .PHONY: gateware-arty gateware-netv2 program-arty program-netv2 test-arty test-netv2 clean
 
-# -- Arty A7 --
-gateware-arty:
-	$(PYTHON) gateware/ethernet_soc_arty.py \
-		--variant $(ARTY_VARIANT) \
-		--toolchain $(TOOLCHAIN) \
-		--build
+# Legacy aliases — pick the default variant for each board.
+gateware-arty: gateware-arty-a7-35-yosys-nextpnr
+gateware-netv2: gateware-netv2-a7-35-yosys-nextpnr
 
 program-arty:
 	openFPGALoader -b arty $(ARTY_BUILD_DIR)/gateware/digilent_arty.bit
@@ -29,12 +33,6 @@ test-arty:
 		--board arty \
 		--uart-port $(ARTY_UART) \
 		--baud $(BAUD_RATE)
-
-# -- NeTV2 --
-gateware-netv2:
-	$(PYTHON) gateware/ethernet_soc_netv2.py \
-		--toolchain $(TOOLCHAIN) \
-		--build
 
 # alphamax-rpi.cfg is the OpenOCD config for the NeTV2's JTAG interface via RPi GPIO.
 # See: https://github.com/AlphamaxMedia/netv2-fpga/tree/master/openocd

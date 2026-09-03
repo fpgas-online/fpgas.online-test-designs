@@ -108,6 +108,141 @@ test-pcie-enumeration:
 	sudo $(MAKE) -C designs/pcie-enumeration test
 
 # ---------------------------------------------------------------------------
+# Three-flow synth→P&R cross-design aggregators
+# ---------------------------------------------------------------------------
+#
+# Three toolchain flows are supported, named uniformly <synth>-<pnr>:
+#
+#   vivado-vivado   — pure proprietary Vivado (synth + P&R)
+#   yosys-vivado    — Yosys synthesis + Vivado P&R (hybrid)
+#   yosys-nextpnr   — Yosys synthesis + nextpnr-xilinx P&R (openxc7)
+#
+# Each Xilinx-targeting design exposes three per-flow aggregators:
+#   gateware-vivado-vivado-all
+#   gateware-yosys-vivado-all
+#   gateware-yosys-nextpnr-all
+# plus a combined gateware-all-flows. The targets below pass those
+# through for each Xilinx design and provide top-level aggregators
+# that build every Xilinx design in a given flow (or all flows).
+
+.PHONY: build-uart-vivado-vivado build-uart-yosys-vivado build-uart-yosys-nextpnr \
+        build-ethernet-vivado-vivado build-ethernet-yosys-vivado build-ethernet-yosys-nextpnr \
+        build-ddr-vivado-vivado build-ddr-yosys-vivado build-ddr-yosys-nextpnr \
+        build-pmod-loopback-vivado-vivado build-pmod-loopback-yosys-vivado build-pmod-loopback-yosys-nextpnr \
+        build-pmod-pin-id-vivado-vivado build-pmod-pin-id-yosys-vivado build-pmod-pin-id-yosys-nextpnr \
+        build-spi-flash-id-vivado-vivado build-spi-flash-id-yosys-vivado build-spi-flash-id-yosys-nextpnr \
+        build-pcie-enumeration-vivado-vivado build-pcie-enumeration-yosys-vivado build-pcie-enumeration-yosys-nextpnr \
+        build-all-xilinx-vivado-vivado build-all-xilinx-yosys-vivado \
+        build-all-xilinx-yosys-nextpnr build-all-xilinx-all-flows \
+        check-vivado
+
+# -- Per-design flow passthroughs --------------------------------------------
+
+build-uart-vivado-vivado:
+	$(MAKE) -C designs/uart gateware-vivado-vivado-all
+build-uart-yosys-vivado:
+	$(MAKE) -C designs/uart gateware-yosys-vivado-all
+build-uart-yosys-nextpnr:
+	$(MAKE) -C designs/uart gateware-yosys-nextpnr-all
+
+build-ethernet-vivado-vivado:
+	$(MAKE) -C designs/ethernet-test gateware-vivado-vivado-all
+build-ethernet-yosys-vivado:
+	$(MAKE) -C designs/ethernet-test gateware-yosys-vivado-all
+build-ethernet-yosys-nextpnr:
+	$(MAKE) -C designs/ethernet-test gateware-yosys-nextpnr-all
+
+build-ddr-vivado-vivado:
+	$(MAKE) -C designs/ddr-memory gateware-vivado-vivado-all
+build-ddr-yosys-vivado:
+	$(MAKE) -C designs/ddr-memory gateware-yosys-vivado-all
+build-ddr-yosys-nextpnr:
+	$(MAKE) -C designs/ddr-memory gateware-yosys-nextpnr-all
+
+build-pmod-loopback-vivado-vivado:
+	$(MAKE) -C designs/pmod-loopback gateware-vivado-vivado-all
+build-pmod-loopback-yosys-vivado:
+	$(MAKE) -C designs/pmod-loopback gateware-yosys-vivado-all
+build-pmod-loopback-yosys-nextpnr:
+	$(MAKE) -C designs/pmod-loopback gateware-yosys-nextpnr-all
+
+build-pmod-pin-id-vivado-vivado:
+	$(MAKE) -C designs/pmod-pin-id gateware-vivado-vivado-all
+build-pmod-pin-id-yosys-vivado:
+	$(MAKE) -C designs/pmod-pin-id gateware-yosys-vivado-all
+build-pmod-pin-id-yosys-nextpnr:
+	$(MAKE) -C designs/pmod-pin-id gateware-yosys-nextpnr-all
+
+build-spi-flash-id-vivado-vivado:
+	$(MAKE) -C designs/spi-flash-id gateware-vivado-vivado-all
+build-spi-flash-id-yosys-vivado:
+	$(MAKE) -C designs/spi-flash-id gateware-yosys-vivado-all
+build-spi-flash-id-yosys-nextpnr:
+	$(MAKE) -C designs/spi-flash-id gateware-yosys-nextpnr-all
+
+build-pcie-enumeration-vivado-vivado:
+	$(MAKE) -C designs/pcie-enumeration gateware-vivado-vivado-all
+build-pcie-enumeration-yosys-vivado:
+	$(MAKE) -C designs/pcie-enumeration gateware-yosys-vivado-all
+build-pcie-enumeration-yosys-nextpnr:
+	$(MAKE) -C designs/pcie-enumeration gateware-yosys-nextpnr-all
+
+# -- All-Xilinx aggregators --------------------------------------------------
+
+build-all-xilinx-vivado-vivado: \
+    build-uart-vivado-vivado \
+    build-ethernet-vivado-vivado \
+    build-ddr-vivado-vivado \
+    build-pmod-loopback-vivado-vivado \
+    build-pmod-pin-id-vivado-vivado \
+    build-spi-flash-id-vivado-vivado \
+    build-pcie-enumeration-vivado-vivado
+
+build-all-xilinx-yosys-vivado: \
+    build-uart-yosys-vivado \
+    build-ethernet-yosys-vivado \
+    build-ddr-yosys-vivado \
+    build-pmod-loopback-yosys-vivado \
+    build-pmod-pin-id-yosys-vivado \
+    build-spi-flash-id-yosys-vivado \
+    build-pcie-enumeration-yosys-vivado
+
+build-all-xilinx-yosys-nextpnr: \
+    build-uart-yosys-nextpnr \
+    build-ethernet-yosys-nextpnr \
+    build-ddr-yosys-nextpnr \
+    build-pmod-loopback-yosys-nextpnr \
+    build-pmod-pin-id-yosys-nextpnr \
+    build-spi-flash-id-yosys-nextpnr \
+    build-pcie-enumeration-yosys-nextpnr
+
+build-all-xilinx-all-flows: \
+    build-all-xilinx-vivado-vivado \
+    build-all-xilinx-yosys-vivado \
+    build-all-xilinx-yosys-nextpnr
+
+# -- Sanity check ------------------------------------------------------------
+
+check-vivado:
+	@$(MAKE) -C designs/uart check-vivado
+
+# ---------------------------------------------------------------------------
+# Release publishing
+# ---------------------------------------------------------------------------
+#
+# Vivado cannot run in GitHub Actions CI, so the vivado-vivado and
+# yosys-vivado flows must be built locally and published as a GitHub Release.
+# See scripts/publish_vivado_bitstreams.py and
+# docs/toolchains/vivado-release-workflow.md for the full workflow.
+#
+# Pass extra flags through via ARGS, e.g.:
+#     make publish-vivado-bitstreams ARGS="--dry-run"
+
+.PHONY: publish-vivado-bitstreams
+publish-vivado-bitstreams:
+	$(PYTHON) scripts/publish_vivado_bitstreams.py $(ARGS)
+
+# ---------------------------------------------------------------------------
 # Cleanup
 # ---------------------------------------------------------------------------
 

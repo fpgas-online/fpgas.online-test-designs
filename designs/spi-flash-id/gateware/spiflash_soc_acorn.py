@@ -29,7 +29,7 @@ from litex_boards.platforms.sqrl_acorn import Platform
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-from designs._shared.build_helpers import default_build_dir
+from designs._shared.build_helpers import board_dir, default_build_dir, flow_suffix
 from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
 from designs._shared.yosys_workarounds import patch_yosys_template
 
@@ -118,7 +118,10 @@ def main():
     ensure_chipdb_symlink(soc.platform)
     patch_yosys_template(soc)
 
+    board_name = board_dir("acorn", args.variant) + flow_suffix(
+        parser._toolchain, parser.toolchain_argdict.get("synth_mode"))
     builder_args = dict(parser.builder_argdict)
+    builder_args["output_dir"] = default_build_dir(__file__, board_name)
     builder_args["compile_software"] = False
     builder = Builder(soc, **builder_args)
 
@@ -127,7 +130,7 @@ def main():
     ident = "fpgas-online SPI Flash Test SoC -- Acorn/LiteFury"
     install_spiflash_firmware(soc, ident)
 
-    builder.build(run=args.build)
+    builder.build(run=args.build, **parser.toolchain_argdict)
 
 
 if __name__ == "__main__":

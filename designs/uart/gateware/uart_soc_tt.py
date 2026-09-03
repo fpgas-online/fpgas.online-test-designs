@@ -20,7 +20,7 @@ Build command (from repo root):
     uv run python designs/uart/gateware/uart_soc_tt.py --build
 
 The bitstream is written to:
-    designs/uart/build/tt/gateware/tt_fpga_platform.bin
+    designs/uart/build/tt-fpga-yosys-nextpnr/gateware/tt_fpga_platform.bin
 """
 
 import argparse
@@ -36,7 +36,7 @@ from litex.soc.integration.soc_core import SoCCore
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-from designs._shared.build_helpers import default_build_dir
+from designs._shared.build_helpers import board_dir, default_build_dir, flow_suffix
 from designs._shared.tt_fpga_crg import TtFpgaCRG
 from designs._shared.tt_fpga_platform import Platform
 
@@ -95,7 +95,8 @@ def main():
         integrated_main_ram_size = 0,  # Provided by SPRAM above.
     )
 
-    output_dir = default_build_dir(__file__, "tt")
+    output_dir = default_build_dir(
+        __file__, board_dir("tt", "fpga") + flow_suffix("icestorm"))
     # Skip BIOS compilation — LiteX BIOS (~24 KB) does not fit in iCE40 EBR (15 KB).
     # Instead, install minimal custom firmware (< 200 bytes) after SoC finalization.
     builder = Builder(soc, output_dir=output_dir, compile_software=False)

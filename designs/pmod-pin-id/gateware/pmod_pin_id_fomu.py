@@ -24,6 +24,7 @@ from migen import *
 from pmod_pin_id import UARTTxIdentifier
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+from designs._shared.build_helpers import board_dir, flow_suffix
 
 CONNECTORS = ["pmoda_n", "pmodb_n"]
 
@@ -88,8 +89,13 @@ def main():
     module = PMODPinIdentifier(platform, pin_list)
 
     if args.build:
-        build_dir = str(Path(__file__).resolve().parent.parent / "build" / "fomu")
-        platform.build(module, build_dir=build_dir)
+        # Write to build/fomu-evt-yosys-nextpnr/gateware/<platform>.bin to
+        # match LiteX Builder's layout used by the other designs.
+        board = board_dir("fomu", "evt") + flow_suffix("icestorm")
+        build_dir = str(
+            Path(__file__).resolve().parent.parent / "build" / board / "gateware"
+        )
+        platform.build(module, build_dir=build_dir, build_name=platform.name)
 
 
 if __name__ == "__main__":

@@ -16,14 +16,15 @@ jobs:
         with:
           ref: ${{ github.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          # Match all build job names but exclude the NeTV2 PCIe endpoint
-          # jobs (which are continue-on-error: true and report job
-          # conclusion=failure even though the workflow conclusion is
-          # success — lewagon/wait-on-check-action checks job conclusions
-          # so we filter them out via negative-lookahead). The other NeTV2
-          # builds (DDR3, RMII Ethernet, etc.) are still required to pass.
-          # See ci-netv2-100t-fix branch for why those two jobs fail.
-          check-regexp: "^(Arty|NeTV2(?!.* PCIe endpoint)|Fomu|TT FPGA|netv2)"
+          # Match all build job names (but not Lint or this workflow),
+          # including the Acorn/NiteFury/LiteFury jobs added when the CI
+          # matrix was expanded to every board variant. Exclude the NeTV2
+          # PCIe endpoint jobs: they are continue-on-error: true and report
+          # job conclusion=failure even though the workflow conclusion is
+          # success, and lewagon/wait-on-check-action checks job conclusions
+          # (negative lookahead). The other NeTV2 builds still gate.
+          # See PR #7 for why those two jobs fail.
+          check-regexp: "^(Arty|NeTV2(?!.* PCIe endpoint)|Fomu|TT FPGA|netv2|Acorn|NiteFury|LiteFury)"
           wait-interval: 30
           allowed-conclusions: success
 

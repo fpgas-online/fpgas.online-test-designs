@@ -236,18 +236,21 @@ DESIGNS = {
         "test_script": "designs/pmod-loopback/host/test_pmod_loopback.py",
         "boards": {
             "arty": {
-                "artifact": "gpio-loopback-arty-a7-35t/top.bit",
+                "artifact": "gpio-loopback-arty-a7-35t/digilent_arty.bit",
                 "test_args": "--board arty",
                 "pre_test": "rmmod spidev spi_bcm2835 2>&1; true",
             },
-            "netv2": {"artifact": "gpio-loopback-netv2/top.bit", "test_args": "--board netv2"},
+            "netv2": {
+                "artifact": "gpio-loopback-netv2-a7-35t/kosagi_netv2.bit",
+                "test_args": "--board netv2",
+            },
             "fomu": {
-                "artifact": "gpio-loopback-fomu-evt/top.bin",
+                "artifact": "gpio-loopback-fomu-evt/kosagi_fomu_evt.bin",
                 "test_args": "--board fomu",
                 "pre_test": "rmmod spidev spi_bcm2835 2>&1; true",
             },
             "tt": {
-                "artifact": "gpio-loopback-tt-fpga/top.bin",
+                "artifact": "gpio-loopback-tt-fpga/tt_fpga_platform.bin",
                 "test_args": "--board tt",
                 "pre_test": "rmmod spidev spi_bcm2835 2>&1; true",
                 "program_cmd": "python3 ~/tt_fpga_program.py /dev/ttyACM0 {bitstream} --gpio-release",
