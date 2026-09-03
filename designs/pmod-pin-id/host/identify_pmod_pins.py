@@ -154,7 +154,13 @@ def detect_gpio_chip():
 # -- Single-pin GPIO reader ---------------------------------------------------
 
 class GpioReader:
-    """Read a single GPIO pin using gpiod (v1 or v2)."""
+    """Capture edge events on a single GPIO pin using gpiod (v1 or v2).
+
+    Edge events carry kernel timestamps, so the UART decode is immune to
+    Python scheduling jitter. (A polling sampler was used before; on the
+    Pi 5 Acorn hosts it mis-framed bytes on some pins while gpiomon on the
+    same line showed a clean 1200-baud signal, 2026-09-03.)
+    """
 
     def __init__(self, gpio_num, chip_path):
         self.gpio_num = gpio_num
@@ -171,6 +177,7 @@ class GpioReader:
                 config={
                     (self.gpio_num,): gpiod.LineSettings(
                         direction=gpiod.line.Direction.INPUT,
+                        edge_detection=gpiod.line.Edge.BOTH,
                         bias=gpiod.line.Bias.PULL_UP,
                     ),
                 },
@@ -180,16 +187,35 @@ class GpioReader:
             self._line = self._chip.get_line(self.gpio_num)
             self._line.request(
                 consumer="pmod-pin-id",
-                type=gpiod.LINE_REQ_DIR_IN,
+                type=gpiod.LINE_REQ_EV_BOTH_EDGES,
                 flags=gpiod.LINE_REQ_FLAG_BIAS_PULL_UP,
             )
 
-    def read(self):
-        if _GPIOD_V2:
-            val = self._request.get_values()
-            return 1 if val[0] == gpiod.line.Value.ACTIVE else 0
-        else:
-            return self._line.get_value()
+    def capture_edges(self, duration_s):
+        """Collect edge events for *duration_s*.
+
+        Returns a list of ``(level_after_edge, timestamp_ns)`` tuples in
+        time order, where level is 1 for a rising edge and 0 for a falling one.
+        """
+        events = []
+        deadline = time.monotonic() + duration_s
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            if _GPIOD_V2:
+                if not self._request.wait_edge_events(remaining):
+                    break
+                for ev in self._request.read_edge_events():
+                    rising = ev.event_type == gpiod.EdgeEvent.Type.RISING_EDGE
+                    events.append((1 if rising else 0, ev.timestamp_ns))
+            else:
+                if not self._line.event_wait(sec=int(remaining), nsec=int((remaining % 1) * 1e9)):
+                    break
+                ev = self._line.event_read()
+                rising = ev.type == gpiod.LineEvent.RISING_EDGE
+                events.append((1 if rising else 0, ev.sec * 1_000_000_000 + ev.nsec))
+        return events
 
     def close(self):
         if _GPIOD_V2:
@@ -205,79 +231,43 @@ class GpioReader:
                 self._chip = None
 
 
-# -- UART bit-bang decoder -----------------------------------------------------
+# -- UART decoder (from edge timestamps) --------------------------------------
 
-def receive_byte(reader, timeout=0.1):
-    """Receive one UART byte (8N1) by bit-banging.
+def _level_at(events, i, ts):
+    """Line level at time *ts*, given that events[i] is the first edge at or
+    before the frame start. The level before an edge is its complement."""
+    level = 1 - events[i][0]
+    j = i
+    while j < len(events) and events[j][1] <= ts:
+        level = events[j][0]
+        j += 1
+    return level
 
-    Properly synchronizes to the HIGH→LOW transition (start bit edge)
-    to avoid sampling mid-byte. Samples 8 data bits at the center of
-    each bit period.
 
-    Returns the decoded byte, or None on timeout.
+def decode_edges(events, baud=BAUD_RATE):
+    """Decode 8N1 frames from ``(level_after_edge, timestamp_ns)`` edges.
+
+    Every falling edge that is not inside a frame already being decoded is
+    taken as a start bit; data bits are reconstructed at the centre of each
+    bit period from the edge history. Returns ``[(byte, stop_bit_ok)]``.
     """
-    deadline = time.monotonic() + timeout
-
-    # First wait for line to be HIGH (idle/stop-bit state).
-    # This ensures we don't mistake a mid-byte LOW for a start bit.
-    while reader.read() == 0:
-        if time.monotonic() > deadline:
-            return None
-
-    # Now wait for the HIGH→LOW transition (actual start bit edge).
-    while reader.read() != 0:
-        if time.monotonic() > deadline:
-            return None
-
-    # We detected the falling edge. Wait half a bit period to reach
-    # the center of the start bit, then verify it's still low.
-    start_edge = time.monotonic()
-    target = start_edge + BIT_PERIOD * 0.5
-    while time.monotonic() < target:
-        pass
-    if reader.read() != 0:
-        return None  # False start (glitch)
-
-    # Sample 8 data bits at the center of each bit period.
-    byte_val = 0
-    for bit_idx in range(8):
-        target = start_edge + BIT_PERIOD * (1.5 + bit_idx)
-        while time.monotonic() < target:
-            pass
-        if reader.read():
-            byte_val |= (1 << bit_idx)
-
-    # Wait through the stop bit.
-    target = start_edge + BIT_PERIOD * 9.5
-    while time.monotonic() < target:
-        pass
-
-    return byte_val
-
-
-def receive_label(reader, max_bytes=20, timeout=0.2):
-    """Receive bytes until \\n is seen or timeout, return decoded string.
-
-    Returns the label string (excluding \\r\\n), or None if nothing received.
-    """
-    buf = []
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        remaining = deadline - time.monotonic()
-        b = receive_byte(reader, timeout=remaining)
-        if b is None:
-            break
-        if b == ord('\n'):
-            # Strip trailing \r if present.
-            text = bytes(buf).decode('ascii', errors='replace').rstrip('\r')
-            return text
-        buf.append(b)
-        if len(buf) >= max_bytes:
-            break
-    # If we got some bytes but no newline, return what we have.
-    if buf:
-        return bytes(buf).decode('ascii', errors='replace').rstrip('\r')
-    return None
+    bit_ns = 1e9 / baud
+    frames = []
+    i = 0
+    while i < len(events):
+        level, t0 = events[i]
+        if level != 0:  # only a falling edge can start a frame
+            i += 1
+            continue
+        byte = 0
+        for k in range(8):
+            byte |= _level_at(events, i, t0 + (1.5 + k) * bit_ns) << k
+        stop_ok = _level_at(events, i, t0 + 9.5 * bit_ns) == 1
+        frames.append((byte, stop_ok))
+        frame_end = t0 + 9.5 * bit_ns
+        while i < len(events) and events[i][1] < frame_end:
+            i += 1
+    return frames
 
 
 # Expected label format: FPGA pin names are 2-4 alphanumeric characters.
@@ -291,30 +281,40 @@ def is_valid_label(label):
     return bool(_LABEL_PATTERN.match(label))
 
 
-def identify_pin(reader, attempts=10):
-    """Read the pin label, trying multiple times for reliability.
+def label_from_frames(frames):
+    """Turn decoded frames into the pin label the FPGA is transmitting.
 
-    Only accepts labels matching the expected format (e.g. "JA01").
-    Returns the label string if consistently decoded, or None.
+    Lines are split on ``\\n`` with a trailing ``\\r`` stripped. Returns the
+    most common *valid* label, a ``"?<raw>"`` marker if there was signal but
+    no valid label (so a miswired or unclocked pin is visible), or ``None``
+    when nothing was received.
     """
-    valid_results = []
-    raw_results = []
-    for _ in range(attempts):
-        label = receive_label(reader)
-        if label:
-            raw_results.append(label)
-            if is_valid_label(label):
-                valid_results.append(label)
-    if valid_results:
-        from collections import Counter
-        most_common, _count = Counter(valid_results).most_common(1)[0]
-        return most_common
-    # Return raw data for debugging if we got signal but no valid decode.
-    if raw_results:
-        from collections import Counter
-        most_common, _count = Counter(raw_results).most_common(1)[0]
-        return f"?{most_common}"  # Prefix with ? to flag as unvalidated
+    from collections import Counter
+
+    text = bytes(b for b, _ok in frames).decode("latin-1")
+    lines = [ln.rstrip("\r") for ln in text.split("\n")]
+    lines = [ln for ln in lines if ln]
+    valid = [ln for ln in lines if is_valid_label(ln)]
+    if valid:
+        return Counter(valid).most_common(1)[0][0]
+    if lines:
+        return "?" + Counter(lines).most_common(1)[0][0]
     return None
+
+
+# 1200 baud, "XNN\r\n" is 5 frames = 50 bit periods = ~42 ms per repeat;
+# 250 ms captures at least five repeats for the vote.
+CAPTURE_SECONDS = 0.25
+
+
+def identify_pin(reader, capture_s=CAPTURE_SECONDS):
+    """Capture edges for *capture_s* and return the transmitted label.
+
+    Returns the label string (e.g. "K2"), a "?<raw>" marker for a garbled
+    signal, or None when the line is silent.
+    """
+    events = reader.capture_edges(capture_s)
+    return label_from_frames(decode_edges(events))
 
 
 # -- Scanner -------------------------------------------------------------------

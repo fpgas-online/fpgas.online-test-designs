@@ -77,3 +77,66 @@ def test_evaluate_unprogrammed_board_all_none_fails():
     all_ok, rows = ident.evaluate_board("acorn", {})
     assert all_ok is False
     assert all(r["got"] is None and not r["ok"] for r in rows)
+
+
+# -- Edge-timestamp UART decoder ------------------------------------------------
+
+BIT_NS = int(1e9 / 1200)
+
+
+def _edges_for(text, start_ns=1_000_000, baud_bit_ns=BIT_NS):
+    """Synthesise (level, timestamp_ns) edge events for 8N1 frames of *text*,
+    idle-high, back to back, exactly as gpiomon would report them."""
+    bits = []
+    for ch in text.encode():
+        bits += [0] + [(ch >> k) & 1 for k in range(8)] + [1]
+    events = []
+    level = 1
+    t = start_ns
+    for b in bits:
+        if b != level:
+            events.append((b, t))
+            level = b
+        t += baud_bit_ns
+    return events
+
+
+def test_decode_edges_recovers_clean_frames():
+    events = _edges_for("J5\r\nJ5\r\n")
+    frames = ident.decode_edges(events, baud=1200)
+    assert [b for b, _ok in frames] == list(b"J5\r\nJ5\r\n")
+    assert all(ok for _b, ok in frames)
+
+
+def test_decode_edges_tolerates_baud_error_and_jitter():
+    # 2% slow transmitter plus +-40 us of edge jitter must still decode.
+    import random
+    rnd = random.Random(1)
+    events = [(lvl, t + rnd.randint(-40_000, 40_000)) for lvl, t in
+              _edges_for("K2\r\n" * 3, baud_bit_ns=int(BIT_NS * 1.02))]
+    frames = ident.decode_edges(events, baud=1200)
+    assert [b for b, _ok in frames] == list(b"K2\r\n" * 3)
+
+
+def test_decode_edges_ignores_leading_partial_frame():
+    # Capture started mid-byte: the first falling edge is inside a data byte.
+    events = _edges_for("H5\r\n" * 3)
+    events = events[3:]  # drop the first three edges
+    frames = ident.decode_edges(events, baud=1200)
+    text = bytes(b for b, ok in frames if ok)
+    assert b"H5\r\n" in text
+
+
+def test_labels_from_frames_votes_on_valid_labels():
+    frames = [(b, True) for b in b"\xabJ5\r\nJ5\r\nJ5\r\n"]
+    assert ident.label_from_frames(frames) == "J5"
+
+
+def test_labels_from_frames_returns_garbled_marker_without_valid_label():
+    frames = [(b, True) for b in b"\xab\xd6\x0a\xab\xd6\x0a"]
+    got = ident.label_from_frames(frames)
+    assert got is not None and got.startswith("?")
+
+
+def test_labels_from_frames_none_when_silent():
+    assert ident.label_from_frames([]) is None
