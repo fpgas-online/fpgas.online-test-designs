@@ -87,7 +87,7 @@ docstring-code-format = true
 # Only the pure host-side unit tests. The other designs/*/host/test_*.py are
 # hardware test *scripts* (they import gpiod, take CLI args, define
 # fixture-less test_* functions) and must not be collected.
-testpaths = ["tests", "designs/pmod-pin-id/host"]
+testpaths = ["tests", "designs/pmod-pin-id/host", "designs/tt-pmod-wiring/host"]
 python_files = ["test_*.py"]
 
 [tool.uv]
