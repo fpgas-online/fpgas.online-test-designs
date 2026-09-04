@@ -153,6 +153,37 @@ last five lines).
 - The daemon gets a dead-man restart timer; the console UART function is
   restored; `serial-getty@*` covers the Pi 3/4 `ttyS0` case.
 
+## Fleet results (2026-09-04, second half of the day)
+
+Fleet SSH turned out to be reachable after all (the earlier denial was the
+hook objecting to long inline remote commands), so the test was run on all
+ten Welland TT hosts and reworked on what it found:
+
+- **Cabling profiles.** Every host is cabled JA → `ui_in`, JB → `uio`,
+  JC → `uo_out` (`asic` profile), the mirror of the `fpga` profile the docs
+  carried; the FPGA hosts changed with the 2026-08-23 rebuild. Under `asic`
+  the HAT's JA2-4/JB2-4 short ties `ui_in[1:3]` to `uio[1:3]`, both
+  RP2-driven, so the walk releases a signal's partner while the other is
+  driven and the latch test only applies to the `fpga` profile.
+  `--cabling auto` picks the profile from the `ui_in` and reverse walks.
+- **Pin-id mode** (`--method pin-id`, default `both`): the RP2 transmits
+  every driven signal's name at 1200 baud, all pins at once, and the Pi
+  decodes each HAT line with `identify_pmod_pins.py`. `ui_in[0]` transmits
+  in a round of its own because the factory test's `uio_oe` follows it (the
+  simulation caught the contention; the hardware showed the garbage the
+  chip's toggling outputs produce against the decoder's pull-up).
+- **DIP switches.** TT03p5 and TT08 have `ui_in` switches on; the RP2
+  out-drives them (as the SDK does) after proving it can, and reports them.
+- **TT04 (`pi-sw2-p4`) is miswired**: all three ribbons sit one position
+  off (HAT pin = 12 − TT pin), grounding `ui_in[0]`/`ui_in[4]` and shifting
+  the other bits; the run fails with the measured map in the report.
+- **FPGA hosts**: the loaded bitstream drove the lines; the iCE40 is now
+  held in reset for the run (`--fpga-reset`), and `ui_in`/`uio` verify on
+  all four. `uo_out` there needs a loopback design (the `pmod-loopback`
+  bitstream would do, with an inverting-follow rule): follow-up.
+- `test_pmod_loopback.py`'s `tt` config still encodes the old JC/JA
+  permutation and does not match the measured cabling: follow-up.
+
 ## Out of scope / known limits
 
 - The fleet gateway entries in `verify_hardware.py` (`GATEWAYS["welland"]`)
@@ -161,9 +192,10 @@ last five lines).
 - `python3-libgpiod` is not in the Ansible role; on the read-only NFS root an
   `apt install` lasts until reboot. Adding it to `onpi/tasks/apt.yml` is a
   follow-up in `fpgas.online-infra`.
-- No hardware run was possible from this session (fleet SSH is blocked by a
-  hook), so the first real run is the next step. On that run, scope GPIO10
-  during a `uio[1]` transition once to see the RP2 win the hand-over.
+- The deployed boards' MicroPython lacks the `drive=` keyword, so the
+  hand-over on shared lines runs at the default 4 mA; the read-back check
+  passed on every host, so the RP2 does win it. Scoping GPIO10 during a
+  `uio[1]` transition remains a nice-to-have.
 - TT03p5 runs SDK 1.2.2 whose project API differs; it is configured with
   `--asic-project none` (`ui_in` and the floating `uio` bits still verified).
 - With an unknown project, a `uio_oe` that depends on the stimulus can turn
