@@ -13,7 +13,7 @@ discover:
 
 # Dev-machine tests against the simulated board.
 unittest:
-	$(PYTHON) -m pytest host/
+	uv run --extra dev pytest host/
 
 clean:
 	rm -rf host/__pycache__ .pytest_cache
