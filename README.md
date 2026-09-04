@@ -54,6 +54,7 @@ This repository contains LiteX-based FPGA test designs that run automatically du
 |------|---------|-------|----------|---------|------------------|-------|-------------|
 | [GPIO Loopback](docs/tests/pmod-loopback.md) | Yes | Yes | Yes | Yes | Yes | — | — |
 | [PMOD Pin ID](docs/tests/pmod-loopback.md) | Yes | Yes | Yes | Yes | Yes | — | — |
+| [TT PMOD Wiring](docs/tests/tt-pmod-wiring.md) | — | — | — | Yes (and TT ASIC) | — | — | — |
 | [UART](docs/tests/uart.md) | Yes | Yes | Yes | Yes | Yes | — | — |
 | [Ethernet](docs/tests/ethernet.md) | Yes | Yes | — | — | — | — | — |
 | [PCIe Enumeration](docs/tests/pcie-enumeration.md) | — | Yes | — | — | Yes | — | — |
