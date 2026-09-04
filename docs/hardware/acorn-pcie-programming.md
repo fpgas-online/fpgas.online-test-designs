@@ -245,6 +245,38 @@ If the golden bitstream at address 0x0 is corrupted, PCIe will not come up on bo
 
 **Critical**: Between steps 1 and 5, the board **must not lose power**. The SRAM-loaded bitstream is volatile — if power is lost before step 3 completes, the flash still has the corrupted golden image and you must restart from step 1.
 
+### JTAG-only bootstrap via the `flash_writer` SoC (fallback)
+
+`designs/pcie-enumeration/gateware/flash_writer_soc_acorn.py` is a minimal
+LiteX SoC with **no PCIe**: JTAGBone as the host control channel plus the same
+`S7SPIFlash` + `flash_cs_n` + `ICAP` cores the PCIe design uses. JTAG-loaded
+into SRAM, it lets the host write a bitstream into flash through the
+JTAGBone-exposed SPI CSRs and then trigger `icap.iprog`, so a board can be
+moved from the factory firmware to a LiteX image without any PCIe involvement.
+
+It was written in May 2026 when JTAG-loaded PCIe-capable designs appeared to
+revert to the factory firmware within seconds, which was read as a
+PERST→PROG_B circuit reacting to host-side link maintenance. The 2026-08-31
+finding that reconfiguring an *enumerated* endpoint crashes and reboots the
+Pi 5 (see the detach rule at the top of this page) is a simpler explanation
+for the same observation, so the SRAM bootstrap above, with the endpoint
+detached first, is the primary path and this SoC is the fallback if that
+re-test fails. Notes for using it:
+
+- LiteX 2025.12 (the pinned version) has an xc7 JTAGPHY bug that silently
+  drops host→target JTAGBone writes. Apply
+  `scripts/apply_litex_jtag_patch.py <venv>/lib/python3.12/site-packages/litex/soc/cores/jtag.py`
+  before building; LiteX 2026.04 has the fix upstream.
+- Build with `--toolchain openxc7` (it has been built and JTAG-loaded that
+  way; a `--toolchain vivado` build is untested).
+- The host side (a JTAGBone client that erases, page-programs and verifies
+  the flash through the `flash`/`flash_cs_n` CSRs, then pulses `icap.iprog`)
+  is not in the repo yet; `litex_server --jtag` plus `litex.tools.litex_client`
+  is the starting point.
+- The factory firmware at 0x0 does not chain-load 0x400000, so after writing
+  the operational slot the *first* PROG_B still boots Sqrl; `icap.iprog`
+  with `WBSTAR` = 0x400000 bypasses that until golden is installed at 0x0.
+
 ### Recovery Summary
 
 | Scenario | Golden OK? | Operational OK? | Recovery Method | Automatic? |
