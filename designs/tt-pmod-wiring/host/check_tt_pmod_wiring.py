@@ -171,8 +171,8 @@ def expected_map(cabling, asic_loopback):
 
 # A tiny command server run on the RP2 through the raw REPL. Every command is
 # answered with exactly one "TTW ..." line (OK / VAL / VALS / ERR / PONG / BYE /
-# READY); WARN lines may precede it. Pull-less input is requested explicitly
-# (pull=None) because Pin(g, Pin.IN) alone leaves whatever pull the SDK set.
+# READY); WARN lines may precede it. Inputs are requested with an explicit
+# pull=None so the intent (no pull, whatever the SDK had set) is visible.
 # "out" reads the pin back so the Pi can see a lost fight immediately.
 FIRMWARE = r"""
 import sys, time
@@ -181,6 +181,7 @@ DATA = __DATA__
 _pins = {}
 _tt = None
 _saved_mode = None
+_drive_warned = False
 _PULLS = {'none': None, 'up': Pin.PULL_UP, 'down': Pin.PULL_DOWN}
 
 def _emit(s):
@@ -191,12 +192,22 @@ def _release_all():
         _pins[g] = Pin(g, Pin.IN, None)
 
 def _out(g, v, d):
+    global _drive_warned
     try:
         p = Pin(g, Pin.OUT, value=v, drive=getattr(Pin, 'DRIVE_%d' % d))
     except (TypeError, AttributeError):
+        if not _drive_warned:
+            _drive_warned = True
+            _emit('WARN drive strength unsupported by this firmware; using the default')
         p = Pin(g, Pin.OUT, value=v)
     _pins[g] = p
     return p
+
+def _clock_stop(t):
+    try:
+        t.clock_project_stop()
+    except Exception as e:
+        _emit('WARN clock_project_stop: %r' % e)
 
 def _find_tt():
     global _tt
@@ -214,19 +225,20 @@ def _sdk(args):
     t = _find_tt()
     if op == 'init':
         _saved_mode = t.mode
-        try:
-            t.clock_project_stop()
-        except Exception as e:
-            _emit('WARN clock_project_stop: %r' % e)
+        _clock_stop(t)
         _emit('OK mode=%s' % _saved_mode)
     elif op == 'project':
         name = args[1]
         sh = t.shuttle
         p = sh.get(name) if hasattr(sh, 'get') else getattr(sh, name)
         p.enable()
+        # enable() applies the project's config.ini section, which may
+        # restart the auto-clock (and change the mode); stop it again.
+        _clock_stop(t)
         en = getattr(sh, 'enabled', None)
-        _emit('OK enabled=%s' % getattr(en, 'name', en))
+        _emit('OK enabled=%s mode=%s' % (getattr(en, 'name', en), t.mode))
     elif op == 'reset':
+        _clock_stop(t)
         t.reset_project(True)
         time.sleep_ms(5)
         try:
@@ -240,8 +252,15 @@ def _sdk(args):
     elif op == 'restore':
         _release_all()
         if _saved_mode is not None:
+            # Go through SAFE first in case the mode setter is a no-op for
+            # an unchanged value; the SDK must re-own its pins.
+            try:
+                from ttboard.mode import RPMode
+                t.mode = RPMode.SAFE
+            except Exception as e:
+                _emit('WARN mode SAFE: %r' % e)
             t.mode = _saved_mode
-        _emit('OK')
+        _emit('OK mode=%s' % t.mode)
     else:
         _emit('ERR sdk: unknown op %s' % op)
 
@@ -747,8 +766,11 @@ class WiringProbe:
         first = self.walk(group, bits, strength, expected_follow)
         second = self.walk(group, bits, strength, expected_follow)
         if first != second:
-            diff = sorted(name for name in first[0] if first[0][name] != second[0][name] or
-                          first[1].get(name) != second[1].get(name))
+
+            def differs(name):
+                return first[0][name] != second[0][name] or first[1].get(name) != second[1].get(name)
+
+            diff = sorted(name for name in first[0] if differs(name))
             raise UnstableReading(f"the two {group} passes disagree on {', '.join(diff)} (intermittent contact?)")
         return first
 
@@ -775,8 +797,7 @@ class WiringProbe:
                 if pi_gpio in held:
                     continue
                 self.hat.set_bias("down", pull_up={pi_gpio})
-                time.sleep(self.settle)
-                pi_now = self.hat.read_all()
+                pi_now = self.sample()
                 if not pi_now.get(pi_gpio):
                     held.append(pi_gpio)
                     continue
@@ -1038,6 +1059,7 @@ class PiEnvironment:
         self.daemon_was_active = False
         self.sysrq_before = None
         self.console_alt = {}
+        self.gettys = []
 
     def _pin_tool(self):
         for tool in ("pinctrl", "raspi-gpio"):
@@ -1046,15 +1068,22 @@ class PiEnvironment:
         return None
 
     def enter(self):
+        if os.geteuid() != 0 and subprocess.run(["sudo", "-n", "true"], capture_output=True).returncode != 0:
+            raise RuntimeError("root or passwordless sudo is required (systemctl, sysctl, rmmod)")
         if self.manage_daemon:
             active = run_quiet(["systemctl", "is-active", "fpgas-tt"]).stdout.strip()
             self.daemon_was_active = active == "active"
             if self.daemon_was_active:
                 self.log("Stopping fpgas-tt (it owns the serial port; restarted afterwards)")
-                run_quiet(
+                # A dead-man restart in case this process is killed mid-run;
+                # clear any stale one from an earlier aborted run first.
+                run_quiet(["systemctl", "stop", f"{self.RESTART_UNIT}.timer"])
+                armed = run_quiet(
                     ["systemd-run", "--quiet", "--on-active=600", f"--unit={self.RESTART_UNIT}",
                      "systemctl", "start", "fpgas-tt"]
                 )
+                if armed.returncode != 0:
+                    self.log(f"WARNING: could not arm the fpgas-tt restart timer: {armed.stderr.strip()}")
                 run_quiet(["systemctl", "stop", "fpgas-tt"], check=True)
                 time.sleep(0.5)
         try:
@@ -1064,7 +1093,13 @@ class PiEnvironment:
         if self.sysrq_before not in (None, "0"):
             self.log(f"Disabling SysRq for the test (was {self.sysrq_before})")
             run_quiet(["sysctl", "-q", "-w", "kernel.sysrq=0"])
-        run_quiet(["systemctl", "stop", "serial-getty@*"])
+        listed = run_quiet(
+            ["systemctl", "list-units", "--plain", "--no-legend", "--state=active", "serial-getty@*"]
+        ).stdout
+        self.gettys = [line.split()[0] for line in listed.splitlines() if line.strip()]
+        if self.gettys:
+            self.log(f"Stopping {', '.join(self.gettys)} (restarted afterwards)")
+            run_quiet(["systemctl", "stop", *self.gettys])
         tool = self._pin_tool()
         if tool:
             for g in self.CONSOLE_GPIOS:
@@ -1085,6 +1120,8 @@ class PiEnvironment:
             self.log(f"Restored UART function on GPIO{'/'.join(str(g) for g in self.console_alt)}")
         if self.sysrq_before not in (None, "0"):
             run_quiet(["sysctl", "-q", "-w", f"kernel.sysrq={self.sysrq_before}"])
+        if self.gettys:
+            run_quiet(["systemctl", "start", *self.gettys])
         if self.manage_daemon and self.daemon_was_active:
             self.log("Restarting fpgas-tt")
             result = run_quiet(["systemctl", "start", "fpgas-tt"])
@@ -1321,7 +1358,12 @@ def main(argv=None):
         print(f"GPIO chip: {hat.chip_path}, {len(ALL_HAT_GPIOS)} HAT lines as inputs")
         fd = open_raw_serial(args.port)
         link = Rp2Link(fd, log=print)
-        start_firmware(link, build_firmware(args.controller))
+        try:
+            start_firmware(link, build_firmware(args.controller))
+        except ProtocolError:
+            # Do not leave the board in the raw REPL for the daemon to find.
+            link.write(b"\r\x03\x02")
+            raise
         print("RP2 command server running")
         try:
             result = run_wiring_test(link, hat, args)
