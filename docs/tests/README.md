@@ -56,6 +56,7 @@ For tests that do not use UART as the primary interface (e.g., PCIe enumeration)
 | Test | Arty A7 | NeTV2 | Fomu EVT | TT FPGA | Acorn / LiteFury |
 |------|---------|-------|----------|---------|------------------|
 | [PMOD Loopback](pmod-loopback.md) | Yes | Yes | Yes | Yes | Yes |
+| [TT PMOD Wiring](tt-pmod-wiring.md) | — | — | — | Yes (and TT ASIC) | — |
 | [UART](uart.md) | Yes | Yes | Yes | Yes | Yes |
 | [Ethernet](ethernet.md) | Yes | Yes | — | — | — |
 | [PCIe Enumeration](pcie-enumeration.md) | — | Yes | — | — | Yes |
@@ -71,6 +72,12 @@ Source: [Project README Test Matrix](../../README.md#test-matrix)
 Verifies PMOD/GPIO pin connectivity between the RPi and the FPGA board using pure combinational gateware (`output = ~input`). The RPi drives known bit patterns on one set of GPIO pins and reads the inverted result on another set. No UART, no CPU, no firmware needed. Supports Arty A7 (8-bit), NeTV2 (1-bit), Fomu EVT (4-bit), TT FPGA (8-bit), and Acorn (1-bit serial loopback).
 
 See: [pmod-loopback.md](pmod-loopback.md)
+
+### TT PMOD Wiring
+
+Verifies the three ribbon cables between a Tiny Tapeout demo board's PMOD connectors and the Pi PMOD HAT, bit for bit, using the demo board's RP2040/RP2350 (over its MicroPython REPL) as the stimulus and the Pi's GPIOs as the observer. No bitstream: it is the only wiring test that runs on the deployed TT ASIC boards. Can tell a swapped bit from a correct one, and an open from a short; exercises `uo_out` through the chip's factory-test project.
+
+See: [tt-pmod-wiring.md](tt-pmod-wiring.md)
 
 ### UART
 

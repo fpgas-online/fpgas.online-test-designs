@@ -15,6 +15,7 @@ hardware features and produces pass/fail results suitable for CI.
 | [pcie-enumeration](pcie-enumeration/) | SoC | PCIe link training and enumeration | NeTV2, Acorn (CLE-215+/215/101) |
 | [pmod-loopback](pmod-loopback/) | Gateware | GPIO loopback (directly wired pins) | Arty A7, NeTV2, TT FPGA |
 | [pmod-pin-id](pmod-pin-id/) | Gateware | UART TX pin identification | Arty A7, Fomu, TT FPGA, Acorn |
+| [tt-pmod-wiring](tt-pmod-wiring/) | Host only | PMOD HAT ribbon wiring via the demo board's RP2 | TT ASIC, TT FPGA |
 
 ## Shared Modules
 
@@ -31,6 +32,10 @@ firmware over UART or run embedded tests.
 
 **Pure gateware designs** have no CPU. They use `platform.build()` directly
 and only need the FPGA toolchain (openXC7 or Yosys+nextpnr-ice40).
+
+**Host-only designs** have no bitstream at all. `tt-pmod-wiring` uses the
+Tiny Tapeout demo board's own RP2040/RP2350 (via its MicroPython REPL) as the
+stimulus and the Pi's GPIOs as the observer.
 
 ## Building
 
