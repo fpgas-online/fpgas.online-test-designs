@@ -299,6 +299,11 @@ EXTRA_UPLOADS = {
     "tt": [
         ("designs/_host/tt_fpga_program.py", "~/tt_fpga_program.py"),
         ("designs/_host/tt_test_wrapper.py", "~/tt_test_wrapper.py"),
+        # tt-pmod-wiring's pin-id mode decodes with the pin-id host script.
+        ("designs/pmod-pin-id/host/identify_pmod_pins.py", "~/identify_pmod_pins.py"),
+    ],
+    "tt-asic": [
+        ("designs/pmod-pin-id/host/identify_pmod_pins.py", "~/identify_pmod_pins.py"),
     ],
 }
 

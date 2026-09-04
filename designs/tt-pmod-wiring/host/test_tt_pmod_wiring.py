@@ -133,6 +133,8 @@ class BoardModel:
                 mode, val = self.rp2[gpio]
                 if mode == "out":
                     strong.setdefault(net, []).append(("rp2", gpio, val))
+                elif mode == "tx":  # transmitting a label: idle high between frames
+                    strong.setdefault(net, []).append(("rp2", gpio, 1))
                 elif val == "up":
                     weak.setdefault(net, []).append(1)
                 elif val == "down":
@@ -191,7 +193,7 @@ class BoardModel:
         return levels[self.net(f"rp2:{gpio}")]
 
 
-def standard_wires(controller="rp2040", cabling="standard", swap=None, unplug=(), drop=()):
+def standard_wires(controller="rp2040", cabling="fpga", swap=None, unplug=(), drop=()):
     """The documented cabling as a wires dict.
 
     *swap* exchanges two RP2 GPIOs' lines; *unplug* removes whole groups;
@@ -221,6 +223,54 @@ def swapped_ja_jb_wires():
         wires[RP2040["uio"][bit]] = {JA[bit]}
         wires[RP2040["uo_out"][bit]] = {JB[bit]}
     return wires
+
+
+def asic_wires():
+    """The ASIC hosts' cabling as measured on pi-sw2-p6: JA -> ui_in, JB -> uio, JC -> uo_out."""
+    return standard_wires(cabling="asic")
+
+
+def make_fake_scanner(model):
+    """What identify_pmod_pins' decoder would see on each Pi line of *model*.
+
+    A line carries the label of a transmitting RP2 pin on its net, or, with
+    the factory test and ui_in[0] low, the label on the uio net that the
+    chip echoes onto that uo_out pin. Two different labels decode as garbage.
+    """
+
+    def scan():
+        levels = model.resolve()
+        ui0 = levels.get(model.net(f"rp2:{model.UI[0]}"), 0)
+        ui0_tx = model.rp2[model.UI[0]][0] == "tx"
+        chip_nodes = {f"rp2:{g}" for g in model.UIO + model.UO}
+        decoded = {}
+        for g in ttw.ALL_HAT_GPIOS:
+            net = model.net(f"pi:{g}")
+            if model.project == "factory" and ui0_tx and any(model.net(n) == net for n in chip_nodes):
+                # The chip toggles uio_oe/uo_out with ui_in[0]; against the
+                # decoder's pull-up that reads as garbage (seen on hardware).
+                decoded[g] = "?chip"
+                continue
+            labels = set()
+            for gpio, (mode, val) in model.rp2.items():
+                if mode == "tx" and model.net(f"rp2:{gpio}") == net:
+                    labels.add(val)
+            if model.project == "factory" and not ui0:
+                for k in range(8):
+                    if model.net(f"rp2:{model.UO[k]}") == net:
+                        unet = model.net(f"rp2:{model.UIO[k]}")
+                        for gpio, (mode, val) in model.rp2.items():
+                            if mode == "tx" and model.net(f"rp2:{gpio}") == unet:
+                                labels.add(val)
+            if len(labels) == 1:
+                decoded[g] = labels.pop()
+            elif labels:
+                decoded[g] = "?" + "/".join(sorted(labels))
+            else:
+                decoded[g] = None
+        return decoded
+
+    return scan
 
 
 # -- Fake RP2 speaking the TTW protocol ----------------------------------------------------
@@ -259,6 +309,17 @@ class FakeFirmware:
             if cmd == "readall":
                 m.resolve()
                 return ["TTW VALS " + " ".join(str(m.rp2_read(g)) for g in m.UI + m.UIO + m.UO)]
+            if cmd == "txid":
+                for a in args:
+                    g, label = a.split("=")
+                    m.rp2[int(g)] = ("tx", label)
+                m.resolve()  # a fight would be recorded here
+                return ["TTW OK started"]
+            if cmd == "stop":
+                for g, (mode, _val) in list(m.rp2.items()):
+                    if mode == "tx":
+                        m.rp2[g] = ("out", 1)
+                return ["TTW OK stopped"]
             if cmd == "release":
                 self._release()
                 return ["TTW OK"]
@@ -320,12 +381,16 @@ class FakeHat:
         self.model.pi_bias = bias
         self.model.pi_pull_up = set(pull_up)
 
+    def close(self):
+        self.model.pi_bias = "none"
+        self.model.pi_pull_up = set()
+
     def read_all(self):
         return self.model.pi_read_all()
 
 
 def run_simulated(model, argv=(), projects=("tt_um_factory_test",), sdk=True, firmware_cls=FakeFirmware,
-                  hat_cls=FakeHat):
+                  hat_cls=FakeHat, pin_id=False):
     """Run the full measurement against *model*; return (result, log_lines)."""
     a, b = socket.socketpair()
     firmware = firmware_cls(model, projects=projects, sdk=sdk)
@@ -336,8 +401,9 @@ def run_simulated(model, argv=(), projects=("tt_um_factory_test",), sdk=True, fi
     assert link.expect()[:1] == ["READY"]
     args = ttw.parse_args(list(argv))
     args.samples = 2
+    scanner = make_fake_scanner(model) if pin_id else None
     try:
-        result = ttw.run_wiring_test(link, hat_cls(model), args, log=log.append)
+        result = ttw.run_wiring_test(link, hat_cls(model), args, log=log.append, pin_scanner=scanner)
         link.cmd("quit")
     finally:
         a.close()
@@ -364,20 +430,58 @@ def test_hat_ports_are_21_unique_lines_with_ja_jb_shared():
     assert ttw.HAT_GPIO_LABELS[16] == "JC1"
 
 
-def test_shorted_uio_bits_are_1_to_3_for_standard_cabling():
-    assert ttw.shorted_uio_bits("standard") == [1, 2, 3]
+def test_shared_lines_per_cabling_profile():
+    # fpga cabling: the HAT's JA2-4/JB2-4 short ties uio[1:3] to the chip's uo_out[1:3].
+    assert ttw.latch_bits("fpga") == [1, 2, 3]
+    assert ttw.shared_partners("fpga")["uio[1]"] == []
+    # asic cabling: the same short ties ui_in[1:3] to uio[1:3], both RP2-driven.
+    assert ttw.latch_bits("asic") == []
+    assert ttw.shared_partners("asic")["ui_in[1]"] == ["uio[1]"]
+    assert ttw.shared_partners("asic")["uio[3]"] == ["ui_in[3]"]
+    assert ttw.connected_uio("asic", "ui_in[2]") == [2]
+    assert ttw.connected_uio("fpga", "ui_in[2]") == []
 
 
 def test_expected_map_matches_documented_cabling():
-    exp = ttw.expected_map("standard", asic_loopback=False)
+    exp = ttw.expected_map("fpga", asic_loopback=False)
     # docs/hardware/tt-fpga-pin-mapping.md: ui_in[0] = JC1 = GPIO16 ... ui_in[7] = JC10 = GPIO6
     assert [sorted(exp[f"ui_in[{k}]"]) for k in range(8)] == [[16], [14], [15], [17], [4], [12], [5], [6]]
     assert [sorted(exp[f"uio[{k}]"]) for k in range(8)] == [[7], [10], [9], [11], [26], [13], [3], [2]]
-    with_asic = ttw.expected_map("standard", asic_loopback=True)
+    with_asic = ttw.expected_map("fpga", asic_loopback=True)
     assert with_asic["uio[0]"] == {7, 8}  # JB1 direct + JA1 through the chip
     assert with_asic["uio[1]"] == {10}  # JB2 and JA2 are the same Pi line
     assert with_asic["uio[7]"] == {2, 18}
-    assert ttw.expected_direct("standard")["uio[0]"] == 7
+    assert ttw.expected_direct("fpga")["uio[0]"] == 7
+    # asic cabling as measured on pi-sw2-p6: ui_in[1] drives the shared line
+    # with uio[1], so the chip echoes it onto uo_out[1] = JC2 too.
+    asic = ttw.expected_map("asic", asic_loopback=True)
+    assert asic["ui_in[0]"] == {8}
+    assert asic["ui_in[1]"] == {10, 14}
+    assert asic["uio[1]"] == {10, 14}
+    assert asic["uio[4]"] == {26, 4}
+    assert ttw.expected_followers("asic", True, "ui_in[1]") == {"uio[1]", "uo_out[1]"}
+    assert ttw.expected_followers("fpga", True, "uio[4]") == {"uo_out[4]"}
+
+
+def test_choose_cabling():
+    fpga_lines = ttw.profile_lines("fpga")
+    observed = {f"ui_in[{k}]": {fpga_lines[f"ui_in[{k}]"]} for k in range(8)}
+    assert ttw.choose_cabling(observed, {})[0] == "fpga"
+    asic_lines = ttw.profile_lines("asic")
+    observed = {f"ui_in[{k}]": {asic_lines[f"ui_in[{k}]"]} for k in range(8)}
+    assert ttw.choose_cabling(observed, {})[0] == "asic"
+
+
+def test_pin_id_labels_and_expectations():
+    assert ttw.pin_id_label("ui_in[3]") == "UI3" and ttw.pin_id_label("uio[7]") == "IO7"
+    assert ttw.expected_labels("fpga", True, {"uio[0]": "IO0"}) == {7: "IO0", 8: "IO0"}
+    assert ttw.expected_labels("fpga", False, {"uio[0]": "IO0"}) == {7: "IO0"}
+    assert ttw.expected_labels("asic", True, {"ui_in[1]": "UI1"}) == {10: "UI1", 14: "UI1"}
+    ok, rows = ttw.evaluate_pin_id({7: "IO0", 8: "IO0"}, {7: "IO0", 8: "IO0"})
+    assert ok and {r["status"] for r in rows} == {"ok", "idle"}
+    by = {r["gpio"]: r["status"] for r in ttw.evaluate_pin_id(
+        {7: None, 8: "?IOx", 16: "UI0", 14: "IO0"}, {7: "IO0", 8: "IO0", 16: "IO0"})[1]}
+    assert by[7] == "open" and by[8] == "garbled" and by[16] == "wrong" and by[14] == "unexpected"
 
 
 def test_controller_tables():
@@ -409,7 +513,7 @@ def test_classify(expected, observed, status):
 
 
 def test_evaluate_untested_required_row_fails():
-    expected = ttw.expected_map("standard", False)
+    expected = ttw.expected_map("fpga",False)
     observed = {name: set(pins) for name, pins in expected.items() if name.startswith("ui_in")}
     ok, rows, _shorts = ttw.evaluate(observed, expected, set(observed), set(expected))
     assert not ok
@@ -419,9 +523,9 @@ def test_evaluate_untested_required_row_fails():
 
 
 def test_evaluate_cross_checks_override_ok():
-    expected = ttw.expected_map("standard", True)
+    expected = ttw.expected_map("fpga",True)
     observed = {n: set(p) for n, p in expected.items()}
-    direct = ttw.expected_direct("standard")
+    direct = ttw.expected_direct("fpga")
     # Reverse walk says uio[0]'s own line is JA1, not JB1 -> ribbons swapped.
     _ok, rows, _ = ttw.evaluate(observed, expected, set(observed), set(observed), direct=direct,
                                 reverse={"uio[0]": {8}})
@@ -502,7 +606,8 @@ def test_correct_wiring_with_factory_loopback_passes():
     assert set(JA) | {2, 3} <= held
     assert not held & ((set(JC) | set(JB)) - set(JA) - {2, 3, 16})
     assert result["latch"] == {"uio[1]": True, "uio[2]": True, "uio[3]": True}
-    docs = ttw.format_docs_table({k: set(v) for k, v in result["observed"].items()}, "rp2040", "standard", True)
+    assert result["cabling"] == "fpga"
+    docs = ttw.format_docs_table({k: set(v) for k, v in result["observed"].items()}, "rp2040", "fpga", True)
     assert "| uo_out[0] | 5           | JA1          | 8        | factory-test loopback via uio[0] |" in docs
     assert "| uo_out[1] | 6           | JA2/JB2      | 10       | factory-test loopback via uio[1] |" in docs
     assert "| ui_in[7]  | 20          | JC10         | 6        | wiring test |" in docs
@@ -691,6 +796,69 @@ def test_unstable_readings_abort():
     model = BoardModel(standard_wires())
     with pytest.raises(ttw.UnstableReading):
         run_simulated(model, argv=["--asic-project", "none"], hat_cls=NoisyHat)
+
+
+def test_asic_cabling_is_detected_and_passes():
+    # The ASIC hosts' cabling: JA -> ui_in, JB -> uio, JC -> uo_out. The HAT
+    # short now ties ui_in[1:3] to uio[1:3]; the partner is released while
+    # the other is driven, so two RP2 outputs never fight.
+    model = BoardModel(asic_wires(), project="drives_uio")
+    result, _log = run_simulated(model)
+    assert result["cabling"] == "asic"
+    assert result["pass"] is True, [r for r in result["rows"] if r["status"] != "ok"]
+    assert {r["status"] for r in result["rows"]} == {"ok"}
+    assert result["latch"] == {}
+    assert model.contentions == []
+    rows = rows_by_name(result)
+    assert rows["ui_in[1]"]["observed"] == [10, 14]  # shared JA2/JB2 line, and JC2 through the chip
+    assert rows["uio[4]"]["observed"] == [4, 26]
+    docs = ttw.format_docs_table({k: set(v) for k, v in result["observed"].items()}, "rp2040", "asic", True)
+    assert "| uo_out[4] | 13          | JC7          | 4        | factory-test loopback via uio[4] |" in docs
+    assert "| uo_out[1] | 6           | JC2          | 14       | factory-test loopback via uio[1] |" in docs
+
+
+def test_asic_cabling_against_the_fpga_profile_fails():
+    model = BoardModel(asic_wires())
+    result, _log = run_simulated(model, argv=["--cabling", "fpga"])
+    assert result["cabling"] == "fpga"
+    assert result["pass"] is False
+    assert rows_by_name(result)["ui_in[0]"]["status"] == "miswired"
+
+
+@pytest.mark.parametrize("wires,cabling", [(standard_wires(), "fpga"), (asic_wires(), "asic")])
+def test_pin_id_rounds_decode_every_name(wires, cabling):
+    model = BoardModel(wires, project="drives_uio")
+    result, _log = run_simulated(model, pin_id=True)
+    assert result["cabling"] == cabling
+    assert result["pin_id_ok"] is True and result["pass"] is True
+    lines = ttw.profile_lines(cabling)
+    assert list(result["pin_id"]) == ["ui_in", "ui_in[0]", "uio"]
+    ui = result["pin_id"]["ui_in"]
+    assert ui["decoded"][lines["ui_in[3]"]] == "UI3"
+    assert result["pin_id"]["ui_in[0]"]["decoded"][lines["ui_in[0]"]] == "UI0"
+    uio = result["pin_id"]["uio"]
+    assert uio["decoded"][lines["uio[4]"]] == "IO4"
+    assert uio["decoded"][lines["uo_out[4]"]] == "IO4"  # echoed through the chip
+    assert {r["status"] for r in ui["rows"]} <= {"ok", "idle"}
+    assert {r["status"] for r in uio["rows"]} <= {"ok", "idle"}
+    assert model.contentions == []
+
+
+def test_pin_id_shares_the_reverse_walks_blind_spot_on_swapped_ribbons():
+    # A JA/JB swap gives the same label on the same lines (direct vs echoed),
+    # so pin-id alone passes; the reverse walk in the same run still fails it.
+    model = BoardModel(swapped_ja_jb_wires())
+    result, _log = run_simulated(model, pin_id=True)
+    assert result["pin_id_ok"] is True
+    assert result["pass"] is False
+
+
+def test_pin_id_reports_an_open_line():
+    model = BoardModel(standard_wires(drop=(RP2040["ui_in"][5],)))
+    result, _log = run_simulated(model, pin_id=True)
+    rows = {r["gpio"]: r for r in result["pin_id"]["ui_in"]["rows"]}
+    assert rows[12]["status"] == "open" and rows[12]["expected"] == "UI5"
+    assert result["pin_id_ok"] is False
 
 
 def test_discover_mode_reports_without_verdict(capsys):
