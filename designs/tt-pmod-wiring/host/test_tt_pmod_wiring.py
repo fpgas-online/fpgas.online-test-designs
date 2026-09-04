@@ -43,13 +43,14 @@ class BoardModel:
 
     UI, UIO, UO = RP2040["ui_in"], RP2040["uio"], RP2040["uo_out"]
 
-    def __init__(self, wires, project="factory", extra_shorts=(), held_ui_in=()):
+    def __init__(self, wires, project="factory", extra_shorts=(), held_ui_in=(), hard_ui_in=()):
         self.wires = wires
         self.project = project  # what the chip is running right now
         self.rp2 = {g: ("in", None) for g in self.UI + self.UIO + self.UO}
         self.pi_bias = "down"
         self.pi_pull_up = set()
-        self.held_ui_in = set(held_ui_in)  # ui_in bits a DIP switch ties high
+        self.held_ui_in = set(held_ui_in)  # ui_in bits a DIP switch pulls low through a resistor
+        self.hard_ui_in = set(hard_ui_in)  # ui_in bits shorted to a rail (low)
         self.levels = {}
         self.contentions = []
         self.reset_n = 1
@@ -110,8 +111,6 @@ class BoardModel:
             # uo_out = ui_in (an unknown project reacting to ui_in), uio inputs.
             for k in range(8):
                 drivers[f"rp2:{self.UO[k]}"] = levels.get(self.net(f"rp2:{self.UI[k]}"), 0)
-        for k in self.held_ui_in:
-            drivers[f"rp2:{self.UI[k]}"] = 1
         return drivers
 
     def reset(self):
@@ -125,12 +124,17 @@ class BoardModel:
         strong = {}
         weak = {}
         fixed_up = set()
+        medium = {}  # beats pulls, loses to outputs: a DIP switch through its resistor
         for node in self.parent:
             net = self.net(node)
             kind, gpio = node.split(":")
             gpio = int(gpio)
             if kind == "rp2":
                 mode, val = self.rp2[gpio]
+                if gpio in self.UI and self.UI.index(gpio) in self.held_ui_in:
+                    medium[net] = 0
+                if gpio in self.UI and self.UI.index(gpio) in self.hard_ui_in:
+                    strong.setdefault(net, []).insert(0, ("rail", gpio, 0))  # a rail always wins
                 if mode == "out":
                     strong.setdefault(net, []).append(("rp2", gpio, val))
                 elif mode == "tx":  # transmitting a label: idle high between frames
@@ -148,7 +152,7 @@ class BoardModel:
                     weak.setdefault(net, []).append(1)
                 elif self.pi_bias == "down":
                     weak.setdefault(net, []).append(0)
-        return strong, weak, fixed_up
+        return strong, weak, fixed_up, medium
 
     def resolve(self):
         """Settle every net; record contention at the settled state; return {net: level}.
@@ -159,7 +163,7 @@ class BoardModel:
         """
         levels = dict(self.levels)
         for _ in range(10):
-            strong, weak, fixed_up = self._drivers(levels)
+            strong, weak, fixed_up, medium = self._drivers(levels)
             new = {}
             for node in self.parent:
                 net = self.net(node)
@@ -167,6 +171,8 @@ class BoardModel:
                     continue
                 if net in strong:
                     new[net] = strong[net][0][2]
+                elif net in medium:
+                    new[net] = medium[net]
                 elif net in fixed_up:
                     new[net] = 1
                 elif net in weak:
@@ -177,7 +183,7 @@ class BoardModel:
             if new == levels:
                 break
             levels = new
-        strong, _weak, _fixed = self._drivers(levels)
+        strong, _weak, _fixed, _medium = self._drivers(levels)
         for _net, drivers in strong.items():
             if len({d[2] for d in drivers}) > 1:
                 self.contentions.append(sorted(drivers))
@@ -322,6 +328,9 @@ class FakeFirmware:
                 return ["TTW OK stopped"]
             if cmd == "release":
                 self._release()
+                return ["TTW OK"]
+            if cmd == "creset":
+                self.creset = int(args[0])
                 return ["TTW OK"]
             if cmd == "ping":
                 return ["TTW PONG"]
@@ -746,26 +755,40 @@ def test_short_between_ribbon_lines_is_reported():
     rows = rows_by_name(result)
     assert result["pass"] is False
     assert rows["ui_in[0]"]["status"] in ("short", "contention")
-    assert rows["ui_in[3]"]["status"] in ("short", "open", "miswired", "contention")
+    # The shorted partner is found held by ui_in[0]'s output in the pre-check
+    # (or reads as one of the fault statuses); either way it is not OK.
+    assert rows["ui_in[3]"]["status"] in ("short", "open", "miswired", "contention", "untested")
     # Two RP2 outputs fight through a shorted ribbon during a walk; that is
     # inherent to any walking-1 test and harmless at the RP2040's drive.
     # The chip must never be one of the parties.
     assert all(d[0] == "rp2" for c in model.contentions for d in c)
 
 
-def test_dip_switch_holding_ui_in_bit_is_skipped():
+def test_dip_switch_holding_ui_in_bit_is_still_tested():
+    # A DIP switch pulls ui_in[5] low through its resistor (seen on TT08 and
+    # TT03p5): the RP2 out-drives it, as the SDK does every day, so the bit
+    # is tested and the switch is reported.
     model = BoardModel(standard_wires(), held_ui_in={5})
     result, _log = run_simulated(model)
     rows = rows_by_name(result)
+    assert rows["ui_in[5]"]["status"] == "ok"
+    assert any("ui_in[5] is held weakly" in n for n in result["notes"])
+    assert result["pass"] is True
+    assert model.contentions == []
+
+
+def test_ui_in_bit_shorted_to_a_rail_is_skipped():
+    model = BoardModel(standard_wires(), hard_ui_in={5})
+    result, _log = run_simulated(model)
+    rows = rows_by_name(result)
     assert rows["ui_in[5]"]["status"] == "untested"
-    assert any("ui_in[5] is held" in n for n in result["notes"])
+    assert any("ui_in[5] is held hard" in n for n in result["notes"])
     assert all(rows[f"ui_in[{k}]"]["status"] == "ok" for k in range(8) if k != 5)
     assert result["asic_loopback"] is True
-    assert not any(d[1] == RP2040["ui_in"][5] and d[0] == "rp2" for c in model.contentions for d in c)
 
 
-def test_held_ui_in0_disables_loopback():
-    model = BoardModel(standard_wires(), held_ui_in={0})
+def test_hard_held_ui_in0_disables_loopback():
+    model = BoardModel(standard_wires(), hard_ui_in={0})
     result, _log = run_simulated(model)
     assert result["asic_loopback"] is False
     assert any("ui_in[0] is held externally" in n for n in result["notes"])

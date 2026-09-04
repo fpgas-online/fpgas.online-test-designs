@@ -387,6 +387,11 @@ try:
                 _emit('VALS ' + ' '.join(vals))
             elif cmd == 'txid':
                 _txid(args)
+            elif cmd == 'creset':
+                # Demo board v3 only: CRESET_B of the iCE40 breakout is RP2350
+                # GPIO1; low holds the FPGA unconfigured with every pin high-Z.
+                Pin(1, Pin.OUT, value=int(args[0]))
+                _emit('OK')
             elif cmd == 'release':
                 _release_all()
                 _emit('OK')
@@ -1373,6 +1378,12 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
 
     rp2.cmd("ping")
     probe.release_all()
+    if args.fpga_reset:
+        # TT FPGA board: whatever bitstream is loaded may be driving the
+        # lines; hold the iCE40 in reset (all pins high-Z) for the test.
+        rp2.cmd("creset 0")
+        notes.append("iCE40 held in reset for the test (CRESET_B low); it reloads from flash afterwards")
+        log("FPGA held in reset (CRESET_B low)")
 
     if args.sdk:
         try:
@@ -1395,12 +1406,32 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
         notes.append("ASIC loopback requested but --no-sdk given")
 
     # ui_in: anything a DIP switch or the Pi's console still holds is left alone.
+    # ui_in[0] is probed first and then held low: the factory test's uio_oe
+    # follows it, and a floating ui_in[0] would let the chip drive uio, which
+    # shares HAT lines with ui_in[1:3] on the asic cabling.
     log("\n== ui_in: checking nothing else holds the lines ==")
-    ui_floating = probe.probe_floating("ui_in")
+    ui_floating = probe.probe_floating("ui_in", bits={0})
+    if ui_floating["ui_in[0]"]:
+        probe.hold_low("ui_in", {0})
+    ui_floating.update(probe.probe_floating("ui_in", bits=set(range(1, 8))))
     ui_bits = {b for b, (n, _g) in enumerate(probe.signals("ui_in")) if ui_floating[n]}
     for name, ok in ui_floating.items():
-        if not ok:
-            notes.append(f"{name} is held by something else (DIP switch on? console UART?): not driven")
+        if ok:
+            continue
+        # ui_in is an input of the chip, so what holds it is a DIP switch (a
+        # resistor to a rail, which the RP2 out-drives every day in
+        # ASIC_RP_CONTROL mode), the console UART, or a wiring fault. Try to
+        # impose both levels; if the RP2 wins, test the bit and say so.
+        gpio = probe.gpio_of(name)
+        wins = probe.drive(name, 1) and probe.drive(name, 0)
+        probe.drive_failures.pop(name, None)
+        rp2.cmd(f"in {gpio} none")
+        probe.outputs.discard(name)
+        if wins:
+            ui_bits.add(signal_bit(name))
+            notes.append(f"{name} is held weakly by something (DIP switch on?); the RP2 out-drives it, tested anyway")
+        else:
+            notes.append(f"{name} is held hard by something else (shorted to a rail? console UART?): not driven")
     if 0 not in ui_bits and project_selected:
         notes.append("ui_in[0] is held externally, so the factory-test loopback cannot be used")
         project_selected = False
@@ -1460,8 +1491,21 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
         drivable = {b for b, (n, _g) in enumerate(probe.signals("uio")) if uio_floating[n]}
         strength = 0  # unknown project: keep any surprise fight current-limited
         for name, ok in uio_floating.items():
-            if not ok:
-                notes.append(f"{name} is held (chip, a shared line, or a Pi pull-up): not driven")
+            if ok:
+                continue
+            if args.fpga_reset:
+                # No chip can be driving with the iCE40 in reset; what holds
+                # the line is its weak configuration pull-up or a Pi pull-up.
+                wins = probe.drive(name, 1) and probe.drive(name, 0)
+                probe.drive_failures.pop(name, None)
+                rp2.cmd(f"in {probe.gpio_of(name)} none")
+                probe.outputs.discard(name)
+                if wins:
+                    drivable.add(signal_bit(name))
+                    continue
+                notes.append(f"{name} is held hard by something: not driven")
+                continue
+            notes.append(f"{name} is held (chip, a shared line, or a Pi pull-up): not driven")
 
     log("\n== uio: RP2 drives, Pi reads" + (" (uo_out follows through the chip)" if asic_loopback else "") + " ==")
     if drivable:
@@ -1629,6 +1673,11 @@ def parse_args(argv=None):
     )
     parser.add_argument("--no-sdk", dest="sdk", action="store_false", help="never import the ttboard SDK on the RP2")
     parser.add_argument(
+        "--fpga-reset", dest="fpga_reset", action="store_true", default=None,
+        help="hold the iCE40 of a TT FPGA board in reset during the test (default for --controller rp2350)",
+    )
+    parser.add_argument("--no-fpga-reset", dest="fpga_reset", action="store_false")
+    parser.add_argument(
         "--no-strict",
         dest="strict",
         action="store_false",
@@ -1643,6 +1692,8 @@ def parse_args(argv=None):
     # uo_out is never tested; only the ui_in rows and the drivable uio rows count.
     if args.asic_project == "none":
         args.strict = False
+    if args.fpga_reset is None:
+        args.fpga_reset = args.controller == "rp2350"
     if args.port is None:
         args.port = "/dev/ttboard" if os.path.exists("/dev/ttboard") else "/dev/ttyACM0"
     return args
@@ -1683,6 +1734,11 @@ def main(argv=None):
         try:
             result = run_wiring_test(link, hat, args, pin_scanner=pin_scanner)
         finally:
+            if args.fpga_reset:
+                try:
+                    link.cmd("creset 1", timeout=5)
+                except ProtocolError as e:
+                    print(f"WARNING: could not release the FPGA reset: {e}")
             if args.sdk:
                 try:
                     link.cmd("sdk restore", timeout=10)
