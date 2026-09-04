@@ -117,54 +117,100 @@ GROUPS = ("ui_in", "uio", "uo_out")
 # -- Expected cabling: TT group -> HAT port --------------------------------------
 
 CABLINGS = {
-    # The fleet convention, measured on the TT FPGA hosts
-    # (docs/hardware/tt-fpga-pin-mapping.md): JC -> ui_in, JB -> uio, JA -> uo_out.
-    "standard": {"ui_in": "JC", "uio": "JB", "uo_out": "JA"},
+    # Measured on the TT FPGA hosts (docs/hardware/tt-fpga-pin-mapping.md).
+    "fpga": {"ui_in": "JC", "uio": "JB", "uo_out": "JA"},
+    # Measured on the TT ASIC hosts on 2026-09-04 (pi-sw2-p6 first): the
+    # mirror image, which puts the HAT's shared JA2-4/JB2-4 lines between
+    # ui_in[1:3] and uio[1:3] instead of between uio[1:3] and uo_out[1:3].
+    "asic": {"ui_in": "JA", "uio": "JB", "uo_out": "JC"},
 }
+
+RP2_GROUPS = ("ui_in", "uio")  # the groups the RP2 may drive
 
 
 def signal_name(group, bit):
     return f"{group}[{bit}]"
 
 
-def shorted_uio_bits(cabling):
-    """uio bits whose HAT line is the same Pi GPIO as the same bit of uo_out.
+def signal_bit(name):
+    return int(name[:-1].split("[")[1])
 
-    With the standard cabling these are uio[1:3] / uo_out[1:3] on GPIO10/9/11.
-    """
+
+def profile_lines(cabling):
+    """``{signal: pi_gpio}`` for all 24 signals under a cabling profile."""
     ports = CABLINGS[cabling]
-    uio = PMOD_HAT_PORTS[ports["uio"]]
-    uo_out = PMOD_HAT_PORTS[ports["uo_out"]]
-    return [bit for bit in range(8) if uio[bit] == uo_out[bit]]
+    return {signal_name(g, b): PMOD_HAT_PORTS[ports[g]][b] for g in GROUPS for b in range(8)}
 
 
 def expected_direct(cabling):
     """Expected Pi GPIO of each RP2-driven signal's own ribbon line."""
-    ports = CABLINGS[cabling]
-    direct = {}
-    for group in ("ui_in", "uio"):
-        for bit in range(8):
-            direct[signal_name(group, bit)] = PMOD_HAT_PORTS[ports[group]][bit]
-    return direct
+    lines = profile_lines(cabling)
+    return {n: g for n, g in lines.items() if not n.startswith("uo_out")}
+
+
+def shared_partners(cabling):
+    """``{signal: [other RP2-driven signals on the same Pi line]}`` under a profile.
+
+    Two RP2 outputs on one HAT line (e.g. ui_in[1] and uio[1] with the asic
+    cabling) must never be driven against each other.
+    """
+    direct = expected_direct(cabling)
+    partners = {}
+    for name, line in direct.items():
+        partners[name] = [o for o, ol in direct.items() if o != name and ol == line]
+    return partners
+
+
+def connected_uio(cabling, name):
+    """uio bits whose net is driven whenever *name* is driven (itself, or via a shared line)."""
+    lines = profile_lines(cabling)
+    return [j for j in range(8) if lines[signal_name("uio", j)] == lines[name]]
+
+
+def latch_bits(cabling):
+    """uio bits whose HAT line is also the same bit of uo_out (the chip loops back onto it)."""
+    lines = profile_lines(cabling)
+    return [k for k in range(8) if lines[signal_name("uio", k)] == lines[signal_name("uo_out", k)]]
 
 
 def expected_map(cabling, asic_loopback):
     """Expected Pi GPIO set for every RP2-driven signal in the forward walk.
 
-    ``ui_in[k]`` reaches its own HAT line. ``uio[k]`` reaches its own HAT line
-    and, when the factory-test loopback is active (``uo_out = uio_in``), also
-    the ``uo_out[k]`` HAT line through the chip.
+    A signal reaches its own HAT line and, with the factory-test loopback
+    (``uo_out = uio_in``), the ``uo_out[j]`` line of every uio bit whose net
+    it drives (itself for ``uio[j]``, or a shared-line partner).
     """
-    ports = CABLINGS[cabling]
+    lines = profile_lines(cabling)
     expected = {}
-    for bit in range(8):
-        expected[signal_name("ui_in", bit)] = {PMOD_HAT_PORTS[ports["ui_in"]][bit]}
-    for bit in range(8):
-        pins = {PMOD_HAT_PORTS[ports["uio"]][bit]}
+    for name in expected_direct(cabling):
+        pins = {lines[name]}
         if asic_loopback:
-            pins.add(PMOD_HAT_PORTS[ports["uo_out"]][bit])
-        expected[signal_name("uio", bit)] = pins
+            pins |= {lines[signal_name("uo_out", j)] for j in connected_uio(cabling, name)}
+        expected[name] = pins
     return expected
+
+
+def expected_followers(cabling, asic_loopback, name):
+    """RP2 pins that legitimately follow *name* on the board side."""
+    follow = set(shared_partners(cabling)[name])
+    if asic_loopback:
+        follow |= {signal_name("uo_out", j) for j in connected_uio(cabling, name)}
+    else:
+        # Unknown project: its own reactions on uio/uo_out are not faults.
+        follow |= {signal_name(g, b) for g in ("uio", "uo_out") for b in range(8)}
+    return follow
+
+
+def choose_cabling(observed_ui_in, reverse):
+    """Pick the profile that best explains the ui_in walk and the reverse walk."""
+    best, best_score = None, -1
+    for name in CABLINGS:
+        lines = profile_lines(name)
+        score = sum(1 for s, pins in observed_ui_in.items() if lines[s] in pins)
+        score += sum(1 for s, pins in reverse.items() if pins == {lines[s]})
+        if score > best_score:
+            best, best_score = name, score
+    return best, best_score
 
 
 # -- MicroPython side ----------------------------------------------------------------
@@ -264,6 +310,47 @@ def _sdk(args):
     else:
         _emit('ERR sdk: unknown op %s' % op)
 
+def _txid(args):
+    # Transmit each pin's label as 1200 baud 8N1 frames, like the FPGA
+    # pin-id design, until a line arrives on stdin. All pins step together
+    # once per bit period; setting them one after another costs a few
+    # microseconds of constant skew per pin, well inside the 833 us bit.
+    import select
+    pins = []
+    frames = []
+    for a in args:
+        g, label = a.split('=')
+        pins.append(_out(int(g), 1, 1))
+        bits = []
+        for ch in (label + '\r\n').encode():
+            bits.append(0)
+            for i in range(8):
+                bits.append((ch >> i) & 1)
+            bits.append(1)
+        frames.append(bits)
+    n = max(len(f) for f in frames)
+    for f in frames:
+        f.extend([1] * (n - len(f)))
+    slots = [[(pins[i], frames[i][s]) for i in range(len(pins))] for s in range(n)]
+    poll = select.poll()
+    poll.register(sys.stdin, select.POLLIN)
+    _emit('OK started')
+    t = time.ticks_us()
+    while True:
+        for slot in slots:
+            for p, v in slot:
+                p.value(v)
+            t = time.ticks_add(t, 833)
+            while time.ticks_diff(t, time.ticks_us()) > 0:
+                pass
+        if poll.poll(0):
+            sys.stdin.readline()
+            break
+        t = time.ticks_us()
+    for p in pins:
+        p.value(1)
+    _emit('OK stopped')
+
 _emit('READY')
 try:
     while True:
@@ -298,6 +385,8 @@ try:
                         p = _pins[g] = Pin(g, Pin.IN, None)
                     vals.append(str(p.value()))
                 _emit('VALS ' + ' '.join(vals))
+            elif cmd == 'txid':
+                _txid(args)
             elif cmd == 'release':
                 _release_all()
                 _emit('OK')
@@ -624,6 +713,7 @@ class WiringProbe:
         self.settle = settle
         self.log = log
         self.drive_failures = {}  # signal -> what the RP2 read back
+        self.outputs = set()  # signals currently driven by the RP2
 
     # -- primitives --------------------------------------------------------------
 
@@ -660,6 +750,7 @@ class WiringProbe:
         """Drive *name* and check the RP2 reads it back; return True if it took."""
         gpio = self.gpio_of(name)
         fields = self.rp2.cmd(f"out {gpio} {value} {strength}")
+        self.outputs.add(name)
         got = int(fields[1]) if len(fields) > 1 else value
         if got != value:
             self.drive_failures[name] = got
@@ -674,6 +765,7 @@ class WiringProbe:
 
     def release_all(self):
         self.rp2.cmd("release")
+        self.outputs.clear()
 
     def hold_low(self, group, bits=None, strength=1):
         """Drive every chosen signal of *group* low and leave it that way.
@@ -686,8 +778,9 @@ class WiringProbe:
             self.drive(name, 0, strength)
 
     def set_inputs(self, group, bits=None, pull="none"):
-        for _name, gpio in self.signals(group, bits):
+        for name, gpio in self.signals(group, bits):
             self.rp2.cmd(f"in {gpio} {pull}")
+            self.outputs.discard(name)
 
     # -- measurements --------------------------------------------------------------
 
@@ -708,6 +801,7 @@ class WiringProbe:
                 time.sleep(self.settle)
                 down = int(self.rp2.cmd(f"read {gpio}")[2])
                 self.rp2.cmd(f"in {gpio} none")
+                self.outputs.discard(name)
                 result[name] = up == 1 and down == 0
                 held = "floating" if result[name] else ("held high" if up == down == 1 else "held low")
                 self.log(f"  {name:<10} (RP2 GPIO{gpio:<2}) pull-up reads {up}, pull-down reads {down}: {held}")
@@ -715,18 +809,21 @@ class WiringProbe:
         finally:
             self.hat.set_bias("down")
 
-    def walk(self, group, bits=None, strength=1, expected_follow=None):
+    def walk(self, group, bits=None, strength=1, partners=None):
         """Walk a 1 across *group*; return ``({signal: set(pi_gpio)}, {signal: [rp2 signals]})``.
 
         Every chosen signal is an output held low except the one under test,
         which is taken high then low; a Pi GPIO that reads 1 in the high step
         and 0 in the low step belongs to that signal. The second map lists
-        RP2 *input* pins that followed the signal on the board side, minus
-        those *expected_follow* says should (``uo_out[k]`` for ``uio[k]``
-        with the factory test). The signals are left as outputs held low.
+        every RP2 *input* pin that followed the signal on the board side; the
+        caller decides which of those are legitimate. *partners* maps a
+        signal to RP2-driven signals known to share its HAT line; any of them
+        currently held low is released to input for the signal's step so two
+        RP2 outputs never fight through the HAT. The chosen signals are left
+        as outputs held low.
         """
         chosen = self.signals(group, bits)
-        expected_follow = expected_follow or {}
+        partners = partners or {}
         for name, _gpio in chosen:
             self.drive(name, 0, strength)
         baseline = self.sample()
@@ -736,35 +833,36 @@ class WiringProbe:
         observed = {}
         follows = {}
         for name, _gpio in chosen:
+            released = [p for p in partners.get(name, ()) if p in self.outputs]
+            for p in released:
+                self.rp2.cmd(f"in {self.gpio_of(p)} none")
+                self.outputs.discard(p)
             if not self.drive(name, 1, strength):
                 self.drive(name, 0, strength)
                 observed[name] = set()
-                continue
-            high = self.sample()
-            rp2_high = self.read_rp2()
-            self.drive(name, 0, strength)
-            low = self.sample()
-            rp2_low = self.read_rp2()
-            observed[name] = {g for g in high if high[g] == 1 and low[g] == 0}
-            followers = [
-                other
-                for other in rp2_high
-                if other != name and rp2_high[other] == 1 and rp2_low[other] == 0
-            ]
-            unexpected = [f for f in followers if f not in expected_follow.get(name, ())]
-            if unexpected:
-                follows[name] = unexpected
-            self.log(
-                f"  {name:<10} (RP2 GPIO{self.gpio_of(name):<2}) -> "
-                f"{describe_gpios(sorted(observed[name])) or '(nothing)'}"
-                + (f"; RP2 pins following: {', '.join(unexpected)}" if unexpected else "")
-            )
+            else:
+                high = self.sample()
+                rp2_high = self.read_rp2()
+                self.drive(name, 0, strength)
+                low = self.sample()
+                rp2_low = self.read_rp2()
+                observed[name] = {g for g in high if high[g] == 1 and low[g] == 0}
+                followers = [o for o in rp2_high if o != name and rp2_high[o] == 1 and rp2_low[o] == 0]
+                if followers:
+                    follows[name] = followers
+                self.log(
+                    f"  {name:<10} (RP2 GPIO{self.gpio_of(name):<2}) -> "
+                    f"{describe_gpios(sorted(observed[name])) or '(nothing)'}"
+                    + (f"; RP2 pins following: {', '.join(followers)}" if followers else "")
+                )
+            for p in released:
+                self.drive(p, 0, strength)
         return observed, follows
 
-    def walk_twice(self, group, bits=None, strength=1, expected_follow=None):
+    def walk_twice(self, group, bits=None, strength=1, partners=None):
         """Run :meth:`walk` twice; both passes must agree."""
-        first = self.walk(group, bits, strength, expected_follow)
-        second = self.walk(group, bits, strength, expected_follow)
+        first = self.walk(group, bits, strength, partners)
+        second = self.walk(group, bits, strength, partners)
         if first != second:
 
             def differs(name):
@@ -882,6 +980,136 @@ class WiringProbe:
         return result
 
 
+# -- Pin-id mode: the RP2 transmits each signal's name, like the FPGA design ------------
+
+
+def pin_id_label(name):
+    """The label a signal transmits: ui_in[k] -> UIk, uio[k] -> IOk (2-4 chars, as the decoder expects)."""
+    return ("UI" if name.startswith("ui_in") else "IO") + str(signal_bit(name))
+
+
+def load_pin_id_module(script_dir):
+    """Import identify_pmod_pins.py (the bit-bang decoder) from next to this script or the repo."""
+    import importlib.util
+
+    for candidate in (
+        script_dir / "identify_pmod_pins.py",
+        script_dir.parent.parent / "pmod-pin-id" / "host" / "identify_pmod_pins.py",
+    ):
+        if candidate.exists():
+            spec = importlib.util.spec_from_file_location("identify_pmod_pins", candidate)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+    return None
+
+
+def expected_labels(cabling, asic_loopback, transmitting):
+    """``{pi_gpio: label}`` for one pin-id round given who transmits what."""
+    lines = profile_lines(cabling)
+    expected = {}
+    for name, label in transmitting.items():
+        expected[lines[name]] = label
+    if asic_loopback:
+        for name, label in transmitting.items():
+            for j in connected_uio(cabling, name):
+                expected[lines[signal_name("uo_out", j)]] = label
+    return expected
+
+
+def evaluate_pin_id(decoded, expected, ignore=()):
+    """Compare one round's decoded labels with the expected ones; return ``(ok, rows)``."""
+    rows = []
+    ok = True
+    for gpio in ALL_HAT_GPIOS:
+        got = decoded.get(gpio)
+        want = expected.get(gpio)
+        if want is None:
+            if got is None or gpio in ignore:
+                status = "idle"
+            else:
+                status = "unexpected"
+                ok = False
+        elif got == want:
+            status = "ok"
+        elif got is None:
+            status = "open"
+            ok = False
+        elif got.startswith("?"):
+            status = "garbled"
+            ok = False
+        else:
+            status = "wrong"
+            ok = False
+        rows.append({"gpio": gpio, "expected": want, "decoded": got, "status": status})
+    return ok, rows
+
+
+def run_pin_id_round(rp2, probe, scanner, transmitting, partners, log):
+    """Have the RP2 transmit *transmitting* (``{signal: label}``) while *scanner* decodes every HAT line."""
+    released = []
+    for name in transmitting:
+        for p in partners.get(name, ()):
+            if p in probe.outputs:
+                rp2.cmd(f"in {probe.gpio_of(p)} none")
+                probe.outputs.discard(p)
+                released.append(p)
+    # "txid" answers OK once it is transmitting; any later line stops it and
+    # is answered with a second OK.
+    rp2.cmd("txid " + " ".join(f"{probe.gpio_of(n)}={label}" for n, label in transmitting.items()))
+    try:
+        decoded = scanner()
+    finally:
+        rp2.cmd("stop", timeout=10)
+    for name in transmitting:
+        probe.drive(name, 0)
+    for p in released:
+        probe.drive(p, 0)
+    for gpio in ALL_HAT_GPIOS:
+        got = decoded.get(gpio)
+        if got:
+            log(f"  GPIO{gpio:<2} ({HAT_GPIO_LABELS[gpio]:<8}) <- {got}")
+    return decoded
+
+
+def make_pin_id_scanner(pinid, attempts=5):
+    """A scanner over all HAT lines using identify_pmod_pins' GpioReader/identify_pin."""
+
+    def scan():
+        chip = pinid.detect_gpio_chip()
+        decoded = {}
+        for gpio in ALL_HAT_GPIOS:
+            reader = pinid.GpioReader(gpio, chip)
+            try:
+                reader.open()
+                decoded[gpio] = pinid.identify_pin(reader, attempts=attempts)
+            finally:
+                reader.close()
+        return decoded
+
+    return scan
+
+
+def format_pin_id_table(rounds):
+    """Per Pi line, the label decoded in each round."""
+    names = list(rounds)
+    head = "| RPi GPIO | HAT      | " + " | ".join(f"{n} round" for n in names) + " |"
+    lines = [head, "|" + "-" * (len(head) - 2) + "|"]
+    for gpio in ALL_HAT_GPIOS:
+        cells = [pin_id_display(rounds[n]["decoded"].get(gpio)) for n in names]
+        lines.append(f"| GPIO{gpio:<4} | {HAT_GPIO_LABELS[gpio]:<8} | " + " | ".join(f"{c:<14}" for c in cells) + " |")
+    return "\n".join(lines)
+
+
+def pin_id_display(label):
+    """A decoded label for printing: garbage bytes are not shown verbatim."""
+    if label is None:
+        return "—"
+    if label.startswith("?"):
+        return "(garbled)"
+    return label
+
+
 def describe_gpios(gpios):
     return ", ".join(f"GPIO{g} ({HAT_GPIO_LABELS.get(g, '?')})" for g in gpios)
 
@@ -981,8 +1209,7 @@ def format_rows(rows):
 def format_docs_table(observed, controller, cabling, asic_loopback):
     """The measured map in the docs/hardware/tt-fpga-pin-mapping.md format."""
     table = CONTROLLERS[controller]
-    ports = CABLINGS[cabling]
-    shorted = set(shorted_uio_bits(cabling))
+    lines = profile_lines(cabling)
     out = []
     for group in GROUPS:
         out.append(f"### {group}")
@@ -994,13 +1221,13 @@ def format_docs_table(observed, controller, cabling, asic_loopback):
             rp2_gpio = table[group][bit]
             if group == "uo_out":
                 # uo_out is only reachable through the chip: with the factory
-                # test, uo_out[k] follows uio[k], so it shows up as the extra
-                # Pi GPIO in the uio[k] walk (or the shared one for the
-                # JA/JB-shorted bits).
+                # test, uo_out[k] follows uio[k]'s net, so it is the Pi GPIO
+                # observed for uio[k] beyond uio[k]'s own line (or that line
+                # itself where the two share one).
                 via = signal_name("uio", bit)
                 seen = set(observed.get(via, set()))
-                direct = {PMOD_HAT_PORTS[ports["uio"]][bit]}
-                pins = seen if bit in shorted else seen - direct
+                own = {lines[via]}
+                pins = seen if lines[via] == lines[name] else seen - own
                 verified = f"factory-test loopback via {via}" if asic_loopback and via in observed else "not tested"
                 if not asic_loopback:
                     pins = set()
@@ -1133,13 +1360,16 @@ class PiEnvironment:
 # -- Test sequence ---------------------------------------------------------------------------
 
 
-def run_wiring_test(rp2, hat, args, log=print):
-    """The whole measurement on already-opened *rp2* and *hat*. Returns a result dict."""
+def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
+    """The whole measurement on already-opened *rp2* and *hat*. Returns a result dict.
+
+    *pin_scanner* (pin-id mode) decodes every HAT line and returns
+    ``{pi_gpio: label|None}``; it is called while the RP2 transmits.
+    """
     probe = WiringProbe(rp2, hat, args.controller, samples=args.samples, log=log)
     want_loopback = args.asic_project != "none"
     asic_loopback = False
     notes = []
-    shorted = set(shorted_uio_bits(args.cabling))
 
     rp2.cmd("ping")
     probe.release_all()
@@ -1182,6 +1412,10 @@ def run_wiring_test(rp2, hat, args, log=print):
     reverse_names = [n for n, _g in probe.signals("ui_in", ui_bits - {0})] + [n for n, _g in probe.signals("uio")]
     reverse, held = probe.reverse_walk(reverse_names)
     probe.hold_low("ui_in", ui_bits)
+    # RP2-driven signals the reverse walk found on one and the same Pi line.
+    measured_partners = {}
+    for a, pa in reverse.items():
+        measured_partners[a] = [b for b, pb in reverse.items() if b != a and pb == pa]
 
     # Loopback confirmation, entirely on-board.
     uio_floating = {}
@@ -1198,48 +1432,78 @@ def run_wiring_test(rp2, hat, args, log=print):
             notes.append(f"factory test not confirmed: {reason}; uo_out loopback disabled")
             log(f"WARNING: {notes[-1]}")
 
-    # Board-side followers: with the factory test confirmed nothing may follow
-    # a ui_in bit (the counter is 0), so any follower is a short. With an
-    # unknown project the chip's own uio/uo_out reactions to ui_in are not
-    # wiring faults; only another ui_in pin following is.
-    chip_pins = [signal_name(g, b) for g in ("uio", "uo_out") for b in range(8)]
-    ui_follow = {} if asic_loopback else {n: chip_pins for n, _g in probe.signals("ui_in")}
     log("\n== ui_in: RP2 drives, Pi reads ==")
-    observed, follows = probe.walk_twice("ui_in", ui_bits, expected_follow=ui_follow)
+    observed, follows = probe.walk_twice("ui_in", ui_bits, partners=measured_partners)
+
+    # Which cabling profile are we looking at?
+    if args.cabling == "auto":
+        cabling, score = choose_cabling(observed, reverse)
+        log(f"\nCabling profile: {cabling} (score {score}/{len(observed) + len(reverse)})")
+        if score < 8:
+            notes.append(f"no known cabling profile fits well (best: {cabling}, score {score})")
+    else:
+        cabling = args.cabling
+    partners = dict(measured_partners)
+    for name, ps in shared_partners(cabling).items():
+        partners[name] = sorted(set(partners.get(name, [])) | set(ps))
 
     if asic_loopback:
         # Confirmed uio_oe = 0: every uio bit is safe to drive, including the
-        # JA/JB-shorted ones, where the chip's uo_out agrees with the RP2 once
-        # it has propagated. Drive strongly so the RP2 wins that hand-over.
+        # ones sharing a line with the chip's uo_out, where the chip agrees
+        # with the RP2 once it has propagated. Drive strongly for that hand-over.
         drivable = set(range(8))
         strength = 3
-        expected_follow = {signal_name("uio", b): [signal_name("uo_out", b)] for b in range(8)}
     else:
         if not uio_floating:
             log("\n== uio: probing which bits nothing else holds ==")
             uio_floating = probe.probe_floating("uio")
         drivable = {b for b, (n, _g) in enumerate(probe.signals("uio")) if uio_floating[n]}
         strength = 0  # unknown project: keep any surprise fight current-limited
-        expected_follow = {signal_name("uio", b): [signal_name("uo_out", k) for k in range(8)] for b in range(8)}
         for name, ok in uio_floating.items():
             if not ok:
-                bit = int(name[:-1].split("[")[1])
-                why = "shared with an ASIC-driven uo_out line" if bit in shorted else "held by the chip or a Pi pull-up"
-                notes.append(f"{name} {why}: not driven")
+                notes.append(f"{name} is held (chip, a shared line, or a Pi pull-up): not driven")
 
     log("\n== uio: RP2 drives, Pi reads" + (" (uo_out follows through the chip)" if asic_loopback else "") + " ==")
     if drivable:
-        uio_observed, uio_follows = probe.walk_twice("uio", drivable, strength, expected_follow)
+        uio_observed, uio_follows = probe.walk_twice("uio", drivable, strength, partners)
         observed.update(uio_observed)
         follows.update(uio_follows)
     latch = {}
-    if asic_loopback and shorted & drivable:
-        log("\n== uio: latch test on the JA/JB-shared bits ==")
-        latch = probe.latch_test(sorted(shorted & drivable))
+    latch_targets = set(latch_bits(cabling)) & drivable
+    if asic_loopback and latch_targets:
+        log("\n== uio: latch test on the bits sharing a line with uo_out ==")
+        latch = probe.latch_test(sorted(latch_targets))
     probe.set_inputs("uio")
 
-    expected = expected_map(args.cabling, asic_loopback)
-    direct = expected_direct(args.cabling)
+    # Pin-id rounds: the RP2 transmits names, the Pi decodes them per line.
+    pin_id = {}
+    if pin_scanner is not None:
+        ui_names = [n for n, _g in probe.signals("ui_in", ui_bits)]
+        rounds = []
+        if asic_loopback and "ui_in[0]" in ui_names:
+            # The factory test's uio_oe follows ui_in[0]: while the other
+            # ui_in bits transmit, ui_in[0] must stay low so the chip never
+            # drives uio (which shares lines with ui_in on the asic cabling).
+            # ui_in[0] transmits alone afterwards: the chip then drives uio
+            # to its zero counter, and nothing else is driving those nets.
+            others = {n: pin_id_label(n) for n in ui_names if n != "ui_in[0]"}
+            if others:
+                rounds.append(("ui_in", others))
+            rounds.append(("ui_in[0]", {"ui_in[0]": pin_id_label("ui_in[0]")}))
+        elif ui_names:
+            rounds.append(("ui_in", {n: pin_id_label(n) for n in ui_names}))
+        if drivable:
+            rounds.append(("uio", {n: pin_id_label(n) for n, _g in probe.signals("uio", drivable)}))
+        hat.close()  # the decoder requests lines one at a time
+        for round_name, transmitting in rounds:
+            log(f"\n== pin-id: RP2 transmits {round_name} names, Pi decodes every HAT line ==")
+            decoded = run_pin_id_round(rp2, probe, pin_scanner, transmitting, partners, log)
+            pin_id[round_name] = {"transmitting": transmitting, "decoded": decoded}
+        probe.set_inputs("uio")
+        probe.hold_low("ui_in", ui_bits)
+
+    expected = expected_map(cabling, asic_loopback)
+    direct = expected_direct(cabling)
     tested = set(observed)
     required = {signal_name("ui_in", b) for b in range(8)}
     if args.strict:
@@ -1258,16 +1522,36 @@ def run_wiring_test(rp2, hat, args, log=print):
             judged[name] = pins - ignore
             if ignore:
                 notes.append(f"{name} also seen on {describe_gpios(sorted(ignore))}: chip-driven line, ignored")
+    bad_follows = {}
+    for name, followers in follows.items():
+        unexpected = [f for f in followers if f not in expected_followers(cabling, asic_loopback, name)]
+        if unexpected:
+            bad_follows[name] = unexpected
     all_ok, rows, shorts = evaluate(
         judged, expected, tested, required,
-        direct=direct, reverse=reverse, follows=follows,
+        direct=direct, reverse=reverse, follows=bad_follows,
         drive_failures=probe.drive_failures, latch=latch,
     )
     if want_loopback and not asic_loopback and args.strict:
         all_ok = False
+    pin_id_ok = True
+    chip_lines = {profile_lines(cabling)[signal_name(g, b)] for g in ("uio", "uo_out") for b in range(8)}
+    for round_name, data in pin_id.items():
+        exp = expected_labels(cabling, asic_loopback, data["transmitting"])
+        ignore = () if asic_loopback else held
+        if round_name == "ui_in[0]":
+            # The factory test toggles uio_oe and uo_out with ui_in[0], so the
+            # chip's lines carry garbage in this round; only ui_in[0]'s own
+            # line is judged.
+            ignore = chip_lines
+        ok, prows = evaluate_pin_id(data["decoded"], exp, ignore=ignore)
+        data["expected"] = exp
+        data["rows"] = prows
+        data["ok"] = ok
+        pin_id_ok = pin_id_ok and ok
     return {
         "controller": args.controller,
-        "cabling": args.cabling,
+        "cabling": cabling,
         "asic_loopback": asic_loopback,
         "observed": {k: sorted(v) for k, v in observed.items()},
         "reverse": {k: sorted(v) for k, v in reverse.items()},
@@ -1275,21 +1559,32 @@ def run_wiring_test(rp2, hat, args, log=print):
         "latch": latch,
         "rows": rows,
         "shorts": {str(g): names for g, names in shorts.items()},
+        "pin_id": pin_id,
+        "pin_id_ok": pin_id_ok,
         "notes": notes + [f"rp2: {w}" for w in getattr(rp2, "warnings", [])],
-        "pass": all_ok,
+        "pass": all_ok and pin_id_ok,
     }
 
 
 def report(result, discover, log=print):
     log("")
+    log(f"Cabling profile: {result['cabling']} "
+        f"(ui_in <- HAT {CABLINGS[result['cabling']]['ui_in']}, uio <- {CABLINGS[result['cabling']]['uio']}, "
+        f"uo_out <- {CABLINGS[result['cabling']]['uo_out']})")
+    log("")
     observed = {k: set(v) for k, v in result["observed"].items()}
     log(format_docs_table(observed, result["controller"], result["cabling"], result["asic_loopback"]))
+    if result.get("pin_id"):
+        log("### Pin-id decode (label transmitted by the RP2, as received on each Pi line)")
+        log("")
+        log(format_pin_id_table(result["pin_id"]))
+        log("")
     if result["held"]:
         log("Pi lines held by something (the chip's uo_out, or the Pi's I2C pull-ups on GPIO2/3):")
         log(f"  {describe_gpios(result['held'])}")
         log("")
     if result["shorts"]:
-        log("Pi GPIOs that follow more than one signal (short between ribbon lines?):")
+        log("Pi GPIOs that follow more than one signal (a shared HAT line, or a short between ribbon lines):")
         for g, names in result["shorts"].items():
             log(f"  GPIO{g} ({HAT_GPIO_LABELS.get(int(g), '?')}): {', '.join(names)}")
         log("")
@@ -1305,6 +1600,11 @@ def report(result, discover, log=print):
     n_req = sum(1 for r in result["rows"] if r["required"])
     n_tested = sum(1 for r in result["rows"] if r["status"] != "untested")
     log(f"\n{n_ok}/{n_tested} tested signals match; {n_req} required.")
+    for round_name, data in result.get("pin_id", {}).items():
+        bad = [r for r in data["rows"] if r["status"] not in ("ok", "idle")]
+        log(f"pin-id {round_name} round: {'ok' if data['ok'] else 'FAIL'}"
+            + (": " + ", ".join(f"GPIO{r['gpio']} {r['status']} (expected {r['expected']}, "
+                                f"got {pin_id_display(r['decoded'])})" for r in bad) if bad else ""))
     if not result["asic_loopback"]:
         log("uo_out was NOT tested (no ASIC loopback).")
 
@@ -1313,7 +1613,14 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--port", default=None, help="serial port (default: /dev/ttboard, else /dev/ttyACM0)")
     parser.add_argument("--controller", choices=sorted(CONTROLLERS), default="rp2040")
-    parser.add_argument("--cabling", choices=sorted(CABLINGS), default="standard", help="expected cabling")
+    parser.add_argument(
+        "--cabling", choices=["auto", *sorted(CABLINGS)], default="auto",
+        help="expected cabling profile, or auto to pick the best fit (default)",
+    )
+    parser.add_argument(
+        "--method", choices=["walk", "pin-id", "both"], default="both",
+        help="walk: RP2 walks a 1; pin-id: RP2 transmits each signal's name at 1200 baud (default: both)",
+    )
     parser.add_argument("--discover", action="store_true", help="print the measured map only, no verdict")
     parser.add_argument(
         "--asic-project",
@@ -1346,6 +1653,14 @@ def main(argv=None):
     print("=== TT PMOD wiring test ===")
     print(f"Port: {args.port}   Controller: {args.controller}   ASIC project: {args.asic_project}")
     env = PiEnvironment(manage_daemon=args.daemon, unload_modules=args.unload)
+    pin_scanner = None
+    if args.method in ("pin-id", "both"):
+        pinid = load_pin_id_module(pathlib.Path(__file__).resolve().parent)
+        if pinid is None:
+            print("ERROR: identify_pmod_pins.py (the pin-id decoder) not found next to this script")
+            print("RESULT: FAIL")
+            return 1
+        pin_scanner = make_pin_id_scanner(pinid)
     result = None
     link = None
     hat = None
@@ -1366,7 +1681,7 @@ def main(argv=None):
             raise
         print("RP2 command server running")
         try:
-            result = run_wiring_test(link, hat, args)
+            result = run_wiring_test(link, hat, args, pin_scanner=pin_scanner)
         finally:
             if args.sdk:
                 try:
