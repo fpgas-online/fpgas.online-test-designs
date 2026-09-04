@@ -73,6 +73,20 @@ HOSTS = {
     "welland-pi29": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.129", "board": "tt"},
     "welland-pi31": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.131", "board": "tt"},
     "welland-pi33": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.0.133", "board": "tt"},
+    # TT ASIC demo boards (RP2040, demo board v2 or the TT04 board) on the
+    # Welland S3300 switch 2, ports 3-8, at 10.21.2.<port> (the 2026-08-23
+    # addressing scheme; the FPGA hosts above still use the old flat one).
+    # TT03p5 runs demo-board firmware 1.2.2, whose SDK cannot select
+    # tt_um_factory_test, so it gets no uo_out loopback.
+    "welland-pi-sw2-p3": {
+        "ssh_type": "gateway", "gateway": "welland", "target": "10.21.2.3",
+        "board": "tt-asic", "variant": "tt03p5", "test_args_extra": "--asic-project none",
+    },
+    "welland-pi-sw2-p4": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.2.4", "board": "tt-asic"},
+    "welland-pi-sw2-p5": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.2.5", "board": "tt-asic"},
+    "welland-pi-sw2-p6": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.2.6", "board": "tt-asic"},
+    "welland-pi-sw2-p7": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.2.7", "board": "tt-asic"},
+    "welland-pi-sw2-p8": {"ssh_type": "gateway", "gateway": "welland", "target": "10.21.2.8", "board": "tt-asic"},
     # PS1 site (via pi@ps1.fpgas.online gateway)
     "ps1-pi2": {"ssh_type": "gateway", "gateway": "ps1", "target": "10.21.0.102", "board": "arty"},  # [offline]
     "ps1-pi3": {"ssh_type": "gateway", "gateway": "ps1", "target": "10.21.0.103", "board": "arty"},
@@ -267,6 +281,17 @@ DESIGNS = {
             },
         },
     },
+    # PMOD HAT ribbon wiring — the demo board's own RP2 drives one TT signal
+    # at a time while the host script samples the Pi GPIOs. No bitstream and
+    # no programming step; the script stops/starts fpgas-tt, unloads the SPI
+    # modules and disables SysRq itself.
+    "tt-pmod-wiring": {
+        "test_script": "designs/tt-pmod-wiring/host/check_tt_pmod_wiring.py",
+        "boards": {
+            "tt-asic": {"artifact": None, "test_args": "--controller rp2040"},
+            "tt": {"artifact": None, "test_args": "--controller rp2350 --asic-project none"},
+        },
+    },
 }
 
 # Extra files that certain boards need uploaded
@@ -395,6 +420,8 @@ def generate_tests():
             board_cfg = design["boards"][board]
             artifact = board_cfg["artifact"]
             test_args = board_cfg["test_args"]
+            if host.get("test_args_extra"):
+                test_args = f"{test_args} {host['test_args_extra']}"
 
             # Host-specific serial port override (e.g. rpi5 uses ttyAMA0,
             # rpi3 uses serial0 for the same GPIO UART pins).
@@ -405,7 +432,7 @@ def generate_tests():
             # NeTV2 variant selection: prefer variant-specific artifact if it exists.
             # CI builds separate a7-35t and a7-100t artifacts for NeTV2.
             variant = host.get("variant")
-            if variant:
+            if variant and artifact:
                 # e.g. "uart-test-netv2/x.bit" -> "uart-test-netv2-a7-100t/x.bit"
                 parts = artifact.split("/", 1)
                 variant_artifact = f"{parts[0]}-{variant}t/{parts[1]}"
@@ -413,12 +440,18 @@ def generate_tests():
                     artifact = variant_artifact
 
             # Determine remote paths
-            ext = os.path.splitext(artifact)[1]
-            remote_bitstream = f"~/{design_name}_{board}{ext}"
             remote_script = f"~/test_{design_name}.py"
+            if artifact is None:
+                # Host-only design: nothing to upload or program.
+                remote_bitstream = None
+            else:
+                ext = os.path.splitext(artifact)[1]
+                remote_bitstream = f"~/{design_name}_{board}{ext}"
 
             # Determine programming command (priority: per-board-config > per-host > per-board)
-            if "program_cmd" in board_cfg:
+            if artifact is None:
+                prog_cmd = None
+            elif "program_cmd" in board_cfg:
                 prog_cmd = board_cfg["program_cmd"].format(bitstream=remote_bitstream)
             elif host_name in HOST_PROGRAM_CMD:
                 prog_template = HOST_PROGRAM_CMD[host_name]
@@ -474,16 +507,17 @@ def run_single_test(test, skip_upload=False):
         return False
 
     if not skip_upload:
-        # Upload bitstream
-        bitstream_path = os.path.join(ARTIFACTS_DIR, test["artifact"])
-        if not os.path.exists(bitstream_path):
-            print("  SKIP: Bitstream not found: {}".format(test["artifact"]))
-            return None
+        # Upload bitstream (host-only designs have none)
+        if test["artifact"] is not None:
+            bitstream_path = os.path.join(ARTIFACTS_DIR, test["artifact"])
+            if not os.path.exists(bitstream_path):
+                print("  SKIP: Bitstream not found: {}".format(test["artifact"]))
+                return None
 
-        print("  Uploading bitstream...")
-        if not ssh_upload(test["host"], bitstream_path, test["remote_bitstream"]):
-            print("  FAIL: Could not upload bitstream")
-            return False
+            print("  Uploading bitstream...")
+            if not ssh_upload(test["host"], bitstream_path, test["remote_bitstream"]):
+                print("  FAIL: Could not upload bitstream")
+                return False
 
         # Upload test script
         script_path = os.path.join(REPO_DIR, test["test_script"])
@@ -521,14 +555,18 @@ def run_single_test(test, skip_upload=False):
         print("  RESULT: {}".format("PASS" if passed else "FAIL"))
         return passed
 
-    # Program FPGA
-    print("  Programming FPGA...")
-    rc, stdout, stderr = ssh_run(test["host"], test["program_cmd"], timeout=120)
-    output = stdout + stderr
-    # Check for successful programming indicators:
-    # - openFPGALoader: prints "done 1" in FPGA status register output
-    # - tt_fpga_program.py: returns rc=0
-    programming_ok = rc == 0 or "done 1" in output.lower()
+    # Program FPGA (host-only designs skip this)
+    if test["program_cmd"] is None:
+        programming_ok = True
+        print("  No bitstream for this design; nothing to program")
+    else:
+        print("  Programming FPGA...")
+        rc, stdout, stderr = ssh_run(test["host"], test["program_cmd"], timeout=120)
+        output = stdout + stderr
+        # Check for successful programming indicators:
+        # - openFPGALoader: prints "done 1" in FPGA status register output
+        # - tt_fpga_program.py: returns rc=0
+        programming_ok = rc == 0 or "done 1" in output.lower()
     if not programming_ok:
         # For Fomu: DFU bootloader may have timed out. PoE-reset to
         # reboot into DFU mode and retry programming immediately.
@@ -553,7 +591,8 @@ def run_single_test(test, skip_upload=False):
             for line in output.strip().split("\n"):
                 print(f"    {line}")
             return False
-    print("  FPGA programmed successfully")
+    if test["program_cmd"] is not None:
+        print("  FPGA programmed successfully")
 
     # Run test — the test script handles its own boot-wait and timeouts
     print("  Running test...")
