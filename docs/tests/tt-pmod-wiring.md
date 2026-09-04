@@ -14,12 +14,20 @@ makes this the only wiring test that runs on the deployed TT **ASIC** boards.
 
 ## Target Boards
 
-| Board | Controller | Cabling checked | Status |
-|-------|------------|-----------------|--------|
-| TT ASIC demo board v2 (TT06-TT08) | RP2040 | JC → `ui_in`, JB → `uio`, JA → `uo_out` | Active |
-| TT ASIC demo board (TT04, TT05) | RP2040 | same | Active |
-| TT ASIC demo board (TT03p5, firmware 1.2.2) | RP2040 | `ui_in` and floating `uio` bits only (`--asic-project none`) | Active |
-| [TT FPGA Demo Board v3](../hardware/tt-fpga.md) / TT09+ | RP2350 | `--controller rp2350`; `uo_out` needs a loopback design | Untested |
+| Board | Controller | What is verified | Status |
+|-------|------------|------------------|--------|
+| TT ASIC demo board v2 (TT06-TT08) | RP2040 | all three ribbons (`uo_out` through the factory test) | Verified 2026-09-04 |
+| TT ASIC demo board (TT04, TT05) | RP2040 | same | Verified 2026-09-04 (TT04 host miswired) |
+| TT ASIC demo board (TT03p5, firmware 1.2.2) | RP2040 | `ui_in` and floating `uio` bits (`--asic-project none`) | Verified 2026-09-04 |
+| [TT FPGA Demo Board v3](../hardware/tt-fpga.md) / TT09+ | RP2350 | `ui_in` and `uio` with the iCE40 held in reset; `uo_out` needs a loopback design | Verified 2026-09-04 |
+
+The measured fleet tables are in
+[`tt-pmod-wiring-fleet.md`](../hardware/tt-pmod-wiring-fleet.md).
+
+Two mirror-image cabling profiles exist (`--cabling auto` picks the best
+fit): `asic` (HAT JA → `ui_in`, JB → `uio`, JC → `uo_out`), found on every
+host on 2026-09-04, and `fpga` (JC → `ui_in`, JB → `uio`, JA → `uo_out`),
+the earlier `tt-fpga-pin-mapping.md` measurement.
 
 ## Prerequisites
 
@@ -51,13 +59,39 @@ so its counter, which it puts on `uo_out` and `uio` whenever `ui_in[0]` is
 high, is zero.
 
 The HAT wires JA2-4 and JB2-4 to the same Pi lines (GPIO10/9/11, the SPI0
-bus). With the factory test active the chip drives `uo_out[1:3]` to what it
-sees on `uio[1:3]`, i.e. the same line, so each RP2 transition is a brief
-hand-over that the RP2 drives at 12 mA and confirms by reading back. Without
-the factory test those three bits are held by the chip's `uo_out` and are
-left untested. Pi GPIO2/3 (JB10/JB9 = `uio[7:6]`) carry the Pi's fixed 1.8 kΩ
-I2C pull-ups: the RP2 can drive them, but no weak pull can move them, so
-they too are untested without the confirmed loopback.
+bus). Which TT signals that ties together depends on the cabling profile:
+on `fpga` it is `uio[1:3]` with the chip's `uo_out[1:3]`, so with the factory
+test each RP2 transition is a brief hand-over that the RP2 drives at 12 mA
+and confirms by reading back, and a latch test checks both ribbon wires; on
+`asic` it is `ui_in[1:3]` with `uio[1:3]`, both RP2-driven, so whichever is
+not under test is released to input for that step. Pi GPIO2/3 (JB10/JB9 =
+`uio[7:6]`) carry the Pi's fixed 1.8 kΩ I2C pull-ups: the RP2 can drive
+them, but no weak pull can move them, so they are untested without the
+confirmed loopback.
+
+`ui_in` is an input of the chip, so a bit the pull probe finds held is
+held by a DIP switch (through its resistor) or a wiring fault. The RP2 tries
+to impose both levels; if it wins the bit is tested and the switch reported
+(TT03p5 and TT08 have switches on), otherwise the bit is skipped (TT04 has
+two bits grounded by a ribbon seated one position off).
+
+On a TT FPGA board the iCE40 is held in reset for the run (`--fpga-reset`,
+default for `--controller rp2350`), so only its weak configuration pull-ups
+remain on the lines and `uio` gets the same drive-and-read-back treatment.
+
+### Pin-id mode
+
+`--method pin-id` (default `both`) has the RP2 transmit each driven signal's
+name (`UI0`..`UI7`, `IO0`..`IO7`) as 1200 baud 8N1 frames on all its pins at
+once, exactly as the [pmod-pin-id](pmod-loopback.md) FPGA design does, and
+the Pi decodes each HAT line with `identify_pmod_pins.py`'s bit-bang
+receiver. With the loopback the chip echoes the `uio` names onto the
+`uo_out` lines. Rounds: `ui_in` (with `ui_in[0]` held low, because the
+factory test's `uio_oe` follows it), `ui_in[0]` alone (only its own line is
+judged; the chip toggles `uio`/`uo_out` with it), then `uio`. A JA/JB ribbon
+swap gives the same label on the same lines whether direct or echoed, so
+pin-id shares the forward walk's blind spot there; the reverse walk in the
+same run catches it.
 
 ### Sequence
 
