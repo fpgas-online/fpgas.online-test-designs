@@ -152,8 +152,9 @@ uv run --extra dev pytest designs/tt-pmod-wiring
   anyway, which is the SysRq hazard the script guards against.
 - A ribbon short between two `ui_in` (or two `uio`) lines makes two RP2
   outputs fight briefly during a walk. That is inherent to any walking-1 test
-  and harmless at the RP2040's drive; the chip is never a party, and the
-  read-back reports it as `contention`.
+  and harmless at the RP2040's drive. The chip is only a party on a JA/JB
+  ribbon short with the loopback confirmed, for one sample; the read-back
+  reports both cases as `contention`.
 - `uo_out` can only be observed, never driven, so without a confirmed
   loopback it stays "not tested".
 - `python3-libgpiod` is not yet in the Ansible role; on the read-only NFS
