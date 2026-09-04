@@ -45,6 +45,20 @@ allow-direct-references = true
 [tool.hatch.build.targets.wheel]
 packages = ["designs"]
 
+[tool.pytest.ini_options]
+testpaths = ["designs"]
+# The Pi-side host scripts are also named test_<design>.py (verify_hardware.py
+# uploads them as ~/test_<design>.py) and need real hardware; keep them out of
+# collection. The dev-machine unit tests live next to them in host/.
+addopts = [
+    "--ignore=designs/ddr-memory/host/test_ddr.py",
+    "--ignore=designs/ethernet-test/host/test_ethernet.py",
+    "--ignore=designs/pcie-enumeration/host/test_pcie_enumeration.py",
+    "--ignore=designs/pmod-loopback/host/test_pmod_loopback.py",
+    "--ignore=designs/spi-flash-id/host/test_spiflash.py",
+    "--ignore=designs/uart/host/test_uart.py",
+]
+
 [tool.ruff]
 target-version = "py39"
 line-length = 120
