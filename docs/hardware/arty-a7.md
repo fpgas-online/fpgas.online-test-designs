@@ -145,6 +145,68 @@ In the fpgas.online setup, the Arty A7's PMOD connectors can be connected to a R
 
 Quad SPI (4x) mode is supported. The bitstream configuration enables SPI_BUSWIDTH=4.
 
+### Which flash part a board has
+
+Digilent has fitted three different 128 Mbit parts over the Arty A7's life,
+and they are not interchangeable in software: the S25FL127S answers the Read
+SFDP command (5Ah) and drops the DDR read commands, and its sector layout
+differs (255 × 64 KB + 16 × 4 KB against 254 × 64 KB + 32 × 4 KB). Table 5.2.1
+"Flash memory part loaded" in section 5.2 of the
+[Arty A7 Reference Manual](https://digilent.com/reference/programmable-logic/arty-a7/reference-manual)
+gives the part by PCB revision and by whether a sticker with the part number
+is on the board:
+
+| Manufacturer | P/N | PCB revision | Package marking |
+|---|---|---|---|
+| Micron | `N25Q128A13ESF40` | ≤ C, no sticker | none |
+| Spansion/Infineon | `S25FL128SAG[M\|N]FI00` | > C and ≤ E with no sticker, or ≥ E with a sticker | `FL128SAIF00` |
+| Spansion/Infineon | `S25FL127SABMFx00` | ≥ E with a sticker | `FL127SxF00` |
+
+The manual's own advice is "check the PCB revision and any stickers placed on
+the PCB with the flash part number printed on it". Vivado's
+`s25fl128s-3.3v-qspi-x4-single` configuration works for both Spansion parts,
+and `mt25ql128` is an alias for the Micron one.
+
+**Reading it from the board.** openFPGALoader 1.1 and later loads its
+spiOverJtag bridge into the FPGA and asks the flash for its JEDEC id:
+
+```bash
+sudo openFPGALoader -b arty_a7_35t --detect -f      # or arty_a7_100t
+# ...
+# JEDEC ID: 0x012018
+# Detected: spansion S25FL128S 256 sectors size: 128Mb
+```
+
+Two caveats. Loading the bridge replaces whatever design was in the fabric
+until the next power cycle reloads it from flash, so do this on a rig nobody
+is using. And **the S25FL128S and the S25FL127S both answer JEDEC `0x012018`**,
+so what openFPGALoader names S25FL128S is either Spansion part; the read rules
+the Micron part in or out and no more. Telling the two Spansion parts apart
+takes the package marking or the sticker, read by eye, or an SFDP probe
+(5Ah), which only the S25FL127S answers. openFPGALoader needs the bridge
+bitstream at `/usr/share/openFPGALoader/spiOverJtag_xc7a35tcsg324.bit.gz`
+(and the `xc7a100t` one for a -100); the rp1-jtag build of openFPGALoader
+on the welland pool image does not ship them, so they were fetched from
+[upstream](https://github.com/trabucayre/openFPGALoader/tree/master/spiOverJtag)
+by hand.
+
+**What the welland pool has.** Read on 2026-09-09 through each board's own
+FT2232 on `pi-sw2-p16`, `p37`, `p38` and `p42`: every one is an XC7A35T
+(idcode `0x362d093`) with a Spansion part at JEDEC `0x012018`, so none has the
+Micron flash. The other three signals worth reading at the same time, since
+neither the serial nor the model badge gives them:
+
+```bash
+sudo openFPGALoader -c digilent --detect        # idcode -> 35T or 100T
+sudo openFPGALoader -c digilent --read-dna      # the die's Device DNA
+```
+
+The Digilent serial (`210319…`, from the FT2232's iSerialNumber and on the
+sticker) identifies the *board*; the DNA identifies the *die*; the idcode
+says which die it is. The rpi-hdcp-output repository's
+`tools/read_arty_identity.py` reads all four in one pass, and its
+`tools/hardware_identity.py` records the result per serial.
+
 ## LiteX Integration
 
 | Property | Value |
