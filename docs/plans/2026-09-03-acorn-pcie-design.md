@@ -621,6 +621,14 @@ Consequences:
   tools so a reply always fits the PL011's FIFO.
 - The rates above 921600 are measured and recorded on the first board, not
   relied on.
+- **UARTBone gets 1 s per command, not LiteX's 100 ms.** `Stream2Wishbone`
+  abandons a command 100 ms after its first byte, and the timer covers the
+  reply too. At 1200 baud a one-word read takes 75 ms and a two-word read
+  108 ms, so the stock bridge would only carry gap-free single-word transfers.
+  The SoC therefore builds the PHY and bridge by hand rather than with
+  `uart_name="crossover+uartbone"`. The cost: a stray byte that happens to be
+  a command code (0x01-0x04) can stall the bridge for up to 1 s, so the host's
+  connect sequence is break, probe, and on failure wait 1.1 s and probe again.
 
 ### 9.4 Device identity
 
