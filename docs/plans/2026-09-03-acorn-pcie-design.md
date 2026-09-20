@@ -1,7 +1,7 @@
 # Acorn PCIe test designs on welland.fpgas.online — design and phased plan
 
 **Date:** 2026-09-03
-**Status:** Approved 2026-09-03 (decisions in §7); implementation starts with Phase 0
+**Status:** Approved 2026-09-03 (decisions in §7); amended 2026-09-20 (§9); Phase 1 in progress
 **Scope:** The six Sqrl Acorn CLE-215+ hosts at Welland (`pi-sw2-p{29,43,44,46,47,48}`)
 first, then the PS1 Compute Blade hosts carrying Acorn CLE-101 boards
 (`pi14`, `pi16`, `pi20`; decided 2026-09-03). The blades differ in JTAG pins,
@@ -547,3 +547,84 @@ as decisions 11–13 in §7.
 - `litepcie/software/user/litepcie_util.c` — `info`, `flash_write`, `flash_reload`, `dma_test`
 - Issues #1 (IBUFDS_GTE2 fasm), #2 (Vivado Acorn PCIe bitstream), #4 (Compute Blade wiring)
 - fpgas.online-infra PR #32 (Pi 5 header UART), PR #48 (openFPGALoader rp1pio)
+
+## 9. Amendments, 2026-09-20
+
+Decided with Tim on 2026-09-20, while locking the pinout ahead of the boards
+being plugged back in one at a time. Where this section disagrees with §1–§7,
+this section wins; the older text is left in place so the change is visible.
+
+### 9.1 One P2 map on every carrier; the blades get their spare GPIOs
+
+The four P2 wires are identical on the Pi 5 HAT and the Compute Blade:
+K2 → GPIO15, J2 → GPIO14, J5 → GPIO3, H5 → GPIO4. JTAG differs
+(`10:9:11:8` on the Pi 5, `2:3:4:14` on the blade) because GPIO8–11 do not
+reach the blade's connectors.
+
+This replaces the Phase 3b statement "No spare GPIOs on the blade connector:
+`pcie-gpio` is reported as `SKIP`". On a blade J5 shares GPIO3 with TDO, H5
+shares GPIO4 with TCK and J2 shares GPIO14 with TMS, so:
+
+- The blade cable carries **470 Ω in series in the J5, H5 and J2 wires**, at
+  the housing end. The JTAG wire reaches the same header pin with no resistor,
+  so JTAG wins any contention and a design that drives those balls can no
+  longer lock out `openFPGALoader` until a PoE cycle.
+- `pcie-gpio` runs on the blades like anywhere else.
+- To confirm on the first blade: GPIO3 carries the blade's I²C pull-up, so J5
+  pulling low through 470 Ω must still read low on the Pi.
+
+Reference drawings, generated from one pin table:
+<http://ten64.welland.mithis.com/~tim/acorn-wiring/>.
+
+Measured on 2026-09-20 (passive pull-fight plus `--detect`): pi20 answers JTAG
+(`0x3631093`) with J2 floating on GPIO14 and GPIO15 driven; pi14 and pi16 do
+not answer and their TCK floats, so their P1 cables are still unmated; pi18 has
+no card. `openFPGALoader` leaves GPIO2/4/14 as driven outputs when it exits, so
+the harness sets them back to inputs after every JTAG operation.
+
+### 9.2 The UART carries a Wishbone bridge, not a raw BIOS console (changes R4)
+
+`uart_name="crossover+uartbone"`: UARTBone on K2/J2, the BIOS console on the
+crossover UART. The console is then reachable through **either** bridge
+(`litex_server --uart` or `litex_server --pcie`, then
+`litex_term crossover`), which is what lets one image be debugged over the
+serial pins when PCIe is down and over PCIe when the cable is missing.
+
+Consequences:
+
+- `test_uart_bios.py` and `test_ddr_bios.py` read the banner and memtest
+  result through `litex_term crossover`, not from `/dev/ttyAMA0` directly.
+- Decision 12 (golden keeps the CPU and UART) stands; golden gets the same
+  `crossover+uartbone` arrangement so a fallen-back board is still reachable.
+- New requirement **R6**: every CSR test that runs over PCIe (`pcie-info`,
+  `pcie-gpio`) also runs over UARTBone, so both bridges are proven, and the
+  spare GPIOs are proven readable and writable from both.
+
+### 9.3 Two baud rates
+
+- **Reset rate 1200 baud**, slow enough to bit-bang from any GPIO.
+- **Fast rate 921600 baud**, selected by the host writing the PHY's
+  `tuning_word` CSR over the 1200-baud link and then reopening its port.
+  921600 is what Raspberry Pi's own `btuart` uses for the PL011 when RTS/CTS
+  are not wired (`hciattach … 921600 noflow`); it uses 3000000 only with flow
+  control. The PL011's ceiling is `init_uart_clock/16` = 3 Mbaud, but a Pi
+  kernel engineer's analysis in raspberrypi/linux#4453 is that without flow
+  control the 16-byte RX FIFO overruns whenever interrupt latency exceeds the
+  fill time, so the spec ceiling is not a usable rate on a two-wire link.
+- **Back to 1200 on a UART break**: J2 held low for 50 ms or more resets the
+  tuning word. Chosen over an idle timeout because it is host-initiated, works
+  when bit-banged, and never drops an idle session. The longest legitimate low
+  at 1200 baud is a zero byte, 7.5 ms. On a blade a long low on TMS has the
+  same effect, which is harmless because every host session starts by
+  handshaking at 1200.
+- Read bursts over UARTBone are capped at 4 words (16 bytes) by the host
+  tools so a reply always fits the PL011's FIFO.
+- The rates above 921600 are measured and recorded on the first board, not
+  relied on.
+
+### 9.4 Device identity
+
+`pcie-info` cross-checks the DNA read from the `DNA` CSR against
+`openFPGALoader --read-dna` on hosts with 0.13 or newer, and the value is what
+ties a physical card to its label and its spreadsheet row. Every image is built
+for `cle-215+` (Welland, XC7A200T) and `cle-101` (PS1, XC7A100T).
