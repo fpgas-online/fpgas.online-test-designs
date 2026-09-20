@@ -580,7 +580,11 @@ Measured on 2026-09-20 (passive pull-fight plus `--detect`): pi20 answers JTAG
 (`0x3631093`) with J2 floating on GPIO14 and GPIO15 driven; pi14 and pi16 do
 not answer and their TCK floats, so their P1 cables are still unmated; pi18 has
 no card. `openFPGALoader` leaves GPIO2/4/14 as driven outputs when it exits, so
-the harness sets them back to inputs after every JTAG operation.
+the harness must set them back to inputs after every JTAG operation (Phase 2
+work: nothing in `verify_hardware.py` does it yet; the bring-up scripts did it by
+hand). pi20's cable has **no J5/H5 wires**: with the SoC loaded, neither end
+could move the other's pin in either direction, so `pcie-gpio` cannot pass on
+any blade until a cable is built to this pinout.
 
 ### 9.2 The UART carries a Wishbone bridge, not a raw BIOS console (changes R4)
 
@@ -612,7 +616,8 @@ Consequences:
   control the 16-byte RX FIFO overruns whenever interrupt latency exceeds the
   fill time, so the spec ceiling is not a usable rate on a two-wire link.
 - **Back to 1200 on a UART break**: J2 held low for 50 ms or more resets the
-  tuning word. Chosen over an idle timeout because it is host-initiated, works
+  PHY, the bridge and the tuning word (`designs/_shared/uartbone_break.py`).
+  Chosen over an idle timeout because it is host-initiated, works
   when bit-banged, and never drops an idle session. The longest legitimate low
   at 1200 baud is a zero byte, 7.5 ms. On a blade a long low on TMS has the
   same effect, which is harmless because every host session starts by
@@ -626,9 +631,11 @@ Consequences:
   reply too. At 1200 baud a one-word read takes 75 ms and a two-word read
   108 ms, so the stock bridge would only carry gap-free single-word transfers.
   The SoC therefore builds the PHY and bridge by hand rather than with
-  `uart_name="crossover+uartbone"`. The cost: a stray byte that happens to be
-  a command code (0x01-0x04) can stall the bridge for up to 1 s, so the host's
-  connect sequence is break, probe, and on failure wait 1.1 s and probe again.
+  `uart_name="crossover+uartbone"`. The cost: **any** stray byte starts a
+  command (`RECEIVE-CMD` takes whatever arrives and only checks it after the
+  length and four address bytes) and holds the bridge for up to 1 s. That is why
+  the break resets the bridge, why J2 has a pull-up, and why the host ends every
+  timed-out request with a break. 1 s covers a 28-word transfer at 1200 baud.
 
 ### 9.4 Device identity
 
@@ -636,3 +643,54 @@ Consequences:
 `openFPGALoader --read-dna` on hosts with 0.13 or newer, and the value is what
 ties a physical card to its label and its spreadsheet row. Every image is built
 for `cle-215+` (Welland, XC7A200T) and `cle-101` (PS1, XC7A100T).
+
+### 9.5 Review and first hardware, 2026-09-20 (pi20, cle-101)
+
+An independent review of `01-soc`/`02-host` and the first load onto hardware
+(pi20 at PS1, SRAM only, flash untouched) happened the same day. What they
+found, and what changed:
+
+| Finding | Evidence | Fix |
+|---|---|---|
+| PCIe never linked: LTSSM stuck in Detect.Quiet. The released `pcie-enumeration` Acorn bitstream behaves the same. | `sqrl_acorn_io.rpt` had `pcie_x1_rx_p` on D9 and `tx_p` on D7, not B10/B6: the Xilinx IP's XDC LOCs a x1 core's transceiver to `GTPE2_CHANNEL_X0Y7`, and a cell LOC beats a port LOC silently. | `add_gt_loc_constraints(["GTPE2_CHANNEL_X0Y6"])`; `_shared/pin_check.py` fails any build whose ports are not where the XDC put them. |
+| LiteX `DNA` core returned noise (`0x01fd7f283fffc21a` vs JTAG `0x0028e5c45e304854`). | Read over UARTBone at both baud rates; no bit alignment with the JTAG value. | `_shared/dna_reader.py` (1 MHz, mid-bit sampling, manual mode). Automatic, bit-banged and JTAG values now identical. |
+| A break reset the baud rate but not the bridge, so a dead session's write header swallowed the next probe and performed the write. | Reviewer's simulation; reproduced in `tests/test_uartbone_break.py`. | `_shared/uartbone_break.py`. On pi20: stale header, break, connect succeeds first time, scratch untouched. |
+| J2 had no pull-up. | Generated XDC. | `PULLUP TRUE` on `serial_rx`. |
+| Host tests never exercised a timeout, a lost baud change or a stale bridge; `send_break(0.1)` is really 250-500 ms. | Mutation run by the reviewer; `serialposix.py`. | Fake FPGA with `silent` / `ignore_tuning_write` / `stale_bytes`; the helper times its own break with `break_condition`. |
+
+Measured on pi20 with the fixed image (Vivado 2025.2, WNS +0.718 ns):
+
+- UARTBone: connect 0.44 s (break, probe at 1200, switch, probe at 921600);
+  5000 write+read round trips at 921600 with 0 errors, 0.29 ms each.
+- PCIe: Gen2 x1, `10ee:7021`, BAR0 1 MiB; 10000 scratch round trips through
+  `resource0` with 0 errors; ident, DNA and XADC identical over both bridges,
+  and each bridge sees the other's scratch write.
+
+**Hot reload needs PERST#, not just a rescan.** After `remove` → JTAG load →
+`rescan`, a LiteX design sits with LTSSM `0x2d` and never links; the vendor
+XDMA image in pi20's flash re-links on the same sequence. Re-probing the slot's
+root complex fixes it, and touches nothing else (the RP1 southbridge is a
+different platform device, PCI domain 0002):
+
+```console
+$ echo 1 | sudo tee /sys/bus/pci/devices/0001:01:00.0/remove
+$ sudo openFPGALoader --cable libgpiod --pins 2:3:4:14 <bitstream.bit>
+$ echo 1000110000.pcie | sudo tee /sys/bus/platform/drivers/brcm-pcie/unbind
+$ echo 1000110000.pcie | sudo tee /sys/bus/platform/drivers/brcm-pcie/bind
+```
+
+If the link is down when `bind` runs, the probe fails with "No such device" and
+the root port disappears until the next successful `bind`; that is recoverable
+(`openFPGALoader --reset` reloads the flash image, then `bind`). Not yet tried
+on a Pi 5 at Welland, where the platform device name may differ.
+
+Correction to §2 and to the hardware docs: `10ee:7011` on pi20 (and so probably
+on pi-sw2-p44) is the **vendor XDMA sample image** (x4-capable, two BARs), not
+"a LiteX design in flash". No LiteX PCIe design had linked on this fleet before
+2026-09-20.
+
+Still open from the review: CI does not run pytest (Phase 4); K2 is push-pull
+into GPIO15 with no series resistor, so the harness must make GPIO15 an input
+or `a4` before every load; on a blade, JTAG activity on TMS reaches the bridge
+as bytes (each costs at most one timeout, and the next `connect()` breaks first).
+

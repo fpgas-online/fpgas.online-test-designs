@@ -25,6 +25,7 @@ SHARED = [
     "identifier_mem",
     "uart",
     "uartbone",
+    "timer0",
     "dna",
     "xadc",
     "flash",
@@ -34,6 +35,7 @@ SHARED = [
     "pcie_msi",
     "pcie_dma0",
     "pcie_endpoint",
+    "leds",
 ]
 OPERATIONAL_ONLY = ["sdram", "ddrphy", "p2_gpio"]
 
