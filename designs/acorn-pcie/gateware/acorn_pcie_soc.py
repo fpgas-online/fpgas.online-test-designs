@@ -7,9 +7,10 @@ Reachable two ways, with the same CSRs behind both:
 
 - **PCIe** Gen2 x1, BAR0 -> Wishbone (`litex_server --pcie`), plus one DMA channel.
 - **UARTBone** on the P2 serial pins, K2 (FPGA TX) / J2 (FPGA RX). The link comes
-  out of reset at 1200 baud; the host writes `uartbone_phy_tuning_word` to move
-  it to 921600, and a UART break (J2 low for 50 ms) puts it back. A command has
-  1 s to complete, not LiteX's usual 100 ms, so multi-word transfers work at 1200.
+  out of reset at 1200 baud; the host writes the PHY's `tuning_word` CSR to move
+  it to 921600, and a UART break (J2 low for 50 ms) resets the PHY and the bridge,
+  which puts it back. A command has 1 s to complete, not LiteX's usual 100 ms, so
+  multi-word transfers work at 1200.
 
 The BIOS console is on the crossover UART, so `litex_term crossover` works
 through either bridge.
@@ -42,12 +43,10 @@ from litepcie.software import generate_litepcie_software
 from litex.build.generic_platform import IOStandard, Misc, Pins, Subsignal
 from litex.gen import *
 from litex.soc.cores.clock import S7IDELAYCTRL, S7PLL
-from litex.soc.cores.dna import DNA
 from litex.soc.cores.gpio import GPIOOut, GPIOTristate
 from litex.soc.cores.icap import ICAP
 from litex.soc.cores.led import LedChaser
 from litex.soc.cores.spi_flash import S7SPIFlash
-from litex.soc.cores.uart import RS232PHY, UARTBone
 from litex.soc.cores.xadc import XADC
 from litex.soc.integration.builder import Builder
 from litex.soc.integration.soc_core import SoCCore
@@ -56,7 +55,9 @@ from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
 from designs._shared.build_helpers import default_build_dir
-from designs._shared.uart_break import UARTBreakDetector
+from designs._shared.dna_reader import DNAReader
+from designs._shared.pin_check import check_build
+from designs._shared.uartbone_break import BreakResetUARTBone, tuning_word
 
 UART_RESET_BAUD = 1200
 UART_FAST_BAUD = 921600
@@ -64,8 +65,14 @@ UART_BREAK_S = 0.05
 # Stream2Wishbone abandons a command that has not finished within 100 ms of its
 # first byte. At 1200 baud a one-word read takes 75 ms and a two-word read 108 ms,
 # so the stock timeout would limit the slow link to gap-free single-word
-# transfers and leave a bit-banged host no slack. 1 s covers a 29-word read.
+# transfers and leave a bit-banged host no slack. 1 s covers a 28-word read.
 UARTBONE_TIMEOUT_S = 1.0
+
+# M.2 lane 0 (B10/A10, B6/A6) is GTP channel X0Y6. The Xilinx PCIe IP's own XDC pins a x1 core's
+# only lane to X0Y7, and a cell LOC beats a port LOC without an error, so unless the channel is
+# re-LOC'd the core ends up on D9/D7 (M.2 lane 3), which no x1 host wires. RHS Research's
+# LiteFury constraints give the same lane 0 = X0Y6 mapping.
+PCIE_X1_GT_LOC = "GTPE2_CHANNEL_X0Y6"
 
 _extension_io = [
     # The Pi 5 HAT and the Compute Blade both give the card a single Gen2 lane (lane 0).
@@ -90,11 +97,6 @@ _DDR3_MODULE = {
     "cle-215": MT41K512M16,
     "cle-101": MT41K256M16,
 }
-
-
-def tuning_word(baudrate, clk_freq):
-    """The RS232PHY phase-accumulator increment for `baudrate` (same formula as litex.soc.cores.uart)."""
-    return int((baudrate / clk_freq) * 2**32)
 
 
 # CRG ----------------------------------------------------------------------------------------------
@@ -175,27 +177,24 @@ class AcornPCIeSoC(SoCCore):
         self.add_constant("UARTBONE_TIMEOUT_MS", int(UARTBONE_TIMEOUT_S * 1000))
 
         # UARTBone on P2 (K2/J2) -------------------------------------------------------------------
-        # Built by hand rather than with uart_name="crossover+uartbone" for the longer
-        # command timeout: Stream2Wishbone sizes its only timer as 100e-3 * clk_freq.
+        # Not uart_name="crossover+uartbone": see designs/_shared/uartbone_break.py for what that lacks.
         serial = platform.request("serial")
-        self.uartbone = UARTBone(
-            phy=RS232PHY(serial, sys_clk_freq, UART_RESET_BAUD, with_dynamic_baudrate=True),
-            clk_freq=sys_clk_freq * UARTBONE_TIMEOUT_S / 100e-3,
+        self.uartbone = BreakResetUARTBone(
+            serial,
+            sys_clk_freq,
+            UART_RESET_BAUD,
+            timeout_s=UARTBONE_TIMEOUT_S,
+            break_s=UART_BREAK_S,
             address_width=self.bus.address_width,
         )
         self.bus.add_master(name="uartbone", master=self.uartbone.wishbone)
-
-        # UART break -> back to the reset baud rate ------------------------------------------------
-        self.uart_break = UARTBreakDetector(sys_clk_freq, break_s=UART_BREAK_S)
-        self.comb += self.uart_break.rx.eq(serial.rx)
-        self.sync += If(
-            self.uart_break.detected,
-            self.uartbone.phy._tuning_word.storage.eq(tuning_word(UART_RESET_BAUD, sys_clk_freq)),
-        )
+        # J2 floats whenever the host has GPIO14 as an input (and is TMS on a Compute Blade).
+        # Every stray byte costs the bridge a timeout, so hold the line at idle.
+        platform.add_platform_command("set_property PULLUP TRUE [get_ports {{serial_rx}}]")
 
         # XADC + DNA (R1) --------------------------------------------------------------------------
         self.xadc = XADC()
-        self.dna = DNA()
+        self.dna = DNAReader(sys_clk_freq)  # not litex.soc.cores.dna: see designs/_shared/dna_reader.py
         self.dna.add_timing_constraints(platform, sys_clk_freq, self.crg.cd_sys.clk)
 
         # DDR3 (R5a) -------------------------------------------------------------------------------
@@ -217,6 +216,7 @@ class AcornPCIeSoC(SoCCore):
         # PCIe Gen2 x1 -----------------------------------------------------------------------------
         self.comb += platform.request("pcie_clkreq_n").eq(0)
         self.pcie_phy = S7PCIEPHY(platform, platform.request("pcie_x1"), data_width=64, bar0_size=0x20000)
+        self.pcie_phy.add_gt_loc_constraints([PCIE_X1_GT_LOC])
         # address_width=64: the BCM2712 root complex maps host RAM above 4 GiB on the
         # bus and litepcie.ko sets its DMA mask from this at probe.
         self.add_pcie(phy=self.pcie_phy, ndmas=1, address_width=64, with_dma_loopback=True)
@@ -285,6 +285,8 @@ def main():
     builder_kwargs["output_dir"] = default_build_dir(__file__, board)
     builder = Builder(soc, **builder_kwargs)
     builder.build(**parser.toolchain_argdict, run=args.build)
+    if args.build and args.toolchain == "vivado":
+        check_build(builder.gateware_dir, soc.platform.name)
 
     if args.driver:
         generate_litepcie_software(soc, os.path.join(builder.output_dir, "driver"))
