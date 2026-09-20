@@ -156,7 +156,7 @@ Six Acorn CLE-215+ hosts, all Raspberry Pi 5 Rev 1.1, all on the S3300 switch
 (switch index 2) under the [VLAN-per-port scheme](site-welland.md#network-topology):
 hostname `pi-sw2-p<port>`, IP `10.21.2.<port>`. Probed live 2026-09-03; JTAG /
 P2 columns from the 2026-08-31 pin-ID survey in
-[acorn-pinmap.md](acorn-pinmap.md#measured-p2-wiring-welland-2026-08-31).
+[acorn-pinmap.md](https://docs.fpgas.online/en/latest/boards/acorn/wiring.html#measured-p2-wiring-on-raspberry-pi-5-hosts).
 
 | Host       | Port | IP         | RPi MAC           | RPi (rev)          | Flash contents        | JTAG (P1)          | P2 serial            | Camera | Old name |
 | ---------- | ---- | ---------- | ----------------- | ------------------ | --------------------- | ------------------ | -------------------- | ------ | -------- |
