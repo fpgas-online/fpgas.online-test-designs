@@ -8,7 +8,8 @@ Reachable two ways, with the same CSRs behind both:
 - **PCIe** Gen2 x1, BAR0 -> Wishbone (`litex_server --pcie`), plus one DMA channel.
 - **UARTBone** on the P2 serial pins, K2 (FPGA TX) / J2 (FPGA RX). The link comes
   out of reset at 1200 baud; the host writes `uartbone_phy_tuning_word` to move
-  it to 921600, and a UART break (J2 low for 50 ms) puts it back.
+  it to 921600, and a UART break (J2 low for 50 ms) puts it back. A command has
+  1 s to complete, not LiteX's usual 100 ms, so multi-word transfers work at 1200.
 
 The BIOS console is on the crossover UART, so `litex_term crossover` works
 through either bridge.
@@ -46,6 +47,7 @@ from litex.soc.cores.gpio import GPIOOut, GPIOTristate
 from litex.soc.cores.icap import ICAP
 from litex.soc.cores.led import LedChaser
 from litex.soc.cores.spi_flash import S7SPIFlash
+from litex.soc.cores.uart import RS232PHY, UARTBone
 from litex.soc.cores.xadc import XADC
 from litex.soc.integration.builder import Builder
 from litex.soc.integration.soc_core import SoCCore
@@ -59,6 +61,11 @@ from designs._shared.uart_break import UARTBreakDetector
 UART_RESET_BAUD = 1200
 UART_FAST_BAUD = 921600
 UART_BREAK_S = 0.05
+# Stream2Wishbone abandons a command that has not finished within 100 ms of its
+# first byte. At 1200 baud a one-word read takes 75 ms and a two-word read 108 ms,
+# so the stock timeout would limit the slow link to gap-free single-word
+# transfers and leave a bit-banged host no slack. 1 s covers a 29-word read.
+UARTBONE_TIMEOUT_S = 1.0
 
 _extension_io = [
     # The Pi 5 HAT and the Compute Blade both give the card a single Gen2 lane (lane 0).
@@ -151,9 +158,7 @@ class AcornPCIeSoC(SoCCore):
         self.crg = _CRG(platform, sys_clk_freq, with_ddr=with_ddr)
 
         # SoCCore ----------------------------------------------------------------------------------
-        kwargs["uart_name"] = "crossover+uartbone"
-        kwargs["uart_baudrate"] = UART_RESET_BAUD
-        kwargs["uart_with_dynamic_baudrate"] = True
+        kwargs["uart_name"] = "crossover"  # the BIOS console; reachable through either bridge
         kwargs["integrated_main_ram_size"] = 0
         SoCCore.__init__(
             self,
@@ -166,10 +171,22 @@ class AcornPCIeSoC(SoCCore):
         self.add_constant("UART_RESET_BAUD", UART_RESET_BAUD)
         self.add_constant("UART_FAST_BAUD", UART_FAST_BAUD)
         self.add_constant("UART_FAST_TUNING_WORD", tuning_word(UART_FAST_BAUD, sys_clk_freq))
+        self.add_constant("UARTBONE_TIMEOUT_MS", int(UARTBONE_TIMEOUT_S * 1000))
+
+        # UARTBone on P2 (K2/J2) -------------------------------------------------------------------
+        # Built by hand rather than with uart_name="crossover+uartbone" for the longer
+        # command timeout: Stream2Wishbone sizes its only timer as 100e-3 * clk_freq.
+        serial = platform.request("serial")
+        self.uartbone = UARTBone(
+            phy=RS232PHY(serial, sys_clk_freq, UART_RESET_BAUD, with_dynamic_baudrate=True),
+            clk_freq=sys_clk_freq * UARTBONE_TIMEOUT_S / 100e-3,
+            address_width=self.bus.address_width,
+        )
+        self.bus.add_master(name="uartbone", master=self.uartbone.wishbone)
 
         # UART break -> back to the reset baud rate ------------------------------------------------
         self.uart_break = UARTBreakDetector(sys_clk_freq, break_s=UART_BREAK_S)
-        self.comb += self.uart_break.rx.eq(platform.lookup_request("serial").rx)
+        self.comb += self.uart_break.rx.eq(serial.rx)
         self.sync += If(
             self.uart_break.detected,
             self.uartbone.phy._tuning_word.storage.eq(tuning_word(UART_RESET_BAUD, sys_clk_freq)),
@@ -238,7 +255,7 @@ def main():
     args = parser.parse_args()
 
     soc_kwargs = parser.soc_argdict
-    for owned in ("uart_name", "uart_baudrate", "uart_with_dynamic_baudrate", "integrated_main_ram_size", "ident"):
+    for owned in ("uart_name", "integrated_main_ram_size", "ident"):
         soc_kwargs.pop(owned, None)
     soc_kwargs.pop("ident_version", None)
 
