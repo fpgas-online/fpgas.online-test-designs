@@ -220,6 +220,18 @@ class AcornPCIeSoC(SoCCore):
         # bus and litepcie.ko sets its DMA mask from this at probe.
         self.add_pcie(phy=self.pcie_phy, ndmas=1, address_width=64, with_dma_loopback=True)
         platform.add_period_constraint(self.crg.cd_sys.clk, 1e9 / sys_clk_freq)
+        if toolchain == "vivado":
+            # add_pcie() already declares sys and pcie asynchronous, but LiteX's XDC is read at
+            # synthesis, when the Xilinx PCIe IP is a black box with no clocks in it: the command
+            # matches nothing ([Vivado 12-4739]) and is never retried, so every CDC path gets timed
+            # and the placer chases ~80 false failures. Say it again once the IP is linked, and
+            # cover all the PHY's MMCM outputs (clk125/clk250/userclk), not only the pcie domain.
+            platform.toolchain.pre_placement_commands.append(
+                "set_clock_groups -asynchronous"
+                " -group [get_clocks -include_generated_clocks {{clk200_p sys_clk}}]"
+                " -group [get_clocks -include_generated_clocks -of_objects"
+                " [get_pins -hierarchical -filter {{NAME =~ *gtpe2_channel_i/TXOUTCLK}}]]"
+            )
 
         # Flash + ICAP: gateware update over PCIe (R2) ---------------------------------------------
         self.icap = ICAP()
