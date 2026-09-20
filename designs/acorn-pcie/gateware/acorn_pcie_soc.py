@@ -160,6 +160,7 @@ class AcornPCIeSoC(SoCCore):
         # SoCCore ----------------------------------------------------------------------------------
         kwargs["uart_name"] = "crossover"  # the BIOS console; reachable through either bridge
         kwargs["integrated_main_ram_size"] = 0
+        kwargs.setdefault("integrated_rom_size", 0x20000)  # the parser's default; needed when built from Python
         SoCCore.__init__(
             self,
             platform,
