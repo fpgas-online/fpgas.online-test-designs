@@ -144,11 +144,13 @@ class Flash:
         return (value & ((1 << bits) - 1)).to_bytes(len(data), "big")
 
     def _wake(self):
-        # The SoC resets flash_cs_n to 0, so the part has sat selected since configuration and takes
-        # nothing in until CS has risen once (the first RDID on p48 read back as all ones).
+        # STARTUPE2 does not pass the first three USRCCLKO edges after configuration on to CCLK, so the first
+        # transfer reaches the flash three clocks short (on p48 the first RDID after every load read all ones).
+        # Spend them with the flash deselected, where clocks mean nothing to it. The SoC resets flash_cs_n to
+        # 0, so deselecting is a real step and not a formality.
         if not self._woken:
             self.bus.write(FLASH_CS_N, 1)
-            time.sleep(0.001)
+            self._shift(b"\xff")
             self._woken = True
 
     def transaction(self, tx, rx_len=0):

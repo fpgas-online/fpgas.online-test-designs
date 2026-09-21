@@ -5,8 +5,10 @@ CSRs and the separate `flash_cs_n` GPIO, and shifts every transfer through a
 model of the Acorn's S25FL256S. The model has the behaviours that make a flash
 writer go wrong on the real part:
 
-  * the SoC resets `flash_cs_n` to 0, so the flash has been selected since
-    configuration and ignores everything until it has seen CS rise;
+  * STARTUPE2 swallows the first three clock edges after configuration, so the
+    first transfer reaches the flash three clocks short and reads back as ones
+    (seen on pi-sw2-p48 after every fresh load, whatever CS did beforehand);
+  * the SoC resets `flash_cs_n` to 0, so the flash starts out selected;
   * programming can only clear bits;
   * the first 128 KiB is overlaid by 4 KiB parameter sectors, which a 64 KiB
     sector erase does not touch;
@@ -37,7 +39,6 @@ class FakeS25FL:
         self.wel = False
         self.busy_polls = 0
         self.sr_errors = 0
-        self.seen_cs_rise = False
         self.opcodes = []
         self.erases = []
         self.erase_fails_at = None
@@ -53,16 +54,13 @@ class FakeS25FL:
         self._tx = []
 
     def deselect(self):
-        if self.seen_cs_rise and self._rx:
+        if self._rx:
             self._execute(bytes(self._rx))
-        self.seen_cs_rise = True
         self._rx = bytearray()
 
     # -- one byte in, one byte out -------------------------------------------------------------
 
     def exchange(self, byte):
-        if not self.seen_cs_rise:
-            return 0xFF
         self._rx.append(byte)
         if len(self._rx) == 1:
             self.opcodes.append(byte)
@@ -129,6 +127,7 @@ class FakeBus:
         self.mosi = 0
         self.miso = 0
         self.writes = []
+        self.swallowed_clocks = 3  # STARTUPE2, once per configuration
 
     def read(self, addr):
         if addr == sf.SPI_STATUS:
@@ -156,7 +155,16 @@ class FakeBus:
         elif addr == sf.SPI_CONTROL:
             bits = value >> 8
             assert value & 1 and bits % 8 == 0 and 8 <= bits <= 40
-            assert self.cs_n == 0, "clocked the flash while it was deselected"
+            if self.swallowed_clocks:
+                # The flash gets fewer clocks than the master sent: if it is selected, that transaction is lost.
+                self.swallowed_clocks = 0
+                if self.cs_n == 0:
+                    self.flash.exchange(0xFF)  # something that is not the opcode that was sent
+                self.miso = (1 << bits) - 1
+                return
+            if self.cs_n:
+                self.miso = (1 << bits) - 1  # nobody is driving MISO
+                return
             out = (self.mosi >> (40 - bits)).to_bytes(bits // 8, "big")  # SPIMaster shifts from the top bit
             self.miso = int.from_bytes(bytes(self.flash.exchange(b) for b in out), "big")
         else:
@@ -188,7 +196,7 @@ def bus(chip):
     return FakeBus(chip)
 
 
-def test_identify_works_from_the_reset_state_where_the_flash_is_already_selected(bus):
+def test_identify_works_straight_after_configuration(bus):
     info = sf.Flash(bus).identify()
     assert info["rdid"] == RDID.hex()
     assert info["size_bytes"] == 32 << 20
