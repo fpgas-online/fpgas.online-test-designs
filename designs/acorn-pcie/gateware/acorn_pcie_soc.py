@@ -253,7 +253,8 @@ class AcornPCIeSoC(SoCCore):
         self.icap = ICAP()
         self.icap.add_reload()
         self.icap.add_timing_constraints(platform, sys_clk_freq, self.crg.cd_sys.clk)
-        self.flash_cs_n = GPIOOut(platform.request("flash_cs_n"))
+        # reset=1: leave the flash deselected until a host asks for it, not selected from configuration onwards.
+        self.flash_cs_n = GPIOOut(platform.request("flash_cs_n"), reset=1)
         self.flash = S7SPIFlash(platform.request("flash"), sys_clk_freq, 25e6)
 
         # P2 spare GPIOs (R3): inputs out of reset, so they never fight the Pi or JTAG -------------
