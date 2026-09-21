@@ -74,6 +74,14 @@ UARTBONE_TIMEOUT_S = 1.0
 # LiteFury constraints give the same lane 0 = X0Y6 mapping.
 PCIE_X1_GT_LOC = "GTPE2_CHANNEL_X0Y6"
 
+# PCI subsystem IDs: which board this image was built for. Vendor:device stays LitePCIe's 10ee:7021 so that
+# litepcie.ko binds; the subsystem pair is where PCI expects a board to be named under a generic controller,
+# and it can be read from config space (lspci, sysfs) without mapping a BAR. The values are the vendor:device
+# pairs SQRL's factory images were seen to use (021f at Welland, 0101 at PS1); those images leave their own
+# subsystem fields at 0000:0000. No CLE-215 has been seen, so that variant keeps the Xilinx default, not a guess.
+PCIE_SUBSYSTEM_VENDOR_ID = 0x1E24  # Squirrels Research Labs
+PCIE_SUBSYSTEM_ID = {"cle-215+": 0x021F, "cle-101": 0x0101}
+
 _extension_io = [
     # The Pi 5 HAT and the Compute Blade both give the card a single Gen2 lane (lane 0).
     (
@@ -217,6 +225,13 @@ class AcornPCIeSoC(SoCCore):
         self.comb += platform.request("pcie_clkreq_n").eq(0)
         self.pcie_phy = S7PCIEPHY(platform, platform.request("pcie_x1"), data_width=64, bar0_size=0x20000)
         self.pcie_phy.add_gt_loc_constraints([PCIE_X1_GT_LOC])
+        if variant in PCIE_SUBSYSTEM_ID:
+            self.pcie_phy.update_config(
+                {
+                    "Subsystem_Vendor_ID": f"{PCIE_SUBSYSTEM_VENDOR_ID:04X}",
+                    "Subsystem_ID": f"{PCIE_SUBSYSTEM_ID[variant]:04X}",
+                }
+            )
         # address_width=64: the BCM2712 root complex maps host RAM above 4 GiB on the
         # bus and litepcie.ko sets its DMA mask from this at probe.
         self.add_pcie(phy=self.pcie_phy, ndmas=1, address_width=64, with_dma_loopback=True)
