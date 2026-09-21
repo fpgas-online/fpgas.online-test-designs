@@ -37,7 +37,7 @@ SHARED = [
     "pcie_endpoint",
     "leds",
 ]
-OPERATIONAL_ONLY = ["sdram", "ddrphy", "p2_gpio"]
+OPERATIONAL_ONLY = ["sdram", "ddrphy", "p2_gpio", "pcie_dram"]
 
 
 def _csr_origins(golden, variant="cle-215+"):

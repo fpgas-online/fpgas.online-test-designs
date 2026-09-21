@@ -56,6 +56,7 @@ from migen import *
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
 from designs._shared.build_helpers import default_build_dir
 from designs._shared.dna_reader import DNAReader
+from designs._shared.pcie_dram_bridge import PCIeDRAMBridge
 from designs._shared.pin_check import check_build
 from designs._shared.uartbone_break import BreakResetUARTBone, tuning_word
 
@@ -248,6 +249,19 @@ class AcornPCIeSoC(SoCCore):
                 " -group [get_clocks -include_generated_clocks -of_objects"
                 " [get_pins -hierarchical -filter {{NAME =~ *gtpe2_channel_i/TXOUTCLK}}]]"
             )
+
+        # Pi RAM <-> DDR3 over DMA (R5b) -----------------------------------------------------------
+        if with_ddr:
+            # The far end of LitePCIe's DMA streams. With the DMA's loopback enabled the streams turn round
+            # inside LitePCIe and never get here, so `litepcie_util dma_test` still works as it always has.
+            self.pcie_dram = PCIeDRAMBridge(
+                self.sdram.crossbar.get_port(mode="write", data_width=64),
+                self.sdram.crossbar.get_port(mode="read", data_width=64),
+            )
+            self.comb += [
+                self.pcie_dma0.source.connect(self.pcie_dram.sink),
+                self.pcie_dram.source.connect(self.pcie_dma0.sink),
+            ]
 
         # Flash + ICAP: gateware update over PCIe (R2) ---------------------------------------------
         self.icap = ICAP()
