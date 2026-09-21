@@ -40,11 +40,12 @@ SHARED = [
     "pcie_endpoint",
     "leds",
 ]
-OPERATIONAL_ONLY = ["sdram", "ddrphy", "p2_gpio", "dram_generator", "dram_checker", "p2_serial"]
+OPERATIONAL_ONLY = ["sdram", "ddrphy", "p2_gpio", "dram_generator", "dram_checker", "p2_serial", "pcie_dram"]
 
 # The slot of every module, as released. Slots 0-17 are in release
 # vivado-bitstreams-acorn-pcie-20260923-ge48a750c8303 (15-17 were unpinned there,
-# and sat where these pins keep them); 18-20 came with the DRAM BIST and the P2 switch.
+# and sat where these pins keep them); 18-20 came with the DRAM BIST and the P2 switch,
+# 21 with the DMA<->DDR3 bridge.
 SLOTS = {
     "ctrl": 0,
     "identifier_mem": 1,
@@ -67,6 +68,7 @@ SLOTS = {
     "dram_generator": 18,
     "dram_checker": 19,
     "p2_serial": 20,
+    "pcie_dram": 21,
 }
 CSR_BASE = 0xF0000000
 PAGING = 0x800
