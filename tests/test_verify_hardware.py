@@ -13,7 +13,7 @@ def test_gateway_host_uses_proxyjump_and_login_user():
     cmd = vh._build_ssh_cmd("welland-sw2-p29", "echo ok", as_root=False)
     assert cmd == [
         "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15",
-        "-o", "ProxyJump=tim@10.21.0.1",
+        "-o", "ProxyJump=pi@tweed.welland.mithis.com",
         "pi@10.21.2.29", "echo ok",
     ]
 
