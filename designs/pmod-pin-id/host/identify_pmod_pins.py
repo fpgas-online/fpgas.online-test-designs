@@ -28,7 +28,14 @@ import subprocess
 import sys
 import time
 
-import gpiod
+# gpiod only exists on the Raspberry Pi (it wraps libgpiod). Guard the import
+# so the board mapping + validation logic in this module can be imported and
+# unit-tested on a development machine without the native library present.
+# Any code path that actually reads GPIO raises a clear error if gpiod is None.
+try:
+    import gpiod
+except ImportError:  # pragma: no cover - exercised only off-target
+    gpiod = None
 
 # -- PMOD HAT GPIO definitions ------------------------------------------------
 
@@ -58,6 +65,54 @@ for port_name, gpios in PMOD_HAT_PORTS.items():
     for gpio, phys in zip(gpios, pmod_phys):
         HAT_GPIO_LABELS[gpio] = f"HAT {port_name} pin {phys:02d}"
 
+# -- Board pin maps (for --board validation mode) ------------------------------
+
+# Expected RPi-BCM-GPIO -> FPGA-ball mappings used by `--board` mode to *verify*
+# physical wiring (not just discover it). Each pin is (gpio, fpga_ball, label).
+# When the FPGA runs the matching pmod_pin_id bitstream, the ball connected to
+# each GPIO transmits its own name, so a correct decode == correct wiring.
+BOARDS = {
+    # Sqrl Acorn CLE-215+ / LiteFury P2 header, wired to the RPi 5 GPIO header
+    # via an adapted Pico-EZmate cable with the fleet's null-modem crossover:
+    # FPGA TX (K2) lands on the Pi's RXD0 (GPIO15) and FPGA RX (J2) on the
+    # Pi's TXD0 (GPIO14). See docs/hardware/acorn-pinmap.md, "Measured P2
+    # wiring (Welland, 2026-08-31)".
+    "acorn": {
+        "description": "Acorn CLE-215+ / LiteFury P2 header -> RPi 5 GPIO",
+        "pins": [
+            (15, "K2", "P2.1 Serial TX -> Pi RXD0"),
+            (14, "J2", "P2.2 Serial RX <- Pi TXD0"),
+            (3, "J5", "P2.3 Spare GPIO 0"),
+            (4, "H5", "P2.4 Spare GPIO 1"),
+        ],
+    },
+}
+
+
+def evaluate_board(board_name, results):
+    """Validate decoded pin labels against a board's expected wiring.
+
+    *results* maps ``gpio -> decoded_label`` as produced by :func:`scan_gpios`
+    (a clean ball name like ``"K2"``, a ``"?garbled"`` string, or ``None`` for
+    no signal). Returns ``(all_ok, rows)`` where each row is a dict with
+    ``gpio``, ``label``, ``expected``, ``got`` and ``ok``. A pin passes only on
+    an exact clean match — garbled and missing decodes both fail, because a
+    miswired or unprogrammed board must not be reported as good.
+    """
+    spec = BOARDS[board_name]
+    rows = []
+    all_ok = True
+    for gpio, expected, label in spec["pins"]:
+        got = results.get(gpio)
+        ok = got == expected
+        if not ok:
+            all_ok = False
+        rows.append(
+            {"gpio": gpio, "label": label, "expected": expected, "got": got, "ok": ok}
+        )
+    return all_ok, rows
+
+
 # -- UART bit-bang parameters --------------------------------------------------
 
 BAUD_RATE = 1200
@@ -77,6 +132,11 @@ _GPIOD_V2 = hasattr(gpiod, "request_lines")
 
 def detect_gpio_chip():
     """Find the gpiochip device for RPi GPIO by label."""
+    if gpiod is None:
+        raise RuntimeError(
+            "python3-libgpiod (the `gpiod` module) is not installed. "
+            "Pin scanning requires it; install it on the Raspberry Pi."
+        )
     for chip_path in sorted(pathlib.Path("/dev").glob("gpiochip*")):
         try:
             chip = gpiod.Chip(str(chip_path))
@@ -94,7 +154,13 @@ def detect_gpio_chip():
 # -- Single-pin GPIO reader ---------------------------------------------------
 
 class GpioReader:
-    """Read a single GPIO pin using gpiod (v1 or v2)."""
+    """Capture edge events on a single GPIO pin using gpiod (v1 or v2).
+
+    Edge events carry kernel timestamps, so the UART decode is immune to
+    Python scheduling jitter. (A polling sampler was used before; on the
+    Pi 5 Acorn hosts it mis-framed bytes on some pins while gpiomon on the
+    same line showed a clean 1200-baud signal, 2026-09-03.)
+    """
 
     def __init__(self, gpio_num, chip_path):
         self.gpio_num = gpio_num
@@ -111,6 +177,7 @@ class GpioReader:
                 config={
                     (self.gpio_num,): gpiod.LineSettings(
                         direction=gpiod.line.Direction.INPUT,
+                        edge_detection=gpiod.line.Edge.BOTH,
                         bias=gpiod.line.Bias.PULL_UP,
                     ),
                 },
@@ -120,16 +187,35 @@ class GpioReader:
             self._line = self._chip.get_line(self.gpio_num)
             self._line.request(
                 consumer="pmod-pin-id",
-                type=gpiod.LINE_REQ_DIR_IN,
+                type=gpiod.LINE_REQ_EV_BOTH_EDGES,
                 flags=gpiod.LINE_REQ_FLAG_BIAS_PULL_UP,
             )
 
-    def read(self):
-        if _GPIOD_V2:
-            val = self._request.get_values()
-            return 1 if val[0] == gpiod.line.Value.ACTIVE else 0
-        else:
-            return self._line.get_value()
+    def capture_edges(self, duration_s):
+        """Collect edge events for *duration_s*.
+
+        Returns a list of ``(level_after_edge, timestamp_ns)`` tuples in
+        time order, where level is 1 for a rising edge and 0 for a falling one.
+        """
+        events = []
+        deadline = time.monotonic() + duration_s
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            if _GPIOD_V2:
+                if not self._request.wait_edge_events(remaining):
+                    break
+                for ev in self._request.read_edge_events():
+                    rising = ev.event_type == gpiod.EdgeEvent.Type.RISING_EDGE
+                    events.append((1 if rising else 0, ev.timestamp_ns))
+            else:
+                if not self._line.event_wait(sec=int(remaining), nsec=int((remaining % 1) * 1e9)):
+                    break
+                ev = self._line.event_read()
+                rising = ev.type == gpiod.LineEvent.RISING_EDGE
+                events.append((1 if rising else 0, ev.sec * 1_000_000_000 + ev.nsec))
+        return events
 
     def close(self):
         if _GPIOD_V2:
@@ -145,79 +231,72 @@ class GpioReader:
                 self._chip = None
 
 
-# -- UART bit-bang decoder -----------------------------------------------------
+# -- UART decoder (from edge timestamps) --------------------------------------
 
-def receive_byte(reader, timeout=0.1):
-    """Receive one UART byte (8N1) by bit-banging.
+def _level_at(events, i, ts):
+    """Line level at time *ts*, given that events[i] is the first edge at or
+    before the frame start. The level before an edge is its complement."""
+    level = 1 - events[i][0]
+    j = i
+    while j < len(events) and events[j][1] <= ts:
+        level = events[j][0]
+        j += 1
+    return level
 
-    Properly synchronizes to the HIGH→LOW transition (start bit edge)
-    to avoid sampling mid-byte. Samples 8 data bits at the center of
-    each bit period.
 
-    Returns the decoded byte, or None on timeout.
+def _decode_from(events, start, bit_ns):
+    """Decode frames beginning the search at events[start].
+
+    A falling edge is tried as a start bit; if the stop bit reads low the
+    frame is rejected and the search moves to the very next edge (standard
+    UART resynchronisation), otherwise the frame is kept and the search
+    resumes after it. Without the reject-and-step rule a capture that begins
+    mid-byte can alias onto the wrong falling edge of a periodic message and
+    stay there for the whole capture.
     """
-    deadline = time.monotonic() + timeout
-
-    # First wait for line to be HIGH (idle/stop-bit state).
-    # This ensures we don't mistake a mid-byte LOW for a start bit.
-    while reader.read() == 0:
-        if time.monotonic() > deadline:
-            return None
-
-    # Now wait for the HIGH→LOW transition (actual start bit edge).
-    while reader.read() != 0:
-        if time.monotonic() > deadline:
-            return None
-
-    # We detected the falling edge. Wait half a bit period to reach
-    # the center of the start bit, then verify it's still low.
-    start_edge = time.monotonic()
-    target = start_edge + BIT_PERIOD * 0.5
-    while time.monotonic() < target:
-        pass
-    if reader.read() != 0:
-        return None  # False start (glitch)
-
-    # Sample 8 data bits at the center of each bit period.
-    byte_val = 0
-    for bit_idx in range(8):
-        target = start_edge + BIT_PERIOD * (1.5 + bit_idx)
-        while time.monotonic() < target:
-            pass
-        if reader.read():
-            byte_val |= (1 << bit_idx)
-
-    # Wait through the stop bit.
-    target = start_edge + BIT_PERIOD * 9.5
-    while time.monotonic() < target:
-        pass
-
-    return byte_val
+    frames = []
+    i = start
+    while i < len(events):
+        level, t0 = events[i]
+        if level != 0:  # only a falling edge can start a frame
+            i += 1
+            continue
+        byte = 0
+        for k in range(8):
+            byte |= _level_at(events, i, t0 + (1.5 + k) * bit_ns) << k
+        stop_ok = _level_at(events, i, t0 + 9.5 * bit_ns) == 1
+        if not stop_ok:
+            frames.append((byte, False))
+            i += 1
+            continue
+        frames.append((byte, True))
+        frame_end = t0 + 9.5 * bit_ns
+        while i < len(events) and events[i][1] < frame_end:
+            i += 1
+    return frames
 
 
-def receive_label(reader, max_bytes=20, timeout=0.2):
-    """Receive bytes until \\n is seen or timeout, return decoded string.
+def decode_edges(events, baud=BAUD_RATE, max_start_candidates=12):
+    """Decode 8N1 frames from ``(level_after_edge, timestamp_ns)`` edges.
 
-    Returns the label string (excluding \\r\\n), or None if nothing received.
+    The capture may begin at any phase of the transmitted message, and some
+    wrong phases still yield frames with a plausible stop bit. So the decode
+    is attempted from each of the first *max_start_candidates* falling edges
+    and the attempt with the most clean frames (fewest rejected ones) wins.
+    Returns ``[(byte, stop_bit_ok)]`` for the winning attempt.
     """
-    buf = []
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        remaining = deadline - time.monotonic()
-        b = receive_byte(reader, timeout=remaining)
-        if b is None:
-            break
-        if b == ord('\n'):
-            # Strip trailing \r if present.
-            text = bytes(buf).decode('ascii', errors='replace').rstrip('\r')
-            return text
-        buf.append(b)
-        if len(buf) >= max_bytes:
-            break
-    # If we got some bytes but no newline, return what we have.
-    if buf:
-        return bytes(buf).decode('ascii', errors='replace').rstrip('\r')
-    return None
+    bit_ns = 1e9 / baud
+    starts = [i for i, (level, _t) in enumerate(events) if level == 0][:max_start_candidates]
+    best = []
+    best_score = None
+    for start in starts:
+        frames = _decode_from(events, start, bit_ns)
+        good = sum(1 for _b, ok in frames if ok)
+        bad = len(frames) - good
+        score = (good, -bad)
+        if best_score is None or score > best_score:
+            best, best_score = frames, score
+    return best
 
 
 # Expected label format: FPGA pin names are 2-4 alphanumeric characters.
@@ -231,30 +310,40 @@ def is_valid_label(label):
     return bool(_LABEL_PATTERN.match(label))
 
 
-def identify_pin(reader, attempts=10):
-    """Read the pin label, trying multiple times for reliability.
+def label_from_frames(frames):
+    """Turn decoded frames into the pin label the FPGA is transmitting.
 
-    Only accepts labels matching the expected format (e.g. "JA01").
-    Returns the label string if consistently decoded, or None.
+    Lines are split on ``\\n`` with a trailing ``\\r`` stripped. Returns the
+    most common *valid* label, a ``"?<raw>"`` marker if there was signal but
+    no valid label (so a miswired or unclocked pin is visible), or ``None``
+    when nothing was received.
     """
-    valid_results = []
-    raw_results = []
-    for _ in range(attempts):
-        label = receive_label(reader)
-        if label:
-            raw_results.append(label)
-            if is_valid_label(label):
-                valid_results.append(label)
-    if valid_results:
-        from collections import Counter
-        most_common, _count = Counter(valid_results).most_common(1)[0]
-        return most_common
-    # Return raw data for debugging if we got signal but no valid decode.
-    if raw_results:
-        from collections import Counter
-        most_common, _count = Counter(raw_results).most_common(1)[0]
-        return f"?{most_common}"  # Prefix with ? to flag as unvalidated
+    from collections import Counter
+
+    text = bytes(b for b, _ok in frames).decode("latin-1")
+    lines = [ln.rstrip("\r") for ln in text.split("\n")]
+    lines = [ln for ln in lines if ln]
+    valid = [ln for ln in lines if is_valid_label(ln)]
+    if valid:
+        return Counter(valid).most_common(1)[0][0]
+    if lines:
+        return "?" + Counter(lines).most_common(1)[0][0]
     return None
+
+
+# 1200 baud, "XNN\r\n" is 5 frames = 50 bit periods = ~42 ms per repeat;
+# 250 ms captures at least five repeats for the vote.
+CAPTURE_SECONDS = 0.25
+
+
+def identify_pin(reader, capture_s=CAPTURE_SECONDS):
+    """Capture edges for *capture_s* and return the transmitted label.
+
+    Returns the label string (e.g. "K2"), a "?<raw>" marker for a garbled
+    signal, or None when the line is silent.
+    """
+    events = reader.capture_edges(capture_s)
+    return label_from_frames(decode_edges(events))
 
 
 # -- Scanner -------------------------------------------------------------------
@@ -349,11 +438,33 @@ def release_kernel_gpio_drivers():
         print("No kernel modules needed unloading.")
 
 
+# -- Board validation output ---------------------------------------------------
+
+def print_validation(board_name, rows):
+    """Print a per-pin expected-vs-decoded table for `--board` mode."""
+    spec = BOARDS[board_name]
+    print(f"\n=== Wiring check: {board_name} ({spec['description']}) ===\n")
+    print("| RPi GPIO | Header pin         | Expect | Got    | OK |")
+    print("|----------|--------------------|--------|--------|----|")
+    for r in rows:
+        got = r["got"] if r["got"] is not None else "(none)"
+        mark = "✓" if r["ok"] else "✗"
+        print(
+            f"| GPIO{r['gpio']:<4d} | {r['label']:<18s} | {r['expected']:<6s}"
+            f" | {got:<6s} | {mark}  |"
+        )
+
+
 # -- Main ----------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(
         description="Identify FPGA pins via UART transmission at 1200 baud"
+    )
+    parser.add_argument(
+        "--board", choices=sorted(BOARDS),
+        help="Validate wiring for a known board against its expected GPIO->ball "
+             "map (prints RESULT: PASS/FAIL). Overrides --gpios/--hat-port.",
     )
     parser.add_argument(
         "--gpios", type=int, nargs="+",
@@ -369,7 +480,9 @@ def main():
     )
     args = parser.parse_args()
 
-    if args.gpios:
+    if args.board:
+        gpio_list = [gpio for gpio, _ball, _label in BOARDS[args.board]["pins"]]
+    elif args.gpios:
         gpio_list = args.gpios
     elif args.hat_port:
         gpio_list = PMOD_HAT_PORTS[args.hat_port]
@@ -388,6 +501,17 @@ def main():
     print()
 
     results = scan_gpios(gpio_list, chip_path)
+
+    # `--board` mode: validate against the expected wiring and emit a single
+    # RESULT: marker so verify_hardware.py can score it pass/fail.
+    if args.board:
+        all_ok, rows = evaluate_board(args.board, results)
+        print_validation(args.board, rows)
+        n_ok = sum(1 for r in rows if r["ok"])
+        print(f"\n{n_ok}/{len(rows)} pins match expected wiring.")
+        print(f"RESULT: {'PASS' if all_ok else 'FAIL'}")
+        sys.exit(0 if all_ok else 1)
+
     print_mapping_table(results)
 
     valid_count = sum(1 for v in results.values() if v and not v.startswith("?"))

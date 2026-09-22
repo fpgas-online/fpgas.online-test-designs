@@ -83,6 +83,13 @@ known-first-party = ["designs"]
 quote-style = "double"
 docstring-code-format = true
 
+[tool.pytest.ini_options]
+# Only the pure host-side unit tests. The other designs/*/host/test_*.py are
+# hardware test *scripts* (they import gpiod, take CLI args, define
+# fixture-less test_* functions) and must not be collected.
+testpaths = ["tests", "designs/pmod-pin-id/host"]
+python_files = ["test_*.py"]
+
 [tool.uv]
 # Pin migen to git main for Python 3.12+ bytecode tracer compatibility.
 override-dependencies = [

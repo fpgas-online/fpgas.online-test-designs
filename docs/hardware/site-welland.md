@@ -64,25 +64,30 @@ tables, and live probes of every host below on 2026-09-03.
 | Domain     | fpgas.welland.mithis.com                                                             |
 | PCI        | 2× Intel 82574L GbE, Tundra PCI bridge, Matrox G200eW                                |
 | NFS roots  | `/srv/nfs/rpi/bookworm/{boot,root}` (armhf + arm64 kernels, `overlayroot=tmpfs`); apt packages `fpgas-online-tt` 0.0.post52, `fpgas-online-tt-demos` 0.0.post21, `fpgas-online-cam` 0.0.post43, `openfpgaloader` 0.10.0 |
-| SSH access | from ten64: `ssh -i ~/.ssh/fpgas.online-ansible -o IdentitiesOnly=yes -o IdentityAgent=none ansible@10.99.21.2` (the automation key; verified 2026-09-03) |
+| SSH access | operators: `ssh tim@10.21.0.1` / `ssh carl@…` over WireGuard (infra `operators` role, passwordless sudo). Automation from ten64: `ssh -i ~/.ssh/fpgas.online-ansible -o IdentitiesOnly=yes -o IdentityAgent=none ansible@10.99.21.2`. Jump only: `pi@tweed.welland.mithis.com` (below) |
 
 Tweed does **not** host any FPGA boards directly. It serves as the network gateway and PXE boot server for the RPi fleet. The RPis are on the `eth-local` (10.21.0.0/16) network.
 
 **SSH to RPis**: the Pis are not routable from outside tweed (per-port VLANs;
-they do not even answer pings from ten64). Jump through tweed as the `ansible`
-user with `ProxyCommand`, then `pi@10.21.<switch>.<port>` (the shared Pi
-password is printed in the ssh banner and is public by design):
+they do not even answer pings from ten64). Jump through tweed's restricted
+`pi` account with `ProxyJump`, then `pi@10.21.<switch>.<port>` (the shared Pi
+password is printed in the ssh banner and is public by design; your own key
+is what the Pi checks — the jump account only forwards):
 
 ```bash
-ssh -o ProxyCommand='ssh -i ~/.ssh/fpgas.online-ansible -o IdentityAgent=none -W %h:%p ansible@10.99.21.2' \
-    pi@10.21.2.29
+ssh -o ProxyJump=pi@tweed.welland.mithis.com pi@10.21.2.29
 ```
 
-The old restricted `pi@tweed.welland.mithis.com` jump account (rbash) did not
-survive the 2026-08-30 reinstall of tweed (`getent passwd pi` is empty there;
-only `ansible`, `carl`, `piroot`, `tim` and `videoteam` remain). Note that the
-public name `tweed.welland.mithis.com` resolves to ten64's reverse proxy, so
-ssh to it never reached tweed anyway — use the 10.99.21.2 uplink address.
+The jump account is `/bin/rbash` with a PATH of only `ssh` and `ssh-keyscan`,
+an sshd `ForceCommand` wrapper that refuses anything else, and no sudo. It
+was hand-built on the previous tweed on 2026-03-18 and lost in the
+2026-08-26 reinstall because it was not in Ansible; it is now
+fpgas.online-infra `roles/jump` (PR #61), applied to every gateway.
+Two DNS caveats as of 2026-09-03 (same PR): the name still publishes the
+pre-reinstall SSHFP records, and one of its two AAAA records
+(`2404:e80:a137:9921::2`, the uplink /126) accepts TCP 22 but never answers,
+so an IPv6 client may hang until the record is fixed; over WireGuard the
+`10.21.0.1` A record works.
 
 **Public access** (for end users): `ssh pi@fpgas.mithis.com -p 13422` provides port-forwarded access to individual RPis. See [Getting Started](https://github.com/CarlFK/pici/wiki/Getting-Started).
 
