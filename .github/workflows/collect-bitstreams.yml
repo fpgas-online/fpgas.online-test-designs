@@ -10,11 +10,17 @@ jobs:
   collect:
     name: "Bundle all bitstreams"
     runs-on: ubuntu-latest
+    env:
+      # On pull_request events github.sha is the synthetic merge commit, but
+      # the build workflows' check runs and artifacts hang off the PR's head
+      # commit, so waiting on / downloading for github.sha finds nothing and
+      # this job failed on every PR (push runs of the same commit passed).
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Wait for build workflows to complete
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ env.HEAD_SHA }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           # Match all build job names but exclude the NeTV2 PCIe endpoint
           # jobs (which are continue-on-error: true and report job
@@ -34,7 +40,7 @@ jobs:
           mkdir -p bitstreams
 
           # List all workflow runs for this commit
-          runs=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${{ github.sha }}&status=completed&per_page=100" \
+          runs=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${HEAD_SHA}&status=completed&per_page=100" \
             --jq '.workflow_runs[] | select(.conclusion == "success") | .id')
 
           for run_id in $runs; do
