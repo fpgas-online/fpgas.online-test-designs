@@ -108,6 +108,14 @@ def _check(c):
         is_ground = SIGNALS[s]["label"] == "GND"
         if is_ground != (c.headers[hk].pins[pin]["name"] == "GND"):
             errors.append(f"{c.key}: {s} goes to {hk} pin {pin} ({c.headers[hk].pins[pin]['name']})")
+    # openFPGALoader's --pins is TDI:TDO:TCK:TMS as GPIO numbers; it must be what the JTAG wires land on
+    try:
+        gpios = [c.headers[c.wires[s][0]].pins[c.wires[s][1]]["gpio"] for s in ("TDI", "TDO", "TCK", "TMS")]
+        derived = ":".join(g.removeprefix("GPIO") for g in gpios)
+        if derived != c.jtag_pins:
+            errors.append(f"{c.key}: jtag_pins is {c.jtag_pins}, but TDI:TDO:TCK:TMS land on {derived}")
+    except KeyError as e:
+        errors.append(f"{c.key}: a JTAG wire is missing, or lands on a pin with no gpio ({e})")
     if c.resistors and not c.resistor_value:
         errors.append(f"{c.key}: resistors listed but no resistor_value")
     for r in c.resistors:
