@@ -22,23 +22,42 @@ verify_hardware.py
 
 There are two types of SSH connections:
 
-> **Stale since 2026-08-23.** The Welland site moved to VLAN-per-port
-> addressing (Pi = `pi-sw<switch>-p<port>` at `10.21.<switch>.<port>`), the
-> `pi@tweed` rbash jump account went away with tweed's 2026-08-30 reinstall
-> (use the `ansible@10.99.21.2` key from ten64 as a ProxyCommand), and the
-> TT hosts now run the `fpgas-tt` daemon that holds `/dev/ttyACM0`. The
-> `HOSTS` table in `verify_hardware.py` still has the old names/addresses.
-> Current host names and addresses: [docs/hardware/site-welland.md](hardware/site-welland.md).
-
-**Tweed-connected hosts** (pi3, pi5, pi9, pi17, pi21, pi27, pi29, pi31, pi33): These RPis are on a private 10.21.0.0/16 network behind a gateway called `tweed.welland.mithis.com`. Every SSH command is a double-hop:
+**Gateway hosts**: RPis on a private 10.21.0.0/16 network behind a site
+gateway (`GATEWAYS`). Every command is one OpenSSH hop through the gateway
+with `ProxyJump`, so there is no nested quoting:
 
 ```
-local ──SSH──> pi@tweed.welland.mithis.com ──SSH──> root@10.21.0.NNN
+local ──ssh -o ProxyJump=pi@tweed.welland.mithis.com──> pi@10.21.2.46 'sudo -n sh -c ...'
 ```
 
-The `_build_ssh_cmd()` function constructs this. The inner command is shell-escaped with `shlex.quote()` so it survives the tweed shell intact.
+- The gateway login is the restricted `pi` jump account (rbash, only `ssh`
+  and `ssh-keyscan`, an sshd `ForceCommand` wrapper, no sudo), managed by
+  fpgas.online-infra `roles/jump`. It only provides the TCP forward; the
+  Pi authenticates your own key. tweed's copy was lost in the 2026-08-26
+  reinstall and restored from Ansible on 2026-09-03 (infra PR #61).
+  `tweed.welland.mithis.com` resolves to `10.21.0.1` over WireGuard and to
+  tweed's public IPv6; see the DNS notes in that PR if the IPv6 path hangs.
+- Each host entry names its **login user** (`user`, default `root`). The
+  Welland Acorn Pi 5s only allow `pi` (pubkey) with passwordless sudo, so
+  `_build_ssh_cmd(..., as_root=True)` wraps the command in
+  `sudo -n sh -c '<cmd>'`. Uploads run as the login user (`as_root=False`).
+- Remote paths are absolute in the login user's home (`remote_home()`):
+  `/home/pi/pin-id_acorn.bit`, not `~/...`, because under sudo `~` would
+  resolve to `/root`.
+- Only the six Welland Acorn hosts (`welland-sw2-p29` … `p48`, i.e.
+  `10.21.2.<port>` under the [VLAN-per-port scheme](hardware/site-welland.md))
+  have been migrated. The Arty/NeTV2/Fomu/TT entries still carry the
+  pre-2026-08-23 `10.21.0.1NN` addresses and have not been re-probed.
 
-**Direct-SSH hosts** (rpi5-netv2, rpi3-netv2): These are reachable directly by hostname.
+**Direct-SSH hosts** (rpi5-netv2, rpi3-netv2): reachable directly by
+hostname; the login user is part of `target`.
+
+Use `--dry-run` to print the exact argv for every selected test before
+touching hardware.
+
+Run **one `verify_hardware.py` at a time**. Two instances going through the
+same jump host concurrently produced spurious "Host … is unreachable" and
+rc 255 failures on 2026-09-03; the same boards passed when run sequentially.
 
 ## Host and Board Definitions
 
@@ -101,6 +120,21 @@ Programming varies by board:
 
 **NeTV2 (rpi3)**: `sudo openocd -f alphamax-rpi.cfg -c 'init; pld load 0 <bitstream>; exit'` — JTAG via OpenOCD with BCM2835 GPIO bitbang. Uses `pld load 0` (device index 0, OpenOCD 0.10.x syntax).
 
+**Acorn (RPi 5)**: four steps in one `sudo` command, each forced by a Pi 5
+finding recorded in [acorn-pinmap.md](hardware/acorn-pinmap.md):
+
+1. `echo 1 > /sys/bus/pci/devices/0001:01:00.0/remove` — reconfiguring the
+   FPGA while its PCIe endpoint is enumerated crashes the Pi 5 outright
+   (2026-08-31, pi-sw2-p47). Skipped if nothing is enumerated.
+2. `ln -sfn /dev/gpiochip15 /dev/gpiochip0` — the fleet's openFPGALoader
+   0.10.0 opens `gpiochip0` unconditionally, but the 40-pin header is
+   `gpiochip15` on the deployed kernel. devtmpfs, so it is redone every time.
+3. `openFPGALoader --cable libgpiod --pins 10:9:11:8 <bitstream>` — bit-banged
+   JTAG on the SPI0 pins, TDI:TDO:TCK:TMS, about 16 s for an XC7A200T. The
+   `rp1pio` cable arrives with infra PR #48.
+4. `echo 1 > /sys/bus/pci/rescan` — brings the endpoint back (the flash
+   design's, or the newly loaded design's if it has PCIe).
+
 **TT FPGA**: `python3 ~/tt_fpga_program.py /dev/ttyACM0 <bitstream>` — Programming goes through the RP2350 microcontroller via USB CDC (`/dev/ttyACM0`). The script uses `mpremote` to upload the bitstream to the RP2350's filesystem, then executes a MicroPython script that programs the iCE40 via PIO-accelerated SPI and starts the 50 MHz clock. After programming, the RP2350 releases all shared GPIO pins to high-impedance so the RPi can communicate with the FPGA directly through the PMOD HAT.
 
 ### Programming Success Detection
@@ -122,15 +156,26 @@ When the Fomu's DFU bootloader has timed out, programming fails. The script auto
 
 ## PoE Reset
 
-`poe_reset()` power-cycles a PoE-powered RPi via SNMP commands to a Netgear managed switch. The switch port numbers match the host naming convention: pi27 → switch port 27.
+`poe_reset()` power-cycles a PoE-powered RPi by writing the switch port's
+`pethPsePortAdminEnable` (POWER-ETHERNET-MIB, `.1.3.6.1.2.1.105.1.1.1.3.<group>.<port>`,
+1 = enable, 2 = disable) with `snmpset`, run on the site gateway because
+only it can reach the switch management address. Hosts that can be cycled
+carry `"poe": {"switch": "sw2", "port": N}`; `POE_SWITCHES` maps the switch
+name to its address (Welland S3300: `10.1.5.11`).
+
+The SNMP write community is **not** in the repo. Export it as
+`FPGAS_POE_COMMUNITY` (it lives in fpgas.online-infra). Without it
+`poe_reset()` prints why and returns `False`, so the caller falls back to
+"power-cycle by hand" instead of hanging.
 
 The sequence:
-1. SSH to tweed, run `poe.sh <port> 2` (off)
+1. `snmpset ... i 2` (off) on the gateway
 2. Poll `ssh_check_connectivity()` until the host is unreachable (confirms power is off)
-3. Run `poe.sh <port> 1` (on)
-4. Poll `ssh_check_connectivity()` until the host responds (RPi 3 PXE boot takes ~2 minutes)
+3. `snmpset ... i 1` (on)
+4. Poll `ssh_check_connectivity()` until the host responds (a Pi 5 PXE boot needs more than 90 s; the bound is 240 s)
 
-No fixed sleeps — all waits use polling with bounded timeouts.
+No fixed sleeps — all waits use polling with bounded timeouts. (The old
+`poe.sh` helper did not survive tweed's 2026-08-30 reinstall.)
 
 ## TT FPGA Programming
 
