@@ -58,7 +58,7 @@ from designs._shared.build_helpers import board_dir, default_build_dir, flow_suf
 from designs._shared.pin_check import check_build
 from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
 from designs._shared.s7pcie_clocking import feed_pclk_mux_from_mmcm
-from designs._shared.yosys_workarounds import patch_yosys_template
+from designs._shared.yosys_workarounds import apply_nodram_workaround, patch_yosys_template
 
 # Path to the open-source pcie_7x Verilog sources (git submodule).
 PCIE_7X_SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pcie_7x", "src")
@@ -288,6 +288,10 @@ def main():
     # patch_yosys_template is a no-op on pure Vivado (no _yosys_template
     # attr); safe to call unconditionally since Phase 3a.
     patch_yosys_template(soc)
+    # The openXC7 image's Yosys (0.62) maps the 8 KiB L2 cache's data memory to 256 RAM256X1S, which its
+    # nextpnr-xilinx cannot pack (#30); -nodram puts it in block RAM, as for ddr-memory and ethernet-test on
+    # this board. The Vivado flows never pass _synth_opts to Yosys, so it changes only openxc7.
+    apply_nodram_workaround(soc)
 
     board_name = board_dir("netv2", args.variant) + flow_suffix(args.toolchain, args.synth_mode)
     builder = Builder(soc, output_dir=default_build_dir(__file__, board_name))
