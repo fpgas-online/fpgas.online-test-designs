@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Post-process a Yosys-generated EDIF so Vivado can route hierarchical designs.
 
-Applies three independent fixes to the EDIF that the Yosys 0.64 + synth_xilinx
+Applies four independent fixes to the EDIF that the Yosys 0.64 + synth_xilinx
 flow produces for the LiteX SoCs in this repo:
 
 **Bug 1 — dual library declarations (libraryRef LIB vs DESIGN).** Yosys
@@ -52,6 +52,18 @@ LiteX does to pcie-enumeration's ``pcie_x1_clk_p`` (it names it in
 Fix: drop ``dont_touch``/``keep`` from port nets that feed a GT refclk
 buffer's I/IB pin. Vivado then buffers both pads, as its own synthesis does.
 
+**Bug 4 — binary attributes written as integers.** Yosys writes every fully
+defined parameter of up to 32 bits as an EDIF integer, so a GTPE2_CHANNEL's
+``ALIGN_COMMA_ENABLE = 10'b1111111111`` arrives as ``(integer 1023)``, and
+Vivado drops it::
+
+    CRITICAL WARNING: [Netlist 29-72] Incorrect value '1023' specified for
+    property 'ALIGN_COMMA_ENABLE'. Expecting type 'binary' ... The system
+    will either use the default value or the property value will be dropped.
+
+Fix: rewrite them as sized binary strings, taking each primitive's binary
+parameters and widths from Yosys's own ``share/xilinx/cells_xtra.v``.
+
 Usage::
 
     fix_yosys_edif_libref.py <in.edif> <out.edif>   # write fixed copy
@@ -64,7 +76,9 @@ that wires it in automatically for the yosys-vivado flow.
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -347,6 +361,82 @@ def untouch_gt_refclk_ports(edif_text: str) -> tuple[str, int]:
     return text, len(matches)
 
 
+# ---------------------------------------------------------------------------
+# Bug 4 — binary primitive attributes written as integers
+# ---------------------------------------------------------------------------
+
+# `parameter [MSB:LSB] NAME = W'b...;` inside `module CELL` of Yosys's cells_xtra.v.
+_MODULE_RE = re.compile(r"^module (\w+)\b(.*?)^endmodule", re.MULTILINE | re.DOTALL)
+_BINARY_PARAM_RE = re.compile(r"^\s*parameter \[(\d+):(\d+)\] (\w+) = \d+'b", re.MULTILINE)
+
+# An instance header and its one-per-line properties, as Yosys writes them.
+_INSTANCE_BLOCK_RE = re.compile(
+    r"^          \(instance (?:\(rename \S+ \"[^\"]+\"\)|\S+)\n"
+    r"            \(viewRef VIEW_NETLIST \(cellRef (\S+) \(libraryRef LIB\)\)\)\n"
+    r"(?P<props>(?:            \(property [^\n]*\n)*)",
+    re.MULTILINE,
+)
+_INTEGER_PROP_RE = re.compile(r"\(property (\w+) \(integer (\d+)\)\)")
+
+
+def binary_params(cells_xtra_text: str) -> dict[str, dict[str, int]]:
+    """{primitive: {parameter: width}} for the ranged, binary-default parameters in Yosys's cells_xtra.v."""
+    return {
+        m.group(1): {name: int(msb) - int(lsb) + 1 for msb, lsb, name in _BINARY_PARAM_RE.findall(m.group(2))}
+        for m in _MODULE_RE.finditer(cells_xtra_text)
+        if _BINARY_PARAM_RE.search(m.group(2))
+    }
+
+
+def binarize_properties(edif_text: str, params: dict[str, dict[str, int]]) -> tuple[str, int]:
+    """Rewrite `(property P (integer V))` as `(string "W'b...")` where the primitive declares P binary.
+
+    Yosys writes any fully-defined parameter of up to 32 bits as an EDIF integer, dropping its width.
+    Vivado will not take an integer for a binary-typed attribute: it warns ([Netlist 29-72] "Incorrect
+    value ... Expecting type 'binary'") and uses the default or drops the value, 53 of them on the
+    PCIe GTPE2_CHANNEL/GTPE2_COMMON/PCIE_2_1 alone. Wider parameters already come out as sized strings.
+
+    Returns ``(fixed_text, number_of_properties_rewritten)``.
+    """
+    count = 0
+
+    def rewrite_props(cell: str, props: str) -> str:
+        widths = params.get(cell, {})
+
+        def one(m: re.Match) -> str:
+            nonlocal count
+            name, value = m.group(1), int(m.group(2))
+            if name not in widths:
+                return m.group(0)
+            width = widths[name]
+            if value >= 1 << width:
+                raise ValueError(f"{cell}.{name} = {value} does not fit its {width} bits")
+            count += 1
+            return f'(property {name} (string "{width}\'b{value:0{width}b}"))'
+
+        return _INTEGER_PROP_RE.sub(one, props)
+
+    text = edif_text
+    for m in reversed(list(_INSTANCE_BLOCK_RE.finditer(edif_text))):
+        if m.group(1) in params:
+            text = text[: m.start("props")] + rewrite_props(m.group(1), m.group("props")) + text[m.end("props"):]
+    return text, count
+
+
+def cells_xtra_path() -> Path:
+    """Yosys's share/xilinx/cells_xtra.v: $YOSYS_CELLS_XTRA, or next to the `yosys` on PATH."""
+    override = os.environ.get("YOSYS_CELLS_XTRA")
+    if override:
+        return Path(override)
+    yosys = shutil.which("yosys")
+    if yosys is None:
+        raise SystemExit("ERROR: yosys not on PATH; set YOSYS_CELLS_XTRA to its share/xilinx/cells_xtra.v")
+    path = Path(yosys).resolve().parent.parent / "share" / "yosys" / "xilinx" / "cells_xtra.v"
+    if not path.is_file():
+        raise SystemExit(f"ERROR: {path} not found; set YOSYS_CELLS_XTRA to Yosys's share/xilinx/cells_xtra.v")
+    return path
+
+
 def run_cli(argv: list[str]) -> int:
     if not argv or len(argv) > 2:
         print(
@@ -372,6 +462,7 @@ def run_cli(argv: list[str]) -> int:
     fixed, n_libref = fix_edif(original)
     fixed, n_iopads = remove_unused_iopads(fixed)
     fixed, n_untouched = untouch_gt_refclk_ports(fixed)
+    fixed, n_binary = binarize_properties(fixed, binary_params(cells_xtra_path().read_text()))
 
     dst.write_text(fixed)
 
@@ -380,7 +471,7 @@ def run_cli(argv: list[str]) -> int:
     duplicated = find_duplicated_cells(original)
     unused = find_unused_iopads(original)
     untouched = find_gt_refclk_port_nets(original)
-    if n_libref == 0 and n_iopads == 0 and n_untouched == 0:
+    if n_libref == 0 and n_iopads == 0 and n_untouched == 0 and n_binary == 0:
         print(f"  {src}: no Yosys-EDIF bugs found; nothing to fix.")
         return 0
     if n_libref > 0:
@@ -399,6 +490,8 @@ def run_cli(argv: list[str]) -> int:
             f"  {src}: dropped dont_touch/keep from {n_untouched} GT refclk "
             f"port net(s): {', '.join(sorted(untouched))}"
         )
+    if n_binary > 0:
+        print(f"  {src}: wrote {n_binary} binary primitive attribute(s) as sized strings")
     return 0
 
 

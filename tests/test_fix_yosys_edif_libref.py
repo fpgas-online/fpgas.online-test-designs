@@ -24,6 +24,14 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 import fix_yosys_edif_libref as fixer  # noqa: E402
 
+
+@pytest.fixture(autouse=True)
+def _cells_xtra(tmp_path, monkeypatch):
+    # The CLI reads Yosys's cells_xtra.v; give it the fixture's, so the tests need no Yosys install.
+    path = tmp_path / "cells_xtra.v"
+    path.write_text(CELLS_XTRA)
+    monkeypatch.setenv("YOSYS_CELLS_XTRA", str(path))
+
 # ---------------------------------------------------------------------------
 # Minimal EDIF fixture mirroring the real bug
 # ---------------------------------------------------------------------------
@@ -603,6 +611,91 @@ def test_cli_untouches_gt_refclk_ports(tmp_path):
     src.write_text(GT_REFCLK_EDIF)
     fixer.run_cli([str(src)])
     assert fixer.find_gt_refclk_port_nets(src.read_text()) == set()
+
+
+# ---------------------------------------------------------------------------
+# Bug 4 — binary primitive attributes written as integers
+# ---------------------------------------------------------------------------
+
+# Shape of Yosys's share/xilinx/cells_xtra.v: the same parameter can differ in width and radix between
+# primitives (CFOK_CFG2 is 6 bits on GTPE2_CHANNEL and 7 on GTXE2_CHANNEL; PMA_RSV is hex on one).
+CELLS_XTRA = """
+module GTPE2_CHANNEL (...);
+    parameter [9:0] ALIGN_COMMA_ENABLE = 10'b0001111111;
+    parameter [5:0] CFOK_CFG2 = 6'b100000;
+    parameter [31:0] PMA_RSV = 32'h00000333;
+    parameter integer RXOUT_DIV = 2;
+    parameter RX_DATA_WIDTH = 20;
+    input GTREFCLK0;
+endmodule
+
+module GTXE2_CHANNEL (...);
+    parameter [6:0] CFOK_CFG2 = 7'b0100000;
+endmodule
+"""
+
+BINARY_PARAM_EDIF = """(edif top
+  (external LIB
+    (cell GTPE2_CHANNEL (view V))
+  )
+  (library DESIGN
+    (cell top
+      (view V
+        (contents
+          (instance gtpe2_channell_i
+            (viewRef VIEW_NETLIST (cellRef GTPE2_CHANNEL (libraryRef LIB)))
+            (property ALIGN_COMMA_ENABLE (integer 1023))
+            (property CFOK_CFG2 (integer 32))
+            (property PMA_RSV (integer 819))
+            (property RXOUT_DIV (integer 2))
+            (property RXCDR_CFG (string "83'h0000107fe406001041010"))
+            (property src (string "pipe_wrapper.v:979.7-1269.7")))
+          (instance (rename id00007 "other")
+            (viewRef VIEW_NETLIST (cellRef GTXE2_CHANNEL (libraryRef LIB)))
+            (property CFOK_CFG2 (integer 32)))
+        )
+      )
+    )
+  )
+  (design top (cellRef top (libraryRef DESIGN)))
+)
+"""
+
+
+def test_binary_params_are_read_per_primitive_with_their_width():
+    params = fixer.binary_params(CELLS_XTRA)
+    # Only ranged parameters with a binary default: not the hex PMA_RSV, not integers or untyped ones.
+    assert params == {
+        "GTPE2_CHANNEL": {"ALIGN_COMMA_ENABLE": 10, "CFOK_CFG2": 6},
+        "GTXE2_CHANNEL": {"CFOK_CFG2": 7},
+    }
+
+
+def test_binarize_properties_writes_sized_binary_strings():
+    fixed, n = fixer.binarize_properties(BINARY_PARAM_EDIF, fixer.binary_params(CELLS_XTRA))
+    assert n == 3
+    assert "(property ALIGN_COMMA_ENABLE (string \"10'b1111111111\"))" in fixed
+    assert "(property CFOK_CFG2 (string \"6'b100000\"))" in fixed
+    # Same parameter, other primitive, other width.
+    assert "(property CFOK_CFG2 (string \"7'b0100000\"))" in fixed
+    # Left alone: hex-declared, integer-typed, and already-string properties, and the closing parens.
+    assert "(property PMA_RSV (integer 819))" in fixed
+    assert "(property RXOUT_DIV (integer 2))" in fixed
+    assert "(property RXCDR_CFG (string \"83'h0000107fe406001041010\"))" in fixed
+    assert '(property src (string "pipe_wrapper.v:979.7-1269.7")))' in fixed
+
+
+def test_binarize_properties_is_idempotent():
+    params = fixer.binary_params(CELLS_XTRA)
+    once, _ = fixer.binarize_properties(BINARY_PARAM_EDIF, params)
+    twice, n = fixer.binarize_properties(once, params)
+    assert once == twice and n == 0
+
+
+def test_binarize_properties_refuses_a_value_wider_than_the_parameter():
+    too_wide = BINARY_PARAM_EDIF.replace("(property CFOK_CFG2 (integer 32))", "(property CFOK_CFG2 (integer 64))", 1)
+    with pytest.raises(ValueError, match="CFOK_CFG2"):
+        fixer.binarize_properties(too_wide, fixer.binary_params(CELLS_XTRA))
 
 
 # ---------------------------------------------------------------------------
