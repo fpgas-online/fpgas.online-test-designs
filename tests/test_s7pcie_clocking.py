@@ -53,6 +53,27 @@ def test_the_125mhz_bufg_still_clocks_its_domain():
     assert any(e is phy.mmcm.clkouts[0][0] for e in bufg_inputs)
 
 
+def test_the_mux_clocks_are_physically_exclusive():
+    # Only one of 125/250 MHz drives PIPECLK at a time: a path launched on one and captured on the other
+    # does not exist, and without this Vivado times it (-0.645 ns on Acorn CLE-215+, yosys-vivado).
+    phy = _phy()
+    feed_pclk_mux_from_mmcm(phy)
+    (mux,) = [s for s in phy._fragment.specials if isinstance(s, Instance) and s.of == "BUFGCTRL"]
+    assert mux.name_override == "pcie_pclk_mux"
+    commands = [c.format() for c in phy.platform.toolchain.pre_placement_commands]
+    assert (
+        "create_generated_clock -name pcie_pclk_125 -source [get_pins pcie_pclk_mux/I0] -divide_by 1"
+        " [get_pins pcie_pclk_mux/O]"
+    ) in commands
+    assert (
+        "create_generated_clock -name pcie_pclk_250 -source [get_pins pcie_pclk_mux/I1] -divide_by 1"
+        " -add -master_clock [get_clocks -of_objects [get_pins pcie_pclk_mux/I1]] [get_pins pcie_pclk_mux/O]"
+    ) in commands
+    assert (
+        "set_clock_groups -name pcie_pclk_mux -physically_exclusive -group pcie_pclk_125 -group pcie_pclk_250"
+    ) in commands
+
+
 def test_refuses_a_second_call():
     phy = _phy()
     feed_pclk_mux_from_mmcm(phy)
