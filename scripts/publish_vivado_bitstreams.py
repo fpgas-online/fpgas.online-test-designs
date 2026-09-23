@@ -15,7 +15,7 @@ script is the one-command workflow that:
   4. Emits a `manifest.json` (schema-versioned, with SHA-256 per artifact)
      and a plain `SHA256SUMS` file next to the bitstreams.
   5. Publishes a GitHub Release tagged with the output of
-     `git describe --tags --always --dirty` (optionally prefixed), attaching
+     `git describe --tags --match "v[0-9]*" --always --dirty` (optionally prefixed), attaching
      every bitstream plus the manifest and checksums.
 
 Usage:
@@ -168,8 +168,10 @@ def git_describe() -> str:
     # --tags: consider lightweight tags (not just annotated).
     # --always: fall back to bare abbrev SHA if there are no tags at all.
     # --dirty: append '-dirty' when tracked files have uncommitted changes.
+    # --match: only the vX.Y version tags. Release tags (this script's vivado-bitstreams-v..., and
+    #   vivado-bitstreams-acorn-pcie-...) can sit nearer HEAD and would nest one tag inside another.
     return must_run(
-        ["git", "describe", "--tags", "--always", "--dirty"],
+        ["git", "describe", "--tags", "--match", "v[0-9]*", "--always", "--dirty"],
         "running git describe",
     )
 
