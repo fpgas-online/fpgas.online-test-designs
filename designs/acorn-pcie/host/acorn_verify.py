@@ -327,12 +327,14 @@ def fleet_event_argv(report):
     return argv
 
 
-def publish(report):
+def publish(report, kept_in):
+    """Send the fleet-event. A failure is reported loudly but does not change the result: the hardware is
+    what it is whether or not the broker heard about it, and `kept_in` still holds the report."""
     argv = fleet_event_argv(report)
     try:
         subprocess.run(argv, check=True, timeout=60)
     except (OSError, subprocess.SubprocessError) as e:
-        print(f"fpgas-acorn-verify: could not publish the result ({e}); it is still in {REPORT}", file=sys.stderr)
+        print(f"fpgas-acorn-verify: could not publish the result ({e}); the report is in {kept_in}", file=sys.stderr)
         return False
     return True
 
@@ -372,7 +374,7 @@ def main(argv=None):
         out.write_text(text)
     print(_summary(report), file=sys.stderr)
     if not args.no_publish:
-        publish(report)
+        publish(report, "stdout" if args.report == "-" else args.report)
     return exit_code(report)
 
 

@@ -337,3 +337,13 @@ def test_the_command_line_checks_against_the_images_it_is_given(tmp_path, monkey
     assert av.main(["--images", str(elsewhere), "--no-publish", "--report", "-"]) == 1
     report = json.loads(capsys.readouterr().out)
     assert str(elsewhere / "manifest.json") in report["boards"][0]["reason"]
+
+
+def test_a_failed_publish_names_where_the_report_went_and_keeps_the_result(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(av, "LOCK", tmp_path / "lock")
+    monkeypatch.setattr(av, "scan_pci", lambda root=None: [])
+    monkeypatch.setattr(av, "fleet_event_argv", lambda report: ["/nonexistent/fleet-event"])
+    out = tmp_path / "report.json"
+    assert av.main(["--report", str(out)]) == 0
+    assert json.loads(out.read_text())["result"] == "none"
+    assert f"the report is in {out}" in capsys.readouterr().err
