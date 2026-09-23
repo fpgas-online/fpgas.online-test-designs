@@ -10,13 +10,6 @@ jobs:
   build-netv2-a7-35:
     name: "NeTV2 A7-35T PCIe endpoint"
     runs-on: ubuntu-latest
-    # nextpnr-xilinx in the regymm/openxc7 image rejects the RAM256X1S
-    # primitive Yosys emits for this design (regression vs the 2026-04-03
-    # main run that succeeded): issue #30. Non-blocking, and run only on
-    # main and by hand so PR check lists stay meaningful while main keeps
-    # tracking the upstream state. Drop both lines when #30 is closed.
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
-    continue-on-error: true
     container:
       image: regymm/openxc7
     steps:
@@ -70,11 +63,6 @@ jobs:
   build-netv2-a7-100:
     name: "NeTV2 A7-100T PCIe endpoint"
     runs-on: ubuntu-latest
-    # Fails the same way as the A7-35T job above (RAM256X1S, issue #30);
-    # the earlier nextpnr-xilinx SIGSEGV on the A7-100T chipdb is no longer
-    # what stops it. Same gating as above; drop both lines when #30 is closed.
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
-    continue-on-error: true
     container:
       image: regymm/openxc7
     steps:
