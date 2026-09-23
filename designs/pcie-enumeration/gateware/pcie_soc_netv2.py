@@ -55,11 +55,23 @@ from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer for Python >= 3.11
 from designs._shared.build_helpers import board_dir, default_build_dir, flow_suffix
+from designs._shared.pin_check import check_build
 from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
+from designs._shared.s7pcie_clocking import feed_pclk_mux_from_mmcm
 from designs._shared.yosys_workarounds import patch_yosys_template
 
 # Path to the open-source pcie_7x Verilog sources (git submodule).
 PCIE_7X_SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pcie_7x", "src")
+
+# GTP channel behind the pcie_x1 pins (D11/C11, D5/C5), from Vivado's package-pin map. The numbering
+# depends on the part, so it is per variant.
+PCIE_X1_GT_LOC = {"a7-35": "GTPE2_CHANNEL_X0Y1", "a7-100": "GTPE2_CHANNEL_X0Y5"}
+
+# The GTP's TXOUTCLK pin, which every PCIe clock derives from (Tcl, braces doubled for LiteX's format()).
+_TXOUTCLK = (
+    "[get_pins -of_objects [get_cells -hierarchical -filter {{REF_NAME == GTPE2_CHANNEL}}]"
+    " -filter {{REF_PIN_NAME == TXOUTCLK}}]"
+)
 
 # CRG (Clock Reset Generator) ---------------------------------------------------------------------
 
@@ -161,6 +173,19 @@ class PCIeEnumerationSoC(SoCCore):
             # Tcl: create_ip/synth_ip, and reset_property LOC on the IP's cell names, which match
             # nothing in the open-source core and stop Vivado in the yosys-vivado flow.
             self.pcie_phy.external_hard_ip = True
+            if toolchain == "vivado":
+                # The Xilinx IP's own XDC declares TXOUTCLK; the open-source core has none. Declared first:
+                # every PCIe clock, the PIPECLK mux's below included, is derived from it.
+                platform.toolchain.pre_placement_commands.append(
+                    "create_clock -name pcie_txoutclk -period 10.000 " + _TXOUTCLK
+                )
+        elif toolchain == "vivado":
+            # The IP's own XDC LOCs its lane-0 transceiver to GTPE2_CHANNEL_X0Y7, and a cell LOC beats a
+            # port LOC without an error, so the lane ends up on another lane's pins and never links (#25).
+            self.pcie_phy.add_gt_loc_constraints([PCIE_X1_GT_LOC[variant]])
+        # One global buffer on PIPECLK, as on USERCLK, or the hard block's Max Skew check fails. The PHY's
+        # clocking is the same whichever core sits behind it.
+        feed_pclk_mux_from_mmcm(self.pcie_phy)
 
         self.pcie_endpoint = LitePCIeEndpoint(
             self.pcie_phy,
@@ -177,11 +202,24 @@ class PCIeEnumerationSoC(SoCCore):
         self.comb += self.pcie_msi.irqs.eq(0)
         self.comb += self.pcie_msi.source.connect(self.pcie_phy.msi)
 
-        # PCIe clock period constraint
-        platform.add_period_constraint(
-            self.pcie_phy.cd_pcie.clk,
-            1e9 / 62.5e6,
-        )
+        # PCIe clock constraints
+        if toolchain == "vivado":
+            # The PHY's clocks come out of its MMCM, fed by the GTP's TXOUTCLK, and Vivado derives them;
+            # a create_clock on the BUFG output would replace the generated clock with a new primary one
+            # and lose the MMCM's insertion delay (4.3 ns of USERCLK/USERCLK2 skew in the hard block).
+            # sys and pcie meet only in the PHY's AsyncFIFOs and MultiRegs. Said after link: at synthesis
+            # the PCIe clocks don't exist yet (the IP is a black box, or TXOUTCLK is not yet declared).
+            platform.toolchain.pre_placement_commands.append(
+                "set_clock_groups -asynchronous"
+                " -group [get_clocks -include_generated_clocks {{clk50}}]"
+                " -group [get_clocks -include_generated_clocks -of_objects " + _TXOUTCLK + "]"
+            )
+        else:
+            # nextpnr has no clocks to derive through the GTP: give the pcie domain its period.
+            platform.add_period_constraint(
+                self.pcie_phy.cd_pcie.clk,
+                1e9 / 62.5e6,
+            )
 
 
 # Build --------------------------------------------------------------------------------------------
@@ -243,7 +281,16 @@ def main():
     builder = Builder(soc, output_dir=default_build_dir(__file__, board_name))
 
     if args.toolchain == "vivado":
-        builder.build(run=args.build, synth_mode=args.synth_mode or "vivado")
+        # The open core's RXVALID -> rxvalid_cnt reset path at 250 MHz has one LUT but a long route out of the
+        # GTP; default placement closed it on one run and missed by 0.244 ns on the next (Acorn CLE-215+,
+        # yosys-vivado). ExtraTimingOpt placed the same netlist at +0.341 ns.
+        builder.build(
+            run=args.build,
+            synth_mode=args.synth_mode or "vivado",
+            vivado_place_directive="ExtraTimingOpt",
+        )
+        if args.build:
+            check_build(builder.gateware_dir, soc.platform.name)
     else:
         builder.build(run=args.build)
 
