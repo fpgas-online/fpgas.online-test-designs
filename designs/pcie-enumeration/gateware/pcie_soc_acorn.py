@@ -155,6 +155,11 @@ class PCIeEnumerationSoC(SoCCore):
             data_width=64,
             bar0_size=0x20000,  # 128 KB BAR0
         )
+        if uses_opensource_pcie:
+            # pcie_s7 comes from the pcie_7x sources above, so the PHY must not emit its Xilinx IP
+            # Tcl: create_ip/synth_ip, and reset_property LOC on the IP's cell names, which match
+            # nothing in the open-source core and stop Vivado in the yosys-vivado flow.
+            self.pcie_phy.external_hard_ip = True
 
         self.pcie_endpoint = LitePCIeEndpoint(
             self.pcie_phy,
