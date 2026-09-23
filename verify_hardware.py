@@ -189,7 +189,7 @@ DESIGNS = {
     "uart": {
         "test_script": "designs/uart/host/test_uart.py",
         "boards": {
-            "arty": {"artifact": "uart-test-arty/digilent_arty.bit", "test_args": "--port /dev/ttyUSB1 --board arty"},
+            "arty": {"artifact": "uart-test-arty-a7-35/digilent_arty.bit", "test_args": "--port /dev/ttyUSB1 --board arty"},
             "netv2": {
                 "artifact": "uart-test-netv2/kosagi_netv2.bit",
                 "test_args": "--port /dev/ttyAMA0 --board netv2 --skip-banner",
@@ -229,7 +229,7 @@ DESIGNS = {
     "ddr": {
         "test_script": "designs/ddr-memory/host/test_ddr.py",
         "boards": {
-            "arty": {"artifact": "ddr-test-arty/digilent_arty.bit", "test_args": "--port /dev/ttyUSB1 --board arty"},
+            "arty": {"artifact": "ddr-test-arty-a7-35/digilent_arty.bit", "test_args": "--port /dev/ttyUSB1 --board arty"},
             "netv2": {
                 "artifact": "ddr-test-netv2/kosagi_netv2.bit",
                 "test_args": "--port /dev/ttyAMA0 --board netv2",
@@ -261,7 +261,7 @@ DESIGNS = {
         "test_script": "designs/spi-flash-id/host/test_spiflash.py",
         "boards": {
             "arty": {
-                "artifact": "spiflash-test-arty/digilent_arty.bit",
+                "artifact": "spiflash-test-arty-a7-35/digilent_arty.bit",
                 "test_args": "--port /dev/ttyUSB1 --board arty",
             },
             "netv2": {
@@ -336,9 +336,9 @@ DESIGNS = {
         "test_script": "designs/pmod-pin-id/host/identify_pmod_pins.py",
         "boards": {
             "acorn": {
-                # pmod_pin_id_acorn.py calls platform.build() directly, so the
-                # bitstream is build/acorn/top.bit and CI uploads that name.
-                "artifact": "pmod-pin-id-acorn-cle-215plus/top.bit",
+                # pmod_pin_id_acorn.py builds with build_name=platform.name, so the
+                # bitstream is .../gateware/sqrl_acorn.bit and CI uploads that name.
+                "artifact": "pmod-pin-id-acorn-cle-215plus/sqrl_acorn.bit",
                 "test_args": "--board acorn",
                 # Stop the login console so the host script can read GPIO14/15,
                 # and make sure GPIO14 is a plain input: with pin-ID loaded
