@@ -178,6 +178,18 @@ class PCIeEnumerationSoC(SoCCore):
                 platform.toolchain.pre_placement_commands.append(
                     "create_clock -name pcie_txoutclk -period 10.000 " + _TXOUTCLK
                 )
+                # Keep the core's PIPE logic in its transceiver's clock region. Left to itself the placer pulled
+                # it ~180 columns away, and the RXVALID -> rxvalid_cnt reset path at 250 MHz (one LUT, but a
+                # long route out of the GTP) closed on one run and missed by up to 0.33 ns on the next (Acorn
+                # CLE-215+). In the region it had +1.29 ns. The GTP's LOC is known after link, from its pins.
+                platform.toolchain.pre_placement_commands += [
+                    "create_pblock pcie_pipe",
+                    "add_cells_to_pblock [get_pblocks pcie_pipe] [get_cells -hierarchical -filter"
+                    " {{NAME =~ */pipe_wrapper_i/* && IS_PRIMITIVE && REF_NAME !~ GTPE2*"
+                    " && REF_NAME != GND && REF_NAME != VCC}}]",
+                    "resize_pblock [get_pblocks pcie_pipe] -add CLOCKREGION_[get_clock_regions -of_objects"
+                    " [get_sites -of_objects [get_cells -hierarchical -filter {{REF_NAME == GTPE2_CHANNEL}}]]]",
+                ]
         elif toolchain == "vivado":
             # The IP's own XDC LOCs its lane-0 transceiver to GTPE2_CHANNEL_X0Y7, and a cell LOC beats a
             # port LOC without an error, so the lane ends up on another lane's pins and never links (#25).
@@ -275,14 +287,7 @@ def main():
     builder = Builder(soc, output_dir=default_build_dir(__file__, board_name))
 
     if args.toolchain == "vivado":
-        # The open core's RXVALID -> rxvalid_cnt reset path at 250 MHz has one LUT but a long route out of the
-        # GTP; default placement closed it on one run and missed by 0.244 ns on the next (Acorn CLE-215+,
-        # yosys-vivado). ExtraTimingOpt placed the same netlist at +0.341 ns.
-        builder.build(
-            run=args.build,
-            synth_mode=args.synth_mode or "vivado",
-            vivado_place_directive="ExtraTimingOpt",
-        )
+        builder.build(run=args.build, synth_mode=args.synth_mode or "vivado")
         if args.build:
             check_build(builder.gateware_dir, soc.platform.name)
     else:
