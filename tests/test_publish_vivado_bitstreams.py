@@ -403,3 +403,22 @@ def test_write_manifest_schema(tmp_path):
     assert entry["flow"] == "vivado-vivado"
     assert entry["sha256"] == "a" * 64
     assert entry["size_bytes"] == 100
+
+
+def test_git_describe_ignores_other_release_tags(tmp_path, monkeypatch):
+    # Other automation tags (vivado-bitstreams-acorn-pcie-..., this script's own vivado-bitstreams-v...) sit
+    # nearer HEAD than the vX.Y tag; describing from them nested one release tag inside another.
+    import subprocess
+
+    def git(*args):
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+
+    git("init", "-q")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "base")
+    git("tag", "v0.0")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "later")
+    git("tag", "vivado-bitstreams-acorn-pcie-20260921-gf3355dccf443")
+    git("tag", "vivado-bitstreams-v0.0-1-gabcdef0")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "head")
+    monkeypatch.chdir(tmp_path)
+    assert pvb.git_describe().startswith("v0.0-2-g")
