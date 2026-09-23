@@ -219,6 +219,7 @@ def test_the_expected_build_with_both_slots_intact_passes(tmp_path, images, chip
     assert board["running"] == {"identifier": OP_IDENT_ON_CHIP, "build": "operational"}
     assert [s["result"] for s in board["flash"]["slots"]] == ["match", "match"]
     assert board["flash"]["part"] == "S25FL256S"
+    assert board["flash"]["jedec"] == "0x010219"  # as openFPGALoader prints it: "JEDEC ID: 0x010219"
     assert av.exit_code(report) == 0
 
 

@@ -270,7 +270,14 @@ def _check_board(dev, images, release, open_bar):
             if diff is not None:
                 entry["first_difference"] = f"{diff:#x}"
             slots.append(entry)
-        out["flash"] = {"part": ident["part"], "unique_id": ident["unique_id"], "slots": slots}
+        # The same identity rpi-hwid puts on the label: openFPGALoader reads the S25FL-S unique id with
+        # the same OTPR (0x4B, 3 address + 1 dummy, 16 bytes from 0) that spi_flash.identify() sends.
+        out["flash"] = {
+            "part": ident["part"],
+            "jedec": "0x" + ident["rdid"][:6],
+            "unique_id": ident["unique_id"],
+            "slots": slots,
+        }
 
     if any(s["result"] != "match" for s in slots):
         bad = ", ".join(f"{s['slot']} differs at {s['first_difference']}" for s in slots if s["result"] != "match")
