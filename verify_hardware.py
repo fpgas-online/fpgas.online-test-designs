@@ -183,7 +183,10 @@ DESIGNS = {
     "uart": {
         "test_script": "designs/uart/host/test_uart.py",
         "boards": {
-            "arty": {"artifact": "uart-test-arty-a7-35/digilent_arty.bit", "test_args": "--port /dev/ttyUSB1 --board arty"},
+            "arty": {
+                "artifact": "uart-test-arty-a7-35/digilent_arty.bit",
+                "test_args": "--port /dev/ttyUSB1 --board arty",
+            },
             "netv2": {
                 "artifact": "uart-test-netv2/kosagi_netv2.bit",
                 "test_args": "--port /dev/ttyAMA0 --board netv2 --skip-banner",
@@ -223,7 +226,10 @@ DESIGNS = {
     "ddr": {
         "test_script": "designs/ddr-memory/host/test_ddr.py",
         "boards": {
-            "arty": {"artifact": "ddr-test-arty-a7-35/digilent_arty.bit", "test_args": "--port /dev/ttyUSB1 --board arty"},
+            "arty": {
+                "artifact": "ddr-test-arty-a7-35/digilent_arty.bit",
+                "test_args": "--port /dev/ttyUSB1 --board arty",
+            },
             "netv2": {
                 "artifact": "ddr-test-netv2/kosagi_netv2.bit",
                 "test_args": "--port /dev/ttyAMA0 --board netv2",
