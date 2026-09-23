@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Post-process a Yosys-generated EDIF so Vivado can route hierarchical designs.
 
-Applies two independent fixes to the EDIF that the Yosys 0.64 + synth_xilinx
+Applies three independent fixes to the EDIF that the Yosys 0.64 + synth_xilinx
 flow produces for the LiteX SoCs in this repo:
 
 **Bug 1 — dual library declarations (libraryRef LIB vs DESIGN).** Yosys
@@ -38,6 +38,19 @@ a net that Yosys marked ``(property unused_bits ...)``. After removal the
 top-level port is connected to only its port declaration — an unused
 port — which Vivado accepts as a no-op for that pin (a warning, but
 not an error).
+
+**Bug 3 — dont_touch on a GT reference-clock port.** iopadmap leaves the
+pads of an ``IBUFDS_GTE2`` unbuffered, so Vivado adds an IBUF between each
+port and the buffer at link time — except on a net marked DONT_TOUCH, which
+LiteX does to pcie-enumeration's ``pcie_x1_clk_p`` (it names it in
+``create_clock``). ``opt_design`` then fails with::
+
+    ERROR: [Opt 31-38] IBUFDS_GTE2 IBUFDS_GTE2 I pin is connected directly
+    to a top-level port. An IBUF must be inserted in between the port and
+    the IBUFDS_GTE2
+
+Fix: drop ``dont_touch``/``keep`` from port nets that feed a GT refclk
+buffer's I/IB pin. Vivado then buffers both pads, as its own synthesis does.
 
 Usage::
 
@@ -258,6 +271,82 @@ def remove_unused_iopads(edif_text: str) -> tuple[str, int]:
     return text, len(to_remove)
 
 
+# ---------------------------------------------------------------------------
+# Bug 3 — dont_touch on a GT reference-clock port net
+# ---------------------------------------------------------------------------
+
+# Buffers whose input pins sit on a GT reference-clock pad. Yosys's iopadmap
+# leaves those ports unbuffered, and Vivado has to add an IBUF between each
+# port and the buffer when it links the netlist (its own synthesis puts one
+# there too). It won't add one to a DONT_TOUCH net, and opt_design then fails:
+#
+#     ERROR: [Opt 31-38] IBUFDS_GTE2 IBUFDS_GTE2 I pin is connected directly
+#     to a top-level port. An IBUF must be inserted in between the port and
+#     the IBUFDS_GTE2
+#
+# LiteX marks the port dont_touch because create_clock names it (pcie-
+# enumeration's pcie_x1_clk_p); nothing sits between the pad and the buffer
+# for the attribute to protect, so dropping it from that one net is safe.
+GT_REFCLK_BUFFERS: tuple[str, ...] = ("IBUFDS_GTE2",)
+
+_INSTANCE_RE = re.compile(
+    r"^          \(instance (?:\(rename (\S+) \"[^\"]+\"\)|(\S+))\n"
+    r"            \(viewRef VIEW_NETLIST \(cellRef (\S+) \(libraryRef LIB\)\)\)",
+    re.MULTILINE,
+)
+
+# A whole `(net NAME (joined ...) (property ...)* )` block, as Yosys writes it:
+# the joined list, then one property per line, then the closing paren.
+_NET_BLOCK_RE = re.compile(
+    r"^          \(net (?:\(rename (\S+) \"[^\"]+\"\)|(\S+)) \(joined\n"
+    r"(?P<refs>(?:              \(portRef [^\n]*\n)*)"
+    r"            \)\n"
+    r"(?P<props>(?:            \(property [^\n]*\n)*)"
+    r"          \)\n",
+    re.MULTILINE,
+)
+_TOUCH_PROP_RE = re.compile(r"^            \(property (?:dont_touch|keep) [^\n]*\n", re.MULTILINE)
+
+
+def _gt_refclk_port_net_matches(edif_text: str) -> list[re.Match]:
+    buffers = {
+        m.group(1) or m.group(2)
+        for m in _INSTANCE_RE.finditer(edif_text)
+        if m.group(3) in GT_REFCLK_BUFFERS
+    }
+    matches = []
+    for m in _NET_BLOCK_RE.finditer(edif_text):
+        refs = m.group("refs").splitlines()
+        # A bare `(portRef NAME)` (no instanceRef) is the top-level port itself.
+        on_port = any("(instanceRef" not in r for r in refs)
+        on_buffer_input = any(
+            re.search(rf"\(portRef (?:I|IB) \(instanceRef {re.escape(b)}\)\)", r)
+            for r in refs for b in buffers
+        )
+        if on_port and on_buffer_input and _TOUCH_PROP_RE.search(m.group("props")):
+            matches.append(m)
+    return matches
+
+
+def find_gt_refclk_port_nets(edif_text: str) -> set[str]:
+    """Return the names of port nets that feed a GT refclk buffer and carry dont_touch/keep."""
+    return {m.group(1) or m.group(2) for m in _gt_refclk_port_net_matches(edif_text)}
+
+
+def untouch_gt_refclk_ports(edif_text: str) -> tuple[str, int]:
+    """Drop dont_touch/keep from each net :func:`find_gt_refclk_port_nets` reports.
+
+    Returns ``(fixed_text, number_of_nets_changed)``.
+    """
+    matches = _gt_refclk_port_net_matches(edif_text)
+    text = edif_text
+    # Back to front, so earlier offsets stay valid.
+    for m in reversed(matches):
+        props = _TOUCH_PROP_RE.sub("", m.group("props"))
+        text = text[: m.start("props")] + props + text[m.end("props"):]
+    return text, len(matches)
+
+
 def run_cli(argv: list[str]) -> int:
     if not argv or len(argv) > 2:
         print(
@@ -282,6 +371,7 @@ def run_cli(argv: list[str]) -> int:
     # output deterministic and the summary consistent.
     fixed, n_libref = fix_edif(original)
     fixed, n_iopads = remove_unused_iopads(fixed)
+    fixed, n_untouched = untouch_gt_refclk_ports(fixed)
 
     dst.write_text(fixed)
 
@@ -289,7 +379,8 @@ def run_cli(argv: list[str]) -> int:
     # present in the input file, not what's left after the rewrites.
     duplicated = find_duplicated_cells(original)
     unused = find_unused_iopads(original)
-    if n_libref == 0 and n_iopads == 0:
+    untouched = find_gt_refclk_port_nets(original)
+    if n_libref == 0 and n_iopads == 0 and n_untouched == 0:
         print(f"  {src}: no Yosys-EDIF bugs found; nothing to fix.")
         return 0
     if n_libref > 0:
@@ -302,6 +393,11 @@ def run_cli(argv: list[str]) -> int:
         print(
             f"  {src}: removed {n_iopads} unused iopad(s) "
             f"(instance IDs: {', '.join(sorted(unused))})"
+        )
+    if n_untouched > 0:
+        print(
+            f"  {src}: dropped dont_touch/keep from {n_untouched} GT refclk "
+            f"port net(s): {', '.join(sorted(untouched))}"
         )
     return 0
 

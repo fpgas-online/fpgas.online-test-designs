@@ -497,6 +497,115 @@ def test_remove_unused_iopads_leaves_primitives_alone():
 
 
 # ---------------------------------------------------------------------------
+# Bug 3 — dont_touch on a GT reference-clock port blocks Vivado's IBUF
+# ---------------------------------------------------------------------------
+
+# Shape of pcie-enumeration on NeTV2: the PCIe refclk pads drive an
+# IBUFDS_GTE2 directly (Yosys's iopadmap leaves them unbuffered), and LiteX's
+# create_clock on pcie_x1_clk_p marks that port net dont_touch/keep. Vivado
+# must add an IBUF between each port and the IBUFDS_GTE2 at link time, and
+# won't on a DONT_TOUCH net: opt_design then fails with [Opt 31-38].
+# Controls that must stay untouched: clk200_p's dont_touch net feeds an
+# ordinary IBUF (already buffered), and the refclk_out net is internal.
+GT_REFCLK_EDIF = """(edif top
+  (edifVersion 2 0 0)
+  (external LIB
+    (cell IBUFDS_GTE2 (view V (interface
+      (port I (direction INPUT)) (port IB (direction INPUT)) (port O (direction OUTPUT)))))
+    (cell IBUF (view V (interface (port I (direction INPUT)) (port O (direction OUTPUT)))))
+  )
+  (library DESIGN
+    (cell top
+      (view V
+        (interface
+          (port pcie_x1_clk_n (direction INPUT))
+          (port pcie_x1_clk_p (direction INPUT))
+          (port clk200_p (direction INPUT))
+        )
+        (contents
+          (instance IBUFDS_GTE2
+            (viewRef VIEW_NETLIST (cellRef IBUFDS_GTE2 (libraryRef LIB))))
+          (instance (rename id00006 "$iopadmap$top.clk200_p")
+            (viewRef VIEW_NETLIST (cellRef IBUF (libraryRef LIB)))
+            (property keep (integer 1)))
+          (net pcie_x1_clk_n (joined
+              (portRef IB (instanceRef IBUFDS_GTE2))
+              (portRef pcie_x1_clk_n)
+            )
+            (property src (string "top.v:41.26-41.39"))
+          )
+          (net pcie_x1_clk_p (joined
+              (portRef I (instanceRef IBUFDS_GTE2))
+              (portRef pcie_x1_clk_p)
+            )
+            (property dont_touch (string "true"))
+            (property keep (integer 1))
+            (property src (string "top.v:43.26-43.39"))
+          )
+          (net clk200_p (joined
+              (portRef I (instanceRef id00006))
+              (portRef clk200_p)
+            )
+            (property dont_touch (string "true"))
+          )
+          (net refclk_out (joined
+              (portRef O (instanceRef IBUFDS_GTE2))
+              (portRef GTREFCLK0 (instanceRef gtp))
+            )
+            (property dont_touch (string "true"))
+          )
+        )
+      )
+    )
+  )
+  (design top (cellRef top (libraryRef DESIGN)))
+)
+"""
+
+
+def test_find_gt_refclk_port_nets_only_reports_the_pad_net_with_dont_touch():
+    assert fixer.find_gt_refclk_port_nets(GT_REFCLK_EDIF) == {"pcie_x1_clk_p"}
+
+
+def test_untouch_gt_refclk_ports_strips_dont_touch_and_keep_from_that_net():
+    fixed, n = fixer.untouch_gt_refclk_ports(GT_REFCLK_EDIF)
+    assert n == 1
+    assert fixed == GT_REFCLK_EDIF.replace(
+        '            (property dont_touch (string "true"))\n'
+        "            (property keep (integer 1))\n"
+        '            (property src (string "top.v:43.26-43.39"))\n',
+        '            (property src (string "top.v:43.26-43.39"))\n',
+    )
+    # The controls keep their dont_touch: clk200_p (ordinary IBUF) and
+    # refclk_out (not a top-level port).
+    assert fixed.count('(property dont_touch (string "true"))') == 2
+
+
+def test_untouch_gt_refclk_ports_is_idempotent():
+    once, n1 = fixer.untouch_gt_refclk_ports(GT_REFCLK_EDIF)
+    twice, n2 = fixer.untouch_gt_refclk_ports(once)
+    assert once == twice
+    assert n1 == 1 and n2 == 0
+
+
+def test_untouch_gt_refclk_ports_handles_renamed_instances():
+    # Yosys escapes some instance names with (rename ID "..."); nets then
+    # reference the internal ID.
+    renamed = GT_REFCLK_EDIF.replace(
+        "(instance IBUFDS_GTE2\n",
+        '(instance (rename id00099 "pcie_s7.refclk_ibuf")\n',
+    ).replace("(instanceRef IBUFDS_GTE2)", "(instanceRef id00099)")
+    assert fixer.find_gt_refclk_port_nets(renamed) == {"pcie_x1_clk_p"}
+
+
+def test_cli_untouches_gt_refclk_ports(tmp_path):
+    src = tmp_path / "top.edif"
+    src.write_text(GT_REFCLK_EDIF)
+    fixer.run_cli([str(src)])
+    assert fixer.find_gt_refclk_port_nets(src.read_text()) == set()
+
+
+# ---------------------------------------------------------------------------
 # Malformed-EDIF error paths — must raise loudly, not silently no-op
 # ---------------------------------------------------------------------------
 
