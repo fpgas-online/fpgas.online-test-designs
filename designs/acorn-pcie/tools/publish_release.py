@@ -21,8 +21,17 @@ their .bit files) plus `csr.json` and `csr.csv`, and writes next to them:
   * SHA256SUMS - `sha256sum -c` format, covering every asset and the manifest.
 
 Asset names are `<variant dir>-<file>` with `+` spelled `p`, so they are
-unique across variants. The tag is `vivado-bitstreams-<git describe of the
-source commit>`: tag ruleset 13744509 lets that prefix through.
+unique across variants. The tag is
+`vivado-bitstreams-acorn-pcie-<commit date YYYYMMDD>-g<12-char sha>`, made
+from the source commit alone. `git describe` would depend on which tags the
+clone has (a shallow clone gives a bare sha) and would nest once a release
+tag exists. Tag ruleset 13744509 lets the `vivado-bitstreams-` prefix through.
+
+The build tree does not record which commit it was built from, so
+`--source-commit` is corroborated. The worktree the build tree lives in must
+have that commit checked out, with no uncommitted changes under designs/
+(build/ itself is ignored). `--unverified-source-commit` skips the check, and
+the manifest says so either way.
 
     uv run python designs/acorn-pcie/tools/publish_release.py \\
         --build-dir .worktrees/acorn-pcie-04-soc-board-id/designs/acorn-pcie/build \\
@@ -34,6 +43,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -45,7 +55,7 @@ _spec = importlib.util.spec_from_file_location("spi_flash", _HERE.parents[1] / "
 spi_flash = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(spi_flash)
 
-TAG_PREFIX = "vivado-bitstreams"
+TAG_PREFIX = "vivado-bitstreams-acorn-pcie"
 SCHEMA_VERSION = 1
 PLATFORM = "sqrl_acorn"
 IMAGES = ("", "_fallback", "_operational")
@@ -68,8 +78,48 @@ def asset_prefix(variant_dir):
     return variant_dir.replace("+", "p")
 
 
-def release_tag(describe):
-    return f"{TAG_PREFIX}-{describe}"
+def release_tag(commit, date):
+    """The release's name, from the commit alone: never from the tags a clone happens to have."""
+    return f"{TAG_PREFIX}-{date}-g{commit[:12]}"
+
+
+def _git_in(cwd, *args):
+    result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, env={**os.environ, "TZ": "UTC"})
+    if result.returncode:
+        raise ReleaseError(f"git {' '.join(args)} in {cwd}: {result.stderr.strip()}")
+    return result.stdout.strip()
+
+
+def source_identity(repo_dir, rev):
+    """The full sha and UTC committer date (YYYYMMDD) of `rev`."""
+    commit = _git_in(repo_dir, "rev-parse", "--verify", f"{rev}^{{commit}}")
+    date = _git_in(repo_dir, "log", "-1", "--format=%cd", "--date=format-local:%Y%m%d", commit)
+    return {"commit": commit, "date": date}
+
+
+def verify_source(build_dir, commit, unverified=False):
+    """Corroborate that `build_dir` was built from `commit`. Returns what was checked, for the manifest."""
+    build_dir = pathlib.Path(build_dir).resolve()
+    try:
+        top = _git_in(build_dir, "rev-parse", "--show-toplevel")
+        head = _git_in(top, "rev-parse", "HEAD")
+        dirty = _git_in(top, "status", "--porcelain", "--", "designs")
+    except (ReleaseError, FileNotFoundError, NotADirectoryError) as e:
+        if unverified:
+            return "NOT CHECKED (--unverified-source-commit): the build dir is not in a git worktree"
+        raise ReleaseError(f"cannot corroborate --source-commit: {build_dir} is not in a git worktree ({e})") from None
+    problems = []
+    if head != commit:
+        problems.append(f"its worktree {top} has {head[:12]} checked out, not {commit[:12]}")
+    if dirty:
+        problems.append(f"{top} has uncommitted changes under designs/:\n{dirty}")
+    if problems and not unverified:
+        raise ReleaseError("cannot corroborate --source-commit: " + "; ".join(problems))
+    if problems:
+        return "NOT CHECKED (--unverified-source-commit): " + "; ".join(problems)
+    return (
+        f"build dir's worktree HEAD is {commit[:12]}, no uncommitted changes under designs/ (checked at publish time)"
+    )
 
 
 def bit_header(data):
@@ -134,9 +184,14 @@ def _variant_of(dirname):
     return variant, base, variant.endswith("-golden")
 
 
-def collect(build_dir, source_commit, source_describe, variants=None):
-    """Check a build tree and describe it. Returns (manifest, {asset name: source path})."""
+def collect(build_dir, source, variants=None):
+    """Check a build tree and describe it. Returns (manifest, {asset name: source path}).
+
+    `source` is {"commit", "date", "evidence"}: the source_identity() of the
+    commit the tree was built from plus what verify_source() found.
+    """
     build_dir = pathlib.Path(build_dir)
+    source_commit = source["commit"]
     dirs = sorted(p for p in build_dir.iterdir() if p.is_dir() and p.name.startswith("acorn-"))
     if variants is not None:
         wanted = {f"acorn-{v}" for v in variants}
@@ -207,8 +262,9 @@ def collect(build_dir, source_commit, source_describe, variants=None):
         "schema_version": SCHEMA_VERSION,
         "design": "designs/acorn-pcie (fpgas.online Acorn PCIe SoC)",
         "source_commit": source_commit,
-        "source_describe": source_describe,
-        "tag": release_tag(source_describe),
+        "source_commit_date": source["date"],
+        "source_commit_evidence": source["evidence"],
+        "tag": release_tag(source_commit, source["date"]),
         # What goes where on each board: the golden build's fallback image in
         # the golden slot, the operational build's operational image above it.
         "flash_layout": {b: dict(sorted(s.items())) for b, s in sorted(layout.items())},
@@ -217,11 +273,34 @@ def collect(build_dir, source_commit, source_describe, variants=None):
     return manifest, staged
 
 
-def stage(manifest, staged, out_dir):
-    out_dir = pathlib.Path(out_dir)
-    if out_dir.exists():
-        shutil.rmtree(out_dir)
-    out_dir.mkdir(parents=True)
+def _check_out_dir(out_dir, build_dir):
+    """Refuse a staging directory that overlaps the build tree or holds anything a previous run did not stage."""
+    out, build = out_dir.resolve(), build_dir.resolve()
+    if out == build or build in out.parents or out in build.parents:
+        raise ReleaseError(f"--out {out_dir} overlaps --build-dir {build_dir}: refusing to touch the build tree")
+    if not out.exists():
+        return []
+    if not out.is_dir():
+        raise ReleaseError(f"--out {out_dir} exists and is not a directory")
+    present = {p.name for p in out.iterdir()}
+    if not present:
+        return []
+    sums = out / "SHA256SUMS"
+    listed = set()
+    if sums.is_file() and (out / "manifest.json").is_file():
+        listed = {line.split("  ", 1)[1] for line in sums.read_text().splitlines() if "  " in line}
+    unknown = sorted(present - listed - {"SHA256SUMS"})
+    if not listed or unknown or any(not (out / n).is_file() for n in present):
+        shown = ", ".join(unknown[:5]) or "no SHA256SUMS/manifest.json"
+        raise ReleaseError(f"--out {out_dir} is not empty and not a previous staging directory ({shown})")
+    return [out / n for n in sorted(present)]
+
+
+def stage(manifest, staged, out_dir, build_dir):
+    out_dir, build_dir = pathlib.Path(out_dir), pathlib.Path(build_dir)
+    for old in _check_out_dir(out_dir, build_dir):
+        old.unlink()
+    out_dir.mkdir(parents=True, exist_ok=True)
     for asset, src in staged.items():
         shutil.copyfile(src, out_dir / asset)
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -234,7 +313,9 @@ def stage(manifest, staged, out_dir):
 def release_notes(manifest):
     lines = [
         f"fpgas.online Acorn PCIe SoC images built with Vivado from {manifest['source_commit'][:12]} "
-        f"(`{manifest['source_describe']}`).",
+        f"(committed {manifest['source_commit_date']}).",
+        "",
+        f"Source commit evidence: {manifest['source_commit_evidence']}.",
         "",
         "Each board gets the golden build's fallback image at 0x000000 and the operational build's "
         "operational image at 0x400000 (`spi_flash.py write <file> <slot>`). The plain `sqrl_acorn.bin`/`.bit` "
@@ -251,10 +332,6 @@ def release_notes(manifest):
     return "\n".join(lines) + "\n"
 
 
-def _git(*args):
-    return subprocess.run(["git", *args], cwd=_REPO, check=True, capture_output=True, text=True).stdout.strip()
-
-
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--build-dir", required=True, type=pathlib.Path, help="designs/acorn-pcie/build to publish")
@@ -263,19 +340,26 @@ def main(argv=None):
         required=True,
         help="the commit the build tree was built from (the build tree does not record it)",
     )
+    parser.add_argument(
+        "--unverified-source-commit",
+        action="store_true",
+        help="publish even though the build dir's worktree does not show --source-commit checked out and clean",
+    )
     parser.add_argument("--variants", nargs="+", help="variant directories to include (default: all)")
     parser.add_argument("--out", type=pathlib.Path, default=DEFAULT_OUT, help="staging directory")
     parser.add_argument("--repo", default="fpgas-online/fpgas.online-test-designs")
     parser.add_argument("--publish", action="store_true", help="create the GitHub Release (default: stage only)")
     args = parser.parse_args(argv)
 
-    commit = _git("rev-parse", "--verify", f"{args.source_commit}^{{commit}}")
-    describe = _git("describe", "--tags", "--always", commit)
     try:
-        manifest, staged = collect(args.build_dir, commit, describe, args.variants)
+        source = source_identity(_REPO, args.source_commit)
+        source["evidence"] = verify_source(args.build_dir, source["commit"], args.unverified_source_commit)
+        manifest, staged = collect(args.build_dir, source, args.variants)
+        paths = stage(manifest, staged, args.out, args.build_dir)
     except ReleaseError as e:
         sys.exit(f"error: {e}")
-    paths = stage(manifest, staged, args.out)
+    commit = source["commit"]
+    print(f"source commit {commit[:12]}: {source['evidence']}")
     notes = args.out.parent / f"{args.out.name}-notes.md"
     notes.write_text(release_notes(manifest))
     print(f"staged {len(paths)} files in {args.out} for {manifest['tag']}")
@@ -289,7 +373,7 @@ def main(argv=None):
         [
             "gh", "release", "create", manifest["tag"], *map(str, paths),
             "--repo", args.repo, "--target", commit,
-            "--title", f"Acorn PCIe SoC images - {describe}", "--notes-file", str(notes),
+            "--title", f"Acorn PCIe SoC images - {manifest['tag']}", "--notes-file", str(notes),
         ],
         check=True,
     )  # fmt: skip

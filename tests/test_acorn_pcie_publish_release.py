@@ -100,9 +100,11 @@ def build(tmp_path):
     return root
 
 
+SOURCE = {"commit": "f3355dc" + "0" * 33, "date": "20260921", "evidence": "test fixture"}
+
+
 def _collect(build, **kw):
-    kw.setdefault("source_commit", "f3355dc" + "0" * 33)
-    kw.setdefault("source_describe", "v0.0-514-gf3355dc")
+    kw.setdefault("source", SOURCE)
     return pr.collect(build, **kw)
 
 
@@ -198,7 +200,7 @@ def test_variants_can_be_selected(build):
 def test_sha256sums_matches_the_staged_files(build, tmp_path):
     manifest, staged = _collect(build)
     out = tmp_path / "stage"
-    pr.stage(manifest, staged, out)
+    pr.stage(manifest, staged, out, build)
     lines = (out / "SHA256SUMS").read_text().splitlines()
     assert len(lines) == len(manifest["files"]) + 1  # plus manifest.json itself
     for line in lines:
@@ -209,4 +211,147 @@ def test_sha256sums_matches_the_staged_files(build, tmp_path):
 
 def test_tag_uses_the_allowed_prefix():
     # Ruleset 13744509 only lets refs/tags/vivado-bitstreams-* through besides vX.Y.
-    assert pr.release_tag("v0.0-514-gf3355dc") == "vivado-bitstreams-v0.0-514-gf3355dc"
+    tag = pr.release_tag("f3355dc1234567890" + "0" * 23, "20260921")
+    assert tag == "vivado-bitstreams-acorn-pcie-20260921-gf3355dc12345"
+
+
+def test_manifest_carries_the_tag_and_the_evidence(build):
+    manifest = _collect(build)[0]
+    assert manifest["tag"] == "vivado-bitstreams-acorn-pcie-20260921-gf3355dc00000"
+    assert manifest["source_commit_date"] == "20260921"
+    assert manifest["source_commit_evidence"] == "test fixture"
+
+
+# --- the source commit: named from the commit alone, and corroborated ---------------------------
+
+
+def _git(repo, *args, committer_date="2026-09-21T10:00:00+09:30"):
+    import os
+    import subprocess
+
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", *args],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        env={**os.environ, "GIT_COMMITTER_DATE": committer_date},
+    )
+
+
+@pytest.fixture
+def repo(tmp_path):
+    """A worktree with designs/ committed and an ignored build/ tree, like acorn-pcie's."""
+    r = tmp_path / "repo"
+    (r / "designs" / "acorn-pcie").mkdir(parents=True)
+    (r / "designs" / "acorn-pcie" / "soc.py").write_text("v1\n")
+    (r / ".gitignore").write_text("**/build/\n")
+    _git(r, "init", "-q")
+    _git(r, "add", ".")
+    _git(r, "commit", "-q", "-m", "first", "--date=2026-09-21T10:00:00+09:30")
+    (r / "designs" / "acorn-pcie" / "build").mkdir()
+    return r
+
+
+def _head(repo):
+    import subprocess
+
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def test_tag_is_independent_of_existing_tags(repo):
+    before = pr.source_identity(repo, "HEAD")
+    # An old version tag and a previous release at the same commit would both
+    # change what `git describe` prints; neither may change the name.
+    _git(repo, "tag", "v0.0")
+    _git(repo, "tag", pr.release_tag(before["commit"], before["date"]))
+    (repo / "designs" / "later.py").write_text("x\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", "later")
+    after = pr.source_identity(repo, before["commit"])
+    assert after == before
+    assert pr.release_tag(**after) == f"vivado-bitstreams-acorn-pcie-{before['date']}-g{before['commit'][:12]}"
+
+
+def test_source_date_is_the_utc_committer_date(repo):
+    # Committed at 09:00 in Adelaide (+09:30) on the 22nd: still the 21st in UTC,
+    # so a committer's local date would name a different release.
+    (repo / "designs" / "b.py").write_text("b\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", "b", committer_date="2026-09-22T09:00:00+09:30")
+    assert pr.source_identity(repo, "HEAD")["date"] == "20260921"
+
+
+def test_source_commit_checked_out_and_clean_is_accepted(repo):
+    evidence = pr.verify_source(repo / "designs" / "acorn-pcie" / "build", _head(repo))
+    assert "HEAD is" in evidence and "NOT CHECKED" not in evidence
+
+
+def test_other_commit_checked_out_is_refused(repo):
+    with pytest.raises(pr.ReleaseError, match="checked out"):
+        pr.verify_source(repo / "designs" / "acorn-pcie" / "build", "f" * 40)
+
+
+def test_uncommitted_design_change_is_refused(repo):
+    (repo / "designs" / "acorn-pcie" / "soc.py").write_text("v2\n")
+    with pytest.raises(pr.ReleaseError, match="uncommitted"):
+        pr.verify_source(repo / "designs" / "acorn-pcie" / "build", _head(repo))
+
+
+def test_build_outputs_do_not_count_as_uncommitted(repo):
+    (repo / "designs" / "acorn-pcie" / "build" / "sqrl_acorn.bit").write_bytes(b"x")
+    pr.verify_source(repo / "designs" / "acorn-pcie" / "build", _head(repo))
+
+
+def test_build_dir_outside_git_is_refused(tmp_path):
+    with pytest.raises(pr.ReleaseError, match="not in a git worktree"):
+        pr.verify_source(tmp_path, "f" * 40)
+
+
+def test_override_records_that_nothing_was_checked(repo):
+    evidence = pr.verify_source(repo / "designs" / "acorn-pcie" / "build", "f" * 40, unverified=True)
+    assert evidence.startswith("NOT CHECKED")
+
+
+# --- the staging directory: never somewhere that holds anything else ---------------------------
+
+
+def test_out_inside_the_build_tree_is_refused(build):
+    manifest, staged = _collect(build)
+    with pytest.raises(pr.ReleaseError, match="build tree"):
+        pr.stage(manifest, staged, build / "release", build)
+    with pytest.raises(pr.ReleaseError, match="build tree"):
+        pr.stage(manifest, staged, build, build)
+    with pytest.raises(pr.ReleaseError, match="build tree"):
+        pr.stage(manifest, staged, build.parent, build)
+    assert (build / "acorn-cle-215+" / "csr.json").exists()
+
+
+def test_out_holding_other_files_is_refused(build, tmp_path):
+    manifest, staged = _collect(build)
+    out = tmp_path / "home"
+    out.mkdir()
+    (out / "precious.txt").write_text("keep me")
+    with pytest.raises(pr.ReleaseError, match="not empty"):
+        pr.stage(manifest, staged, out, build)
+    assert (out / "precious.txt").read_text() == "keep me"
+
+
+def test_extra_file_in_a_previous_staging_is_refused(build, tmp_path):
+    manifest, staged = _collect(build)
+    out = tmp_path / "stage"
+    pr.stage(manifest, staged, out, build)
+    (out / "precious.txt").write_text("keep me")
+    with pytest.raises(pr.ReleaseError, match=r"precious\.txt"):
+        pr.stage(manifest, staged, out, build)
+    assert (out / "precious.txt").exists()
+
+
+def test_a_previous_staging_is_replaced(build, tmp_path):
+    manifest, staged = _collect(build)
+    out = tmp_path / "stage"
+    pr.stage(manifest, staged, out, build)
+    small, small_staged = _collect(build, variants=["cle-101"])
+    pr.stage(small, small_staged, out, build)
+    assert sorted(p.name for p in out.iterdir()) == sorted([*small_staged, "manifest.json", "SHA256SUMS"])
