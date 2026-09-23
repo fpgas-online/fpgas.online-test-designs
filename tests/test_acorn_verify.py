@@ -326,3 +326,14 @@ def test_memory_decoding_that_was_already_on_is_left_on(tmp_path):
     with av.open_bar0("0001:01:00.0", sysfs=tmp_path):
         pass
     assert int.from_bytes((dev / "config").read_bytes()[4:6], "little") == 0x0006
+
+
+def test_the_command_line_checks_against_the_images_it_is_given(tmp_path, monkeypatch, capsys):
+    """--images reaches verify(): found on pi-sw2-p48, where main() once ignored it for the default path."""
+    monkeypatch.setattr(av, "LOCK", tmp_path / "lock")
+    real_scan, sysfs = av.scan_pci, _sysfs(tmp_path, OURS)
+    monkeypatch.setattr(av, "scan_pci", lambda root=None: real_scan(sysfs))
+    elsewhere = tmp_path / "somewhere-else"
+    assert av.main(["--images", str(elsewhere), "--no-publish", "--report", "-"]) == 1
+    report = json.loads(capsys.readouterr().out)
+    assert str(elsewhere / "manifest.json") in report["boards"][0]["reason"]

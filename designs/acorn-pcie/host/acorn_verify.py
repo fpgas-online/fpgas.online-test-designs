@@ -361,7 +361,7 @@ def main(argv=None):
     LOCK.parent.mkdir(parents=True, exist_ok=True)
     with open(LOCK, "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)  # one BAR0 user at a time: this check, or an operator's spi_flash.py
-        report = verify(scan_pci())
+        report = verify(scan_pci(), args.images)
 
     text = json.dumps(report, indent=2) + "\n"
     if args.report == "-":
