@@ -348,3 +348,72 @@ def test_a_failed_publish_names_where_the_report_went_and_keeps_the_result(tmp_p
     assert av.main(["--report", str(out)]) == 0
     assert json.loads(out.read_text())["result"] == "none"
     assert f"the report is in {out}" in capsys.readouterr().err
+
+
+# -- the live identity read, for rpi-hwid's labels ----------------------------------------------------
+
+
+def _identify(tmp_path, images, bus, *devices):
+    return av.identify(av.scan_pci(_sysfs(tmp_path, *devices)), images, open_bar=lambda bdf: _Ctx(bus))
+
+
+def test_identify_reads_the_flash_row_and_not_the_slots(tmp_path, images, chip):
+    report = _identify(tmp_path, images, SoCBus(chip, OP_IDENT_ON_CHIP), OURS)
+    (board,) = report["boards"]
+    assert report["result"] == board["result"] == "read"
+    assert board["flash"]["part"] == "S25FL256S"
+    assert board["flash"]["jedec"] == "0x010219"
+    assert len(board["flash"]["unique_id"]) == 32
+    assert sf.READ4 not in chip.opcodes  # identity only: no page of either slot is read
+    assert av.exit_code(report) == 0
+
+
+def test_identify_gives_the_same_row_as_the_full_check(tmp_path, images, chip):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    full = _verify(tmp_path / "a", images, SoCBus(chip, OP_IDENT_ON_CHIP), OURS)["boards"][0]["flash"]
+    quick = _identify(tmp_path / "b", images, SoCBus(chip, OP_IDENT_ON_CHIP), OURS)["boards"][0]["flash"]
+    assert {k: full[k] for k in ("part", "jedec", "unique_id")} == {k: quick[k] for k in ("part", "jedec", "unique_id")}
+
+
+def test_identify_will_not_touch_the_flash_of_a_build_it_does_not_know(tmp_path, images, chip):
+    bus = SoCBus(chip, "fpgas-online Acorn PCIe SoC cle-215+ 2026-10-01 09:00:00")
+    report = _identify(tmp_path, images, bus, OURS)
+    assert report["result"] == "fail"
+    assert report["boards"][0]["running"]["build"] is None
+    assert not bus.flash_touched
+    assert av.exit_code(report) == 1
+
+
+def test_identify_never_opens_the_bar_of_a_factory_board(tmp_path, images):
+    def refuse(bdf):
+        raise AssertionError("BAR0 of a design we did not build must not be touched")
+
+    report = av.identify(av.scan_pci(_sysfs(tmp_path, FACTORY)), images, open_bar=refuse)
+    assert report["result"] == "unconverted"
+
+
+def test_identify_on_a_pi_with_no_fpga_is_none(tmp_path, images):
+    assert _identify(tmp_path, images, None, RP1)["result"] == "none"
+
+
+def test_the_identify_command_prints_json_and_writes_no_report(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(av, "LOCK", tmp_path / "lock")
+    monkeypatch.setattr(av, "REPORT", tmp_path / "must-not-exist.json")
+    monkeypatch.setattr(av, "scan_pci", lambda root=None: [])
+    assert av.main(["--identify"]) == 0
+    assert json.loads(capsys.readouterr().out)["result"] == "none"
+    assert not (tmp_path / "must-not-exist.json").exists()
+
+
+def test_the_check_and_spi_flash_share_one_lock(tmp_path):
+    import fcntl
+
+    assert pathlib.Path(sf.LOCK) == av.LOCK
+    lock = tmp_path / "run" / "lock" / "fpgas-acorn.lock"
+    held = sf.hold_lock(str(lock))
+    try:
+        with open(lock, "w") as other, pytest.raises(BlockingIOError):
+            fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    finally:
+        held.close()

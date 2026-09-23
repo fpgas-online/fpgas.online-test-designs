@@ -28,7 +28,6 @@ Stdlib only: the Pi hosts boot a tmpfs root with no LiteX.
 import argparse
 import contextlib
 import datetime
-import fcntl
 import hashlib
 import importlib.util
 import json
@@ -48,7 +47,7 @@ SCHEMA_VERSION = 1
 SYSFS_PCI = pathlib.Path("/sys/bus/pci/devices")
 IMAGES = pathlib.Path("/usr/share/fpgas-online/acorn-pcie/images")
 REPORT = pathlib.Path("/run/fpgas-online/acorn-verify.json")
-LOCK = pathlib.Path("/run/lock/fpgas-acorn.lock")
+LOCK = pathlib.Path(spi_flash.LOCK)  # one user of the SoC at a time: this, or an operator's spi_flash.py
 
 CSR_BASE = spi_flash.CSR_BASE
 IDENTIFIER_BASE = CSR_BASE + 0x800  # csr_map: identifier_mem = 1
@@ -70,9 +69,9 @@ SEVERITY = ("none", "pass", "degraded", "unconverted", "fail", "error")
 
 
 class Problem(Exception):
-    def __init__(self, result, reason):
+    def __init__(self, result, reason, **seen):
         super().__init__(reason)
-        self.result, self.reason = result, reason
+        self.result, self.reason, self.seen = result, reason, seen
 
 
 # -- tier 1: PCI IDs ---------------------------------------------------------------------------------
@@ -223,46 +222,65 @@ def check_board(dev, images, release, open_bar):
     try:
         board.update(_check_board(dev, images, release, open_bar))
     except Problem as p:
-        board.update(result=p.result, reason=p.reason)
+        board.update(p.seen, result=p.result, reason=p.reason)
     return board
 
 
-def _check_board(dev, images, release, open_bar):
+def _tier1(dev):
+    """Refuse, from the PCI IDs alone, anything that is not our SoC: its BAR0 layout is unknown to us."""
     kind = dev["kind"]
     if kind in ("sqrl-factory", "vendor-xdma"):
         what = "SQRL's factory image" if kind == "sqrl-factory" else "the vendor XDMA sample image"
-        return {"result": "unconverted", "reason": f"runs {what}, not the fpgas.online design"}
+        raise Problem("unconverted", f"runs {what}, not the fpgas.online design")
     if kind != "fpgas-online":
-        return {"result": "fail", "reason": f"{dev['ids']} subsystem {dev['subsystem']} is not a design we built"}
+        raise Problem("fail", f"{dev['ids']} subsystem {dev['subsystem']} is not a design we built")
 
+
+def _known_build(bus, images, files, builds, tag):
+    """Tier 2, and the gate for everything after it: the running build must be one of the release's, and
+    its register map must be the one spi_flash.py drives. Returns what was seen and which build runs."""
+    identifier = read_identifier(bus)
+    running = next(
+        (name for name, f in builds.items() if f["config_identifier"].casefold() == identifier.casefold()), None
+    )
+    seen = {"running": {"identifier": identifier, "build": running}}
+    if running is None:  # its CSR map is unknown to us, so the flash is not read
+        raise Problem("fail", f"runs {identifier!r}, which is not in release {tag}", **seen)
+    csr_entry = _csr_file(files, builds[running]["variant"])
+    bases = json.loads(_checked_file(images, csr_entry)).get("csr_bases", {})
+    for name, want in CSR_EXPECTED.items():
+        if bases.get(name) != want:
+            got = "missing" if bases.get(name) is None else f"{bases[name]:#x}"
+            raise Problem(
+                "error", f"{csr_entry['asset']} puts {name} at {got}, not {want:#x}: not reading this flash", **seen
+            )
+    return seen, running
+
+
+def _flash_identity(flash):
+    """The flash row of an rpi-hwid label. openFPGALoader reads an S25FL-S's unique id with the same OTPR
+    (0x4B, 3 address + 1 dummy, 16 bytes from 0) that spi_flash.identify() sends; on pi-sw2-p48 the two gave
+    the same 128 bits in the same order."""
+    ident = flash.identify()
+    return {
+        "part": ident["part"],
+        "jedec": "0x" + ident["rdid"][:6],
+        "unique_id": ident["unique_id"],
+        "size_bytes": ident["size_bytes"],
+    }
+
+
+def _check_board(dev, images, release, open_bar):
+    _tier1(dev)
     manifest, files = release
     tag = manifest.get("tag")
     builds, layout = _expectations(manifest, files, dev["variant"])
     slot_images = {slot: _checked_file(images, files[layout[slot]]) for slot, _ in SLOTS}
 
     with open_bar(dev["bdf"]) as bus:
-        identifier = read_identifier(bus)
-        running = next(
-            (name for name, f in builds.items() if f["config_identifier"].casefold() == identifier.casefold()), None
-        )
-        out = {"running": {"identifier": identifier, "build": running}}
-        if running is None:  # its CSR map is unknown to us, so the flash is not read
-            return {**out, "result": "fail", "reason": f"runs {identifier!r}, which is not in release {tag}"}
-
-        csr_entry = _csr_file(files, builds[running]["variant"])
-        bases = json.loads(_checked_file(images, csr_entry)).get("csr_bases", {})
-        for name, want in CSR_EXPECTED.items():
-            if bases.get(name) != want:
-                got = bases.get(name)
-                got = "missing" if got is None else f"{got:#x}"
-                return {
-                    **out,
-                    "result": "error",
-                    "reason": f"{csr_entry['asset']} puts {name} at {got}, not {want:#x}: not reading this flash",
-                }
-
+        out, running = _known_build(bus, images, files, builds, tag)
         flash = spi_flash.Flash(bus)  # read opcodes only
-        ident = flash.identify()
+        identity = _flash_identity(flash)
         slots = []
         for slot, addr in SLOTS:
             diff = flash.first_difference(addr, slot_images[slot])
@@ -270,14 +288,7 @@ def _check_board(dev, images, release, open_bar):
             if diff is not None:
                 entry["first_difference"] = f"{diff:#x}"
             slots.append(entry)
-        # The same identity rpi-hwid puts on the label: openFPGALoader reads the S25FL-S unique id with
-        # the same OTPR (0x4B, 3 address + 1 dummy, 16 bytes from 0) that spi_flash.identify() sends.
-        out["flash"] = {
-            "part": ident["part"],
-            "jedec": "0x" + ident["rdid"][:6],
-            "unique_id": ident["unique_id"],
-            "slots": slots,
-        }
+        out["flash"] = {**identity, "slots": slots}
 
     if any(s["result"] != "match" for s in slots):
         bad = ", ".join(f"{s['slot']} differs at {s['first_difference']}" for s in slots if s["result"] != "match")
@@ -285,6 +296,42 @@ def _check_board(dev, images, release, open_bar):
     if running == "golden":
         return {**out, "result": "degraded", "reason": "running the golden image: the operational slot did not boot"}
     return {**out, "result": "pass"}
+
+
+def _identify_board(dev, images, release, open_bar):
+    _tier1(dev)
+    manifest, files = release
+    builds, _ = _expectations(manifest, files, dev["variant"])
+    with open_bar(dev["bdf"]) as bus:
+        out, _ = _known_build(bus, images, files, builds, manifest.get("tag"))
+        out["flash"] = _flash_identity(spi_flash.Flash(bus))
+    return {**out, "result": "read"}
+
+
+def identify(devices, images=IMAGES, open_bar=open_bar0):
+    """Each board's flash row, read live and nothing more: no slot is read. For rpi-hwid's labels.
+
+    The same gates as the full check apply before anything is sent to the flash. "read" for a board
+    whose flash identified itself; otherwise the board's result and reason say why not."""
+    try:
+        release = load_release(images) if any(d["kind"] == "fpgas-online" for d in devices) else None
+    except Problem as p:
+        release, failure = None, p
+    else:
+        failure = None
+    boards = []
+    for dev in devices:
+        board = dict(dev)
+        try:
+            if failure and dev["kind"] == "fpgas-online":
+                raise failure
+            board.update(_identify_board(dev, images, release, open_bar))
+        except Problem as p:
+            board.update(p.seen, result=p.result, reason=p.reason)
+        boards.append(board)
+    worst = max((b["result"] for b in boards if b["result"] != "read"), key=SEVERITY.index, default=None)
+    result = worst or ("read" if boards else "none")
+    return {"schema_version": SCHEMA_VERSION, "result": result, "boards": boards}
 
 
 def verify(devices, images=IMAGES, open_bar=open_bar0):
@@ -311,7 +358,7 @@ def verify(devices, images=IMAGES, open_bar=open_bar0):
 
 
 def exit_code(report):
-    return 0 if report["result"] in ("pass", "none") else 1
+    return 0 if report["result"] in ("pass", "read", "none") else 1
 
 
 # -- reporting ---------------------------------------------------------------------------------------
@@ -365,12 +412,19 @@ def main(argv=None):
     parser.add_argument("--images", type=pathlib.Path, default=IMAGES, help="installed release (manifest.json)")
     parser.add_argument("--report", default=str(REPORT), help="where to write the JSON report ('-' for stdout)")
     parser.add_argument("--no-publish", action="store_true", help="do not send the fleet-event")
+    parser.add_argument(
+        "--identify",
+        action="store_true",
+        help="print each board's flash part, JEDEC id and unique id as JSON, read live, and nothing else",
+    )
     args = parser.parse_args(argv)
 
-    LOCK.parent.mkdir(parents=True, exist_ok=True)
-    with open(LOCK, "w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)  # one BAR0 user at a time: this check, or an operator's spi_flash.py
-        report = verify(scan_pci(), args.images)
+    check = identify if args.identify else verify
+    with spi_flash.hold_lock(str(LOCK)):
+        report = check(scan_pci(), args.images)
+    if args.identify:
+        sys.stdout.write(json.dumps(report, indent=2) + "\n")
+        return exit_code(report)
 
     text = json.dumps(report, indent=2) + "\n"
     if args.report == "-":
