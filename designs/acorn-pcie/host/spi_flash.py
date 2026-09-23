@@ -26,8 +26,10 @@ LiteX. Runs over PCIe BAR0 by default, or over the UART bridge with `--uart`.
 """
 
 import argparse
+import fcntl
 import hashlib
 import json
+import os
 import sys
 import time
 
@@ -40,6 +42,9 @@ SPI_MISO_HI = CSR_BASE + 0x3810
 SPI_MISO_LO = CSR_BASE + 0x3814
 FLASH_CS_N = CSR_BASE + 0x4000  # csr_map: flash_cs_n = 8
 SHIFT_BYTES = 5
+# Shared with fpgas-acorn-verify (acorn_verify.py): one user of the SoC's SPI master at a time. Its CS and
+# shift registers are single-user: two tools interleaving would corrupt a read, or a write.
+LOCK = "/run/lock/fpgas-acorn.lock"
 
 GOLDEN_ADDR = 0x000000
 OPERATIONAL_ADDR = 0x400000
@@ -289,6 +294,14 @@ class UARTBus:
         self._link.write(addr, [value])
 
 
+def hold_lock(path=LOCK):
+    """Take the SoC lock, waiting for whoever has it; the returned file holds it until closed."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    held = open(path, "w")  # noqa: SIM115 -- the open file is the lock, kept by the caller
+    fcntl.flock(held, fcntl.LOCK_EX)
+    return held
+
+
 def _progress(done, total):
     if done == total or done % (256 * PAGE) == 0:
         print(f"  programmed {done}/{total} bytes", flush=True)
@@ -310,6 +323,7 @@ def main():
     sub.choices["write"].add_argument("--i-know-this-writes-golden", action="store_true")
     args = parser.parse_args()
 
+    lock = hold_lock()  # noqa: F841 -- held until main returns
     bus = UARTBus(args.uart) if args.uart else Bar0Bus(args.bdf)
     flash = Flash(bus, allow_write=args.command == "write")
     try:

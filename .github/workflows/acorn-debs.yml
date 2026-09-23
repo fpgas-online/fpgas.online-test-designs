@@ -1,0 +1,111 @@
+# .github/workflows/acorn-debs.yml
+#
+# fpgas-online-acorn-bitstreams and fpgas-online-acorn-tools (packaging/acorn-pcie/build_debs.py).
+#
+# Every pull request and push: lint and test the host tools, build both debs from the release pinned in
+# packaging/acorn-pcie/release.toml, then install them into a clean Debian bookworm (the NFS root's release)
+# and run fpgas-acorn-verify there. With no FPGA on the runner it must report "none" and exit 0, which proves
+# the dependencies, the installed paths, the /usr/bin symlinks and the module loading all hold together.
+#
+# On main, the debs are then published to this repository's rolling series release (the nearest vX.Y tag,
+# v0.0), which fpgas-online/apt pulls from, as the other fpgas.online deb repositories do. The bitstreams deb
+# keeps its file name until the pin moves, so re-uploading it changes nothing downstream.
+name: "Acorn debs"
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NFPM_VERSION: "2.47.0"
+  NFPM_SHA256: "0660ca602b2d2d2ae4781a06c692b3eeb9d437ffea05b831d76e41f4a3188783"
+  ACORN_TESTS: tests/test_acorn_verify.py tests/test_acorn_packaging.py tests/test_spi_flash.py
+  ACORN_PY: >-
+    designs/acorn-pcie/host/acorn_verify.py packaging/acorn-pcie/build_debs.py
+    tests/test_acorn_verify.py tests/test_acorn_packaging.py
+
+jobs:
+  build:
+    name: "Acorn debs: tests, build, install and run"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the tools version is git describe against the v0.0 series tag
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Lint
+        run: |
+          uv run --no-project --with ruff ruff check $ACORN_PY
+          uv run --no-project --with ruff ruff format --check $ACORN_PY
+
+      - name: Tests
+        run: uv run --no-project --python 3.12 --with pytest pytest $ACORN_TESTS
+
+      - name: Install nfpm ${{ env.NFPM_VERSION }}
+        run: |
+          set -euo pipefail
+          f="nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
+          curl -fsSL -o "$f" "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/$f"
+          echo "${NFPM_SHA256}  $f" | sha256sum -c -
+          tar xzf "$f" nfpm
+
+      - name: Build the debs
+        run: uv run --no-project --python 3.12 packaging/acorn-pcie/build_debs.py --out dist --nfpm ./nfpm
+
+      - name: Show what was built
+        run: |
+          for d in dist/*.deb; do echo "== $d"; dpkg-deb -f "$d" Package Version Depends; dpkg-deb -c "$d"; done
+
+      - name: Install into Debian bookworm and run the check
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD/dist:/dist:ro" debian:bookworm sh -euc '
+            apt-get update -qq
+            apt-get install -y -qq /dist/*.deb >/dev/null
+            fpgas-acorn-verify --no-publish --report /tmp/report.json
+            python3 -c "import json, sys; r = json.load(open(\"/tmp/report.json\")); print(r); sys.exit(r[\"result\"] != \"none\")"
+            test -x /usr/bin/fpgas-acorn-flash && fpgas-acorn-flash --help >/dev/null
+          '
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: acorn-debs
+          path: dist/*.deb
+
+  publish:
+    name: "Publish to the series release"
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: acorn-debs
+          path: dist
+
+      - name: Upload to the current series release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SERIES="$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*')"
+          if ! gh release view "$SERIES" >/dev/null; then
+            gh release create "$SERIES" --prerelease --title "Debian packages (rolling, series $SERIES)" \
+              --notes "Rolling .deb builds from this repository for series $SERIES, one per green commit on main. Consumed by https://github.com/fpgas-online/apt."
+          fi
+          gh release upload "$SERIES" dist/*.deb --clobber
+          ls -l dist
