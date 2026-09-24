@@ -6,6 +6,48 @@ The Sqrl Acorn CLE-215+ is an M.2 form factor PCIe FPGA accelerator card, pin-co
 
 See [acorn-pinmap.md](acorn-pinmap.md) for the full RPi GPIO pinmap.
 
+## Installing the Acorn Packages
+
+The Acorn's verification tools and bitstreams are Debian packages in the fpgas.online APT repository. Add the repository first ([README: Installing the Packages](../../README.md#installing-the-packages)), then on the Acorn's Pi 5 host run:
+
+```bash
+sudo apt update
+sudo apt install --no-install-recommends fpgas-online-acorn-tools
+```
+
+`--no-install-recommends` keeps apt from also installing `fpgas-online-setup-pi`, which turns the host into an fpgas.online fleet node. Leave the flag off only on fleet Pis.
+
+| Package | Version scheme | Installs |
+|---------|----------------|----------|
+| `fpgas-online-acorn-tools` | `X.Y.postN` from `git describe` (e.g. `0.0.post557`) | `/usr/bin/fpgas-acorn-verify`, `/usr/bin/fpgas-acorn-flash`, `fpgas-acorn-verify.service`; the scripts live in `/usr/lib/fpgas-online/acorn-pcie/` |
+| `fpgas-online-acorn-bitstreams` | pinned release date + commit (e.g. `20260921+gf3355dccf443`) | `/usr/share/fpgas-online/acorn-pcie/images/`: `manifest.json`, and for each of `cle-215p` / `cle-101` the golden (`0x000000`) and operational (`0x400000`) flash images, the operational `.bit`, and the CSR maps |
+
+The tools package depends on one exact bitstreams version. Which release that is comes from [`packaging/acorn-pcie/release.toml`](../../packaging/acorn-pcie/release.toml), and a new release reaches hosts only when a reviewed PR moves that pin. Both debs are built, installed into a clean Debian bookworm and smoke-tested by [`acorn-debs.yml`](../../.github/workflows/acorn-debs.yml).
+
+**Check the board** (reads only, never writes the flash):
+
+```bash
+sudo fpgas-acorn-verify --no-publish --report -
+```
+
+The JSON `result` is `pass` or `none` (no FPGA on PCIe), both with exit status 0. Otherwise it is `degraded` (running the golden image), `unconverted` (still on SQRL's factory image, or the vendor XDMA sample), `fail` (flash differs from the release, or a PCIe FPGA whose design it does not recognise) or `error`, all with exit status 1. Leave out `--no-publish` to also send the `fpga-verified` fleet-event, which only makes sense on a fleet Pi.
+
+**Run the check on every boot.** The package installs the unit but does not enable it:
+
+```bash
+sudo systemctl enable --now fpgas-acorn-verify.service
+journalctl -u fpgas-acorn-verify.service       # the last result is also in /run/fpgas-online/acorn-verify.json
+```
+
+**Use the flash tool** against the installed images (CLE-215+ shown; use `acorn-cle-101-*` for a CLE-101):
+
+```bash
+sudo fpgas-acorn-flash id
+sudo fpgas-acorn-flash verify /usr/share/fpgas-online/acorn-pcie/images/acorn-cle-215p-sqrl_acorn_operational.bin 0x400000
+```
+
+Writing the flash, and converting a board that still runs the factory image, are covered in [acorn-pcie-programming.md](acorn-pcie-programming.md). `fpgas-acorn-flash` reaches the flash through the fpgas.online SoC's PCIe BAR0, so it needs that SoC to be running already. By default it expects the SoC at `0001:01:00.0`; pass `--bdf` for another address, or `--uart PORT` to use the UART bridge instead.
+
 ## Key Specifications
 
 | Parameter        | Value                            |
