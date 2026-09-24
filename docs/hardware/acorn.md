@@ -12,15 +12,18 @@ The Acorn's verification tools and bitstreams are Debian packages in the fpgas.o
 
 ```bash
 sudo apt update
-sudo apt install --no-install-recommends fpgas-online-acorn-tools
+sudo apt install fpgas-online-acorn-tools
 ```
 
-`--no-install-recommends` keeps apt from also installing `fpgas-online-setup-pi`, which turns the host into an fpgas.online fleet node. Leave the flag off only on fleet Pis.
+That one package also installs the matching bitstreams and openFPGALoader:
 
 | Package | Version scheme | Installs |
 |---------|----------------|----------|
 | `fpgas-online-acorn-tools` | `X.Y.postN` from `git describe` (e.g. `0.0.post557`) | `/usr/bin/fpgas-acorn-verify`, `/usr/bin/fpgas-acorn-flash`, `fpgas-acorn-verify.service`; the scripts live in `/usr/lib/fpgas-online/acorn-pcie/` |
 | `fpgas-online-acorn-bitstreams` | pinned release date + commit (e.g. `20260921+gf3355dccf443`) | `/usr/share/fpgas-online/acorn-pcie/images/`: `manifest.json`, and for each of `cle-215p` / `cle-101` the golden (`0x000000`) and operational (`0x400000`) flash images, the operational `.bit`, and the CSR maps |
+| `openfpgaloader-fpgasonline`, or Debian's `openfpgaloader` | | `openFPGALoader`, for loading the `.bit` over GPIO JTAG ([below](#via-gpio-jtag-openfpgaloader--what-the-fleet-uses)) |
+
+apt picks the fpgas.online openFPGALoader build (with the RP1 PIO JTAG cable and SPI flash info) if you have added the [fpgas.online-fpga-tools repository](https://github.com/fpgas-online/fpgas.online-fpga-tools#debian-packages-bookworm-trixie-sid-arm64-armhf). Otherwise it picks Debian's own package (bookworm 0.10.0, trixie 0.13.1).
 
 The tools package depends on one exact bitstreams version. Which release that is comes from [`packaging/acorn-pcie/release.toml`](../../packaging/acorn-pcie/release.toml), and a new release reaches hosts only when a reviewed PR moves that pin. Both debs are built, installed into a clean Debian bookworm and smoke-tested by [`acorn-debs.yml`](../../.github/workflows/acorn-debs.yml).
 
@@ -30,7 +33,7 @@ The tools package depends on one exact bitstreams version. Which release that is
 sudo fpgas-acorn-verify --no-publish --report -
 ```
 
-The JSON `result` is `pass` or `none` (no FPGA on PCIe), both with exit status 0. Otherwise it is `degraded` (running the golden image), `unconverted` (still on SQRL's factory image, or the vendor XDMA sample), `fail` (flash differs from the release, or a PCIe FPGA whose design it does not recognise) or `error`, all with exit status 1. Leave out `--no-publish` to also send the `fpga-verified` fleet-event, which only makes sense on a fleet Pi.
+The JSON `result` is `pass` or `none` (no FPGA on PCIe), both with exit status 0. Otherwise it is `degraded` (running the golden image), `unconverted` (still on SQRL's factory image, or the vendor XDMA sample), `fail` (flash differs from the release, or a PCIe FPGA whose design it does not recognise) or `error`, all with exit status 1. Leave out `--no-publish` to also send the `fpga-verified` fleet-event. That needs `fleet-event` from `fpgas-online-setup-pi`, which only fleet Pis have. Without it the check prints a warning and still reports its result.
 
 **Run the check on every boot.** The package installs the unit but does not enable it:
 
