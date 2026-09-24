@@ -6,6 +6,39 @@ Automated hardware verification designs for the [fpgas.online](https://fpgas.onl
 
 This repository contains LiteX-based FPGA test designs that run automatically during Raspberry Pi boot to verify that FPGA boards connected to the fpgas.online infrastructure are functioning correctly. Each test produces a clear pass/fail result over UART or other interfaces, enabling fully automated hardware health checks.
 
+## Installing the Packages
+
+CI builds the verification tools and the bitstreams they check against as Debian packages. Every green commit on `main` publishes them to the fpgas.online APT repository at <https://apt.fpgas.online> ([fpgas-online/apt](https://github.com/fpgas-online/apt)), which picks up new builds within about 15 minutes.
+
+| Package | Board | What it installs |
+|---------|-------|------------------|
+| `fpgas-online-acorn-bitstreams` | [Acorn CLE-215+ / CLE-101](docs/hardware/acorn.md#installing-the-acorn-packages) | Golden and operational flash images, `.bit` and CSR maps of the pinned Acorn PCIe SoC release |
+| `fpgas-online-acorn-tools` | [Acorn CLE-215+ / CLE-101](docs/hardware/acorn.md#installing-the-acorn-packages) | `fpgas-acorn-verify` (boot-time check), `fpgas-acorn-flash` (SPI flash tool), `fpgas-acorn-verify.service` |
+
+The other boards have no packages yet. Their bitstreams are the `all-bitstreams` artifact of the [Collect Bitstreams](.github/workflows/collect-bitstreams.yml) workflow.
+
+**1. Add the repository** (once per host). The repository serves `bookworm` (Debian 12) and `trixie` (Debian 13) for `arm64` and `armhf` only, which means Raspberry Pi OS, not an x86 workstation:
+
+```bash
+curl -fsSL https://apt.fpgas.online/pubkey.gpg \
+  | sudo tee /usr/share/keyrings/fpgas-online.gpg > /dev/null
+
+echo "deb [signed-by=/usr/share/keyrings/fpgas-online.gpg] https://apt.fpgas.online $(. /etc/os-release && echo "$VERSION_CODENAME") main" \
+  | sudo tee /etc/apt/sources.list.d/fpgas-online.list
+
+sudo apt update
+```
+
+**2. Install the packages for your board.** Each board's page has the exact command and what to run afterwards; see the table above. For the Acorn:
+
+```bash
+sudo apt install --no-install-recommends fpgas-online-acorn-tools   # pulls in fpgas-online-acorn-bitstreams
+```
+
+Use `--no-install-recommends` on any machine that is not an fpgas.online fleet Pi. Without it, apt also installs the recommended `fpgas-online-setup-pi`, which reconfigures the host as a fleet node (SSH keys, sshd settings, status services).
+
+To upgrade, run `sudo apt update && sudo apt upgrade`. The tools package depends on one exact bitstreams version, so the two always upgrade together.
+
 ## Architecture
 
 ```
