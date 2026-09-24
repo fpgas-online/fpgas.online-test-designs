@@ -1,0 +1,38 @@
+# .github/workflows/wiring.yml
+#
+# The Acorn wiring sheets and pin tables in docs/wiring/acorn/generated/ are built from wiring.toml.
+# This fails if they are out of date with it (or with the generator), or if the table does not check.
+# The fpgas.online docs copy generated/ from main, so what is here is what readers see.
+name: "Wiring sheets"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: "Acorn wiring: tests, and generated/ up to date"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Lint
+        run: |
+          uv run --no-project --with ruff ruff check docs/wiring/acorn
+          uv run --no-project --with ruff ruff format --check docs/wiring/acorn
+
+      - name: Tests
+        run: uv run --no-project --python 3.12 --with pytest pytest docs/wiring/acorn
+
+      - name: generated/ matches wiring.toml
+        # Pillow and fontTools are pinned in gen.py's script metadata and the fonts are in the repository,
+        # so the SVGs and tables come out byte for byte the same here as on the machine that committed them.
+        run: uv run --python 3.12 docs/wiring/acorn/gen.py --check

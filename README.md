@@ -6,6 +6,36 @@ Automated hardware verification designs for the [fpgas.online](https://fpgas.onl
 
 This repository contains LiteX-based FPGA test designs that run automatically during Raspberry Pi boot to verify that FPGA boards connected to the fpgas.online infrastructure are functioning correctly. Each test produces a clear pass/fail result over UART or other interfaces, enabling fully automated hardware health checks.
 
+## Installing the Packages
+
+CI builds the verification tools, and the bitstreams they check against, as Debian packages. Every green commit on `main` publishes them to the fpgas.online APT repository at <https://apt.fpgas.online> ([fpgas-online/apt](https://github.com/fpgas-online/apt)), which picks up new builds within about 15 minutes. Installing a board's tools package also installs its bitstreams and openFPGALoader.
+
+| Board | Package |
+|-------|---------|
+| [Acorn CLE-215+ / CLE-101](docs/hardware/acorn.md#installing-the-acorn-packages) | `fpgas-online-acorn-tools` |
+
+The other boards have no packages yet. Their bitstreams are the `all-bitstreams` artifact of the [Collect Bitstreams](.github/workflows/collect-bitstreams.yml) workflow.
+
+**1. Add the repository** (once per host). It serves `bookworm` (Debian 12) and `trixie` (Debian 13). The packages are architecture-independent, so this works on Raspberry Pi OS and on an x86 machine alike:
+
+```bash
+sudo install -d -m0755 /etc/apt/keyrings
+curl -fsSL https://apt.fpgas.online/apt.gpg | sudo tee /etc/apt/keyrings/apt.gpg > /dev/null
+echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
+  | sudo tee /etc/apt/sources.list.d/apt.list
+sudo apt update
+```
+
+This is the setup every fpgas.online apt repository uses ([convention](https://github.com/mithro/apt-repo-action/blob/main/docs/conventions.md)). If you added the repository before 2026-09-24 using `pubkey.gpg` and `https://apt.fpgas.online <suite> main`, that path is now a frozen snapshot that gets no new packages. Remove it with `sudo rm /etc/apt/sources.list.d/fpgas-online.list /usr/share/keyrings/fpgas-online.gpg`, then run the commands above.
+
+**2. Install your board's package** from the table above. For the Acorn:
+
+```bash
+sudo apt install fpgas-online-acorn-tools
+```
+
+The board's page, linked from the table, says what to run afterwards. To upgrade, run `sudo apt update && sudo apt upgrade`.
+
 ## Architecture
 
 ```

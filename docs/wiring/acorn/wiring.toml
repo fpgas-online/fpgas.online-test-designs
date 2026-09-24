@@ -1,0 +1,137 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# How an SQRL Acorn (CLE-215+, or the CLE-101 sold as LiteFury) is wired to its host.
+#
+# This file is the one copy. gen.py draws the two wiring sheets and writes the Markdown pin tables
+# from it, and the fpgas.online docs copy those generated files. Change the wiring here, run gen.py,
+# and commit the regenerated files with it.
+
+# ---------------------------------------------------------------------------------------------------
+# The Acorn's two 6-pin Molex Pico-EZmate connectors, pins in physical order: position 1 is the end
+# nearest the M.2 edge connector. Sources: the "Pico-EZmate connectors pinout on Acorn, Nite/LiteFury"
+# legend on the LiteX Acorn CLE-215 wiki, and the silkscreen of RHS Research's JTAG adapter.
+# ---------------------------------------------------------------------------------------------------
+[connectors.P1]
+what = "JTAG"
+pins = ["GND1", "TCK", "TDO", "TMS", "TDI", "VCC"]
+
+[connectors.P2]
+what = "I/O"
+pins = ["GND2", "J2", "K2", "J5", "H5", "VCC"]
+
+# label: what the sheet and the tables print. ball: the FPGA package pin (P2 only; P1 is the
+# dedicated JTAG port). drive: which end drives it (pi, fpga, both), for the arrows.
+[signals]
+K2 = { label = "K2", ball = "K2", standard = "LVCMOS33", colour = "#0f766e", drive = "fpga", what = "serial TX, FPGA output" }
+J2 = { label = "J2", ball = "J2", standard = "LVCMOS33", colour = "#b4491f", drive = "pi", what = "serial RX, FPGA input" }
+J5 = { label = "J5", ball = "J5", standard = "LVCMOS33", colour = "#6b4aa0", drive = "both", what = "spare GPIO" }
+H5 = { label = "H5", ball = "H5", standard = "LVCMOS33", colour = "#1d6fb8", drive = "both", what = "spare GPIO" }
+TDI = { label = "TDI", colour = "#d97706", drive = "pi", what = "JTAG data in" }
+TDO = { label = "TDO", colour = "#2e7d32", drive = "fpga", what = "JTAG data out" }
+TCK = { label = "TCK", colour = "#546e7a", drive = "pi", what = "JTAG clock" }
+TMS = { label = "TMS", colour = "#d81b60", drive = "pi", what = "JTAG mode select" }
+GND1 = { label = "GND", colour = "#15181d", what = "ground" }
+GND2 = { label = "GND", colour = "#15181d", what = "ground" }
+VCC = { label = "VCC", what = "3.3 V from the Acorn" }
+
+# ---------------------------------------------------------------------------------------------------
+# Carriers. Each header lists its pins by the number printed on (or counted on) that board:
+#   name: the silkscreen or pinout name; gpio + func: the SoC line and its function, if it has one;
+#   tag: the host's name for the pin as the sheet prints it beside the wire; rpi: the same pin on a
+#   Raspberry Pi 40-pin header, where the numbers differ.
+# wires maps each connected signal to [header, pin]. Signals not listed are cut back: VCC always.
+# ---------------------------------------------------------------------------------------------------
+[carriers.pi5]
+name = "Raspberry Pi 5"
+jtag_pins = "10:9:11:8"
+resistors = []
+
+[carriers.pi5.headers.gpio]
+name = "40-pin header"
+short = "header"
+columns = 2
+housings = [[5, 10], [19, 26]]
+
+[carriers.pi5.headers.gpio.pins]
+1 = { name = "3.3 V" }
+2 = { name = "5 V" }
+3 = { name = "GPIO2", gpio = "GPIO2", func = "I2C1_SDA" }
+4 = { name = "5 V" }
+5 = { name = "GPIO3", gpio = "GPIO3", func = "I2C1_SCL", tag = "GPIO3" }
+6 = { name = "GND" }
+7 = { name = "GPIO4", gpio = "GPIO4", func = "GPCLK0", tag = "GPIO4" }
+8 = { name = "GPIO14", gpio = "GPIO14", func = "TXD0", tag = "GPIO14 TXD" }
+9 = { name = "GND" }
+10 = { name = "GPIO15", gpio = "GPIO15", func = "RXD0", tag = "GPIO15 RXD" }
+19 = { name = "GPIO10", gpio = "GPIO10", func = "SPI0_MOSI", tag = "GPIO10" }
+20 = { name = "GND" }
+21 = { name = "GPIO9", gpio = "GPIO9", func = "SPI0_MISO", tag = "GPIO9" }
+22 = { name = "GPIO25", gpio = "GPIO25" }
+23 = { name = "GPIO11", gpio = "GPIO11", func = "SPI0_SCLK", tag = "GPIO11" }
+24 = { name = "GPIO8", gpio = "GPIO8", func = "SPI0_CE0", tag = "GPIO8" }
+25 = { name = "GND" }
+26 = { name = "GPIO7", gpio = "GPIO7", func = "SPI0_CE1" }
+
+# The order of the wires is the order the sheet's router places them in; changing it moves wires to
+# other lanes on the sheet (the same wiring, drawn differently).
+[carriers.pi5.wires]
+K2 = ["gpio", 10]
+J2 = ["gpio", 8]
+J5 = ["gpio", 5]
+H5 = ["gpio", 7]
+GND2 = ["gpio", 6]
+TDI = ["gpio", 19]
+TDO = ["gpio", 21]
+TCK = ["gpio", 23]
+TMS = ["gpio", 24]
+GND1 = ["gpio", 25]
+
+[carriers.blade]
+name = "Compute Blade"
+jtag_pins = "2:3:4:14"
+# J2 reaches GPIO14 through the UART header while TMS reaches it through the Extension Port: the
+# resistor lets JTAG win if a design drives J2.
+resistors = ["J2"]
+resistor_value = "470 Ω"
+
+# Printed numbers: 1 to 5 down the left column, 6 to 10 down the right. Electrically RPi header
+# pins 1 to 10 in the same arrangement. Read off the vendor's board photo.
+[carriers.blade.headers.ext]
+name = "Extension Port"
+columns = 2
+housings = [[1, 10]]
+
+[carriers.blade.headers.ext.pins]
+1 = { name = "3.3V", rpi = 1 }
+2 = { name = "IO2", gpio = "GPIO2", func = "I2C1_SDA", tag = "IO2", rpi = 3 }
+3 = { name = "IO3", gpio = "GPIO3", func = "I2C1_SCL", tag = "IO3", rpi = 5 }
+4 = { name = "IO4", gpio = "GPIO4", func = "GPCLK0", tag = "IO4", rpi = 7 }
+5 = { name = "GND", rpi = 9 }
+6 = { name = "5V", rpi = 2 }
+7 = { name = "5V", rpi = 4 }
+8 = { name = "GND", rpi = 6 }
+9 = { name = "IO14", gpio = "GPIO14", func = "TXD0", tag = "IO14", rpi = 8 }
+10 = { name = "IO15", gpio = "GPIO15", func = "RXD0", tag = "IO15", rpi = 10 }
+
+# The 1x4 header beside the Extension Port, numbered 1 to 4 from the top; the vendor's GPIO table
+# calls it "UART Back" and lists GPIO14 and GPIO15 there as well as on the Extension Port.
+[carriers.blade.headers.uart]
+name = "UART"
+columns = 1
+housings = [[1, 4]]
+
+[carriers.blade.headers.uart.pins]
+1 = { name = "5V" }
+2 = { name = "GND" }
+3 = { name = "TX", gpio = "GPIO14", func = "TXD0", tag = "TX IO14" }
+4 = { name = "RX", gpio = "GPIO15", func = "RXD0", tag = "RX IO15" }
+
+[carriers.blade.wires]
+TDI = ["ext", 2]
+TDO = ["ext", 3]
+TCK = ["ext", 4]
+GND1 = ["ext", 8]
+TMS = ["ext", 9]
+GND2 = ["uart", 2]
+J2 = ["uart", 3]
+K2 = ["uart", 4]

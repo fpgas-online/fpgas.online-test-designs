@@ -6,6 +6,51 @@ The Sqrl Acorn CLE-215+ is an M.2 form factor PCIe FPGA accelerator card, pin-co
 
 See [acorn-pinmap.md](acorn-pinmap.md) for the full RPi GPIO pinmap.
 
+## Installing the Acorn Packages
+
+The Acorn's verification tools and bitstreams are Debian packages in the fpgas.online APT repository. Add the repository first ([README: Installing the Packages](../../README.md#installing-the-packages)), then on the Acorn's Pi 5 host run:
+
+```bash
+sudo apt update
+sudo apt install fpgas-online-acorn-tools
+```
+
+That one package also installs the matching bitstreams and openFPGALoader:
+
+| Package | Version scheme | Installs |
+|---------|----------------|----------|
+| `fpgas-online-acorn-tools` | `X.Y.postN` from `git describe` (e.g. `0.0.post557`) | `/usr/bin/fpgas-acorn-verify`, `/usr/bin/fpgas-acorn-flash`, `fpgas-acorn-verify.service`; the scripts live in `/usr/lib/fpgas-online/acorn-pcie/` |
+| `fpgas-online-acorn-bitstreams` | pinned release date + commit (e.g. `20260921+gf3355dccf443`) | `/usr/share/fpgas-online/acorn-pcie/images/`: `manifest.json`, and for each of `cle-215p` / `cle-101` the golden (`0x000000`) and operational (`0x400000`) flash images, the operational `.bit`, and the CSR maps |
+| `openfpgaloader-fpgasonline`, or Debian's `openfpgaloader` | | `openFPGALoader`, for loading the `.bit` over GPIO JTAG ([below](#via-gpio-jtag-openfpgaloader--what-the-fleet-uses)) |
+
+To get the fpgas.online openFPGALoader build (with the RP1 PIO JTAG cable and SPI flash info), add the [fpgas.online-fpga-tools repository](https://github.com/fpgas-online/fpgas.online-fpga-tools#debian-packages-bookworm-trixie-sid-arm64-armhf) **before** installing. Otherwise apt installs Debian's own package (bookworm 0.10.0, trixie 0.13.1). Adding the repository afterwards does not replace it; run `sudo apt install openfpgaloader-fpgasonline` to switch. Fleet Pis already get the patched `openfpgaloader-fpgasonline-git` from the infra role.
+
+The tools package depends on one exact bitstreams version. Which release that is comes from [`packaging/acorn-pcie/release.toml`](../../packaging/acorn-pcie/release.toml), and a new release reaches hosts only when a reviewed PR moves that pin. Both debs are built, installed into a clean Debian bookworm and smoke-tested by [`acorn-debs.yml`](../../.github/workflows/acorn-debs.yml).
+
+**Check the board** (reads only, never writes the flash):
+
+```bash
+sudo fpgas-acorn-verify --no-publish --report -
+```
+
+The JSON `result` is `pass` or `none` (no FPGA on PCIe), both with exit status 0. Otherwise it is `degraded` (running the golden image), `unconverted` (still on SQRL's factory image, or the vendor XDMA sample), `fail` (flash differs from the release, or a PCIe FPGA whose design it does not recognise) or `error`, all with exit status 1. Leave out `--no-publish` to also send the `fpga-verified` fleet-event. That needs `fleet-event` from `fpgas-online-setup-pi`, which only fleet Pis have. Without it the check prints a warning and still reports its result.
+
+**Run the check on every boot.** The package installs the unit but does not enable it:
+
+```bash
+sudo systemctl enable --now fpgas-acorn-verify.service
+journalctl -u fpgas-acorn-verify.service       # the last result is also in /run/fpgas-online/acorn-verify.json
+```
+
+**Use the flash tool** against the installed images (CLE-215+ shown; use `acorn-cle-101-*` for a CLE-101):
+
+```bash
+sudo fpgas-acorn-flash id
+sudo fpgas-acorn-flash verify /usr/share/fpgas-online/acorn-pcie/images/acorn-cle-215p-sqrl_acorn_operational.bin 0x400000
+```
+
+Writing the flash, and converting a board that still runs the factory image, are covered in [acorn-pcie-programming.md](acorn-pcie-programming.md). `fpgas-acorn-flash` reaches the flash through the fpgas.online SoC's PCIe BAR0, so it needs that SoC to be running already. By default it expects the SoC at `0001:01:00.0`; pass `--bdf` for another address, or `--uart PORT` to use the UART bridge instead.
+
 ## Key Specifications
 
 | Parameter        | Value                            |
@@ -156,7 +201,7 @@ Six Acorn CLE-215+ hosts, all Raspberry Pi 5 Rev 1.1, all on the S3300 switch
 (switch index 2) under the [VLAN-per-port scheme](site-welland.md#network-topology):
 hostname `pi-sw2-p<port>`, IP `10.21.2.<port>`. Probed live 2026-09-03; JTAG /
 P2 columns from the 2026-08-31 pin-ID survey in
-[acorn-pinmap.md](acorn-pinmap.md#measured-p2-wiring-welland-2026-08-31).
+[the Welland Acorn table](https://docs.fpgas.online/en/latest/sites/welland.html#sqrl-acorn-cle-215).
 
 | Host       | Port | IP         | RPi MAC           | RPi (rev)          | Flash contents        | JTAG (P1)          | P2 serial            | Camera | Old name |
 | ---------- | ---- | ---------- | ----------------- | ------------------ | --------------------- | ------------------ | -------------------- | ------ | -------- |
