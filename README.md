@@ -16,17 +16,17 @@ CI builds the verification tools, and the bitstreams they check against, as Debi
 
 The other boards have no packages yet. Their bitstreams are the `all-bitstreams` artifact of the [Collect Bitstreams](.github/workflows/collect-bitstreams.yml) workflow.
 
-**1. Add the repository** (once per host). It serves `bookworm` (Debian 12) and `trixie` (Debian 13), and for now only `arm64` and `armhf`, such as Raspberry Pi OS ([fpgas-online/apt#12](https://github.com/fpgas-online/apt/issues/12)):
+**1. Add the repository** (once per host). It serves `bookworm` (Debian 12) and `trixie` (Debian 13). The packages are architecture-independent, so this works on Raspberry Pi OS and on an x86 machine alike:
 
 ```bash
-curl -fsSL https://apt.fpgas.online/pubkey.gpg \
-  | sudo tee /usr/share/keyrings/fpgas-online.gpg > /dev/null
-
-echo "deb [signed-by=/usr/share/keyrings/fpgas-online.gpg] https://apt.fpgas.online $(. /etc/os-release && echo "$VERSION_CODENAME") main" \
-  | sudo tee /etc/apt/sources.list.d/fpgas-online.list
-
+sudo install -d -m0755 /etc/apt/keyrings
+curl -fsSL https://apt.fpgas.online/apt.gpg | sudo tee /etc/apt/keyrings/apt.gpg > /dev/null
+echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
+  | sudo tee /etc/apt/sources.list.d/apt.list
 sudo apt update
 ```
+
+This is the setup every fpgas.online apt repository uses ([convention](https://github.com/mithro/apt-repo-action/blob/main/docs/conventions.md)). If you added the repository before 2026-09-24 using `pubkey.gpg` and `https://apt.fpgas.online <suite> main`, that path is now a frozen snapshot that gets no new packages. Remove it with `sudo rm /etc/apt/sources.list.d/fpgas-online.list /usr/share/keyrings/fpgas-online.gpg`, then run the commands above.
 
 **2. Install your board's package** from the table above. For the Acorn:
 
