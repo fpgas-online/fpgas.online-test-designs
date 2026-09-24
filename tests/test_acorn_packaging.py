@@ -159,6 +159,16 @@ def test_the_tools_package_depends_on_exactly_the_pinned_bitstreams():
             assert pathlib.Path(c["src"]).is_file(), c["src"]
 
 
+def test_the_tools_package_pulls_in_openfpgaloader_but_not_the_fleet_setup():
+    config = bd.tools_nfpm(version="0.0.post600", bitstreams="20260921+gf3355dccf443", repo=_PATH.parents[2])
+    # The fpgas.online builds first, so apt picks one when the fpga-tools repo is configured; both Provide
+    # openfpgaloader, and Debian's own openfpgaloader resolves it on a host with only Debian + apt.fpgas.online.
+    assert "openfpgaloader-fpgasonline | openfpgaloader-fpgasonline-git | openfpgaloader" in config["depends"]
+    # apt installs Recommends by default: fpgas-online-setup-pi reconfigures the host as a fleet node.
+    assert "recommends" not in config
+    assert config["suggests"] == ["fpgas-online-setup-pi"]
+
+
 def test_the_pin_file_names_a_release_this_builder_accepts():
     pin = bd.read_pin(_PATH.parent / "release.toml")
     bd.bitstreams_version(pin["tag"])
