@@ -6,6 +6,36 @@ Automated hardware verification designs for the [fpgas.online](https://fpgas.onl
 
 This repository contains LiteX-based FPGA test designs that run automatically during Raspberry Pi boot to verify that FPGA boards connected to the fpgas.online infrastructure are functioning correctly. Each test produces a clear pass/fail result over UART or other interfaces, enabling fully automated hardware health checks.
 
+## Installing the Packages
+
+CI builds the verification tools, and the bitstreams they check against, as Debian packages. Every green commit on `main` publishes them to the fpgas.online APT repository at <https://apt.fpgas.online> ([fpgas-online/apt](https://github.com/fpgas-online/apt)), which picks up new builds within about 15 minutes. Installing a board's tools package also installs its bitstreams and openFPGALoader.
+
+| Board | Package |
+|-------|---------|
+| [Acorn CLE-215+ / CLE-101](docs/hardware/acorn.md#installing-the-acorn-packages) | `fpgas-online-acorn-tools` |
+
+The other boards have no packages yet. Their bitstreams are the `all-bitstreams` artifact of the [Collect Bitstreams](.github/workflows/collect-bitstreams.yml) workflow.
+
+**1. Add the repository** (once per host). It serves `bookworm` (Debian 12) and `trixie` (Debian 13), and for now only `arm64` and `armhf`, such as Raspberry Pi OS ([fpgas-online/apt#12](https://github.com/fpgas-online/apt/issues/12)):
+
+```bash
+curl -fsSL https://apt.fpgas.online/pubkey.gpg \
+  | sudo tee /usr/share/keyrings/fpgas-online.gpg > /dev/null
+
+echo "deb [signed-by=/usr/share/keyrings/fpgas-online.gpg] https://apt.fpgas.online $(. /etc/os-release && echo "$VERSION_CODENAME") main" \
+  | sudo tee /etc/apt/sources.list.d/fpgas-online.list
+
+sudo apt update
+```
+
+**2. Install your board's package** from the table above. For the Acorn:
+
+```bash
+sudo apt install fpgas-online-acorn-tools
+```
+
+The board's page, linked from the table, says what to run afterwards. To upgrade, run `sudo apt update && sudo apt upgrade`.
+
 ## Architecture
 
 ```
