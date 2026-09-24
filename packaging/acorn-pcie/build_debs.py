@@ -10,7 +10,7 @@ grows when a reviewed PR moves the pin: moving the pin is also what changes whic
 
 fpgas-online-acorn-tools carries acorn_verify.py, spi_flash.py, uartbone_link.py and the boot unit. Its
 version is the repository's (`X.Y.postN` from git describe, as the other fpgas.online debs do) and it
-depends on exactly the pinned bitstreams version.
+depends on exactly the pinned bitstreams version, and on an openFPGALoader to load the .bit with.
 
 Nothing is trusted on the way: the manifest must hash to release.toml's manifest_sha256, and every asset to
 its manifest entry.
@@ -178,8 +178,17 @@ def tools_nfpm(version, bitstreams, repo=REPO):
             "that its flash holds the expected images, reading only. fpgas-acorn-flash (spi_flash.py) identifies,\n"
             "dumps, verifies and, when asked, writes the flash over PCIe."
         ),
-        "depends": ["python3", f"fpgas-online-acorn-bitstreams (= {bitstreams})"],
-        "recommends": ["fpgas-online-setup-pi"],  # fleet-event, which the boot check publishes through
+        "depends": [
+            "python3",
+            f"fpgas-online-acorn-bitstreams (= {bitstreams})",
+            # Loads the bitstreams package's .bit into SRAM over GPIO JTAG, which is how a board on SQRL's factory
+            # image is converted. The fpgas.online builds (fpgas.online-fpga-tools) first; both Provide
+            # openfpgaloader, and Debian's own openfpgaloader satisfies a host without that repository.
+            "openfpgaloader-fpgasonline | openfpgaloader-fpgasonline-git | openfpgaloader",
+        ],
+        # fleet-event, which the boot check publishes through; publish() copes without it. Not Recommends: apt
+        # installs those by default, and fpgas-online-setup-pi turns any host into a fleet node.
+        "suggests": ["fpgas-online-setup-pi"],
         "contents": [
             {"src": str(host / "acorn_verify.py"), "dst": f"{LIB_DST}/acorn_verify.py", **exe},
             {"src": str(host / "spi_flash.py"), "dst": f"{LIB_DST}/spi_flash.py", **exe},
