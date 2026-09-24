@@ -3,8 +3,16 @@ name: "Build: PCIe Enumeration"
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
+
+# A new push to a pull request cancels that pull request's older, now stale, run.
+# Anything else (main, workflow_dispatch) is grouped by commit, so it never waits
+# behind or cancels another run: every merge builds, exactly as before.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   build-netv2-a7-35:
