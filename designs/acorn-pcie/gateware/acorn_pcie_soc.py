@@ -57,6 +57,7 @@ import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
 from designs._shared.build_helpers import default_build_dir
 from designs._shared.dna_reader import DNAReader
 from designs._shared.pin_check import check_build
+from designs._shared.s7pcie_clocking import feed_pclk_mux_from_mmcm
 from designs._shared.uartbone_break import BreakResetUARTBone, tuning_word
 
 UART_RESET_BAUD = 1200
@@ -225,6 +226,8 @@ class AcornPCIeSoC(SoCCore):
         self.comb += platform.request("pcie_clkreq_n").eq(0)
         self.pcie_phy = S7PCIEPHY(platform, platform.request("pcie_x1"), data_width=64, bar0_size=0x20000)
         self.pcie_phy.add_gt_loc_constraints([PCIE_X1_GT_LOC])
+        # One global buffer on PIPECLK, as on USERCLK, or the hard block's Max Skew check fails.
+        feed_pclk_mux_from_mmcm(self.pcie_phy)
         if variant in PCIE_SUBSYSTEM_ID:
             self.pcie_phy.update_config(
                 {
