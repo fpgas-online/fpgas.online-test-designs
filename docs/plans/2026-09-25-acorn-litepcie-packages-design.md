@@ -103,8 +103,42 @@ CI keeps this true. A check script:
    manifest against `manifest_sha256` and each file against its manifest entry, as `build_debs.py` already
    does.
 2. Collects every `CSR_*` macro and every `soc.h` constant that the sources under `driver/kernel` and
-   `driver/user` reference.
-3. Fails unless each one has the same value in the generated headers as in all six `csr.json`.
+   `driver/user` reference, **including those they only test with `#ifdef`**.
+3. Fails unless each one agrees between the generated headers and all six `csr.json` in **presence and
+   value**: defined in all or in none, and equal wherever defined.
+
+Presence matters as much as value. The sources compile different code depending on which CSRs exist:
+
+| `#ifdef` | where | when it is defined, the build... |
+|---|---|---|
+| `CSR_XADC_BASE`, `CSR_DNA_BASE` | `user/litepcie_util.c` | ...prints temperatures/voltages and the FPGA DNA |
+| `CSR_FLASH_BASE` | `user/litepcie_util.c`, `user/liblitepcie/litepcie_flash.c` | ...has the flash commands at all |
+| `CSR_FLASH_BPI_CONTROL_ADDR`, `CSR_FLASH_SPI_CONTROL_ADDR` | `user/liblitepcie/litepcie_flash.c` | ...uses the BPI or the SPI flash path |
+| `CSR_PCIE_DMA1_BASE` … `CSR_PCIE_DMA7_BASE` | `kernel/main.c` | ...sets up that DMA channel |
+| `CSR_PCIE_MSI_PBA_ADDR` | `kernel/main.c` | ...asks for MSI-X instead of MSI |
+| `CSR_PCIE_MSI_CLEAR_ADDR`, `CSR_CTRL_RESET_ADDR`, `CSR_UART_XOVER_RXTX_ADDR`, `CSR_ICAP_BASE`, `CSR_FLASH_SPI_CONTROL_ADDR` | `kernel/main.c` | ...turns on MSI clearing, the reset at probe, the liteuart device, ICAP, SPI flash |
+
+A driver built from headers where one of these is present, run on an image where it is absent (or the other
+way round), does the wrong thing without any error. Today every image agrees: none has `pcie_msi_pba`,
+`flash_bpi_*` or `pcie_dma1`…`7`, and all six have the rest.
+
+The header names map to `csr.json` keys like this (as LiteX exports them, checked against the pinned
+release):
+
+| header | `csr.json` |
+|---|---|
+| `CSR_<NAME>_ADDR` (`csr.h`) | `csr_registers["<name>"]["addr"]`, name lower-cased: `CSR_PCIE_MSI_ENABLE_ADDR` → `pcie_msi_enable` |
+| `CSR_<NAME>_BASE` (`csr.h`) | `csr_bases["<name>"]`: `CSR_PCIE_DMA0_BASE` → `pcie_dma0` |
+| `CSR_BASE` (`csr.h`) | `memories["csr"]["base"]` |
+| `<NAME>` constants (`soc.h`) | `constants["<name>"]`: `DMA_CHANNELS` → `dma_channels`, `PCIE_DMA0_WRITER_INTERRUPT` → `pcie_dma0_writer_interrupt` |
+
+Not every `DMA_*` name comes from the SoC:
+
+- `DMA_CHANNELS` and `DMA_ADDR_WIDTH` are SoC constants in `soc.h`, so the check covers them.
+- `DMA_BUFFER_COUNT`, `DMA_BUFFER_SIZE`, `DMA_BUFFER_PER_IRQ`, `DMA_IRQ_DISABLE`, `DMA_LAST_DISABLE` and the
+  `PCIE_DMA_*_OFFSET` values are fixed in litepcie's `kernel/config.h`. `DMA_CHANNEL_COUNT` is also defined
+  there, as `DMA_CHANNELS`. None of these is in `csr.json`, so they are outside the check. They change only
+  with the litepcie pin in `uv.lock`, which is a version input (§3.7).
 
 A gateware change that moves a CSR the driver uses therefore fails CI until the driver question is settled
 (a new release, or a driver per image), rather than shipping a driver that is wrong for part of the fleet.
