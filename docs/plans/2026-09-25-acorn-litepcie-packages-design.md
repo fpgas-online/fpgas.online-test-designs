@@ -306,7 +306,7 @@ CI, on every pull request:
 - a DKMS test in the shape DKMS is for (§2), a single-architecture `debian:bookworm` arm64 container: install
   the headers for the newest v8 kernel and the `-dkms` deb, run `dkms install -k <kver>`, then check that
   `modinfo -k <kver> litepcie liteuart` resolves. The fleet's shape (armhf root, arm64 kernel) is not tested
-  with DKMS, because it is not supported there. Part B's install test (§4.3) covers it with prebuilt modules.
+  with DKMS, because it is not supported there. Part B's install test (§4.4) covers it with prebuilt modules.
 
 On hardware, on pi-sw2-p48, which runs the #29 cle-215+ image from SRAM. It uses Part A's CI artifacts: the
 armhf `-utils` and `-common` debs, and the fleet-kernel `.ko` files, copied to the host's tmpfs. These are
@@ -362,7 +362,56 @@ The same kernel name can exist in both suites with different builds: `linux-head
 `1:6.12.34-1+rpt1~bookworm` in bookworm and `1:6.12.34-1+rpt1` in trixie, built with GCC 12 and GCC 14.
 Modules are therefore built per suite and never shared between suites.
 
-### 4.3 Tests
+### 4.3 Retention, pruning and the kernel floor
+
+**Two budgets are at stake.**
+
+- *The series release.* A GitHub release holds at most 1000 assets, and the `vX.Y` series release is shared:
+  `acorn-debs.yml` uploads `fpgas-online-acorn-bitstreams` and `fpgas-online-acorn-tools` there. On
+  2026-09-25 `v0.0` held 9 assets, 2 bitstreams and 7 tools; the tools deb adds one per merge.
+- *The apt pool.* fpgas-online/apt commits every deb it pulls into `pool/main/` in git (29 debs, 3.7 MiB on
+  2026-09-25), and nothing there is ever deleted.
+
+**Release retention (this repository, Part B).** After a run has uploaded a complete new set,
+`acorn-litepcie.yml` prunes the litepcie assets.
+
+- *What stays*: for every `fpgas-online-acorn-litepcie-*` package, the assets of the current driver version
+  and of the one before it, so a host can roll back one version. Everything older is deleted from the
+  release.
+- *Where old versions live*: in the apt pool. Removing an asset from the release does not remove a deb
+  fpgas-online/apt has already pulled. `pull_debs.py` also counts a package as offered while any version
+  remains, so the prefix entry never goes stale.
+- *Only its own assets*: pruning never touches assets of other packages.
+- *Headroom for acorn-debs*: before uploading, the workflow counts the release's assets and fails if the
+  upload would take it past 900.
+
+Two driver versions of 63 modules, plus `-common`, `-dkms` and two `-utils`, come to about 134 assets.
+
+**Pool retention (fpgas-online/apt, Part C).** fpgas-online/apt keeps the newest two versions of each
+`fpgas-online-acorn-litepcie-*` package in `pool/main/` and removes older ones in the same commit that adds a
+new one. Removal only happens there, because the pool is that repository's.
+
+**Raising the floor.** `min_kernel` in `packaging/acorn-litepcie/kernels.toml` is the floor.
+
+- *Raising it* is a reviewed pull request that edits that one value. The next run neither builds nor keeps
+  modules for kernels below it: their assets are pruned from the release by the same step.
+  fpgas-online/apt's pool retention then drops them from the pool as newer versions arrive.
+- *Guard*: CI fails if `fleet_kernel` (§3.5) is below `min_kernel`, so the floor can never drop the kernel
+  the fleet boots.
+
+**Scheduled runs and inactivity.** GitHub disables scheduled workflows in a public repository after 60 days
+with no repository activity. Workflow runs do not count as activity; pushes do.
+
+- *What stops*: the daily run. When it stops, new RPi kernels stop getting modules, with no error anywhere.
+  Pushes to main keep building, because that trigger is not affected.
+- *Mitigation*: fpgas-online/apt's `pull-debs.yml` (every 15 minutes) reads this workflow's state from the
+  public API. `GET /repos/fpgas-online/fpgas.online-test-designs/actions/workflows/acorn-litepcie.yml` returns
+  `"state": "disabled_inactivity"` once it has been disabled. The check fails that run loudly, naming the fix:
+  `gh workflow enable acorn-litepcie.yml -R fpgas-online/fpgas.online-test-designs`.
+- *Why the watcher sits elsewhere*: a workflow cannot report its own disabling, so the check lives in
+  another repository.
+
+### 4.4 Tests
 
 - on pull requests, a **sample** of `-modules-<kver>`: the newest kernel of each (suite, flavour). Main and
   the daily run build the full set;
@@ -385,7 +434,7 @@ a pull request there first:
   need routing: a deb whose version ends in `+<suite>` goes only to that suite, and everything else goes to
   all suites, as now.
 - Architecture-specific packages in a flat repository are already accepted by `pull_debs.py`'s asset-name
-  pattern (`amd64|arm64|armhf`). The install test in §4.3 proves apt resolves them on an armhf host with
+  pattern (`amd64|arm64|armhf`). The install test in §4.4 proves apt resolves them on an armhf host with
   arm64 as a foreign architecture.
 
 If that apt change is not wanted, the fallback is what fpgas.online-fpga-tools does: publish this
