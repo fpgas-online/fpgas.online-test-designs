@@ -50,6 +50,20 @@ Relationships:
   copies of `litepcie.ko` for the same kernel with depmod choosing between them.
 - `-dkms` Depends on `dkms`. It does not depend on any headers package: the RPi headers packages are per kernel
   and the operator installs the ones for their kernel.
+
+**Who uses which.**
+
+- **DKMS is for single-architecture, SD-booted hosts**: a Pi whose userland architecture matches its kernel
+  and whose root filesystem keeps what DKMS builds.
+- **The netbooted fleet uses the prebuilt `-modules-<kver>` packages.** DKMS does not work there, for two
+  reasons.
+  - *Architectures*: the Welland root is armhf with an arm64 `rpi-v8` kernel. The headers package's
+    `.kernelvariables` pins `override ARCH = arm64` and `override CROSS_COMPILE = aarch64-linux-gnu-` (read
+    from `linux-headers-6.12.96+rpt-rpi-v8`). Its Depends pull in `gcc-12` and
+    `linux-kbuild-6.12.96+rpt`. On an armhf root that means an aarch64 cross toolchain and arm64 kbuild
+    tools that the root cannot run.
+  - *Storage*: the root is a read-only NFS export under a tmpfs overlay, so anything DKMS builds at boot is
+    lost at the next reboot.
 - `-utils` Recommends `fpgas-online-acorn-litepcie-module`.
 - The modules packages run `depmod -a <kver>` in postinst and postrm.
 
@@ -144,6 +158,11 @@ All builds run in Docker on GitHub's `ubuntu-24.04-arm` runners. armhf builds us
 - **dkms, common**: once per run, architecture-independent.
 - **utils**: in `debian:bookworm` for arm64 and for armhf. Bookworm's glibc (2.36) is the older of the two
   fleet suites, so the same binaries install on trixie.
+- **the fleet kernel's modules, as a CI artifact only**: one build of `litepcie.ko` and `liteuart.ko`
+  against the kernel the netbooted fleet runs, named as `fleet_kernel` in
+  `packaging/acorn-litepcie/kernels.toml` (today `6.12.96+rpt-rpi-v8`, bookworm). It is built the way §4.1
+  builds a module and uploaded as a workflow artifact, not as a package. This is what makes Part A usable on
+  pi-sw2-p48 before Part B exists: DKMS cannot serve that host (§2).
 
 A new workflow, `.github/workflows/acorn-litepcie.yml`, builds on pull requests (no publishing), on pushes to
 main, daily, and on demand. On main it uploads to the current `vX.Y` series release, the rolling pre-release
@@ -187,15 +206,20 @@ CI, on every pull request:
 - the driver generation (§3.1) and the CSR cross-check (§3.2);
 - the struct-layout asserts, compiled for armhf and arm64 (§3.3);
 - the compat patch applies, and is not already present upstream;
-- builds of `-common`, `-dkms` and `-utils` (armhf, arm64);
-- a DKMS test in `debian:bookworm` arm64: install the headers for the newest v8 kernel and the `-dkms` deb,
-  run `dkms install -k <kver>`, then check that `modinfo -k <kver> litepcie liteuart` resolves.
+- builds of `-common`, `-dkms` and `-utils` (armhf, arm64), and the fleet-kernel module artifact with its
+  vermagic check;
+- a DKMS test in the shape DKMS is for (§2), a single-architecture `debian:bookworm` arm64 container: install
+  the headers for the newest v8 kernel and the `-dkms` deb, run `dkms install -k <kver>`, then check that
+  `modinfo -k <kver> litepcie liteuart` resolves. The fleet's shape (armhf root, arm64 kernel) is not tested
+  with DKMS, because it is not supported there. Part B's install test (§4.3) covers it with prebuilt modules.
 
-On hardware, on pi-sw2-p48, which runs the #29 cle-215+ image from SRAM. These are operator steps, run once
-when the packages first publish:
+On hardware, on pi-sw2-p48, which runs the #29 cle-215+ image from SRAM. It uses Part A's CI artifacts: the
+armhf `-utils` and `-common` debs, and the fleet-kernel `.ko` files, copied to the host's tmpfs. These are
+operator steps, run once:
 
 1. Stop anything using BAR0.
-2. `modprobe litepcie`. dmesg shows the identifier and `/dev/litepcie0`.
+2. `insmod` the artifact `litepcie.ko` (with Part B's package installed, `modprobe litepcie` instead). dmesg
+   shows the identifier and `/dev/litepcie0`.
 3. `litepcie_util info` (armhf tools against the arm64 kernel, which exercises compat_ioctl).
 4. The #29 DMA test.
 5. `rmmod litepcie liteuart`. Then `fpgas-acorn-verify --no-publish --report -` still reports the board
