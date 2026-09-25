@@ -247,11 +247,24 @@ Nothing changes on a running host until an operator loads the module.
   of scope.
 - **Loading resets the SoC.** Probe writes `CSR_CTRL_RESET_ADDR`, so `modprobe litepcie` resets the SoC's
   CPU and logic. DDR3 recalibrates, and anything an operator had running on the SoC is lost.
-- **One user at a time.** Probe claims BAR0 (`pcim_iomap_regions`). `fpgas-acorn-verify` and
-  `fpgas-acorn-flash` (spi_flash.py) drive BAR0 directly through sysfs `resource0` and serialise only with
-  each other (`spi_flash.LOCK`). The driver's flash ioctl does not take that lock.
-- **Not while the check runs.** Operators do not load the driver while the boot check or a flash operation
-  runs.
+- **One user at a time, enforced by the tools, because the kernel does not.**
+  - *What collides*: probe claims BAR0 (`pcim_iomap_regions`). `fpgas-acorn-verify` and `fpgas-acorn-flash`
+    (spi_flash.py) drive BAR0 directly through sysfs `resource0`, and serialise only with each other
+    (`spi_flash.LOCK`). The driver's flash ioctl does not take that lock.
+  - *Nothing stops them*: the fleet kernel has `# CONFIG_STRICT_DEVMEM is not set` (read from
+    `config-6.12.96+rpt-rpi-v8`), so `IO_STRICT_DEVMEM` is off. The kernel neither revokes nor refuses a
+    `resource0` mapping of a BAR a driver holds, and both would drive the same CSRs at once.
+  - *Decision*: `fpgas-acorn-verify` and `fpgas-acorn-flash` check `/sys/bus/pci/devices/<bdf>/driver`
+    before they open BAR0. When `litepcie` is bound, they touch nothing on that device and report it.
+    - The boot check's board result is then `driver-bound`, with the reason "litepcie.ko is bound: not
+      checked". `driver-bound` ranks between `pass` and `degraded` in `SEVERITY`.
+    - Its exit status is non-zero, because the board has not been verified. An operator who loaded the
+      driver on purpose sees the unit fail for that reason, and nothing else.
+    - `fpgas-acorn-flash` refuses with the same message.
+  - *Where it lands*: this is a change to `designs/acorn-pcie/host/`, shipped in `fpgas-online-acorn-tools`,
+    with tests in `tests/test_acorn_verify.py` against a fake sysfs. It belongs to Part A.
+- **Load order.** The check cannot stop a driver being loaded while it is already running, so operators do
+  not load the driver while the boot check or a flash operation runs.
 
 ### 3.7 Versions
 
@@ -287,6 +300,7 @@ CI, on every pull request:
 - the driver generation (§3.1) and the CSR cross-check (§3.2);
 - the struct-layout asserts, compiled for armhf and arm64 (§3.3);
 - the compat and liteuart-alias patches apply, and neither is already present upstream;
+- the `driver-bound` refusal in `fpgas-acorn-verify` and `fpgas-acorn-flash` (fake-sysfs unit tests);
 - builds of `-common`, `-dkms` and `-utils` (armhf, arm64), and the fleet-kernel module artifact with its
   vermagic check;
 - a DKMS test in the shape DKMS is for (§2), a single-architecture `debian:bookworm` arm64 container: install
@@ -387,10 +401,12 @@ the Pis keep one source for test-design packages) or run a separate archive.
 
 ## 7. Out of scope
 
-- **Loading the module at boot.** That needs its own design. It must settle whether the boot check reads
-  through the driver (its ioctls) or unbinds it first, and whether a Pi kernel built with
-  `CONFIG_IO_STRICT_DEVMEM` still allows `resource0` mmap while the driver holds BAR0. The reset on probe
-  (§3.6) also means the driver must load before, not during, anything that uses the SoC.
+- **Loading the module at boot.** That needs its own design.
+  - It must settle whether the boot check reads through the driver (its ioctls) or unbinds it first. Until
+    then, a bound driver makes the check report `driver-bound` (§3.6).
+  - Whether the kernel would police `resource0` is already answered: it does not (`CONFIG_STRICT_DEVMEM`
+    unset).
+  - The reset on probe (§3.6) means the driver must load before, not during, anything that uses the SoC.
 - **The CI trigger.** This repository used to build every pull request twice (push and pull_request). #41
   already fixed that: `push` is limited to main and a concurrency group cancels stale runs. The new workflow
   follows the same pattern.
