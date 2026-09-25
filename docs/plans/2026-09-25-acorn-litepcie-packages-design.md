@@ -334,12 +334,18 @@ that `modinfo -F vermagic` of each `.ko` starts with `<kver> ` and fails if not.
 
 The RPi archive keeps every kernel it has ever shipped. On 2026-09-25 its indexes listed:
 
-| suite / arch | flavours | kernels |
+| suite / arch | flavour | kernels |
 |---|---|---|
-| bookworm / arm64 | `rpi-v8`, `rpi-2712` | 24 each, 6.1.21 … 6.12.109 |
-| bookworm / armhf | `rpi-v6`, `rpi-v7`, `rpi-v7l` | 25 each, 6.1.21 … 6.12.109 |
+| bookworm / arm64 | `rpi-v8` | 25: seven `6.1.0-rpiN` (6.1.21 … 6.1.73), seven 6.6.x, eleven 6.12.x (6.12.19 … 6.12.109) |
+| bookworm / arm64 | `rpi-2712` | 23: five `6.1.0-rpiN` (from `6.1.0-rpi3`, 6.1.47), seven 6.6.x, eleven 6.12.x |
+| bookworm / armhf | `rpi-v6`, `rpi-v7`, `rpi-v7l` | 25 each, the same kernels as `rpi-v8` |
 | trixie / arm64 | `rpi-v8`, `rpi-2712` | 10 each, 6.12.25 … 6.18.50 |
 | trixie / armhf | `rpi-v6`, `rpi-v7` (no `rpi-v7l`) | 10 each, 6.12.25 … 6.18.50 |
+| bookworm, trixie / arm64 | `rpi-v8-rt` | the real-time flavour: 8 on bookworm and 10 on trixie, all 6.12 or later |
+
+The 6.1 kernels are named `6.1.0-rpiN` (`linux-headers-6.1.0-rpi8-rpi-v8`), not by their upstream version, so
+the matrix script compares the package's Version (`1:6.1.73-1+rpt1`), not its name, against the floor. The
+unversioned meta packages (`linux-headers-rpi-v8` and the like) are skipped.
 
 The build set is:
 
@@ -347,7 +353,9 @@ The build set is:
   These are the kernels a PCIe-capable Pi (Pi 5, CM4, CM5) can boot, 64-bit or 32-bit. `rpi-v6` and
   bookworm's `rpi-v7` are for older Pis (Zero, 2, 3), which have no PCIe. Trixie ships no `rpi-v7l`, so its
   `rpi-v7` is the only 32-bit ARMv7 flavour left there. Which boards it targets has not been checked yet,
-  and the first trixie host with an Acorn confirms it.
+  and the first trixie host with an Acorn confirms it. **`rpi-v8-rt` is left out on purpose.** No fpgas.online
+  host runs the real-time kernel, and building it would add 18 modules today (8 bookworm, 10 trixie) that
+  nothing installs. Adding it later is one line in `kernels.toml`.
 - **Versions**: every kernel from 6.12 onwards. The fleet runs 6.12, and 6.1 and 6.6 are kernels no current
   host boots. That is 63 builds today (bookworm 11 × 3, trixie 10 × 3). "Every kernel" with no floor would
   be 103.
