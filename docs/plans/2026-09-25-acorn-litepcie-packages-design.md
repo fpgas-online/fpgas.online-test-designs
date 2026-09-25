@@ -193,9 +193,15 @@ in `build_debs.py`). They are never dates.
 
 The driver packages take their version from **the last commit that changed the driver's inputs**, not from
 HEAD. Those inputs are `packaging/acorn-litepcie/`, `designs/acorn-pcie/gateware/acorn_pcie_soc.py` and
-`uv.lock`: `git describe` of `git log -1 --format=%H -- <inputs>`. Otherwise every merge to main would bump
-the version and rebuild all 63 modules (§4). That would add 63 assets to the series release per merge, and a
-GitHub release holds at most 1000 assets.
+`uv.lock`: `git describe` of `git log -1 --first-parent --format=%H -- <inputs>`. Otherwise every merge to main
+would bump the version and rebuild all 63 modules (§4). That would add 63 assets to the series release per
+merge, and a GitHub release holds at most 1000 assets.
+
+`--first-parent` is what keeps versions from going backwards. Without it, `git log` can return a commit
+from a merged side branch, one that was written before an earlier main commit. That commit's `git describe`
+count is lower, so the new version would sort below one already published. With it, the commit found is
+always one on main's first-parent line: the merge commit that brought the change in. N then only grows as
+main moves.
 
 `-modules-<kver>` versions add the suite: `X.Y.postN+bookworm` or `X.Y.postN+trixie`.
 
