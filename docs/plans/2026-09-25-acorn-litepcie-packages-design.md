@@ -150,6 +150,23 @@ it.
 (`main.c`, `#ifdef CSR_UART_XOVER_RXTX_ADDR`). Without `liteuart.ko` that device never binds and the SoC's
 console is not reachable as `/dev/ttyLXU*`.
 
+**The liteuart alias is broken upstream and is patched.** `liteuart.c` declares
+`MODULE_ALIAS("platform: liteuart")`, with a space. The device's modalias is `platform:liteuart`, so udev
+never matches it and `liteuart.ko` never loads by itself. The packaging applies a second one-line patch
+alongside the compat one, making it `MODULE_ALIAS("platform:liteuart")`.
+
+Patching beats documenting `modprobe liteuart` as an operator step:
+
+- it is a plain bug with a one-character fix;
+- it goes upstream in the same litepcie pull request as §3.3;
+- with it, `modprobe litepcie` is the whole procedure, and nothing depends on an operator remembering a
+  second module.
+
+Like the compat patch, the step fails once upstream carries the fix, so it is dropped then. `liteuart` is not
+blacklisted: it can only bind to the device that `litepcie.ko` registers, so it loads only when litepcie has
+been loaded on purpose. The Pi kernel builds no in-tree LiteUART driver (`CONFIG_SERIAL_LITEUART` is unset in
+`config-6.12.96+rpt-rpi-v8`), so nothing else claims the name `liteuart`.
+
 ### 3.5 Builds
 
 All builds run in Docker on GitHub's `ubuntu-24.04-arm` runners. armhf builds use
@@ -219,7 +236,7 @@ CI, on every pull request:
 
 - the driver generation (§3.1) and the CSR cross-check (§3.2);
 - the struct-layout asserts, compiled for armhf and arm64 (§3.3);
-- the compat patch applies, and is not already present upstream;
+- the compat and liteuart-alias patches apply, and neither is already present upstream;
 - builds of `-common`, `-dkms` and `-utils` (armhf, arm64), and the fleet-kernel module artifact with its
   vermagic check;
 - a DKMS test in the shape DKMS is for (§2), a single-architecture `debian:bookworm` arm64 container: install
@@ -232,8 +249,9 @@ armhf `-utils` and `-common` debs, and the fleet-kernel `.ko` files, copied to t
 operator steps, run once:
 
 1. Stop anything using BAR0.
-2. `insmod` the artifact `litepcie.ko` (with Part B's package installed, `modprobe litepcie` instead). dmesg
-   shows the identifier and `/dev/litepcie0`.
+2. `insmod` the artifact `liteuart.ko`, then `litepcie.ko`. `insmod` resolves no aliases, so both are loaded
+   by hand here. With Part B's package installed, `modprobe litepcie` alone is enough, and the patched alias
+   (§3.4) brings in `liteuart`. dmesg shows the identifier, `/dev/litepcie0` and a `ttyLXU` port.
 3. `litepcie_util info` (armhf tools against the arm64 kernel, which exercises compat_ioctl).
 4. The #29 DMA test.
 5. `rmmod litepcie liteuart`. Then `fpgas-acorn-verify --no-publish --report -` still reports the board
