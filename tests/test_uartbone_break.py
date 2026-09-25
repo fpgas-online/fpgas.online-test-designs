@@ -1,5 +1,10 @@
 """Simulation: a UART break must leave the bridge at the reset baud rate AND with no half-received command."""
 
+import pytest
+
+pytest.importorskip("litex")
+pytest.importorskip("migen")
+
 from litex.soc.interconnect import wishbone
 from migen import Module, Record, run_simulation
 

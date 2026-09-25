@@ -84,6 +84,7 @@ The board's page, linked from the table, says what to run afterwards. To upgrade
 |------|---------|-------|----------|---------|------------------|-------|-------------|
 | [GPIO Loopback](docs/tests/pmod-loopback.md) | Yes | Yes | Yes | Yes | Yes | — | — |
 | [PMOD Pin ID](docs/tests/pmod-loopback.md) | Yes | Yes | Yes | Yes | Yes | — | — |
+| [TT PMOD Wiring](docs/tests/tt-pmod-wiring.md) | — | — | — | Yes (and TT ASIC) | — | — | — |
 | [UART](docs/tests/uart.md) | Yes | Yes | Yes | Yes | Yes | — | — |
 | [Ethernet](docs/tests/ethernet.md) | Yes | Yes | — | — | — | — | — |
 | [PCIe Enumeration](docs/tests/pcie-enumeration.md) | — | Yes | — | — | Yes | — | — |
@@ -99,6 +100,7 @@ See [docs/tests/](docs/tests/) for detailed test specifications.
   - [PS1 Site](docs/hardware/site-ps1.md) — Public fpgas.online service (Arty A7 boards)
   - [PMOD Interface Spec](docs/hardware/pmod.md) — Standard PMOD types and connector pinouts
   - [RPi PMOD HAT](docs/hardware/rpi-hat-pmod.md) — Raspberry Pi PMOD HAT adapter pin mapping
+  - [TT PMOD wiring, measured](docs/hardware/tt-pmod-wiring-fleet.md) — HAT ↔ Tiny Tapeout ribbon wiring of every TT host
   - [TinyTapeout PMOD Standards](docs/hardware/pmod-tt.md) — TT-specific PMOD layouts and peripherals
 - **[Test Specifications](docs/tests/)** — What each test verifies and how
 - **[Toolchain Guides](docs/toolchains/)** — Building bitstreams with open source tools
