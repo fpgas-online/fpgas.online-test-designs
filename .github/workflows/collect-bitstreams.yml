@@ -3,8 +3,16 @@ name: "Collect Bitstreams"
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
+
+# A new push to a pull request cancels that pull request's older, now stale, run.
+# Anything else (main, workflow_dispatch) is grouped by commit, so it never waits
+# behind or cancels another run: every merge builds, exactly as before.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   collect:
@@ -17,6 +25,24 @@ jobs:
       # this job failed on every PR (push runs of the same commit passed).
       HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
+      # wait-on-check-action fails outright if no check matches when it first looks. After a
+      # push to a pull request cancels the older run (concurrency, above), the new build runs
+      # can briefly have no jobs yet, so wait here until at least one build check exists.
+      - name: Wait for the build workflows to start
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          for _ in $(seq 60); do
+            n="$(gh api "repos/${REPO}/commits/${HEAD_SHA}/check-runs?per_page=100" \
+              --jq '[.check_runs[].name | select(test("^(Arty|NeTV2|Fomu|TT FPGA|netv2)"))] | length' || echo 0)"  # gh's jq has no lookahead; an API error just retries
+            if [ "$n" -gt 0 ]; then echo "$n build checks on ${HEAD_SHA}"; exit 0; fi
+            sleep 10
+          done
+          echo "no build check appeared on ${HEAD_SHA} in 10 minutes" >&2
+          exit 1
+
       - name: Wait for build workflows to complete
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
