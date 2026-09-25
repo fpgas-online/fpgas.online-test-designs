@@ -29,7 +29,11 @@ What this spec assumes (correct these if they are wrong):
 - The consumers are Raspberry Pi hosts with an Acorn on PCIe: Pi 5 and Compute Module 4/5 carriers. The
   Welland fleet runs a 32-bit (armhf) userland with a 64-bit `rpi-v8` kernel (`linux-image-6.12.96+rpt-rpi-v8`,
   arm64, installed as a foreign architecture).
-- The first user is the #29 DMA test on pi-sw2-p48. Loading the driver on every boot is a later decision (§7).
+- The first user is the #29 DMA test on one board, named here by what identifies it rather than by where it
+  is plugged in: the Pi with Ethernet MAC `88:a2:9e:45:85:77` carrying the Acorn whose FPGA DNA is
+  `0x0054b48664b04854`. It sits at pi-sw2-p48 today, and that name is only its placement: boards move ports,
+  and this Pi was pi-sw2-p46 before. Both identifiers come from its bring-up record (2026-09-22). Loading the
+  driver on every boot is a later decision (§7).
 - One driver build serves all six Acorn images in the pinned release (§3.2 proves it and CI keeps checking it).
 
 ## 2. Packages
@@ -313,7 +317,7 @@ CI, on every pull request:
   `modinfo -k <kver> litepcie liteuart` resolves. The fleet's shape (armhf root, arm64 kernel) is not tested
   with DKMS, because it is not supported there. Part B's install test (§4.4) covers it with prebuilt modules.
 
-On hardware, on pi-sw2-p48, which runs the #29 cle-215+ image from SRAM. It uses Part A's CI artifacts: the
+On hardware, on the test board of §1 (MAC `88:a2:9e:45:85:77`, DNA `0x0054b48664b04854`; today at pi-sw2-p48), running the #29 cle-215+ image from SRAM. It uses Part A's CI artifacts: the
 armhf `-utils` and `-common` debs, and the fleet-kernel `.ko` files, copied to the host's tmpfs. These are
 operator steps, run once:
 
