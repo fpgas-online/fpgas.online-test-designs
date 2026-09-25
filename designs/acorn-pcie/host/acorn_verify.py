@@ -94,9 +94,15 @@ def classify(vendor, device, sub_vendor, sub_device):
 
 
 def scan_pci(root=SYSFS_PCI):
-    """Every Xilinx or SQRL endpoint under /sys/bus/pci/devices, classified."""
+    """Every Xilinx or SQRL endpoint under /sys/bus/pci/devices, classified.
+
+    A Pi with no PCIe at all (a Pi 3, an Orange Pi) has no such directory: that is no devices, not an error.
+    """
+    root = pathlib.Path(root)
+    if not root.is_dir():
+        return []
     found = []
-    for d in sorted(pathlib.Path(root).iterdir()):
+    for d in sorted(root.iterdir()):
         try:
             ids = [_hex(d / n) for n in ("vendor", "device", "subsystem_vendor", "subsystem_device")]
         except (OSError, ValueError):
