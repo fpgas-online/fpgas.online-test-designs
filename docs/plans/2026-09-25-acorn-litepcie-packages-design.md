@@ -274,7 +274,12 @@ in `build_debs.py`). They are never dates.
 The driver packages take their version from **the last commit that changed the driver's inputs**, not from
 HEAD. The inputs are:
 
-- `packaging/acorn-litepcie/`, which holds the patch, `dkms.conf`, `kernels.toml` and the build scripts;
+- `packaging/acorn-litepcie/`, which holds the patches, `dkms.conf`, `kernels.toml` and the build scripts.
+  This is deliberately a new directory, not `packaging/acorn-pcie/`. That one holds `release.toml`, the
+  bitstreams pin, which moves on its own schedule. If it were a version input, every pin move would give the
+  driver a new version and rebuild every module, even though the driver had not changed. A pin move that does
+  change a CSR the driver uses is caught by the cross-check (§3.2), which reads `release.toml` whatever
+  directory it is in;
 - `designs/acorn-pcie/gateware/acorn_pcie_soc.py`;
 - `designs/_shared/`, which `acorn_pcie_soc.py` imports: `migen_compat`, `build_helpers`, `dna_reader`,
   `pin_check`, `s7pcie_clocking` and `uartbone_break`;
