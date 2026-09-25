@@ -290,9 +290,9 @@ HEAD. The inputs are:
 - `uv.lock`;
 - `.github/workflows/acorn-litepcie.yml`.
 
-The version is `git describe` of `git log -1 --first-parent --format=%H -- <inputs>`. Otherwise every merge to main
-would bump the version and rebuild all 63 modules (§4). That would add 63 assets to the series release per
-merge, and a GitHub release holds at most 1000 assets.
+The version is `git describe` of `git log -1 --first-parent --format=%H -- <inputs>`. Otherwise every merge
+to main would bump the version and rebuild all 63 modules (§4). That would add 63 assets to the series release
+per merge, and a GitHub release holds at most 1000 assets.
 
 `--first-parent` is what keeps versions from going backwards. Without it, `git log` can return a commit
 from a merged side branch, one that was written before an earlier main commit. That commit's `git describe`
@@ -317,9 +317,10 @@ CI, on every pull request:
   `modinfo -k <kver> litepcie liteuart` resolves. The fleet's shape (armhf root, arm64 kernel) is not tested
   with DKMS, because it is not supported there. Part B's install test (§4.4) covers it with prebuilt modules.
 
-On hardware, on the test board of §1 (MAC `88:a2:9e:45:85:77`, DNA `0x0054b48664b04854`; today at pi-sw2-p48), running the #29 cle-215+ image from SRAM. It uses Part A's CI artifacts: the
-armhf `-utils` and `-common` debs, and the fleet-kernel `.ko` files, copied to the host's tmpfs. These are
-operator steps, run once:
+On hardware, on the test board of §1 (MAC `88:a2:9e:45:85:77`, DNA `0x0054b48664b04854`; today at
+pi-sw2-p48), running the #29 cle-215+ image from SRAM. It uses Part A's CI artifacts: the armhf `-utils` and
+`-common` debs, and the fleet-kernel `.ko` files, copied to the host's tmpfs. These are operator steps, run
+once:
 
 1. Stop anything using BAR0.
 2. `insmod` the artifact `liteuart.ko`, then `litepcie.ko`. `insmod` resolves no aliases, so both are loaded
@@ -327,7 +328,9 @@ operator steps, run once:
    (§3.4) brings in `liteuart`. dmesg shows the identifier, `/dev/litepcie0` and a `ttyLXU` port.
 3. `litepcie_util info` (armhf tools against the arm64 kernel, which exercises compat_ioctl).
 4. The #29 DMA test.
-5. `rmmod litepcie liteuart`. Then `fpgas-acorn-verify --no-publish --report -` still reports the board
+5. With the driver still loaded, `fpgas-acorn-verify --no-publish --report -` reports the board
+   `driver-bound` and reads nothing from it (§3.6).
+6. `rmmod litepcie liteuart`. Then `fpgas-acorn-verify --no-publish --report -` still reports the board
    correctly, which proves the driver leaves BAR0 access as it found it.
 
 ## 4. Part B: prebuilt modules per kernel
