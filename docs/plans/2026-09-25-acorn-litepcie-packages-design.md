@@ -6,6 +6,14 @@ This repository's CI builds and publishes Debian packages for the LitePCIe kerne
 with its companion `liteuart.ko`) and the LitePCIe user tools (`litepcie_util`, `litepcie_test`), generated
 for the Acorn PCIe SoC (`designs/acorn-pcie/gateware/acorn_pcie_soc.py`).
 
+The work is in three parts, each planned and delivered on its own. **Part A is planned first.**
+
+- **Part A** (§3): the driver source, the CSR cross-check, the compat patch, and the `-common`, `-utils` and
+  `-dkms` packages. Their CI artifacts are enough for the #29 test on pi-sw2-p48.
+- **Part B** (§4): the prebuilt `-modules-<kver>` packages for every chosen kernel, the daily run, and
+  retention.
+- **Part C** (§5): changes in fpgas-online/apt so it can serve these packages.
+
 ## 1. Intent
 
 What Tim asked for:
@@ -21,17 +29,17 @@ What this spec assumes (correct these if they are wrong):
 - The consumers are Raspberry Pi hosts with an Acorn on PCIe: Pi 5 and Compute Module 4/5 carriers. The
   Welland fleet runs a 32-bit (armhf) userland with a 64-bit `rpi-v8` kernel (`linux-image-6.12.96+rpt-rpi-v8`,
   arm64, installed as a foreign architecture).
-- The first user is the #29 DMA test on pi-sw2-p48. Loading the driver on every boot is a later decision (§8).
+- The first user is the #29 DMA test on pi-sw2-p48. Loading the driver on every boot is a later decision (§7).
 - One driver build serves all six Acorn images in the pinned release (§3.2 proves it and CI keeps checking it).
 
 ## 2. Packages
 
-| Package | Architecture | Contents |
-|---|---|---|
-| `fpgas-online-acorn-litepcie-common` | all | `/etc/modprobe.d/fpgas-online-acorn-litepcie.conf` (`blacklist litepcie`, §6) |
-| `fpgas-online-acorn-litepcie-dkms` | all | driver source under `/usr/src/fpgas-online-acorn-litepcie-<version>/` plus `dkms.conf` building `litepcie` and `liteuart` |
-| `fpgas-online-acorn-litepcie-modules-<kver>` | the kernel package's (arm64 for `rpi-v8`/`rpi-2712`, armhf for `rpi-v7l`/`rpi-v7`) | `litepcie.ko`, `liteuart.ko` under `/lib/modules/<kver>/updates/fpgas-online/` |
-| `fpgas-online-acorn-litepcie-utils` | armhf, arm64 | `/usr/bin/litepcie_util`, `/usr/bin/litepcie_test` |
+| Package | Part | Architecture | Contents |
+|---|---|---|---|
+| `fpgas-online-acorn-litepcie-common` | A | all | `/etc/modprobe.d/fpgas-online-acorn-litepcie.conf` (`blacklist litepcie`, §3.6) |
+| `fpgas-online-acorn-litepcie-dkms` | A | all | driver source under `/usr/src/fpgas-online-acorn-litepcie-<version>/` plus `dkms.conf` building `litepcie` and `liteuart` |
+| `fpgas-online-acorn-litepcie-utils` | A | armhf, arm64 | `/usr/bin/litepcie_util`, `/usr/bin/litepcie_test` |
+| `fpgas-online-acorn-litepcie-modules-<kver>` | B | the kernel package's (arm64 for `rpi-v8`/`rpi-2712`, armhf for `rpi-v7l`/`rpi-v7`) | `litepcie.ko`, `liteuart.ko` under `/lib/modules/<kver>/updates/fpgas-online/` |
 
 Relationships:
 
@@ -45,15 +53,10 @@ Relationships:
 - `-utils` Recommends `fpgas-online-acorn-litepcie-module`.
 - The modules packages run `depmod -a <kver>` in postinst and postrm.
 
-`liteuart.ko` is shipped because every image in the pinned release has the crossover UART
-(`uart_xover_rxtx` is in all six `csr.json`), so `litepcie.ko`'s probe registers a `liteuart` platform device
-(`main.c`, `#ifdef CSR_UART_XOVER_RXTX_ADDR`). Without `liteuart.ko` that device never binds and the SoC's
-console is not reachable as `/dev/ttyLXU*`.
-
 `liblitepcie` is not a separate package: `driver/user/Makefile` builds it only as a static archive
 (`liblitepcie.a`) and links it into both tools.
 
-## 3. The driver source
+## 3. Part A: the driver source, `-common`, `-utils` and `-dkms`
 
 ### 3.1 Generation
 
@@ -126,7 +129,14 @@ The same line goes upstream as a pull request to enjoy-digital/litepcie. The pac
 the line is already present, so the patch is dropped as soon as `uv.lock` moves to a litepcie that carries
 it.
 
-## 4. Builds
+### 3.4 liteuart
+
+`liteuart.ko` is shipped because every image in the pinned release has the crossover UART
+(`uart_xover_rxtx` is in all six `csr.json`), so `litepcie.ko`'s probe registers a `liteuart` platform device
+(`main.c`, `#ifdef CSR_UART_XOVER_RXTX_ADDR`). Without `liteuart.ko` that device never binds and the SoC's
+console is not reachable as `/dev/ttyLXU*`.
+
+### 3.5 Builds
 
 All builds run in Docker on GitHub's `ubuntu-24.04-arm` runners. armhf builds use
 `docker run --platform linux/arm/v7`, which fpgas.online-fpga-tools' `debs.yml` already does successfully.
@@ -134,13 +144,73 @@ All builds run in Docker on GitHub's `ubuntu-24.04-arm` runners. armhf builds us
 - **dkms, common**: once per run, architecture-independent.
 - **utils**: in `debian:bookworm` for arm64 and for armhf. Bookworm's glibc (2.36) is the older of the two
   fleet suites, so the same binaries install on trixie.
-- **modules**: one job per (suite, kernel) pair. It uses the suite's Debian image with the Raspberry Pi
-  archive (`archive.raspberrypi.com/debian`) added, installs `linux-headers-<kver>` for the kernel's
-  architecture, and runs `make -C /usr/src/linux-headers-<kver> M=$PWD modules` on the generated
-  `driver/kernel`. It then checks that `modinfo -F vermagic` of each `.ko` starts with `<kver> ` and fails if
-  not.
 
-### 4.1 Which kernels
+A new workflow, `.github/workflows/acorn-litepcie.yml`, builds on pull requests (no publishing), on pushes to
+main, daily, and on demand. On main it uploads to the current `vX.Y` series release, the rolling pre-release
+that `acorn-debs.yml` already publishes to. It sits apart from `acorn-debs.yml` because its matrix, its
+runners (arm64) and its daily schedule are all different.
+
+### 3.6 What installing the packages does to a host
+
+Nothing changes on a running host until an operator loads the module.
+
+- **No autoload.** `litepcie.ko` has a `MODULE_DEVICE_TABLE(pci, …)` that includes `10ee:7021`. Installed
+  and depmod'ed, udev would load it on every boot for every Acorn running our SoC. `-common`'s
+  `blacklist litepcie` stops that alias autoload, while `modprobe litepcie` still loads it on purpose.
+  Without the blacklist, installing the packages would silently turn on boot-time loading, which §7 keeps out
+  of scope.
+- **Loading resets the SoC.** Probe writes `CSR_CTRL_RESET_ADDR`, so `modprobe litepcie` resets the SoC's
+  CPU and logic. DDR3 recalibrates, and anything an operator had running on the SoC is lost.
+- **One user at a time.** Probe claims BAR0 (`pcim_iomap_regions`). `fpgas-acorn-verify` and
+  `fpgas-acorn-flash` (spi_flash.py) drive BAR0 directly through sysfs `resource0` and serialise only with
+  each other (`spi_flash.LOCK`). The driver's flash ioctl does not take that lock.
+- **Not while the check runs.** Operators do not load the driver while the boot check or a flash operation
+  runs.
+
+### 3.7 Versions
+
+Versions are `X.Y.postN` from `git describe`, like every other deb this repository builds (`git_version()`
+in `build_debs.py`). They are never dates.
+
+The driver packages take their version from **the last commit that changed the driver's inputs**, not from
+HEAD. Those inputs are `packaging/acorn-litepcie/`, `designs/acorn-pcie/gateware/acorn_pcie_soc.py` and
+`uv.lock`: `git describe` of `git log -1 --format=%H -- <inputs>`. Otherwise every merge to main would bump
+the version and rebuild all 63 modules (§4). That would add 63 assets to the series release per merge, and a
+GitHub release holds at most 1000 assets.
+
+`-modules-<kver>` versions add the suite: `X.Y.postN+bookworm` or `X.Y.postN+trixie`.
+
+### 3.8 Tests
+
+CI, on every pull request:
+
+- the driver generation (§3.1) and the CSR cross-check (§3.2);
+- the struct-layout asserts, compiled for armhf and arm64 (§3.3);
+- the compat patch applies, and is not already present upstream;
+- builds of `-common`, `-dkms` and `-utils` (armhf, arm64);
+- a DKMS test in `debian:bookworm` arm64: install the headers for the newest v8 kernel and the `-dkms` deb,
+  run `dkms install -k <kver>`, then check that `modinfo -k <kver> litepcie liteuart` resolves.
+
+On hardware, on pi-sw2-p48, which runs the #29 cle-215+ image from SRAM. These are operator steps, run once
+when the packages first publish:
+
+1. Stop anything using BAR0.
+2. `modprobe litepcie`. dmesg shows the identifier and `/dev/litepcie0`.
+3. `litepcie_util info` (armhf tools against the arm64 kernel, which exercises compat_ioctl).
+4. The #29 DMA test.
+5. `rmmod litepcie liteuart`. Then `fpgas-acorn-verify --no-publish --report -` still reports the board
+   correctly, which proves the driver leaves BAR0 access as it found it.
+
+## 4. Part B: prebuilt modules per kernel
+
+### 4.1 Builds
+
+**modules**: one job per (suite, kernel) pair. It uses the suite's Debian image with the Raspberry Pi archive
+(`archive.raspberrypi.com/debian`) added, installs `linux-headers-<kver>` for the kernel's architecture, and
+runs `make -C /usr/src/linux-headers-<kver> M=$PWD modules` on the generated `driver/kernel`. It then checks
+that `modinfo -F vermagic` of each `.ko` starts with `<kver> ` and fails if not.
+
+### 4.2 Which kernels
 
 The RPi archive keeps every kernel it has ever shipped. On 2026-09-25 its indexes listed:
 
@@ -172,29 +242,20 @@ The same kernel name can exist in both suites with different builds: `linux-head
 `1:6.12.34-1+rpt1~bookworm` in bookworm and `1:6.12.34-1+rpt1` in trixie, built with GCC 12 and GCC 14.
 Modules are therefore built per suite and never shared between suites.
 
-## 5. Versions and publishing
+### 4.3 Tests
 
-### 5.1 Versions
+- on pull requests, a **sample** of `-modules-<kver>`: the newest kernel of each (suite, flavour). Main and
+  the daily run build the full set;
+- the vermagic check on every module built;
+- an install test in `debian:bookworm` under `--platform linux/arm/v7`, the fleet's shape:
+  1. `dpkg --add-architecture arm64`, then install the RPi `linux-image-<newest v8 kver>:arm64` and the
+     built `-common`, `-modules-<kver>` and `-utils` debs through apt from a local flat repository;
+  2. check that `modinfo -k <kver> litepcie liteuart` resolves, and that the blacklist is in place;
+  3. check that `litepcie_util` prints its usage.
 
-Versions are `X.Y.postN` from `git describe`, like every other deb this repository builds (`git_version()`
-in `build_debs.py`). They are never dates.
+## 5. Part C: fpgas-online/apt
 
-The driver packages take their version from **the last commit that changed the driver's inputs**, not from
-HEAD. Those inputs are `packaging/acorn-litepcie/`, `designs/acorn-pcie/gateware/acorn_pcie_soc.py` and
-`uv.lock`: `git describe` of `git log -1 --format=%H -- <inputs>`. Otherwise every merge to main would bump
-the version and rebuild all 63 modules. That would add 63 assets to the series release per merge, and a
-GitHub release holds at most 1000 assets.
-
-`-modules-<kver>` versions add the suite: `X.Y.postN+bookworm` or `X.Y.postN+trixie`.
-
-### 5.2 Publishing
-
-A new workflow, `.github/workflows/acorn-litepcie.yml`, builds on pull requests (no publishing), on pushes to
-main, daily, and on demand. On main and on the daily run it uploads to the current `vX.Y` series release, the
-rolling pre-release that `acorn-debs.yml` already publishes to. It sits apart from `acorn-debs.yml` because
-its matrix, its runners (arm64) and its daily schedule are all different.
-
-fpgas-online/apt then pulls from that release. Its current design does not fit these packages, so this needs
+fpgas-online/apt pulls from the series release. Its current design does not fit these packages, so this needs
 a pull request there first:
 
 - `tools/pull_debs.py` matches each `package_sources.toml` entry as an exact package name (`<package>_`).
@@ -204,65 +265,26 @@ a pull request there first:
   need routing: a deb whose version ends in `+<suite>` goes only to that suite, and everything else goes to
   all suites, as now.
 - Architecture-specific packages in a flat repository are already accepted by `pull_debs.py`'s asset-name
-  pattern (`amd64|arm64|armhf`). The install test in §7 proves apt resolves them on an armhf host with arm64
-  as a foreign architecture.
+  pattern (`amd64|arm64|armhf`). The install test in §4.3 proves apt resolves them on an armhf host with
+  arm64 as a foreign architecture.
 
 If that apt change is not wanted, the fallback is what fpgas.online-fpga-tools does: publish this
 repository's own per-suite archive with `mithro/apt-repo-action` (`debs-<suite>-<arch>` artifacts). That
 means the Pis need one more apt source. **Decision for Tim**: extend fpgas-online/apt (recommended, because
 the Pis keep one source for test-design packages) or run a separate archive.
 
-## 6. What installing the packages does to a host
+## 6. Plan order
 
-Nothing changes on a running host until an operator loads the module.
+1. Part A. Its CI artifacts are what the #29 test on pi-sw2-p48 uses.
+2. Part B.
+3. Part C, once Tim has decided between extending fpgas-online/apt and a separate archive.
 
-- **No autoload.** `litepcie.ko` has a `MODULE_DEVICE_TABLE(pci, …)` that includes `10ee:7021`. Installed
-  and depmod'ed, udev would load it on every boot for every Acorn running our SoC. `-common`'s
-  `blacklist litepcie` stops that alias autoload, while `modprobe litepcie` still loads it on purpose.
-  Without the blacklist, installing the packages would silently turn on boot-time loading, which §8 keeps out
-  of scope.
-- **Loading resets the SoC.** Probe writes `CSR_CTRL_RESET_ADDR`, so `modprobe litepcie` resets the SoC's
-  CPU and logic. DDR3 recalibrates, and anything an operator had running on the SoC is lost.
-- **One user at a time.** Probe claims BAR0 (`pcim_iomap_regions`). `fpgas-acorn-verify` and
-  `fpgas-acorn-flash` (spi_flash.py) drive BAR0 directly through sysfs `resource0` and serialise only with
-  each other (`spi_flash.LOCK`). The driver's flash ioctl does not take that lock.
-- **Not while the check runs.** Operators do not load the driver while the boot check or a flash operation
-  runs.
-
-## 7. Tests
-
-CI, on every pull request:
-
-- the driver generation (§3.1) and the CSR cross-check (§3.2);
-- the struct-layout asserts, compiled for armhf and arm64 (§3.3);
-- the compat patch applies, and is not already present upstream;
-- builds of `-common`, `-dkms`, `-utils` (armhf, arm64) and a **sample** of `-modules-<kver>`: the newest
-  kernel of each (suite, flavour). Main and the daily run build the full set;
-- the vermagic check on every module built;
-- an install test in `debian:bookworm` under `--platform linux/arm/v7`, the fleet's shape:
-  1. `dpkg --add-architecture arm64`, then install the RPi `linux-image-<newest v8 kver>:arm64` and the
-     built `-common`, `-modules-<kver>` and `-utils` debs through apt from a local flat repository;
-  2. check that `modinfo -k <kver> litepcie liteuart` resolves, and that the blacklist is in place;
-  3. check that `litepcie_util` prints its usage;
-- a DKMS test in `debian:bookworm` arm64: install the headers for the newest v8 kernel and the `-dkms` deb,
-  run `dkms install -k <kver>`, then run the same modinfo check.
-
-On hardware, on pi-sw2-p48, which runs the #29 cle-215+ image from SRAM. These are operator steps, run once
-when the packages first publish:
-
-1. Stop anything using BAR0.
-2. `modprobe litepcie`. dmesg shows the identifier and `/dev/litepcie0`.
-3. `litepcie_util info` (armhf tools against the arm64 kernel, which exercises compat_ioctl).
-4. The #29 DMA test.
-5. `rmmod litepcie liteuart`. Then `fpgas-acorn-verify --no-publish --report -` still reports the board
-   correctly, which proves the driver leaves BAR0 access as it found it.
-
-## 8. Out of scope
+## 7. Out of scope
 
 - **Loading the module at boot.** That needs its own design. It must settle whether the boot check reads
   through the driver (its ioctls) or unbinds it first, and whether a Pi kernel built with
   `CONFIG_IO_STRICT_DEVMEM` still allows `resource0` mmap while the driver holds BAR0. The reset on probe
-  (§6) also means the driver must load before, not during, anything that uses the SoC.
+  (§3.6) also means the driver must load before, not during, anything that uses the SoC.
 - **The CI trigger.** This repository used to build every pull request twice (push and pull_request). #41
   already fixed that: `push` is limited to main and a concurrency group cancels stale runs. The new workflow
   follows the same pattern.
