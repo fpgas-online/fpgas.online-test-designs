@@ -453,6 +453,11 @@ a pull request there first:
 - Architecture-specific packages in a flat repository are already accepted by `pull_debs.py`'s asset-name
   pattern (`amd64|arm64|armhf`). The install test in §4.4 proves apt resolves them on an armhf host with
   arm64 as a foreign architecture.
+- Part A's packages (`-common`, `-dkms`, `-utils`) need only ordinary exact entries in
+  `package_sources.toml`, with no routing: they are not suite-specific. They can be registered first, on
+  their own.
+- Pool retention for `fpgas-online-acorn-litepcie-*`, keeping the newest two versions (§4.3).
+- The inactivity check on this repository's `acorn-litepcie.yml` in `pull-debs.yml` (§4.3).
 
 If that apt change is not wanted, the fallback is what fpgas.online-fpga-tools does: publish this
 repository's own per-suite archive with `mithro/apt-repo-action` (`debs-<suite>-<arch>` artifacts). That
