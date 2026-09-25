@@ -192,8 +192,16 @@ Versions are `X.Y.postN` from `git describe`, like every other deb this reposito
 in `build_debs.py`). They are never dates.
 
 The driver packages take their version from **the last commit that changed the driver's inputs**, not from
-HEAD. Those inputs are `packaging/acorn-litepcie/`, `designs/acorn-pcie/gateware/acorn_pcie_soc.py` and
-`uv.lock`: `git describe` of `git log -1 --first-parent --format=%H -- <inputs>`. Otherwise every merge to main
+HEAD. The inputs are:
+
+- `packaging/acorn-litepcie/`, which holds the patch, `dkms.conf`, `kernels.toml` and the build scripts;
+- `designs/acorn-pcie/gateware/acorn_pcie_soc.py`;
+- `designs/_shared/`, which `acorn_pcie_soc.py` imports: `migen_compat`, `build_helpers`, `dna_reader`,
+  `pin_check`, `s7pcie_clocking` and `uartbone_break`;
+- `uv.lock`;
+- `.github/workflows/acorn-litepcie.yml`.
+
+The version is `git describe` of `git log -1 --first-parent --format=%H -- <inputs>`. Otherwise every merge to main
 would bump the version and rebuild all 63 modules (§4). That would add 63 assets to the series release per
 merge, and a GitHub release holds at most 1000 assets.
 
