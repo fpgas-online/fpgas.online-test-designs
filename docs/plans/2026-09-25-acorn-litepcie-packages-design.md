@@ -50,6 +50,8 @@ Relationships:
   copies of `litepcie.ko` for the same kernel with depmod choosing between them.
 - `-dkms` Depends on `dkms`. It does not depend on any headers package: the RPi headers packages are per kernel
   and the operator installs the ones for their kernel.
+- `-utils` Recommends `fpgas-online-acorn-litepcie-module`.
+- The modules packages run `depmod -a <kver>` in postinst and postrm.
 
 **Who uses which.**
 
@@ -64,8 +66,6 @@ Relationships:
     tools that the root cannot run.
   - *Storage*: the root is a read-only NFS export under a tmpfs overlay, so anything DKMS builds at boot is
     lost at the next reboot.
-- `-utils` Recommends `fpgas-online-acorn-litepcie-module`.
-- The modules packages run `depmod -a <kver>` in postinst and postrm.
 
 `liblitepcie` is not a separate package: `driver/user/Makefile` builds it only as a static archive
 (`liblitepcie.a`) and links it into both tools.
