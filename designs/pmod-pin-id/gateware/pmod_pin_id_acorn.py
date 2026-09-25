@@ -35,6 +35,7 @@ from migen import *
 from pmod_pin_id import UARTTxIdentifier
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+from designs._shared.build_helpers import board_dir, flow_suffix
 from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
 from designs._shared.yosys_workarounds import YOSYS_TEMPLATE_STRIP_SCOPEINFO
 
@@ -108,6 +109,10 @@ def main():
     parser = argparse.ArgumentParser(description="GPIO Pin Identification for Acorn/LiteFury")
     parser.add_argument("--variant", default="cle-215+", choices=["cle-215+", "cle-215", "cle-101"])
     parser.add_argument("--toolchain", default="openxc7", choices=["openxc7", "vivado"])
+    parser.add_argument("--synth-mode", default=None, choices=["vivado", "yosys"],
+                        help="Vivado synthesis mode (only honoured with "
+                             "--toolchain=vivado; default vivado. Use 'yosys' "
+                             "for the Yosys→Vivado hybrid flow).")
     parser.add_argument("--build", action="store_true")
     args = parser.parse_args()
 
@@ -134,8 +139,18 @@ def main():
         platform.toolchain._yosys_template = list(YOSYS_TEMPLATE_STRIP_SCOPEINFO)
 
     if args.build:
-        build_dir = str(Path(__file__).resolve().parent.parent / "build" / "acorn")
-        platform.build(module, build_dir=build_dir)
+        # Write to build/<board>-<variant>-<flow>/gateware/<platform>.bit
+        # to match LiteX Builder's layout used by the other designs.
+        build_dir = str(
+            Path(__file__).resolve().parent.parent
+            / "build"
+            / f"{board_dir('acorn', args.variant)}{flow_suffix(args.toolchain, args.synth_mode)}"
+            / "gateware"
+        )
+        build_kwargs = {"build_dir": build_dir, "build_name": platform.name}
+        if args.toolchain == "vivado":
+            build_kwargs["synth_mode"] = args.synth_mode or "vivado"
+        platform.build(module, **build_kwargs)
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+from designs._shared.build_helpers import board_dir, flow_suffix
 from designs._shared.tt_fpga_platform import Platform
 
 
@@ -39,8 +40,13 @@ def main():
     module = GPIOLoopback(platform)
 
     if args.build:
-        build_dir = str(Path(__file__).resolve().parent.parent / "build" / "tt")
-        platform.build(module, build_dir=build_dir)
+        # Write to build/tt-fpga-yosys-nextpnr/gateware/<platform>.bin to
+        # match LiteX Builder's layout used by the other designs.
+        board = board_dir("tt", "fpga") + flow_suffix("icestorm")
+        build_dir = str(
+            Path(__file__).resolve().parent.parent / "build" / board / "gateware"
+        )
+        platform.build(module, build_dir=build_dir, build_name=platform.name)
 
 
 if __name__ == "__main__":

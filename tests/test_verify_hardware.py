@@ -82,10 +82,18 @@ def test_acorn_program_cmd_detaches_pcie_and_uses_libgpiod():
 
 
 def test_acorn_pin_id_artifact_matches_ci_upload_name():
-    # pmod_pin_id_acorn.py calls platform.build() directly, so LiteX names the
-    # output build/acorn/top.bit, and the CI job uploads build/acorn/*.bit.
+    # pmod_pin_id_acorn.py passes build_name=platform.name into
+    # build/acorn-cle-215p-yosys-nextpnr/gateware/, so the bitstream is
+    # sqrl_acorn.bit, and the CI job uploads that directory's *.bit.
     t = _pin_id_test_for("welland-sw2-p46")
-    assert t["artifact"] == "pmod-pin-id-acorn-cle-215plus/top.bit"
+    assert t["artifact"] == "pmod-pin-id-acorn-cle-215plus/sqrl_acorn.bit"
+
+
+def test_arty_artifacts_match_ci_upload_names():
+    # The CI jobs upload the Arty builds under <design>-arty-a7-35.
+    for design in ("uart", "ddr", "spiflash"):
+        artifact = vh.DESIGNS[design]["boards"]["arty"]["artifact"]
+        assert artifact.split("/")[0].endswith("-arty-a7-35"), artifact
 
 
 def test_cli_repeat_and_dry_run_flags_exist():

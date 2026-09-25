@@ -44,15 +44,16 @@ jobs:
         run: |
           mkdir -p "$CHIPDB"
           uv run python designs/uart/gateware/uart_soc_arty.py \
+            --variant a7-35 \
             --toolchain openxc7 \
             --build
 
       - name: Upload bitstream
         uses: actions/upload-artifact@v4
         with:
-          name: uart-test-arty
+          name: uart-test-arty-a7-35
           path: |
-            designs/uart/build/arty/gateware/*.bit
+            designs/uart/build/arty-a7-35-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-netv2-a7-35:
@@ -93,7 +94,7 @@ jobs:
         with:
           name: uart-test-netv2-a7-35t
           path: |
-            designs/uart/build/netv2/gateware/*.bit
+            designs/uart/build/netv2-a7-35-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-netv2-a7-100:
@@ -134,7 +135,7 @@ jobs:
         with:
           name: uart-test-netv2-a7-100t
           path: |
-            designs/uart/build/netv2/gateware/*.bit
+            designs/uart/build/netv2-a7-100-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-fomu:
@@ -164,7 +165,7 @@ jobs:
         with:
           name: uart-test-fomu
           path: |
-            designs/uart/build/fomu/gateware/*.bin
+            designs/uart/build/fomu-evt-yosys-nextpnr/gateware/*.bin
           if-no-files-found: error
 
   build-tt:
@@ -194,7 +195,7 @@ jobs:
         with:
           name: uart-test-tt-fpga
           path: |
-            designs/uart/build/tt/gateware/*.bin
+            designs/uart/build/tt-fpga-yosys-nextpnr/gateware/*.bin
           if-no-files-found: error
 
   lint:
@@ -247,7 +248,7 @@ jobs:
         with:
           name: uart-test-acorn-cle-215plus
           path: |
-            designs/uart/build/acorn/gateware/*.bit
+            designs/uart/build/acorn-cle-215p-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-acorn-cle-215:
@@ -288,7 +289,7 @@ jobs:
         with:
           name: uart-test-acorn-cle-215
           path: |
-            designs/uart/build/acorn/gateware/*.bit
+            designs/uart/build/acorn-cle-215-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-acorn-cle-101:
@@ -350,10 +351,10 @@ jobs:
         with:
           name: uart-test-acorn-cle-101
           path: |
-            designs/uart/build/acorn/gateware/*.bit
-            designs/uart/build/acorn/gateware/*.fasm
-            designs/uart/build/acorn/gateware/*.init
-            designs/uart/build/acorn/software/bios/bios.bin
+            designs/uart/build/acorn-cle-101-yosys-nextpnr/gateware/*.bit
+            designs/uart/build/acorn-cle-101-yosys-nextpnr/gateware/*.fasm
+            designs/uart/build/acorn-cle-101-yosys-nextpnr/gateware/*.init
+            designs/uart/build/acorn-cle-101-yosys-nextpnr/software/bios/bios.bin
             tmp/build/diag_pll/*.bit
             tmp/build/diag_bram/*.bit
           if-no-files-found: error

@@ -10,7 +10,8 @@ Arty A7 SPI Flash: Quad SPI, CS=L13.  Clock routed via STARTUPE2.
 Build command:
     uv run python designs/spi-flash-id/gateware/spiflash_soc_arty.py --toolchain openxc7 --build
 
-The bitstream is written to: designs/spi-flash-id/build/arty/gateware/arty_spiflash_test.bit
+The bitstream is written to:
+    designs/spi-flash-id/build/arty-<variant>-<flow>/gateware/digilent_arty.bit
 """
 
 import pathlib
@@ -27,7 +28,7 @@ from litex_boards.platforms.digilent_arty import Platform
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-from designs._shared.build_helpers import default_build_dir
+from designs._shared.build_helpers import board_dir, default_build_dir, flow_suffix
 from designs._shared.yosys_workarounds import patch_yosys_template
 
 kB = 1024
@@ -97,7 +98,10 @@ def main():
 
     patch_yosys_template(soc)
 
+    board_name = board_dir("arty", args.variant) + flow_suffix(
+        parser._toolchain, parser.toolchain_argdict.get("synth_mode"))
     builder_args = dict(parser.builder_argdict)
+    builder_args["output_dir"] = default_build_dir(__file__, board_name)
     builder_args["compile_software"] = False
     builder = Builder(soc, **builder_args)
 
@@ -105,7 +109,7 @@ def main():
     ident = "fpgas-online SPI Flash Test SoC -- Arty A7"
     install_spiflash_firmware(soc, ident)
 
-    builder.build(run=args.build)
+    builder.build(run=args.build, **parser.toolchain_argdict)
 
 
 if __name__ == "__main__":

@@ -44,15 +44,16 @@ jobs:
         run: |
           mkdir -p "$CHIPDB"
           uv run python designs/spi-flash-id/gateware/spiflash_soc_arty.py \
+            --variant a7-35 \
             --toolchain openxc7 \
             --build
 
       - name: Upload bitstream
         uses: actions/upload-artifact@v4
         with:
-          name: spiflash-test-arty
+          name: spiflash-test-arty-a7-35
           path: |
-            designs/spi-flash-id/build/arty/gateware/*.bit
+            designs/spi-flash-id/build/arty-a7-35-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-netv2-a7-35:
@@ -93,7 +94,7 @@ jobs:
         with:
           name: spiflash-test-netv2-a7-35t
           path: |
-            designs/spi-flash-id/build/netv2/gateware/*.bit
+            designs/spi-flash-id/build/netv2-a7-35-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-netv2-a7-100:
@@ -134,7 +135,7 @@ jobs:
         with:
           name: spiflash-test-netv2-a7-100t
           path: |
-            designs/spi-flash-id/build/netv2/gateware/*.bit
+            designs/spi-flash-id/build/netv2-a7-100-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-fomu:
@@ -164,7 +165,7 @@ jobs:
         with:
           name: spiflash-test-fomu
           path: |
-            designs/spi-flash-id/build/fomu/gateware/*.bin
+            designs/spi-flash-id/build/fomu-evt-yosys-nextpnr/gateware/*.bin
           if-no-files-found: error
 
   build-tt:
@@ -194,7 +195,7 @@ jobs:
         with:
           name: spiflash-test-tt-fpga
           path: |
-            designs/spi-flash-id/build/tt/gateware/*.bin
+            designs/spi-flash-id/build/tt-fpga-yosys-nextpnr/gateware/*.bin
           if-no-files-found: error
 
   lint:
@@ -247,7 +248,7 @@ jobs:
         with:
           name: spiflash-test-acorn-cle-215plus
           path: |
-            designs/spi-flash-id/build/acorn/gateware/*.bit
+            designs/spi-flash-id/build/acorn-cle-215p-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-acorn-cle-215:
@@ -288,7 +289,7 @@ jobs:
         with:
           name: spiflash-test-acorn-cle-215
           path: |
-            designs/spi-flash-id/build/acorn/gateware/*.bit
+            designs/spi-flash-id/build/acorn-cle-215-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-acorn-cle-101:
@@ -329,5 +330,5 @@ jobs:
         with:
           name: spiflash-test-acorn-cle-101
           path: |
-            designs/spi-flash-id/build/acorn/gateware/*.bit
+            designs/spi-flash-id/build/acorn-cle-101-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
