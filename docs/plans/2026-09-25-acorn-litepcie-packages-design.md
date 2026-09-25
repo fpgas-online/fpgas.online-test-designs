@@ -172,7 +172,23 @@ been loaded on purpose. The Pi kernel builds no in-tree LiteUART driver (`CONFIG
 All builds run in Docker on GitHub's `ubuntu-24.04-arm` runners. armhf builds use
 `docker run --platform linux/arm/v7`, which fpgas.online-fpga-tools' `debs.yml` already does successfully.
 
-- **dkms, common**: once per run, architecture-independent.
+- **dkms, common**: once per run, architecture-independent. `dkms.conf` calls kbuild directly and does not
+  use the upstream `driver/kernel/Makefile`. That Makefile sets `ARCH?=$(shell uname -m)`, which is
+  `aarch64` on arm64, not the kernel's `arm64`, and it finds the kernel through `KERNEL_PATH` (from
+  `uname -r`) rather than the kernel DKMS is building for:
+
+      PACKAGE_NAME="fpgas-online-acorn-litepcie"
+      PACKAGE_VERSION="<X.Y.postN>"
+      MAKE[0]="make -C ${kernel_source_dir} M=${dkms_tree}/${PACKAGE_NAME}/${PACKAGE_VERSION}/build modules"
+      CLEAN="make -C ${kernel_source_dir} M=${dkms_tree}/${PACKAGE_NAME}/${PACKAGE_VERSION}/build clean"
+      BUILT_MODULE_NAME[0]="litepcie"
+      BUILT_MODULE_NAME[1]="liteuart"
+      DEST_MODULE_LOCATION[0]="/updates/dkms"
+      DEST_MODULE_LOCATION[1]="/updates/dkms"
+      AUTOINSTALL="yes"
+
+  kbuild reads the source's `Makefile` only for its `obj-m` list (`litepcie.o liteuart.o`,
+  `litepcie-objs = main.o`), and that list is what gets built.
 - **utils**: in `debian:bookworm` for arm64 and for armhf. Bookworm's glibc (2.36) is the older of the two
   fleet suites, so the same binaries install on trixie.
 - **the fleet kernel's modules, as a CI artifact only**: one build of `litepcie.ko` and `liteuart.ko`
