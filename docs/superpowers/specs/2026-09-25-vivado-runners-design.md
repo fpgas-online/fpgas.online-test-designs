@@ -13,6 +13,36 @@ hosts, the fpgas.online networks, or the next job.
 The openXC7 builds on `ubuntu-latest` stay exactly as they are. Vivado builds
 are added beside them.
 
+## Hosts (probed 2026-09-25)
+
+| | big-storage.welland.mithis.com | buddy.mithis.com |
+|---|---|---|
+| CPU | 2× Xeon Gold 6152, 88 threads, 2 NUMA nodes | i7-8700, 12 threads |
+| RAM | 503 GiB, ~477 GiB available | 125 GiB, **~15 GiB available, 24 GiB in swap** |
+| Load (1/5/15) | 2.4 / 3.9 / 4.0 | 5.5 / 5.6 / 6.2 |
+| KVM / libvirt | `/dev/kvm`, libvirtd active, no running VMs | `/dev/kvm`, libvirtd active, 4 running VMs (siliconprawn-backup, desktop, checker/data-wafer-space) |
+| Free disk | 2.7 TiB on `/` | 230 GiB on `/` |
+| OS | Debian 13, 6.12.73 | Debian 13, 6.12.41 |
+| Network | Welland LAN `10.1.8.0/21` + IPv6; docker running | public Hetzner host, `95.216.246.231/26` + a routed IPv6 /56 |
+| Vivado | none | 2025.2 in the `desktop` VM (desktop.buddy), ~50 GiB |
+
+**big-storage is the primary host.** buddy has no spare memory today and would
+host at most one slot, only if its other VMs can give up the RAM (D-3).
+
+Host specifics the deployment must respect:
+
+* Both hosts already run docker and libvirt, whose rules live in the
+  iptables-nft `ip filter`/`nat` tables. The runner rules go in a separate nft
+  table (`inet vivado_runners`) with a higher-priority `forward` and `input`
+  hook, so they apply regardless of docker's or libvirt's chains.
+* `vrbr0` gets **no IPv6** (no address, no RA, `disable_ipv6=1`). buddy's
+  routed /56 and big-storage's global IPv6 must never reach a guest.
+* big-storage mounts the `/space*` and `/backups` volumes; nothing is shared
+  into guests, and the controller's paths stay under `/var/lib/vivado-runners`
+  on `/`.
+* On big-storage each slot is pinned to one NUMA node (vCPUs and memory), so
+  two slots per node do not contend across the interconnect.
+
 ## Threat model
 
 **Policy:** Vivado jobs run for pushes to `main`, tags, `workflow_dispatch`, and
@@ -155,9 +185,14 @@ separate build network, never on `vrbr0` and never from a job.
 
 ### Vivado disk
 
-`vivado-<version>-artix7-<YYYY-MM-DD>.squashfs`, made from the existing
+`vivado-<version>-<YYYY-MM-DD>.squashfs`, made from the existing
 `/opt/Xilinx/2025.2` on desktop.buddy.mithis.com (AMD's installer needs an
-interactive login), with device support trimmed to Artix-7. It is attached to
+interactive login). That install is ~50 GiB (`data` 19, `tps` 9.4, `Vivado`
+7.3, `lnx64` 5.5, `gnu` 4.5, `Vitis` 3.7) and already carries few device
+families: `data/parts` is 3.4 GiB of which Artix-7 is 271 MiB. Trimming
+device support therefore saves little. Phase 0 records the compressed size and
+checks whether `Vitis/` and `data/xsim` can be left out without breaking a
+LiteX Vivado build. It is attached to
 each VM as a read-only virtio disk; one copy per host serves every slot. A
 squashfs block device is used rather than virtiofs so no host-side daemon parses
 guest requests.
@@ -176,8 +211,8 @@ Every image is kept by version under `/var/lib/vivado-runners/images/`:
 runner-base-2026-09-25.1.qcow2
 runner-base-2026-10-02.1.qcow2
 runner-base-current -> runner-base-2026-10-02.1.qcow2
-vivado-2025.2-artix7-2026-09-25.squashfs
-vivado-current -> vivado-2025.2-artix7-2026-09-25.squashfs
+vivado-2025.2-2026-09-25.squashfs
+vivado-current -> vivado-2025.2-2026-09-25.squashfs
 ```
 
 * The controller resolves the `*-current` symlinks when it prepares a slot and
@@ -202,9 +237,10 @@ key_file = "/etc/vivado-runners/app.pem"
 runner_group = "vivado"
 
 [slots]
-count = 2
+count = 4             # big-storage; buddy 0 or 1 (D-3)
 vcpus = 8
 memory_gib = 24
+numa_nodes = [0, 0, 1, 1]   # big-storage only
 scratch_gib = 60
 wall_limit_minutes = 120
 labels = ["self-hosted", "linux", "x64", "vivado-2025.2"]
@@ -276,8 +312,10 @@ restriction and the organisation's fork-approval policy.
 
 A new `release-vivado-bitstreams.yml` (on tag / `workflow_dispatch`) runs on
 `ubuntu-latest`. It downloads the Vivado jobs' artifacts, runs
-`designs/acorn-pcie/tools/publish_release.py` (and the equivalent for the
-all-designs release), and holds `contents: write`. The runners never hold a
+`designs/acorn-pcie/tools/publish_release.py`, and holds `contents: write`.
+The all-designs release (`vivado-bitstreams-v0.0-496-gf162f60`, 2026-04-17) was
+made by hand and no script for it is in the repo; Phase 5 adds one beside
+`publish_release.py`, with the same manifest and SHA256SUMS format. The runners never hold a
 token that can write. This replaces today's manual publish from a build tree on
 buddy.
 
@@ -316,11 +354,11 @@ Each phase is a PR with CI green before the next starts.
 
 | Phase | Work | Exit check |
 |---|---|---|
-| 0 | Probe both hosts (KVM, CPU, RAM, disk, other services and mounts to wall off); measure Vivado peak RAM for the largest design; build the trimmed squashfs and record its size; record GitHub's blob hostnames from a proxied run | Numbers and hostnames written into this spec |
+| 0 | Host inventory is done (above). Measure Vivado peak RAM for the largest design; build the trimmed squashfs and record its size; record GitHub's blob hostnames from a proxied run | Numbers and hostnames written into this spec |
 | 1 | Create the runner repo; controller + unit tests; image build; proxy + nftables | Unit tests green; image boots under the controller locally |
-| 2 | Deploy to buddy, 1 slot, runner group live | Sandbox acceptance workflow passes; one Vivado bitstream built |
-| 3 | test-designs Vivado matrix | Full Vivado matrix green on buddy |
-| 4 | big-storage joins (Vivado copied from buddy); slot counts set from Phase 0 | Jobs run on both hosts |
+| 2 | Deploy to big-storage, 1 slot, runner group live | Sandbox acceptance workflow passes; one Vivado bitstream built |
+| 3 | test-designs Vivado matrix | Full Vivado matrix green on big-storage |
+| 4 | Raise big-storage to its measured slot count; buddy joins with one slot only if D-3 frees the RAM | Matrix runs in parallel; host load stays within limits |
 | 5 | Release workflow replaces the manual publish | A `vivado-bitstreams-*` release made by CI with matching SHA-256s |
 
 ## Out of scope
@@ -336,5 +374,6 @@ Each phase is a PR with CI green before the next starts.
 * **D-1** What to do if `*.blob.core.windows.net` cannot be narrowed.
 * **D-2** Name of the runner repository (proposed
   `fpgas-online/fpgas.online-vivado-runners`).
-* **D-3** Whether big-storage's existing workloads can give up the RAM for its
-  slots; Phase 0 supplies the numbers.
+* **D-3** Whether buddy takes a slot at all. It has ~15 GiB available and is
+  already swapping, so a 24 GiB slot needs its other VMs trimmed first.
+  big-storage alone (4 slots) may be enough.
