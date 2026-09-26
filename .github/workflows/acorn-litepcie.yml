@@ -26,8 +26,9 @@ on:
   workflow_dispatch:
 
 # A new push to a pull request cancels that pull request's older, now stale, run.
-# Anything else (main, schedule, workflow_dispatch) is grouped by commit, so it never waits
-# behind or cancels another run.
+# Anything else (main, schedule, workflow_dispatch) is grouped by commit, so runs of different commits never
+# wait for or cancel each other. Two runs of the same commit (a push, then the daily run) share a group and the
+# newer cancels the older: harmless, since both build the same thing and publishing only adds missing files.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
@@ -42,6 +43,7 @@ env:
   PY: >-
     packaging/acorn-litepcie/build_debs.py packaging/acorn-litepcie/prepare_driver.py
     packaging/acorn-litepcie/csr_check.py packaging/acorn-litepcie/container.py
+    packaging/acorn-litepcie/publish.py
     designs/acorn-pcie/host/acorn_verify.py designs/acorn-pcie/host/spi_flash.py
     tests/test_acorn_litepcie.py tests/test_acorn_verify.py tests/test_spi_flash.py
   TESTS: >-
@@ -237,8 +239,6 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: actions/download-artifact@v4
         with:
@@ -246,22 +246,9 @@ jobs:
           path: dist
           merge-multiple: true
 
-      # A published version is never replaced: its bytes would differ (build times), and an apt repository that
-      # already pulled it must not see the same name and version change under it. Only new files go up.
+      # Only files the release lacks go up, to the version's own vX.Y series: see publish.py.
       - name: Upload the versions the series release does not have yet
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          SERIES="$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*')"
-          if ! gh release view "$SERIES" >/dev/null; then
-            gh release create "$SERIES" --prerelease --title "Debian packages (rolling, series $SERIES)" \
-              --notes "Rolling .deb builds from this repository for series $SERIES, one per green commit on main. Consumed by https://github.com/fpgas-online/apt."
-          fi
-          have="$(gh release view "$SERIES" --json assets --jq '.assets[].name')"
-          new=()
-          for f in dist/*.deb; do
-            if grep -qxF "$(basename "$f")" <<<"$have"; then echo "already published: $(basename "$f")"; else new+=("$f"); fi
-          done
-          if [ "${#new[@]}" -gt 0 ]; then gh release upload "$SERIES" "${new[@]}"; fi
-          ls -l dist
+          VERSION: ${{ needs.driver.outputs.version }}
+        run: python3 packaging/acorn-litepcie/publish.py --version "$VERSION" dist/*.deb

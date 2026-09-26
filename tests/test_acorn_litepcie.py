@@ -697,3 +697,72 @@ def test_a_string_define_python_cannot_read_is_kept_as_text_not_a_crash():
     """evaluate() sees every define in the generated headers, not only the ones the driver uses."""
     values = cc.evaluate(cc.parse_defines('#define CONFIG_ODD "C:\\\\N{x"\n#define CONFIG_BAD "\\N"\n'))
     assert values["CONFIG_BAD"] == '"\\N"'
+
+
+# -- publishing (§3.6) -----------------------------------------------------------------------------------------
+
+pub = _load("publish")
+
+
+@pytest.mark.parametrize(("version", "series"), [("0.0.post42", "v0.0"), ("0.1", "v0.1"), ("1.12.post3", "v1.12")])
+def test_the_series_release_is_the_versions_own(version, series):
+    """Not HEAD's nearest tag: the version is the driver inputs' last commit's, which can predate a new tag."""
+    assert pub.series(version) == series
+
+
+def test_only_files_the_release_lacks_are_uploaded(tmp_path):
+    """A published version never changes under an apt repository that already pulled it."""
+    debs = [tmp_path / n for n in ("a_0.0.post1_all.deb", "b_0.0.post1_all.deb")]
+    assert pub.to_upload(debs, {"a_0.0.post1_all.deb", "fpgas-online-acorn-tools_0.0.post9_all.deb"}) == [debs[1]]
+
+
+class FakeGh:
+    def __init__(self, assets, exists=True, race=()):
+        self.assets, self.exists, self.race, self.calls = set(assets), exists, set(race), []
+
+    def __call__(self, *args):
+        self.calls.append(args)
+        if args[:2] == ("release", "view"):
+            if not self.exists:
+                raise pub.GhError("release not found")
+            return "\n".join(sorted(self.assets))
+        if args[:2] == ("release", "create"):
+            self.exists = True
+            return ""
+        if args[:2] == ("release", "upload"):
+            name = pathlib.Path(args[3]).name
+            if name in self.race:  # another run got there first
+                self.assets.add(name)
+                raise pub.GhError(f"asset {name} already exists")
+            self.assets.add(name)
+            return ""
+        raise AssertionError(args)
+
+
+def test_publish_creates_the_series_release_when_missing_and_uploads(tmp_path):
+    deb = tmp_path / "x_0.0.post1_all.deb"
+    deb.write_bytes(b"x")
+    gh = FakeGh([], exists=False)
+    pub.publish([deb], "0.0.post1", gh=gh)
+    assert gh.calls[1][:2] == ("release", "create") and gh.calls[1][2] == "v0.0"
+    assert "x_0.0.post1_all.deb" in gh.assets
+
+
+def test_an_upload_another_run_made_meanwhile_is_not_a_failure(tmp_path):
+    deb = tmp_path / "x_0.0.post1_all.deb"
+    deb.write_bytes(b"x")
+    pub.publish([deb], "0.0.post1", gh=FakeGh([], race={"x_0.0.post1_all.deb"}))
+
+
+def test_an_upload_that_really_failed_is_a_failure(tmp_path):
+    deb = tmp_path / "x_0.0.post1_all.deb"
+    deb.write_bytes(b"x")
+
+    class Broken(FakeGh):
+        def __call__(self, *args):
+            if args[:2] == ("release", "upload"):
+                raise pub.GhError("HTTP 500")
+            return super().__call__(*args)
+
+    with pytest.raises(pub.GhError, match="500"):
+        pub.publish([deb], "0.0.post1", gh=Broken([]))
