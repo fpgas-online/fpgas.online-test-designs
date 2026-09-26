@@ -125,14 +125,21 @@ class SoCBus(FakeBus):
 
 
 def _sysfs(tmp_path, *devices):
-    """A /sys/bus/pci/devices with the given (bdf, vendor, device, subsystem_vendor, subsystem_device) entries."""
+    """A /sys/bus/pci/devices with the given (bdf, vendor, device, subsystem_vendor, subsystem_device) entries.
+
+    A sixth element names the driver bound to the device: its `driver` link points at
+    /sys/bus/pci/drivers/<name>, as the kernel's does."""
     root = tmp_path / "sys"
     root.mkdir(exist_ok=True)
-    for bdf, ven, dev, sven, sdev in devices:
+    for bdf, ven, dev, sven, sdev, *driver in devices:
         d = root / bdf
         d.mkdir()
         for name, value in (("vendor", ven), ("device", dev), ("subsystem_vendor", sven), ("subsystem_device", sdev)):
             (d / name).write_text(f"{value}\n")
+        if driver:
+            target = tmp_path / "drivers" / driver[0]
+            target.mkdir(parents=True, exist_ok=True)
+            (d / "driver").symlink_to(target)
     return root
 
 
@@ -219,6 +226,56 @@ def test_a_board_on_factory_or_vendor_firmware_is_unconverted_and_its_bar_is_nev
 
     report = av.verify(av.scan_pci(_sysfs(tmp_path, device)), images, open_bar=refuse)
     assert report["result"] == "unconverted"
+    assert av.exit_code(report) == 1
+
+
+# -- a driver holds BAR0 -------------------------------------------------------------------------------
+
+BOUND = (*OURS, "litepcie")
+
+
+def _refuse(bdf):
+    raise AssertionError("BAR0 belongs to the bound driver: it must not be opened")
+
+
+def test_a_board_with_litepcie_bound_is_driver_bound_and_its_bar_is_never_opened(tmp_path, images):
+    """litepcie.ko claims BAR0 at probe, and nothing in the kernel stops a second user mapping resource0
+    (CONFIG_STRICT_DEVMEM is off on the fleet kernel): both would drive the same CSRs at once."""
+    report = av.verify(av.scan_pci(_sysfs(tmp_path, BOUND)), images, open_bar=_refuse)
+    (board,) = report["boards"]
+    assert report["result"] == board["result"] == "driver-bound"
+    assert board["reason"] == "litepcie.ko is bound: not checked"
+    assert board["driver"] == "litepcie"
+    assert av.exit_code(report) == 1  # the board has not been verified
+
+
+def test_an_unbound_board_records_no_driver(tmp_path):
+    (dev,) = av.scan_pci(_sysfs(tmp_path, OURS))
+    assert dev["driver"] is None
+
+
+def test_driver_bound_ranks_between_pass_and_degraded():
+    s = av.SEVERITY
+    assert s.index("pass") < s.index("driver-bound") < s.index("degraded")
+
+
+def test_any_bound_driver_is_refused_and_named(tmp_path, images):
+    """vfio-pci, or some later in-tree driver, owns BAR0 just as litepcie.ko does."""
+    report = av.verify(av.scan_pci(_sysfs(tmp_path, (*OURS, "vfio-pci"))), images, open_bar=_refuse)
+    (board,) = report["boards"]
+    assert board["result"] == "driver-bound"
+    assert board["reason"] == "the vfio-pci driver is bound: not checked"
+
+
+def test_a_factory_board_is_unconverted_even_with_a_driver_bound(tmp_path, images):
+    """What runs on the card is known from config space alone, so that result still stands."""
+    report = av.verify(av.scan_pci(_sysfs(tmp_path, (*FACTORY, "xdma"))), images, open_bar=_refuse)
+    assert report["result"] == "unconverted"
+
+
+def test_identify_also_leaves_a_driver_bound_board_alone(tmp_path, images):
+    report = av.identify(av.scan_pci(_sysfs(tmp_path, BOUND)), images, open_bar=_refuse)
+    assert report["result"] == "driver-bound"
     assert av.exit_code(report) == 1
 
 

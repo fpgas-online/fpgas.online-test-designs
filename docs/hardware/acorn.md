@@ -33,7 +33,7 @@ The tools package depends on one exact bitstreams version. Which release that is
 sudo fpgas-acorn-verify --no-publish --report -
 ```
 
-The JSON `result` is `pass` or `none` (no FPGA on PCIe), both with exit status 0. Otherwise it is `degraded` (running the golden image), `unconverted` (still on SQRL's factory image, or the vendor XDMA sample), `fail` (flash differs from the release, or a PCIe FPGA whose design it does not recognise) or `error`, all with exit status 1. Leave out `--no-publish` to also send the `fpga-verified` fleet-event. That needs `fleet-event` from `fpgas-online-setup-pi`, which only fleet Pis have. Without it the check prints a warning and still reports its result.
+The JSON `result` is `pass` or `none` (no FPGA on PCIe), both with exit status 0. Otherwise it is `degraded` (running the golden image), `unconverted` (still on SQRL's factory image, or the vendor XDMA sample), `driver-bound` (a kernel driver such as `litepcie.ko` holds the board's BAR0, so nothing was read), `fail` (flash differs from the release, or a PCIe FPGA whose design it does not recognise) or `error`, all with exit status 1. `fpgas-acorn-flash` likewise refuses a board a driver is bound to. Leave out `--no-publish` to also send the `fpga-verified` fleet-event. That needs `fleet-event` from `fpgas-online-setup-pi`, which only fleet Pis have. Without it the check prints a warning and still reports its result.
 
 **Run the check on every boot.** The package installs the unit but does not enable it:
 
