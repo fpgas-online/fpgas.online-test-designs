@@ -25,7 +25,36 @@ load completed cleanly and the host was unaffected.
 echo 1 | sudo tee /sys/bus/pci/devices/0001:01:00.0/remove   # before openFPGALoader
 # ... load ...
 echo 1 | sudo tee /sys/bus/pci/rescan                         # afterwards, or just reboot
+sudo python3 designs/acorn-pcie/host/pcie_match_mps.py        # after every rescan (next section)
 ```
+
+### Match Max_Payload_Size after every rescan
+
+The Pi 5 firmware boots Linux with `pci=pcie_bus_safe`. In that mode the
+kernel matches Max_Payload_Size (MPS) across the link once, at boot; a sysfs
+rescan does not. An endpoint found by a rescan keeps its reset MPS of 128
+bytes while the root port `0001:00:00.0` stays at 512. The root port then
+returns read completions of up to 512 bytes, the 7-series PCIe core rejects
+them as malformed TLPs and sets FatalErr, and LitePCIe's DMA waits forever for
+its read data. On pi-sw2-p48 (2026-09-26), `litepcie_util dma_test` moved
+nothing (TX 128, RX 0, no MSI) until the endpoint's MPS was set to 512. After
+that it ran at 3.6 Gb/s.
+
+```bash
+sudo lspci -vv -s 0001:00:00.0 | grep MaxPayload   # root port: 512
+sudo lspci -vv -s 0001:01:00.0 | grep MaxPayload   # after a rescan: 128 - mismatch
+sudo python3 designs/acorn-pcie/host/pcie_match_mps.py
+# 0001:01:00.0: MPS 128 -> 512 (root port 0001:00:00.0: 512)
+```
+
+`pcie_match_mps.py` writes only the MPS field of Device Control. It sets both
+ends to the smaller of the root port's current MPS and the endpoint's
+supported maximum, as `pcie_bus_safe` does at boot. It does nothing when the
+loaded design has no PCIe endpoint. Run it before `insmod litepcie.ko`, or at
+least before any DMA. The PCI core rewrites Device Control on every
+remove/rescan, so run it again after each one. `verify_hardware.py` runs it
+after its Acorn JTAG load. A boot-time enumeration is already matched (p48 with
+its flash image: 512 on both ends).
 
 Every `openFPGALoader … <bitstream>` invocation on this page assumes that
 detach has been done. Read-only operations (`--detect`, and `--read-dna` /
@@ -175,10 +204,13 @@ litepcie_util flash_write operational.bin 0x400000
 litepcie_util flash_reload
 ```
 
-After reload, the PCIe link retrains. The host must rescan the PCIe bus:
+After reload, the PCIe link retrains. The host must rescan the PCIe bus, then
+match the endpoint's Max_Payload_Size (see
+[above](#match-max_payload_size-after-every-rescan)):
 
 ```bash
 echo 1 > /sys/bus/pci/rescan
+python3 designs/acorn-pcie/host/pcie_match_mps.py
 ```
 
 ### Full Update Sequence
@@ -193,8 +225,9 @@ litepcie_util flash_reload
 # 3. Wait for PCIe link to retrain (~2-5 seconds)
 sleep 5
 
-# 4. Rescan PCIe bus
+# 4. Rescan PCIe bus, then match Max_Payload_Size
 echo 1 > /sys/bus/pci/rescan
+python3 designs/acorn-pcie/host/pcie_match_mps.py
 
 # 5. Verify new bitstream is running
 lspci -d 10ee: -vvv

@@ -31,10 +31,12 @@ permissions:
 env:
   NFPM_VERSION: "2.47.0"
   NFPM_SHA256: "0660ca602b2d2d2ae4781a06c692b3eeb9d437ffea05b831d76e41f4a3188783"
-  ACORN_TESTS: tests/test_acorn_verify.py tests/test_acorn_packaging.py tests/test_spi_flash.py
+  ACORN_TESTS: >-
+    tests/test_acorn_verify.py tests/test_acorn_packaging.py tests/test_spi_flash.py tests/test_pcie_match_mps.py
   ACORN_PY: >-
     designs/acorn-pcie/host/acorn_verify.py packaging/acorn-pcie/build_debs.py
     tests/test_acorn_verify.py tests/test_acorn_packaging.py
+    designs/acorn-pcie/host/pcie_match_mps.py tests/test_pcie_match_mps.py
 
 jobs:
   build:
