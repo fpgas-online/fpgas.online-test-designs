@@ -126,3 +126,16 @@ def test_acorn_program_cmd_exit_status_is_openfpgaloaders():
     cmd = _pin_id_test_for("welland-sw2-p46")["program_cmd"]
     assert "rc=$?" in cmd
     assert cmd.rstrip().endswith("exit $rc")
+
+
+def test_acorn_program_cmd_matches_mps_after_the_rescan():
+    # pci=pcie_bus_safe only matches Max_Payload_Size at boot: a rescanned endpoint stays at 128 bytes under
+    # a 512-byte root port and its DMA dies on malformed completions (p48, 2026-09-26).
+    cmd = _pin_id_test_for("welland-sw2-p46")["program_cmd"]
+    helper = "python3 /home/pi/pcie_match_mps.py 0001:01:00.0"
+    assert cmd.index("/sys/bus/pci/rescan") < cmd.index(helper)
+    assert cmd.rstrip().endswith("exit $rc")
+
+
+def test_acorn_uploads_the_mps_helper():
+    assert ("designs/acorn-pcie/host/pcie_match_mps.py", "~/pcie_match_mps.py") in vh.EXTRA_UPLOADS["acorn"]

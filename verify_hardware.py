@@ -150,13 +150,19 @@ PROGRAM_CMD = {
     #  3. libgpiod bit-bang JTAG, pin order TDI:TDO:TCK:TMS (~16 s);
     #  4. rescan so the flash-resident endpoint (or the new design's) is back,
     #     but exit with openFPGALoader's status so a failed load (e.g. an
-    #     empty JTAG chain) is not masked by the rescan's 0.
+    #     empty JTAG chain) is not masked by the rescan's 0;
+    #  5. match the endpoint's Max_Payload_Size to the root port's: under the
+    #     Pi 5's pci=pcie_bus_safe the kernel only does that at boot, and a
+    #     rescanned endpoint left at 128 bytes under a 512-byte root port
+    #     flags the root port's completions as malformed, so DMA never runs
+    #     (p48, 2026-09-26). A no-op when the design has no PCIe endpoint.
     "acorn": (
         "if [ -e /sys/bus/pci/devices/0001:01:00.0 ]; then"
         " echo 1 > /sys/bus/pci/devices/0001:01:00.0/remove; fi;"
         " ln -sfn /dev/gpiochip15 /dev/gpiochip0;"
         " openFPGALoader --cable libgpiod --pins 10:9:11:8 {bitstream}; rc=$?;"
-        " echo 1 > /sys/bus/pci/rescan; exit $rc"
+        " echo 1 > /sys/bus/pci/rescan;"
+        " python3 {home}/pcie_match_mps.py 0001:01:00.0 || [ $rc -ne 0 ] || rc=1; exit $rc"
     ),
     # NeTV2 varies by host — handled per-host below
 }
@@ -345,6 +351,9 @@ DESIGNS = {
 
 # Extra files that certain boards need uploaded
 EXTRA_UPLOADS = {
+    "acorn": [
+        ("designs/acorn-pcie/host/pcie_match_mps.py", "~/pcie_match_mps.py"),
+    ],
     "tt": [
         ("designs/_host/tt_fpga_program.py", "~/tt_fpga_program.py"),
         ("designs/_host/tt_test_wrapper.py", "~/tt_test_wrapper.py"),
@@ -544,7 +553,7 @@ def generate_tests():
                 prog_template = HOST_PROGRAM_CMD[host_name]
                 prog_cmd = prog_template.format(bitstream=remote_bitstream, bitstream_abs=remote_bitstream)
             else:
-                prog_cmd = PROGRAM_CMD[board].format(bitstream=remote_bitstream)
+                prog_cmd = PROGRAM_CMD[board].format(bitstream=remote_bitstream, home=home)
 
             tests.append(
                 {

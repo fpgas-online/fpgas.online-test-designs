@@ -14,6 +14,9 @@ fpgas-verify.service when the host is set up for an Acorn, and on demand as fpga
      operational slot (0x400000) are read whole and compared with the images the release puts there; their
      sha256s, with the flash's identity, are the board's state (fpgas_online_verify.state).
 
+A board whose BAR0 a kernel driver holds (litepcie.ko, loaded by an operator) is not read at all: it is
+reported "driver-bound", because two users of BAR0 would drive the same CSRs at once.
+
 Nothing is ever written to the flash or reconfigured: a board that fails is reported, not repaired. The
 images and manifest come from the fpgas-online-acorn-bitstreams package; each installed file is checked
 against the manifest's sha256 before it is trusted.
@@ -54,7 +57,8 @@ SQRL_FACTORY = {0x021F: "cle-215+", 0x0101: "cle-101"}
 SLOTS = (("0x000000", spi_flash.GOLDEN_ADDR), ("0x400000", spi_flash.OPERATIONAL_ADDR))
 
 # Worst first wins when there is more than one board.
-SEVERITY = ("none", "pass", "degraded", "unconverted", "fail", "error")
+# driver-bound: a kernel driver (litepcie.ko) holds BAR0, so nothing was read. Not a fault, but not a pass either.
+SEVERITY = ("none", "pass", "driver-bound", "degraded", "unconverted", "fail", "error")
 
 
 # -- tier 1: PCI IDs ---------------------------------------------------------------------------------
@@ -72,8 +76,9 @@ def classify(vendor, device, sub_vendor, sub_device):
     return "unknown", None
 
 
-def describe(dev):
-    """A Xilinx or SQRL function from core.pci_devices(), classified; None for anyone else's."""
+def describe(dev, root=SYSFS_PCI):
+    """A Xilinx or SQRL function from core.pci_devices(), classified, with the kernel driver bound to it (a
+    driver holding BAR0 means the board is left alone); None for anyone else's."""
     if dev["vendor"] not in (XILINX, SQRL):
         return None
     ids = (dev["vendor"], dev["device"], dev["subsystem_vendor"], dev["subsystem_device"])
@@ -84,12 +89,17 @@ def describe(dev):
         "subsystem": f"{ids[2]:04x}:{ids[3]:04x}",
         "kind": kind,
         "variant": variant,
+        "driver": spi_flash.bound_driver(dev["bdf"], root),
     }
 
 
 def scan_pci(root=SYSFS_PCI):
-    """Every Xilinx or SQRL endpoint under /sys/bus/pci/devices, classified."""
-    return [d for d in map(describe, pci_devices(root)) if d]
+    """Every Xilinx or SQRL endpoint under /sys/bus/pci/devices, classified.
+
+    A Pi with no PCIe at all (a Pi 3, an Orange Pi) has no such directory: that is no devices, not an error
+    (core.pci_devices).
+    """
+    return [d for d in (describe(dev, root) for dev in pci_devices(root)) if d]
 
 
 # -- BAR0 --------------------------------------------------------------------------------------------
@@ -212,6 +222,12 @@ def _tier1(dev):
         raise Problem("fail", f"{dev['ids']} subsystem {dev['subsystem']} is not a design we built")
 
 
+def _not_driver_bound(dev):
+    """Refuse a board whose BAR0 a kernel driver holds: see spi_flash.bound_driver()."""
+    if dev.get("driver"):
+        raise Problem("driver-bound", spi_flash.driver_bound_reason(dev["driver"]))
+
+
 def _known_build(bus, images, files, builds, tag):
     """Tier 2, and the gate for everything after it: the running build must be one of the release's, and
     its register map must be the one spi_flash.py drives. Returns what was seen and which build runs."""
@@ -255,6 +271,7 @@ def _first_difference(held, want):
 
 def _check_board(dev, images, release, open_bar):
     _tier1(dev)
+    _not_driver_bound(dev)
     manifest, files = release
     tag = manifest.get("tag")
     builds, layout = _expectations(manifest, files, dev["variant"])
@@ -285,6 +302,7 @@ def _check_board(dev, images, release, open_bar):
 
 def _identify_board(dev, images, release, open_bar):
     _tier1(dev)
+    _not_driver_bound(dev)
     manifest, files = release
     builds, _ = _expectations(manifest, files, dev["variant"])
     with open_bar(dev["bdf"]) as bus:

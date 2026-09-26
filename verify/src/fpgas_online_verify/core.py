@@ -13,13 +13,14 @@ import sys
 
 # Worst last: a run's result is the worst of its boards', a board's the worst of its checks'.
 #   pass         everything checked out
+#   driver-bound a kernel driver holds the board (litepcie.ko on an Acorn), so it was left alone, not read
 #   degraded     works, but not as intended (an Acorn running its golden image)
 #   unconverted  runs a design that is not ours, so it could not be checked (SQRL's factory image)
 #   changed      a different board, or a different flash, from the one recorded: see `fpgas-verify --update`
 #   fail         a test, a load or a flash comparison failed
 #   missing      the configured board (or, with `auto`, any board) is not there
 #   error        the check itself could not run (a missing tool, a damaged package, no configuration)
-SEVERITY = ("pass", "degraded", "unconverted", "changed", "fail", "missing", "error")
+SEVERITY = ("pass", "driver-bound", "degraded", "unconverted", "changed", "fail", "missing", "error")
 
 RUN = pathlib.Path("/run/fpgas-online")
 SYSFS_USB = pathlib.Path("/sys/bus/usb/devices")

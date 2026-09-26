@@ -32,7 +32,7 @@ sudo fpgas-verify                                    # what the boot unit runs
 sudo fpgas-acorn-verify --no-publish --report -      # the Acorn only, the JSON report on stdout
 ```
 
-Besides the [results every board has](../../README.md#installing-the-packages), the Acorn's can be `degraded` (running the golden image: the operational slot did not boot) or `unconverted` (still on SQRL's factory image, or the vendor XDMA sample). A PCIe FPGA whose design the check does not recognise is `fail`. A Pi with no Acorn is `missing`: fatal, since the host was set up for one.
+Besides the [results every board has](../../README.md#installing-the-packages), the Acorn's can be `degraded` (running the golden image: the operational slot did not boot), `unconverted` (still on SQRL's factory image, or the vendor XDMA sample) or `driver-bound` (a kernel driver such as `litepcie.ko` holds the board's BAR0, so nothing was read; `fpgas-acorn-flash` likewise refuses a board a driver is bound to). A PCIe FPGA whose design the check does not recognise is `fail`. A Pi with no Acorn is `missing`: fatal, since the host was set up for one.
 
 **When a check fails**, `sudo apt install fpgas-online-acorn-debug`. It brings openFPGALoader for loading the `.bit` over GPIO JTAG ([below](#via-gpio-jtag-openfpgaloader--what-the-fleet-uses)), which is how a board still on SQRL's factory image is converted, and `python3-serial` for `fpgas-acorn-flash --uart`:
 

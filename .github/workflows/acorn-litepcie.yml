@@ -1,0 +1,254 @@
+# .github/workflows/acorn-litepcie.yml
+#
+# The LitePCIe driver packages for the Acorn SoC (packaging/acorn-litepcie/), Part A of
+# docs/plans/2026-09-25-acorn-litepcie-packages-design.md:
+#
+#   driver        generate the driver at this commit from acorn_pcie_soc.py (no Vivado), apply the three
+#                 packaging patches, cross-check its CSRs against all six images of the pinned release, and
+#                 build fpgas-online-acorn-litepcie-common and -dkms
+#   utils         litepcie_util and litepcie_test for armhf and arm64 in debian:bookworm, the struct-layout
+#                 asserts, the -utils deb, and an install test
+#   fleet-module  litepcie.ko and liteuart.ko for the fleet kernel (kernels.toml), as a workflow artifact
+#                 only: the netbooted fleet cannot use DKMS, and Part B packages modules per kernel
+#   dkms          a DKMS build in the shape DKMS is for: an arm64 bookworm root with rpi-v8 headers
+#   publish       on main: the debs to the rolling series release that fpgas-online/apt pulls from
+#
+# Pull requests build and test everything and publish nothing. The daily run is here for Part B, which adds
+# new Raspberry Pi kernels as they appear; until then it rebuilds what main has and uploads nothing new.
+name: "Acorn LitePCIe debs"
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+# A new push to a pull request cancels that pull request's older, now stale, run.
+# Anything else (main, schedule, workflow_dispatch) is grouped by commit, so runs of different commits never
+# wait for or cancel each other. Two runs of the same commit (a push, then the daily run) share a group and the
+# newer cancels the older: harmless, since both build the same thing and publishing only adds missing files.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NFPM_VERSION: "2.47.0"
+  NFPM_SHA256_X86_64: "0660ca602b2d2d2ae4781a06c692b3eeb9d437ffea05b831d76e41f4a3188783"
+  NFPM_SHA256_ARM64: "1c0f5f2999b9a974bfb04fdb0cc3306096de530ac5dbb25d739cc5f5219c919c"
+  PY: >-
+    packaging/acorn-litepcie/build_debs.py packaging/acorn-litepcie/prepare_driver.py
+    packaging/acorn-litepcie/csr_check.py packaging/acorn-litepcie/container.py
+    packaging/acorn-litepcie/publish.py
+    verify/src/fpgas_online_verify/boards/acorn/check.py verify/src/fpgas_online_verify/boards/acorn/spi_flash.py
+    tests/test_acorn_litepcie.py tests/test_acorn_verify.py tests/test_spi_flash.py
+  TESTS: >-
+    tests/test_acorn_litepcie.py tests/test_acorn_verify.py tests/test_spi_flash.py
+    tests/test_acorn_packaging.py
+
+jobs:
+  test:
+    name: "Lint and unit tests"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Lint
+        run: |
+          uv run --no-project --with ruff ruff check $PY
+          uv run --no-project --with ruff ruff format --check $PY
+
+      - name: Tests
+        run: uv run --no-project --python 3.12 --with pytest pytest $TESTS
+
+  driver:
+    name: "Driver: generate, patch, CSR cross-check, -common and -dkms"
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the version is git describe of the driver inputs' last first-parent commit
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Version
+        id: version
+        run: |
+          v="$(uv run --no-project --python 3.12 packaging/acorn-litepcie/build_debs.py --print-version)"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "driver version: $v"
+
+      - name: Install the LiteX environment
+        run: uv sync --locked --python 3.12 --extra build
+
+      - name: Generate the driver and apply the packaging patches
+        run: uv run --no-project --python 3.12 packaging/acorn-litepcie/prepare_driver.py --out dist/driver
+
+      - name: Cross-check the driver's CSRs against the pinned release
+        run: uv run --no-project --python 3.12 packaging/acorn-litepcie/csr_check.py dist/driver
+
+      - name: Install nfpm ${{ env.NFPM_VERSION }}
+        run: |
+          set -euo pipefail
+          f="nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
+          curl -fsSL -o "$f" "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/$f"
+          echo "${NFPM_SHA256_X86_64}  $f" | sha256sum -c -
+          tar xzf "$f" nfpm
+
+      - name: Build -common and -dkms
+        run: >-
+          uv run --no-project --python 3.12 packaging/acorn-litepcie/build_debs.py --out dist/debs
+          --driver dist/driver --only common --only dkms --nfpm ./nfpm
+          --version "${{ steps.version.outputs.version }}"
+
+      - name: Show what was built
+        run: |
+          for d in dist/debs/*.deb; do echo "== $d"; dpkg-deb -f "$d"; dpkg-deb -c "$d"; done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: acorn-litepcie-driver
+          path: dist/driver
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: acorn-litepcie-debs-all
+          path: dist/debs/*.deb
+          if-no-files-found: error
+
+  utils:
+    name: "-utils (${{ matrix.arch }})"
+    needs: driver
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, armhf]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: acorn-litepcie-driver
+          path: dist/driver
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: acorn-litepcie-debs-all
+          path: dist/debs
+
+      - name: Build the tools in debian:bookworm (${{ matrix.arch }})
+        run: >-
+          python3 packaging/acorn-litepcie/container.py run --arch ${{ matrix.arch }} --
+          utils --arch ${{ matrix.arch }} --driver dist/driver --out dist/utils
+
+      - name: Install nfpm ${{ env.NFPM_VERSION }}
+        run: |
+          set -euo pipefail
+          f="nfpm_${NFPM_VERSION}_Linux_arm64.tar.gz"
+          curl -fsSL -o "$f" "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/$f"
+          echo "${NFPM_SHA256_ARM64}  $f" | sha256sum -c -
+          tar xzf "$f" nfpm
+
+      - name: Build -utils
+        run: >-
+          uv run --no-project --python 3.12 packaging/acorn-litepcie/build_debs.py --out dist/utils-deb
+          --driver dist/driver --only utils --arch ${{ matrix.arch }} --bin-dir dist/utils --nfpm ./nfpm
+          --version "${{ needs.driver.outputs.version }}"
+
+      - name: Install -common and -utils and run litepcie_util (${{ matrix.arch }})
+        run: >-
+          python3 packaging/acorn-litepcie/container.py run --arch ${{ matrix.arch }} --
+          install-test --arch ${{ matrix.arch }} dist/debs/fpgas-online-acorn-litepcie-common_*.deb
+          dist/utils-deb/fpgas-online-acorn-litepcie-utils_*_${{ matrix.arch }}.deb
+
+      - name: Show what was built
+        run: |
+          for d in dist/utils-deb/*.deb; do echo "== $d"; dpkg-deb -f "$d"; dpkg-deb -c "$d"; done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: acorn-litepcie-debs-${{ matrix.arch }}
+          path: dist/utils-deb/*.deb
+          if-no-files-found: error
+
+  fleet-module:
+    name: "Fleet-kernel modules (CI artifact)"
+    needs: driver
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: acorn-litepcie-driver
+          path: dist/driver
+
+      - name: Build litepcie.ko and liteuart.ko against the fleet kernel's headers
+        run: >-
+          python3 packaging/acorn-litepcie/container.py run --arch arm64 --
+          module --driver dist/driver --out dist/modules
+
+      - name: Name the artifact after the kernel
+        id: kernel
+        run: echo "kver=$(cat dist/modules/kernel.txt)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: acorn-litepcie-modules-${{ steps.kernel.outputs.kver }}
+          path: dist/modules
+          if-no-files-found: error
+
+  dkms:
+    name: "DKMS build (arm64 bookworm, newest rpi-v8 headers)"
+    needs: driver
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: acorn-litepcie-debs-all
+          path: dist/debs
+
+      - name: Install -common and -dkms and have DKMS build the modules
+        run: >-
+          python3 packaging/acorn-litepcie/container.py run --arch arm64 --
+          dkms-test dist/debs/fpgas-online-acorn-litepcie-common_*.deb dist/debs/fpgas-online-acorn-litepcie-dkms_*.deb
+
+  publish:
+    name: "Publish to the series release"
+    needs: [test, driver, utils, fleet-module, dkms]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: acorn-litepcie-debs-*
+          path: dist
+          merge-multiple: true
+
+      # Only files the release lacks go up, to the version's own vX.Y series: see publish.py.
+      - name: Upload the versions the series release does not have yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.driver.outputs.version }}
+        run: python3 packaging/acorn-litepcie/publish.py --version "$VERSION" dist/*.deb

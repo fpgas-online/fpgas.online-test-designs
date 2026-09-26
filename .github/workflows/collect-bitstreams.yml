@@ -30,11 +30,12 @@ env:
   VERIFY_TESTS: >-
     tests/test_verify_runner.py tests/test_verify_boards.py tests/test_debs_packaging.py
     tests/test_acorn_verify.py tests/test_acorn_packaging.py tests/test_spi_flash.py tests/test_uartbone_link.py
-    tests/test_acorn_pcie_publish_release.py
+    tests/test_acorn_pcie_publish_release.py tests/test_pcie_match_mps.py
   VERIFY_PY: >-
     verify/src packaging/debs/build_debs.py packaging/acorn-pcie/build_debs.py tests/conftest.py
     tests/test_verify_runner.py tests/test_verify_boards.py tests/test_debs_packaging.py
     tests/test_acorn_verify.py tests/test_acorn_packaging.py tests/test_spi_flash.py tests/test_uartbone_link.py
+    designs/acorn-pcie/host/pcie_match_mps.py tests/test_pcie_match_mps.py
 
 jobs:
   collect:

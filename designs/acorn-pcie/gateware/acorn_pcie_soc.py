@@ -226,6 +226,8 @@ class AcornPCIeSoC(SoCCore):
         self.comb += platform.request("pcie_clkreq_n").eq(0)
         self.pcie_phy = S7PCIEPHY(platform, platform.request("pcie_x1"), data_width=64, bar0_size=0x20000)
         self.pcie_phy.add_gt_loc_constraints([PCIE_X1_GT_LOC])
+        # A 64-bit MSI address: the Pi 5 (BCM2712) targets MSIs above 4 GiB and refuses a 32-bit-only capability.
+        self.pcie_phy.update_config({"MSI_64b": True})
         # One global buffer on PIPECLK, as on USERCLK, or the hard block's Max Skew check fails.
         feed_pclk_mux_from_mmcm(self.pcie_phy)
         if variant in PCIE_SUBSYSTEM_ID:

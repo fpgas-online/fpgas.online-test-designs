@@ -118,6 +118,12 @@ def test_the_acorn_is_spotted_on_pci_and_other_xilinx_designs_are_not_claimed():
     assert found["bdf"] == "0001:01:00.0" and found["kind"] == "fpgas-online" and found["variant"] == "cle-215+"
 
 
+def test_a_pi_with_no_pci_or_usb_bus_has_no_devices_and_finds_no_acorn(tmp_path):
+    """A Pi 3, or an Orange Pi, has no /sys/bus/pci at all (#43): no devices, not a crash."""
+    assert core.pci_devices(tmp_path / "no-such-bus") == [] and core.usb_devices(tmp_path / "nor-this") == []
+    assert ACORN.spot({}, [], core.pci_devices(tmp_path / "no-such-bus")) == []
+
+
 def test_idcodes_are_read_from_openocd_and_openfpgaloader():
     openocd = "Info : JTAG tap: xc7.tap tap/device found: 0x0362d093 (mfg: 0x049 (Xilinx), part: 0x362d, ver: 0x0)"
     ofl = "index 0:\n\tidcode 0x13631093\n\tmanufacturer xilinx\n\tfamily artix a7 100t"
