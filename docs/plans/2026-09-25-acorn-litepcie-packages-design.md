@@ -8,7 +8,7 @@ for the Acorn PCIe SoC (`designs/acorn-pcie/gateware/acorn_pcie_soc.py`).
 
 The work is in three parts, each planned and delivered on its own. **Part A is planned first.**
 
-- **Part A** (§3): the driver source, the CSR cross-check, the compat patch, and the `-common`, `-utils` and
+- **Part A** (§3): the driver source, the CSR cross-check, the driver patches, and the `-common`, `-utils` and
   `-dkms` packages. Their CI artifacts are enough for the #29 test on pi-sw2-p48.
 - **Part B** (§4): the prebuilt `-modules-<kver>` packages for every chosen kernel, the daily run, and
   retention.
@@ -27,8 +27,8 @@ What Tim asked for:
 What this spec assumes (correct these if they are wrong):
 
 - The consumers are Raspberry Pi hosts with an Acorn on PCIe: Pi 5 and Compute Module 4/5 carriers. The
-  Welland fleet runs a 32-bit (armhf) userland with a 64-bit `rpi-v8` kernel (`linux-image-6.12.96+rpt-rpi-v8`,
-  arm64, installed as a foreign architecture).
+  Welland fleet runs a 32-bit (armhf) userland with a 64-bit `rpi-v8` kernel (on 2026-09-26
+  `linux-image-6.12.109+rpt-rpi-v8`, arm64, installed as a foreign architecture).
 - The first user is the #29 DMA test on one board, named here by what identifies it rather than by where it
   is plugged in: the Pi with Ethernet MAC `88:a2:9e:45:85:77` carrying the Acorn whose FPGA DNA is
   `0x0054b48664b04854`. It sits at pi-sw2-p48 today, and that name is only its placement: boards move ports,
@@ -40,7 +40,7 @@ What this spec assumes (correct these if they are wrong):
 
 | Package | Part | Architecture | Contents |
 |---|---|---|---|
-| `fpgas-online-acorn-litepcie-common` | A | all | `/etc/modprobe.d/fpgas-online-acorn-litepcie.conf` (`blacklist litepcie`, §3.6) |
+| `fpgas-online-acorn-litepcie-common` | A | all | `/etc/modprobe.d/fpgas-online-acorn-litepcie.conf` (`blacklist litepcie`, §3.7) |
 | `fpgas-online-acorn-litepcie-dkms` | A | all | driver source under `/usr/src/fpgas-online-acorn-litepcie-<version>/` plus `dkms.conf` building `litepcie` and `liteuart` |
 | `fpgas-online-acorn-litepcie-utils` | A | armhf, arm64 | `/usr/bin/litepcie_util`, `/usr/bin/litepcie_test` |
 | `fpgas-online-acorn-litepcie-modules-<kver>` | B | the kernel package's (arm64 for `rpi-v8`/`rpi-2712`, armhf for `rpi-v7l`/`rpi-v7`) | `litepcie.ko`, `liteuart.ko` under `/lib/modules/<kver>/updates/fpgas-online/` |
@@ -142,7 +142,7 @@ Not every `DMA_*` name comes from the SoC:
 - `DMA_BUFFER_COUNT`, `DMA_BUFFER_SIZE`, `DMA_BUFFER_PER_IRQ`, `DMA_IRQ_DISABLE`, `DMA_LAST_DISABLE` and the
   `PCIE_DMA_*_OFFSET` values are fixed in litepcie's `kernel/config.h`. `DMA_CHANNEL_COUNT` is also defined
   there, as `DMA_CHANNELS`. None of these is in `csr.json`, so they are outside the check. They change only
-  with the litepcie pin in `uv.lock`, which is a version input (§3.7).
+  with the litepcie pin in `uv.lock`, which is a version input (§3.8).
 
 A gateware change that moves a CSR the driver uses therefore fails CI until the driver question is settled
 (a new release, or a driver per image), rather than shipping a driver that is wrong for part of the fleet.
@@ -205,7 +205,27 @@ blacklisted: it can only bind to the device that `litepcie.ko` registers, so it 
 been loaded on purpose. The Pi kernel builds no in-tree LiteUART driver (`CONFIG_SERIAL_LITEUART` is unset in
 `config-6.12.96+rpt-rpi-v8`), so nothing else claims the name `liteuart`.
 
-### 3.5 Builds
+### 3.5 The coherent DMA mask
+
+**The third patch.** On kernels from 5.18 onwards `main.c`'s probe calls
+`dma_set_mask(&dev->dev, DMA_BIT_MASK(DMA_ADDR_WIDTH))`. That sets the streaming mask only. The coherent mask
+stays at the 32-bit default, and every buffer the driver takes comes from `dmam_alloc_coherent`, which obeys
+the coherent mask.
+
+On a Pi 5 that fails every allocation. pcie1's `dma-ranges` put host RAM at bus address `0x10_0000_0000`, so
+no RAM is reachable below 4 GiB on the bus, and each `dmam_alloc_coherent` returns `-ENOMEM` (-12). This was
+seen on the test board of §1 (pi-sw2-p48, 2026-09-25), and a build with the patch below loaded and bound
+there.
+
+The patch replaces the call with the one that sets both masks:
+
+    ret = dma_set_mask_and_coherent(&dev->dev, DMA_BIT_MASK(DMA_ADDR_WIDTH));
+
+It sets both masks from the SoC's `DMA_ADDR_WIDTH` (64, §3.2). Like the other two, it is applied in the
+packaging step, the step fails once upstream carries it, and it goes upstream in the same litepcie pull
+request.
+
+### 3.6 Builds
 
 All builds run in Docker on GitHub's `ubuntu-24.04-arm` runners. armhf builds use
 `docker run --platform linux/arm/v7`, which fpgas.online-fpga-tools' `debs.yml` already does successfully.
@@ -231,8 +251,8 @@ All builds run in Docker on GitHub's `ubuntu-24.04-arm` runners. armhf builds us
   fleet suites, so the same binaries install on trixie.
 - **the fleet kernel's modules, as a CI artifact only**: one build of `litepcie.ko` and `liteuart.ko`
   against the kernel the netbooted fleet runs, named as `fleet_kernel` in
-  `packaging/acorn-litepcie/kernels.toml` (today `6.12.96+rpt-rpi-v8`, bookworm). It is built the way §4.1
-  builds a module and uploaded as a workflow artifact, not as a package. This is what makes Part A usable on
+  `packaging/acorn-litepcie/kernels.toml` (on 2026-09-26 `6.12.109+rpt-rpi-v8`, bookworm). It is built the
+  way §4.1 builds a module and uploaded as a workflow artifact, not as a package. This is what makes Part A usable on
   pi-sw2-p48 before Part B exists: DKMS cannot serve that host (§2).
 
 A new workflow, `.github/workflows/acorn-litepcie.yml`, builds on pull requests (no publishing), on pushes to
@@ -240,7 +260,7 @@ main, daily, and on demand. On main it uploads to the current `vX.Y` series rele
 that `acorn-debs.yml` already publishes to. It sits apart from `acorn-debs.yml` because its matrix, its
 runners (arm64) and its daily schedule are all different.
 
-### 3.6 What installing the packages does to a host
+### 3.7 What installing the packages does to a host
 
 Nothing changes on a running host until an operator loads the module.
 
@@ -270,7 +290,7 @@ Nothing changes on a running host until an operator loads the module.
 - **Load order.** The check cannot stop a driver being loaded while it is already running, so operators do
   not load the driver while the boot check or a flash operation runs.
 
-### 3.7 Versions
+### 3.8 Versions
 
 Versions are `X.Y.postN` from `git describe`, like every other deb this repository builds (`git_version()`
 in `build_debs.py`). They are never dates.
@@ -302,13 +322,13 @@ main moves.
 
 `-modules-<kver>` versions add the suite: `X.Y.postN+bookworm` or `X.Y.postN+trixie`.
 
-### 3.8 Tests
+### 3.9 Tests
 
 CI, on every pull request:
 
 - the driver generation (§3.1) and the CSR cross-check (§3.2);
 - the struct-layout asserts, compiled for armhf and arm64 (§3.3);
-- the compat and liteuart-alias patches apply, and neither is already present upstream;
+- the compat, liteuart-alias and coherent-mask patches apply, and none is already present upstream;
 - the `driver-bound` refusal in `fpgas-acorn-verify` and `fpgas-acorn-flash` (fake-sysfs unit tests);
 - builds of `-common`, `-dkms` and `-utils` (armhf, arm64), and the fleet-kernel module artifact with its
   vermagic check;
@@ -329,7 +349,7 @@ once:
 3. `litepcie_util info` (armhf tools against the arm64 kernel, which exercises compat_ioctl).
 4. The #29 DMA test.
 5. With the driver still loaded, `fpgas-acorn-verify --no-publish --report -` reports the board
-   `driver-bound` and reads nothing from it (§3.6).
+   `driver-bound` and reads nothing from it (§3.7).
 6. `rmmod litepcie liteuart`. Then `fpgas-acorn-verify --no-publish --report -` still reports the board
    correctly, which proves the driver leaves BAR0 access as it found it.
 
@@ -416,7 +436,7 @@ new one. Removal only happens there, because the pool is that repository's.
 - *Raising it* is a reviewed pull request that edits that one value. The next run neither builds nor keeps
   modules for kernels below it: their assets are pruned from the release by the same step.
   fpgas-online/apt's pool retention then drops them from the pool as newer versions arrive.
-- *Guard*: CI fails if `fleet_kernel` (§3.5) is below `min_kernel`, so the floor can never drop the kernel
+- *Guard*: CI fails if `fleet_kernel` (§3.6) is below `min_kernel`, so the floor can never drop the kernel
   the fleet boots.
 
 **Scheduled runs and inactivity.** GitHub disables scheduled workflows in a public repository after 60 days
@@ -477,10 +497,10 @@ the Pis keep one source for test-design packages) or run a separate archive.
 
 - **Loading the module at boot.** That needs its own design.
   - It must settle whether the boot check reads through the driver (its ioctls) or unbinds it first. Until
-    then, a bound driver makes the check report `driver-bound` (§3.6).
+    then, a bound driver makes the check report `driver-bound` (§3.7).
   - Whether the kernel would police `resource0` is already answered: it does not (`CONFIG_STRICT_DEVMEM`
     unset).
-  - The reset on probe (§3.6) means the driver must load before, not during, anything that uses the SoC.
+  - The reset on probe (§3.7) means the driver must load before, not during, anything that uses the SoC.
 - **The CI trigger.** This repository used to build every pull request twice (push and pull_request). #41
   already fixed that: `push` is limited to main and a concurrency group cancels stale runs. The new workflow
   follows the same pattern.
