@@ -74,7 +74,9 @@ numbers below are the spec's.
 | `packaging/acorn-litepcie/fpgas-online-acorn-litepcie.conf` | the modprobe.d blacklist |
 | `packaging/acorn-litepcie/dkms-postinst`, `dkms-prerm` | the DKMS maintainer scripts (dh_dkms shape) |
 | `packaging/acorn-litepcie/struct_layout.c` | the §3.3 `_Static_assert`s |
-| `packaging/acorn-litepcie/container.py` | in-container steps: `utils`, `module`, `dkms-test` |
+| `packaging/acorn-litepcie/container.py` | in-container steps: `utils`, `install-test`, `module`, `dkms-test`; `run` starts them |
+| `packaging/acorn-litepcie/publish.py` | upload new debs to the version's `vX.Y` series release (added in review) |
+| `packaging/acorn-litepcie/copyright.common` | `-common`'s copyright file (added in review) |
 | `.github/workflows/acorn-litepcie.yml` | CI |
 | `designs/acorn-pcie/host/spi_flash.py` | `bound_driver()`, refusal in `main()` |
 | `designs/acorn-pcie/host/acorn_verify.py` | `driver-bound` result |
@@ -185,7 +187,7 @@ min_kernel = "6.12"
   `prepare_driver.apply_patches(driver_dir, patches=PATCHES) -> None` raising `PatchError`,
   `prepare_driver.generate(out_dir, repo=REPO, python=("uv", "run", "--extra", "build", "python")) -> Path`
   (runs the SoC script, copies `designs/acorn-pcie/build/acorn-cle-215+/driver/{kernel,user}` to
-  `out_dir/{kernel,user}`, dropping `__init__.py`/`__pycache__`, and returns `out_dir`).
+  `out_dir/{kernel,user}` (no `__pycache__`) plus litepcie's `LICENSE` at the top, and returns `out_dir`).
 - CLI: `prepare_driver.py --out DIR [--from-dir GENERATED]` (generate, or take an already generated tree),
   then patch.
 
@@ -229,7 +231,7 @@ means "fixed upstream".
   None]` (resolves `(CSR_BASE + 0x800L)` and `L` suffixes; a bare `#define X` is `None`),
   `csr_check.referenced_names(driver_dir) -> set[str]` (identifiers in every `.c`/`.h` under `kernel/` and
   `user/` except the generated `csr.h`, `soc.h`, `mem.h`),
-  `csr_check.json_value(csr, name, soc_constants) -> (present: bool, value)`,
+  `csr_check.json_value(csr, name) -> value | ABSENT`, `csr_check.compare(driver_dir, csrs) -> list[Row]`,
   `csr_check.check(driver_dir, csr_jsons: dict[str, dict]) -> list[str]` (problems; empty means agreement),
   `csr_check.fetch_release_csrs(pin=RELEASE_TOML, fetch=None) -> dict[str, dict]` (reusing
   `packaging/acorn-pcie/build_debs.py`'s `read_pin`, `release_fetcher`, `local_fetcher` via importlib, the
@@ -276,7 +278,7 @@ Modify `packaging/acorn-litepcie/build_debs.py`; Test `tests/test_acorn_litepcie
 **Interfaces:**
 - `build_debs.dkms_conf(version) -> str` (exactly §3.6's text with the version),
   `build_debs.common_nfpm(version)`, `build_debs.dkms_nfpm(version, driver_dir, staging)`,
-  `build_debs.utils_nfpm(version, arch, bin_dir)` (reads `bin_dir/utils.json` `{"glibc": "2.34"}` written by
+  `build_debs.utils_nfpm(version, arch, bin_dir, tree)` (reads `bin_dir/utils.json` `{"arch": ..., "glibc": "2.34"}` written by
   `container.py utils`), `run_nfpm` shared in shape with `packaging/acorn-pcie/build_debs.py`.
 - CLI: `build_debs.py --out DIR --driver DIR --only {common,dkms,utils} [--arch A --bin-dir D] [--nfpm P]`.
 
@@ -297,18 +299,19 @@ Modify `packaging/acorn-litepcie/build_debs.py`; Test `tests/test_acorn_litepcie
 parsing and the vermagic/glibc parsers only; the rest is exercised by running it).
 
 **Interfaces:**
-- `container.py utils --driver D --out O`: `apt-get install gcc make libc6-dev binutils`, compile
+- `container.py utils --arch A --driver D --out O`: `apt-get install gcc make libc6-dev binutils`, compile
   `struct_layout.c`, `make -C D/user litepcie_util litepcie_test`, strip, copy to `O`, write `O/utils.json`
   with the highest `GLIBC_x.y` either binary needs (`objdump -T`).
 - `container.py module --driver D --out O [--kver K]`: default `K` from `kernels.toml`; add the RPi archive,
   install `linux-headers-K`, `make -C /usr/src/linux-headers-K M=<copy of D/kernel> modules`, check
   `modinfo -F vermagic` starts with `K `, copy the two `.ko` to `O`.
-- `container.py dkms-test --debs DIR`: add the RPi archive, install `dkms` and `linux-headers-rpi-v8` (the
-  meta package names the newest v8 kernel), install the debs through apt, `dkms install -k K`, then
-  `modinfo -k K litepcie liteuart` and the blacklist file.
-- `container.py install-test --debs DIR`: install `-common` and `-utils`, `litepcie_util` prints its usage.
+- `container.py dkms-test DEB...`: add the RPi archive, install `dkms` and `linux-headers-rpi-v8` (the
+  meta package names the newest v8 kernel), install the debs through apt, require that the postinst alone
+  built and installed the modules for `K` (no `dkms install` by hand), then `modinfo -k K litepcie liteuart`,
+  the blacklist in `modprobe -c`, and a clean purge.
+- `container.py install-test --arch A DEB...`: install `-common` and `-utils`, `litepcie_util` prints its usage.
 - Pure helpers with unit tests: `max_glibc(objdump_text) -> str`, `vermagic_ok(vermagic, kver) -> bool`,
-  `newest_headers(depends_text) -> str`.
+  `newest_kernel(header_packages, flavour) -> str`, `docker_argv(platform, args, docker) -> list`.
 
 - [ ] Tests first for the helpers; implement; run all four subcommands locally with
   `sudo -n docker run --rm --network host --platform linux/arm64|linux/arm/v7 -v <worktree>:/w -w /w
