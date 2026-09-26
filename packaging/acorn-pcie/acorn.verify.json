@@ -1,7 +1,0 @@
-{
-  "board": "acorn",
-  "title": "Sqrl Acorn CLE-215+ / CLE-101",
-  "command": ["/usr/bin/fpgas-acorn-verify"],
-  "report": "/run/fpgas-online/acorn-verify.json",
-  "detect": {"pci_vendor": ["10ee", "1e24"]}
-}

@@ -51,7 +51,9 @@ import sys
 
 _HERE = pathlib.Path(__file__).resolve()
 _REPO = _HERE.parents[3]
-_spec = importlib.util.spec_from_file_location("spi_flash", _HERE.parents[1] / "host" / "spi_flash.py")
+_spec = importlib.util.spec_from_file_location(
+    "spi_flash", _REPO / "verify" / "src" / "fpgas_online_verify" / "boards" / "acorn" / "spi_flash.py"
+)
 spi_flash = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(spi_flash)
 

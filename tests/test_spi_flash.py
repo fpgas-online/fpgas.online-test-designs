@@ -18,15 +18,8 @@ Fault switches (`erase_fails_at`, `program_flips_at`, `p_err_at`) exist because
 a flash that always works tests none of the checking code.
 """
 
-import importlib.util
-import pathlib
-
 import pytest
-
-_PATH = pathlib.Path(__file__).resolve().parents[1] / "designs" / "acorn-pcie" / "host" / "spi_flash.py"
-_spec = importlib.util.spec_from_file_location("spi_flash", _PATH)
-sf = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(sf)
+from fpgas_online_verify.boards.acorn import spi_flash as sf
 
 RDID = bytes.fromhex("0102194d0180")
 SIZE = 8 << 20  # enough for both slots; the real part is 32 MiB

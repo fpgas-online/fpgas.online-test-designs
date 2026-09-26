@@ -1,4 +1,4 @@
-"""Tests for the boot-time Acorn check (designs/acorn-pcie/host/acorn_verify.py).
+"""Tests for the Acorn check (fpgas_online_verify.boards.acorn.check).
 
 The check has three tiers, run on every boot and never writing anything to the board:
 
@@ -13,18 +13,13 @@ goes through the real spi_flash.Flash code path, STARTUPE2's swallowed clocks in
 
 import ast
 import hashlib
-import importlib.util
 import json
 import pathlib
 
 import pytest
+from fpgas_online_verify.boards.acorn import check as av
 
 from tests.test_spi_flash import FakeBus, FakeS25FL, image, sf
-
-_HOST = pathlib.Path(__file__).resolve().parents[1] / "designs" / "acorn-pcie" / "host"
-_spec = importlib.util.spec_from_file_location("acorn_verify", _HOST / "acorn_verify.py")
-av = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(av)
 
 # What csr.json records (lower case) and what the SoC's identifier memory holds (as written in the gateware).
 OP_IDENT = "fpgas-online acorn pcie soc cle-215+ 2026-09-21 14:23:32"
@@ -47,6 +42,13 @@ def _golden_image():
 
 def _operational_image():
     return image(fill=0x22)
+
+
+@pytest.fixture(autouse=True)
+def small_slots(monkeypatch):
+    """The check reads each 4 MiB slot whole; through the fake chip that is minutes. 128 KiB still holds the
+    70000-byte test images and more, so what lies past an image is still read and hashed."""
+    monkeypatch.setattr(sf, "SLOT_SIZE", 0x20000)
 
 
 @pytest.fixture
@@ -159,8 +161,9 @@ class _Ctx:
 
 
 def test_the_subsystem_table_is_the_one_the_soc_is_built_with():
-    """acorn_verify.py cannot import the gateware (no LiteX on a Pi), so check its copy against the source."""
-    tree = ast.parse((_HOST.parent / "gateware" / "acorn_pcie_soc.py").read_text())
+    """The check cannot import the gateware (no LiteX on a Pi), so check its copy against the source."""
+    soc = pathlib.Path(__file__).resolve().parents[1] / "designs" / "acorn-pcie" / "gateware" / "acorn_pcie_soc.py"
+    tree = ast.parse(soc.read_text())
     consts = {
         node.targets[0].id: ast.literal_eval(node.value)
         for node in tree.body
@@ -285,22 +288,7 @@ def test_the_check_never_sends_a_writing_opcode(tmp_path, images, chip):
     assert not set(chip.opcodes) & sf.WRITE_OPCODES
 
 
-# -- reporting ----------------------------------------------------------------------------------------
-
-
-def test_the_fleet_event_carries_a_flat_summary(tmp_path, images, chip):
-    report = _verify(tmp_path, images, SoCBus(chip, OP_IDENT_ON_CHIP), OURS)
-    argv = av.fleet_event_argv(report)
-    assert argv[:2] == ["fleet-event", "fpga-verified"]
-    details = dict(a.split("=", 1) for a in argv[3::2])
-    assert argv[2::2] == ["--detail"] * len(details)
-    assert details == {
-        "result": "pass",
-        "release": "vivado-bitstreams-acorn-pcie-20260921-gf3355dccf443",
-        "board0": "0001:01:00.0 fpgas-online cle-215+ pass",
-        "board0_identifier": OP_IDENT_ON_CHIP,
-        "board0_flash": "0x000000=match 0x400000=match",
-    }
+# -- BAR0 ---------------------------------------------------------------------------------------------
 
 
 def test_memory_decoding_is_enabled_for_the_read_and_put_back_afterwards(tmp_path):
@@ -327,27 +315,6 @@ def test_memory_decoding_that_was_already_on_is_left_on(tmp_path):
     with av.open_bar0("0001:01:00.0", sysfs=tmp_path):
         pass
     assert int.from_bytes((dev / "config").read_bytes()[4:6], "little") == 0x0006
-
-
-def test_the_command_line_checks_against_the_images_it_is_given(tmp_path, monkeypatch, capsys):
-    """--images reaches verify(): found on pi-sw2-p48, where main() once ignored it for the default path."""
-    monkeypatch.setattr(av, "LOCK", tmp_path / "lock")
-    real_scan, sysfs = av.scan_pci, _sysfs(tmp_path, OURS)
-    monkeypatch.setattr(av, "scan_pci", lambda root=None: real_scan(sysfs))
-    elsewhere = tmp_path / "somewhere-else"
-    assert av.main(["--images", str(elsewhere), "--no-publish", "--report", "-"]) == 1
-    report = json.loads(capsys.readouterr().out)
-    assert str(elsewhere / "manifest.json") in report["boards"][0]["reason"]
-
-
-def test_a_failed_publish_names_where_the_report_went_and_keeps_the_result(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(av, "LOCK", tmp_path / "lock")
-    monkeypatch.setattr(av, "scan_pci", lambda root=None: [])
-    monkeypatch.setattr(av, "fleet_event_argv", lambda report: ["/nonexistent/fleet-event"])
-    out = tmp_path / "report.json"
-    assert av.main(["--report", str(out)]) == 0
-    assert json.loads(out.read_text())["result"] == "none"
-    assert f"the report is in {out}" in capsys.readouterr().err
 
 
 # -- the live identity read, for rpi-hwid's labels ----------------------------------------------------
@@ -395,15 +362,6 @@ def test_identify_never_opens_the_bar_of_a_factory_board(tmp_path, images):
 
 def test_identify_on_a_pi_with_no_fpga_is_none(tmp_path, images):
     assert _identify(tmp_path, images, None, RP1)["result"] == "none"
-
-
-def test_the_identify_command_prints_json_and_writes_no_report(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(av, "LOCK", tmp_path / "lock")
-    monkeypatch.setattr(av, "REPORT", tmp_path / "must-not-exist.json")
-    monkeypatch.setattr(av, "scan_pci", lambda root=None: [])
-    assert av.main(["--identify"]) == 0
-    assert json.loads(capsys.readouterr().out)["result"] == "none"
-    assert not (tmp_path / "must-not-exist.json").exists()
 
 
 def test_the_check_and_spi_flash_share_one_lock(tmp_path):

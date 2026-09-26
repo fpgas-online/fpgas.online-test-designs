@@ -1,0 +1,16 @@
+#!/bin/sh
+# A mode package going: fpgas-verify.service has nothing configured to check without one, so disable it. A
+# mode package replacing this one (they conflict) enables it again in its postinst. Not masked, unlike
+# dh_installsystemd's postrm: the unit belongs to fpgas-online-verify, which stays.
+set -e
+UNIT=fpgas-verify.service
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+	if [ -x /usr/bin/deb-systemd-helper ]; then
+		deb-systemd-helper disable "$UNIT" >/dev/null || true
+		[ "$1" = "purge" ] && deb-systemd-helper purge "$UNIT" >/dev/null || true
+	fi
+	if [ -d /run/systemd/system ]; then
+		systemctl --system daemon-reload >/dev/null || true
+	fi
+fi
+exit 0
