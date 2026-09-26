@@ -18,6 +18,8 @@ Measured on pi-sw2-p48 (Pi 5, PCIe BAR0, 2026-09-21): 32 MiB read in 58 s.
 
 Refuses to run over PCIe while a kernel driver (litepcie.ko) is bound to the
 board: the driver owns BAR0 then, and its flash ioctl does not take our lock.
+Over UART it refuses while litepcie.ko is bound to any device, for the same
+SPI master's sake.
 
 Self-contained on purpose (stdlib only): the Pi hosts boot a tmpfs root with no
 LiteX. Runs over PCIe BAR0 by default, or over the UART bridge with `--uart`.
@@ -309,6 +311,15 @@ def bound_driver(bdf, sysfs=None):
     return os.path.basename(os.readlink(link)) if link.is_symlink() else None
 
 
+def litepcie_bound_anywhere(sysfs=None):
+    """The first PCI device litepcie.ko is bound to, or None. For the UART path, which has no BDF: the bridge
+    reaches the same SPI master the driver's flash ioctl drives, and loading the driver resets the SoC."""
+    root = pathlib.Path(sysfs or SYSFS_PCI)
+    if not root.is_dir():
+        return None
+    return next((d.name for d in sorted(root.iterdir()) if bound_driver(d.name, root) == "litepcie"), None)
+
+
 def driver_bound_reason(driver):
     what = "litepcie.ko" if driver == "litepcie" else f"the {driver} driver"
     return f"{what} is bound: not checked"
@@ -344,7 +355,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     lock = hold_lock(LOCK)  # noqa: F841 -- held until main returns
-    driver = None if args.uart else bound_driver(args.bdf)
+    driver = ("litepcie" if litepcie_bound_anywhere() else None) if args.uart else bound_driver(args.bdf)
     if driver:
         print(f"error: {driver_bound_reason(driver)}")
         print("RESULT: FAIL")

@@ -319,3 +319,21 @@ def test_the_flash_tool_refuses_a_board_litepcie_holds_before_mapping_bar0(tmp_p
     out = capsys.readouterr().out
     assert "error: litepcie.ko is bound: not checked" in out
     assert "RESULT: FAIL" in out
+
+
+def test_the_uart_path_is_refused_too_while_litepcie_is_bound(tmp_path, monkeypatch, capsys):
+    """Over UART the bridge reaches the same SPI master that litepcie.ko's flash ioctl drives."""
+    monkeypatch.setattr(sf, "SYSFS_PCI", str(_pci(tmp_path, driver="litepcie")))
+    monkeypatch.setattr(sf, "LOCK", str(tmp_path / "lock"))
+
+    def no_uart(port):
+        raise AssertionError("the SoC's SPI master belongs to litepcie.ko")
+
+    monkeypatch.setattr(sf, "UARTBus", no_uart)
+    assert sf.main(["--uart", "/dev/ttyAMA0", "id"]) == 1
+    assert "error: litepcie.ko is bound: not checked" in capsys.readouterr().out
+
+
+def test_the_uart_path_is_fine_on_a_host_without_pci(tmp_path, monkeypatch):
+    monkeypatch.setattr(sf, "SYSFS_PCI", str(tmp_path / "no-pci"))
+    assert sf.litepcie_bound_anywhere() is None
