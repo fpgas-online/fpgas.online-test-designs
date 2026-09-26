@@ -50,7 +50,9 @@ def publish(debs, version, gh=gh):
     tag = series(version)
     try:
         published = _assets(tag, gh)
-    except GhError:
+    except GhError as e:
+        if "not found" not in str(e):
+            raise
         gh("release", "create", tag, "--prerelease", "--title", f"Debian packages (rolling, series {tag})",
            "--notes", f"Rolling .deb builds from this repository for series {tag}, one per green commit on main. "
            "Consumed by https://github.com/fpgas-online/apt.")  # fmt: skip

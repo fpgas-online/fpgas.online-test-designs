@@ -151,7 +151,8 @@ def test_identify_also_leaves_a_driver_bound_board_alone(tmp_path, images): ...
   - first-parent: branch `side` commits an input change *before* main commits two unrelated changes, then main
     merges `side` with `--no-ff`; version is `describe` of the merge commit (`post4`), not of the side commit
     (`post1`);
-  - no `vX.Y` tag → `BuildError` naming "shallow"/"tag" (`test_the_version_refuses_a_repository_without_a_series_tag`);
+  - no `vX.Y` tag → `BuildError` naming "shallow"/"tag"
+    (`test_the_version_refuses_a_repository_without_a_series_tag`);
   - `kernels.toml`: `fleet_kernel == "6.12.109+rpt-rpi-v8"`, `fleet_suite == "bookworm"`, and
     `kernel_release_key(fleet_kernel) >= kernel_release_key(min_kernel)` (the §4.3 guard, cheap to have now).
 - [ ] **Step 2: run** — fail (module missing).
@@ -175,7 +176,8 @@ fleet_suite = "bookworm"
 min_kernel = "6.12"
 ```
 
-- [ ] **Step 4: run** — pass. **Step 5: commit** `acorn-litepcie: the driver version, from its inputs' last first-parent commit`.
+- [ ] **Step 4: run** — pass. **Step 5: commit**
+  `acorn-litepcie: the driver version, from its inputs' last first-parent commit`.
 
 ### Task 3: generate and patch the driver (§3.1, §3.3–§3.5)
 
@@ -185,7 +187,8 @@ min_kernel = "6.12"
 - `prepare_driver.Patch(path, old, new, why)` (a dataclass), `prepare_driver.PATCHES` (three entries,
   paths relative to the driver tree: `kernel/main.c`, `kernel/liteuart.c`, `kernel/main.c`),
   `prepare_driver.apply_patches(driver_dir, patches=PATCHES) -> None` raising `PatchError`,
-  `prepare_driver.generate(out_dir, repo=REPO, python=("uv", "run", "--extra", "build", "python")) -> Path`
+  `prepare_driver.generate(out_dir, python=("uv", "run", "--locked", "--extra", "build", "python"),
+  build_dir=BUILD_DIR, license_file=None) -> Path`
   (runs the SoC script, copies `designs/acorn-pcie/build/acorn-cle-215+/driver/{kernel,user}` to
   `out_dir/{kernel,user}` (no `__pycache__`) plus litepcie's `LICENSE` at the top, and returns `out_dir`).
 - CLI: `prepare_driver.py --out DIR [--from-dir GENERATED]` (generate, or take an already generated tree),
@@ -278,7 +281,8 @@ Modify `packaging/acorn-litepcie/build_debs.py`; Test `tests/test_acorn_litepcie
 **Interfaces:**
 - `build_debs.dkms_conf(version) -> str` (exactly §3.6's text with the version),
   `build_debs.common_nfpm(version)`, `build_debs.dkms_nfpm(version, driver_dir, staging)`,
-  `build_debs.utils_nfpm(version, arch, bin_dir, tree)` (reads `bin_dir/utils.json` `{"arch": ..., "glibc": "2.34"}` written by
+  `build_debs.utils_nfpm(version, arch, bin_dir, tree)` (reads `bin_dir/utils.json`,
+  `{"arch": ..., "glibc": "2.34"}`, written by
   `container.py utils`), `run_nfpm` shared in shape with `packaging/acorn-pcie/build_debs.py`.
 - CLI: `build_debs.py --out DIR --driver DIR --only {common,dkms,utils} [--arch A --bin-dir D] [--nfpm P]`.
 

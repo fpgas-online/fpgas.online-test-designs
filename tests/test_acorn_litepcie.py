@@ -766,3 +766,20 @@ def test_an_upload_that_really_failed_is_a_failure(tmp_path):
 
     with pytest.raises(pub.GhError, match="500"):
         pub.publish([deb], "0.0.post1", gh=Broken([]))
+
+
+def test_a_release_view_that_fails_for_another_reason_is_reported_as_itself(tmp_path):
+    """Only a missing release is created; an auth or network failure must not turn into a bogus create."""
+    deb = tmp_path / "x_0.0.post1_all.deb"
+    deb.write_bytes(b"x")
+
+    class Offline(FakeGh):
+        def __call__(self, *args):
+            if args[:2] == ("release", "view"):
+                raise pub.GhError("gh release: HTTP 401: Bad credentials")
+            return super().__call__(*args)
+
+    gh = Offline([])
+    with pytest.raises(pub.GhError, match="401"):
+        pub.publish([deb], "0.0.post1", gh=gh)
+    assert not [c for c in gh.calls if c[:2] == ("release", "create")]
