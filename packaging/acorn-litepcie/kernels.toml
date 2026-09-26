@@ -1,0 +1,11 @@
+# The kernels the LitePCIe driver is built for (packaging/acorn-litepcie/, design
+# docs/plans/2026-09-25-acorn-litepcie-packages-design.md §3.6 and §4.2).
+#
+# fleet_kernel: the kernel the netbooted fleet boots (arm64 kernel, armhf userland). Part A builds
+# litepcie.ko and liteuart.ko against it as a CI artifact, since DKMS cannot serve that host shape. Move it
+# in the same reviewed PR that moves the fleet's kernel; the module's vermagic is checked against it.
+fleet_kernel = "6.12.109+rpt-rpi-v8"
+fleet_suite = "bookworm"
+
+# The kernel floor: no modules are built or kept for kernels below it. CI fails if fleet_kernel is below it.
+min_kernel = "6.12"
