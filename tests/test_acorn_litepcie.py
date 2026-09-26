@@ -783,3 +783,35 @@ def test_a_release_view_that_fails_for_another_reason_is_reported_as_itself(tmp_
     with pytest.raises(pub.GhError, match="401"):
         pub.publish([deb], "0.0.post1", gh=gh)
     assert not [c for c in gh.calls if c[:2] == ("release", "create")]
+
+
+def test_a_transient_download_failure_is_retried(tmp_path, monkeypatch):
+    """GitHub's release downloads return an occasional HTTP 500 (seen on this PR's CI)."""
+    import urllib.error
+
+    d, pin = _staged_release(tmp_path)
+    real = cc.bits.local_fetcher(d)
+    failures = {"acorn-cle-215-csr.json": 2}
+
+    def flaky(asset):
+        if failures.get(asset):
+            failures[asset] -= 1
+            raise urllib.error.HTTPError(asset, 500, "Internal Server Error", None, None)
+        return real(asset)
+
+    monkeypatch.setattr(cc, "RETRY_DELAY_S", 0)
+    got = cc.fetch_release_csrs(pin, fetch=flaky)
+    assert len(got) == 6
+
+
+def test_a_download_that_keeps_failing_is_a_clear_error_not_a_traceback(tmp_path, monkeypatch):
+    import urllib.error
+
+    _d, pin = _staged_release(tmp_path)
+
+    def down(asset):
+        raise urllib.error.URLError("no route to host")
+
+    monkeypatch.setattr(cc, "RETRY_DELAY_S", 0)
+    with pytest.raises(cc.CheckError, match=r"manifest\.json.*no route to host"):
+        cc.fetch_release_csrs(pin, fetch=down)

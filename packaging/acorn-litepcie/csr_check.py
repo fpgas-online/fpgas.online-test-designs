@@ -33,11 +33,15 @@ import json
 import pathlib
 import re
 import sys
+import time
+import urllib.error
 
 HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 RELEASE_PIN = REPO / "packaging" / "acorn-pcie" / "release.toml"
 IMAGE_COUNT = 6
+ATTEMPTS = 3  # GitHub release downloads fail now and then with an HTTP 500
+RETRY_DELAY_S = 10
 GENERATED = ("csr.h", "soc.h", "mem.h")
 
 _spec = importlib.util.spec_from_file_location("acorn_pcie_build_debs", REPO / "packaging/acorn-pcie/build_debs.py")
@@ -210,13 +214,30 @@ def check(driver_dir, csrs):
 # -- the release -------------------------------------------------------------------------------------------
 
 
-def fetch_release_csrs(pin=RELEASE_PIN, from_dir=None):
+def _retrying(fetch):
+    def get(asset):
+        for attempt in range(1, ATTEMPTS + 1):
+            try:
+                return fetch(asset)
+            except (urllib.error.URLError, TimeoutError) as e:
+                if attempt == ATTEMPTS:
+                    raise CheckError(f"cannot download {asset} ({ATTEMPTS} attempts): {e}") from None
+                print(f"downloading {asset} failed ({e}); retrying", file=sys.stderr)
+                time.sleep(RETRY_DELAY_S * attempt)
+        raise AssertionError("unreachable")
+
+    return get
+
+
+def fetch_release_csrs(pin=RELEASE_PIN, from_dir=None, fetch=None):
     """{image variant: csr.json} for the pinned release, each file checked against the pinned manifest."""
     try:
         p = bits.read_pin(pin)
     except bits.BuildError as e:
         raise CheckError(str(e)) from None
-    fetch = bits.local_fetcher(from_dir) if from_dir else bits.release_fetcher(p["repo"], p["tag"])
+    if fetch is None:
+        fetch = bits.local_fetcher(from_dir) if from_dir else bits.release_fetcher(p["repo"], p["tag"])
+    fetch = _retrying(fetch)
     raw = fetch("manifest.json")
     if hashlib.sha256(raw).hexdigest() != p["manifest_sha256"]:
         raise CheckError(f"the manifest of {p['tag']} does not match {pin}'s manifest_sha256")
