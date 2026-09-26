@@ -229,7 +229,9 @@ def test_generate_runs_the_soc_for_the_driver_only_and_copies_the_tree_out(tmp_p
     script = tmp_path / "fake_soc.py"
     argv_file = tmp_path / "argv"
     script.write_text(FAKE_SOC.format(build=str(build), argv=str(argv_file)))
-    out = pd.generate(tmp_path / "out", python=("python3", str(script)), build_dir=build)
+    licence = tmp_path / "LICENSE"
+    licence.write_text("Unless otherwise noted, LitePCIe is Copyright 2015-2024 / EnjoyDigital\n")
+    out = pd.generate(tmp_path / "out", python=("python3", str(script)), build_dir=build, license_file=licence)
     assert argv_file.read_text().split() == [
         str(pd.SOC_SCRIPT),
         "--variant",
@@ -238,10 +240,33 @@ def test_generate_runs_the_soc_for_the_driver_only_and_copies_the_tree_out(tmp_p
         "--no-compile-software",
     ]
     assert sorted(p.relative_to(out).as_posix() for p in out.rglob("*") if p.is_file()) == [
+        "LICENSE",
         "kernel/csr.h",
         "kernel/main.c",
         "user/litepcie_util.c",
     ]
+
+
+def test_the_litepcie_licence_travels_with_the_tree_because_the_binaries_must_reproduce_it(tmp_path):
+    """BSD-2-Clause, clause 2: binary redistributions reproduce the notice. The -utils and -dkms debs ship it."""
+    gen = tmp_path / "gen"
+    for sub in ("kernel", "user"):
+        (gen / sub).mkdir(parents=True)
+    with pytest.raises(pd.PatchError, match="LICENSE"):
+        pd.copy_tree(gen, tmp_path / "a", license_file=tmp_path / "missing")
+    lic = tmp_path / "LICENSE"
+    lic.write_text("BSD\n")
+    assert (pd.copy_tree(gen, tmp_path / "b", license_file=lic) / "LICENSE").read_text() == "BSD\n"
+
+
+def test_the_licence_is_found_in_the_environment_litepcie_was_installed_into(tmp_path):
+    """generate() asks the same Python that ran the SoC where litepcie's LICENSE is."""
+    fake = tmp_path / "LICENSE"
+    fake.write_text("x")
+    script = tmp_path / "py"
+    script.write_text(f"#!/bin/sh\necho {fake}\n")
+    script.chmod(0o755)
+    assert pd.litepcie_license((str(script),)) == fake
 
 
 # -- the CSR cross-check (§3.2) ----------------------------------------------------------------------------

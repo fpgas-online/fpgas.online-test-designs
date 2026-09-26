@@ -31,6 +31,7 @@ REPO = HERE.parents[1]
 SOC_SCRIPT = REPO / "designs" / "acorn-pcie" / "gateware" / "acorn_pcie_soc.py"
 VARIANT = "cle-215+"
 BUILD_DIR = REPO / "designs" / "acorn-pcie" / "build" / f"acorn-{VARIANT}"
+PYTHON = ("uv", "run", "--extra", "build", "python")
 
 
 class PatchError(Exception):
@@ -91,38 +92,57 @@ def apply_patches(driver_dir, patches=PATCHES):
         (driver_dir / rel).write_text(text)
 
 
-def copy_tree(generated, out_dir):
-    """`kernel/` and `user/` of a generated driver tree, without LitePCIe's Python package files."""
-    generated, out_dir = pathlib.Path(generated), pathlib.Path(out_dir)
+def copy_tree(generated, out_dir, license_file):
+    """`kernel/` and `user/` of a generated driver tree, without LitePCIe's Python package files, and
+    litepcie's LICENSE: BSD-2-Clause, whose binary redistributions must reproduce it."""
+    generated, out_dir, license_file = pathlib.Path(generated), pathlib.Path(out_dir), pathlib.Path(license_file)
+    if not license_file.is_file():
+        raise PatchError(f"litepcie's LICENSE is not at {license_file}")
     if out_dir.exists():
         raise PatchError(f"{out_dir} already exists: refusing to mix a new driver tree into an old one")
     for sub in ("kernel", "user"):
         if not (generated / sub).is_dir():
             raise PatchError(f"{generated} has no {sub}/: not a generated LitePCIe driver tree")
         shutil.copytree(generated / sub, out_dir / sub, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    shutil.copyfile(license_file, out_dir / "LICENSE")
     return out_dir
 
 
-def generate(out_dir, python=("uv", "run", "--extra", "build", "python"), build_dir=BUILD_DIR):
+_FIND_LICENSE = """
+import importlib.metadata as m
+d = m.distribution("litepcie")
+(f,) = [f for f in d.files if f.name == "LICENSE"]
+print(d.locate_file(f))
+"""
+
+
+def litepcie_license(python=PYTHON):
+    """Where the Python environment that generates the driver has litepcie's LICENSE."""
+    out = subprocess.run([*python, "-c", _FIND_LICENSE], check=True, capture_output=True, text=True, cwd=REPO)
+    return pathlib.Path(out.stdout.strip())
+
+
+def generate(out_dir, python=PYTHON, build_dir=BUILD_DIR, license_file=None):
     """Elaborate the SoC, have LitePCIe write its driver tree, and copy that tree to `out_dir`."""
     driver = pathlib.Path(build_dir) / "driver"
     if driver.exists():
         shutil.rmtree(driver)  # a tree from an earlier run must not survive into this one
     argv = [*python, str(SOC_SCRIPT), "--variant", VARIANT, "--driver", "--no-compile-software"]
     subprocess.run(argv, check=True, cwd=REPO)
-    return copy_tree(driver, out_dir)
+    return copy_tree(driver, out_dir, license_file or litepcie_license(python))
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--out", type=pathlib.Path, required=True, help="where the patched tree goes")
     parser.add_argument("--from-dir", type=pathlib.Path, help="an already generated driver tree")
+    parser.add_argument("--license", type=pathlib.Path, help="litepcie's LICENSE (default: from the uv environment)")
     args = parser.parse_args(argv)
     try:
         if args.from_dir:
-            copy_tree(args.from_dir, args.out)
+            copy_tree(args.from_dir, args.out, args.license or litepcie_license())
         else:
-            generate(args.out)
+            generate(args.out, license_file=args.license)
         apply_patches(args.out)
     except PatchError as e:
         sys.exit(f"error: {e}")
