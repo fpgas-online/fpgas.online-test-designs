@@ -600,3 +600,68 @@ def json_text(config):
     import json
 
     return json.dumps(config)
+
+
+# -- container.py: the in-container builds (§3.6, §3.9) ---------------------------------------------------------
+
+ct = _load("container")
+
+OBJDUMP_T = """
+litepcie_util:     file format elf32-littlearm
+
+DYNAMIC SYMBOL TABLE:
+00000000      DF *UND*  00000000 (GLIBC_2.4)  __stack_chk_fail
+00000000      DF *UND*  00000000 (GLIBC_2.34) __libc_start_main
+00000000      DF *UND*  00000000 (GLIBC_2.9)  pipe2
+00000000  w   D  *UND*  00000000  Base        __gmon_start__
+"""
+
+
+def test_the_glibc_floor_is_the_highest_symbol_version_compared_as_numbers():
+    assert ct.max_glibc(OBJDUMP_T) == "2.34"  # not "2.9", which sorts higher as text
+
+
+def test_no_glibc_symbols_is_an_error_not_a_floor_of_nothing():
+    with pytest.raises(ct.ContainerError, match="GLIBC"):
+        ct.max_glibc("DYNAMIC SYMBOL TABLE:\n")
+
+
+@pytest.mark.parametrize(
+    ("vermagic", "ok"),
+    [
+        ("6.12.109+rpt-rpi-v8 SMP preempt mod_unload modversions aarch64", True),  # as seen on pi-sw2-p48
+        ("6.12.109+rpt-rpi-v8-rt SMP preempt_rt mod_unload modversions aarch64", False),
+        ("6.12.10+rpt-rpi-v8 SMP preempt mod_unload modversions aarch64", False),
+        ("", False),
+    ],
+)
+def test_vermagic_must_name_exactly_the_kernel(vermagic, ok):
+    assert ct.vermagic_ok(vermagic, "6.12.109+rpt-rpi-v8") is ok
+
+
+def test_the_newest_installed_headers_name_the_kernel_to_build_for():
+    names = [
+        "linux-headers-rpi-v8",  # the meta package: not a kernel
+        "linux-headers-6.12.9+rpt-rpi-v8",
+        "linux-headers-6.12.47+rpt-rpi-v8",
+        "linux-headers-6.12.47+rpt-common-rpi",
+    ]
+    assert ct.newest_kernel(names, "rpi-v8") == "6.12.47+rpt-rpi-v8"
+
+
+def test_no_installed_headers_is_an_error():
+    with pytest.raises(ct.ContainerError, match="rpi-v8"):
+        ct.newest_kernel(["linux-headers-rpi-v8"], "rpi-v8")
+
+
+def test_the_docker_command_mounts_the_repository_and_bootstraps_python(tmp_path):
+    argv = ct.docker_argv("linux/arm/v7", ["utils", "--arch", "armhf"], docker=("sudo", "-n", "docker"))
+    assert argv[:3] == ["sudo", "-n", "docker"]
+    assert argv[argv.index("--platform") + 1] == "linux/arm/v7"
+    assert "--pull=always" in argv  # otherwise a local debian:bookworm of the other architecture is reused
+    assert f"{ct.REPO}:/w" in argv
+    assert argv[-1].endswith("python3 packaging/acorn-litepcie/container.py utils --arch armhf")
+
+
+def test_every_architecture_has_its_docker_platform():
+    assert ct.PLATFORMS == {"arm64": "linux/arm64", "armhf": "linux/arm/v7"}
