@@ -177,6 +177,7 @@ build = [
     { name = "migen" },
     { name = "ninja" },
     { name = "pythondata-cpu-vexriscv" },
+    { name = "pythondata-misc-tapcfg" },
     { name = "pythondata-software-compiler-rt" },
     { name = "pythondata-software-picolibc" },
 ]
@@ -205,6 +206,7 @@ requires-dist = [
     { name = "pyserial", specifier = ">=3.5" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pythondata-cpu-vexriscv", marker = "extra == 'build'", git = "https://github.com/litex-hub/pythondata-cpu-vexriscv.git" },
+    { name = "pythondata-misc-tapcfg", marker = "extra == 'build'", git = "https://github.com/litex-hub/pythondata-misc-tapcfg.git" },
     { name = "pythondata-software-compiler-rt", marker = "extra == 'build'", git = "https://github.com/litex-hub/pythondata-software-compiler_rt.git" },
     { name = "pythondata-software-picolibc", marker = "extra == 'build'", git = "https://github.com/litex-hub/pythondata-software-picolibc.git" },
     { name = "ruff", marker = "extra == 'dev'" },
@@ -476,6 +478,11 @@ wheels = [
 name = "pythondata-cpu-vexriscv"
 version = "1.0.1.post407"
 source = { git = "https://github.com/litex-hub/pythondata-cpu-vexriscv.git#1979a644dbe64d8d32dfbdd970dccee6add63723" }
+
+[[package]]
+name = "pythondata-misc-tapcfg"
+version = "0.0.post517"
+source = { git = "https://github.com/litex-hub/pythondata-misc-tapcfg.git#a12c3f592c99f9c082fdc68c065b81cbd6e6b238" }
 
 [[package]]
 name = "pythondata-software-compiler-rt"
