@@ -1,6 +1,7 @@
 # Acorn LitePCIe driver packages: design
 
-Status: design, for review. Nothing here is implemented yet.
+Status: Part A implemented (plan: `docs/plans/2026-09-26-acorn-litepcie-part-a-plan.md`). Parts B and C are
+design only.
 
 This repository's CI builds and publishes Debian packages for the LitePCIe kernel driver (`litepcie.ko`,
 with its companion `liteuart.ko`) and the LitePCIe user tools (`litepcie_util`, `litepcie_test`), generated
@@ -227,8 +228,10 @@ request.
 
 ### 3.6 Builds
 
-All builds run in Docker on GitHub's `ubuntu-24.04-arm` runners. armhf builds use
+Every architecture-specific build runs in Docker on GitHub's `ubuntu-24.04-arm` runners. armhf builds use
 `docker run --platform linux/arm/v7`, which fpgas.online-fpga-tools' `debs.yml` already does successfully.
+The driver generation and the architecture-independent `-common` and `-dkms` run on `ubuntu-latest`: they
+are Python and nfpm only, and LiteX elaborates the SoC faster there.
 
 - **dkms, common**: once per run, architecture-independent. `dkms.conf` calls kbuild directly and does not
   use the upstream `driver/kernel/Makefile`. That Makefile sets `ARCH?=$(shell uname -m)`, which is
@@ -279,9 +282,11 @@ Nothing changes on a running host until an operator loads the module.
     `config-6.12.96+rpt-rpi-v8`), so `IO_STRICT_DEVMEM` is off. The kernel neither revokes nor refuses a
     `resource0` mapping of a BAR a driver holds, and both would drive the same CSRs at once.
   - *Decision*: `fpgas-acorn-verify` and `fpgas-acorn-flash` check `/sys/bus/pci/devices/<bdf>/driver`
-    before they open BAR0. When `litepcie` is bound, they touch nothing on that device and report it.
+    before they open BAR0. When `litepcie` is bound, they touch nothing on that device and report it. Any
+    other bound driver (`vfio-pci`, say) owns BAR0 just the same and is treated alike, named in the reason.
     - The boot check's board result is then `driver-bound`, with the reason "litepcie.ko is bound: not
-      checked". `driver-bound` ranks between `pass` and `degraded` in `SEVERITY`.
+      checked". `driver-bound` ranks between `pass` and `degraded` in `SEVERITY`. A board on SQRL's factory
+      or the vendor XDMA image is still `unconverted`: that is known from config space alone.
     - Its exit status is non-zero, because the board has not been verified. An operator who loaded the
       driver on purpose sees the unit fail for that reason, and nothing else.
     - `fpgas-acorn-flash` refuses with the same message.
