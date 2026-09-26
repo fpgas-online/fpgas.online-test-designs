@@ -1,7 +1,8 @@
 """Simulation tests: the BIOS console (LiteX's crossover UART) must not stall the CPU when nobody reads it.
 
-The CPU side is driven the way LiteX's libbase uart_write() drives it: wait while `txfull`, then write
-`rxtx`. The crossover side is the host's `xover_rxtx`/`xover_rxempty` CSRs.
+The CPU side is driven like libbase's polling uart_write(): wait while `txfull`, then write `rxtx`. The
+BIOS uses libbase's interrupt-driven ring instead, which drains into the UART on the same `txfull`. The
+crossover side is the host's `xover_rxtx`/`xover_rxempty` CSRs.
 """
 
 from litex.soc.cores.uart import UARTCrossover
