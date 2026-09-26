@@ -183,6 +183,7 @@ class AcornPCIeSoC(SoCCore):
         # Nothing reads the crossover until a host attaches, and a full console makes the BIOS wait in
         # uart_write(): it stopped after the banner, so DDR3 stayed uninitialised until someone drained it.
         # With the flush, 10 ms without a reader and the queued output is dropped instead of waited on.
+        # Drop this line once the pinned LiteX's get_uart_core() does it for crossovers (mithro/litex#4).
         self.uart.add_auto_tx_flush(sys_clk_freq=sys_clk_freq)
         self.add_constant("UART_RESET_BAUD", UART_RESET_BAUD)
         self.add_constant("UART_FAST_BAUD", UART_FAST_BAUD)
