@@ -689,3 +689,9 @@ def test_the_command_line_prints_the_version_for_the_workflow(monkeypatch, capsy
 def test_the_command_line_wants_a_package_to_build(tmp_path):
     with pytest.raises(SystemExit):
         bd.main(["--out", str(tmp_path), "--driver", str(tmp_path)])
+
+
+def test_a_string_define_python_cannot_read_is_kept_as_text_not_a_crash():
+    """evaluate() sees every define in the generated headers, not only the ones the driver uses."""
+    values = cc.evaluate(cc.parse_defines('#define CONFIG_ODD "C:\\\\N{x"\n#define CONFIG_BAD "\\N"\n'))
+    assert values["CONFIG_BAD"] == '"\\N"'

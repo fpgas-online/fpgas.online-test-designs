@@ -85,7 +85,10 @@ def evaluate(defines):
         if not text:
             result = None
         elif text.startswith('"') and text.endswith('"'):
-            result = ast.literal_eval(text)
+            try:
+                result = ast.literal_eval(text)
+            except (SyntaxError, ValueError):  # a C escape Python does not accept: compare the text
+                result = text
         else:
             expr = _INT_SUFFIX.sub(r"\1", text)
             for ident in set(re.findall(r"\b[A-Za-z_]\w*\b", expr)):
