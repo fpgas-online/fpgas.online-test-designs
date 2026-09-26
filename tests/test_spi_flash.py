@@ -1,4 +1,4 @@
-"""Unit tests for the SPI flash host tool (designs/acorn-pcie/host/spi_flash.py).
+"""Unit tests for the SPI flash host tool (fpgas_online_verify.boards.acorn.spi_flash, fpgas-acorn-flash).
 
 A fake register bus stands in for the SoC: it models LiteX's 40-bit SPIMaster
 CSRs and the separate `flash_cs_n` GPIO, and shifts every transfer through a

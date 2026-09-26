@@ -320,7 +320,7 @@ def release_notes(manifest):
         f"Source commit evidence: {manifest['source_commit_evidence']}.",
         "",
         "Each board gets the golden build's fallback image at 0x000000 and the operational build's "
-        "operational image at 0x400000 (`spi_flash.py write <file> <slot>`). The plain `sqrl_acorn.bin`/`.bit` "
+        "operational image at 0x400000 (`fpgas-acorn-flash write <file> <slot>`). The plain `sqrl_acorn.bin`/`.bit` "
         "are for loading into SRAM over JTAG only. `manifest.json` has every file's identifier, slot and "
         "sha256; `sha256sum -c SHA256SUMS` checks a download.",
         "",

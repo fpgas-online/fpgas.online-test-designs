@@ -1,13 +1,15 @@
 #!/bin/sh
-# A mode package going: fpgas-verify.service has nothing configured to check without one, so disable it. A
-# mode package replacing this one (they conflict) enables it again in its postinst. Not masked, unlike
-# dh_installsystemd's postrm: the unit belongs to fpgas-online-verify, which stays.
+# A mode package going: fpgas-verify.service has nothing configured to check without one, so take it out of
+# the boot. `purge` rather than `disable`: disable records "turned off by the admin", after which the next mode
+# package's postinst (its was-enabled is false) would leave the unit off, and swapping one board's package for
+# another (they conflict, so apt removes the old one first) would silently lose the boot check. purge removes
+# the links and forgets that state, so the next mode package enables it as on a first install. Not masked,
+# unlike dh_installsystemd's postrm: the unit belongs to fpgas-online-verify, which stays.
 set -e
 UNIT=fpgas-verify.service
 if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
 	if [ -x /usr/bin/deb-systemd-helper ]; then
-		deb-systemd-helper disable "$UNIT" >/dev/null || true
-		[ "$1" = "purge" ] && deb-systemd-helper purge "$UNIT" >/dev/null || true
+		deb-systemd-helper purge "$UNIT" >/dev/null || true
 	fi
 	if [ -d /run/systemd/system ]; then
 		systemctl --system daemon-reload >/dev/null || true

@@ -42,7 +42,7 @@ SPI_MISO_HI = CSR_BASE + 0x3810
 SPI_MISO_LO = CSR_BASE + 0x3814
 FLASH_CS_N = CSR_BASE + 0x4000  # csr_map: flash_cs_n = 8
 SHIFT_BYTES = 5
-# Shared with fpgas-acorn-verify (acorn_verify.py): one user of the SoC's SPI master at a time. Its CS and
+# Shared with the Acorn check (check.py, fpgas-acorn-verify): one user of the SoC's SPI master at a time. Its CS and
 # shift registers are single-user: two tools interleaving would corrupt a read, or a write.
 LOCK = "/run/lock/fpgas-acorn.lock"
 

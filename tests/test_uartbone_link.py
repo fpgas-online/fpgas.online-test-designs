@@ -1,4 +1,4 @@
-"""Unit tests for the UARTBone link helper (designs/acorn-pcie/host/uartbone_link.py).
+"""Unit tests for the UARTBone link helper (fpgas_online_verify.boards.acorn.uartbone_link).
 
 A fake serial port stands in for the FPGA: it implements the UARTBone wire
 protocol over a small memory, only answers at the baud rate the "FPGA" is

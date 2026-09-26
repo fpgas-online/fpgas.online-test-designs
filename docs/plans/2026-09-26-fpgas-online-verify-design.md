@@ -1,6 +1,6 @@
 # fpgas-online-verify: boot-time FPGA board verification, packaged per board
 
-Date: 2026-09-26. Status: design, being implemented on `worktree-board-debs`.
+Date: 2026-09-26. Status: implemented (`verify/`, `packaging/debs/`); the non-Acorn boards not yet run on hardware.
 
 ## What it is for
 

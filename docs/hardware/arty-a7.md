@@ -4,6 +4,45 @@
 
 The Digilent Arty A7 is a Xilinx Artix-7 development board used in the fpgas.online test infrastructure. It connects to the host via USB (FTDI FT2232HQ providing both JTAG and UART) and optionally through PMOD connectors via a PMOD HAT adapter on a Raspberry Pi.
 
+## Installing the Arty Packages
+
+Add the fpgas.online APT repository first ([README: Installing the Packages](../../README.md#installing-the-packages)), then on the Arty's Pi:
+
+```bash
+sudo apt install fpgas-online-arty
+```
+
+| Package | Installs |
+|---------|----------|
+| `fpgas-online-arty` | sets the host up as having an Arty, and enables `fpgas-verify.service` |
+| `fpgas-online-arty-tools` | the Arty's module of `fpgas_online_verify`, and `fpgas-arty-verify`; with `python3-serial` and openFPGALoader |
+| `fpgas-online-arty-bitstreams` | the Arty A7-35T test bitstreams built by the same commit's CI, in `/usr/share/fpgas-online/arty/bitstreams/` |
+| `fpgas-online-verify` | `fpgas-verify`, the unit, and the host test scripts |
+
+At boot the check finds the Arty by its FT2232H on USB (`0403:6010`). It then loads the UART, DDR and SPI flash test designs into SRAM with openFPGALoader, one at a time, and runs each one's host test on `/dev/ttyUSB1`. Last, it reads back the flash's boot image region (the first 2.1 MiB) through openFPGALoader's SPI-over-JTAG bridge. The FTDI serial number, the flash's JEDEC ID and that region's sha256 are what `changed` compares. The Arty is left running the SPI-over-JTAG bridge, and comes back to its flash image at the next power cycle. The PMOD loopback, pin identification and Ethernet tests need the PMOD HAT or a USB Ethernet adapter, so only `fpgas-arty-debug` runs them.
+
+For the fpgas.online openFPGALoader build, add the [fpgas.online-fpga-tools repository](https://github.com/fpgas-online/fpgas.online-fpga-tools#debian-packages-bookworm-trixie-sid-arm64-armhf) **before** installing; otherwise apt installs Debian's `openfpgaloader`, which also works for the Arty.
+
+The Arty's check has not yet been run on an Arty.
+
+**Check the board now**, and see what each test printed:
+
+```bash
+sudo fpgas-verify                          # what the boot unit runs: report, publish, exit 0 only for pass
+sudo fpgas-arty-verify --no-publish --report -   # this board only, the JSON report on stdout
+```
+
+The results are in the [README](../../README.md#installing-the-packages). `changed` means the board, or its flash, differs from what was recorded last time; after flashing or swapping it on purpose, `sudo fpgas-verify --update` records the new state.
+
+**When a check fails**, `sudo apt install fpgas-online-arty-debug` for step-by-step tools:
+
+```bash
+sudo fpgas-arty-debug detect           # is the board there, and what was found
+fpgas-arty-debug list                  # every test, whether the boot check runs it, and its bitstream
+sudo fpgas-arty-debug check            # the installed bitstreams against their manifest
+sudo fpgas-arty-debug test ddr   # load one test's design and run its test, output live
+```
+
 ## Key Specifications
 
 | Parameter | Value |

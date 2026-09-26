@@ -1,4 +1,11 @@
 # .github/workflows/collect-bitstreams.yml
+#
+# collect: bundle every bitstream built for this commit (all-bitstreams).
+# debs:    lint and test fpgas_online_verify, build every fpgas-online-verify deb from the bundle
+#          (packaging/debs/build_debs.py) and the wheel, and check the debs' install rules in clean Debian
+#          bookworm and trixie containers (packaging/debs/install_test.sh).
+# publish: on main, upload the debs to this repository's rolling series release (the nearest vX.Y tag, v0.0),
+#          which fpgas-online/apt pulls from, as the other fpgas.online deb repositories do.
 name: "Collect Bitstreams"
 
 on:
@@ -14,10 +21,29 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
+env:
+  NFPM_VERSION: "2.47.0"
+  NFPM_SHA256: "0660ca602b2d2d2ae4781a06c692b3eeb9d437ffea05b831d76e41f4a3188783"
+  VERIFY_TESTS: >-
+    tests/test_verify_runner.py tests/test_verify_boards.py tests/test_debs_packaging.py
+    tests/test_acorn_verify.py tests/test_acorn_packaging.py tests/test_spi_flash.py tests/test_uartbone_link.py
+    tests/test_acorn_pcie_publish_release.py
+  VERIFY_PY: >-
+    verify/src packaging/debs/build_debs.py packaging/acorn-pcie/build_debs.py tests/conftest.py
+    tests/test_verify_runner.py tests/test_verify_boards.py tests/test_debs_packaging.py
+    tests/test_acorn_verify.py tests/test_acorn_packaging.py tests/test_spi_flash.py tests/test_uartbone_link.py
+
 jobs:
   collect:
     name: "Bundle all bitstreams"
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      checks: read
     env:
       # On pull_request events github.sha is the synthetic merge commit, but
       # the build workflows' check runs and artifacts hang off the PR's head
@@ -59,6 +85,28 @@ jobs:
           wait-interval: 30
           allowed-conclusions: success
 
+      # The check names above are the board jobs', but an artifact is only downloaded from a workflow run
+      # that has completed, and the DDR, SPI flash and PCIe runs also have Acorn/NiteFury/LiteFury jobs that
+      # finish later: on main at cb8191e the bundle was made at 01:24:01 and missed the SPI flash (01:24:04),
+      # DDR (01:25:18) and PCIe (01:26:42) runs entirely. So wait for every other run on this commit.
+      - name: Wait for every other workflow run on this commit to finish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          WORKFLOW: ${{ github.workflow }}
+        run: |
+          set -euo pipefail
+          for _ in $(seq 120); do
+            left="$(gh api "repos/${REPO}/actions/runs?head_sha=${HEAD_SHA}&per_page=100" \
+              --jq "[.workflow_runs[] | select(.status != \"completed\" and .id != ${RUN_ID} and .name != \"${WORKFLOW}\") | .name] | join(\", \")" || echo "?")"
+            if [ -z "$left" ]; then echo "every other run on ${HEAD_SHA} has finished"; exit 0; fi
+            echo "still running: $left"
+            sleep 30
+          done
+          echo "runs on ${HEAD_SHA} still not finished after an hour: $left" >&2
+          exit 1
+
       - name: Download artifacts from all build workflows
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -93,3 +141,107 @@ jobs:
           name: all-bitstreams
           path: bitstreams/
           if-no-files-found: error
+
+  debs:
+    name: "fpgas-online-verify debs: tests, build, install rules"
+    needs: collect
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the version is git describe against the v0.0 series tag
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Lint
+        run: |
+          # shellcheck disable=SC2086 # the lists are meant to split into paths
+          uv run --no-project --with ruff ruff check $VERIFY_PY
+          # shellcheck disable=SC2086
+          uv run --no-project --with ruff ruff format --check $VERIFY_PY
+
+      - name: Tests (Python 3.11, as on bookworm, and 3.12)
+        run: |
+          # shellcheck disable=SC2086 # the lists are meant to split into paths
+          uv run --no-project --python 3.11 --with pytest pytest $VERIFY_TESTS
+          # shellcheck disable=SC2086
+          uv run --no-project --python 3.12 --with pytest pytest $VERIFY_TESTS
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: all-bitstreams
+          path: bitstreams
+
+      - name: Install nfpm ${{ env.NFPM_VERSION }}
+        run: |
+          set -euo pipefail
+          f="nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
+          curl -fsSL -o "$f" "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/$f"
+          echo "${NFPM_SHA256}  $f" | sha256sum -c -
+          tar xzf "$f" nfpm
+
+      - name: Build the debs
+        run: uv run --no-project --python 3.12 packaging/debs/build_debs.py --bitstreams bitstreams --out dist --nfpm ./nfpm
+
+      - name: Show what was built
+        run: |
+          for d in dist/*.deb; do
+            echo "== $d"; dpkg-deb -f "$d" Package Version Depends Recommends Suggests Provides Conflicts; dpkg-deb -c "$d"
+          done
+
+      - name: Build the wheel and run its commands
+        run: |
+          set -euo pipefail
+          uv build --wheel verify --out-dir wheel
+          uv venv --python 3.11 venv
+          uv pip install --python venv/bin/python wheel/*.whl
+          venv/bin/fpgas-verify --list
+          venv/bin/fpgas-arty-debug --help > /dev/null
+
+      - name: Install rules in Debian bookworm and trixie
+        run: |
+          set -euo pipefail
+          for suite in bookworm trixie; do
+            docker run --rm \
+              --mount type=tmpfs,destination=/sys/bus/pci/devices --mount type=tmpfs,destination=/sys/bus/usb/devices \
+              -v "$PWD/dist:/dist:ro" -v "$PWD/packaging/debs/install_test.sh:/install_test.sh:ro" \
+              "debian:$suite" sh /install_test.sh
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fpgas-online-verify-debs
+          path: dist/*.deb
+
+  publish:
+    name: "Publish to the series release"
+    needs: debs
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: fpgas-online-verify-debs
+          path: dist
+
+      # The Acorn's bitstreams deb keeps its file name until its pin moves, so re-uploading it changes nothing
+      # downstream; every other deb is named by this commit's version.
+      - name: Upload to the current series release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SERIES="$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*')"
+          if ! gh release view "$SERIES" >/dev/null; then
+            gh release create "$SERIES" --prerelease --title "Debian packages (rolling, series $SERIES)" \
+              --notes "Rolling .deb builds from this repository for series $SERIES, one per green commit on main. Consumed by https://github.com/fpgas-online/apt."
+          fi
+          gh release upload "$SERIES" dist/*.deb --clobber
+          ls -l dist

@@ -39,7 +39,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.version]
 source = "vcs"
-raw-options = { root = "..", git_describe_command = "git describe --tags --long --match v[0-9]*.[0-9]*" }
+# X.Y.postN, N commits after the vX.Y tag: the same version as the debs.
+raw-options = { root = "..", git_describe_command = "git describe --tags --long --match v[0-9]*.[0-9]*", version_scheme = "post-release", local_scheme = "no-local-version" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/fpgas_online_verify"]
