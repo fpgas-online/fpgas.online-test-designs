@@ -24,10 +24,10 @@ SPI master's sake.
 Self-contained on purpose (stdlib only): the Pi hosts boot a tmpfs root with no
 LiteX. Runs over PCIe BAR0 by default, or over the UART bridge with `--uart`.
 
-    sudo python3 spi_flash.py id
-    sudo python3 spi_flash.py dump factory.bin
-    sudo python3 spi_flash.py verify sqrl_acorn_operational.bin 0x400000
-    sudo python3 spi_flash.py write  sqrl_acorn_operational.bin 0x400000
+    sudo fpgas-acorn-flash id
+    sudo fpgas-acorn-flash dump factory.bin
+    sudo fpgas-acorn-flash verify sqrl_acorn_operational.bin 0x400000
+    sudo fpgas-acorn-flash write  sqrl_acorn_operational.bin 0x400000
 """
 
 import argparse
@@ -48,7 +48,7 @@ SPI_MISO_HI = CSR_BASE + 0x3810
 SPI_MISO_LO = CSR_BASE + 0x3814
 FLASH_CS_N = CSR_BASE + 0x4000  # csr_map: flash_cs_n = 8
 SHIFT_BYTES = 5
-# Shared with fpgas-acorn-verify (acorn_verify.py): one user of the SoC's SPI master at a time. Its CS and
+# Shared with the Acorn check (check.py, fpgas-acorn-verify): one user of the SoC's SPI master at a time. Its CS and
 # shift registers are single-user: two tools interleaving would corrupt a read, or a write.
 LOCK = "/run/lock/fpgas-acorn.lock"
 SYSFS_PCI = "/sys/bus/pci/devices"
@@ -286,10 +286,7 @@ class UARTBus:
     """The same CSRs over the UART bridge. Fine for `id`; a full dump would take hours."""
 
     def __init__(self, port):
-        import pathlib
-
-        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-        import uartbone_link
+        from . import uartbone_link
 
         self._link = uartbone_link.UARTBoneLink(uartbone_link._serial_opener(port))
         self._link.connect()

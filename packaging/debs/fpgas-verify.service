@@ -1,0 +1,24 @@
+# Installed by fpgas-online-verify; enabled by the mode package (fpgas-online-<board>, or fpgas-online-multi-board
+# and so fpgas-online-all-boards). Runs fpgas-verify once per boot: check the board (or boards) the host is set
+# up for, with the fpgas.online test bitstreams, and compare it with the state recorded last time. The board
+# is left running a test design. The result is in /run/fpgas-online/verify.json and is published as the
+# fleet-event stage `fpga-verified`; anything but "pass" leaves this unit failed.
+# To accept a board flashed or swapped on purpose: sudo fpgas-verify --update.
+# Options (for example --no-probe): FPGAS_VERIFY_ARGS in /etc/default/fpgas-verify.
+[Unit]
+Description=Verify this Pi's FPGA board with the fpgas.online test bitstreams
+Documentation=https://github.com/fpgas-online/fpgas.online-test-designs/blob/main/docs/plans/2026-09-26-fpgas-online-verify-design.md
+Wants=network-online.target
+After=network-online.target fpgas-fleet-agent.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=-/etc/default/fpgas-verify
+ExecStart=/usr/bin/fpgas-verify $FPGAS_VERIFY_ARGS
+# Each test loads a bitstream (openocd over GPIO JTAG on a Pi 3 takes a minute or more) and waits for its BIOS,
+# and the Arty and NeTV2 flash is read back after.
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=multi-user.target

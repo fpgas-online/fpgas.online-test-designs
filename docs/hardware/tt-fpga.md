@@ -4,6 +4,45 @@
 
 The TinyTapeout (TT) FPGA Demo Board is a development platform that combines an FPGA breakout board (Lattice iCE40UP5K) with the TinyTapeout demo PCB (RP2040-based). It allows testing TinyTapeout designs on real FPGA hardware before silicon fabrication.
 
+## Installing the TT FPGA Packages
+
+Add the fpgas.online APT repository first ([README: Installing the Packages](../../README.md#installing-the-packages)), then on the demo board's Pi:
+
+```bash
+sudo apt install fpgas-online-tt-fpga
+```
+
+| Package | Installs |
+|---------|----------|
+| `fpgas-online-tt-fpga` | sets the host up as having a TT FPGA Demo Board, and enables `fpgas-verify.service` |
+| `fpgas-online-tt-fpga-tools` | the board's module of `fpgas_online_verify`, and `fpgas-tt-fpga-verify`; with `python3-serial`, and recommending `micropython-mpremote` |
+| `fpgas-online-tt-fpga-bitstreams` | the test bitstreams built by the same commit's CI, in `/usr/share/fpgas-online/tt-fpga/bitstreams/` |
+| `fpgas-online-verify` | `fpgas-verify`, the unit, and the host test scripts |
+
+`fpgas-online-tt` is a different package: the TT site's own.
+
+The check finds the board by its Raspberry Pi microcontroller on USB (vendor `2e8a`). It loads the UART and SPI flash test designs through that microcontroller (`tt_fpga_program.py`, over `mpremote`), and runs each design's host test through its UART bridge on `/dev/ttyACM0`. Every load writes the bitstream to the microcontroller's filesystem, so its flash is not part of what `changed` compares; its USB serial number is. `mpremote` is `micropython-mpremote` in trixie, but only in bookworm-backports for bookworm: without it the check reports an `error`. The PMOD loopback and pin identification tests need the PMOD HAT, so only `fpgas-tt-fpga-debug` runs them.
+
+The TT FPGA board's check has not yet been run on the board.
+
+**Check the board now**, and see what each test printed:
+
+```bash
+sudo fpgas-verify                          # what the boot unit runs: report, publish, exit 0 only for pass
+sudo fpgas-tt-fpga-verify --no-publish --report -   # this board only, the JSON report on stdout
+```
+
+The results are in the [README](../../README.md#installing-the-packages). `changed` means the board, or its flash, differs from what was recorded last time; after flashing or swapping it on purpose, `sudo fpgas-verify --update` records the new state.
+
+**When a check fails**, `sudo apt install fpgas-online-tt-fpga-debug` for step-by-step tools:
+
+```bash
+sudo fpgas-tt-fpga-debug detect           # is the board there, and what was found
+fpgas-tt-fpga-debug list                  # every test, whether the boot check runs it, and its bitstream
+sudo fpgas-tt-fpga-debug check            # the installed bitstreams against their manifest
+sudo fpgas-tt-fpga-debug test spiflash   # load one test's design and run its test, output live
+```
+
 ## Key Specifications
 
 | Parameter | Value |

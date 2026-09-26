@@ -4,6 +4,45 @@
 
 The NeTV2 is a Xilinx Artix-7 based video overlay/processing board designed by bunnie (Andrew Huang) and produced by Alphamax/Kosagi. In the fpgas.online infrastructure, it connects to Raspberry Pi hosts via GPIO (JTAG + UART) and optionally PCIe.
 
+## Installing the NeTV2 Packages
+
+Add the fpgas.online APT repository first ([README: Installing the Packages](../../README.md#installing-the-packages)), then on the NeTV2's Pi:
+
+```bash
+sudo apt install fpgas-online-netv2
+```
+
+| Package | Installs |
+|---------|----------|
+| `fpgas-online-netv2` | sets the host up as having a NeTV2, and enables `fpgas-verify.service` |
+| `fpgas-online-netv2-tools` | the NeTV2's module of `fpgas_online_verify`, and `fpgas-netv2-verify`; with `python3-serial`, openFPGALoader and openocd |
+| `fpgas-online-netv2-bitstreams` | the XC7A35T and XC7A100T test bitstreams built by the same commit's CI, in `/usr/share/fpgas-online/netv2/bitstreams/` |
+| `fpgas-online-verify` | `fpgas-verify`, the unit, and the host test scripts |
+
+The NeTV2 has no USB, so the check finds it with a JTAG scan over the Pi's header: TCK GPIO4, TMS GPIO17, TDI GPIO27, TDO GPIO22. The scan drives GPIO 4, 17 and 27. On a host set up with `fpgas-online-netv2` that is all it looks for; with `fpgas-online-all-boards` it scans only when no USB or PCI board was found (`--no-probe` rules it out). The IDCODE says which part is fitted, so which bitstreams to use. The check loads the UART, DDR and SPI flash test designs into SRAM, with openocd on a Pi 3/4 and openFPGALoader's `rp1pio` cable on a Pi 5. It runs each design's host test on `/dev/ttyAMA0`, then reads back the flash's boot image region. The IDCODE, the flash's JEDEC ID and that region's sha256 are what `changed` compares.
+
+On a Pi 5, add the [fpgas.online-fpga-tools repository](https://github.com/fpgas-online/fpgas.online-fpga-tools#debian-packages-bookworm-trixie-sid-arm64-armhf) **before** installing: only its openFPGALoader builds have the `rp1pio` cable. They also have the SPI-over-JTAG bridge for the XC7A35T-FGG484, which Debian bookworm's `openfpgaloader` lacks, so on bookworm the flash readback of an XC7A35T board fails without them.
+
+The NeTV2's check has not yet been run on a NeTV2.
+
+**Check the board now**, and see what each test printed:
+
+```bash
+sudo fpgas-verify                          # what the boot unit runs: report, publish, exit 0 only for pass
+sudo fpgas-netv2-verify --no-publish --report -   # this board only, the JSON report on stdout
+```
+
+The results are in the [README](../../README.md#installing-the-packages). `changed` means the board, or its flash, differs from what was recorded last time; after flashing or swapping it on purpose, `sudo fpgas-verify --update` records the new state.
+
+**When a check fails**, `sudo apt install fpgas-online-netv2-debug` for step-by-step tools:
+
+```bash
+sudo fpgas-netv2-debug detect           # is the board there, and what was found
+fpgas-netv2-debug list                  # every test, whether the boot check runs it, and its bitstream
+sudo fpgas-netv2-debug check            # the installed bitstreams against their manifest
+sudo fpgas-netv2-debug test uart   # load one test's design and run its test, output live
+```
+
 ## Key Specifications
 
 | Parameter            | Value                                             |

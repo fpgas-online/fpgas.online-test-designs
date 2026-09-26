@@ -1,4 +1,4 @@
-"""Unit tests for the UARTBone link helper (designs/acorn-pcie/host/uartbone_link.py).
+"""Unit tests for the UARTBone link helper (fpgas_online_verify.boards.acorn.uartbone_link).
 
 A fake serial port stands in for the FPGA: it implements the UARTBone wire
 protocol over a small memory, only answers at the baud rate the "FPGA" is
@@ -11,15 +11,8 @@ The failure modes have their own switches (`silent`, `ignore_tuning_write`,
 `stale_bytes`) because a fake that always answers tests none of the recovery code.
 """
 
-import importlib.util
-import pathlib
-
 import pytest
-
-_PATH = pathlib.Path(__file__).resolve().parents[1] / "designs" / "acorn-pcie" / "host" / "uartbone_link.py"
-_spec = importlib.util.spec_from_file_location("uartbone_link", _PATH)
-link = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(link)
+from fpgas_online_verify.boards.acorn import uartbone_link as link
 
 IDENT = "fpgas-online Acorn PCIe SoC cle-215+ 2026-09-20"
 

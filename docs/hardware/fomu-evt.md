@@ -4,6 +4,43 @@
 
 The Fomu is a tiny FPGA board that fits inside a USB port, designed by Sean Cross (xobs) and Tim Ansell. The EVT (Engineering Validation Test) revision is used in the fpgas.online test infrastructure. It uses a Lattice iCE40UP5K FPGA with native USB connectivity.
 
+## Installing the Fomu Packages
+
+Add the fpgas.online APT repository first ([README: Installing the Packages](../../README.md#installing-the-packages)), then on the Fomu's Pi:
+
+```bash
+sudo apt install fpgas-online-fomu
+```
+
+| Package | Installs |
+|---------|----------|
+| `fpgas-online-fomu` | sets the host up as having a Fomu, and enables `fpgas-verify.service` |
+| `fpgas-online-fomu-tools` | the Fomu's module of `fpgas_online_verify`, and `fpgas-fomu-verify`; with `python3-serial` and openFPGALoader |
+| `fpgas-online-fomu-bitstreams` | the test bitstreams built by the same commit's CI, in `/usr/share/fpgas-online/fomu/bitstreams/` |
+| `fpgas-online-verify` | `fpgas-verify`, the unit, and the host test scripts |
+
+The check finds the Fomu by its foboot DFU bootloader on USB (`1209:5bf0`), which is there from power-up until a design is loaded. It loads the UART test design with openFPGALoader over DFU and runs its host test on `/dev/serial0`. That is the only test at boot: a DFU load replaces the bootloader until the next power cycle, and it writes the design into the flash's user image. So the Fomu's flash is not part of what `changed` compares; its USB serial number is. `fpgas-fomu-debug` runs the SPI flash, PMOD loopback and pin identification tests, one per power cycle.
+
+The Fomu's check has not yet been run on a Fomu.
+
+**Check the board now**, and see what each test printed:
+
+```bash
+sudo fpgas-verify                          # what the boot unit runs: report, publish, exit 0 only for pass
+sudo fpgas-fomu-verify --no-publish --report -   # this board only, the JSON report on stdout
+```
+
+The results are in the [README](../../README.md#installing-the-packages). `changed` means the board, or its flash, differs from what was recorded last time; after flashing or swapping it on purpose, `sudo fpgas-verify --update` records the new state.
+
+**When a check fails**, `sudo apt install fpgas-online-fomu-debug` for step-by-step tools:
+
+```bash
+sudo fpgas-fomu-debug detect           # is the board there, and what was found
+fpgas-fomu-debug list                  # every test, whether the boot check runs it, and its bitstream
+sudo fpgas-fomu-debug check            # the installed bitstreams against their manifest
+sudo fpgas-fomu-debug test spiflash   # load one test's design and run its test, output live
+```
+
 ## Key Specifications
 
 | Parameter | Value |

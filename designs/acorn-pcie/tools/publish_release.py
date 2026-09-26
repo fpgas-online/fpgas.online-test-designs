@@ -51,7 +51,9 @@ import sys
 
 _HERE = pathlib.Path(__file__).resolve()
 _REPO = _HERE.parents[3]
-_spec = importlib.util.spec_from_file_location("spi_flash", _HERE.parents[1] / "host" / "spi_flash.py")
+_spec = importlib.util.spec_from_file_location(
+    "spi_flash", _REPO / "verify" / "src" / "fpgas_online_verify" / "boards" / "acorn" / "spi_flash.py"
+)
 spi_flash = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(spi_flash)
 
@@ -318,7 +320,7 @@ def release_notes(manifest):
         f"Source commit evidence: {manifest['source_commit_evidence']}.",
         "",
         "Each board gets the golden build's fallback image at 0x000000 and the operational build's "
-        "operational image at 0x400000 (`spi_flash.py write <file> <slot>`). The plain `sqrl_acorn.bin`/`.bit` "
+        "operational image at 0x400000 (`fpgas-acorn-flash write <file> <slot>`). The plain `sqrl_acorn.bin`/`.bit` "
         "are for loading into SRAM over JTAG only. `manifest.json` has every file's identifier, slot and "
         "sha256; `sha256sum -c SHA256SUMS` checks a download.",
         "",
