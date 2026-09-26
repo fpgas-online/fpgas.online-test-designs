@@ -340,8 +340,9 @@ CI, on every pull request:
 - builds of `-common`, `-dkms` and `-utils` (armhf, arm64), and the fleet-kernel module artifact with its
   vermagic check;
 - a DKMS test in the shape DKMS is for (§2), a single-architecture `debian:bookworm` arm64 container: install
-  the headers for the newest v8 kernel and the `-dkms` deb, run `dkms install -k <kver>`, then check that
-  `modinfo -k <kver> litepcie liteuart` resolves. The fleet's shape (armhf root, arm64 kernel) is not tested
+  the headers for the newest v8 kernel and the `-dkms` deb, check that its postinst alone built and installed
+  the modules for `<kver>` (no `dkms install` by hand, which would hide a postinst that builds nothing), then
+  that `modinfo -k <kver> litepcie liteuart` resolves, and that purging the package removes them. The fleet's shape (armhf root, arm64 kernel) is not tested
   with DKMS, because it is not supported there. Part B's install test (§4.4) covers it with prebuilt modules.
 
 On hardware, on the test board of §1 (MAC `88:a2:9e:45:85:77`, DNA `0x0054b48664b04854`; today at

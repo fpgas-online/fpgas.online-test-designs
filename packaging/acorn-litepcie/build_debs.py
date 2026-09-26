@@ -165,7 +165,12 @@ def common_nfpm(version):
                 "dst": "/etc/modprobe.d/fpgas-online-acorn-litepcie.conf",
                 "type": "config",
                 "file_info": {"mode": 0o644},
-            }
+            },
+            {
+                "src": str(HERE / "copyright.common"),
+                "dst": f"/usr/share/doc/{COMMON}/copyright",
+                "file_info": {"mode": 0o644},
+            },
         ],
     }
 

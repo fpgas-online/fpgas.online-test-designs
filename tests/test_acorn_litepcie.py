@@ -550,7 +550,9 @@ def test_the_common_package_is_the_blacklist_only():
     config = bd.common_nfpm(VERSION)
     assert config["name"] == "fpgas-online-acorn-litepcie-common"
     assert config["arch"] == "all"
-    (entry,) = config["contents"]
+    entry, notice = config["contents"]
+    assert notice["dst"] == "/usr/share/doc/fpgas-online-acorn-litepcie-common/copyright"
+    assert "Apache-2.0" in pathlib.Path(notice["src"]).read_text()
     assert entry["dst"] == "/etc/modprobe.d/fpgas-online-acorn-litepcie.conf"
     assert entry["type"] == "config"
     lines = [line for line in pathlib.Path(entry["src"]).read_text().splitlines() if not line.startswith("#")]

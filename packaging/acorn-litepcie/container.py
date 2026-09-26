@@ -14,8 +14,10 @@ repository at /w and bootstraps python3 (stdlib only: bookworm's 3.11). Paths ar
     dkms-test     install the newest rpi-v8 headers and the -common and -dkms debs, have DKMS build the
                   modules, and check modinfo finds them
 
-    python3 packaging/acorn-litepcie/container.py run --arch armhf -- utils --driver dist/driver --out dist/utils-armhf
-    python3 packaging/acorn-litepcie/container.py run --arch arm64 --docker "sudo -n docker" -- module ...
+    python3 packaging/acorn-litepcie/container.py run --arch armhf -- \
+        utils --arch armhf --driver dist/driver --out dist/utils-armhf
+    python3 packaging/acorn-litepcie/container.py run --arch arm64 --docker "sudo -n docker" -- \
+        module --driver dist/driver --out dist/modules
 """
 
 import argparse
@@ -194,6 +196,8 @@ def cmd_module(args):
         shutil.copy2(work / f"{module}.ko", dest / f"{module}.ko")
     shutil.rmtree(work)
     (dest / "kernel.txt").write_text(kver + "\n")
+    # litepcie's BSD-2-Clause notice travels with the binaries; liteuart.c is GPL-2.0 (its SPDX header).
+    shutil.copyfile(pathlib.Path(args.driver) / "LICENSE", dest / "LICENSE")
     give_back(dest, args.driver)
 
 
@@ -205,10 +209,12 @@ def cmd_dkms_test(args):
     kver = newest_kernel(installed, "rpi-v8")
     apt_install(*(f"./{d}" for d in args.debs))
     version = out("dpkg-query", "-W", "-f", "${Version}", f"{NAME}-dkms").strip()
+    # The package's postinst (common.postinst) must have built and installed the modules by itself: no
+    # `dkms install` here, or a postinst that silently builds nothing would still pass.
     status = out("dkms", "status", "-m", NAME, "-v", version, "-k", kver)
     print(f"dkms status after install: {status.strip()}")
     if "installed" not in status:
-        sh("dkms", "install", "-m", NAME, "-v", version, "-k", kver)
+        raise ContainerError(f"installing {NAME}-dkms did not build and install it for {kver}: {status!r}")
     for module in ("litepcie", "liteuart"):
         path = out("modinfo", "-k", kver, "-F", "filename", module).strip()
         vermagic = out("modinfo", "-k", kver, "-F", "vermagic", module).strip()
