@@ -131,3 +131,114 @@ def test_a_kernels_toml_without_the_fleet_kernel_is_refused(tmp_path):
     bad.write_text('min_kernel = "6.12"\n')
     with pytest.raises(bd.BuildError, match="fleet_kernel"):
         bd.read_kernels(bad)
+
+
+# -- the driver patches (§3.3-§3.5) -----------------------------------------------------------------------
+
+pd = _load("prepare_driver")
+
+# The lines the patches anchor on, as litepcie aceef740dbfe has them.
+MAIN_C = """static const struct file_operations litepcie_fops = {
+\t.owner = THIS_MODULE,
+\t.unlocked_ioctl = litepcie_ioctl,
+\t.mmap = litepcie_mmap,
+};
+
+\tpci_set_master(dev);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 18, 0)
+\tret = pci_set_dma_mask(dev, DMA_BIT_MASK(DMA_ADDR_WIDTH));
+#else
+\tret = dma_set_mask(&dev->dev, DMA_BIT_MASK(DMA_ADDR_WIDTH));
+#endif
+"""
+LITEUART_C = 'MODULE_DESCRIPTION("LiteUART serial driver");\nMODULE_ALIAS("platform: liteuart");\n'
+
+
+@pytest.fixture
+def driver(tmp_path):
+    d = tmp_path / "driver"
+    (d / "kernel").mkdir(parents=True)
+    (d / "user").mkdir()
+    (d / "kernel" / "main.c").write_text(MAIN_C)
+    (d / "kernel" / "liteuart.c").write_text(LITEUART_C)
+    return d
+
+
+def test_the_three_patches_apply(driver):
+    pd.apply_patches(driver)
+    main_c = (driver / "kernel" / "main.c").read_text()
+    assert "\t.unlocked_ioctl = litepcie_ioctl,\n\t.compat_ioctl = compat_ptr_ioctl,\n" in main_c
+    assert "\tret = dma_set_mask_and_coherent(&dev->dev, DMA_BIT_MASK(DMA_ADDR_WIDTH));\n" in main_c
+    assert "dma_set_mask(&dev->dev" not in main_c
+    assert "pci_set_dma_mask(dev, DMA_BIT_MASK(DMA_ADDR_WIDTH));" in main_c  # the pre-5.18 branch is left alone
+    assert 'MODULE_ALIAS("platform:liteuart");' in (driver / "kernel" / "liteuart.c").read_text()
+
+
+def test_a_patch_already_carried_upstream_fails_so_it_gets_dropped(driver):
+    pd.apply_patches(driver)
+    with pytest.raises(pd.PatchError, match="already"):
+        pd.apply_patches(driver)
+
+
+@pytest.mark.parametrize("patch", pd.PATCHES, ids=lambda p: p.already)
+def test_each_patch_notices_on_its_own_that_upstream_has_the_fix(driver, patch):
+    f = driver / patch.path
+    f.write_text(f.read_text().replace(patch.old, patch.new))
+    with pytest.raises(pd.PatchError, match="already"):
+        pd.apply_patches(driver, [patch])
+
+
+def test_a_patch_whose_anchor_is_gone_fails(driver):
+    (driver / "kernel" / "liteuart.c").write_text('MODULE_LICENSE("GPL");\n')
+    with pytest.raises(pd.PatchError, match="not found"):
+        pd.apply_patches(driver)
+
+
+def test_a_patch_anchor_that_is_not_unique_is_refused(driver):
+    (driver / "kernel" / "liteuart.c").write_text(LITEUART_C * 2)
+    with pytest.raises(pd.PatchError, match="2 times"):
+        pd.apply_patches(driver)
+    assert (driver / "kernel" / "liteuart.c").read_text() == LITEUART_C * 2
+
+
+def test_a_failed_patch_leaves_every_file_as_it_was(driver):
+    (driver / "kernel" / "liteuart.c").write_text("nothing to patch\n")
+    with pytest.raises(pd.PatchError):
+        pd.apply_patches(driver)
+    assert (driver / "kernel" / "main.c").read_text() == MAIN_C
+
+
+# -- generation (§3.1) ---------------------------------------------------------------------------------------
+
+
+FAKE_SOC = """
+import pathlib, sys
+pathlib.Path({argv!r}).write_text(" ".join(sys.argv[1:]))
+out = pathlib.Path({build!r}) / "driver"
+for sub in ("kernel", "user"):
+    (out / sub).mkdir(parents=True, exist_ok=True)
+(out / "kernel" / "main.c").write_text("main")
+(out / "kernel" / "csr.h").write_text("csr")
+(out / "user" / "litepcie_util.c").write_text("util")
+(out / "__init__.py").write_text("")
+"""
+
+
+def test_generate_runs_the_soc_for_the_driver_only_and_copies_the_tree_out(tmp_path):
+    build = tmp_path / "build" / "acorn-cle-215+"
+    script = tmp_path / "fake_soc.py"
+    argv_file = tmp_path / "argv"
+    script.write_text(FAKE_SOC.format(build=str(build), argv=str(argv_file)))
+    out = pd.generate(tmp_path / "out", python=("python3", str(script)), build_dir=build)
+    assert argv_file.read_text().split() == [
+        str(pd.SOC_SCRIPT),
+        "--variant",
+        "cle-215+",
+        "--driver",
+        "--no-compile-software",
+    ]
+    assert sorted(p.relative_to(out).as_posix() for p in out.rglob("*") if p.is_file()) == [
+        "kernel/csr.h",
+        "kernel/main.c",
+        "user/litepcie_util.c",
+    ]
