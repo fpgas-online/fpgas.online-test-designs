@@ -194,6 +194,20 @@ def test_a_pi_with_no_fpga_on_pcie_reports_none_and_passes(tmp_path, images):
     assert av.exit_code(report) == 0
 
 
+def test_a_pi_with_no_pci_bus_at_all_has_no_devices(tmp_path):
+    """A Pi 3 or an Orange Pi has no PCIe, so no /sys/bus/pci/devices: found on pi-sw1-p10, where the
+    service crashed with FileNotFoundError instead of reporting "none"."""
+    assert av.scan_pci(tmp_path / "no-such-dir") == []
+
+
+def test_the_command_line_on_a_pi_with_no_pci_bus_reports_none(tmp_path, monkeypatch):
+    monkeypatch.setattr(av, "LOCK", tmp_path / "lock")
+    monkeypatch.setattr(av.scan_pci, "__defaults__", (tmp_path / "no-such-dir",))
+    out = tmp_path / "report.json"
+    assert av.main(["--no-publish", "--report", str(out)]) == 0
+    assert json.loads(out.read_text())["result"] == "none"
+
+
 FACTORY = ("0001:01:00.0", "0x1e24", "0x021f", "0x0000", "0x0000")
 VENDOR_XDMA = ("0001:01:00.0", "0x10ee", "0x7011", "0x0000", "0x0000")
 
