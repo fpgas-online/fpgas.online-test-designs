@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+# fpgas-online-acorn-litepcie-dkms: register the driver source with DKMS and build it for the installed
+# kernels that have headers, as dh_dkms's postinst does.
+
+if [ "$1" = configure ]; then
+    /usr/lib/dkms/common.postinst @NAME@ @VERSION@ /usr/share/@NAME@-dkms "" "$2"
+fi

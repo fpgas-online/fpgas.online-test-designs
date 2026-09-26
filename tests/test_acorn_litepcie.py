@@ -93,6 +93,16 @@ def test_the_version_refuses_a_repository_without_a_series_tag(tmp_path):
         bd.driver_version(r)
 
 
+def test_the_version_refuses_a_shallow_clone(repo, tmp_path):
+    """Say so plainly: otherwise the version depends on whether the cut happens to leave the tag reachable."""
+    for i in range(3):
+        _commit(repo, "uv.lock", f"{i}\n", f"lock {i}")
+    shallow = tmp_path / "shallow"
+    _git(tmp_path, "clone", "-q", "--depth", "1", f"file://{repo}", str(shallow))
+    with pytest.raises(bd.BuildError, match="is a shallow clone"):
+        bd.driver_version(shallow)
+
+
 def test_the_version_inputs_are_the_ones_the_spec_names():
     assert set(bd.VERSION_INPUTS) == {
         "packaging/acorn-litepcie/",
@@ -463,3 +473,130 @@ def test_a_csr_json_that_does_not_match_its_manifest_entry_is_refused(tmp_path):
 def test_the_check_reads_the_pin_the_bitstreams_package_is_built_from():
     assert cc.RELEASE_PIN == cc.REPO / "packaging" / "acorn-pcie" / "release.toml"
     cc.bits.bitstreams_version(cc.bits.read_pin(cc.RELEASE_PIN)["tag"])
+
+
+# -- the packages (§2, §3.6) ----------------------------------------------------------------------------------
+
+VERSION = "0.0.post7"
+DKMS_CONF = """PACKAGE_NAME="fpgas-online-acorn-litepcie"
+PACKAGE_VERSION="0.0.post7"
+MAKE[0]="make -C ${kernel_source_dir} M=${dkms_tree}/${PACKAGE_NAME}/${PACKAGE_VERSION}/build modules"
+CLEAN="make -C ${kernel_source_dir} M=${dkms_tree}/${PACKAGE_NAME}/${PACKAGE_VERSION}/build clean"
+BUILT_MODULE_NAME[0]="litepcie"
+BUILT_MODULE_NAME[1]="liteuart"
+DEST_MODULE_LOCATION[0]="/updates/dkms"
+DEST_MODULE_LOCATION[1]="/updates/dkms"
+AUTOINSTALL="yes"
+"""
+
+
+@pytest.fixture
+def tree(tmp_path):
+    """A prepared driver tree, as prepare_driver.py leaves it."""
+    d = tmp_path / "driver"
+    for rel, text in {
+        "LICENSE": "Unless otherwise noted, LitePCIe is Copyright 2015-2024 / EnjoyDigital\n",
+        "kernel/Makefile": "obj-m = litepcie.o liteuart.o\nlitepcie-objs = main.o\n",
+        "kernel/main.c": "main\n",
+        "kernel/liteuart.c": "uart\n",
+        "kernel/csr.h": "csr\n",
+        "user/litepcie_util.c": "util\n",
+    }.items():
+        (d / rel).parent.mkdir(parents=True, exist_ok=True)
+        (d / rel).write_text(text)
+    return d
+
+
+def _dst(config):
+    return {c["dst"]: c for c in config["contents"]}
+
+
+def test_dkms_conf_is_the_specs_calling_kbuild_directly():
+    """Not the upstream Makefile: its ARCH?=$(uname -m) is aarch64 on arm64 and it builds for uname -r."""
+    assert bd.dkms_conf(VERSION) == DKMS_CONF
+
+
+def test_the_dkms_package_carries_the_kernel_sources_and_dkms_conf(tree, tmp_path):
+    config = bd.dkms_nfpm(VERSION, tree, tmp_path / "stage")
+    assert config["name"] == "fpgas-online-acorn-litepcie-dkms"
+    assert config["arch"] == "all"
+    assert config["section"] == "kernel"
+    src = pathlib.Path(_dst(config)["/usr/src/fpgas-online-acorn-litepcie-0.0.post7"]["src"])
+    assert sorted(p.name for p in src.iterdir()) == ["Makefile", "csr.h", "dkms.conf", "liteuart.c", "main.c"]
+    assert (src / "dkms.conf").read_text() == DKMS_CONF
+    assert {p.stat().st_mode & 0o777 for p in src.iterdir()} == {0o644}
+
+
+def test_the_dkms_package_relationships_are_the_specs(tree, tmp_path):
+    config = bd.dkms_nfpm(VERSION, tree, tmp_path / "stage")
+    assert config["depends"] == ["dkms", "fpgas-online-acorn-litepcie-common"]
+    assert config["provides"] == ["fpgas-online-acorn-litepcie-module"]
+    assert config["conflicts"] == ["fpgas-online-acorn-litepcie-prebuilt"]
+    assert "linux-headers" not in json_text(config)  # the RPi headers are per kernel: the operator's choice
+
+
+def test_the_dkms_maintainer_scripts_register_and_remove_this_version(tree, tmp_path):
+    config = bd.dkms_nfpm(VERSION, tree, tmp_path / "stage")
+    postinst = pathlib.Path(config["scripts"]["postinstall"]).read_text()
+    prerm = pathlib.Path(config["scripts"]["preremove"]).read_text()
+    assert "/usr/lib/dkms/common.postinst fpgas-online-acorn-litepcie 0.0.post7" in postinst
+    assert "dkms remove -m fpgas-online-acorn-litepcie -v 0.0.post7 --all" in prerm
+    for script in (postinst, prerm):
+        assert script.startswith("#!/bin/sh\nset -e\n")
+        assert "@" not in script  # every template field was filled
+
+
+def test_the_common_package_is_the_blacklist_only():
+    config = bd.common_nfpm(VERSION)
+    assert config["name"] == "fpgas-online-acorn-litepcie-common"
+    assert config["arch"] == "all"
+    (entry,) = config["contents"]
+    assert entry["dst"] == "/etc/modprobe.d/fpgas-online-acorn-litepcie.conf"
+    assert entry["type"] == "config"
+    lines = [line for line in pathlib.Path(entry["src"]).read_text().splitlines() if not line.startswith("#")]
+    assert [line for line in lines if line.strip()] == ["blacklist litepcie"]
+
+
+@pytest.fixture
+def bins(tmp_path):
+    d = tmp_path / "bin"
+    d.mkdir()
+    for name in ("litepcie_util", "litepcie_test"):
+        (d / name).write_bytes(b"\x7fELF")
+    (d / "utils.json").write_text('{"arch": "armhf", "glibc": "2.34"}')
+    return d
+
+
+def test_the_utils_package_installs_both_tools_for_its_architecture(tree, bins):
+    config = bd.utils_nfpm(VERSION, "armhf", bins, tree)
+    assert config["name"] == "fpgas-online-acorn-litepcie-utils"
+    assert config["arch"] == "armhf"
+    dst = _dst(config)
+    for tool in ("litepcie_util", "litepcie_test"):
+        assert dst[f"/usr/bin/{tool}"]["file_info"]["mode"] == 0o755
+    assert config["depends"] == ["libc6 (>= 2.34)"]
+    assert config["recommends"] == ["fpgas-online-acorn-litepcie-module"]
+
+
+def test_binaries_built_for_another_architecture_are_refused(tree, bins):
+    with pytest.raises(bd.BuildError, match="armhf"):
+        bd.utils_nfpm(VERSION, "arm64", bins, tree)
+
+
+def test_the_litepcie_notice_ships_with_the_binaries_and_the_sources(tree, bins, tmp_path):
+    for config in (bd.utils_nfpm(VERSION, "armhf", bins, tree), bd.dkms_nfpm(VERSION, tree, tmp_path / "s")):
+        copyright_file = _dst(config)[f"/usr/share/doc/{config['name']}/copyright"]
+        assert "LitePCIe is Copyright 2015-2024 / EnjoyDigital" in pathlib.Path(copyright_file["src"]).read_text()
+
+
+def test_every_package_keeps_its_version_exactly_as_given(tree, bins, tmp_path):
+    configs = [bd.common_nfpm(VERSION), bd.dkms_nfpm(VERSION, tree, tmp_path / "s"),
+               bd.utils_nfpm(VERSION, "armhf", bins, tree)]  # fmt: skip
+    assert {c["version"] for c in configs} == {VERSION}
+    assert {c["version_schema"] for c in configs} == {"none"}
+
+
+def json_text(config):
+    import json
+
+    return json.dumps(config)
