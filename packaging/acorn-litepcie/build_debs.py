@@ -252,15 +252,21 @@ def run_nfpm(config, out_dir, nfpm="nfpm"):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--out", type=pathlib.Path, required=True, help="where the .deb files go")
-    parser.add_argument("--driver", type=pathlib.Path, required=True, help="the tree prepare_driver.py wrote")
-    parser.add_argument("--only", choices=("common", "dkms", "utils"), action="append", required=True)
+    parser.add_argument("--print-version", action="store_true", help="print driver_version() and stop")
+    parser.add_argument("--out", type=pathlib.Path, help="where the .deb files go")
+    parser.add_argument("--driver", type=pathlib.Path, help="the tree prepare_driver.py wrote")
+    parser.add_argument("--only", choices=("common", "dkms", "utils"), action="append")
     parser.add_argument("--arch", choices=ARCHES, help="-utils: the architecture the tools were built for")
     parser.add_argument("--bin-dir", type=pathlib.Path, help="-utils: where container.py put the tools")
     parser.add_argument("--version", help="override the version (default: driver_version())")
     parser.add_argument("--nfpm", default="nfpm", help="the nfpm binary")
     args = parser.parse_args(argv)
+    if not args.print_version and not (args.out and args.driver and args.only):
+        parser.error("--out, --driver and at least one --only are required")
     try:
+        if args.print_version:
+            print(driver_version())
+            return
         version = args.version or driver_version()
         args.out.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=args.out, prefix=".stage-") as stage:

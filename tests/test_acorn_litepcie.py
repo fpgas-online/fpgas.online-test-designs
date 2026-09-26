@@ -665,3 +665,15 @@ def test_the_docker_command_mounts_the_repository_and_bootstraps_python(tmp_path
 
 def test_every_architecture_has_its_docker_platform():
     assert ct.PLATFORMS == {"arm64": "linux/arm64", "armhf": "linux/arm/v7"}
+
+
+def test_the_command_line_prints_the_version_for_the_workflow(monkeypatch, capsys):
+    """CI computes the version once and hands it to every job, so all the debs of a run agree."""
+    monkeypatch.setattr(bd, "driver_version", lambda repo=None: "0.0.post42")
+    bd.main(["--print-version"])
+    assert capsys.readouterr().out == "0.0.post42\n"
+
+
+def test_the_command_line_wants_a_package_to_build(tmp_path):
+    with pytest.raises(SystemExit):
+        bd.main(["--out", str(tmp_path), "--driver", str(tmp_path)])
