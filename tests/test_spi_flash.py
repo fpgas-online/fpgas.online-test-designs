@@ -288,3 +288,34 @@ def test_image_info_reads_the_multiboot_header():
     assert (info["wbstar"], info["iprog"], info["watchdog"], info["idcode"]) == (0x400000, True, True, 0x03636093)
     info = sf.image_info(OPERATIONAL)
     assert (info["wbstar"], info["iprog"], info["watchdog"]) == (0, False, True)
+
+
+# -- a driver holds BAR0 -------------------------------------------------------------------------------
+
+
+def _pci(tmp_path, bdf="0001:01:00.0", driver=None):
+    root = tmp_path / "devices"
+    (root / bdf).mkdir(parents=True)
+    if driver:
+        (tmp_path / "drivers" / driver).mkdir(parents=True)
+        (root / bdf / "driver").symlink_to(tmp_path / "drivers" / driver)
+    return root
+
+
+def test_bound_driver_names_the_driver_or_none(tmp_path):
+    assert sf.bound_driver("0001:01:00.0", _pci(tmp_path / "a")) is None
+    assert sf.bound_driver("0001:01:00.0", _pci(tmp_path / "b", driver="litepcie")) == "litepcie"
+
+
+def test_the_flash_tool_refuses_a_board_litepcie_holds_before_mapping_bar0(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(sf, "SYSFS_PCI", str(_pci(tmp_path, driver="litepcie")))
+    monkeypatch.setattr(sf, "LOCK", str(tmp_path / "lock"))
+
+    def no_bar0(bdf):
+        raise AssertionError("BAR0 belongs to litepcie.ko")
+
+    monkeypatch.setattr(sf, "Bar0Bus", no_bar0)
+    assert sf.main(["--bdf", "0001:01:00.0", "id"]) == 1
+    out = capsys.readouterr().out
+    assert "error: litepcie.ko is bound: not checked" in out
+    assert "RESULT: FAIL" in out

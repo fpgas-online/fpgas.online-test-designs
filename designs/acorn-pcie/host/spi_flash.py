@@ -16,6 +16,9 @@ want the IDCODE of the part that is actually there.
 
 Measured on pi-sw2-p48 (Pi 5, PCIe BAR0, 2026-09-21): 32 MiB read in 58 s.
 
+Refuses to run over PCIe while a kernel driver (litepcie.ko) is bound to the
+board: the driver owns BAR0 then, and its flash ioctl does not take our lock.
+
 Self-contained on purpose (stdlib only): the Pi hosts boot a tmpfs root with no
 LiteX. Runs over PCIe BAR0 by default, or over the UART bridge with `--uart`.
 
@@ -30,6 +33,7 @@ import fcntl
 import hashlib
 import json
 import os
+import pathlib
 import sys
 import time
 
@@ -45,6 +49,7 @@ SHIFT_BYTES = 5
 # Shared with fpgas-acorn-verify (acorn_verify.py): one user of the SoC's SPI master at a time. Its CS and
 # shift registers are single-user: two tools interleaving would corrupt a read, or a write.
 LOCK = "/run/lock/fpgas-acorn.lock"
+SYSFS_PCI = "/sys/bus/pci/devices"
 
 GOLDEN_ADDR = 0x000000
 OPERATIONAL_ADDR = 0x400000
@@ -294,6 +299,21 @@ class UARTBus:
         self._link.write(addr, [value])
 
 
+def bound_driver(bdf, sysfs=None):
+    """The name of the kernel driver bound to `bdf`, or None.
+
+    A bound driver owns BAR0: litepcie.ko claims it at probe. The fleet kernel has CONFIG_STRICT_DEVMEM off, so
+    nothing stops a resource0 mapping of a claimed BAR, and two users would drive the same CSRs at once. The
+    host tools therefore check this before they map BAR0, and touch nothing when a driver is bound."""
+    link = pathlib.Path(sysfs or SYSFS_PCI) / bdf / "driver"
+    return os.path.basename(os.readlink(link)) if link.is_symlink() else None
+
+
+def driver_bound_reason(driver):
+    what = "litepcie.ko" if driver == "litepcie" else f"the {driver} driver"
+    return f"{what} is bound: not checked"
+
+
 def hold_lock(path=LOCK):
     """Take the SoC lock, waiting for whoever has it; the returned file holds it until closed."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -307,7 +327,7 @@ def _progress(done, total):
         print(f"  programmed {done}/{total} bytes", flush=True)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--bdf", default="0001:01:00.0", help="PCIe address of the SoC")
     parser.add_argument("--uart", metavar="PORT", help="use the UART bridge on PORT instead of PCIe")
@@ -321,9 +341,14 @@ def main():
         p.add_argument("addr", type=lambda s: int(s, 0))
         p.add_argument("--idcode", type=lambda s: int(s, 0), required=name == "write", help="the FPGA's JTAG IDCODE")
     sub.choices["write"].add_argument("--i-know-this-writes-golden", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
-    lock = hold_lock()  # noqa: F841 -- held until main returns
+    lock = hold_lock(LOCK)  # noqa: F841 -- held until main returns
+    driver = None if args.uart else bound_driver(args.bdf)
+    if driver:
+        print(f"error: {driver_bound_reason(driver)}")
+        print("RESULT: FAIL")
+        return 1
     bus = UARTBus(args.uart) if args.uart else Bar0Bus(args.bdf)
     flash = Flash(bus, allow_write=args.command == "write")
     try:
