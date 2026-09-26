@@ -1,0 +1,20 @@
+#!/bin/sh
+# fpgas-online-verify: enable fpgas-verify.service, as debhelper's dh_installsystemd does for a unit that is
+# enabled by default. deb-systemd-helper only writes the symlinks, so this works in a chroot too (the netboot
+# root). The unit is not started here: it loads test bitstreams into the board, so it waits for the next boot
+# or `systemctl start fpgas-verify`.
+set -e
+UNIT=fpgas-verify.service
+if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ]; then
+	deb-systemd-helper unmask "$UNIT" >/dev/null || true
+	# was-enabled is true on a first install, so that enables the unit; after that it keeps the admin's choice.
+	if deb-systemd-helper --quiet was-enabled "$UNIT"; then
+		deb-systemd-helper enable "$UNIT" >/dev/null || true
+	else
+		deb-systemd-helper update-state "$UNIT" >/dev/null || true
+	fi
+	if [ -d /run/systemd/system ]; then
+		systemctl --system daemon-reload >/dev/null || true
+	fi
+fi
+exit 0

@@ -164,9 +164,20 @@ def test_the_tools_package_pulls_in_openfpgaloader_but_not_the_fleet_setup():
     # The fpgas.online builds first, so apt picks one when the fpga-tools repo is configured; both Provide
     # openfpgaloader, and Debian's own openfpgaloader resolves it on a host with only Debian + apt.fpgas.online.
     assert "openfpgaloader-fpgasonline | openfpgaloader-fpgasonline-git | openfpgaloader" in config["depends"]
-    # apt installs Recommends by default: fpgas-online-setup-pi reconfigures the host as a fleet node.
-    assert "recommends" not in config
+    # apt installs Recommends by default: fpgas-online-setup-pi reconfigures the host as a fleet node, so only
+    # fpgas-online-verify (the boot-time check) is recommended.
+    assert config["recommends"] == ["fpgas-online-verify"]
     assert config["suggests"] == ["fpgas-online-setup-pi"]
+
+
+def test_the_tools_package_registers_the_acorn_with_fpgas_verify():
+    """fpgas-verify spots the Acorn by its PCI vendor (Xilinx for our SoC, SQRL for the factory image)."""
+    config = bd.tools_nfpm(version="0.0.post600", bitstreams="20260921+gf3355dccf443", repo=_PATH.parents[2])
+    dst = {c["dst"]: c for c in config["contents"]}
+    entry = json.loads(pathlib.Path(dst["/usr/share/fpgas-online/verify.d/acorn.json"]["src"]).read_text())
+    assert entry["command"] == ["/usr/bin/fpgas-acorn-verify"]
+    assert entry["report"] == "/run/fpgas-online/acorn-verify.json"
+    assert entry["detect"] == {"pci_vendor": ["10ee", "1e24"]}
 
 
 def test_the_pin_file_names_a_release_this_builder_accepts():

@@ -159,6 +159,7 @@ def bitstreams_nfpm(version, root, tag):
 def tools_nfpm(version, bitstreams, repo=REPO):
     host = pathlib.Path(repo) / "designs" / "acorn-pcie" / "host"
     unit = pathlib.Path(repo) / "packaging" / "acorn-pcie" / "fpgas-acorn-verify.service"
+    registration = pathlib.Path(repo) / "packaging" / "acorn-pcie" / "acorn.verify.json"
     exe = {"file_info": {"mode": 0o755}}
     data = {"file_info": {"mode": 0o644}}
     return {
@@ -186,6 +187,9 @@ def tools_nfpm(version, bitstreams, repo=REPO):
             # openfpgaloader, and Debian's own openfpgaloader satisfies a host without that repository.
             "openfpgaloader-fpgasonline | openfpgaloader-fpgasonline-git | openfpgaloader",
         ],
+        # fpgas-verify and its boot unit (packaging/boards/build_debs.py), which finds the Acorn on PCI through
+        # acorn.verify.json and runs fpgas-acorn-verify at boot, as it does every other board's verify.
+        "recommends": ["fpgas-online-verify"],
         # fleet-event, which the boot check publishes through; publish() copes without it. Not Recommends: apt
         # installs those by default, and fpgas-online-setup-pi turns any host into a fleet node.
         "suggests": ["fpgas-online-setup-pi"],
@@ -196,6 +200,7 @@ def tools_nfpm(version, bitstreams, repo=REPO):
             {"src": f"{LIB_DST}/acorn_verify.py", "dst": "/usr/bin/fpgas-acorn-verify", "type": "symlink"},
             {"src": f"{LIB_DST}/spi_flash.py", "dst": "/usr/bin/fpgas-acorn-flash", "type": "symlink"},
             {"src": str(unit), "dst": "/usr/lib/systemd/system/fpgas-acorn-verify.service", **data},
+            {"src": str(registration), "dst": "/usr/share/fpgas-online/verify.d/acorn.json", **data},
         ],
     }
 
