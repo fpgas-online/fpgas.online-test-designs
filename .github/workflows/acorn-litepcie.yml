@@ -87,7 +87,7 @@ jobs:
           echo "driver version: $v"
 
       - name: Install the LiteX environment
-        run: uv sync --python 3.12 --extra build
+        run: uv sync --locked --python 3.12 --extra build
 
       - name: Generate the driver and apply the packaging patches
         run: uv run --no-project --python 3.12 packaging/acorn-litepcie/prepare_driver.py --out dist/driver

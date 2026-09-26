@@ -31,7 +31,9 @@ REPO = HERE.parents[1]
 SOC_SCRIPT = REPO / "designs" / "acorn-pcie" / "gateware" / "acorn_pcie_soc.py"
 VARIANT = "cle-215+"
 BUILD_DIR = REPO / "designs" / "acorn-pcie" / "build" / f"acorn-{VARIANT}"
-PYTHON = ("uv", "run", "--extra", "build", "python")
+# --locked: the driver (and so the version, which uv.lock is an input of) is exactly what uv.lock pins; a lock
+# out of date with pyproject.toml fails instead of quietly re-resolving to litepcie/litex HEAD.
+PYTHON = ("uv", "run", "--locked", "--extra", "build", "python")
 
 
 class PatchError(Exception):

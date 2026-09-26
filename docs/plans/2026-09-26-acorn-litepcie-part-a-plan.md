@@ -29,7 +29,7 @@ numbers below are the spec's.
 - `-dkms`: source under `/usr/src/fpgas-online-acorn-litepcie-<version>/`, `dkms.conf` exactly as §3.6,
   Depends `dkms` and `-common`, Provides `-module`, Conflicts `-prebuilt`, no headers dependency.
 - `-utils`: `/usr/bin/litepcie_util`, `/usr/bin/litepcie_test`, armhf and arm64, built in `debian:bookworm`,
-  Recommends `fpgas-online-acorn-litepcie-module`.
+  Suggests `fpgas-online-acorn-litepcie-module` (the spec said Recommends; changed in review, see spec §2).
 - Versions: `X.Y.postN` from `git describe --tags --long --match 'v[0-9]*.[0-9]*'` of
   `git log -1 --first-parent --format=%H -- <inputs>`; inputs are `packaging/acorn-litepcie/`,
   `designs/acorn-pcie/gateware/acorn_pcie_soc.py`, `designs/_shared/`, `uv.lock`,

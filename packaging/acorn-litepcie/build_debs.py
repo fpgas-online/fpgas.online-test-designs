@@ -229,7 +229,8 @@ def utils_nfpm(version, arch, bin_dir, tree):
             "fpgas.online Acorn PCIe SoC, through /dev/litepcie*. Needs litepcie.ko loaded.",
         ),
         "depends": [f"libc6 (>= {info['glibc']})"],
-        "recommends": [MODULE],
+        # Not Recommends: apt would install the sole provider, -dkms, into the fleet's armhf root (see §2).
+        "suggests": [MODULE],
         "contents": [
             *({"src": str(bin_dir / tool), "dst": f"/usr/bin/{tool}", **exe} for tool in TOOLS),
             {"src": str(_license(tree)), "dst": f"/usr/share/doc/{UTILS}/copyright", "file_info": {"mode": 0o644}},

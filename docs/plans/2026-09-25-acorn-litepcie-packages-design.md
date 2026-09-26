@@ -55,7 +55,9 @@ Relationships:
   copies of `litepcie.ko` for the same kernel with depmod choosing between them.
 - `-dkms` Depends on `dkms`. It does not depend on any headers package: the RPi headers packages are per kernel
   and the operator installs the ones for their kernel.
-- `-utils` Recommends `fpgas-online-acorn-litepcie-module`.
+- `-utils` Suggests `fpgas-online-acorn-litepcie-module`. Not Recommends: apt installs Recommends by default
+  and picks the sole provider of a virtual package, which today is `-dkms`, so a Recommends would pull `-dkms`,
+  `dkms` and a compiler into the fleet's armhf root, where DKMS cannot work (below).
 - The modules packages run `depmod -a <kver>` in postinst and postrm.
 
 **Who uses which.**

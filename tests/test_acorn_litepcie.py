@@ -575,7 +575,19 @@ def test_the_utils_package_installs_both_tools_for_its_architecture(tree, bins):
     for tool in ("litepcie_util", "litepcie_test"):
         assert dst[f"/usr/bin/{tool}"]["file_info"]["mode"] == 0o755
     assert config["depends"] == ["libc6 (>= 2.34)"]
-    assert config["recommends"] == ["fpgas-online-acorn-litepcie-module"]
+
+
+def test_the_utils_package_only_suggests_a_driver(tree, bins):
+    """apt installs Recommends by default and picks the sole provider of a virtual package: a Recommends would
+    pull -dkms, dkms and gcc into the netbooted fleet's armhf root, where DKMS cannot work (§2)."""
+    config = bd.utils_nfpm(VERSION, "armhf", bins, tree)
+    assert config["suggests"] == ["fpgas-online-acorn-litepcie-module"]
+    assert "recommends" not in config
+
+
+def test_generation_uses_exactly_what_uv_lock_pins():
+    """uv.lock is a version input: a stale lock must fail, not re-resolve to litepcie/litex HEAD."""
+    assert pd.PYTHON[:3] == ("uv", "run", "--locked")
 
 
 def test_binaries_built_for_another_architecture_are_refused(tree, bins):
