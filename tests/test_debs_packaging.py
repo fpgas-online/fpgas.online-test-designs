@@ -127,13 +127,14 @@ def test_every_package_keeps_its_version_as_given(tmp_path):
     assert {c["version_schema"] for c in configs} == {"none"} and {c["arch"] for c in configs} == {"all"}
 
 
-def test_the_boot_check_unit_orders_nothing_before_the_tt_bridge():
-    """The fleet agent is After=fpgas-tt.service and the boot check is After= the fleet agent, so a
-    Before=fpgas-tt.service here makes an ordering cycle, which systemd breaks by dropping a start job (in the
-    VM test, the fleet agent's). The TT check stops and restarts the bridge itself."""
+def test_the_boot_check_runs_after_the_fleet_agent_and_before_the_tt_bridge():
+    """The site hears the Pi is up (the fleet agent) before the check starts; the TT bridge, which serves the
+    Pi to people and holds the TT board's port, starts only once it is done. Ordering only: a failed check
+    still lets the bridge start."""
     unit = (_REPO / "packaging" / "debs" / "fpgas-verify.service").read_text()
     lines = [line.split("=", 1) for line in unit.splitlines() if "=" in line and not line.startswith("#")]
     before = " ".join(v for k, v in lines if k.strip() == "Before").split()
     after = " ".join(v for k, v in lines if k.strip() == "After").split()
-    assert "fpgas-fleet-agent.service" in after
-    assert "fpgas-tt.service" not in before
+    assert "fpgas-fleet-agent.service" in after and "fpgas-fleet-agent.service" not in before
+    assert "fpgas-tt.service" in before and "fpgas-tt.service" not in after
+    assert not [k for k, _ in lines if k.strip() in ("Requires", "Requisite", "BindsTo")]

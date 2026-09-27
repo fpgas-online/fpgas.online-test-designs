@@ -63,9 +63,10 @@ class TestBoard(Board):
 
         Yields {"stopped": [...], "failed": [...]}: a unit that would not stop, or whose start could not be
         queued, is in "failed" (the check makes that an error: the service may be left down). The start is
-        --no-block, so the check does not wait for the service to come up: a start job queued from inside
-        fpgas-verify.service's ExecStart would also wait on the verify's own start job if anything ever
-        ordered it after the verify."""
+        --no-block: fpgas-verify.service is ordered Before= fpgas-tt, so a blocking start from inside its
+        ExecStart (a `systemctl restart fpgas-verify`) would wait on the verify's own start job; queued, it
+        runs as soon as the verify is done. At boot the bridge is not running yet (its start waits for the
+        verify), so nothing is stopped."""
         held = {"stopped": [], "failed": []}
         for unit in self.services:
             try:

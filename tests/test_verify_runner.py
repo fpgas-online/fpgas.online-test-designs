@@ -303,5 +303,20 @@ def test_only_a_pass_exits_zero(opts, tmp_path, monkeypatch, capsys):
     assert runner.run({**opts, "board": "fomu", "report": str(out)}) == 1
 
 
+def test_the_start_is_published_before_the_result(opts, tmp_path, monkeypatch):
+    monkeypatch.setattr(runner, "installed", lambda: _boards(Fake("arty", seen=[{"variant": "a7-35"}])))
+    monkeypatch.setattr(runner, "usb_devices", lambda: [])
+    monkeypatch.setattr(runner, "pci_devices", lambda: [])
+    sent = []
+    monkeypatch.setattr(runner, "publish", lambda stage, details, kept_in, prog: sent.append((stage, details)))
+    out = tmp_path / "r.json"
+    assert runner.run({**opts, "board": "arty", "report": str(out), "no_publish": False}) == 0
+    assert [s for s, _ in sent] == ["fpga-verifying", "fpga-verified"]
+    assert sent[0][1]["started_at"] and sent[1][1]["result"] == "pass"
+    sent.clear()
+    runner.run({**opts, "board": "arty", "report": str(out), "no_publish": True})
+    assert sent == []
+
+
 def test_every_board_module_is_found():
     assert set(installed()) == {"acorn", "arty", "fomu", "netv2", "tt"}

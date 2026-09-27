@@ -207,8 +207,12 @@ def write(report, where):
 
 
 def run(options, prog="fpgas-verify"):
+    kept_in = options.get("report") or str(REPORT)
+    if not options.get("no_publish"):
+        # The site hears the check has started, and says the board is being verified until the result follows.
+        publish("fpga-verifying", {"started_at": _now()}, kept_in, prog)
     report = verify(options)
-    kept_in = write(report, options.get("report") or str(REPORT))
+    kept_in = write(report, kept_in)
     print(summary(report), file=sys.stderr)
     if not options.get("no_publish"):
         publish("fpga-verified", details(report), kept_in, prog)

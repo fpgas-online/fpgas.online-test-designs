@@ -197,6 +197,6 @@ def publish(stage, details, kept_in, prog="fpgas-verify"):
     try:
         subprocess.run(fleet_event_argv(stage, details), check=True, timeout=60)
     except (OSError, subprocess.SubprocessError) as e:
-        print(f"{prog}: could not publish the result ({e}); the report is in {kept_in}", file=sys.stderr)
+        print(f"{prog}: could not publish {stage} ({e}); the report is in {kept_in}", file=sys.stderr)
         return False
     return True
