@@ -59,7 +59,7 @@ class NeTV2(TestBoard):
         # It prints its JEDEC ID once, at start, onto the Pi's own UART, so it listens from before the load
         # (listen.py), and its timeout covers the load too (openocd on a Pi 3 takes a minute or more).
         "spiflash": {"artifact": "spiflash-test-netv2-{v}/kosagi_netv2.bit", "script": "test_spiflash.py",
-                     "args": ["--port", "{port}", "--board", "netv2", "--timeout", "360"], "verify": True,
+                     "args": ["--port", "{port}", "--board", "netv2", "--timeout", "180"], "verify": True,
                      "listen": True},
         "ethernet": {"artifact": "ethernet-test-netv2-{v}/kosagi_netv2.bit", "script": "test_ethernet.py",
                      "args": ["--board", "netv2", "--uart-port", "{port}"]},
