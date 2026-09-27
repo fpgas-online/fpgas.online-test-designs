@@ -56,7 +56,7 @@ MANUFACTURER_NAMES = {
 # --------------------------------------------------------------------------- #
 
 
-def run_firmware_mode(ser, board, expected_ids=None):
+def run_firmware_mode(ser, board, expected_ids=None, timeout=BOOT_TIMEOUT_S):
     """Parse output from custom JEDEC ID firmware.
 
     Looks for lines:
@@ -64,7 +64,7 @@ def run_firmware_mode(ser, board, expected_ids=None):
         SPI_FLASH_TEST: PASS
     """
     lines = []
-    deadline = time.monotonic() + BOOT_TIMEOUT_S
+    deadline = time.monotonic() + timeout
 
     jedec_id = None
     test_result = None
@@ -138,14 +138,14 @@ def run_firmware_mode(ser, board, expected_ids=None):
     return all(results), lines
 
 
-def run_bios_mode(ser, board):
+def run_bios_mode(ser, board, timeout=BOOT_TIMEOUT_S):
     """Parse SPI flash info from standard LiteX BIOS boot output.
 
     The BIOS prints flash identification during boot, e.g.:
         Initializing SPI Flash @0x...
     """
     lines = []
-    deadline = time.monotonic() + BOOT_TIMEOUT_S
+    deadline = time.monotonic() + timeout
 
     spi_detected = False
 
@@ -201,6 +201,13 @@ def main():
         help="Use BIOS mode (parse standard BIOS output instead of custom firmware)",
     )
     parser.add_argument(
+        "--timeout",
+        type=float,
+        default=BOOT_TIMEOUT_S,
+        help=f"Seconds to wait for the result (default: {BOOT_TIMEOUT_S}); longer when the port is opened "
+        "before the design is loaded, as fpgas-verify's listen does",
+    )
+    parser.add_argument(
         "--expected-jedec",
         help="Expected JEDEC ID as hex string, e.g. '20BA18' for Micron 128Mbit",
     )
@@ -227,9 +234,9 @@ def main():
 
     with serial.Serial(args.port, args.baud, timeout=2) as ser:
         if args.bios:
-            passed, boot_lines = run_bios_mode(ser, args.board)
+            passed, boot_lines = run_bios_mode(ser, args.board, args.timeout)
         else:
-            passed, boot_lines = run_firmware_mode(ser, args.board, expected_ids)
+            passed, boot_lines = run_firmware_mode(ser, args.board, expected_ids, args.timeout)
 
     if not passed:
         print("\nFull output:")

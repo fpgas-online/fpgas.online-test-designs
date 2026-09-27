@@ -56,9 +56,11 @@ class NeTV2(TestBoard):
                  "args": ["--port", "{port}", "--board", "netv2", "--skip-banner"], "verify": True},
         "ddr": {"artifact": "ddr-test-netv2-{v}/kosagi_netv2.bit", "script": "test_ddr.py",
                 "args": ["--port", "{port}", "--board", "netv2"], "verify": True},
+        # It prints its JEDEC ID once, at start, onto the Pi's own UART, so it listens from before the load
+        # (listen.py), and its timeout covers the load too (openocd on a Pi 3 takes a minute or more).
         "spiflash": {"artifact": "spiflash-test-netv2-{v}/kosagi_netv2.bit", "script": "test_spiflash.py",
-                     "args": ["--port", "{port}", "--board", "netv2"], "verify": True,
-                     "listen": True},  # it prints its JEDEC ID once, at start, onto the Pi's own UART
+                     "args": ["--port", "{port}", "--board", "netv2", "--timeout", "360"], "verify": True,
+                     "listen": True},
         "ethernet": {"artifact": "ethernet-test-netv2-{v}/kosagi_netv2.bit", "script": "test_ethernet.py",
                      "args": ["--board", "netv2", "--uart-port", "{port}"]},
         "pmod": {"artifact": "gpio-loopback-netv2-{v}/top.bit", "script": "test_pmod_loopback.py",

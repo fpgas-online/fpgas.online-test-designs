@@ -467,7 +467,8 @@ def main():
         actual_cmd.insert(1, "-u")
     print("Running: {}".format(" ".join(actual_cmd)), flush=True)
     child = subprocess.Popen(actual_cmd)
-    wait_for_reader(child.pid, slave_name)
+    if not wait_for_reader(child.pid, slave_name):
+        print(f"WARNING: the test did not open {slave_name} within 10 s; relaying anyway", flush=True)
     reader_ready.set()
     try:
         rc = child.wait(timeout=180)

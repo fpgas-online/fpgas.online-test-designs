@@ -19,6 +19,7 @@ import time
 
 OPEN_TIMEOUT = 15.0
 SETTLE = 0.3
+PROGRAM_TIMEOUT = 300
 TEST_TIMEOUT = 300
 
 
@@ -38,14 +39,20 @@ def main(argv=None):
     deadline = time.monotonic() + OPEN_TIMEOUT
     while not has_open(child.pid, port) and child.poll() is None and time.monotonic() < deadline:
         time.sleep(0.05)
+    if not has_open(child.pid, port):
+        print(f"the test did not open {port} within {OPEN_TIMEOUT:.0f} s; loading the design anyway", flush=True)
     time.sleep(SETTLE)
     print("$ " + " ".join(program), flush=True)
-    loaded = subprocess.run(program, check=False)
-    if loaded.returncode != 0:
+    try:
+        rc = subprocess.run(program, check=False, timeout=PROGRAM_TIMEOUT).returncode
+    except subprocess.TimeoutExpired:  # run() has killed it; the test must not be left holding the port
+        print(f"loading the design did not finish within {PROGRAM_TIMEOUT} s", flush=True)
+        rc = 1
+    if rc != 0:
         child.kill()
         child.wait()
-        print(f"loading the design failed (exit {loaded.returncode})", flush=True)
-        return loaded.returncode
+        print(f"loading the design failed (exit {rc})", flush=True)
+        return rc
     try:
         return child.wait(timeout=TEST_TIMEOUT)
     except subprocess.TimeoutExpired:
