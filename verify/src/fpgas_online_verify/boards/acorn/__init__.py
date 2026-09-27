@@ -1,8 +1,9 @@
 """Sqrl Acorn CLE-215+ / CLE-101 (and NiteFury/LiteFury): found on PCI, checked over BAR0 (check.py).
 
-Only the Acorn-family images count as an Acorn here: the fpgas.online SoC (10ee:7021 with our subsystem IDs),
-SQRL's factory image and the vendor XDMA sample. Any other Xilinx endpoint is some other design, possibly on
-another board, so it is not claimed.
+Every Xilinx or SQRL PCIe endpoint is claimed. The Acorn-family images are recognised: the fpgas.online SoC
+(10ee:7021 with our subsystem IDs), SQRL's factory image and the vendor XDMA sample. Anything else (an older
+build of ours without the subsystem IDs, 10ee:7021 subsystem 10ee:0007, or another design) fails as "not a
+design we built": an FPGA is plainly there, so reporting no board at all would hide it (pi-sw2-p37, 2026-09-27).
 
 spi_flash.py (fpgas-acorn-flash) is the operator's tool for the same flash, and shares the lock.
 """
@@ -10,8 +11,6 @@ spi_flash.py (fpgas-acorn-flash) is the operator's tool for the same flash, and 
 from ...board import Board
 from ...core import Problem
 from . import check
-
-ACORN_KINDS = ("fpgas-online", "sqrl-factory", "vendor-xdma")
 
 
 class Acorn(Board):
@@ -21,7 +20,7 @@ class Acorn(Board):
     lock = str(check.LOCK)  # shared with fpgas-acorn-flash (spi_flash.py)
 
     def spot(self, host, usb, pci):
-        return [d for d in map(check.describe, pci) if d and d["kind"] in ACORN_KINDS]
+        return [d for d in map(check.describe, pci) if d]
 
     def check(self, host, found, options):
         images = options.get("images") or check.IMAGES
