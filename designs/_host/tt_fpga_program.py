@@ -56,7 +56,10 @@ print("GPIO_RELEASED")
 
 PROGRAM_SCRIPT_PIO = """\
 from machine import Pin
-from ttboard.fpga.fabricfox import DoDummyClocks, spi_write
+try:  # TT SDK 3.x renamed it fabricfoxv2 (same API); 2.x has fabricfox
+    from ttboard.fpga.fabricfoxv2 import DoDummyClocks, spi_write
+except ImportError:
+    from ttboard.fpga.fabricfox import DoDummyClocks, spi_write
 import rp2
 from rp2 import PIO, StateMachine
 import utime
@@ -129,7 +132,10 @@ print("PROGRAM_OK")
 
 PROGRAM_SCRIPT_BITBANG = """\
 from machine import Pin
-from ttboard.fpga.fabricfox import DoDummyClocks
+try:  # TT SDK 3.x renamed it fabricfoxv2 (same API); 2.x has fabricfox
+    from ttboard.fpga.fabricfoxv2 import DoDummyClocks
+except ImportError:
+    from ttboard.fpga.fabricfox import DoDummyClocks
 import utime
 
 # TTDBv3 SPI programming pins (hardcoded to bypass GPIOMap firmware bug).

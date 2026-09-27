@@ -46,7 +46,10 @@ PROGRAM_AND_BRIDGE_SCRIPT = """\
 from machine import UART, Pin
 import sys, utime
 
-from ttboard.fpga.fabricfox import DoDummyClocks, spi_write
+try:  # TT SDK 3.x renamed it fabricfoxv2 (same API); 2.x has fabricfox
+    from ttboard.fpga.fabricfoxv2 import DoDummyClocks, spi_write
+except ImportError:
+    from ttboard.fpga.fabricfox import DoDummyClocks, spi_write
 from rp2 import StateMachine
 
 # TTDBv3 SPI programming pins (hardcoded to bypass GPIOMap firmware bug:
@@ -402,27 +405,13 @@ def main():
     pty_attrs[3] = 0
     termios.tcsetattr(slave_fd, termios.TCSANOW, pty_attrs)
 
-    if extra_data:
-        os.write(master_fd, extra_data)
-
-    # Wait for boot data from RP2350 bridge.  The MicroPython script
-    # writes the captured FPGA boot banner to stdout AFTER the
-    # BRIDGE_ACTIVE marker, so it arrives on serial_fd slightly after
-    # execute_raw_repl() returns.  Read it here and inject into the
-    # PTY so the test script sees the BIOS banner immediately.
-    boot_deadline = time.monotonic() + 1.0
-    while time.monotonic() < boot_deadline:
-        r, _, _ = select.select([serial_fd], [], [], 0.2)
-        if serial_fd in r:
-            boot_data = os.read(serial_fd, 4096)
-            if boot_data:
-                os.write(master_fd, boot_data)
-                print(f"Boot data forwarded to PTY ({len(boot_data)} bytes)")
-                break
-        else:
-            # No more data within 200 ms — boot data has been consumed
-            # or the FPGA didn't produce any.
-            break
+    # Everything the board sends -- the data after the marker, the FPGA's boot output the MicroPython script
+    # captured and writes after BRIDGE_ACTIVE, and whatever follows -- is held until the test script has
+    # opened the PTY: pyserial empties the input buffer when it opens a port, so anything written to the
+    # PTY before then is lost. A design that prints only at boot (the SPI flash test's JEDEC ID) then never
+    # reached the test (pi-sw2-p33, 2026-09-27).
+    pending = bytearray(extra_data)
+    reader_ready = threading.Event()
 
     # Step 4: Start relay thread
     relay_active = True
@@ -431,11 +420,18 @@ def main():
     def relay_loop():
         while relay_active:
             try:
+                if reader_ready.is_set() and pending:
+                    os.write(master_fd, bytes(pending))
+                    relay_stats["serial_to_pty"] += len(pending)
+                    print(f"Held data forwarded to PTY ({len(pending)} bytes)", flush=True)
+                    pending.clear()
                 r, _, _ = select.select([serial_fd, master_fd], [], [], 0.1)
                 for ready_fd in r:
                     if ready_fd == serial_fd:
                         data = os.read(serial_fd, 4096)
-                        if data:
+                        if data and not reader_ready.is_set():
+                            pending.extend(data)
+                        elif data:
                             os.write(master_fd, data)
                             relay_stats["serial_to_pty"] += len(data)
                     elif ready_fd == master_fd:
@@ -470,9 +466,14 @@ def main():
     if actual_cmd and actual_cmd[0] in ("python3", "python"):
         actual_cmd.insert(1, "-u")
     print("Running: {}".format(" ".join(actual_cmd)), flush=True)
+    child = subprocess.Popen(actual_cmd)
+    wait_for_reader(child.pid, slave_name)
+    reader_ready.set()
     try:
-        rc = subprocess.call(actual_cmd, timeout=180)
+        rc = child.wait(timeout=180)
     except subprocess.TimeoutExpired:
+        child.kill()
+        child.wait()
         print("ERROR: Test timed out", file=sys.stderr)
         rc = 1
 
@@ -497,6 +498,22 @@ def main():
             os.close(fd)
 
     return rc
+
+
+def wait_for_reader(pid, tty, timeout=10.0, settle=0.3):
+    """Wait until process `pid` has `tty` open (Linux: /proc/<pid>/fd), then `settle` seconds more for the
+    flush that follows pyserial's open. Gives up after `timeout`: the data is released anyway."""
+    deadline = time.monotonic() + timeout
+    fd_dir = f"/proc/{pid}/fd"
+    while time.monotonic() < deadline:
+        try:
+            if any(os.readlink(os.path.join(fd_dir, fd)) == tty for fd in os.listdir(fd_dir)):
+                time.sleep(settle)
+                return True
+        except OSError:
+            pass  # the process has not started, has exited, or an fd closed while we looked
+        time.sleep(0.05)
+    return False
 
 
 if __name__ == "__main__":
