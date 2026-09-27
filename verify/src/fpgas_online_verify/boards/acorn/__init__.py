@@ -22,6 +22,9 @@ class Acorn(Board):
     def spot(self, host, usb, pci):
         return [d for d in map(check.describe, pci) if d]
 
+    def weak(self, found):
+        return found.get("kind") not in ("fpgas-online", "sqrl-factory")  # the Xilinx sample runs on a NeTV2 too
+
     def check(self, host, found, options):
         images = options.get("images") or check.IMAGES
         try:

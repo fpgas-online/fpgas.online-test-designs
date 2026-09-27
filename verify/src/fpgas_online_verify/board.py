@@ -41,6 +41,11 @@ class Board:
         """The boards found by actively looking (only for `probes` boards)."""
         return []
 
+    def weak(self, found):
+        """True if `found` may be some other kind of board (an Acorn claim on a Xilinx PCIe design we cannot
+        name): with only weak claims, `auto` still probes, so a NeTV2 on PCIe is found by its JTAG as well."""
+        return False
+
     def find(self, host, usb, pci):
         return self.spot(host, usb, pci) or (self.probe(host) if self.probes else [])
 

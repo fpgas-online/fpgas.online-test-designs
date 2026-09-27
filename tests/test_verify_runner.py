@@ -19,8 +19,9 @@ from fpgas_online_verify.core import Problem
 class Fake(Board):
     """A board seen on USB with `seen`, or found by probing; check() reports `result` and the state given."""
 
-    def __init__(self, name, seen=(), probes=False, probed=(), result="pass", flash="aaaa"):
+    def __init__(self, name, seen=(), probes=False, probed=(), result="pass", flash="aaaa", weak=False):
         self.name = self.slug = name
+        self.is_weak = weak
         self.title = name.title()
         self.probes, self.seen, self.probed = probes, list(seen), list(probed)
         self.result, self.flash = result, flash
@@ -35,6 +36,9 @@ class Fake(Board):
     def probe(self, host):
         self.probe_calls += 1
         return list(self.probed)
+
+    def weak(self, found):
+        return self.is_weak
 
     def check(self, host, found, options):
         self.checked.append(found)
@@ -115,6 +119,20 @@ def test_auto_probes_only_when_nothing_is_seen(opts):
     netv2 = Fake("netv2", probes=True, probed=[{"variant": "a7-35", "idcode": "0x0362d093"}])
     report = runner.verify(opts, _boards(Fake("arty"), netv2), usb=[], pci=[], mode=("auto", "test"))
     assert [b["board"] for b in report["boards"]] == ["netv2"] and report["chosen_by"] == "auto: probed (netv2)"
+
+
+def test_auto_still_probes_when_every_claim_is_weak_and_keeps_the_claim(opts):
+    """A Xilinx PCIe design the Acorn module cannot name may be a NeTV2 on PCIe: its JTAG is probed too."""
+    acorn = Fake("acorn", seen=[{"kind": "vendor-xdma"}], weak=True, result="unconverted")
+    netv2 = Fake("netv2", probes=True, probed=[{"variant": "a7-35", "idcode": "0x0362d093"}])
+    report = runner.verify(opts, _boards(acorn, netv2), usb=[], pci=[], mode=("auto", "test"))
+    assert [b["board"] for b in report["boards"]] == ["acorn", "netv2"]
+    assert report["chosen_by"] == "auto: USB/PCI IDs and probed (netv2)" and report["result"] == "unconverted"
+    alone = Fake("netv2", probes=True)
+    weak = Fake("acorn", seen=[{"kind": "litex-other"}], weak=True)
+    report = runner.verify(opts, _boards(weak, alone), usb=[], pci=[], mode=("auto", "test"))
+    assert [b["board"] for b in report["boards"]] == ["acorn"] and alone.probe_calls == 1
+    assert report["chosen_by"] == "auto: USB/PCI IDs, and probing found nothing more"
 
 
 def test_auto_finding_nothing_is_missing(opts):

@@ -59,19 +59,34 @@ class TestBoard(Board):
 
     @contextlib.contextmanager
     def services_stopped(self, runner=run):
-        """Stop whichever of `services` are running; start them again on the way out, whatever happened."""
-        stopped = []
+        """Stop whichever of `services` are running; start them again on the way out, whatever happened.
+
+        Yields {"stopped": [...], "failed": [...]}: a unit that would not stop, or whose start could not be
+        queued, is in "failed" (the check makes that an error: the service may be left down). The start is
+        --no-block: fpgas-verify.service is ordered Before= fpgas-tt, so a blocking start from inside its
+        ExecStart would wait on the verify's own start job; queued, it runs as soon as the verify is done."""
+        held = {"stopped": [], "failed": []}
         for unit in self.services:
-            with contextlib.suppress(Problem):
-                running = runner(["systemctl", "is-active", "--quiet", unit], 30)[0] == 0
-                if running and runner(["systemctl", "stop", unit], 60)[0] == 0:
-                    stopped.append(unit)
+            try:
+                if runner(["systemctl", "is-active", "--quiet", unit], 30)[0] != 0:
+                    continue
+                rc, text = runner(["systemctl", "stop", unit], 60)
+            except Problem as p:
+                rc, text = 1, p.reason
+            if rc == 0:
+                held["stopped"].append(unit)
+            else:
+                held["failed"].append(f"{unit} would not stop: {' '.join(tail(text, 2))}")
         try:
-            yield stopped
+            yield held
         finally:
-            for unit in stopped:
-                with contextlib.suppress(Problem):
-                    runner(["systemctl", "start", unit], 60)
+            for unit in held["stopped"]:
+                try:
+                    rc, text = runner(["systemctl", "start", "--no-block", unit], 60)
+                except Problem as p:
+                    rc, text = 1, p.reason
+                if rc != 0:
+                    held["failed"].append(f"{unit} was not started again: {' '.join(tail(text, 2))}")
 
     # -- detection -----------------------------------------------------------------------------------------
 
@@ -134,7 +149,7 @@ class TestBoard(Board):
                 test_argv = self.test_argv(test, host, bitstream)
                 argv = [sys.executable, "-m", "fpgas_online_verify.listen", host["port"], str(len(test_argv)),
                         *test_argv, *self.program_argv(bitstream, host, test)]  # fmt: skip
-                rc, text = runner(argv, PROGRAM_TIMEOUT + TEST_TIMEOUT)
+                rc, text = runner(argv, PROGRAM_TIMEOUT + TEST_TIMEOUT + 60)  # more than listen.py allows itself
             else:
                 if t.get("runner") != "tt-bridge":  # the bridge loads the design itself
                     rc, text = runner(self.program_argv(bitstream, host, test), PROGRAM_TIMEOUT)
@@ -190,11 +205,11 @@ class TestBoard(Board):
         except Problem as p:
             return {**report, "result": p.result, "reason": p.reason}
         report["bitstreams"] = manifest.get("version")
-        with self.services_stopped(runner) as stopped:
+        with self.services_stopped(runner) as held:
             for test in options.get("tests") or self.verify_tests:
                 report["tests"].append(self.run_test(test, variant, host, images, manifest, runner))
-        if stopped:
-            report["services_stopped"] = stopped
+        if held["stopped"]:
+            report["services_stopped"] = held["stopped"]
         state = self.identity({**found, "variant": variant})
         jedec = next((t["flash_jedec"] for t in report["tests"] if "flash_jedec" in t), None)
         if jedec:
@@ -209,11 +224,15 @@ class TestBoard(Board):
         except Problem as p:
             report["flash_error"] = p.reason
             results.append(p.result)
+        if held["failed"]:
+            report["services_failed"] = held["failed"]
+            results.append("error")
         report["state"] = state
         report["result"] = worst(results)
         bad = [t for t in report["tests"] if t["result"] != "pass"]
-        if bad:
-            report["reason"] = "; ".join(f"{t['test']} {t['result']}: {t.get('reason', '')}" for t in bad)
+        reasons = [f"{t['test']} {t['result']}: {t.get('reason', '')}" for t in bad] + held["failed"]
+        if reasons:
+            report["reason"] = "; ".join(reasons)
         elif "flash_error" in report:
             report["reason"] = report["flash_error"]
         return report

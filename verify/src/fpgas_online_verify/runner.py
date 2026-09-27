@@ -47,14 +47,19 @@ def find(boards, mode, options, usb, pci):
         raise Problem("error", "fpga-board = auto, but no board module is installed (fpgas-online-<board>-tools)")
     hosts = {name: b.facts(options.get("port")) for name, b in boards.items()}
     spotted = [(b, hosts[n], f) for n, b in boards.items() for f in b.spot(hosts[n], usb, pci)]
-    if spotted:
+    # Only weak claims (a Xilinx PCIe design the Acorn module cannot name): probe as well, since it may be a
+    # NeTV2 on PCIe. The weak claims stay in, and fail on their own: nothing seen is dropped.
+    if spotted and (options.get("no_probe") or not all(b.weak(f) for b, _, f in spotted)):
         return spotted, "auto: USB/PCI IDs"
     if options.get("no_probe"):
         how = "auto: USB/PCI IDs, probing disabled"
     else:
         probed = [(b, hosts[n], f) for n, b in boards.items() if b.probes for f in b.probe(hosts[n])]
         if probed:
-            return probed, "auto: probed (" + ", ".join(sorted({b.name for b, _, _ in probed})) + ")"
+            names = ", ".join(sorted({b.name for b, _, _ in probed}))
+            return spotted + probed, ("auto: USB/PCI IDs and probed (" if spotted else "auto: probed (") + names + ")"
+        if spotted:
+            return spotted, "auto: USB/PCI IDs, and probing found nothing more"
         how = "auto: USB/PCI IDs, then probing"
     raise Problem("missing", f"none of the installed boards ({', '.join(boards)}) was found ({how})")
 

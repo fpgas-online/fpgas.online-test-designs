@@ -281,7 +281,7 @@ def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_rea
         ["systemctl", "is-active", "--quiet", "fpgas-tt.service"],
         ["systemctl", "stop", "fpgas-tt.service"],
     ]
-    assert run.calls[-1] == ["systemctl", "start", "fpgas-tt.service"]
+    assert run.calls[-1] == ["systemctl", "start", "--no-block", "fpgas-tt.service"]
     assert report["services_stopped"] == ["fpgas-tt.service"]
     first = run.calls[2]
     assert first[1].endswith("tt_test_wrapper.py") and first[2] == "/dev/ttyACM0"
@@ -297,7 +297,23 @@ def test_a_stopped_bridge_is_left_stopped_and_a_failed_test_still_restarts_a_run
     assert "services_stopped" not in report
     failing = Runner([("tt_test_wrapper.py", (1, "could not enter raw repl"))])
     report = _check(TT, tmp_path, {"variant": "tt-fpga", "usb": "1-2", "serial": "E6"}, failing)
-    assert report["result"] == "fail" and failing.calls[-1] == ["systemctl", "start", "fpgas-tt.service"]
+    assert report["result"] == "fail" and failing.calls[-1] == ["systemctl", "start", "--no-block", "fpgas-tt.service"]
+
+
+def test_a_bridge_that_will_not_stop_or_restart_makes_the_check_an_error(tmp_path):
+    stuck = Runner([("systemctl stop", (1, "Failed to stop fpgas-tt.service: Access denied"))])
+    report = _check(TT, tmp_path, {"variant": "tt-fpga", "usb": "1-2", "serial": "E6"}, stuck)
+    assert report["result"] == "error" and "fpgas-tt.service would not stop" in report["reason"]
+    assert not any(c[:2] == ["systemctl", "start"] for c in stuck.calls)  # it was never stopped
+    gone = Runner([("systemctl start", (5, "Unit fpgas-tt.service not found."))])
+    report = _check(TT, tmp_path, {"variant": "tt-fpga", "usb": "1-2", "serial": "E6"}, gone)
+    assert report["result"] == "error" and "fpgas-tt.service was not started again" in report["reason"]
+    assert report["services_failed"] == ["fpgas-tt.service was not started again: Unit fpgas-tt.service not found."]
+
+
+def test_only_an_acorn_claim_on_a_design_it_cannot_name_is_weak():
+    assert all(ACORN.weak({"kind": k}) for k in ("litex-other", "vendor-xdma", "unknown"))
+    assert not ACORN.weak({"kind": "fpgas-online"}) and not ACORN.weak({"kind": "sqrl-factory"})
 
 
 def test_the_fomu_state_is_its_serial_only(tmp_path):
