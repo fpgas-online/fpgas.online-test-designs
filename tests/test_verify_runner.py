@@ -135,6 +135,17 @@ def test_auto_still_probes_when_every_claim_is_weak_and_keeps_the_claim(opts):
     assert report["chosen_by"] == "auto: USB/PCI IDs, and probing found nothing more"
 
 
+def test_a_probe_that_fails_beside_a_weak_claim_keeps_the_claim_and_says_why(opts):
+    class Broken(Fake):
+        def probe(self, host):
+            raise Problem("error", "the JTAG chain answers with IDCODE 0x13636093, which is no NeTV2 part")
+
+    acorn = Fake("acorn", seen=[{"kind": "litex-other"}], weak=True, result="fail")
+    report = runner.verify(opts, _boards(acorn, Broken("netv2", probes=True)), usb=[], pci=[], mode=("auto", "test"))
+    assert [b["board"] for b in report["boards"]] == ["acorn"] and report["result"] == "fail"
+    assert "probing as well failed: the JTAG chain answers" in report["chosen_by"]
+
+
 def test_auto_finding_nothing_is_missing(opts):
     netv2 = Fake("netv2", probes=True)
     report = runner.verify(opts, _boards(Fake("arty"), netv2), usb=[], pci=[], mode=("auto", "test"))

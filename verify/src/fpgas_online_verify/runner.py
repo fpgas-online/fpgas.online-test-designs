@@ -54,7 +54,13 @@ def find(boards, mode, options, usb, pci):
     if options.get("no_probe"):
         how = "auto: USB/PCI IDs, probing disabled"
     else:
-        probed = [(b, hosts[n], f) for n, b in boards.items() if b.probes for f in b.probe(hosts[n])]
+        try:
+            probed = [(b, hosts[n], f) for n, b in boards.items() if b.probes for f in b.probe(hosts[n])]
+        except Problem as p:
+            if not spotted:
+                raise
+            # The weak claims are still checked (and never pass); the probe's failure is said, not lost.
+            return spotted, f"auto: USB/PCI IDs; probing as well failed: {p.reason}"
         if probed:
             names = ", ".join(sorted({b.name for b, _, _ in probed}))
             return spotted + probed, ("auto: USB/PCI IDs and probed (" if spotted else "auto: probed (") + names + ")"
