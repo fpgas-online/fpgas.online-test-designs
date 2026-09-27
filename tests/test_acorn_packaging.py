@@ -1,11 +1,8 @@
-"""Tests for the Acorn deb builder (packaging/acorn-pcie/build_debs.py).
+"""Tests for the Acorn bitstreams deb builder (packaging/acorn-pcie/build_debs.py).
 
-Two packages come out of it:
-
-  * fpgas-online-acorn-bitstreams: the images a Pi uses, from the release pinned in release.toml. Versioned by
-    that release, so it only changes (and only adds to the apt pool) when a reviewed PR moves the pin.
-  * fpgas-online-acorn-tools: acorn_verify.py, spi_flash.py and the boot unit, versioned by git describe, and
-    depending on exactly the pinned bitstreams version.
+fpgas-online-acorn-bitstreams carries the images a Pi uses, from the release pinned in release.toml. Versioned
+by that release, so it only changes (and only adds to the apt pool) when a reviewed PR moves the pin. The
+Acorn's other packages are built with every board's (tests/test_debs_packaging.py).
 
 What must hold: every file that reaches a package matches the manifest, the manifest matches the pin, and
 nothing else from the release is shipped.
@@ -147,28 +144,6 @@ def test_the_staged_tree_is_the_installed_layout(staged, tmp_path):
     assert sorted(p.name for p in images.iterdir()) == sorted([*bd.select_assets(manifest), "manifest.json"])
 
 
-def test_the_tools_package_depends_on_exactly_the_pinned_bitstreams():
-    config = bd.tools_nfpm(version="0.0.post600", bitstreams="20260921+gf3355dccf443", repo=_PATH.parents[2])
-    assert "fpgas-online-acorn-bitstreams (= 20260921+gf3355dccf443)" in config["depends"]
-    dst = {c["dst"]: c for c in config["contents"]}
-    assert dst["/usr/bin/fpgas-acorn-verify"]["type"] == "symlink"
-    assert dst["/usr/lib/fpgas-online/acorn-pcie/acorn_verify.py"]["file_info"]["mode"] == 0o755
-    assert "/usr/lib/systemd/system/fpgas-acorn-verify.service" in dst
-    for c in config["contents"]:
-        if c.get("type") != "symlink":
-            assert pathlib.Path(c["src"]).is_file(), c["src"]
-
-
-def test_the_tools_package_pulls_in_openfpgaloader_but_not_the_fleet_setup():
-    config = bd.tools_nfpm(version="0.0.post600", bitstreams="20260921+gf3355dccf443", repo=_PATH.parents[2])
-    # The fpgas.online builds first, so apt picks one when the fpga-tools repo is configured; both Provide
-    # openfpgaloader, and Debian's own openfpgaloader resolves it on a host with only Debian + apt.fpgas.online.
-    assert "openfpgaloader-fpgasonline | openfpgaloader-fpgasonline-git | openfpgaloader" in config["depends"]
-    # apt installs Recommends by default: fpgas-online-setup-pi reconfigures the host as a fleet node.
-    assert "recommends" not in config
-    assert config["suggests"] == ["fpgas-online-setup-pi"]
-
-
 def test_the_pin_file_names_a_release_this_builder_accepts():
     pin = bd.read_pin(_PATH.parent / "release.toml")
     bd.bitstreams_version(pin["tag"])
@@ -177,9 +152,8 @@ def test_the_pin_file_names_a_release_this_builder_accepts():
 
 def test_nfpm_is_told_to_keep_the_version_exactly_as_given():
     """Left to itself nfpm turns 20260921+gf3355dccf443 into 20260921.0.0+gf3355dccf443 (seen building it)."""
-    tools = bd.tools_nfpm(version="0.0.post600", bitstreams="20260921+gf3355dccf443", repo=_PATH.parents[2])
     bits = bd.bitstreams_nfpm("20260921+gf3355dccf443", "/nonexistent", TAG)
-    assert tools["version_schema"] == bits["version_schema"] == "none"
+    assert bits["version_schema"] == "none"
 
 
 def test_packaged_files_get_system_modes_whatever_the_builders_umask(staged, tmp_path):
@@ -189,7 +163,3 @@ def test_packaged_files_get_system_modes_whatever_the_builders_umask(staged, tmp
     images = bd.stage_bitstreams(manifest, bd.local_fetcher(d), root)
     assert {p.stat().st_mode & 0o777 for p in images.iterdir()} == {0o644}
     assert images.stat().st_mode & 0o777 == 0o755
-    config = bd.tools_nfpm(version="0.0.post600", bitstreams="20260921+gf3355dccf443", repo=_PATH.parents[2])
-    for c in config["contents"]:
-        if c.get("type") != "symlink":
-            assert c["file_info"]["mode"] in (0o644, 0o755), c["dst"]

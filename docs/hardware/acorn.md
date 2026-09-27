@@ -8,39 +8,40 @@ See [acorn-pinmap.md](acorn-pinmap.md) for the full RPi GPIO pinmap.
 
 ## Installing the Acorn Packages
 
-The Acorn's verification tools and bitstreams are Debian packages in the fpgas.online APT repository. Add the repository first ([README: Installing the Packages](../../README.md#installing-the-packages)), then on the Acorn's Pi 5 host run:
+Add the fpgas.online APT repository first ([README: Installing the Packages](../../README.md#installing-the-packages)), then on the Acorn's Pi 5 host:
 
 ```bash
-sudo apt update
-sudo apt install fpgas-online-acorn-tools
+sudo apt install fpgas-online-acorn
 ```
-
-That one package also installs the matching bitstreams and openFPGALoader:
 
 | Package | Version scheme | Installs |
 |---------|----------------|----------|
-| `fpgas-online-acorn-tools` | `X.Y.postN` from `git describe` (e.g. `0.0.post557`) | `/usr/bin/fpgas-acorn-verify`, `/usr/bin/fpgas-acorn-flash`, `fpgas-acorn-verify.service`; the scripts live in `/usr/lib/fpgas-online/acorn-pcie/` |
-| `fpgas-online-acorn-bitstreams` | pinned release date + commit (e.g. `20260921+gf3355dccf443`) | `/usr/share/fpgas-online/acorn-pcie/images/`: `manifest.json`, and for each of `cle-215p` / `cle-101` the golden (`0x000000`) and operational (`0x400000`) flash images, the operational `.bit`, and the CSR maps |
-| `openfpgaloader-fpgasonline`, or Debian's `openfpgaloader` | | `openFPGALoader`, for loading the `.bit` over GPIO JTAG ([below](#via-gpio-jtag-openfpgaloader--what-the-fleet-uses)) |
+| `fpgas-online-acorn` | `X.Y.postN` from `git describe` (e.g. `0.0.post576`) | sets the host up as having an Acorn, and enables `fpgas-verify.service` |
+| `fpgas-online-acorn-tools` | `X.Y.postN` | the Acorn's module of `fpgas_online_verify` (`check.py`, `spi_flash.py`, `uartbone_link.py`), `/usr/bin/fpgas-acorn-verify` and `/usr/bin/fpgas-acorn-flash`. The Acorn is checked over PCIe with the standard library only, so nothing else is installed for it |
+| `fpgas-online-acorn-bitstreams` | pinned release date + commit (e.g. `20260923+ge48a750c8303`) | `/usr/share/fpgas-online/acorn-pcie/images/`: `manifest.json`, and for each of `cle-215p` / `cle-101` the golden (`0x000000`) and operational (`0x400000`) flash images, the operational `.bit`, and the CSR maps |
+| `fpgas-online-verify` | `X.Y.postN` | `fpgas-verify` and its unit |
 
-To get the fpgas.online openFPGALoader build (with the RP1 PIO JTAG cable and SPI flash info), add the [fpgas.online-fpga-tools repository](https://github.com/fpgas-online/fpgas.online-fpga-tools#debian-packages-bookworm-trixie-sid-arm64-armhf) **before** installing. Otherwise apt installs Debian's own package (bookworm 0.10.0, trixie 0.13.1). Adding the repository afterwards does not replace it; run `sudo apt install openfpgaloader-fpgasonline` to switch. Fleet Pis already get the patched `openfpgaloader-fpgasonline-git` from the infra role.
+The tools package depends on one exact bitstreams version. Which release that is comes from [`packaging/acorn-pcie/release.toml`](../../packaging/acorn-pcie/release.toml), and a new release reaches hosts only when a reviewed PR moves that pin. Every package is built, and its install rules are checked in clean Debian bookworm and trixie, by [`collect-bitstreams.yml`](../../.github/workflows/collect-bitstreams.yml).
 
-The tools package depends on one exact bitstreams version. Which release that is comes from [`packaging/acorn-pcie/release.toml`](../../packaging/acorn-pcie/release.toml), and a new release reaches hosts only when a reviewed PR moves that pin. Both debs are built, installed into a clean Debian bookworm and smoke-tested by [`acorn-debs.yml`](../../.github/workflows/acorn-debs.yml).
+At boot the check finds the Acorn on PCI (Xilinx `10ee` or SQRL `1e24`), reads which build is running over BAR0, and reads both 4 MiB flash slots back whole, comparing them with the release's images. It never writes the flash. The PCI slot and IDs, the flash's identity and the sha256 of each slot are what `changed` compares, so a flash rewritten since the last run (by `fpgas-acorn-flash write`, say) is fatal until `sudo fpgas-verify --update`.
 
-**Check the board** (reads only, never writes the flash):
-
-```bash
-sudo fpgas-acorn-verify --no-publish --report -
-```
-
-The JSON `result` is `pass` or `none` (no FPGA on PCIe), both with exit status 0. Otherwise it is `degraded` (running the golden image), `unconverted` (still on SQRL's factory image, or the vendor XDMA sample), `driver-bound` (a kernel driver such as `litepcie.ko` holds the board's BAR0, so nothing was read), `fail` (flash differs from the release, or a PCIe FPGA whose design it does not recognise) or `error`, all with exit status 1. `fpgas-acorn-flash` likewise refuses a board a driver is bound to. Leave out `--no-publish` to also send the `fpga-verified` fleet-event. That needs `fleet-event` from `fpgas-online-setup-pi`, which only fleet Pis have. Without it the check prints a warning and still reports its result.
-
-**Run the check on every boot.** The package installs the unit but does not enable it:
+**Check the board now:**
 
 ```bash
-sudo systemctl enable --now fpgas-acorn-verify.service
-journalctl -u fpgas-acorn-verify.service       # the last result is also in /run/fpgas-online/acorn-verify.json
+sudo fpgas-verify                                    # what the boot unit runs
+sudo fpgas-acorn-verify --no-publish --report -      # the Acorn only, the JSON report on stdout
 ```
+
+Besides the [results every board has](../../README.md#installing-the-packages), the Acorn's can be `degraded` (running the golden image: the operational slot did not boot), `unconverted` (still on SQRL's factory image, or the vendor XDMA sample) or `driver-bound` (a kernel driver such as `litepcie.ko` holds the board's BAR0, so nothing was read; `fpgas-acorn-flash` likewise refuses a board a driver is bound to). A PCIe FPGA whose design the check does not recognise is `fail`. A Pi with no Acorn is `missing`: fatal, since the host was set up for one.
+
+**When a check fails**, `sudo apt install fpgas-online-acorn-debug`. It brings openFPGALoader for loading the `.bit` over GPIO JTAG ([below](#via-gpio-jtag-openfpgaloader--what-the-fleet-uses)), which is how a board still on SQRL's factory image is converted, and `python3-serial` for `fpgas-acorn-flash --uart`:
+
+```bash
+sudo fpgas-acorn-debug detect       # the Acorn-family endpoints on PCI
+sudo fpgas-acorn-debug identify     # the running build and the flash's part, JEDEC ID and unique ID, read live
+```
+
+For the fpgas.online openFPGALoader build (with the RP1 PIO JTAG cable and SPI flash info), add the [fpgas.online-fpga-tools repository](https://github.com/fpgas-online/fpgas.online-fpga-tools#debian-packages-bookworm-trixie-sid-arm64-armhf) **before** installing. Otherwise apt installs Debian's own package (bookworm 0.10.0, trixie 0.13.1). Adding the repository afterwards does not replace it; run `sudo apt install openfpgaloader-fpgasonline` to switch. Fleet Pis already get the patched `openfpgaloader-fpgasonline-git` from the infra role.
 
 **Use the flash tool** against the installed images (CLE-215+ shown; use `acorn-cle-101-*` for a CLE-101):
 
@@ -49,7 +50,7 @@ sudo fpgas-acorn-flash id
 sudo fpgas-acorn-flash verify /usr/share/fpgas-online/acorn-pcie/images/acorn-cle-215p-sqrl_acorn_operational.bin 0x400000
 ```
 
-Writing the flash, and converting a board that still runs the factory image, are covered in [acorn-pcie-programming.md](acorn-pcie-programming.md). `fpgas-acorn-flash` reaches the flash through the fpgas.online SoC's PCIe BAR0, so it needs that SoC to be running already. By default it expects the SoC at `0001:01:00.0`; pass `--bdf` for another address, or `--uart PORT` to use the UART bridge instead.
+Writing the flash, and converting a board that still runs the factory image, are covered in [acorn-pcie-programming.md](acorn-pcie-programming.md). After writing it, run `sudo fpgas-verify --update`. `fpgas-acorn-flash` reaches the flash through the fpgas.online SoC's PCIe BAR0, so it needs that SoC to be running already. By default it expects the SoC at `0001:01:00.0`; pass `--bdf` for another address, or `--uart PORT` to use the UART bridge instead.
 
 ## Key Specifications
 

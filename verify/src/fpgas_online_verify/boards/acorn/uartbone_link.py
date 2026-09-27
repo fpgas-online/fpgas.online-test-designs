@@ -16,7 +16,7 @@ through `litex_server`. Wire format checked against
 `litex/tools/remote/comm_uart.py`.
 
 Run it directly for a quick link check:
-    python3 uartbone_link.py [--port /dev/ttyAMA0] [--slow]
+    python3 -m fpgas_online_verify.boards.acorn.uartbone_link [--port /dev/ttyAMA0] [--slow]
 """
 
 import argparse

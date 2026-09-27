@@ -1,0 +1,57 @@
+# fpgas_online_verify: the code behind the fpgas-online-verify and fpgas-online-<board>-tools/-debug debs
+# (packaging/boards/build_debs.py), and, later, the same packages on PyPI. This builds one wheel with every
+# board's module; the debs split them per board, and the PyPI packages will too
+# (docs/plans/2026-09-26-fpgas-online-verify-design.md).
+[project]
+name = "fpgas-online-verify"
+dynamic = ["version"]
+description = "fpgas.online boot-time FPGA board verification for Raspberry Pi hosts"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.9"
+# The core and the Acorn module are stdlib only. The host test scripts the other boards run need these.
+dependencies = []
+
+[project.optional-dependencies]
+arty = ["pyserial"]
+netv2 = ["pyserial"]
+fomu = ["pyserial"]
+tt-fpga = ["pyserial", "mpremote"]
+debug = ["gpiod"]
+
+[project.scripts]
+fpgas-verify = "fpgas_online_verify.cli:verify_main"
+fpgas-acorn-verify = "fpgas_online_verify.cli:board_main"
+fpgas-acorn-debug = "fpgas_online_verify.cli:board_main"
+fpgas-acorn-flash = "fpgas_online_verify.boards.acorn.spi_flash:main"
+fpgas-arty-verify = "fpgas_online_verify.cli:board_main"
+fpgas-arty-debug = "fpgas_online_verify.cli:board_main"
+fpgas-netv2-verify = "fpgas_online_verify.cli:board_main"
+fpgas-netv2-debug = "fpgas_online_verify.cli:board_main"
+fpgas-fomu-verify = "fpgas_online_verify.cli:board_main"
+fpgas-fomu-debug = "fpgas_online_verify.cli:board_main"
+fpgas-tt-fpga-verify = "fpgas_online_verify.cli:board_main"
+fpgas-tt-fpga-debug = "fpgas_online_verify.cli:board_main"
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+# X.Y.postN, N commits after the vX.Y tag: the same version as the debs.
+raw-options = { root = "..", git_describe_command = "git describe --tags --long --match v[0-9]*.[0-9]*", version_scheme = "post-release", local_scheme = "no-local-version" }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fpgas_online_verify"]
+
+# The host test scripts live with their designs (verify_hardware.py uploads them from there too).
+[tool.hatch.build.targets.wheel.force-include]
+"../designs/uart/host/test_uart.py" = "fpgas_online_verify/scripts/test_uart.py"
+"../designs/ddr-memory/host/test_ddr.py" = "fpgas_online_verify/scripts/test_ddr.py"
+"../designs/spi-flash-id/host/test_spiflash.py" = "fpgas_online_verify/scripts/test_spiflash.py"
+"../designs/ethernet-test/host/test_ethernet.py" = "fpgas_online_verify/scripts/test_ethernet.py"
+"../designs/pmod-loopback/host/test_pmod_loopback.py" = "fpgas_online_verify/scripts/test_pmod_loopback.py"
+"../designs/pmod-pin-id/host/identify_pmod_pins.py" = "fpgas_online_verify/scripts/identify_pmod_pins.py"
+"../designs/_host/tt_fpga_program.py" = "fpgas_online_verify/scripts/tt_fpga_program.py"
+"../designs/_host/tt_test_wrapper.py" = "fpgas_online_verify/scripts/tt_test_wrapper.py"

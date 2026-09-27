@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-"""Build the Acorn debs: fpgas-online-acorn-bitstreams and fpgas-online-acorn-tools.
+"""Build fpgas-online-acorn-bitstreams, the images an Acorn host checks its board against.
 
-fpgas-online-acorn-bitstreams carries the images a Pi uses, taken from the GitHub Release pinned in
-release.toml: for each board, the two images its flash should hold, the register maps (csr.json/csr.csv) of
-the builds that can be running, and the operational build's .bit for loading it into SRAM over JTAG (how a
-board still on SQRL's factory image is converted). The rest of the release stays on GitHub. Its version comes
-from the release (`20260921+gf3355dccf443`), so the package, and the apt pool that keeps every version, only
-grows when a reviewed PR moves the pin: moving the pin is also what changes which images the fleet expects.
+It carries the images a Pi uses, taken from the GitHub Release pinned in release.toml: for each board, the
+two images its flash should hold, the register maps (csr.json/csr.csv) of the builds that can be running, and
+the operational build's .bit for loading it into SRAM over JTAG (how a board still on SQRL's factory image is
+converted). The rest of the release stays on GitHub. Its version comes from the release
+(`20260921+gf3355dccf443`), so the package, and the apt pool that keeps every version, only grows when a
+reviewed PR moves the pin: moving the pin is also what changes which images the fleet expects.
 
-fpgas-online-acorn-tools carries acorn_verify.py, spi_flash.py, uartbone_link.py and the boot unit. Its
-version is the repository's (`X.Y.postN` from git describe, as the other fpgas.online debs do) and it
-depends on exactly the pinned bitstreams version, and on an openFPGALoader to load the .bit with.
+The Acorn's other packages (fpgas-online-acorn-tools, -debug and fpgas-online-acorn) are built with every
+other board's by packaging/debs/build_debs.py, which uses this module for the pin and for this package.
 
 Nothing is trusted on the way: the manifest must hash to release.toml's manifest_sha256, and every asset to
 its manifest entry.
@@ -36,7 +35,6 @@ REPO = HERE.parents[1]
 PIN = HERE / "release.toml"
 TAG_RE = re.compile(r"^vivado-bitstreams-acorn-pcie-(\d{8})-g([0-9a-f]{12})$")
 IMAGES_DST = "usr/share/fpgas-online/acorn-pcie/images"
-LIB_DST = "/usr/lib/fpgas-online/acorn-pcie"
 MAINTAINER = "fpgas.online <fpgas@fpgas.online>"
 HOMEPAGE = "https://github.com/fpgas-online/fpgas.online-test-designs"
 
@@ -156,50 +154,6 @@ def bitstreams_nfpm(version, root, tag):
     }
 
 
-def tools_nfpm(version, bitstreams, repo=REPO):
-    host = pathlib.Path(repo) / "designs" / "acorn-pcie" / "host"
-    unit = pathlib.Path(repo) / "packaging" / "acorn-pcie" / "fpgas-acorn-verify.service"
-    exe = {"file_info": {"mode": 0o755}}
-    data = {"file_info": {"mode": 0o644}}
-    return {
-        "name": "fpgas-online-acorn-tools",
-        "arch": "all",
-        "platform": "linux",
-        "version": version,
-        # nfpm otherwise parses the version as semver and rewrites 20260921+gf3355dccf443 to
-        # 20260921.0.0+gf3355dccf443, which the tools package's exact Depends would never match.
-        "version_schema": "none",
-        "maintainer": MAINTAINER,
-        "homepage": HOMEPAGE,
-        "license": "Apache-2.0",
-        "description": (
-            "fpgas.online Acorn checks and flash tool\n"
-            "fpgas-acorn-verify checks, on every boot, that an Acorn runs the expected fpgas.online image and\n"
-            "that its flash holds the expected images, reading only. fpgas-acorn-flash (spi_flash.py) identifies,\n"
-            "dumps, verifies and, when asked, writes the flash over PCIe."
-        ),
-        "depends": [
-            "python3",
-            f"fpgas-online-acorn-bitstreams (= {bitstreams})",
-            # Loads the bitstreams package's .bit into SRAM over GPIO JTAG, which is how a board on SQRL's factory
-            # image is converted. The fpgas.online builds (fpgas.online-fpga-tools) first; both Provide
-            # openfpgaloader, and Debian's own openfpgaloader satisfies a host without that repository.
-            "openfpgaloader-fpgasonline | openfpgaloader-fpgasonline-git | openfpgaloader",
-        ],
-        # fleet-event, which the boot check publishes through; publish() copes without it. Not Recommends: apt
-        # installs those by default, and fpgas-online-setup-pi turns any host into a fleet node.
-        "suggests": ["fpgas-online-setup-pi"],
-        "contents": [
-            {"src": str(host / "acorn_verify.py"), "dst": f"{LIB_DST}/acorn_verify.py", **exe},
-            {"src": str(host / "spi_flash.py"), "dst": f"{LIB_DST}/spi_flash.py", **exe},
-            {"src": str(host / "uartbone_link.py"), "dst": f"{LIB_DST}/uartbone_link.py", **data},
-            {"src": f"{LIB_DST}/acorn_verify.py", "dst": "/usr/bin/fpgas-acorn-verify", "type": "symlink"},
-            {"src": f"{LIB_DST}/spi_flash.py", "dst": "/usr/bin/fpgas-acorn-flash", "type": "symlink"},
-            {"src": str(unit), "dst": "/usr/lib/systemd/system/fpgas-acorn-verify.service", **data},
-        ],
-    }
-
-
 def git_version(repo=REPO):
     """`X.Y` at a vX.Y tag, `X.Y.postN` N commits later: the scheme the other fpgas.online debs use."""
     try:
@@ -231,31 +185,32 @@ def run_nfpm(config, out_dir, nfpm="nfpm"):
         cfg.unlink()
 
 
+def build(out, nfpm="nfpm", from_dir=None, pin_path=PIN):
+    """Build the bitstreams deb into `out`; returns its version."""
+    pin = read_pin(pin_path)
+    bits_version = bitstreams_version(pin["tag"])
+    fetch = local_fetcher(from_dir) if from_dir else release_fetcher(pin["repo"], pin["tag"])
+    raw = fetch("manifest.json")
+    if hashlib.sha256(raw).hexdigest() != pin["manifest_sha256"]:
+        raise BuildError(f"the manifest of {pin['tag']} does not match release.toml's manifest_sha256")
+    manifest = json.loads(raw)
+    if manifest.get("tag") != pin["tag"]:
+        raise BuildError(f"the manifest names release {manifest.get('tag')!r}, not {pin['tag']!r}")
+    with tempfile.TemporaryDirectory() as root:
+        stage_bitstreams(manifest, fetch, root, raw_manifest=raw)
+        run_nfpm(bitstreams_nfpm(bits_version, root, pin["tag"]), out, nfpm)
+    return bits_version
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--out", type=pathlib.Path, required=True, help="where the .deb files go")
+    parser.add_argument("--out", type=pathlib.Path, required=True, help="where the .deb file goes")
     parser.add_argument("--from-dir", type=pathlib.Path, help="a staged release instead of the GitHub Release")
-    parser.add_argument("--only", choices=("bitstreams", "tools"), help="build just one package")
     parser.add_argument("--nfpm", default="nfpm", help="the nfpm binary")
     parser.add_argument("--pin", type=pathlib.Path, default=PIN)
     args = parser.parse_args(argv)
-
     try:
-        pin = read_pin(args.pin)
-        bits_version = bitstreams_version(pin["tag"])
-        if args.only != "tools":
-            fetch = local_fetcher(args.from_dir) if args.from_dir else release_fetcher(pin["repo"], pin["tag"])
-            raw = fetch("manifest.json")
-            if hashlib.sha256(raw).hexdigest() != pin["manifest_sha256"]:
-                raise BuildError(f"the manifest of {pin['tag']} does not match release.toml's manifest_sha256")
-            manifest = json.loads(raw)
-            if manifest.get("tag") != pin["tag"]:
-                raise BuildError(f"the manifest names release {manifest.get('tag')!r}, not {pin['tag']!r}")
-            with tempfile.TemporaryDirectory() as root:
-                stage_bitstreams(manifest, fetch, root, raw_manifest=raw)
-                run_nfpm(bitstreams_nfpm(bits_version, root, pin["tag"]), args.out, args.nfpm)
-        if args.only != "bitstreams":
-            run_nfpm(tools_nfpm(git_version(), bits_version), args.out, args.nfpm)
+        build(args.out, args.nfpm, args.from_dir, args.pin)
     except BuildError as e:
         sys.exit(f"error: {e}")
 

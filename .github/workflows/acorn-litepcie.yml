@@ -44,7 +44,7 @@ env:
     packaging/acorn-litepcie/build_debs.py packaging/acorn-litepcie/prepare_driver.py
     packaging/acorn-litepcie/csr_check.py packaging/acorn-litepcie/container.py
     packaging/acorn-litepcie/publish.py
-    designs/acorn-pcie/host/acorn_verify.py designs/acorn-pcie/host/spi_flash.py
+    verify/src/fpgas_online_verify/boards/acorn/check.py verify/src/fpgas_online_verify/boards/acorn/spi_flash.py
     tests/test_acorn_litepcie.py tests/test_acorn_verify.py tests/test_spi_flash.py
   TESTS: >-
     tests/test_acorn_litepcie.py tests/test_acorn_verify.py tests/test_spi_flash.py

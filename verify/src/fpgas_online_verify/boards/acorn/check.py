@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
 """Check that an Acorn runs the expected fpgas.online image and holds the expected images in its flash.
 
-Runs on every boot of a Pi with an Acorn on PCIe (fpgas-acorn-verify.service), and on demand. Three tiers:
+The Acorn's part of fpgas-verify (the board module is fpgas_online_verify.boards.acorn): run at boot by
+fpgas-verify.service when the host is set up for an Acorn, and on demand as fpgas-acorn-verify. Three tiers:
 
   1. PCI IDs, from sysfs: which image family is running. The fpgas.online SoC is LitePCIe's 10ee:7021 with
      the board named in the subsystem IDs; SQRL's factory image and the vendor XDMA sample are recognised and
@@ -11,45 +11,34 @@ Runs on every boot of a Pi with an Acorn on PCIe (fpgas-acorn-verify.service), a
      names one image exactly. It must be the operational or golden build of the installed release; the
      golden one means the operational slot did not boot (degraded).
   3. The flash, over BAR0 through spi_flash.py (read opcodes only): the golden slot (0x000000) and the
-     operational slot (0x400000) are compared with the images the release puts there.
+     operational slot (0x400000) are read whole and compared with the images the release puts there; their
+     sha256s, with the flash's identity, are the board's state (fpgas_online_verify.state).
 
 A board whose BAR0 a kernel driver holds (litepcie.ko, loaded by an operator) is not read at all: it is
 reported "driver-bound", because two users of BAR0 would drive the same CSRs at once.
 
 Nothing is ever written to the flash or reconfigured: a board that fails is reported, not repaired. The
 images and manifest come from the fpgas-online-acorn-bitstreams package; each installed file is checked
-against the manifest's sha256 before it is trusted. The result is written as JSON to /run, printed, and
-published as a fleet-event `fpga-verified` stage, and the exit status is 0 only for "pass" and "none" (no
-FPGA on PCIe), so a failure also shows as a failed unit.
+against the manifest's sha256 before it is trusted.
 
 Stdlib only: the Pi hosts boot a tmpfs root with no LiteX.
-
-    sudo fpgas-acorn-verify              # check, report, publish
-    sudo fpgas-acorn-verify --no-publish --report -
 """
 
-import argparse
 import contextlib
 import datetime
 import hashlib
-import importlib.util
 import json
 import mmap
 import os
 import pathlib
 import struct
-import subprocess
-import sys
 
-_HERE = pathlib.Path(__file__).resolve().parent
-_spec = importlib.util.spec_from_file_location("spi_flash", _HERE / "spi_flash.py")
-spi_flash = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(spi_flash)
+from ...core import Problem, pci_devices
+from . import spi_flash
 
 SCHEMA_VERSION = 1
 SYSFS_PCI = pathlib.Path("/sys/bus/pci/devices")
 IMAGES = pathlib.Path("/usr/share/fpgas-online/acorn-pcie/images")
-REPORT = pathlib.Path("/run/fpgas-online/acorn-verify.json")
 LOCK = pathlib.Path(spi_flash.LOCK)  # one user of the SoC at a time: this, or an operator's spi_flash.py
 
 CSR_BASE = spi_flash.CSR_BASE
@@ -72,17 +61,7 @@ SLOTS = (("0x000000", spi_flash.GOLDEN_ADDR), ("0x400000", spi_flash.OPERATIONAL
 SEVERITY = ("none", "pass", "driver-bound", "degraded", "unconverted", "fail", "error")
 
 
-class Problem(Exception):
-    def __init__(self, result, reason, **seen):
-        super().__init__(reason)
-        self.result, self.reason, self.seen = result, reason, seen
-
-
 # -- tier 1: PCI IDs ---------------------------------------------------------------------------------
-
-
-def _hex(path):
-    return int(path.read_text().strip(), 16)
 
 
 def classify(vendor, device, sub_vendor, sub_device):
@@ -97,34 +76,30 @@ def classify(vendor, device, sub_vendor, sub_device):
     return "unknown", None
 
 
+def describe(dev, root=SYSFS_PCI):
+    """A Xilinx or SQRL function from core.pci_devices(), classified, with the kernel driver bound to it (a
+    driver holding BAR0 means the board is left alone); None for anyone else's."""
+    if dev["vendor"] not in (XILINX, SQRL):
+        return None
+    ids = (dev["vendor"], dev["device"], dev["subsystem_vendor"], dev["subsystem_device"])
+    kind, variant = classify(*ids)
+    return {
+        "bdf": dev["bdf"],
+        "ids": f"{ids[0]:04x}:{ids[1]:04x}",
+        "subsystem": f"{ids[2]:04x}:{ids[3]:04x}",
+        "kind": kind,
+        "variant": variant,
+        "driver": spi_flash.bound_driver(dev["bdf"], root),
+    }
+
+
 def scan_pci(root=SYSFS_PCI):
     """Every Xilinx or SQRL endpoint under /sys/bus/pci/devices, classified.
 
-    A Pi with no PCIe at all (a Pi 3, an Orange Pi) has no such directory: that is no devices, not an error.
+    A Pi with no PCIe at all (a Pi 3, an Orange Pi) has no such directory: that is no devices, not an error
+    (core.pci_devices).
     """
-    root = pathlib.Path(root)
-    if not root.is_dir():
-        return []
-    found = []
-    for d in sorted(root.iterdir()):
-        try:
-            ids = [_hex(d / n) for n in ("vendor", "device", "subsystem_vendor", "subsystem_device")]
-        except (OSError, ValueError):
-            continue
-        if ids[0] not in (XILINX, SQRL):
-            continue
-        kind, variant = classify(*ids)
-        found.append(
-            {
-                "bdf": d.name,
-                "ids": f"{ids[0]:04x}:{ids[1]:04x}",
-                "subsystem": f"{ids[2]:04x}:{ids[3]:04x}",
-                "kind": kind,
-                "variant": variant,
-                "driver": spi_flash.bound_driver(d.name, root),
-            }
-        )
-    return found
+    return [d for d in (describe(dev, root) for dev in pci_devices(root)) if d]
 
 
 # -- BAR0 --------------------------------------------------------------------------------------------
@@ -287,6 +262,13 @@ def _flash_identity(flash):
     }
 
 
+def _first_difference(held, want):
+    """The offset of the first byte of `want` that `held` (read from the start of the slot) does not match."""
+    if held[: len(want)] == want:
+        return None
+    return next(i for i in range(len(want)) if held[i] != want[i])
+
+
 def _check_board(dev, images, release, open_bar):
     _tier1(dev)
     _not_driver_bound(dev)
@@ -301,10 +283,12 @@ def _check_board(dev, images, release, open_bar):
         identity = _flash_identity(flash)
         slots = []
         for slot, addr in SLOTS:
-            diff = flash.first_difference(addr, slot_images[slot])
-            entry = {"slot": slot, "asset": layout[slot], "result": "match" if diff is None else "mismatch"}
+            held = flash.read(addr, spi_flash.SLOT_SIZE)  # the whole slot: its sha256 is part of the state
+            diff = _first_difference(held, slot_images[slot])
+            entry = {"slot": slot, "asset": layout[slot], "result": "match" if diff is None else "mismatch",
+                     "sha256": hashlib.sha256(held).hexdigest()}  # fmt: skip
             if diff is not None:
-                entry["first_difference"] = f"{diff:#x}"
+                entry["first_difference"] = f"{addr + diff:#x}"
             slots.append(entry)
         out["flash"] = {**identity, "slots": slots}
 
@@ -377,86 +361,5 @@ def verify(devices, images=IMAGES, open_bar=open_bar0):
 
 
 def exit_code(report):
+    """0 for what is fine as far as this module goes: pass, an identity read, or no Acorn at all."""
     return 0 if report["result"] in ("pass", "read", "none") else 1
-
-
-# -- reporting ---------------------------------------------------------------------------------------
-
-
-def fleet_event_argv(report):
-    """`fleet-event fpga-verified` with a flat summary: fleet-event details are single strings."""
-    details = {"result": report["result"], "release": report["release"] or "-"}
-    for i, b in enumerate(report["boards"]):
-        details[f"board{i}"] = f"{b['bdf']} {b['kind']} {b['variant'] or '-'} {b['result']}"
-        if "running" in b:
-            details[f"board{i}_identifier"] = b["running"]["identifier"]
-        if "flash" in b:
-            details[f"board{i}_flash"] = " ".join(f"{s['slot']}={s['result']}" for s in b["flash"]["slots"])
-        if "reason" in b:
-            details[f"board{i}_reason"] = b["reason"]
-    argv = ["fleet-event", "fpga-verified"]
-    for k, v in details.items():
-        argv += ["--detail", f"{k}={v}"]
-    return argv
-
-
-def publish(report, kept_in):
-    """Send the fleet-event. A failure is reported loudly but does not change the result: the hardware is
-    what it is whether or not the broker heard about it, and `kept_in` still holds the report."""
-    argv = fleet_event_argv(report)
-    try:
-        subprocess.run(argv, check=True, timeout=60)
-    except (OSError, subprocess.SubprocessError) as e:
-        print(f"fpgas-acorn-verify: could not publish the result ({e}); the report is in {kept_in}", file=sys.stderr)
-        return False
-    return True
-
-
-def _summary(report):
-    lines = [f"acorn verify: {report['result']} (release {report['release'] or '-'})"]
-    for b in report["boards"]:
-        lines.append(f"  {b['bdf']} {b['ids']} subsystem {b['subsystem']}: {b['kind']} {b['variant'] or '-'}")
-        if "running" in b:
-            lines.append(f"    running  {b['running']['identifier']!r} ({b['running']['build'] or 'not in release'})")
-        for s in b.get("flash", {}).get("slots", []):
-            where = f" at {s['first_difference']}" if "first_difference" in s else ""
-            lines.append(f"    flash    {s['slot']} {s['result']}{where}  ({s['asset']})")
-        if "reason" in b:
-            lines.append(f"    {b['result']}: {b['reason']}")
-    return "\n".join(lines)
-
-
-def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--images", type=pathlib.Path, default=IMAGES, help="installed release (manifest.json)")
-    parser.add_argument("--report", default=str(REPORT), help="where to write the JSON report ('-' for stdout)")
-    parser.add_argument("--no-publish", action="store_true", help="do not send the fleet-event")
-    parser.add_argument(
-        "--identify",
-        action="store_true",
-        help="print each board's flash part, JEDEC id and unique id as JSON, read live, and nothing else",
-    )
-    args = parser.parse_args(argv)
-
-    check = identify if args.identify else verify
-    with spi_flash.hold_lock(str(LOCK)):
-        report = check(scan_pci(), args.images)
-    if args.identify:
-        sys.stdout.write(json.dumps(report, indent=2) + "\n")
-        return exit_code(report)
-
-    text = json.dumps(report, indent=2) + "\n"
-    if args.report == "-":
-        sys.stdout.write(text)
-    else:
-        out = pathlib.Path(args.report)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(text)
-    print(_summary(report), file=sys.stderr)
-    if not args.no_publish:
-        publish(report, "stdout" if args.report == "-" else args.report)
-    return exit_code(report)
-
-
-if __name__ == "__main__":
-    sys.exit(main())

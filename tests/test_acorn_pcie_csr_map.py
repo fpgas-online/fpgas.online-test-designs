@@ -73,9 +73,8 @@ def test_operational_only_modules_sit_above_the_pinned_block(maps):
 
 def test_the_host_link_helper_uses_the_addresses_the_gateware_has(maps):
     operational, _ = maps
-    host = pathlib.Path(__file__).resolve().parents[1] / "designs" / "acorn-pcie" / "host" / "uartbone_link.py"
-    if not host.exists():
-        pytest.skip("host helper lands in Phase 2")
+    host = (pathlib.Path(__file__).resolve().parents[1] / "verify" / "src" / "fpgas_online_verify" / "boards"
+            / "acorn" / "uartbone_link.py")  # fmt: skip
     spec = importlib.util.spec_from_file_location("uartbone_link", host)
     link = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(link)
