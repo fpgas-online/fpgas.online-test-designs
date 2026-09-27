@@ -7,6 +7,7 @@ scripts) goes through a fake runner that records it and answers as the hardware 
 import hashlib
 import json
 import struct
+import sys
 
 import pytest
 from fpgas_online_verify import cli, core, debug, host_tests
@@ -231,6 +232,35 @@ def test_a_netv2_on_a_pi3_loads_with_openocd_and_frees_its_uart(tmp_path):
     dump = run.calls[-1]
     assert dump[:3] == ["openFPGALoader", "--cable", "libgpiod"] and "xc7a100tfgg484" in dump
     assert report["state"]["idcode"] == "0x13631093"
+
+
+def test_the_netv2_spi_flash_test_listens_before_its_design_is_loaded(tmp_path):
+    """Its firmware prints the JEDEC ID once, at start, onto ttyAMA0 (pi-sw1-p10, 2026-09-27): listen.py."""
+    run = Runner(flash=b"\0" * NETV2.flash_region["a7-35"])
+    _check(NETV2, tmp_path, {"variant": "a7-35", "idcode": "0x0362d093"}, run)
+    (argv,) = [c for c in run.calls if "fpgas_online_verify.listen" in c]
+    assert argv[3] == "/dev/ttyAMA0"
+    test, program = argv[5 : 5 + int(argv[4])], argv[5 + int(argv[4]) :]
+    assert test[1].endswith("test_spiflash.py") and program[0] == "openocd"
+    assert "spiflash-test-netv2-a7-35t/kosagi_netv2.bit" in program[-1]
+
+
+def test_listen_loads_the_design_only_once_the_test_has_its_port_open(tmp_path):
+    """The stand-in 'test' opens the port file, then waits for what the 'programmer' appends to it."""
+    from fpgas_online_verify import listen
+
+    port = tmp_path / "ttyFAKE"
+    port.write_text("")
+    test = [
+        sys.executable,
+        "-c",
+        "import sys, time\nf = open(sys.argv[1])\nfor _ in range(200):\n"
+        "    if 'STARTED' in f.read(): sys.exit(0)\n    f.seek(0); time.sleep(0.05)\nsys.exit(1)",
+        str(port),
+    ]
+    program = [sys.executable, "-c", "import sys; open(sys.argv[1], 'a').write('STARTED')", str(port)]
+    assert listen.main([str(port), str(len(test)), *test, *program]) == 0
+    assert listen.main([str(port), str(len(test)), *test, sys.executable, "-c", "raise SystemExit(3)"]) == 3
 
 
 def test_a_netv2_on_a_pi5_loads_with_rp1pio_and_muxes_its_uart(tmp_path):

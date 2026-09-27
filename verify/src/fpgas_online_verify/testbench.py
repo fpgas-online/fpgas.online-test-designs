@@ -14,6 +14,7 @@ programmer and its tests; `tests` maps a test to:
   verify        True if the boot check runs it; the others need extra wiring (fpgas-<board>-debug runs them)
   pre           commands to run first (each may fail)
   runner        "tt-bridge": the script runs through the TT board's RP2350, which also loads the design
+  listen        True if the script must have the UART open before the design starts (listen.py)
   program_args  extra arguments to the programmer
 """
 
@@ -129,11 +130,18 @@ class TestBoard(Board):
             for step in self.pre_steps(test, host):
                 with contextlib.suppress(Problem):
                     runner(step, 30)
-            if t.get("runner") != "tt-bridge":  # the bridge loads the design itself
-                rc, text = runner(self.program_argv(bitstream, host, test), PROGRAM_TIMEOUT)
-                if rc != 0:
-                    return {**out, "result": "fail", "reason": f"loading it failed (exit {rc})", "output": tail(text)}
-            rc, text = runner(self.test_argv(test, host, bitstream), TEST_TIMEOUT)
+            if t.get("listen"):  # the test must be listening before the design starts: listen.py
+                test_argv = self.test_argv(test, host, bitstream)
+                argv = [sys.executable, "-m", "fpgas_online_verify.listen", host["port"], str(len(test_argv)),
+                        *test_argv, *self.program_argv(bitstream, host, test)]  # fmt: skip
+                rc, text = runner(argv, PROGRAM_TIMEOUT + TEST_TIMEOUT)
+            else:
+                if t.get("runner") != "tt-bridge":  # the bridge loads the design itself
+                    rc, text = runner(self.program_argv(bitstream, host, test), PROGRAM_TIMEOUT)
+                    if rc != 0:
+                        return {**out, "result": "fail", "reason": f"loading it failed (exit {rc})",
+                                "output": tail(text)}  # fmt: skip
+                rc, text = runner(self.test_argv(test, host, bitstream), TEST_TIMEOUT)
         except Problem as p:
             return {**out, "result": p.result, "reason": p.reason}
         found = {"result": "pass" if rc == 0 else "fail", "output": tail(text)}

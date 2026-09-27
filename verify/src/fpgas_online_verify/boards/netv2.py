@@ -57,7 +57,8 @@ class NeTV2(TestBoard):
         "ddr": {"artifact": "ddr-test-netv2-{v}/kosagi_netv2.bit", "script": "test_ddr.py",
                 "args": ["--port", "{port}", "--board", "netv2"], "verify": True},
         "spiflash": {"artifact": "spiflash-test-netv2-{v}/kosagi_netv2.bit", "script": "test_spiflash.py",
-                     "args": ["--port", "{port}", "--board", "netv2"], "verify": True},
+                     "args": ["--port", "{port}", "--board", "netv2"], "verify": True,
+                     "listen": True},  # it prints its JEDEC ID once, at start, onto the Pi's own UART
         "ethernet": {"artifact": "ethernet-test-netv2-{v}/kosagi_netv2.bit", "script": "test_ethernet.py",
                      "args": ["--board", "netv2", "--uart-port", "{port}"]},
         "pmod": {"artifact": "gpio-loopback-netv2-{v}/top.bit", "script": "test_pmod_loopback.py",

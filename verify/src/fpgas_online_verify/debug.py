@@ -15,6 +15,7 @@ identification (a PMOD HAT) and Ethernet (a USB Ethernet adapter).
 
 import json
 import subprocess
+import sys
 
 from . import bitstreams
 from .core import Problem, hold_lock, pci_devices, usb_devices
@@ -98,6 +99,10 @@ def _program(board, host, args, bitstream, then_test):
         if not then_test:
             return _live(board.program_argv(bitstream, host, args.test))
         return _live([*board.test_argv(args.test, host, bitstream), *args.extra])
+    if then_test and board.tests[args.test].get("listen"):  # the test listens first: see listen.py
+        test = [*board.test_argv(args.test, host, bitstream), *args.extra]
+        return _live([sys.executable, "-m", "fpgas_online_verify.listen", host["port"], str(len(test)), *test,
+                      *board.program_argv(bitstream, host, args.test)])  # fmt: skip
     rc = _live(board.program_argv(bitstream, host, args.test))
     if rc != 0 or not then_test:
         return rc
