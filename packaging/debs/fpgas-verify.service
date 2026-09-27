@@ -10,9 +10,10 @@ Description=Verify this Pi's FPGA board with the fpgas.online test bitstreams
 Documentation=https://github.com/fpgas-online/fpgas.online-test-designs/blob/main/docs/plans/2026-09-26-fpgas-online-verify-design.md
 Wants=network-online.target
 After=network-online.target fpgas-fleet-agent.service
-# The TT site's bridge holds the TT board's USB serial port while it runs, so it starts once the check is done
-# (the TT check also stops and restarts it around a run by hand). Ordering only: nothing is pulled in.
-Before=fpgas-tt.service
+# No ordering against fpgas-tt.service (the TT site's bridge, which holds the TT board's USB serial port): the
+# TT check stops and restarts it around its run by hand. Before=fpgas-tt.service would close a cycle, since the
+# fleet agent is After=fpgas-tt.service and this unit is After= the fleet agent, and systemd breaks a cycle by
+# dropping a start job: it dropped the fleet agent's.
 
 [Service]
 Type=oneshot

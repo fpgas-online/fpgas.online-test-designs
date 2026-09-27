@@ -125,3 +125,15 @@ def test_every_package_keeps_its_version_as_given(tmp_path):
         configs += [bd.tools_nfpm(board, V, V, tmp_path), bd.debug_nfpm(board, V, tmp_path),
                     bd.board_mode_nfpm(board, V, tmp_path)]  # fmt: skip
     assert {c["version_schema"] for c in configs} == {"none"} and {c["arch"] for c in configs} == {"all"}
+
+
+def test_the_boot_check_unit_orders_nothing_before_the_tt_bridge():
+    """The fleet agent is After=fpgas-tt.service and the boot check is After= the fleet agent, so a
+    Before=fpgas-tt.service here makes an ordering cycle, which systemd breaks by dropping a start job (in the
+    VM test, the fleet agent's). The TT check stops and restarts the bridge itself."""
+    unit = (_REPO / "packaging" / "debs" / "fpgas-verify.service").read_text()
+    lines = [line.split("=", 1) for line in unit.splitlines() if "=" in line and not line.startswith("#")]
+    before = " ".join(v for k, v in lines if k.strip() == "Before").split()
+    after = " ".join(v for k, v in lines if k.strip() == "After").split()
+    assert "fpgas-fleet-agent.service" in after
+    assert "fpgas-tt.service" not in before
