@@ -106,7 +106,9 @@ def test_usb_boards_are_found_with_their_serial(tmp_path):
     assert FOMU.spot(_host(FOMU), usb, []) == []
 
 
-def test_the_acorn_is_spotted_on_pci_and_other_xilinx_designs_are_not_claimed():
+def test_the_acorn_claims_every_xilinx_endpoint_and_fails_a_design_it_did_not_build():
+    """pi-sw2-p37 runs a LiteX PCIe design with the Xilinx default subsystem (10ee:0007): an FPGA is there,
+    so it is a board that fails, never "missing"."""
     pci = [
         {"bdf": "0001:01:00.0", "vendor": 0x10EE, "device": 0x7021,
          "subsystem_vendor": 0x1E24, "subsystem_device": 0x021F},
@@ -114,8 +116,11 @@ def test_the_acorn_is_spotted_on_pci_and_other_xilinx_designs_are_not_claimed():
          "subsystem_vendor": 0x10EE, "subsystem_device": 0x0007},
         {"bdf": "0003:01:00.0", "vendor": 0x14E4, "device": 0x1234, "subsystem_vendor": 0, "subsystem_device": 0},
     ]  # fmt: skip
-    (found,) = ACORN.spot({}, [], pci)
-    assert found["bdf"] == "0001:01:00.0" and found["kind"] == "fpgas-online" and found["variant"] == "cle-215+"
+    ours, other = ACORN.spot({}, [], pci)
+    assert ours["bdf"] == "0001:01:00.0" and ours["kind"] == "fpgas-online" and ours["variant"] == "cle-215+"
+    assert other["bdf"] == "0002:01:00.0" and other["kind"] == "litex-other"
+    report = ACORN.check({}, other, {"images": "/nonexistent"})
+    assert report["result"] == "fail" and "not a design we built" in report["reason"]
 
 
 def test_a_pi_with_no_pci_or_usb_bus_has_no_devices_and_finds_no_acorn(tmp_path):
@@ -241,11 +246,28 @@ def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_rea
     run = Runner()
     report = _check(TT, tmp_path, {"variant": "tt-fpga", "usb": "1-2", "serial": "E6"}, run)
     assert report["result"] == "pass"
-    first = run.calls[0]
+    # the TT site's bridge holds /dev/ttyACM0 (pi-sw2-p33, 2026-09-27): stopped for the tests, started after
+    assert run.calls[:2] == [
+        ["systemctl", "is-active", "--quiet", "fpgas-tt.service"],
+        ["systemctl", "stop", "fpgas-tt.service"],
+    ]
+    assert run.calls[-1] == ["systemctl", "start", "fpgas-tt.service"]
+    assert report["services_stopped"] == ["fpgas-tt.service"]
+    first = run.calls[2]
     assert first[1].endswith("tt_test_wrapper.py") and first[2] == "/dev/ttyACM0"
     assert first[3].endswith("uart-test-tt-fpga/tt_fpga_platform.bin") and first[5].endswith("test_uart.py")
     assert not any("tt_fpga_program.py" in " ".join(c) for c in run.calls)  # the bridge loads it
     assert report["state"] == {"variant": "tt-fpga", "serial": "E6"} and "rewrites" in report["flash_note"]
+
+
+def test_a_stopped_bridge_is_left_stopped_and_a_failed_test_still_restarts_a_running_one(tmp_path):
+    idle = Runner([("is-active", (3, "inactive"))])
+    report = _check(TT, tmp_path, {"variant": "tt-fpga", "usb": "1-2", "serial": "E6"}, idle)
+    assert not any(c[:2] == ["systemctl", "stop"] or c[:2] == ["systemctl", "start"] for c in idle.calls)
+    assert "services_stopped" not in report
+    failing = Runner([("tt_test_wrapper.py", (1, "could not enter raw repl"))])
+    report = _check(TT, tmp_path, {"variant": "tt-fpga", "usb": "1-2", "serial": "E6"}, failing)
+    assert report["result"] == "fail" and failing.calls[-1] == ["systemctl", "start", "fpgas-tt.service"]
 
 
 def test_the_fomu_state_is_its_serial_only(tmp_path):

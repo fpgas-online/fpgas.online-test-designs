@@ -52,6 +52,25 @@ class TestBoard(Board):
 
     flash_region: ClassVar[dict] = {}  # variant -> bytes of flash holding the boot image (a whole .bit for that part)
     flash_note = ""  # when there is no readback: why the flash is not part of the state
+    # systemd units that hold the board's port while they run (the TT site's bridge, fpgas-tt, holds the TT
+    # board's /dev/ttyACM0): stopped for the tests, and started again after if they were running.
+    services: ClassVar[tuple] = ()
+
+    @contextlib.contextmanager
+    def services_stopped(self, runner=run):
+        """Stop whichever of `services` are running; start them again on the way out, whatever happened."""
+        stopped = []
+        for unit in self.services:
+            with contextlib.suppress(Problem):
+                running = runner(["systemctl", "is-active", "--quiet", unit], 30)[0] == 0
+                if running and runner(["systemctl", "stop", unit], 60)[0] == 0:
+                    stopped.append(unit)
+        try:
+            yield stopped
+        finally:
+            for unit in stopped:
+                with contextlib.suppress(Problem):
+                    runner(["systemctl", "start", unit], 60)
 
     # -- detection -----------------------------------------------------------------------------------------
 
@@ -163,8 +182,11 @@ class TestBoard(Board):
         except Problem as p:
             return {**report, "result": p.result, "reason": p.reason}
         report["bitstreams"] = manifest.get("version")
-        for test in options.get("tests") or self.verify_tests:
-            report["tests"].append(self.run_test(test, variant, host, images, manifest, runner))
+        with self.services_stopped(runner) as stopped:
+            for test in options.get("tests") or self.verify_tests:
+                report["tests"].append(self.run_test(test, variant, host, images, manifest, runner))
+        if stopped:
+            report["services_stopped"] = stopped
         state = self.identity({**found, "variant": variant})
         jedec = next((t["flash_jedec"] for t in report["tests"] if "flash_jedec" in t), None)
         if jedec:

@@ -87,6 +87,11 @@ def program(board, host, args, then_test=False):
     images = bitstreams.images_dir(board.slug, args.images)
     manifest = bitstreams.load_manifest(images, board.bitstreams_package)
     bitstream = board.bitstream(images, manifest, args.test, variant)
+    with board.services_stopped(lambda argv, timeout: (_live(argv), "")):
+        return _program(board, host, args, bitstream, then_test)
+
+
+def _program(board, host, args, bitstream, then_test):
     for step in board.pre_steps(args.test, host):
         _live(step)
     if board.tests[args.test].get("runner") == "tt-bridge":  # loads the design and bridges the UART in one go
