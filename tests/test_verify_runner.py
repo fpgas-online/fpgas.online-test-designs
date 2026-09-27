@@ -9,9 +9,10 @@
 """
 
 import json
+import subprocess
 
 import pytest
-from fpgas_online_verify import config, runner, state
+from fpgas_online_verify import config, core, runner, state
 from fpgas_online_verify.board import Board, installed
 from fpgas_online_verify.core import Problem
 
@@ -308,7 +309,7 @@ def test_the_start_is_published_before_the_result(opts, tmp_path, monkeypatch):
     monkeypatch.setattr(runner, "usb_devices", lambda: [])
     monkeypatch.setattr(runner, "pci_devices", lambda: [])
     sent = []
-    monkeypatch.setattr(runner, "publish", lambda stage, details, kept_in, prog: sent.append((stage, details)))
+    monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append((stage, details)))
     out = tmp_path / "r.json"
     assert runner.run({**opts, "board": "arty", "report": str(out), "no_publish": False}) == 0
     assert [s for s, _ in sent] == ["fpga-verifying", "fpga-verified"]
@@ -316,6 +317,23 @@ def test_the_start_is_published_before_the_result(opts, tmp_path, monkeypatch):
     sent.clear()
     runner.run({**opts, "board": "arty", "report": str(out), "no_publish": True})
     assert sent == []
+
+
+def test_a_publish_that_times_out_is_said_and_changes_nothing(monkeypatch, capsys):
+    seen = {}
+
+    def hung(argv, check, timeout):
+        seen["timeout"] = timeout
+        raise subprocess.TimeoutExpired(argv, timeout)
+
+    monkeypatch.setattr(core.subprocess, "run", hung)
+    assert core.publish("fpga-verifying", {"started_at": "now"}, timeout=15) is False
+    assert seen["timeout"] == 15
+    err = capsys.readouterr().err
+    assert "could not publish fpga-verifying" in err and "the report is in" not in err
+    assert core.publish("fpga-verified", {"result": "pass"}, "/run/fpgas-online/verify.json") is False
+    assert seen["timeout"] == 60
+    assert "the report is in /run/fpgas-online/verify.json" in capsys.readouterr().err
 
 
 def test_every_board_module_is_found():

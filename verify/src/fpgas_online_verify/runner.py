@@ -210,7 +210,8 @@ def run(options, prog="fpgas-verify"):
     kept_in = options.get("report") or str(REPORT)
     if not options.get("no_publish"):
         # The site hears the check has started, and says the board is being verified until the result follows.
-        publish("fpga-verifying", {"started_at": _now()}, kept_in, prog)
+        # A short timeout: a broker that is down must not hold up the check (nor fpgas-tt, which waits for it).
+        publish("fpga-verifying", {"started_at": _now()}, prog=prog, timeout=15)
     report = verify(options)
     kept_in = write(report, kept_in)
     print(summary(report), file=sys.stderr)
