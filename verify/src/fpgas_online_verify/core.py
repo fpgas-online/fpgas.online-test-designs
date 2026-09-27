@@ -191,12 +191,13 @@ def fleet_event_argv(stage, details):
     return argv
 
 
-def publish(stage, details, kept_in, prog="fpgas-verify"):
+def publish(stage, details, kept_in=None, prog="fpgas-verify", timeout=60):
     """Send a fleet-event. A failure is reported loudly but does not change the result: the hardware is what
-    it is whether or not the broker heard about it, and `kept_in` still holds the report."""
+    it is whether or not the broker heard about it, and `kept_in` (when given) still holds the report."""
     try:
-        subprocess.run(fleet_event_argv(stage, details), check=True, timeout=60)
+        subprocess.run(fleet_event_argv(stage, details), check=True, timeout=timeout)
     except (OSError, subprocess.SubprocessError) as e:
-        print(f"{prog}: could not publish the result ({e}); the report is in {kept_in}", file=sys.stderr)
+        where = f"; the report is in {kept_in}" if kept_in else ""
+        print(f"{prog}: could not publish {stage} ({e}){where}", file=sys.stderr)
         return False
     return True

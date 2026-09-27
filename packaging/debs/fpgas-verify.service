@@ -1,17 +1,23 @@
 # Installed by fpgas-online-verify; enabled by the mode package (fpgas-online-<board>, or fpgas-online-multi-board
 # and so fpgas-online-all-boards). Runs fpgas-verify once per boot: check the board (or boards) the host is set
 # up for, with the fpgas.online test bitstreams, and compare it with the state recorded last time. The board
-# is left running a test design. The result is in /run/fpgas-online/verify.json and is published as the
-# fleet-event stage `fpga-verified`; anything but "pass" leaves this unit failed.
+# is left running a test design. It publishes the fleet-event stage `fpga-verifying` as it starts; the result is
+# in /run/fpgas-online/verify.json and is published as the stage `fpga-verified`; anything but "pass" leaves
+# this unit failed.
 # To accept a board flashed or swapped on purpose: sudo fpgas-verify --update.
 # Options (for example --no-probe): FPGAS_VERIFY_ARGS in /etc/default/fpgas-verify.
 [Unit]
 Description=Verify this Pi's FPGA board with the fpgas.online test bitstreams
 Documentation=https://github.com/fpgas-online/fpgas.online-test-designs/blob/main/docs/plans/2026-09-26-fpgas-online-verify-design.md
 Wants=network-online.target
+# After the fleet agent: the site knows the Pi is up (registered, online) before the check starts, and hears
+# `fpga-verifying` when it does, so it can say the board is being verified rather than show nothing.
 After=network-online.target fpgas-fleet-agent.service
-# The TT site's bridge holds the TT board's USB serial port while it runs, so it starts once the check is done
-# (the TT check also stops and restarts it around a run by hand). Ordering only: nothing is pulled in.
+# The Pi is not ready for anyone to use until its board is verified, so what serves it waits for this check to
+# finish: the TT site's bridge, which also holds the TT board's USB serial port. Ordering only: a failed check
+# still lets it start, and nothing here holds up ssh, so someone can log in and look. The fleet agent must not
+# be After=fpgas-tt.service (setup-pi): with this line that is an ordering cycle, which systemd breaks by
+# dropping a start job.
 Before=fpgas-tt.service
 
 [Service]
