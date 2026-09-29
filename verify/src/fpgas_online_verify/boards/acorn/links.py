@@ -27,21 +27,36 @@ JTAG_TIMEOUT = 60
 # The IDCODE of each variant's FPGA, the revision nibble masked off (check.py's variants).
 IDCODES = {"cle-215+": 0x3636093, "cle-215": 0x3636093, "cle-101": 0x3631093}
 IDCODE_RE = re.compile(r"idcode\s+(0x[0-9a-fA-F]+)")
-# openFPGALoader's libgpiod cable opens /dev/gpiochip0; on a Pi 5 the 40-pin header is gpiochip15.
-GPIOCHIP, HEADER_GPIOCHIP = "/dev/gpiochip0", "/dev/gpiochip15"
+# openFPGALoader's libgpiod cable opens /dev/gpiochip0. On a Pi 5 the 40-pin header is the RP1's GPIO chip,
+# found by its device-tree compatible, not by number: pi-sw2-p37 (2026-09-30) had gpiochip11-15, 15 the RP1.
+GPIOCHIP = "/dev/gpiochip0"
+SYSFS_GPIO = "/sys/bus/gpio/devices"
+HEADER_COMPATIBLE = b"raspberrypi,rp1-gpio"
 UART = "/dev/ttyAMA0"
 
 
-def _header_gpiochip():
-    """Point /dev/gpiochip0 at the header chip (devtmpfs: gone at reboot). A freshly booted Pi 5 has no
-    gpiochip0 (pi-sw2-p37, 2026-09-30: gpiochip11-15, 15 = pinctrl-rp1); if some other chip is gpiochip0,
-    probing it would test the wrong pins, so that is refused."""
-    if not os.path.lexists(GPIOCHIP):
-        if os.path.exists(HEADER_GPIOCHIP):
-            os.symlink(HEADER_GPIOCHIP, GPIOCHIP)
-        return
-    if os.path.realpath(GPIOCHIP) != os.path.realpath(HEADER_GPIOCHIP):
-        raise Problem("error", f"{GPIOCHIP} is not the 40-pin header ({HEADER_GPIOCHIP}): P1 JTAG not probed")
+def header_chip(sysfs=SYSFS_GPIO, dev="/dev"):
+    """The device path of the RP1's GPIO chip, or None."""
+    for chip in sorted(os.listdir(sysfs)) if os.path.isdir(sysfs) else []:
+        try:
+            with open(f"{sysfs}/{chip}/of_node/compatible", "rb") as f:
+                if HEADER_COMPATIBLE in f.read().split(b"\0"):
+                    return f"{dev}/{chip}"
+        except OSError:
+            continue
+    return None
+
+
+def _header_gpiochip(gpiochip=GPIOCHIP, sysfs=SYSFS_GPIO, dev="/dev"):
+    """Make /dev/gpiochip0 the header chip (a symlink in devtmpfs, gone at reboot). A freshly booted Pi 5 has
+    no gpiochip0; if some other chip is gpiochip0, probing it would test the wrong pins, so that is refused."""
+    header = header_chip(sysfs, dev)
+    if header is None:
+        raise Problem("error", "no RP1 GPIO chip (raspberrypi,rp1-gpio): P1 JTAG not probed")
+    if not os.path.lexists(gpiochip):
+        os.symlink(header, gpiochip)
+    elif os.path.realpath(gpiochip) != os.path.realpath(header):
+        raise Problem("error", f"{gpiochip} is not the 40-pin header ({header}): P1 JTAG not probed")
 
 
 def _release_pins(run):

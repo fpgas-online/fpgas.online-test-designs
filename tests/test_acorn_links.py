@@ -5,6 +5,10 @@ Real output from pi-sw2-p48 (2026-09-29): `openFPGALoader --cable libgpiod --pin
 reported dead (test-designs #55) with nothing in the boot check to say so.
 """
 
+import os
+import pathlib
+
+import pytest
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
 from fpgas_online_verify.boards.acorn import check as acorn_check
 from fpgas_online_verify.boards.acorn import links, uartbone_link
@@ -133,25 +137,44 @@ def test_a_missing_openfpgaloader_is_an_error_not_a_board_fault():
     assert t["result"] == "error"
 
 
-def test_a_gpiochip0_that_is_not_the_header_is_refused(tmp_path, monkeypatch):
-    other, header = tmp_path / "gpiochip0", tmp_path / "gpiochip15"
-    other.write_text("")
-    header.write_text("")
-    monkeypatch.setattr(links, "GPIOCHIP", str(other))
-    monkeypatch.setattr(links, "HEADER_GPIOCHIP", str(header))
+def _pi5(tmp_path, rp1="gpiochip15"):
+    """A Pi 5's /sys/bus/gpio/devices and /dev as on pi-sw2-p37 (2026-09-30): gpiochip11-14 the SoC's, the RP1's."""
+    sysfs, dev = tmp_path / "sys", tmp_path / "dev"
+    dev.mkdir()
+    for n in (11, 12, 13, 14, int(rp1.removeprefix("gpiochip"))):
+        chip = f"gpiochip{n}"
+        (sysfs / chip / "of_node").mkdir(parents=True)
+        compat = b"raspberrypi,rp1-gpio\0" if chip == rp1 else b"brcm,brcmstb-gpio\0"
+        (sysfs / chip / "of_node" / "compatible").write_bytes(compat)
+        (dev / chip).write_text("")
+    return str(sysfs), str(dev)
+
+
+def test_a_fresh_pi5_gets_gpiochip0_linked_to_the_rp1_chip(tmp_path):
+    sysfs, dev = _pi5(tmp_path)
+    links._header_gpiochip(f"{dev}/gpiochip0", sysfs, dev)
+    assert os.path.realpath(f"{dev}/gpiochip0") == os.path.realpath(f"{dev}/gpiochip15")
+    links._header_gpiochip(f"{dev}/gpiochip0", sysfs, dev)  # the next boot check: already right
+
+
+def test_the_rp1_chip_is_found_by_compatible_not_by_number(tmp_path):
+    sysfs, dev = _pi5(tmp_path, rp1="gpiochip4")
+    assert links.header_chip(sysfs, dev) == f"{dev}/gpiochip4"
+
+
+def test_a_gpiochip0_that_is_not_the_header_is_refused(tmp_path):
+    sysfs, dev = _pi5(tmp_path)
+    pathlib.Path(dev, "gpiochip0").write_text("")  # some other chip
+    with pytest.raises(Problem, match="is not the 40-pin header"):
+        links._header_gpiochip(f"{dev}/gpiochip0", sysfs, dev)
+
+
+def test_no_rp1_chip_is_an_error_and_openfpgaloader_is_not_run(tmp_path, monkeypatch):
+    monkeypatch.setattr(links, "SYSFS_GPIO", str(tmp_path / "none"))
     run = Run()
-    t = links.jtag("cle-215+", run)
-    assert t["result"] == "error" and "is not the 40-pin header" in t["reason"]
+    t = links.jtag("cle-215+", run, gpiochip=lambda: links._header_gpiochip(sysfs=str(tmp_path / "none")))
+    assert t["result"] == "error" and "no RP1 GPIO chip" in t["reason"]
     assert not any(c[0] == "openFPGALoader" for c in run.calls)
-
-
-def test_a_fresh_pi5_gets_gpiochip0_linked_to_the_header(tmp_path, monkeypatch):
-    header = tmp_path / "gpiochip15"
-    header.write_text("")
-    monkeypatch.setattr(links, "GPIOCHIP", str(tmp_path / "gpiochip0"))
-    monkeypatch.setattr(links, "HEADER_GPIOCHIP", str(header))
-    assert links.jtag("cle-215+", Run())["result"] == "pass"
-    assert (tmp_path / "gpiochip0").resolve() == header.resolve()
 
 
 def test_no_pyserial_is_an_error_not_a_crash(monkeypatch):
