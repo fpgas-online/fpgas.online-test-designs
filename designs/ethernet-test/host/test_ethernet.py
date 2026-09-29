@@ -39,59 +39,39 @@ BIOS_TIMEOUT = 30  # seconds to wait for BIOS boot
 # -- Network interface detection -----------------------------------------------
 
 
-def find_usb_ethernet_interface():
-    """Find the network interface name of the USB Ethernet adapter.
+def pick_test_interface(usb_ifaces, in_use):
+    """The one USB Ethernet adapter that is free for the test, or None with the reason.
 
-    Returns the interface name (e.g., 'eth1', 'enx60e0...') or None.
-    We identify USB Ethernet adapters by checking sysfs for USB bus paths.
+    An interface the Pi itself uses (it carries the default route or an address of its own) is never a
+    candidate, whatever bus it is on: a Pi 3B+'s only Ethernet port is itself on USB (smsc95xx/lan78xx), and
+    readdressing it takes the NFS root away and hangs the Pi (pi-sw1-p10, 2026-09-29). Two free adapters are
+    refused rather than guessed between.
     """
-    result = subprocess.run(
-        ["ip", "-o", "link", "show"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    interfaces = []
-    for line in result.stdout.strip().split("\n"):
-        # Format: "2: eth1: <BROADCAST,MULTICAST> mtu 1500 ..."
-        match = re.match(r"\d+:\s+(\S+):", line)
-        if not match:
-            continue
-        iface = match.group(1)
-        if iface == "lo":
-            continue
-        # Check if this is a USB device by looking at sysfs
-        try:
-            sysfs_path = f"/sys/class/net/{iface}/device"
-            real_path = os.path.realpath(sysfs_path)
-            if "/usb" in real_path:
-                interfaces.append(iface)
-        except (OSError, FileNotFoundError):
-            continue
+    free = sorted(i for i in usb_ifaces if i not in in_use)
+    if len(free) == 1:
+        return free[0], None
+    if not free:
+        busy = ", ".join(sorted(set(usb_ifaces) & set(in_use)))
+        return None, "no USB Ethernet adapter free for the test" + (f" ({busy}: the Pi's own link)" if busy else "")
+    return None, f"more than one free USB Ethernet adapter ({', '.join(free)}): pass --interface"
 
-    if len(interfaces) == 0:
-        return None
-    if len(interfaces) == 1:
-        return interfaces[0]
 
-    # Multiple USB Ethernet adapters -- try to pick the one that isn't the
-    # RPi's main connection (skip the one with a default route)
-    result = subprocess.run(
-        ["ip", "route", "show", "default"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    default_iface = None
-    match = re.search(r"dev\s+(\S+)", result.stdout)
-    if match:
-        default_iface = match.group(1)
+def find_usb_ethernet_interface():
+    """(interface, None) for the USB Ethernet adapter cabled to the FPGA, or (None, reason).
 
-    for iface in interfaces:
-        if iface != default_iface:
-            return iface
-
-    return interfaces[0]
+    USB adapters are found by their sysfs device path. The Pi's own interfaces are those holding the default
+    route or any IPv4 address before the test touches anything.
+    """
+    usb = []
+    for iface in sorted(os.listdir("/sys/class/net")):
+        if iface != "lo" and "/usb" in os.path.realpath(f"/sys/class/net/{iface}/device"):
+            usb.append(iface)
+    routes = subprocess.run(["ip", "-o", "route", "show", "default"], capture_output=True, text=True, check=True)
+    addrs = subprocess.run(["ip", "-o", "-4", "addr", "show"], capture_output=True, text=True, check=True)
+    in_use = set(re.findall(r"\bdev\s+(\S+)", routes.stdout))
+    in_use |= {m.group(1) for m in re.finditer(r"^\d+:\s+(\S+)\s+inet\s+(\S+)", addrs.stdout, re.M)
+               if not m.group(2).startswith(f"{HOST_IP}/")}  # fmt: skip
+    return pick_test_interface(usb, in_use)
 
 
 def configure_interface(iface, ip, netmask):
@@ -250,9 +230,9 @@ def run_test(board, uart_port, baud, eth_interface=None):
         iface = eth_interface
     else:
         print("Detecting USB Ethernet adapter...", end=" ", flush=True)
-        iface = find_usb_ethernet_interface()
+        iface, why = find_usb_ethernet_interface()
         if not iface:
-            print("FAIL - no USB Ethernet adapter found")
+            print(f"FAIL - {why}")
             return False
         print(f"found: {iface}")
 
