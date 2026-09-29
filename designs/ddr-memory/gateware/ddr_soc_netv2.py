@@ -62,8 +62,11 @@ class BaseSoC(SoCCore):
 
         # Fix device name for openxc7/nextpnr-xilinx: remove the dash
         # between part and package (e.g. "xc7a35t-fgg484-2" -> "xc7a35tfgg484-2").
-        from designs._shared.platform_fixups import fix_openxc7_device_name
+        from designs._shared.platform_fixups import fix_openxc7_device_name, fix_openxc7_reduced_drive_iostandards
         fix_openxc7_device_name(platform)
+        if toolchain == "openxc7":
+            # Its DDR3 pins are SSTL15_R, which nextpnr-xilinx builds with no input buffer.
+            fix_openxc7_reduced_drive_iostandards(platform)
 
         # CRG --------------------------------------------------------------------------------------
         self.crg = _CRG(platform, sys_clk_freq)
