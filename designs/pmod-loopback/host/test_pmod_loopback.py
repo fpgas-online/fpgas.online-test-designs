@@ -160,14 +160,22 @@ class PmodHatGpio:
             self._read_lines.append(line)
 
     def close(self):
+        """Release every line, turning the driven ones back into inputs first: a released line keeps its
+        direction on a Pi, so the drive pins would go on fighting whatever design the FPGA loads next
+        (pi-sw2-p12 and p33 were left with six and eight HAT GPIOs driven, 2026-09-30)."""
         if _GPIOD_V2:
             if self._drive_request:
+                self._drive_request.reconfigure_lines(
+                    config={tuple(self.drive_pins): gpiod.LineSettings(direction=gpiod.line.Direction.INPUT)}
+                )
                 self._drive_request.release()
                 self._drive_request = None
             if self._read_request:
                 self._read_request.release()
                 self._read_request = None
         else:
+            for line in self._drive_lines:
+                line.set_direction_input()
             for line in self._drive_lines + self._read_lines:
                 line.release()
             self._drive_lines.clear()
