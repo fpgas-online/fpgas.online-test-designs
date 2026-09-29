@@ -33,8 +33,15 @@ UART = "/dev/ttyAMA0"
 
 
 def _header_gpiochip():
-    if not os.path.lexists(GPIOCHIP) and os.path.exists(HEADER_GPIOCHIP):
-        os.symlink(HEADER_GPIOCHIP, GPIOCHIP)
+    """Point /dev/gpiochip0 at the header chip (devtmpfs: gone at reboot). A freshly booted Pi 5 has no
+    gpiochip0 (pi-sw2-p37, 2026-09-30: gpiochip11-15, 15 = pinctrl-rp1); if some other chip is gpiochip0,
+    probing it would test the wrong pins, so that is refused."""
+    if not os.path.lexists(GPIOCHIP):
+        if os.path.exists(HEADER_GPIOCHIP):
+            os.symlink(HEADER_GPIOCHIP, GPIOCHIP)
+        return
+    if os.path.realpath(GPIOCHIP) != os.path.realpath(HEADER_GPIOCHIP):
+        raise Problem("error", f"{GPIOCHIP} is not the 40-pin header ({HEADER_GPIOCHIP}): P1 JTAG not probed")
 
 
 def _release_pins(run):
@@ -46,13 +53,15 @@ def _release_pins(run):
     return [] if rc == 0 else [f"could not release GPIO {JTAG_GPIOS}: {out.strip()}"]
 
 
-def jtag(variant, run, gpiochip=_header_gpiochip):
+def jtag(variant, run, gpiochip=None):
     want = IDCODES[variant]
     try:
-        gpiochip()
+        (gpiochip or _header_gpiochip)()
         rc, out = run(["openFPGALoader", "--cable", "libgpiod", "--pins", JTAG_PINS, "--detect"], JTAG_TIMEOUT)
     except (Problem, OSError) as e:
-        return {"test": "jtag", "result": "fail", "output": [str(e), *_release_pins(run)],
+        # A missing tool or a wrong gpiochip is the check not running ("error"); a hung probe is a fail.
+        result = e.result if isinstance(e, Problem) else "error"
+        return {"test": "jtag", "result": result, "output": [str(e), *_release_pins(run)],
                 "reason": f"P1 JTAG could not be probed: {e}"}  # fmt: skip
     found = [int(x, 16) & 0x0FFFFFFF for x in IDCODE_RE.findall(out)]
     tail = out.strip().splitlines()[-8:] + _release_pins(run)
@@ -66,9 +75,14 @@ def jtag(variant, run, gpiochip=_header_gpiochip):
 
 
 def p2_uart(identifier, open_port=None):
-    link = uartbone_link.UARTBoneLink(open_port or uartbone_link._serial_opener(UART))
+    """At the reset rate (1200 baud, after a break): the ident is short, and the link is left where the
+    next user of /dev/ttyAMA0 expects it."""
     try:
-        baud = link.connect()
+        link = uartbone_link.UARTBoneLink(open_port or uartbone_link._serial_opener(UART))
+    except ImportError as e:  # pyserial
+        return {"test": "p2-uart", "result": "error", "output": [str(e)], "reason": f"P2 UART not checked: {e}"}
+    try:
+        baud = link.connect(fast=False)
         got = link.ident()
     except (uartbone_link.LinkError, OSError) as e:
         return {"test": "p2-uart", "result": "fail", "output": [str(e)],

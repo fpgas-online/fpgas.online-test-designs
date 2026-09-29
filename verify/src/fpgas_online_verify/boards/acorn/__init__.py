@@ -45,8 +45,10 @@ class Acorn(Board):
                 tests.append(links.p2_uart(identifier, options.get("uart_opener")))
             report["tests"] = tests
             failed = [t for t in tests if t["result"] != "pass"]
-            if failed and check.SEVERITY.index("fail") > check.SEVERITY.index(report["result"]):
-                report["result"], report["reason"] = "fail", failed[0].get("reason", f"{failed[0]['test']} failed")
+            if failed:  # the worst result wins; every reason is kept (a degraded board says so too)
+                report["result"] = max([report["result"], *(t["result"] for t in failed)], key=check.SEVERITY.index)
+                reasons = [report.get("reason"), *(t.get("reason", f"{t['test']} failed") for t in failed)]
+                report["reason"] = "; ".join(r for r in reasons if r)
         if release:
             report["bitstreams"] = release[0].get("tag")
         state = {"bdf": found["bdf"], "ids": found["ids"], "subsystem": found["subsystem"]}

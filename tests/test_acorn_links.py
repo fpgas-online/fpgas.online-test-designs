@@ -49,10 +49,10 @@ def test_the_wrong_part_fails_and_says_which():
     assert t["result"] == "fail" and t["reason"] == "P1 JTAG chain has 0x3636093, expected 0x3631093 for cle-101"
 
 
-def test_a_probe_that_cannot_run_fails_and_still_releases_the_pins():
-    run = Run(Problem("error", "openFPGALoader is not installed"))
+def test_a_probe_that_hangs_fails_and_still_releases_the_pins():
+    run = Run(Problem("fail", "openFPGALoader did not finish within 60 s"))
     t = links.jtag("cle-215+", run, gpiochip=_no_chip)
-    assert t["result"] == "fail" and "openFPGALoader is not installed" in t["reason"]
+    assert t["result"] == "fail" and "did not finish" in t["reason"]
     assert run.calls[-1][0] == "pinctrl"
 
 
@@ -105,12 +105,62 @@ FOUND = {"bdf": "0001:01:00.0", "ids": "10ee:7021", "subsystem": "1e24:021f", "k
          "variant": "cle-215+"}  # fmt: skip
 
 
-def _checked(monkeypatch, tmp_path, run, port):
+def _checked(monkeypatch, tmp_path, run, port, board=None):
+    board = board or {"result": "pass", "running": {"identifier": IDENT}}
     monkeypatch.setattr(acorn_check, "load_release", lambda images: ({"tag": "t"}, {}))
-    monkeypatch.setattr(acorn_check, "check_board",
-                        lambda *a: {**FOUND, "result": "pass", "running": {"identifier": IDENT}})  # fmt: skip
+    monkeypatch.setattr(acorn_check, "check_board", lambda *a: {**FOUND, **board})
     monkeypatch.setattr(links, "_header_gpiochip", _no_chip)
     return ACORN.check({}, FOUND, {"images": tmp_path, "run": run, "uart_opener": lambda baud: port})
+
+
+def test_a_degraded_board_with_a_dead_uart_fails_and_still_says_it_runs_golden(monkeypatch, tmp_path):
+    golden = {"result": "degraded", "reason": "running the golden image: the operational slot did not boot",
+              "running": {"identifier": IDENT}}  # fmt: skip
+    report = _checked(monkeypatch, tmp_path, Run(), Port(""), board=golden)
+    assert report["result"] == "fail"
+    assert report["reason"] == ("running the golden image: the operational slot did not boot; "
+                                "no UARTBone reply on /dev/ttyAMA0 (P2 K2/J2)")  # fmt: skip
+
+
+def test_a_board_that_already_failed_gets_jtag_but_no_uart_read(monkeypatch, tmp_path):
+    bad = {"result": "fail", "reason": "flash does not hold release t", "running": {"identifier": IDENT}}
+    report = _checked(monkeypatch, tmp_path, Run(), Port(IDENT), board=bad)
+    assert [t["test"] for t in report["tests"]] == ["jtag"] and report["reason"] == "flash does not hold release t"
+
+
+def test_a_missing_openfpgaloader_is_an_error_not_a_board_fault():
+    t = links.jtag("cle-215+", Run(Problem("error", "openFPGALoader is not installed")), gpiochip=_no_chip)
+    assert t["result"] == "error"
+
+
+def test_a_gpiochip0_that_is_not_the_header_is_refused(tmp_path, monkeypatch):
+    other, header = tmp_path / "gpiochip0", tmp_path / "gpiochip15"
+    other.write_text("")
+    header.write_text("")
+    monkeypatch.setattr(links, "GPIOCHIP", str(other))
+    monkeypatch.setattr(links, "HEADER_GPIOCHIP", str(header))
+    run = Run()
+    t = links.jtag("cle-215+", run)
+    assert t["result"] == "error" and "is not the 40-pin header" in t["reason"]
+    assert not any(c[0] == "openFPGALoader" for c in run.calls)
+
+
+def test_a_fresh_pi5_gets_gpiochip0_linked_to_the_header(tmp_path, monkeypatch):
+    header = tmp_path / "gpiochip15"
+    header.write_text("")
+    monkeypatch.setattr(links, "GPIOCHIP", str(tmp_path / "gpiochip0"))
+    monkeypatch.setattr(links, "HEADER_GPIOCHIP", str(header))
+    assert links.jtag("cle-215+", Run())["result"] == "pass"
+    assert (tmp_path / "gpiochip0").resolve() == header.resolve()
+
+
+def test_no_pyserial_is_an_error_not_a_crash(monkeypatch):
+    def no_serial(device):
+        raise ImportError("No module named 'serial'")
+
+    monkeypatch.setattr(uartbone_link, "_serial_opener", no_serial)
+    t = links.p2_uart(IDENT)
+    assert t["result"] == "error" and "serial" in t["reason"]
 
 
 def test_a_board_whose_links_work_passes_with_both_tests_reported(monkeypatch, tmp_path):
