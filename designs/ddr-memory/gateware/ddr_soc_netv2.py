@@ -27,6 +27,7 @@ from litex_boards.platforms import kosagi_netv2
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+from designs._shared.platform_fixups import constrain_openxc7_clocks
 
 # CRG ----------------------------------------------------------------------------------------------
 
@@ -50,6 +51,12 @@ class _CRG(LiteXModule):
         pll.create_clkout(self.cd_sys4x_dqs, 4*sys_clk_freq, phase=90)
         pll.create_clkout(self.cd_idelay,    200e6)
         platform.add_false_path_constraints(self.cd_sys.clk, pll.clkin)
+        constrain_openxc7_clocks(platform, {
+            self.cd_sys:       sys_clk_freq,
+            self.cd_sys4x:     4*sys_clk_freq,
+            self.cd_sys4x_dqs: 4*sys_clk_freq,
+            self.cd_idelay:    200e6,
+        })
 
         # IdelayCtrl.
         self.idelayctrl = S7IDELAYCTRL(self.cd_idelay)
