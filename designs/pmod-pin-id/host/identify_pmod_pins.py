@@ -86,6 +86,68 @@ BOARDS = {
             (4, "H5", "P2.4 Spare GPIO 1"),
         ],
     },
+    # Arty A7 on a Digilent Pmod HAT, cabled straight through: HAT JA -> Arty
+    # JA, JB -> JB, JC -> JC (docs/hardware/arty-a7-pin-mapping.md, "PMOD
+    # Cable Routing"). Arty JD is not connected.
+    #
+    # Left out: GPIO10/9/11. They are HAT JA pins 2-4 *and* JB pins 2-4, so two
+    # cables drive them at once and whichever wins is read (JB's balls at PS1,
+    # JC's at Welland): they cannot tell a good cable from a bad one.
+    #
+    # Arty JC pins 1 and 2 read V12 and U12, the reverse of Digilent's order,
+    # wherever that connector is cabled: on PS1's pi9 (HAT JC) and on all four
+    # Welland Artys (HAT JA), 2026-03-17 and 2026-09-29. That follows the
+    # connector, not the cable, so it is expected here.
+    "arty": {
+        "description": "Arty A7 Pmod JA/JB/JC -> Digilent Pmod HAT JA/JB/JC",
+        "pins": [
+            (8, "G13", "HAT JA.1 <- Arty JA.1"),
+            (19, "D13", "HAT JA.7 <- Arty JA.7"),
+            (21, "B18", "HAT JA.8 <- Arty JA.8"),
+            (20, "A18", "HAT JA.9 <- Arty JA.9"),
+            (18, "K16", "HAT JA.10 <- Arty JA.10"),
+            (7, "E15", "HAT JB.1 <- Arty JB.1"),
+            (26, "J17", "HAT JB.7 <- Arty JB.7"),
+            (13, "J18", "HAT JB.8 <- Arty JB.8"),
+            (3, "K15", "HAT JB.9 <- Arty JB.9"),
+            (2, "J15", "HAT JB.10 <- Arty JB.10"),
+            (16, "V12", "HAT JC.1 <- Arty JC.1"),
+            (14, "U12", "HAT JC.2 <- Arty JC.2"),
+            (15, "V10", "HAT JC.3 <- Arty JC.3"),
+            (17, "V11", "HAT JC.4 <- Arty JC.4"),
+            (4, "U14", "HAT JC.7 <- Arty JC.7"),
+            (12, "V14", "HAT JC.8 <- Arty JC.8"),
+            (5, "T13", "HAT JC.9 <- Arty JC.9"),
+            (6, "U13", "HAT JC.10 <- Arty JC.10"),
+        ],
+    },
+    # TT FPGA demo board on a Digilent Pmod HAT: uo_out on HAT JA, uio on JB,
+    # ui_in on JC (docs/hardware/tt-fpga-pin-mapping.md). The iCE40 transmits
+    # its package pin numbers. GPIO10/9/11 are left out, as for the Arty: uo_out
+    # and uio both drive them, and they decode as garbage.
+    "tt": {
+        "description": "TT FPGA demo board Pmods -> Digilent Pmod HAT JA/JB/JC",
+        "pins": [
+            (8, "38", "HAT JA.1 <- uo_out[0]"),
+            (19, "45", "HAT JA.7 <- uo_out[4]"),
+            (21, "46", "HAT JA.8 <- uo_out[5]"),
+            (20, "47", "HAT JA.9 <- uo_out[6]"),
+            (18, "48", "HAT JA.10 <- uo_out[7]"),
+            (7, "2", "HAT JB.1 <- uio[0]"),
+            (26, "9", "HAT JB.7 <- uio[4]"),
+            (13, "10", "HAT JB.8 <- uio[5]"),
+            (3, "11", "HAT JB.9 <- uio[6]"),
+            (2, "12", "HAT JB.10 <- uio[7]"),
+            (16, "13", "HAT JC.1 <- ui_in[0]"),
+            (14, "19", "HAT JC.2 <- ui_in[1]"),
+            (15, "18", "HAT JC.3 <- ui_in[2]"),
+            (17, "21", "HAT JC.4 <- ui_in[3]"),
+            (4, "23", "HAT JC.7 <- ui_in[4]"),
+            (12, "25", "HAT JC.8 <- ui_in[5]"),
+            (5, "26", "HAT JC.9 <- ui_in[6]"),
+            (6, "27", "HAT JC.10 <- ui_in[7]"),
+        ],
+    },
 }
 
 
@@ -301,8 +363,10 @@ def decode_edges(events, baud=BAUD_RATE, max_start_candidates=12):
 
 # Expected label format: FPGA pin names are 2-4 alphanumeric characters.
 # Examples: "G13", "B11", "A9", "K16", "V14" (Xilinx 7-series ball names)
-# Also accepts PMOD-style names like "JA01" for backwards compatibility.
-_LABEL_PATTERN = re.compile(r'^[A-Z][A-Za-z0-9]{1,3}$')
+# Also accepts PMOD-style names like "JA01" for backwards compatibility, and
+# the iCE40's package pin numbers ("2" to "48"), which is what the TT FPGA and
+# Fomu designs send: without them every TT pin read as garbled.
+_LABEL_PATTERN = re.compile(r'^(?:[A-Z][A-Za-z0-9]{1,3}|[1-9][0-9]?)$')
 
 
 def is_valid_label(label):

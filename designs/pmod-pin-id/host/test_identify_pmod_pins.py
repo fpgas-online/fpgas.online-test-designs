@@ -144,3 +144,46 @@ def test_labels_from_frames_returns_garbled_marker_without_valid_label():
 
 def test_labels_from_frames_none_when_silent():
     assert ident.label_from_frames([]) is None
+
+
+# -- iCE40 pin numbers, and the Arty / TT HAT maps -------------------------------
+
+
+def test_ice40_package_pin_numbers_are_valid_labels():
+    """The TT FPGA and Fomu designs send "13", "45", ...: all TT pins used to read as garbled."""
+    frames = [(b, True) for b in b"13\r\n13\r\n13\r\n"]
+    assert ident.label_from_frames(frames) == "13"
+    assert ident.is_valid_label("2") and ident.is_valid_label("48")
+    assert not ident.is_valid_label("0") and not ident.is_valid_label("100")
+
+
+def test_the_shared_hat_gpios_are_not_part_of_a_wiring_check():
+    """GPIO10/9/11 are HAT JA pins 2-4 and JB pins 2-4 at once: two cables drive them."""
+    for board in ("arty", "tt"):
+        gpios = [gpio for gpio, _ball, _label in ident.BOARDS[board]["pins"]]
+        assert not {9, 10, 11} & set(gpios), board
+        assert len(gpios) == len(set(gpios)) == 18, board
+
+
+def _decoded(board):
+    return {gpio: ball for gpio, ball, _label in ident.BOARDS[board]["pins"]}
+
+
+def test_a_straight_through_arty_passes_and_welland_p12_as_cabled_fails():
+    assert ident.evaluate_board("arty", _decoded("arty"))[0]
+    # pi-sw2-p12, 2026-09-29: HAT JA <- Arty JC, JB <- Arty JD, JC <- Arty JB; Arty JA not cabled.
+    p12 = {8: "V12", 19: "U14", 21: "V14", 20: "T13", 18: "U13", 7: "D4", 26: "E2", 13: "D2", 3: "H2", 2: "G2",
+           16: "E15", 14: "E16", 15: "D15", 17: "C15", 4: "J17", 12: "J18", 5: "K15", 6: "J15"}  # fmt: skip
+    all_ok, rows = ident.evaluate_board("arty", p12)
+    assert not all_ok
+    assert not any(r["ok"] for r in rows)
+
+
+def test_a_tt_cabled_as_documented_passes_and_welland_as_cabled_fails():
+    assert ident.evaluate_board("tt", _decoded("tt"))[0]
+    # pi-sw2-p33/p35/p36, 2026-09-29: ui_in on HAT JA and uo_out on HAT JC (the doc has them the other way).
+    welland = {8: "13", 19: "23", 21: "25", 20: "26", 18: "27", 7: "2", 26: "9", 13: "10", 3: "11", 2: "12",
+               16: "38", 14: "42", 15: "43", 17: "44", 4: "45", 12: "46", 5: "47", 6: "48"}  # fmt: skip
+    all_ok, rows = ident.evaluate_board("tt", welland)
+    assert not all_ok
+    assert [r["gpio"] for r in rows if r["ok"]] == [7, 26, 13, 3, 2]  # uio on JB matches
