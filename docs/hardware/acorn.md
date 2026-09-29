@@ -63,7 +63,7 @@ Writing the flash, and converting a board that still runs the factory image, are
 | DSP slices       | 740                              |
 | Block RAM        | 13,140 Kib                       |
 | GTP transceivers | 4 (up to 6.6 Gb/s each)          |
-| DDR3 SDRAM       | 1 GiB (MT41K512M16, 32-bit)      |
+| DDR3 SDRAM       | 1 GiB (MT41K512M16, 16-bit)      |
 | SPI Flash        | S25FL256S (256 Mbit, quad SPI)   |
 | PCIe             | Gen2 x4 (M.2 M-key)              |
 | Form factor      | M.2 2280                         |
@@ -139,24 +139,32 @@ Flash part: Spansion S25FL256S (256 Mbit). Supports multiboot with separate fall
 
 ## DDR3 SDRAM
 
-1 GiB MT41K512M16, 32-bit wide with 4 byte lanes. Uses 7-series native DDR PHY (A7DDRPHY).
+One Micron MT41K512M16 (8 Gbit, 1 GiB on the CLE-215/215+), 16 bits wide: two byte lanes, each with
+its own DQS pair and DM. Uses the 7-series native DDR PHY (A7DDRPHY). CS_N is not wired to the FPGA.
+Address, command, CLK and RESET_N are in bank 15; DQ, DQS and DM in bank 16, whose inputs use the
+internal VREF of 0.75 V (per Vivado's IO report and bit2fasm of its image). The platform's
+`set_property INTERNAL_VREF 0.750 [get_iobanks 34]` names a bank the DDR3 does not use.
 
-| Signal Group | FPGA Pins                                               |
-| ------------ | ------------------------------------------------------- |
-| Address      | M15/L21/M16/L18/K21/M18/M21/N20/M20/N19/J21/M22/K22/N18 |
-| Bank         | N22/M21/N19                                             |
-| DQ[7:0]      | C2/F1/B1/F3/A1/D2/B2/E2                                 |
-| DQ[15:8]     | J5/H3/K1/H2/J1/K2/H1/J3                                 |
-| DQ[23:16]    | N2/M6/P1/N5/P2/N4/R1/P6                                 |
-| DQ[31:24]    | K3/M2/K4/M3/J6/L3/J4/K6                                 |
-| CLK_P/N      | K17/J17                                                 |
-| CKE          | J18                                                     |
-| ODT          | K19                                                     |
-| CS_N         | L19                                                     |
-| RAS_N        | L20                                                     |
-| CAS_N        | K18                                                     |
-| WE_N         | L22                                                     |
-| RESET_N      | G17                                                     |
+| Signal     | FPGA pins (bit 0 first)                                         | IO standard                      |
+| ---------- | --------------------------------------------------------------- | -------------------------------- |
+| A[15:0]    | M15 L21 M16 L18 K21 M18 M21 N20 M20 N19 J21 M22 K22 N18 N22 J22 | SSTL15                           |
+| BA[2:0]    | L19 J20 L20                                                     | SSTL15                           |
+| RAS_N      | H20                                                             | SSTL15                           |
+| CAS_N      | K18                                                             | SSTL15                           |
+| WE_N       | L16                                                             | SSTL15                           |
+| DM[1:0]    | A19 G22                                                         | SSTL15                           |
+| DQ[15:0]   | D19 B20 E19 A20 F19 C19 F20 C18 E22 G21 D20 E21 C22 D21 B22 D22 | SSTL15, IN_TERM=UNTUNED_SPLIT_50 |
+| DQS_P[1:0] | F18 B21                                                         | DIFF_SSTL15                      |
+| DQS_N[1:0] | E18 A21                                                         | DIFF_SSTL15                      |
+| CLK_P      | K17                                                             | DIFF_SSTL15                      |
+| CLK_N      | J17                                                             | DIFF_SSTL15                      |
+| CKE        | H22                                                             | SSTL15                           |
+| ODT        | K19                                                             | SSTL15                           |
+| RESET_N    | K16                                                             | LVCMOS15                         |
+
+Source: `_io["ddram"]` in [LiteX sqrl_acorn.py](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/sqrl_acorn.py)
+(litex-boards dc89d11, as pinned in `uv.lock`). The DDR memory test built from these pins passes memtest on
+pi-sw2-p48 (2026-09-29).
 
 ## Programming
 
