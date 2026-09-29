@@ -14,6 +14,7 @@ from fpgas_online_verify import cli, core, debug, host_tests
 from fpgas_online_verify.boards import arty, fomu, netv2, tt_fpga
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
 from fpgas_online_verify.boards.acorn import check as acorn_check
+from fpgas_online_verify.boards.acorn import links as acorn_links
 
 PI3 = "Raspberry Pi 3 Model B Plus Rev 1.3"
 PI5 = "Raspberry Pi 5 Model B Rev 1.0"
@@ -333,6 +334,8 @@ def test_the_acorn_state_is_its_slot_and_flash_contents(tmp_path, monkeypatch):
              "slots": [{"slot": "0x000000", "result": "match", "sha256": "g"},
                        {"slot": "0x400000", "result": "match", "sha256": "o"}]}  # fmt: skip
     monkeypatch.setattr(acorn_check, "check_board", lambda *a: {**found, "result": "pass", "flash": flash})
+    # the links have their own tests (test_acorn_links.py)
+    monkeypatch.setattr(acorn_links, "jtag", lambda variant, run: {"test": "jtag", "result": "pass"})
     report = ACORN.check({}, found, {"images": tmp_path})
     assert report["result"] == "pass" and report["bitstreams"] == "t"
     assert report["state"] == {"bdf": "0001:01:00.0", "ids": "10ee:7021", "subsystem": "1e24:021f",
