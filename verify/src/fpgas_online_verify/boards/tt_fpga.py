@@ -33,8 +33,10 @@ class TTFPGA(TestBoard):
                      "args": ["--port", "{port}", "--board", "tt"], "verify": True, "runner": "tt-bridge"},
         "pmod": {"artifact": "gpio-loopback-{v}/top.bin", "script": "test_pmod_loopback.py",
                  "args": ["--board", "tt"], "pre": PMOD_PRE, "program_args": ["--gpio-release"]},
-        "pin-id": {"artifact": "pmod-pin-id-{v}/top.bin", "script": "identify_pmod_pins.py", "args": [],
-                   "pre": PMOD_PRE, "program_args": ["--gpio-release"]},
+        # The Pmod HAT cabling, against identify_pmod_pins.BOARDS["tt"] (uo_out on HAT JA, uio JB, ui_in JC).
+        "pin-id": {"artifact": "pmod-pin-id-{v}/top.bin", "script": "identify_pmod_pins.py",
+                   "args": ["--board", "tt"], "pre": PMOD_PRE, "program_args": ["--gpio-release"],
+                   "verify": True},
     }  # fmt: skip
 
     def program_argv(self, bitstream, host, test):

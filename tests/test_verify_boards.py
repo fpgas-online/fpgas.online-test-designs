@@ -184,7 +184,7 @@ def test_an_arty_that_passes_loads_each_test_runs_it_and_records_its_flash(tmp_p
     run = Runner([("test_spiflash.py", (0, "JEDEC ID: 0x20 0xBA 0x18\nRESULT: PASS"))], flash=flash)
     report = _check(ARTY, tmp_path, ARTY_FOUND, run)
     assert report["result"] == "pass", report
-    assert [t["test"] for t in report["tests"]] == ["uart", "ddr", "spiflash"]
+    assert [t["test"] for t in report["tests"]] == ["uart", "ddr", "spiflash", "ethernet", "pin-id"]
     images = tmp_path / "images"
     assert run.calls[1] == ["openFPGALoader", "-b", "arty", str(images / "uart-test-arty/digilent_arty.bit")]
     assert run.calls[-1][:5] == ["openFPGALoader", "-b", "arty", "--dump-flash", "--file-size"]
@@ -286,7 +286,11 @@ def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_rea
     first = run.calls[2]
     assert first[1].endswith("tt_test_wrapper.py") and first[2] == "/dev/ttyACM0"
     assert first[3].endswith("uart-test-tt-fpga/tt_fpga_platform.bin") and first[5].endswith("test_uart.py")
-    assert not any("tt_fpga_program.py" in " ".join(c) for c in run.calls)  # the bridge loads it
+    # the bridge loads the UART and SPI-flash designs; only the Pmod pin-ID scan loads one itself
+    loads = [c for c in run.calls if "tt_fpga_program.py" in " ".join(c)]
+    (load,) = loads
+    assert load[3].endswith("pmod-pin-id-tt-fpga/top.bin") and load[4:] == ["--gpio-release"]
+    assert [t["test"] for t in report["tests"]] == ["uart", "spiflash", "pin-id"]
     assert report["state"] == {"variant": "tt-fpga", "serial": "E6"} and "rewrites" in report["flash_note"]
 
 
@@ -352,7 +356,8 @@ def test_debug_list_shows_every_test_and_whether_the_boot_check_runs_it(tmp_path
     args = cli.argparse.Namespace(command="list", images=_install(tmp_path, ARTY), variant=None, port=None)
     assert debug.run(ARTY, args) == 0
     out = capsys.readouterr().out
-    assert "ddr        a7-35    boot check" in out and "pin-id     a7-35    debug only" in out
+    assert "ddr        a7-35    boot check" in out and "pin-id     a7-35    boot check" in out
+    assert "pmod       a7-35    debug only" in out
     assert "(not installed)" not in out
 
 
@@ -374,7 +379,8 @@ def test_debug_test_loads_then_runs_with_extra_arguments(tmp_path, monkeypatch):
     assert debug.run(ARTY, args) == 0
     assert ran[0] == ["rmmod", "spidev", "spi_bcm2835"]
     assert ran[1] == ["openFPGALoader", "-b", "arty", str(images / "pmod-pin-id-arty-a7-35t/top.bit")]
-    assert ran[2][1].endswith("identify_pmod_pins.py") and ran[2][2:] == ["--hat-port", "JA"]
+    # the extra arguments follow the boot check's; identify_pmod_pins.py lets --hat-port win over --board
+    assert ran[2][1].endswith("identify_pmod_pins.py") and ran[2][2:] == ["--board", "arty", "--hat-port", "JA"]
 
 
 def test_the_acorn_debug_tool_can_identify_and_has_no_test_loading():

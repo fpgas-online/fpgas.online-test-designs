@@ -24,12 +24,14 @@ class Arty(TestBoard):
                 "args": ["--port", "{port}", "--board", "arty"], "verify": True},
         "spiflash": {"artifact": "spiflash-test-arty/digilent_arty.bit", "script": "test_spiflash.py",
                      "args": ["--port", "{port}", "--board", "arty"], "verify": True},
+        # The Pi's USB Ethernet adapter cabled to the Arty's RJ45 (a Pi 4's own port is on-board, not USB).
         "ethernet": {"artifact": "ethernet-test-arty-{v}/digilent_arty.bit", "script": "test_ethernet.py",
-                     "args": ["--board", "arty", "--uart-port", "{port}"]},
+                     "args": ["--board", "arty", "--uart-port", "{port}"], "verify": True},
         "pmod": {"artifact": "gpio-loopback-arty-{v}/top.bit", "script": "test_pmod_loopback.py",
                  "args": ["--board", "arty"], "pre": PMOD_PRE},
-        "pin-id": {"artifact": "pmod-pin-id-arty-{v}/top.bit", "script": "identify_pmod_pins.py", "args": [],
-                   "pre": PMOD_PRE},
+        # The Pmod HAT cabling, against identify_pmod_pins.BOARDS["arty"] (HAT JA/JB/JC -> Arty JA/JB/JC).
+        "pin-id": {"artifact": "pmod-pin-id-arty-{v}/top.bit", "script": "identify_pmod_pins.py",
+                   "args": ["--board", "arty"], "pre": PMOD_PRE, "verify": True},
     }  # fmt: skip
 
     def program_argv(self, bitstream, host, test):
