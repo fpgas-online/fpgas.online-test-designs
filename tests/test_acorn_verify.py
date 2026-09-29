@@ -229,13 +229,22 @@ FACTORY = ("0001:01:00.0", "0x1e24", "0x021f", "0x0000", "0x0000")
 VENDOR_XDMA = ("0001:01:00.0", "0x10ee", "0x7011", "0x0000", "0x0000")
 
 
-@pytest.mark.parametrize("device", [FACTORY, VENDOR_XDMA])
-def test_a_board_on_factory_or_vendor_firmware_is_unconverted_and_its_bar_is_never_opened(tmp_path, images, device):
+@pytest.mark.parametrize(
+    "device, what",
+    [(FACTORY, "SQRL's factory image"), (VENDOR_XDMA, "the vendor XDMA sample image")],
+)
+def test_a_board_on_factory_or_vendor_firmware_fails_as_unconverted_and_its_bar_is_never_opened(
+    tmp_path, images, device, what
+):
+    """Not running the release's fpgas.online image is a failure: the board must not be offered to users."""
+
     def refuse(bdf):
         raise AssertionError("BAR0 of a design we did not build must not be touched")
 
     report = av.verify(av.scan_pci(_sysfs(tmp_path, device)), images, open_bar=refuse)
-    assert report["result"] == "unconverted"
+    (board,) = report["boards"]
+    assert report["result"] == board["result"] == "fail"
+    assert board["reason"] == f"unconverted: runs {what}, not the fpgas.online design"
     assert av.exit_code(report) == 1
 
 
@@ -277,10 +286,12 @@ def test_any_bound_driver_is_refused_and_named(tmp_path, images):
     assert board["reason"] == "the vfio-pci driver is bound: not checked"
 
 
-def test_a_factory_board_is_unconverted_even_with_a_driver_bound(tmp_path, images):
+def test_a_factory_board_fails_as_unconverted_even_with_a_driver_bound(tmp_path, images):
     """What runs on the card is known from config space alone, so that result still stands."""
     report = av.verify(av.scan_pci(_sysfs(tmp_path, (*FACTORY, "xdma"))), images, open_bar=_refuse)
-    assert report["result"] == "unconverted"
+    (board,) = report["boards"]
+    assert report["result"] == "fail"
+    assert board["reason"].startswith("unconverted: ")
 
 
 def test_identify_also_leaves_a_driver_bound_board_alone(tmp_path, images):
@@ -435,7 +446,8 @@ def test_identify_never_opens_the_bar_of_a_factory_board(tmp_path, images):
         raise AssertionError("BAR0 of a design we did not build must not be touched")
 
     report = av.identify(av.scan_pci(_sysfs(tmp_path, FACTORY)), images, open_bar=refuse)
-    assert report["result"] == "unconverted"
+    assert report["result"] == "fail"
+    assert report["boards"][0]["reason"] == "unconverted: runs SQRL's factory image, not the fpgas.online design"
 
 
 def test_identify_on_a_pi_with_no_fpga_is_none(tmp_path, images):

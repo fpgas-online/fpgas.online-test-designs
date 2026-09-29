@@ -51,9 +51,9 @@ These packages conflict with each other, so a host is never set up for two board
 | Result | Meaning |
 |--------|---------|
 | `pass` | every test passed, and the board and its flash are the ones recorded |
-| `driver-bound`, `degraded`, `unconverted` | Acorn only: a kernel driver (`litepcie.ko`) holds the board so it was not read; running its golden image; still on SQRL's factory image |
+| `driver-bound`, `degraded` | Acorn only: a kernel driver (`litepcie.ko`) holds the board so it was not read; running its golden image |
 | `changed` | a different board, or a different flash, from last time. If you did that on purpose (flashed or swapped the board), run `sudo fpgas-verify --update` |
-| `fail` | a test, a load or a flash comparison failed |
+| `fail` | a test, a load or a flash comparison failed, or the board does not run the fpgas.online image (an Acorn still on SQRL's factory image: the reason starts `unconverted:`) |
 | `missing` | the board is not there |
 | `error` | the check itself could not run: a missing tool, a damaged package, nothing configured |
 

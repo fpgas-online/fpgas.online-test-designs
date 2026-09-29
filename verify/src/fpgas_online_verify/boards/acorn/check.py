@@ -5,8 +5,8 @@ fpgas-verify.service when the host is set up for an Acorn, and on demand as fpga
 
   1. PCI IDs, from sysfs: which image family is running. The fpgas.online SoC is LitePCIe's 10ee:7021 with
      the board named in the subsystem IDs; SQRL's factory image and the vendor XDMA sample are recognised and
-     reported as unconverted. Nothing past this tier runs against a design we did not build: its BAR0 has a
-     register layout we do not know.
+     fail, with "unconverted" in the reason. Nothing past this tier runs against a design we did not build:
+     its BAR0 has a register layout we do not know.
   2. The SoC's identifier string, over BAR0: which build is running. It carries the build timestamp, so it
      names one image exactly. It must be the operational or golden build of the installed release; the
      golden one means the operational slot did not boot (degraded).
@@ -58,7 +58,7 @@ SLOTS = (("0x000000", spi_flash.GOLDEN_ADDR), ("0x400000", spi_flash.OPERATIONAL
 
 # Worst first wins when there is more than one board.
 # driver-bound: a kernel driver (litepcie.ko) holds BAR0, so nothing was read. Not a fault, but not a pass either.
-SEVERITY = ("none", "pass", "driver-bound", "degraded", "unconverted", "fail", "error")
+SEVERITY = ("none", "pass", "driver-bound", "degraded", "fail", "error")
 
 
 # -- tier 1: PCI IDs ---------------------------------------------------------------------------------
@@ -213,11 +213,15 @@ def check_board(dev, images, release, open_bar):
 
 
 def _tier1(dev):
-    """Refuse, from the PCI IDs alone, anything that is not our SoC: its BAR0 layout is unknown to us."""
+    """Refuse, from the PCI IDs alone, anything that is not our SoC: its BAR0 layout is unknown to us.
+
+    A board still on SQRL's factory image (or the vendor XDMA sample) fails like any other board not
+    running the release: it cannot be offered to users. The reason says it is unconverted, so the fix
+    (fpgas-acorn-flash) is plain from the report."""
     kind = dev["kind"]
     if kind in ("sqrl-factory", "vendor-xdma"):
         what = "SQRL's factory image" if kind == "sqrl-factory" else "the vendor XDMA sample image"
-        raise Problem("unconverted", f"runs {what}, not the fpgas.online design")
+        raise Problem("fail", f"unconverted: runs {what}, not the fpgas.online design")
     if kind != "fpgas-online":
         raise Problem("fail", f"{dev['ids']} subsystem {dev['subsystem']} is not a design we built")
 
