@@ -40,6 +40,33 @@ def fix_openxc7_reduced_drive_iostandards(platform):
     cm.available = [(r[0], r[1], *[_plain_iostandard(item) for item in r[2:]]) for r in cm.available]
 
 
+def constrain_openxc7_clocks(platform, domains):
+    """Give nextpnr-xilinx the real period of each PLL output, and fail the build if one is not met.
+
+    *domains* maps each ClockDomain to its frequency in Hz. Vivado derives PLL output clocks itself,
+    so this does nothing unless the toolchain is openXC7. nextpnr-xilinx does not: LiteX constrains
+    only the board's input clock and passes that frequency as `--freq`, so every PLL output was timed
+    at the input frequency (the Arty's 100 MHz, the Acorn's 200 MHz), and LiteX also passes
+    `--timing-allow-fail`. Arty DDR images that missed 100 MHz by up to a third were shipped, and
+    whether one could read its DDR3 depended on where that build happened to place things.
+    """
+    if not getattr(platform.toolchain, "is_openxc7", False):
+        return
+    for domain, freq in domains.items():
+        if freq <= 0:
+            raise ValueError(f"clock domain {domain.name}: frequency {freq} is not positive")
+        platform.add_period_constraint(domain.clk, 1e9 / freq)
+
+    # build() resets timingstrict from its keyword argument, so force it there.
+    build = platform.toolchain.build
+
+    def strict_build(*args, **kwargs):
+        kwargs["timingstrict"] = True
+        return build(*args, **kwargs)
+
+    platform.toolchain.build = strict_build
+
+
 def fix_openxc7_device_name(platform):
     """Remove the dash between device family and package for openXC7.
 
