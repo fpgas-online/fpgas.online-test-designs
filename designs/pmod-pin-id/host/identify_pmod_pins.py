@@ -484,6 +484,34 @@ _MODULES_TO_UNLOAD = [
 ]
 
 
+_PINCTRL_RE = re.compile(r"^\s*(\d+):\s+(a\d)\b", re.M)
+
+
+def alt_functions(gpio_list, run=subprocess.run):
+    """{gpio: "aN"} for the scanned pins that are set to an alternate function (UART, I2C, SPI).
+
+    Reading a pin through libgpiod leaves it a plain GPIO input, so without this the scan cut the Pi's own
+    UART on GPIO14/15 until the next reboot (four Welland NeTV2 Pis, 2026-09-29). Empty without pinctrl.
+    """
+    try:
+        out = run(["pinctrl", "get", ",".join(map(str, gpio_list))], capture_output=True, text=True).stdout
+    except OSError:
+        return {}
+    return {int(gpio): func for gpio, func in _PINCTRL_RE.findall(out) if int(gpio) in gpio_list}
+
+
+def restore_alt_functions(functions, run=subprocess.run):
+    """Set each pin back to the alternate function alt_functions() found."""
+    for gpio, func in sorted(functions.items()):
+        try:
+            run(["pinctrl", "set", str(gpio), func], capture_output=True, text=True)
+        except OSError as e:
+            print(f"Could not restore GPIO{gpio} to {func}: {e}")
+            return
+    if functions:
+        print("Restored " + ", ".join(f"GPIO{g}={f}" for g, f in sorted(functions.items())))
+
+
 def release_kernel_gpio_drivers():
     """Unload kernel modules that claim GPIO pins used by PMOD ports.
 
@@ -568,7 +596,11 @@ def main():
     print(f"Scanning:   {len(gpio_list)} GPIO pins")
     print()
 
-    results = scan_gpios(gpio_list, chip_path)
+    functions = alt_functions(gpio_list)
+    try:
+        results = scan_gpios(gpio_list, chip_path)
+    finally:
+        restore_alt_functions(functions)
 
     # `--board` mode: validate against the expected wiring and emit a single
     # RESULT: marker so verify_hardware.py can score it pass/fail.

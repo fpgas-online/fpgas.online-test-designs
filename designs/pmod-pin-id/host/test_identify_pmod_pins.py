@@ -154,6 +154,7 @@ def _main(monkeypatch, argv, decoded):
     monkeypatch.setattr(ident.sys, "argv", ["identify_pmod_pins.py", *argv])
     monkeypatch.setattr(ident, "release_kernel_gpio_drivers", lambda: None)
     monkeypatch.setattr(ident, "detect_gpio_chip", lambda: "/dev/gpiochip0")
+    monkeypatch.setattr(ident, "alt_functions", lambda gpios: {})
     monkeypatch.setattr(ident, "scan_gpios", lambda gpios, chip: scanned.extend(gpios) or dict(decoded))
     try:
         ident.main()
@@ -161,6 +162,36 @@ def _main(monkeypatch, argv, decoded):
     except SystemExit as e:
         code = e.code
     return code, scanned
+
+
+class _Run:
+    """subprocess.run for pinctrl: `get` answers as pi-sw1-p10 did (2026-09-30); `set` is recorded."""
+
+    GET = ("14: a0    -- | hi // GPIO14 = TXD0\n15: a0    -- | hi // GPIO15 = RXD0\n"
+           " 8: ip    pu | hi // GPIO8 = input\n 2: a0    pu | hi // GPIO2 = SDA1\n")  # fmt: skip
+
+    def __init__(self):
+        self.sets = []
+
+    def __call__(self, argv, **kw):
+        if argv[1] == "set":
+            self.sets.append(argv[2:])
+        return type("R", (), {"stdout": self.GET if argv[1] == "get" else "", "returncode": 0})()
+
+
+def test_the_scan_puts_back_the_uart_and_i2c_functions_it_takes_away():
+    run = _Run()
+    functions = ident.alt_functions([14, 15, 8, 2], run=run)
+    assert functions == {14: "a0", 15: "a0", 2: "a0"}  # GPIO8 was a plain input: nothing to put back
+    ident.restore_alt_functions(functions, run=run)
+    assert run.sets == [["2", "a0"], ["14", "a0"], ["15", "a0"]]
+
+
+def test_no_pinctrl_means_nothing_to_restore():
+    def missing(argv, **kw):
+        raise FileNotFoundError("pinctrl")
+
+    assert ident.alt_functions([14, 15], run=missing) == {}
 
 
 def test_board_mode_fails_a_miswired_board(monkeypatch):
