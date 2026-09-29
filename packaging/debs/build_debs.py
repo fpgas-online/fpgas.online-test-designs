@@ -63,8 +63,10 @@ TOOLS_DEPENDS = {
     "tt": ["python3-serial", "python3-libgpiod"],
 }
 # mpremote: in trixie, but only bookworm-backports has it for bookworm. pinctrl (releases the Acorn's JTAG pins
-# after the probe): Raspberry Pi OS's raspi-utils-core, not in Debian, so not a Depends.
-TOOLS_RECOMMENDS = {"tt": ["micropython-mpremote"], "acorn": ["raspi-utils-core"]}
+# after the probe; puts back the UART/I2C/SPI functions the PMOD HAT scan takes): Raspberry Pi OS's
+# raspi-utils-core, not in Debian, so not a Depends.
+PINCTRL = "raspi-utils-core"
+TOOLS_RECOMMENDS = {"tt": ["micropython-mpremote", PINCTRL], "acorn": [PINCTRL], "arty": [PINCTRL]}
 # What fpgas-<b>-debug needs on top: the Acorn's conversion from SQRL's factory image loads a .bit over JTAG,
 # and fpgas-acorn-flash --uart talks UARTBone; the PMOD tests read GPIOs; the Ethernet test configures a link.
 DEBUG_DEPENDS = {
