@@ -213,11 +213,15 @@ def check_board(dev, images, release, open_bar):
 
 
 def _tier1(dev):
-    """Refuse, from the PCI IDs alone, anything that is not our SoC: its BAR0 layout is unknown to us."""
+    """Refuse, from the PCI IDs alone, anything that is not our SoC: its BAR0 layout is unknown to us.
+
+    A board still on SQRL's factory image (or the vendor XDMA sample) fails like any other board not
+    running the release: it cannot be offered to users. The reason says it is unconverted, so the fix
+    (fpgas-acorn-flash) is plain from the report."""
     kind = dev["kind"]
     if kind in ("sqrl-factory", "vendor-xdma"):
         what = "SQRL's factory image" if kind == "sqrl-factory" else "the vendor XDMA sample image"
-        raise Problem("unconverted", f"runs {what}, not the fpgas.online design")
+        raise Problem("fail", f"unconverted: runs {what}, not the fpgas.online design")
     if kind != "fpgas-online":
         raise Problem("fail", f"{dev['ids']} subsystem {dev['subsystem']} is not a design we built")
 
