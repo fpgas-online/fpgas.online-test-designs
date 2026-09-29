@@ -21,10 +21,12 @@ from pathlib import Path
 VREF_MV = (600, 675, 750, 900)  # the HCLK_IOI3.VREF.V_<n>_MV features prjxray-db knows
 
 _VREF = re.compile(r"^(HCLK_IOI3_X\d+Y\d+)\.VREF\.V_\d+_MV$")
-_IOB = re.compile(r"^([LR]IOB33_X\d+Y\d+\.IOB_Y[01])\.(.+)$")
+_IOB = re.compile(r"^([LR]IOB33(?:_SING)?_X\d+Y\d+\.IOB_Y[01])\.(.+)$")
 _SSTL15_DRIVE = "LVCMOS15_SSTL15.DRIVE.I16_I_FIXED"  # SSTL15, and also LVCMOS15 at 16 mA
 _SSTL15_R_DRIVE = "LVCMOS15.DRIVE.I8"
-_SSTL_OUTPUT = "SSTL135_SSTL15.SLEW.FAST"  # only an SSTL output has this slew feature
+# Only an SSTL output has this slew feature, so it marks the pins to rewrite. An SSTL output with SLEW=SLOW
+# gets a slew feature it shares with LVCMOS and is left at full drive: the DDR3 resources all set SLEW=FAST.
+_SSTL_OUTPUT = "SSTL135_SSTL15.SLEW.FAST"
 
 
 def fix_lines(lines, vref_mv=None, sstl15_reduced_drive=False):

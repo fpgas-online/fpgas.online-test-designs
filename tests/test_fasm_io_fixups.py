@@ -2,7 +2,7 @@
 
 import pytest
 
-from designs._shared.fasm_io_fixups import add_openxc7_fasm_io_fixups, fix_lines
+from designs._shared.fasm_io_fixups import add_openxc7_fasm_io_fixups, fix_lines, main
 
 # Trimmed from the openXC7 NeTV2 DDR build: a DQ pin (SSTL in and out), an address pin (SSTL out), and
 # reset_n, an LVCMOS15 output driving 16 mA, which shares the SSTL15 drive feature but is no SSTL pin.
@@ -97,3 +97,18 @@ def test_vivado_builds_are_untouched():
     add_openxc7_fasm_io_fixups(_Platform(tc), vref_mv=750)
     tc.finalize()
     assert tc._pre_packer_cmd == ["fasm2frames"]
+
+
+def test_single_iob_tiles_are_rewritten_too():
+    sing = [
+        "RIOB33_SING_X43Y50.IOB_Y0.LVCMOS15_SSTL15.DRIVE.I16_I_FIXED\n",
+        "RIOB33_SING_X43Y50.IOB_Y0.SSTL135_SSTL15.SLEW.FAST\n",
+    ]
+    assert fix_lines(sing, sstl15_reduced_drive=True)[0] == "RIOB33_SING_X43Y50.IOB_Y0.LVCMOS15.DRIVE.I8\n"
+
+
+def test_the_command_line_rewrites_the_file_in_place(tmp_path):
+    fasm = tmp_path / "top.fasm"
+    fasm.write_text("".join(FASM))
+    main([str(fasm), "--vref-mv", "750", "--sstl15-reduced-drive"])
+    assert fasm.read_text() == "".join(fix_lines(FASM, vref_mv=750, sstl15_reduced_drive=True))
