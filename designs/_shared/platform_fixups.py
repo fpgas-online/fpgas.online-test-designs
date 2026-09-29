@@ -6,6 +6,7 @@ and the openXC7 toolchain expectations.
 
 import os
 import re
+from pathlib import Path
 
 from litex.build.generic_platform import IOStandard, Subsignal
 
@@ -57,14 +58,69 @@ def constrain_openxc7_clocks(platform, domains):
             raise ValueError(f"clock domain {domain.name}: frequency {freq} is not positive")
         platform.add_period_constraint(domain.clk, 1e9 / freq)
 
+    toolchain = platform.toolchain
+
     # build() resets timingstrict from its keyword argument, so force it there.
-    build = platform.toolchain.build
+    build = toolchain.build
 
     def strict_build(*args, **kwargs):
         kwargs["timingstrict"] = True
         return build(*args, **kwargs)
 
-    platform.toolchain.build = strict_build
+    toolchain.build = strict_build
+
+    # nextpnr-xilinx's result varies a lot with its seed (a 75 MHz Acorn SoC reached 74.0-92.5 MHz over three
+    # seeds), and every build's BIOS timestamp changes the netlist, so a strict build would fail now and then.
+    # Log nextpnr to a file, and when that shows a missed clock, place and route again with the next seed.
+    finalize = toolchain.finalize
+
+    def finalize_with_log(*args, **kwargs):
+        result = finalize(*args, **kwargs)
+        toolchain._nextpnr._pnr_opts += f"--log {toolchain._build_name}_nextpnr.log "
+        return result
+
+    toolchain.finalize = finalize_with_log
+    toolchain.run_script = _retry_missed_timing(toolchain)
+
+
+OPENXC7_TIMING_SEEDS = 5
+_MISSED_CLOCK = re.compile(r"^ERROR: Max frequency for clock .*FAIL at", re.MULTILINE)
+
+
+def _retry_missed_timing(toolchain):
+    run_script = toolchain.run_script
+
+    def missed_timing(log):
+        return log.exists() and _MISSED_CLOCK.search(log.read_text(errors="replace")) is not None
+
+    def run_script_retrying(script):
+        log = Path(f"{toolchain._build_name}_nextpnr.log")  # run_script runs in the build directory
+        log.unlink(missing_ok=True)  # never judge this build by an older one's log
+        try:
+            return run_script(script)
+        except OSError:
+            if not missed_timing(log):
+                raise
+        text = Path(script).read_text()
+        first = re.search(r"--seed (\d+)", text)
+        if first is None:
+            raise OSError(f"timing not met, and no --seed in {script} to vary")
+        first = int(first.group(1))
+        # Synthesis does not depend on the seed: rerun only nextpnr and what follows it.
+        pnr = "".join(line for line in text.splitlines(keepends=True) if not line.startswith("yosys "))
+        retry = Path(script).with_name(Path(script).stem + "_retry" + Path(script).suffix)
+        for seed in range(first + 1, first + OPENXC7_TIMING_SEEDS):
+            print(f"constrain_openxc7_clocks: timing not met with nextpnr seed {seed - 1}, trying seed {seed}")
+            retry.write_text(re.sub(r"--seed \d+", f"--seed {seed}", pnr))
+            log.unlink(missing_ok=True)
+            try:
+                return run_script(str(retry))
+            except OSError:
+                if not missed_timing(log):
+                    raise
+        raise OSError(f"timing not met with any nextpnr seed {first}..{first + OPENXC7_TIMING_SEEDS - 1}")
+
+    return run_script_retrying
 
 
 def fix_openxc7_device_name(platform):
