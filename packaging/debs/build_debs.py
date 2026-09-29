@@ -51,13 +51,16 @@ MODE = "fpgas-online-verify-mode"  # virtual: every mode package Provides and Co
 EXE = {"file_info": {"mode": 0o755}}
 DATA = {"file_info": {"mode": 0o644}}
 OPENFPGALOADER = "openfpgaloader-fpgasonline | openfpgaloader-fpgasonline-git | openfpgaloader"
-# What each board's verify needs, and nothing it does not: the Acorn's is PCIe and the stdlib.
+ETHERNET = ["iproute2", "iputils-ping", "iputils-arping | arping", "sudo"]
+# What each board's verify needs, and nothing it does not. Every test the boot check runs needs its tools here,
+# not in -debug (only Suggested): the Arty's Ethernet test and the Arty's and TT's Pmod pin-ID scan (GPIO reads),
+# and the Acorn's P1 JTAG probe (openFPGALoader, then pinctrl to release the pins) and P2 UART read (pyserial).
 TOOLS_DEPENDS = {
-    "acorn": [],
-    "arty": ["python3-serial", OPENFPGALOADER],
+    "acorn": [OPENFPGALOADER, "python3-serial", "raspi-utils-core"],
+    "arty": ["python3-serial", OPENFPGALOADER, "python3-libgpiod", *ETHERNET],
     "netv2": ["python3-serial", OPENFPGALOADER, "openocd"],
     "fomu": ["python3-serial", OPENFPGALOADER],
-    "tt": ["python3-serial"],
+    "tt": ["python3-serial", "python3-libgpiod"],
 }
 TOOLS_RECOMMENDS = {"tt": ["micropython-mpremote"]}  # in trixie; only bookworm-backports has it for bookworm
 # What fpgas-<b>-debug needs on top: the Acorn's conversion from SQRL's factory image loads a .bit over JTAG,
@@ -69,7 +72,6 @@ DEBUG_DEPENDS = {
     "fomu": ["python3-libgpiod"],
     "tt": ["python3-libgpiod"],
 }
-ETHERNET = ["iproute2", "iputils-ping", "iputils-arping | arping", "sudo"]
 BOARDS = installed()
 
 
