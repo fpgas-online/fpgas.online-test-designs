@@ -56,21 +56,39 @@ def pick_test_interface(usb_ifaces, in_use):
     return None, f"more than one free USB Ethernet adapter ({', '.join(free)}): pass --interface"
 
 
-def find_usb_ethernet_interface():
+def interfaces_in_use(default_routes, ipv4_addrs):
+    """The interfaces the Pi itself uses, from `ip -o route show default` and `ip -o -4 addr show`.
+
+    Any interface named by a default route (multipath `nexthop ... dev X` included), and any holding an IPv4
+    address other than the test's own 192.168.1.100 or an IPv4 link-local 169.254/16 (which an idle adapter
+    can pick up by itself at boot).
+    """
+    in_use = set(re.findall(r"\bdev\s+(\S+)", default_routes))
+    for m in re.finditer(r"^\d+:\s+(\S+)\s+inet\s+(\S+)", ipv4_addrs, re.M):
+        if not m.group(2).startswith((f"{HOST_IP}/", "169.254.")):
+            in_use.add(m.group(1))
+    return in_use
+
+
+def find_usb_ethernet_interface(sysfs="/sys/class/net", ip=None):
     """(interface, None) for the USB Ethernet adapter cabled to the FPGA, or (None, reason).
 
-    USB adapters are found by their sysfs device path. The Pi's own interfaces are those holding the default
-    route or any IPv4 address before the test touches anything.
+    USB adapters are found by their sysfs device path. The Pi's own interfaces are those interfaces_in_use()
+    names, plus any enslaved to another interface (a bridge, bond or VLAN's lower device: `master` or
+    `upper_*` in sysfs), whose address sits on the upper interface.
     """
-    usb = []
-    for iface in sorted(os.listdir("/sys/class/net")):
-        if iface != "lo" and "/usb" in os.path.realpath(f"/sys/class/net/{iface}/device"):
+    ip = ip or (lambda *args: subprocess.run(["ip", *args], capture_output=True, text=True, check=True).stdout)
+    usb, enslaved = [], set()
+    for iface in sorted(os.listdir(sysfs)):
+        if iface == "lo":
+            continue
+        if "/usb" in os.path.realpath(f"{sysfs}/{iface}/device"):
             usb.append(iface)
-    routes = subprocess.run(["ip", "-o", "route", "show", "default"], capture_output=True, text=True, check=True)
-    addrs = subprocess.run(["ip", "-o", "-4", "addr", "show"], capture_output=True, text=True, check=True)
-    in_use = set(re.findall(r"\bdev\s+(\S+)", routes.stdout))
-    in_use |= {m.group(1) for m in re.finditer(r"^\d+:\s+(\S+)\s+inet\s+(\S+)", addrs.stdout, re.M)
-               if not m.group(2).startswith(f"{HOST_IP}/")}  # fmt: skip
+        if os.path.lexists(f"{sysfs}/{iface}/master") or any(
+            n.startswith("upper_") for n in os.listdir(f"{sysfs}/{iface}")
+        ):
+            enslaved.add(iface)
+    in_use = interfaces_in_use(ip("-o", "route", "show", "default"), ip("-o", "-4", "addr", "show")) | enslaved
     return pick_test_interface(usb, in_use)
 
 
