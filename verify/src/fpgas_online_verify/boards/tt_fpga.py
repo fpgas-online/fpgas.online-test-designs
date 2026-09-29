@@ -25,7 +25,13 @@ class TTFPGA(TestBoard):
     port = "/dev/ttyACM0"
     services = ("fpgas-tt.service",)  # the TT site's bridge keeps the RP2350's port open while it runs
     flash_note = "not read: every verify rewrites the bitstream on the RP2350"
+    # Run in this order, and the board is left with the last design loaded (testbench.py): the pin-ID scan
+    # comes first, so a UART-bridge design (one TX pin) is what stays, not one driving every Pmod line.
     tests: ClassVar[dict] = {
+        # The Pmod HAT cabling, against identify_pmod_pins.BOARDS["tt"] (uo_out on HAT JA, uio JB, ui_in JC).
+        "pin-id": {"artifact": "pmod-pin-id-{v}/top.bin", "script": "identify_pmod_pins.py",
+                   "args": ["--board", "tt"], "pre": PMOD_PRE, "program_args": ["--gpio-release"],
+                   "verify": True},
         "uart": {"artifact": "uart-test-tt-fpga/tt_fpga_platform.bin", "script": "test_uart.py",
                  "args": ["--port", "{port}", "--board", "tt", "--skip-banner"], "verify": True,
                  "runner": "tt-bridge"},
@@ -33,10 +39,6 @@ class TTFPGA(TestBoard):
                      "args": ["--port", "{port}", "--board", "tt"], "verify": True, "runner": "tt-bridge"},
         "pmod": {"artifact": "gpio-loopback-{v}/top.bin", "script": "test_pmod_loopback.py",
                  "args": ["--board", "tt"], "pre": PMOD_PRE, "program_args": ["--gpio-release"]},
-        # The Pmod HAT cabling, against identify_pmod_pins.BOARDS["tt"] (uo_out on HAT JA, uio JB, ui_in JC).
-        "pin-id": {"artifact": "pmod-pin-id-{v}/top.bin", "script": "identify_pmod_pins.py",
-                   "args": ["--board", "tt"], "pre": PMOD_PRE, "program_args": ["--gpio-release"],
-                   "verify": True},
     }  # fmt: skip
 
     def program_argv(self, bitstream, host, test):

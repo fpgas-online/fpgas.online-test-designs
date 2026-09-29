@@ -284,14 +284,15 @@ def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_rea
     ]
     assert run.calls[-1] == ["systemctl", "start", "--no-block", "fpgas-tt.service"]
     assert report["services_stopped"] == ["fpgas-tt.service"]
-    first = run.calls[2]
-    assert first[1].endswith("tt_test_wrapper.py") and first[2] == "/dev/ttyACM0"
-    assert first[3].endswith("uart-test-tt-fpga/tt_fpga_platform.bin") and first[5].endswith("test_uart.py")
-    # the bridge loads the UART and SPI-flash designs; only the Pmod pin-ID scan loads one itself
-    loads = [c for c in run.calls if "tt_fpga_program.py" in " ".join(c)]
-    (load,) = loads
+    # the pin-ID scan loads its design itself and runs first; the bridge loads the UART and SPI-flash designs,
+    # so the last design left on the board is one with a single TX pin, not one driving every Pmod line
+    assert [t["test"] for t in report["tests"]] == ["pin-id", "uart", "spiflash"]
+    (load,) = [c for c in run.calls if "tt_fpga_program.py" in " ".join(c)]
     assert load[3].endswith("pmod-pin-id-tt-fpga/top.bin") and load[4:] == ["--gpio-release"]
-    assert [t["test"] for t in report["tests"]] == ["uart", "spiflash", "pin-id"]
+    bridged = [c for c in run.calls if "tt_test_wrapper.py" in " ".join(c)]
+    assert [c[3].rsplit("/", 2)[-2] for c in bridged] == ["uart-test-tt-fpga", "spiflash-test-tt-fpga"]
+    assert bridged[0][2] == "/dev/ttyACM0" and bridged[0][5].endswith("test_uart.py")
+    assert run.calls.index(load) < run.calls.index(bridged[0])
     assert report["state"] == {"variant": "tt-fpga", "serial": "E6"} and "rewrites" in report["flash_note"]
 
 
