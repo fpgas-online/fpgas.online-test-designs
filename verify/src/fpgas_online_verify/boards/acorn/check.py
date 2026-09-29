@@ -5,8 +5,8 @@ fpgas-verify.service when the host is set up for an Acorn, and on demand as fpga
 
   1. PCI IDs, from sysfs: which image family is running. The fpgas.online SoC is LitePCIe's 10ee:7021 with
      the board named in the subsystem IDs; SQRL's factory image and the vendor XDMA sample are recognised and
-     reported as unconverted. Nothing past this tier runs against a design we did not build: its BAR0 has a
-     register layout we do not know.
+     fail, with "unconverted" in the reason. Nothing past this tier runs against a design we did not build:
+     its BAR0 has a register layout we do not know.
   2. The SoC's identifier string, over BAR0: which build is running. It carries the build timestamp, so it
      names one image exactly. It must be the operational or golden build of the installed release; the
      golden one means the operational slot did not boot (degraded).
@@ -58,7 +58,7 @@ SLOTS = (("0x000000", spi_flash.GOLDEN_ADDR), ("0x400000", spi_flash.OPERATIONAL
 
 # Worst first wins when there is more than one board.
 # driver-bound: a kernel driver (litepcie.ko) holds BAR0, so nothing was read. Not a fault, but not a pass either.
-SEVERITY = ("none", "pass", "driver-bound", "degraded", "unconverted", "fail", "error")
+SEVERITY = ("none", "pass", "driver-bound", "degraded", "fail", "error")
 
 
 # -- tier 1: PCI IDs ---------------------------------------------------------------------------------
