@@ -65,8 +65,11 @@ class BaseSoC(SoCCore):
         from designs._shared.platform_fixups import fix_openxc7_device_name, fix_openxc7_reduced_drive_iostandards
         fix_openxc7_device_name(platform)
         if toolchain == "openxc7":
-            # Its DDR3 pins are SSTL15_R, which nextpnr-xilinx builds with no input buffer.
+            # Its DDR3 pins are SSTL15_R, which nextpnr-xilinx builds with no input buffer: ask for SSTL15,
+            # then give the bank Vivado's VREF (0.75 V) and the outputs SSTL15_R's drive.
+            from designs._shared.fasm_io_fixups import add_openxc7_fasm_io_fixups
             fix_openxc7_reduced_drive_iostandards(platform)
+            add_openxc7_fasm_io_fixups(platform, vref_mv=750, sstl15_reduced_drive=True)
 
         # CRG --------------------------------------------------------------------------------------
         self.crg = _CRG(platform, sys_clk_freq)
