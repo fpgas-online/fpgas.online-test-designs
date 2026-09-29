@@ -146,6 +146,34 @@ def test_labels_from_frames_none_when_silent():
     assert ident.label_from_frames([]) is None
 
 
+# -- main(): --board versus an explicit pin selection -----------------------------
+
+
+def _main(monkeypatch, argv, decoded):
+    scanned = []
+    monkeypatch.setattr(ident.sys, "argv", ["identify_pmod_pins.py", *argv])
+    monkeypatch.setattr(ident, "release_kernel_gpio_drivers", lambda: None)
+    monkeypatch.setattr(ident, "detect_gpio_chip", lambda: "/dev/gpiochip0")
+    monkeypatch.setattr(ident, "scan_gpios", lambda gpios, chip: scanned.extend(gpios) or dict(decoded))
+    try:
+        ident.main()
+        code = 0
+    except SystemExit as e:
+        code = e.code
+    return code, scanned
+
+
+def test_board_mode_fails_a_miswired_board(monkeypatch):
+    code, scanned = _main(monkeypatch, ["--board", "tt"], {8: "13"})
+    assert code == 1 and scanned == [gpio for gpio, _b, _l in ident.BOARDS["tt"]["pins"]]
+
+
+def test_an_explicit_hat_port_after_board_is_a_discovery_scan(monkeypatch):
+    """fpgas-<board>-debug test pin-id -- --hat-port JA appends to the boot check's --board arguments."""
+    code, scanned = _main(monkeypatch, ["--board", "arty", "--hat-port", "JA"], {8: "G13"})
+    assert scanned == ident.PMOD_HAT_PORTS["JA"] and code in (0, None)
+
+
 # -- iCE40 pin numbers, and the Arty / TT HAT maps -------------------------------
 
 
