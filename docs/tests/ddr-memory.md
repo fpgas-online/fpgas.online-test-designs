@@ -129,7 +129,7 @@ Memtest KO: 42 errors
 | DRAM chip | Micron MT41K128M16JT-125 (or equivalent) |
 | Capacity | 256 MB (2 Gbit) |
 | Data width | 16-bit |
-| Clock frequency | 100 MHz (DDR3-800 effective) |
+| Clock frequency | 100 MHz (DDR3-800) with Vivado; 75 MHz (DDR3 at 600 MT/s) with openXC7 |
 | LiteX target | `digilent_arty` |
 
 Source: [Arty A7 Reference Manual](https://digilent.com/reference/programmable-logic/arty-a7/reference-manual)
@@ -140,6 +140,8 @@ Source: [Arty A7 Reference Manual](https://digilent.com/reference/programmable-l
 |-----------|-------|
 | Capacity | 512 MB |
 | Data width | 32-bit (2x 16-bit chips) |
+| Clock frequency | 50 MHz (DDR3 at 400 MT/s) |
+| IO standard | SSTL15_R (Vivado); SSTL15 plus a FASM drive fix with openXC7, see [designs/ddr-memory/README.md](../../designs/ddr-memory/README.md) |
 | LiteX target | `kosagi_netv2` |
 
 Source: [NeTV2 FPGA repository](https://github.com/AlphamaxMedia/netv2-fpga)
