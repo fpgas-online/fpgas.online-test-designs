@@ -528,7 +528,9 @@ def main():
     parser.add_argument(
         "--board", choices=sorted(BOARDS),
         help="Validate wiring for a known board against its expected GPIO->ball "
-             "map (prints RESULT: PASS/FAIL). Overrides --gpios/--hat-port.",
+             "map (prints RESULT: PASS/FAIL). An explicit --gpios/--hat-port "
+             "scans those pins instead (fpgas-<board>-debug test pin-id -- "
+             "--hat-port JA, where the boot check's arguments carry --board).",
     )
     parser.add_argument(
         "--gpios", type=int, nargs="+",
@@ -543,6 +545,8 @@ def main():
         help="Skip unloading kernel modules (SPI, I2C)"
     )
     args = parser.parse_args()
+    if args.gpios or args.hat_port:  # an explicit scan is discovery, whatever --board says
+        args.board = None
 
     if args.board:
         gpio_list = [gpio for gpio, _ball, _label in BOARDS[args.board]["pins"]]
