@@ -56,13 +56,15 @@ ETHERNET = ["iproute2", "iputils-ping", "iputils-arping | arping", "sudo"]
 # not in -debug (only Suggested): the Arty's Ethernet test and the Arty's and TT's Pmod pin-ID scan (GPIO reads),
 # and the Acorn's P1 JTAG probe (openFPGALoader, then pinctrl to release the pins) and P2 UART read (pyserial).
 TOOLS_DEPENDS = {
-    "acorn": [OPENFPGALOADER, "python3-serial", "raspi-utils-core"],
+    "acorn": [OPENFPGALOADER, "python3-serial"],
     "arty": ["python3-serial", OPENFPGALOADER, "python3-libgpiod", *ETHERNET],
     "netv2": ["python3-serial", OPENFPGALOADER, "openocd"],
     "fomu": ["python3-serial", OPENFPGALOADER],
     "tt": ["python3-serial", "python3-libgpiod"],
 }
-TOOLS_RECOMMENDS = {"tt": ["micropython-mpremote"]}  # in trixie; only bookworm-backports has it for bookworm
+# mpremote: in trixie, but only bookworm-backports has it for bookworm. pinctrl (releases the Acorn's JTAG pins
+# after the probe): Raspberry Pi OS's raspi-utils-core, not in Debian, so not a Depends.
+TOOLS_RECOMMENDS = {"tt": ["micropython-mpremote"], "acorn": ["raspi-utils-core"]}
 # What fpgas-<b>-debug needs on top: the Acorn's conversion from SQRL's factory image loads a .bit over JTAG,
 # and fpgas-acorn-flash --uart talks UARTBone; the PMOD tests read GPIOs; the Ethernet test configures a link.
 DEBUG_DEPENDS = {

@@ -50,9 +50,11 @@ def test_each_board_tools_package_has_its_module_and_only_its_own_tooling(tmp_pa
                                "python3-serial", bd.OPENFPGALOADER, "python3-libgpiod", *bd.ETHERNET]  # fmt: skip
     assert set(_dst(arty)) == {f"{bd.DIST}/boards/arty.py", "/usr/bin/fpgas-arty-verify"}
     acorn = bd.tools_nfpm(B["acorn"], V, ACORN_BITS, tmp_path)
-    # the P1 JTAG probe (openFPGALoader, pinctrl) and the P2 UART read (pyserial) are boot-check tests
+    # the P1 JTAG probe (openFPGALoader) and the P2 UART read (pyserial) are boot-check tests; pinctrl, which
+    # releases the JTAG pins, is Raspberry Pi OS's raspi-utils-core, not in Debian, so only Recommended
     assert acorn["depends"] == [f"fpgas-online-verify (= {V})", f"fpgas-online-acorn-bitstreams (= {ACORN_BITS})",
-                                bd.OPENFPGALOADER, "python3-serial", "raspi-utils-core"]  # fmt: skip
+                                bd.OPENFPGALOADER, "python3-serial"]  # fmt: skip
+    assert acorn["recommends"] == ["raspi-utils-core"]
     modules = ("__init__", "check", "links", "spi_flash", "uartbone_link")
     assert {f"{bd.DIST}/boards/acorn/{m}.py" for m in modules} <= set(_dst(acorn))
     assert "/usr/bin/fpgas-acorn-flash" in _dst(acorn)
