@@ -62,9 +62,10 @@ class S7BitbangSPIFlash(LiteXModule):
 
         # Drive WP# and HOLD# high (inactive). Before, they were only given a reset value (and a WP# named
         # "wp" not even that), which drives nothing: the pads were left floating, and a flash whose HOLD#
-        # floats low stops answering. It was not what made the NeTV2 read 0xFF 0xFF 0xFF (fpgas.online-test-designs#51): that
-        # was the STARTUPE2 clock handoff (see the firmware), and driving these alone did not fix it. The
-        # NeTV2's platform calls WP# "vpp", the Arty's and the Acorn's "wp".
+        # floats low stops answering. It was not what made the NeTV2 read 0xFF 0xFF 0xFF
+        # (fpgas.online-test-designs#51): that was the STARTUPE2 clock handoff (see the firmware), and
+        # driving these alone did not fix it. The NeTV2's platform calls WP# "vpp", the Arty's and the
+        # Acorn's "wp".
         for name in ("vpp", "wp", "hold"):
             if hasattr(pads, name):
                 self.comb += getattr(pads, name).eq(1)
