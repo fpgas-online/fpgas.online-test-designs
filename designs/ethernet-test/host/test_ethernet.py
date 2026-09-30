@@ -13,10 +13,11 @@ Steps:
   5. Send ICMP ping and verify response
 
 Usage:
-    uv run python host/test_ethernet.py --board arty --uart-port /dev/ttyUSB1
-    uv run python host/test_ethernet.py --board netv2 --uart-port /dev/ttyAMA0
+    sudo python3 host/test_ethernet.py --board arty --uart-port /dev/ttyUSB1
+    sudo python3 host/test_ethernet.py --board netv2 --uart-port /dev/ttyAMA0
 
-Requires root (sudo) for network interface configuration and arping.
+Needs root, to configure the adapter and to send ARP: it asks to be rerun as root rather than calling sudo
+itself (the boot check, fpgas-verify.service, runs as root already).
 """
 
 import argparse
@@ -92,22 +93,23 @@ def find_usb_ethernet_interface(sysfs="/sys/class/net", ip=None):
     return pick_test_interface(usb, in_use)
 
 
+def not_root_reason(iface, euid=None):
+    """None when running as root; otherwise what to tell the user, who has to rerun the test as root."""
+    if (os.geteuid() if euid is None else euid) == 0:
+        return None
+    return (
+        f"FAIL - not running as root: configuring {iface} and sending ARP need root. "
+        "Rerun this test as root (e.g. with sudo)."
+    )
+
+
 def configure_interface(iface, ip, netmask):
     """Configure network interface with static IP."""
     prefix_len = ipaddress.IPv4Network(f"0.0.0.0/{netmask}").prefixlen
     print(f"Configuring {iface} with {ip}/{prefix_len}...")
-    subprocess.run(
-        ["sudo", "ip", "addr", "flush", "dev", iface],
-        check=True,
-    )
-    subprocess.run(
-        ["sudo", "ip", "addr", "add", f"{ip}/{prefix_len}", "dev", iface],
-        check=True,
-    )
-    subprocess.run(
-        ["sudo", "ip", "link", "set", iface, "up"],
-        check=True,
-    )
+    subprocess.run(["ip", "addr", "flush", "dev", iface], check=True)
+    subprocess.run(["ip", "addr", "add", f"{ip}/{prefix_len}", "dev", iface], check=True)
+    subprocess.run(["ip", "link", "set", iface, "up"], check=True)
     # Poll for link to come up (carrier detect)
     for _ in range(40):
         try:
@@ -178,16 +180,12 @@ def test_arp(fpga_ip, interface, timeout=10):
     print(f"ARP test: arping {fpga_ip} on {interface}...")
     try:
         result = subprocess.run(
-            ["sudo", "arping", "-c", "5", "-w", str(timeout), "-I", interface, fpga_ip],
+            ["arping", "-c", "5", "-w", str(timeout), "-I", interface, fpga_ip],
             capture_output=True,
             text=True,
         )
     except FileNotFoundError:
-        print("  FAIL: 'arping' not found. Install it with: sudo apt install arping")
-        return False, None
-    # When sudo wraps a missing command, it returns exit code 1 with stderr
-    if "not found" in result.stderr or "No such file" in result.stderr:
-        print("  FAIL: 'arping' not found. Install it with: sudo apt install arping")
+        print("  FAIL: 'arping' not found: install iputils-arping (or arping)")
         return False, None
     print(f"  stdout: {result.stdout.strip()}")
 
@@ -254,7 +252,11 @@ def run_test(board, uart_port, baud, eth_interface=None):
             return False
         print(f"found: {iface}")
 
-    # Step 2: Configure interface
+    # Step 2: Configure interface (from here on, root: `ip addr` and arping)
+    why = not_root_reason(iface)
+    if why:
+        print(why, file=sys.stderr)
+        return False
     configure_interface(iface, HOST_IP, NETMASK)
 
     # Step 3: Read MAC from BIOS UART

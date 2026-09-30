@@ -244,6 +244,7 @@ DESIGNS = {
     },
     "ethernet": {
         "test_script": "designs/ethernet-test/host/test_ethernet.py",
+        "needs_root": True,  # it configures the adapter and sends ARP, and asks to be rerun as root otherwise
         "boards": {
             "arty": {
                 "artifact": "ethernet-test-arty-a7-35t/digilent_arty.bit",
@@ -555,6 +556,11 @@ def generate_tests():
             else:
                 prog_cmd = PROGRAM_CMD[board].format(bitstream=remote_bitstream, home=home)
 
+            test_cmd = f"python3 {remote_script} {test_args}"
+            # Gateway hosts run everything under `sudo -n sh -c` (_build_ssh_cmd); the direct-SSH ones do not.
+            if design.get("needs_root") and HOSTS[host_name]["ssh_type"] == "direct" and host_user(host_name) != "root":
+                test_cmd = f"sudo -n {test_cmd}"
+
             tests.append(
                 {
                     "name": f"{design_name.upper()} on {board} ({host_name})",
@@ -567,7 +573,7 @@ def generate_tests():
                     "remote_bitstream": remote_bitstream,
                     "remote_script": remote_script,
                     "program_cmd": prog_cmd,
-                    "test_cmd": f"python3 {remote_script} {test_args}",
+                    "test_cmd": test_cmd,
                     "pre_test": board_cfg.get("pre_test"),
                 }
             )
