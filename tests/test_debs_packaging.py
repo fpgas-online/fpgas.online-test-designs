@@ -45,21 +45,25 @@ def test_the_core_has_every_module_but_the_boards_and_every_host_script(tmp_path
 def test_each_board_tools_package_has_its_module_and_only_its_own_tooling(tmp_path):
     arty = bd.tools_nfpm(B["arty"], V, V, tmp_path)
     assert arty["name"] == "fpgas-online-arty-tools"
+    # the boot check's Ethernet test and Pmod pin-ID scan need their tools here, not in the Suggested -debug
     assert arty["depends"] == [f"fpgas-online-verify (= {V})", f"fpgas-online-arty-bitstreams (= {V})",
-                               "python3-serial", bd.OPENFPGALOADER]  # fmt: skip
+                               "python3-serial", bd.OPENFPGALOADER, "python3-libgpiod", *bd.ETHERNET]  # fmt: skip
     assert set(_dst(arty)) == {f"{bd.DIST}/boards/arty.py", "/usr/bin/fpgas-arty-verify"}
     acorn = bd.tools_nfpm(B["acorn"], V, ACORN_BITS, tmp_path)
-    # GPIO and PCIe only: no USB tooling, no serial, not even openFPGALoader (that is the debug package's)
-    assert acorn["depends"] == [f"fpgas-online-verify (= {V})", f"fpgas-online-acorn-bitstreams (= {ACORN_BITS})"]
-    assert {f"{bd.DIST}/boards/acorn/{m}.py" for m in ("__init__", "check", "spi_flash", "uartbone_link")} <= set(
-        _dst(acorn)
-    )
+    # the P1 JTAG probe (openFPGALoader) and the P2 UART read (pyserial) are boot-check tests; pinctrl, which
+    # releases the JTAG pins, is Raspberry Pi OS's raspi-utils-core, not in Debian, so only Recommended
+    assert acorn["depends"] == [f"fpgas-online-verify (= {V})", f"fpgas-online-acorn-bitstreams (= {ACORN_BITS})",
+                                bd.OPENFPGALOADER, "python3-serial"]  # fmt: skip
+    assert acorn["recommends"] == ["raspi-utils-core"]
+    modules = ("__init__", "check", "links", "spi_flash", "uartbone_link")
+    assert {f"{bd.DIST}/boards/acorn/{m}.py" for m in modules} <= set(_dst(acorn))
     assert "/usr/bin/fpgas-acorn-flash" in _dst(acorn)
     netv2 = bd.tools_nfpm(B["netv2"], V, V, tmp_path)
     assert "openocd" in netv2["depends"]
     tt = bd.tools_nfpm(B["tt"], V, V, tmp_path)
-    assert tt["name"] == "fpgas-online-tt-fpga-tools" and tt["recommends"] == ["micropython-mpremote"]
-    assert bd.OPENFPGALOADER not in tt["depends"]
+    assert tt["name"] == "fpgas-online-tt-fpga-tools" and tt["recommends"] == ["micropython-mpremote", bd.PINCTRL]
+    assert arty["recommends"] == [bd.PINCTRL]  # the PMOD HAT scan puts back the pins' UART/I2C/SPI functions
+    assert bd.OPENFPGALOADER not in tt["depends"] and "python3-libgpiod" in tt["depends"]
     for config in (arty, acorn, netv2, tt):
         assert "fpgas-online-setup-pi" not in config["depends"] + config.get("recommends", [])
 

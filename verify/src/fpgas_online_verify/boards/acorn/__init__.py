@@ -5,12 +5,16 @@ Every Xilinx or SQRL PCIe endpoint is claimed. The Acorn-family images are recog
 build of ours without the subsystem IDs, 10ee:7021 subsystem 10ee:0007, or another design) fails as "not a
 design we built": an FPGA is plainly there, so reporting no board at all would hide it (pi-sw2-p37, 2026-09-27).
 
+A board whose variant is known also has its links to the Pi checked (links.py): P1 JTAG, and, when our SoC
+runs, the P2 UART. A failure there fails the board: its PCIe side may be fine, but it cannot be loaded or
+talked to the way users are told it can.
+
 spi_flash.py (fpgas-acorn-flash) is the operator's tool for the same flash, and shares the lock.
 """
 
 from ...board import Board
-from ...core import Problem
-from . import check
+from ...core import Problem, run
+from . import check, links
 
 
 class Acorn(Board):
@@ -34,6 +38,17 @@ class Acorn(Board):
                     "reason": p.reason}  # fmt: skip
         board = check.check_board(found, images, release, options.get("open_bar", check.open_bar0))
         report = {"board": self.name, "found": found, "variant": found["variant"], **board}
+        if found["variant"]:  # a board we can name: its P1 JTAG and, running our SoC, its P2 UART (links.py)
+            tests = [links.jtag(found["variant"], options.get("run", run))]
+            identifier = board.get("running", {}).get("identifier")
+            if identifier and board["result"] in ("pass", "degraded"):
+                tests.append(links.p2_uart(identifier, options.get("uart_opener")))
+            report["tests"] = tests
+            failed = [t for t in tests if t["result"] != "pass"]
+            if failed:  # the worst result wins; every reason is kept (a degraded board says so too)
+                report["result"] = max([report["result"], *(t["result"] for t in failed)], key=check.SEVERITY.index)
+                reasons = [report.get("reason"), *(t.get("reason", f"{t['test']} failed") for t in failed)]
+                report["reason"] = "; ".join(r for r in reasons if r)
         if release:
             report["bitstreams"] = release[0].get("tag")
         state = {"bdf": found["bdf"], "ids": found["ids"], "subsystem": found["subsystem"]}

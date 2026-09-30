@@ -15,13 +15,13 @@ sudo apt install fpgas-online-tt-fpga
 | Package | Installs |
 |---------|----------|
 | `fpgas-online-tt-fpga` | sets the host up as having a TT FPGA Demo Board, and enables `fpgas-verify.service` |
-| `fpgas-online-tt-fpga-tools` | the board's module of `fpgas_online_verify`, and `fpgas-tt-fpga-verify`; with `python3-serial`, and recommending `micropython-mpremote` |
+| `fpgas-online-tt-fpga-tools` | the board's module of `fpgas_online_verify`, and `fpgas-tt-fpga-verify`; with `python3-serial` and `python3-libgpiod` (the PMOD HAT scan), and recommending `micropython-mpremote` and `raspi-utils-core` (`pinctrl`, which puts back the Pi's SPI/UART/I2C pin functions after the scan; Raspberry Pi OS only) |
 | `fpgas-online-tt-fpga-bitstreams` | the test bitstreams built by the same commit's CI, in `/usr/share/fpgas-online/tt-fpga/bitstreams/` |
 | `fpgas-online-verify` | `fpgas-verify`, the unit, and the host test scripts |
 
 `fpgas-online-tt` is a different package: the TT site's own.
 
-The check finds the board by its Raspberry Pi microcontroller on USB (vendor `2e8a`). It loads the UART and SPI flash test designs through that microcontroller (`tt_fpga_program.py`, over `mpremote`), and runs each design's host test through its UART bridge on `/dev/ttyACM0`. Every load writes the bitstream to the microcontroller's filesystem, so its flash is not part of what `changed` compares; its USB serial number is. `mpremote` is `micropython-mpremote` in trixie, but only in bookworm-backports for bookworm: without it the check reports an `error`. The PMOD loopback and pin identification tests need the PMOD HAT, so only `fpgas-tt-fpga-debug` runs them.
+The check finds the board by its Raspberry Pi microcontroller on USB (vendor `2e8a`). It first loads the PMOD pin identification design and checks the PMOD HAT cabling against the expected map (uo_out on HAT JA, uio on JB, ui_in on JC, [tt-fpga-pin-mapping.md](tt-fpga-pin-mapping.md)); a miswired HAT fails the board. It then loads the UART and SPI flash test designs through that microcontroller (`tt_fpga_program.py`, over `mpremote`), and runs each design's host test through its UART bridge on `/dev/ttyACM0`. Every load writes the bitstream to the microcontroller's filesystem, so its flash is not part of what `changed` compares; its USB serial number is. `mpremote` is `micropython-mpremote` in trixie, but only in bookworm-backports for bookworm: without it the check reports an `error`. Only the PMOD loopback test is left to `fpgas-tt-fpga-debug`.
 
 The TT FPGA board's check has not yet been run on the board.
 

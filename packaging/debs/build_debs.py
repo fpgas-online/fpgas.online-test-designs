@@ -51,15 +51,22 @@ MODE = "fpgas-online-verify-mode"  # virtual: every mode package Provides and Co
 EXE = {"file_info": {"mode": 0o755}}
 DATA = {"file_info": {"mode": 0o644}}
 OPENFPGALOADER = "openfpgaloader-fpgasonline | openfpgaloader-fpgasonline-git | openfpgaloader"
-# What each board's verify needs, and nothing it does not: the Acorn's is PCIe and the stdlib.
+ETHERNET = ["iproute2", "iputils-ping", "iputils-arping | arping", "sudo"]
+# What each board's verify needs, and nothing it does not. Every test the boot check runs needs its tools here,
+# not in -debug (only Suggested): the Arty's Ethernet test and the Arty's and TT's Pmod pin-ID scan (GPIO reads),
+# and the Acorn's P1 JTAG probe (openFPGALoader, then pinctrl to release the pins) and P2 UART read (pyserial).
 TOOLS_DEPENDS = {
-    "acorn": [],
-    "arty": ["python3-serial", OPENFPGALOADER],
+    "acorn": [OPENFPGALOADER, "python3-serial"],
+    "arty": ["python3-serial", OPENFPGALOADER, "python3-libgpiod", *ETHERNET],
     "netv2": ["python3-serial", OPENFPGALOADER, "openocd"],
     "fomu": ["python3-serial", OPENFPGALOADER],
-    "tt": ["python3-serial"],
+    "tt": ["python3-serial", "python3-libgpiod"],
 }
-TOOLS_RECOMMENDS = {"tt": ["micropython-mpremote"]}  # in trixie; only bookworm-backports has it for bookworm
+# mpremote: in trixie, but only bookworm-backports has it for bookworm. pinctrl (releases the Acorn's JTAG pins
+# after the probe; puts back the UART/I2C/SPI functions the PMOD HAT scan takes): Raspberry Pi OS's
+# raspi-utils-core, not in Debian, so not a Depends.
+PINCTRL = "raspi-utils-core"
+TOOLS_RECOMMENDS = {"tt": ["micropython-mpremote", PINCTRL], "acorn": [PINCTRL], "arty": [PINCTRL]}
 # What fpgas-<b>-debug needs on top: the Acorn's conversion from SQRL's factory image loads a .bit over JTAG,
 # and fpgas-acorn-flash --uart talks UARTBone; the PMOD tests read GPIOs; the Ethernet test configures a link.
 DEBUG_DEPENDS = {
@@ -69,7 +76,6 @@ DEBUG_DEPENDS = {
     "fomu": ["python3-libgpiod"],
     "tt": ["python3-libgpiod"],
 }
-ETHERNET = ["iproute2", "iputils-ping", "iputils-arping | arping", "sudo"]
 BOARDS = installed()
 
 

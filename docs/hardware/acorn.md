@@ -17,13 +17,13 @@ sudo apt install fpgas-online-acorn
 | Package | Version scheme | Installs |
 |---------|----------------|----------|
 | `fpgas-online-acorn` | `X.Y.postN` from `git describe` (e.g. `0.0.post576`) | sets the host up as having an Acorn, and enables `fpgas-verify.service` |
-| `fpgas-online-acorn-tools` | `X.Y.postN` | the Acorn's module of `fpgas_online_verify` (`check.py`, `spi_flash.py`, `uartbone_link.py`), `/usr/bin/fpgas-acorn-verify` and `/usr/bin/fpgas-acorn-flash`. The Acorn is checked over PCIe with the standard library only, so nothing else is installed for it |
+| `fpgas-online-acorn-tools` | `X.Y.postN` | the Acorn's module of `fpgas_online_verify` (`check.py`, `links.py`, `spi_flash.py`, `uartbone_link.py`), `/usr/bin/fpgas-acorn-verify` and `/usr/bin/fpgas-acorn-flash`; with openFPGALoader for the P1 JTAG check (recommending `raspi-utils-core`, whose `pinctrl` releases the JTAG pins after it; Raspberry Pi OS only), and `python3-serial` for the P2 UART check |
 | `fpgas-online-acorn-bitstreams` | pinned release date + commit (e.g. `20260923+ge48a750c8303`) | `/usr/share/fpgas-online/acorn-pcie/images/`: `manifest.json`, and for each of `cle-215p` / `cle-101` the golden (`0x000000`) and operational (`0x400000`) flash images, the operational `.bit`, and the CSR maps |
 | `fpgas-online-verify` | `X.Y.postN` | `fpgas-verify` and its unit |
 
 The tools package depends on one exact bitstreams version. Which release that is comes from [`packaging/acorn-pcie/release.toml`](../../packaging/acorn-pcie/release.toml), and a new release reaches hosts only when a reviewed PR moves that pin. Every package is built, and its install rules are checked in clean Debian bookworm and trixie, by [`collect-bitstreams.yml`](../../.github/workflows/collect-bitstreams.yml).
 
-At boot the check finds the Acorn on PCI (Xilinx `10ee` or SQRL `1e24`), reads which build is running over BAR0, and reads both 4 MiB flash slots back whole, comparing them with the release's images. It never writes the flash. The PCI slot and IDs, the flash's identity and the sha256 of each slot are what `changed` compares, so a flash rewritten since the last run (by `fpgas-acorn-flash write`, say) is fatal until `sudo fpgas-verify --update`.
+At boot the check finds the Acorn on PCI (Xilinx `10ee` or SQRL `1e24`), reads which build is running over BAR0, and reads both 4 MiB flash slots back whole, comparing them with the release's images. It never writes the flash. It also checks the Acorn's two links to the Pi: `openFPGALoader --detect` over the P1 JTAG cable must find the variant's FPGA, and, when our SoC runs, a UARTBone read over the P2 UART (`/dev/ttyAMA0`) must return the same identifier as BAR0. A board whose PCIe side is fine fails if either link is dead. The PCI slot and IDs, the flash's identity and the sha256 of each slot are what `changed` compares, so a flash rewritten since the last run (by `fpgas-acorn-flash write`, say) is fatal until `sudo fpgas-verify --update`.
 
 **Check the board now:**
 

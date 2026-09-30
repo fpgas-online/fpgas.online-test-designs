@@ -9,6 +9,9 @@
 #     -v "$PWD/packaging/debs/install_test.sh:/install_test.sh:ro" debian:bookworm sh /install_test.sh
 set -eu
 export DEBIAN_FRONTEND=noninteractive
+# The Arty's tools pull in sudo (its Ethernet test runs ip and arping through it), and sudo's prerm refuses to be
+# removed while root has no password, as in these images: the purges between steps would fail.
+export SUDO_FORCE_REMOVE=yes
 echo 'APT::Get::Assume-Yes "true";' > /etc/apt/apt.conf.d/90yes
 apt-get update -qq
 apt-get install -qq dpkg-dev >/dev/null
@@ -25,14 +28,17 @@ enabled() { [ -L /etc/systemd/system/multi-user.target.wants/fpgas-verify.servic
 
 echo "--- one board: fpgas-online-arty"
 apt-get install -qq fpgas-online-arty >/dev/null
-for p in fpgas-online-arty fpgas-online-arty-tools fpgas-online-arty-bitstreams fpgas-online-verify python3-serial; do
+# The boot check also runs the Arty's Ethernet test and PMOD HAT pin-ID scan, so their tools come with it.
+for p in fpgas-online-arty fpgas-online-arty-tools fpgas-online-arty-bitstreams fpgas-online-verify python3-serial \
+         python3-libgpiod iproute2 iputils-ping sudo; do
   installed "$p" || fail "$p not installed with fpgas-online-arty"
 done
 for p in fpgas-online-netv2-tools fpgas-online-fomu-tools fpgas-online-acorn-tools fpgas-online-arty-debug openocd \
-         python3-libgpiod micropython-mpremote fpgas-online-setup-pi fpgas-online-multi-board; do
+         micropython-mpremote fpgas-online-setup-pi fpgas-online-multi-board; do
   if installed "$p"; then fail "$p was pulled in by fpgas-online-arty"; fi
 done
 command -v openFPGALoader >/dev/null || fail "no openFPGALoader for the Arty"
+command -v arping >/dev/null || fail "no arping for the Arty's Ethernet test"
 enabled || fail "fpgas-verify.service not enabled by fpgas-online-arty"
 cat /usr/share/fpgas-online/verify/mode.d/*.ini
 set +e
@@ -60,9 +66,11 @@ enabled && fail "fpgas-verify.service still enabled with no mode package"
 apt-get purge -qq 'fpgas-online-*' >/dev/null
 apt-get autoremove -qq --purge >/dev/null
 
-echo "--- the Acorn: PCIe and the stdlib, nothing for USB or serial"
+echo "--- the Acorn: PCIe, plus openFPGALoader (P1 JTAG) and pyserial (P2 UART); pinctrl is only Recommended"
 apt-get install -qq fpgas-online-acorn >/dev/null
-for p in python3-serial openfpgaloader openocd python3-libgpiod libftdi1-2 libusb-1.0-0; do
+installed python3-serial || fail "python3-serial not installed with fpgas-online-acorn"
+command -v openFPGALoader >/dev/null || fail "no openFPGALoader for the Acorn's P1 JTAG check"
+for p in openocd python3-libgpiod micropython-mpremote; do
   if installed "$p"; then fail "$p was pulled in by fpgas-online-acorn"; fi
 done
 enabled || fail "not enabled by fpgas-online-acorn"

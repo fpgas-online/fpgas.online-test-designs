@@ -14,6 +14,7 @@ from fpgas_online_verify import cli, core, debug, host_tests
 from fpgas_online_verify.boards import arty, fomu, netv2, tt_fpga
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
 from fpgas_online_verify.boards.acorn import check as acorn_check
+from fpgas_online_verify.boards.acorn import links as acorn_links
 
 PI3 = "Raspberry Pi 3 Model B Plus Rev 1.3"
 PI5 = "Raspberry Pi 5 Model B Rev 1.0"
@@ -184,7 +185,7 @@ def test_an_arty_that_passes_loads_each_test_runs_it_and_records_its_flash(tmp_p
     run = Runner([("test_spiflash.py", (0, "JEDEC ID: 0x20 0xBA 0x18\nRESULT: PASS"))], flash=flash)
     report = _check(ARTY, tmp_path, ARTY_FOUND, run)
     assert report["result"] == "pass", report
-    assert [t["test"] for t in report["tests"]] == ["uart", "ddr", "spiflash"]
+    assert [t["test"] for t in report["tests"]] == ["uart", "ddr", "spiflash", "ethernet", "pin-id"]
     images = tmp_path / "images"
     assert run.calls[1] == ["openFPGALoader", "-b", "arty", str(images / "uart-test-arty/digilent_arty.bit")]
     assert run.calls[-1][:5] == ["openFPGALoader", "-b", "arty", "--dump-flash", "--file-size"]
@@ -283,10 +284,15 @@ def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_rea
     ]
     assert run.calls[-1] == ["systemctl", "start", "--no-block", "fpgas-tt.service"]
     assert report["services_stopped"] == ["fpgas-tt.service"]
-    first = run.calls[2]
-    assert first[1].endswith("tt_test_wrapper.py") and first[2] == "/dev/ttyACM0"
-    assert first[3].endswith("uart-test-tt-fpga/tt_fpga_platform.bin") and first[5].endswith("test_uart.py")
-    assert not any("tt_fpga_program.py" in " ".join(c) for c in run.calls)  # the bridge loads it
+    # the pin-ID scan loads its design itself and runs first; the bridge loads the UART and SPI-flash designs,
+    # so the last design left on the board is one with a single TX pin, not one driving every Pmod line
+    assert [t["test"] for t in report["tests"]] == ["pin-id", "uart", "spiflash"]
+    (load,) = [c for c in run.calls if "tt_fpga_program.py" in " ".join(c)]
+    assert load[3].endswith("pmod-pin-id-tt-fpga/top.bin") and load[4:] == ["--gpio-release"]
+    bridged = [c for c in run.calls if "tt_test_wrapper.py" in " ".join(c)]
+    assert [c[3].rsplit("/", 2)[-2] for c in bridged] == ["uart-test-tt-fpga", "spiflash-test-tt-fpga"]
+    assert bridged[0][2] == "/dev/ttyACM0" and bridged[0][5].endswith("test_uart.py")
+    assert run.calls.index(load) < run.calls.index(bridged[0])
     assert report["state"] == {"variant": "tt-fpga", "serial": "E6"} and "rewrites" in report["flash_note"]
 
 
@@ -329,6 +335,8 @@ def test_the_acorn_state_is_its_slot_and_flash_contents(tmp_path, monkeypatch):
              "slots": [{"slot": "0x000000", "result": "match", "sha256": "g"},
                        {"slot": "0x400000", "result": "match", "sha256": "o"}]}  # fmt: skip
     monkeypatch.setattr(acorn_check, "check_board", lambda *a: {**found, "result": "pass", "flash": flash})
+    # the links have their own tests (test_acorn_links.py)
+    monkeypatch.setattr(acorn_links, "jtag", lambda variant, run: {"test": "jtag", "result": "pass"})
     report = ACORN.check({}, found, {"images": tmp_path})
     assert report["result"] == "pass" and report["bitstreams"] == "t"
     assert report["state"] == {"bdf": "0001:01:00.0", "ids": "10ee:7021", "subsystem": "1e24:021f",
@@ -352,7 +360,8 @@ def test_debug_list_shows_every_test_and_whether_the_boot_check_runs_it(tmp_path
     args = cli.argparse.Namespace(command="list", images=_install(tmp_path, ARTY), variant=None, port=None)
     assert debug.run(ARTY, args) == 0
     out = capsys.readouterr().out
-    assert "ddr        a7-35    boot check" in out and "pin-id     a7-35    debug only" in out
+    assert "ddr        a7-35    boot check" in out and "pin-id     a7-35    boot check" in out
+    assert "pmod       a7-35    debug only" in out
     assert "(not installed)" not in out
 
 
@@ -374,7 +383,8 @@ def test_debug_test_loads_then_runs_with_extra_arguments(tmp_path, monkeypatch):
     assert debug.run(ARTY, args) == 0
     assert ran[0] == ["rmmod", "spidev", "spi_bcm2835"]
     assert ran[1] == ["openFPGALoader", "-b", "arty", str(images / "pmod-pin-id-arty-a7-35t/top.bit")]
-    assert ran[2][1].endswith("identify_pmod_pins.py") and ran[2][2:] == ["--hat-port", "JA"]
+    # the extra arguments follow the boot check's; identify_pmod_pins.py lets --hat-port win over --board
+    assert ran[2][1].endswith("identify_pmod_pins.py") and ran[2][2:] == ["--board", "arty", "--hat-port", "JA"]
 
 
 def test_the_acorn_debug_tool_can_identify_and_has_no_test_loading():
