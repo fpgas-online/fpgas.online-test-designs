@@ -60,8 +60,11 @@ class S7BitbangSPIFlash(LiteXModule):
             self._miso.fields.miso.eq(pads.miso),
         ]
 
-        # Hold WP and HOLD pins high (inactive).
-        if hasattr(pads, "vpp"):
-            pads.vpp.reset = 1
-        if hasattr(pads, "hold"):
-            pads.hold.reset = 1
+        # Drive WP# and HOLD# high (inactive). Setting only their reset value, as this did before, drove
+        # nothing: undriven pads are left floating, and a flash whose HOLD# floats low stops answering, so
+        # MISO read high and the NeTV2 reported JEDEC ID 0xFF 0xFF 0xFF (fpgas.online-test-designs#51).
+        # The Arty got away with it (its board holds them up); the NeTV2 needs them driven. Its platform
+        # calls WP# "vpp", the Arty's "wp".
+        for name in ("vpp", "wp", "hold"):
+            if hasattr(pads, name):
+                self.comb += getattr(pads, name).eq(1)
