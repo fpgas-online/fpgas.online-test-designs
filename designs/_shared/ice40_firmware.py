@@ -335,6 +335,15 @@ def generate_spiflash_firmware(uart_base, spiflash_base, ident):
     words.append(_lui(S1, spi_upper))
     words.append(_addi(S1, S1, spi_lower))
 
+    # Hold TX idle (high) for a while before the first character. Everything below is sent back to back,
+    # with no idle long enough for a receiver to find the start bit again, so a receiver that locked onto
+    # the edge the TX pin makes while the FPGA configures stays misframed for the whole output: on a NeTV2
+    # every character reached the Pi rotated by two bits (fpgas.online-test-designs#51). The BIOS-based
+    # UART test pauses before printing and never showed it. 0x40000 turns: ~20 ms at 50 MHz, ~0.1 s at 12.
+    words.append(_lui(T0, 0x40))                  # t0 = 0x40000
+    words.append(_addi(T0, T0, -1))               # loop: t0 -= 1
+    words.append(_bne(T0, ZERO, -4))              #   until t0 == 0
+
     # Print banner string.
     i_banner_auipc = len(words); words.append(0)
     i_banner_addi  = len(words); words.append(0)
