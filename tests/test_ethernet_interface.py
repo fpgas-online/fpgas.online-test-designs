@@ -91,3 +91,16 @@ def test_two_free_adapters_are_refused_not_guessed():
     iface, why = te.pick_test_interface(["eth1", "eth2"], {"eth0"})
     assert iface is None
     assert why == "more than one free USB Ethernet adapter (eth1, eth2): pass --interface"
+
+
+def test_root_goes_ahead():
+    assert te.not_root_reason("eth1", euid=0) is None
+
+
+def test_anyone_else_is_asked_to_rerun_it_as_root():
+    why = te.not_root_reason("eth1", euid=1000)
+    assert why.startswith("FAIL - not running as root") and "eth1" in why and "Rerun this test as root" in why
+
+
+def test_nothing_is_run_through_sudo():
+    assert '"sudo"' not in (_HOST / "test_ethernet.py").read_text()

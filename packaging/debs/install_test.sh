@@ -9,9 +9,6 @@
 #     -v "$PWD/packaging/debs/install_test.sh:/install_test.sh:ro" debian:bookworm sh /install_test.sh
 set -eu
 export DEBIAN_FRONTEND=noninteractive
-# The Arty's tools pull in sudo (its Ethernet test runs ip and arping through it), and sudo's prerm refuses to be
-# removed while root has no password, as in these images: the purges between steps would fail.
-export SUDO_FORCE_REMOVE=yes
 echo 'APT::Get::Assume-Yes "true";' > /etc/apt/apt.conf.d/90yes
 apt-get update -qq
 apt-get install -qq dpkg-dev >/dev/null
@@ -30,11 +27,11 @@ echo "--- one board: fpgas-online-arty"
 apt-get install -qq fpgas-online-arty >/dev/null
 # The boot check also runs the Arty's Ethernet test and PMOD HAT pin-ID scan, so their tools come with it.
 for p in fpgas-online-arty fpgas-online-arty-tools fpgas-online-arty-bitstreams fpgas-online-verify python3-serial \
-         python3-libgpiod iproute2 iputils-ping sudo; do
+         python3-libgpiod iproute2 iputils-ping; do
   installed "$p" || fail "$p not installed with fpgas-online-arty"
 done
 for p in fpgas-online-netv2-tools fpgas-online-fomu-tools fpgas-online-acorn-tools fpgas-online-arty-debug openocd \
-         micropython-mpremote fpgas-online-setup-pi fpgas-online-multi-board; do
+         micropython-mpremote fpgas-online-setup-pi fpgas-online-multi-board sudo; do
   if installed "$p"; then fail "$p was pulled in by fpgas-online-arty"; fi
 done
 command -v openFPGALoader >/dev/null || fail "no openFPGALoader for the Arty"

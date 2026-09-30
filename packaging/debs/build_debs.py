@@ -51,7 +51,7 @@ MODE = "fpgas-online-verify-mode"  # virtual: every mode package Provides and Co
 EXE = {"file_info": {"mode": 0o755}}
 DATA = {"file_info": {"mode": 0o644}}
 OPENFPGALOADER = "openfpgaloader-fpgasonline | openfpgaloader-fpgasonline-git | openfpgaloader"
-ETHERNET = ["iproute2", "iputils-ping", "iputils-arping | arping", "sudo"]
+ETHERNET = ["iproute2", "iputils-ping", "iputils-arping | arping"]  # no sudo: the test asks to be run as root
 # What each board's verify needs, and nothing it does not. Every test the boot check runs needs its tools here,
 # not in -debug (only Suggested): the Arty's Ethernet test and the Arty's and TT's Pmod pin-ID scan (GPIO reads),
 # and the Acorn's P1 JTAG probe (openFPGALoader, then pinctrl to release the pins) and P2 UART read (pyserial).

@@ -66,6 +66,7 @@ def test_each_board_tools_package_has_its_module_and_only_its_own_tooling(tmp_pa
     assert bd.OPENFPGALOADER not in tt["depends"] and "python3-libgpiod" in tt["depends"]
     for config in (arty, acorn, netv2, tt):
         assert "fpgas-online-setup-pi" not in config["depends"] + config.get("recommends", [])
+        assert "sudo" not in config["depends"] + config.get("recommends", [])  # the checks run as root
 
 
 def test_debug_packages_carry_what_the_extra_tests_need(tmp_path):
