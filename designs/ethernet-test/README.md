@@ -22,7 +22,7 @@ uv run python designs/ethernet-test/gateware/ethernet_soc_arty.py --toolchain op
 ## Testing
 
 ```sh
-uv run python designs/ethernet-test/host/test_ethernet.py --port /dev/ttyUSB1
+sudo python3 designs/ethernet-test/host/test_ethernet.py --board arty --uart-port /dev/ttyUSB1   # needs root
 ```
 
 ## Directory Structure

@@ -13,8 +13,8 @@ Steps:
   5. Send ICMP ping and verify response
 
 Usage:
-    uv run python host/test_ethernet.py --board arty --uart-port /dev/ttyUSB1
-    uv run python host/test_ethernet.py --board netv2 --uart-port /dev/ttyAMA0
+    sudo python3 host/test_ethernet.py --board arty --uart-port /dev/ttyUSB1
+    sudo python3 host/test_ethernet.py --board netv2 --uart-port /dev/ttyAMA0
 
 Needs root, to configure the adapter and to send ARP: it asks to be rerun as root rather than calling sudo
 itself (the boot check, fpgas-verify.service, runs as root already).
