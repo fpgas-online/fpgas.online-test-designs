@@ -15,7 +15,7 @@ sudo apt install fpgas-online-tt-fpga
 | Package | Installs |
 |---------|----------|
 | `fpgas-online-tt-fpga` | sets the host up as having a TT FPGA Demo Board, and enables `fpgas-verify.service` |
-| `fpgas-online-tt-fpga-tools` | the board's module of `fpgas_online_verify`, and `fpgas-tt-fpga-verify`; with `python3-serial` and `python3-libgpiod` (the PMOD HAT scan), and recommending `micropython-mpremote` |
+| `fpgas-online-tt-fpga-tools` | the board's module of `fpgas_online_verify`, and `fpgas-tt-fpga-verify`; with `python3-serial` and `python3-libgpiod` (the PMOD HAT scan), and recommending `micropython-mpremote` and `raspi-utils-core` (`pinctrl`, which puts back the Pi's SPI/UART/I2C pin functions after the scan; Raspberry Pi OS only) |
 | `fpgas-online-tt-fpga-bitstreams` | the test bitstreams built by the same commit's CI, in `/usr/share/fpgas-online/tt-fpga/bitstreams/` |
 | `fpgas-online-verify` | `fpgas-verify`, the unit, and the host test scripts |
 
