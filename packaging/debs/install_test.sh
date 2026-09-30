@@ -9,6 +9,9 @@
 #     -v "$PWD/packaging/debs/install_test.sh:/install_test.sh:ro" debian:bookworm sh /install_test.sh
 set -eu
 export DEBIAN_FRONTEND=noninteractive
+# The Arty's tools pull in sudo (its Ethernet test runs ip and arping through it), and sudo's prerm refuses to be
+# removed while root has no password, as in these images: the purges between steps would fail.
+export SUDO_FORCE_REMOVE=yes
 echo 'APT::Get::Assume-Yes "true";' > /etc/apt/apt.conf.d/90yes
 apt-get update -qq
 apt-get install -qq dpkg-dev >/dev/null
