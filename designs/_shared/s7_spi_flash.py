@@ -25,7 +25,7 @@ class S7BitbangSPIFlash(LiteXModule):
     ----------
     pads : Record
         Platform pads with ``cs_n``, ``mosi``, ``miso`` subsignals
-        (and optionally ``vpp`` or ``wp``, and ``hold``).
+        (and optionally ``vpp``, ``hold``).
         Obtained via ``platform.request("spiflash")``.
     """
     def __init__(self, pads):
@@ -60,12 +60,8 @@ class S7BitbangSPIFlash(LiteXModule):
             self._miso.fields.miso.eq(pads.miso),
         ]
 
-        # Drive WP# and HOLD# high (inactive). Before, they were only given a reset value (and a WP# named
-        # "wp" not even that), which drives nothing: the pads were left floating, and a flash whose HOLD#
-        # floats low stops answering. It was not what made the NeTV2 read 0xFF 0xFF 0xFF
-        # (fpgas.online-test-designs#51): that was the STARTUPE2 clock handoff (see the firmware), and
-        # driving these alone did not fix it. The NeTV2's platform calls WP# "vpp", the Arty's and the
-        # Acorn's "wp".
-        for name in ("vpp", "wp", "hold"):
-            if hasattr(pads, name):
-                self.comb += getattr(pads, name).eq(1)
+        # Hold WP and HOLD pins high (inactive).
+        if hasattr(pads, "vpp"):
+            pads.vpp.reset = 1
+        if hasattr(pads, "hold"):
+            pads.hold.reset = 1
