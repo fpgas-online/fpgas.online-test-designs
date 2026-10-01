@@ -63,7 +63,7 @@ Writing the flash, and converting a board that still runs the factory image, are
 | DSP slices       | 740                              |
 | Block RAM        | 13,140 Kib                       |
 | GTP transceivers | 4 (up to 6.6 Gb/s each)          |
-| DDR3 SDRAM       | 1 GiB (MT41K512M16, 16-bit)      |
+| DDR3 SDRAM       | 1 GiB (MT41K512M16, 16-bit); 512 MiB (MT41K256M16) on the CLE-101 |
 | SPI Flash        | S25FL256S (256 Mbit, quad SPI)   |
 | PCIe             | Gen2 x4 (M.2 M-key)              |
 | Form factor      | M.2 2280                         |
@@ -139,7 +139,8 @@ Flash part: Spansion S25FL256S (256 Mbit). Supports multiboot with separate fall
 
 ## DDR3 SDRAM
 
-One Micron MT41K512M16 (8 Gbit, 1 GiB on the CLE-215/215+), 16 bits wide: two byte lanes, each with
+One 16-bit Micron DDR3 chip: MT41K512M16 (8 Gbit, 1 GiB) on the CLE-215/215+, MT41K256M16 (4 Gbit,
+512 MiB) on the CLE-101. Two byte lanes, each with
 its own DQS pair and DM. Uses the 7-series native DDR PHY (A7DDRPHY). CS_N is not wired to the FPGA.
 Address, command, CLK and RESET_N are in bank 15; DQ, DQS and DM in bank 16, whose inputs use the
 internal VREF of 0.75 V (per Vivado's IO report and bit2fasm of its image). The platform's

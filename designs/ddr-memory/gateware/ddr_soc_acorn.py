@@ -6,15 +6,16 @@ Builds a SoC with CPU + BIOS + UART + SDRAM (LiteDRAM). The BIOS
 automatically runs DRAM calibration and memtest on boot. The host
 just needs to parse the UART output for "Memtest OK" or "Memtest KO".
 
-Acorn DRAM: Micron MT41K512M16, 1 GiB (CLE-215/215+) or 512 MB (CLE-101), 16-bit DDR3.
+Acorn DRAM: one 16-bit DDR3 chip: Micron MT41K512M16 (1 GiB) on the CLE-215/215+, MT41K256M16 (512 MiB) on the
+CLE-101 / LiteFury.
 
 Build command:
     uv run python designs/ddr-memory/gateware/ddr_soc_acorn.py --toolchain openxc7 --build
 
 Variants:
-    cle-215+ : Acorn CLE-215+ (XC7A200T-3, 1 GiB DDR3)
-    cle-215  : Acorn CLE-215 / NiteFury (XC7A200T-2, 1 GiB DDR3)
-    cle-101  : LiteFury (XC7A100T-2, 512 MB DDR3)
+    cle-215+ : Acorn CLE-215+ (XC7A200T-3, MT41K512M16, 1 GiB)
+    cle-215  : Acorn CLE-215 / NiteFury (XC7A200T-2, MT41K512M16, 1 GiB)
+    cle-101  : Acorn CLE-101 / LiteFury (XC7A100T-2, MT41K256M16, 512 MiB)
 """
 
 import pathlib
@@ -22,7 +23,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
-from litedram.modules import MT41K512M16
+from litedram.modules import MT41K256M16, MT41K512M16
 from litedram.phy import s7ddrphy
 from litex.gen import *
 from litex.soc.cores.clock import *
@@ -38,6 +39,13 @@ from designs._shared.platform_fixups import constrain_openxc7_clocks
 # each (2026-09-29), 80 MHz builds reached 81.4-93.2 MHz and 75 MHz ones 74.0-92.5 MHz. 80 MHz keeps the
 # DDR3 at 640 MT/s, inside its 300 MHz DLL-on minimum clock.
 SYS_CLK_FREQ = {"openxc7": 80e6}
+
+# The DDR3 chip each variant has (as acorn-pcie's acorn_pcie_soc.py).
+DDR3_MODULE = {
+    "cle-215+": MT41K512M16,
+    "cle-215": MT41K512M16,
+    "cle-101": MT41K256M16,
+}
 
 # CRG ----------------------------------------------------------------------------------------------
 
@@ -114,7 +122,7 @@ class BaseSoC(SoCCore):
             self.add_sdram(
                 "sdram",
                 phy=self.ddrphy,
-                module=MT41K512M16(sys_clk_freq, "1:4"),
+                module=DDR3_MODULE[variant](sys_clk_freq, "1:4"),
                 l2_cache_size=kwargs.get("l2_size", 8192),
             )
 
@@ -129,8 +137,8 @@ def main():
     parser.add_target_argument(
         "--variant",
         default="cle-215+",
-        choices=["cle-215+", "cle-215", "cle-101"],
-        help="Board variant: cle-215+ (Acorn), cle-215 (NiteFury), cle-101 (LiteFury).",
+        choices=sorted(DDR3_MODULE),
+        help="Board variant: cle-215+ (Acorn, 1 GiB), cle-215 (NiteFury, 1 GiB), cle-101 (LiteFury, 512 MiB).",
     )
     parser.add_target_argument(
         "--sys-clk-freq",
