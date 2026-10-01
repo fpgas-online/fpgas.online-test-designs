@@ -4,7 +4,7 @@ Documentation for the FPGA boards, host infrastructure, and interconnects used i
 
 ## Sites
 
-- [site-welland.md](site-welland.md) — [welland.fpgas.online](https://welland.fpgas.online) / [tinytapeout.fpgas.online](https://tinytapeout.fpgas.online) — Welland, Australia — Arty A7, NeTV2, Fomu EVT, TT ASIC (TT03p5–TT08), TT FPGA, Acorn CLE-215+ (VLAN-per-port addressing since 2026-08-23)
+- [site-welland.md](site-welland.md) — [welland.fpgas.online](https://welland.fpgas.online) / [tinytapeout.fpgas.online](https://tinytapeout.fpgas.online) — Welland, Australia — Arty A7, NeTV2, Fomu EVT, TT ASIC (TT03p5–TT08), TT FPGA, Acorn CLE-215+ (VLAN-per-port addressing)
 - [site-ps1.md](site-ps1.md) — [ps1.fpgas.online](https://ps1.fpgas.online) — Pumping Station: One, Chicago — Arty A7 boards with live camera feeds, LiteFury / Acorn CLE-101 on Compute Blades
 
 ## FPGA Boards

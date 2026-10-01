@@ -65,15 +65,12 @@ Each RPi also has a separate USB Ethernet adapter for the Arty's Ethernet port.
 | pi18 | e18  | 10.21.0.118 | 2c:cf:67:37:d5:08 | CM4 Rev 1.1 4GB      | (pending) — M.2 empty              | —                  | —        | n/a                     | Online  |
 | pi20 | e20  | 10.21.0.120 | 2c:cf:67:fd:1e:be | CM5 Lite Rev 1.0 8GB | XC7A100T design `10ee:7011`        | 0x0028e5c45e304854 | 0001:01  | OK                      | Online  |
 
-Probed 2026-08-31 (all four up, 37 days uptime). Earlier revisions of this
-table put pi20's DNA in pi14's row (commit c5322ad wrote it one row up) and
-listed pi20 as pending; pi14's JTAG has never answered, so no DNA can have come
-from it. pi14/pi16 enumerate on PCIe with the Sqrl CLE-101 factory ID but do not
+Probed 2026-08-31 (all four up, 37 days uptime). pi14/pi16 enumerate on PCIe with the Sqrl CLE-101 factory ID but do not
 answer JTAG — GPIO4 (TCK) shows the Acorn's JTAG pull-up only on pi20, so their
 P1 cables are unmated. Details in
 [PS1 Compute blades](https://docs.fpgas.online/en/latest/sites/ps1.html#compute-blades).
 
-All Compute Blades boot Trixie arm64 (Debian 13) via NFS with overlayroot. JTAG via Expansion Module Port using [Compute Blade wiring](https://docs.fpgas.online/en/latest/boards/acorn/wiring.html#compute-blade): `openFPGALoader --cable libgpiod --pins 2:3:4:14` (openFPGALoader **0.13.1** on all four, so `--read-dna` works). UART via GPIO14/15 (`/dev/ttyAMA0`, crossover confirmed on pi20 with the pin-ID design: K2→GPIO15, J2→GPIO14). All four have `console=tty1` and `serial-getty@ttyAMA0` inactive, so the SysRq crash of issue #3 cannot recur. PCIe via M.2 slot. Loading a design that drives J2 (pin-ID does) contends with TMS on GPIO14 and costs JTAG until a PoE cycle of the port; PoE control on the FS728TPv2 works only via the Netgear-proprietary OID over SNMPv3 (see `fpgas.online-poe/scripts/poe.sh`).
+All Compute Blades boot Trixie arm64 (Debian 13) via NFS with overlayroot. JTAG via Expansion Module Port using [Compute Blade wiring](https://docs.fpgas.online/en/latest/boards/acorn/wiring.html#compute-blade): `openFPGALoader --cable libgpiod --pins 2:3:4:14` (openFPGALoader **0.13.1** on all four, so `--read-dna` works). UART via GPIO14/15 (`/dev/ttyAMA0`, crossover confirmed on pi20 with the pin-ID design: K2→GPIO15, J2→GPIO14). All four have `console=tty1` and `serial-getty@ttyAMA0` inactive, so FPGA output on the UART cannot trigger SysRq ([#3](https://github.com/fpgas-online/fpgas.online-test-designs/issues/3)). PCIe via M.2 slot. Loading a design that drives J2 (pin-ID does) contends with TMS on GPIO14 and costs JTAG until a PoE cycle of the port; PoE control on the FS728TPv2 works only via the Netgear-proprietary OID over SNMPv3 (see `fpgas.online-poe/scripts/poe.sh`).
 
 ### Other Hosts
 
