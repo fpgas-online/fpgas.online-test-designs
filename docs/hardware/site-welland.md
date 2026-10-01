@@ -24,12 +24,12 @@ Internet ─── eth-uplink ──│  Debian 13 (trixie)                │
   │ +PMOD HAT │  │ (GPIO     │  │ +Acorn    │  │ demo board│  │ Demo Board│
   │ +USB Eth  │  │  JTAG)    │  │  CLE-215+ │  │ +PMOD HAT │  │ +PMOD HAT │
   └───────────┘  └───────────┘  └───────────┘  └───────────┘  └───────────┘
-   (sw2 p38 +…)   (sw1 ×4)      (sw2 ×6)       (sw2 p3–p8)     (sw2 p33–36)
+   (sw2 ×4)       (sw1 ×5)      (sw2 ×6)       (sw2 p3–p8)     (sw2 p33–36)
                                             + Fomu EVT on sw1 p17
 ```
 
-All Raspberry Pis netboot via PXE/TFTP from tweed. Since **2026-08-23** the
-site runs the **VLAN-per-port** scheme (fpgas.online-infra PR #10): every
+All Raspberry Pis netboot via PXE/TFTP from tweed. The site runs the
+**VLAN-per-port** scheme: every
 Pi-facing switch port is an untagged access port in its own VLAN, tweed
 isolates Pi↔Pi traffic with nftables, and a Pi's identity is derived from the
 port it is plugged into, not from its MAC:
@@ -41,9 +41,7 @@ port it is plugged into, not from its MAC:
 
 Switch `s`, port `p` → VLAN `2000 + 100·s + p`, IPv4 `10.21.s.p`, IPv6
 `2404:e80:a137:210s::p`, hostname `pi-sw<s>-p<p>`. Gateway 10.21.0.1. Moving a
-Pi to another port renames and re-addresses it. The old flat `piNN` /
-`10.21.0.1NN` names in earlier revisions of this page (and in
-`site-welland-pibs.conf`) are retired; the "Old name" columns below map them.
+Pi to another port renames and re-addresses it.
 On the S3300, Tim's rule is **port N carries Tiny Tapeout N** (ports 1–10), the
 TT FPGA emulation boards sit on 33–36, and the Acorn Pi 5s on 29 and 43–48.
 
@@ -57,7 +55,7 @@ tables, and live probes of every host below on 2026-09-03.
 | ---------- | ------------------------------------------------------------------------------------ |
 | Role       | Network gateway, DHCP/DNS/TFTP/PXE server, NFS root server, web tier (welland.fpgas.online + tinytapeout.fpgas.online) |
 | Hardware   | Intel Core i5-3610ME (3rd Gen, QM77 chipset)                                         |
-| OS         | Debian 13 (trixie) — fresh install 2026-08-30                                        |
+| OS         | Debian 13 (trixie)                                                                   |
 | Kernel     | 6.12.105+deb13-amd64                                                                 |
 | eth-uplink | 10.99.21.2/30 + 2404:e80:a137:9921::2/126, point-to-point to ten64 (10.99.21.1), which publishes tweed's web names |
 | eth-local  | 10.21.0.1/16 trunk to the switches (per-port VLAN sub-interfaces)                    |
@@ -79,27 +77,27 @@ ssh -o ProxyJump=pi@tweed.welland.mithis.com pi@10.21.2.29
 ```
 
 The jump account is `/bin/rbash` with a PATH of only `ssh` and `ssh-keyscan`,
-an sshd `ForceCommand` wrapper that refuses anything else, and no sudo. It
-was hand-built on the previous tweed on 2026-03-18 and lost in the
-2026-08-26 reinstall because it was not in Ansible; it is now
-fpgas.online-infra `roles/jump` (PR #61), applied to every gateway.
-Two DNS caveats as of 2026-09-03 (same PR): the name still publishes the
-pre-reinstall SSHFP records, and one of its two AAAA records
+an sshd `ForceCommand` wrapper that refuses anything else, and no sudo. It is
+fpgas.online-infra `roles/jump`, applied to every gateway.
+Two DNS caveats (checked 2026-09-03): the name's SSHFP records do not match
+tweed's host keys, and one of its two AAAA records
 (`2404:e80:a137:9921::2`, the uplink /126) accepts TCP 22 but never answers,
-so an IPv6 client may hang until the record is fixed; over WireGuard the
-`10.21.0.1` A record works.
+so an IPv6 client may hang; over WireGuard the `10.21.0.1` A record works.
 
 **Public access** (for end users): `ssh pi@fpgas.mithis.com -p 13422` provides port-forwarded access to individual RPis. See [Getting Started](https://github.com/CarlFK/pici/wiki/Getting-Started).
 
 ## FPGA Board Inventory
 
-The **Acorn**, **Tiny Tapeout ASIC** and **Tiny Tapeout FPGA** sections were
-re-verified live on 2026-09-03 under the VLAN-per-port scheme. The Arty A7,
-NeTV2 and Fomu sections below still carry the pre-2026-08-23 names and
-`10.21.0.1xx` addresses from the 2026-03-17 survey; the 2026-08-30 hardware
-inventory sheet places those Pis at sw1 p10/p12/p14/p16 (NeTV2, same MACs as
-pi10/pi12/pi14/pi16), sw1 p17 (Fomu + OpenVizsla, was pi17) and sw2 p38 (Arty
-`210319B3E5C5`, was pi11), but they have not been re-probed for this page.
+The **Acorn**, **Tiny Tapeout ASIC** and **Tiny Tapeout FPGA** sections are
+from live probes on 2026-09-03. The infrastructure host, Arty A7, NeTV2 and Fomu
+sections are from a
+2026-03-17 survey and name the Pis by flat `piNN` / `10.21.0.1NN` names, which
+the VLAN-per-port scheme does not use (`verify_hardware.py`'s `HOSTS` uses
+them too: [#17](https://github.com/fpgas-online/fpgas.online-test-designs/issues/17)).
+Where those boards are on the switches is in the
+[current verify results](../verify.md#current-results): NeTV2 on pi-sw1-p10,
+p12, p14, p16 and p18 (the same MACs as pi10 … pi18 below), the Fomu on
+pi-sw1-p17, the Artys on pi-sw2-p9, p10, p12 and p15.
 
 ### Infrastructure Host
 
@@ -146,32 +144,32 @@ Source: dnsmasq pibs.conf, `lsusb` on pi10.
 
 ### Sqrl Acorn CLE-215+ (×6 deployed, on RPi 5 hosts with M.2 HAT)
 
-| Host       | Switch Port | IP         | RPi MAC           | RPi Model (rev)          | PCIe Device at `0001:01:00.0`                          | JTAG          | P2 serial            | Old name |
-| ---------- | ----------- | ---------- | ----------------- | ------------------------ | ------------------------------------------------------ | ------------- | -------------------- | -------- |
-| pi-sw2-p29 | sw2 p29     | 10.21.2.29 | 88:a2:9e:45:dd:be | RPi 5 Rev 1.1 2 GB (b04171) | Squirrels Research Labs Acorn CLE-215+ `1e24:021f` | OK            | OK (J5 wire dead)    | pi4      |
-| pi-sw2-p43 | sw2 p43     | 10.21.2.43 | 98:fe:54:13:e0:75 | RPi 5 Rev 1.1 1 GB (a04171) | Squirrels Research Labs Acorn CLE-215+ `1e24:021f` | empty chain   | untestable           | —        |
-| pi-sw2-p44 | sw2 p44     | 10.21.2.44 | 98:fe:54:13:e0:f5 | RPi 5 Rev 1.1 1 GB (a04171) | Xilinx 7-Series FPGA Hard PCIe block `10ee:7011`   | empty chain   | untestable           | —        |
-| pi-sw2-p46 | sw2 p46     | 10.21.2.46 | 88:a2:9e:45:85:77 | RPi 5 Rev 1.1 2 GB (b04171) | Squirrels Research Labs Acorn CLE-215+ `1e24:021f` | OK            | OK                   | pi6      |
-| pi-sw2-p47 | sw2 p47     | 10.21.2.47 | 98:fe:54:13:f5:75 | RPi 5 Rev 1.1 1 GB (a04171) | Squirrels Research Labs Acorn CLE-215+ `1e24:021f` | OK            | reversed (K2↔J2)     | —        |
-| pi-sw2-p48 | sw2 p48     | 10.21.2.48 | 88:a2:9e:45:c6:87 | RPi 5 Rev 1.1 2 GB (b04171) | Squirrels Research Labs Acorn CLE-215+ `1e24:021f` | OK            | OK                   | pi2      |
+| Host       | Switch Port | IP         | RPi MAC           | RPi Model (rev)          | PCIe Device at `0001:01:00.0`                          | JTAG          | P2 serial            |
+| ---------- | ----------- | ---------- | ----------------- | ------------------------ | ------------------------------------------------------ | ------------- | -------------------- |
+| pi-sw2-p29 | sw2 p29     | 10.21.2.29 | 88:a2:9e:45:dd:be | RPi 5 Rev 1.1 2 GB (b04171) | Squirrels Research Labs Acorn CLE-215+ `1e24:021f` | OK            | OK (J5 wire dead)    |
+| pi-sw2-p43 | sw2 p43     | 10.21.2.43 | 98:fe:54:13:e0:75 | RPi 5 Rev 1.1 1 GB (a04171) | Squirrels Research Labs Acorn CLE-215+ `1e24:021f` | empty chain   | untestable           |
+| pi-sw2-p44 | sw2 p44     | 10.21.2.44 | 98:fe:54:13:e0:f5 | RPi 5 Rev 1.1 1 GB (a04171) | Xilinx 7-Series FPGA Hard PCIe block `10ee:7011`   | empty chain   | untestable           |
+| pi-sw2-p46 | sw2 p46     | 10.21.2.46 | 88:a2:9e:45:85:77 | RPi 5 Rev 1.1 2 GB (b04171) | Squirrels Research Labs Acorn CLE-215+ `1e24:021f` | OK            | OK                   |
+| pi-sw2-p47 | sw2 p47     | 10.21.2.47 | 98:fe:54:13:f5:75 | RPi 5 Rev 1.1 1 GB (a04171) | Squirrels Research Labs Acorn CLE-215+ `1e24:021f` | OK            | reversed (K2↔J2)     |
+| pi-sw2-p48 | sw2 p48     | 10.21.2.48 | 88:a2:9e:45:c6:87 | RPi 5 Rev 1.1 2 GB (b04171) | Squirrels Research Labs Acorn CLE-215+ `1e24:021f` | OK            | OK                   |
 
 The Sqrl Acorn CLE-215+ is an M.2 PCIe FPGA accelerator card containing a
 Xilinx Artix-7 XC7A200T FPGA (215K logic cells). It connects to the RPi 5 via
 an M.2 HAT and enumerates at `0001:01:00.0` alongside the RPi 5's RP1 south
-bridge on `0002:01:00.0`. Five boards still boot the Sqrl factory (mining)
+bridge on `0002:01:00.0`. Five boards boot the Sqrl factory (mining)
 firmware; pi-sw2-p44 boots a LiteX/Vivado design. Every host also has an
 ov5647 camera and publishes a feed.
 
 No USB serial devices — **JTAG and UART go over the 40-pin header** (P1 → SPI0
 pins for openFPGALoader bit-bang, P2 → GPIO14/15 with a null-modem crossover)
 and PCIe over the M.2 slot; see [acorn-pinmap.md](acorn-pinmap.md). All six
-have `/dev/ttyAMA0` enabled (`[pi5] dtoverlay=uart0-pi5`, infra PR #32), the
+have `/dev/ttyAMA0` enabled (`[pi5] dtoverlay=uart0-pi5`), the
 kernel console on `ttyAMA10`, `serial-getty@ttyAMA0` inactive, and
 openFPGALoader 0.10.0 (which needs the `gpiochip15 → gpiochip0` symlink on a
 Pi 5). **Detach the PCIe endpoint before any JTAG load** or the Pi crashes.
 p43/p44 need a physical check of their P1 cable; p47's P2 connector is
-reversed; p29's J5 wire is open. Device DNA is not readable until openFPGALoader
-is upgraded (infra PR #48). A wedged Pi 5 draws ~0.4 W on PoE instead of ~8 W
+reversed; p29's J5 wire is open. openFPGALoader 0.10.0 cannot read Device
+DNA. A wedged Pi 5 draws ~0.4 W on PoE instead of ~8 W
 and needs a PoE cycle (> 90 s to return).
 
 Source: live probe of all six hosts 2026-09-03 (`/proc/device-tree/model`,
@@ -197,19 +195,18 @@ Source: `lsusb` output from pi17, dnsmasq pibs.conf.
 
 These boards contain **real fabricated TT ASIC silicon** on a TT demo board
 (RP2040, MicroPython TT SDK). They are the public boards on
-[tinytapeout.fpgas.online](https://tinytapeout.fpgas.online) (live since
-2026-08-23): S3300 port N carries TTN, the board page is
+[tinytapeout.fpgas.online](https://tinytapeout.fpgas.online): S3300 port N carries TTN, the board page is
 `https://tinytapeout.fpgas.online/board/<slug>/` and its `status.json` is the
 liveness check.
 
-| Host      | Slug     | Switch Port | IP        | RPi MAC           | RPi Model (rev)               | Chip / firmware                          | RP2040 serial      | Old name |
-| --------- | -------- | ----------- | --------- | ----------------- | ----------------------------- | ---------------------------------------- | ------------------ | -------- |
-| pi-sw2-p3 | [tt03p5](https://tinytapeout.fpgas.online/board/tt03p5/) | sw2 p3 | 10.21.2.3 | 98:fe:54:1b:7f:de | RPi 4 2 GB Rev 1.5 (b03115) | TT03p5 (sky130), demo-board fw **1.2.2** (last release supporting tt03p5) | de636c65c34d6a25 | — |
-| pi-sw2-p4 | [tt04](https://tinytapeout.fpgas.online/board/tt04/)     | sw2 p4 | 10.21.2.4 | 98:fe:54:1b:7f:57 | RPi 4 2 GB Rev 1.5 (b03115) | TT04, TT SDK 2.0.4                        | de637061074b1838 | — |
-| pi-sw2-p5 | [tt05](https://tinytapeout.fpgas.online/board/tt05/)     | sw2 p5 | 10.21.2.5 | 98:fe:54:1b:80:11 | RPi 4 2 GB Rev 1.5 (b03115) | TT05, TT SDK 2.0.4                        | de637061071e5439 | — |
-| pi-sw2-p6 | [tt06](https://tinytapeout.fpgas.online/board/tt06/)     | sw2 p6 | 10.21.2.6 | b8:27:eb:71:78:cc | RPi 3B+ 1 GB Rev 1.3 (a020d3) | TT06, TT SDK 2.0.4                      | de640cb1d3357125 | pi23 |
-| pi-sw2-p7 | [tt07](https://tinytapeout.fpgas.online/board/tt07/)     | sw2 p7 | 10.21.2.7 | b8:27:eb:19:43:cd | RPi 3B+ 1 GB Rev 1.3 (a020d3) | TT07, TT SDK 2.0.4                      | de641070db746f27 | pi19 |
-| pi-sw2-p8 | [tt08](https://tinytapeout.fpgas.online/board/tt08/)     | sw2 p8 | 10.21.2.8 | b8:27:eb:44:46:e9 | RPi 3B+ 1 GB Rev 1.3 (a020d3) | TT08, TT SDK 2.0.4                      | de641070db5b2d27 | pi25 |
+| Host      | Slug     | Switch Port | IP        | RPi MAC           | RPi Model (rev)               | Chip / firmware                          | RP2040 serial      |
+| --------- | -------- | ----------- | --------- | ----------------- | ----------------------------- | ---------------------------------------- | ------------------ |
+| pi-sw2-p3 | [tt03p5](https://tinytapeout.fpgas.online/board/tt03p5/) | sw2 p3 | 10.21.2.3 | 98:fe:54:1b:7f:de | RPi 4 2 GB Rev 1.5 (b03115) | TT03p5 (sky130), demo-board fw **1.2.2** (last release supporting tt03p5) | de636c65c34d6a25 |
+| pi-sw2-p4 | [tt04](https://tinytapeout.fpgas.online/board/tt04/)     | sw2 p4 | 10.21.2.4 | 98:fe:54:1b:7f:57 | RPi 4 2 GB Rev 1.5 (b03115) | TT04, TT SDK 2.0.4                        | de637061074b1838 |
+| pi-sw2-p5 | [tt05](https://tinytapeout.fpgas.online/board/tt05/)     | sw2 p5 | 10.21.2.5 | 98:fe:54:1b:80:11 | RPi 4 2 GB Rev 1.5 (b03115) | TT05, TT SDK 2.0.4                        | de637061071e5439 |
+| pi-sw2-p6 | [tt06](https://tinytapeout.fpgas.online/board/tt06/)     | sw2 p6 | 10.21.2.6 | b8:27:eb:71:78:cc | RPi 3B+ 1 GB Rev 1.3 (a020d3) | TT06, TT SDK 2.0.4                      | de640cb1d3357125 |
+| pi-sw2-p7 | [tt07](https://tinytapeout.fpgas.online/board/tt07/)     | sw2 p7 | 10.21.2.7 | b8:27:eb:19:43:cd | RPi 3B+ 1 GB Rev 1.3 (a020d3) | TT07, TT SDK 2.0.4                      | de641070db746f27 |
+| pi-sw2-p8 | [tt08](https://tinytapeout.fpgas.online/board/tt08/)     | sw2 p8 | 10.21.2.8 | b8:27:eb:44:46:e9 | RPi 3B+ 1 GB Rev 1.3 (a020d3) | TT08, TT SDK 2.0.4                      | de641070db5b2d27 |
 
 Ports 9 and 10 (tt09, tt10) are reserved in the catalogue but have no Pi yet.
 The TT ASIC boards appear as "MicroPython Board in FS mode" (RP2040, VID:PID
@@ -219,38 +216,36 @@ daemon (0.1.0), which **owns the serial port** and exposes it as a WebSocket
 bridge on port 8765 for the web Commander; stop it before using `mpremote`.
 Every host also has a Digilent Pmod HAT and an ov5647 camera.
 
-Firmware notes (2026-08-23/24): tt04/tt05/tt07 were reflashed to TT SDK 2.0.4
-(the last RP2040 build; 3.x is RP2350-only), tt06/tt08 already had it. The
-tt03p5 chip is not supported by SDK ≥ 2.0, so that board runs demo-board
+Firmware notes: tt04 … tt08 run TT SDK 2.0.4 (the last RP2040 build; 3.x is
+RP2350-only). The tt03p5 chip is not supported by SDK ≥ 2.0, so that board runs demo-board
 firmware 1.2.2 with a hand-pushed `/shuttles/tt03p5.json` and
 `rom_fallback.txt` (TT03p5 has no chip ROM); the web Commander needs the
-upstream `legacy` branch port (fpgas-online/tt-commander-app#9/#10) to drive
-it, so its page is camera-first for now. The RP2 bootloader's mass-storage
+upstream `legacy` branch port (fpgas-online/tt-commander-app#10) to drive
+it, and its page is camera-first. The RP2 bootloader's mass-storage
 path stalls on Pi 3B+ hosts (dwc_otg resets every ~35 s) — flash from those
 with PICOBOOT, and run flashes detached (`setsid nohup … &`).
 
 Source: live probe 2026-09-03 (`lsusb`, `/dev/serial/by-id`, `fuser
-/dev/ttyACM0`, daemon `/health`); firmware versions from the 2026-08-23
-reflash session; catalogue = `tt_boards` in infra `host_vars/fpgas.online.yml`.
+/dev/ttyACM0`, daemon `/health`); catalogue = `tt_boards` in infra `host_vars/fpgas.online.yml`.
 
 ### Tiny Tapeout FPGA Demo Boards (×4, on S3300 ports 33–36, RPi 4 hosts with PMOD HATs)
 
 These boards contain an **iCE40UP5K FPGA** (FabricFox breakout) that emulates
 Tiny Tapeout designs, on a TT demo board **v3 (RP2350B)** running TT SDK
-**3.1.0** (reflashed 2026-08-23). They are **not** ASIC boards. Public as
-`fpga-1` … `fpga-4` on tinytapeout.fpgas.online since 2026-08-24, where users
+**3.1.0**. They are **not** ASIC boards. Public as
+`fpga-1` … `fpga-4` on tinytapeout.fpgas.online, where users
 can run bundled demos or upload their own bitstream.
 
-| Host       | Slug   | Switch Port | IP         | RPi MAC           | RPi Model (rev)              | USB VID:PID | RP2350 Serial    | Old name |
-| ---------- | ------ | ----------- | ---------- | ----------------- | ---------------------------- | ----------- | ---------------- | -------- |
-| pi-sw2-p33 | [fpga-1](https://tinytapeout.fpgas.online/board/fpga-1/) | sw2 p33 | 10.21.2.33 | e4:5f:01:97:0e:77 | RPi 4 2 GB Rev 1.5 (b03115) | 2e8a:0005 | 4df39a7a6856f86f | pi27 |
-| pi-sw2-p34 | [fpga-2](https://tinytapeout.fpgas.online/board/fpga-2/) | sw2 p34 | 10.21.2.34 | e4:5f:01:97:27:f2 | RPi 4 2 GB Rev 1.5 (b03115) | 2e8a:0005 | fd1a167bd863a198 | pi29 |
-| pi-sw2-p35 | [fpga-3](https://tinytapeout.fpgas.online/board/fpga-3/) | sw2 p35 | 10.21.2.35 | e4:5f:01:97:0c:e3 | RPi 4 2 GB Rev 1.5 (b03115) | 2e8a:0005 | 8c46329b33590ecb | pi31 |
-| pi-sw2-p36 | [fpga-4](https://tinytapeout.fpgas.online/board/fpga-4/) | sw2 p36 | 10.21.2.36 | e4:5f:01:8e:02:27 | RPi 4 8 GB Rev 1.5 (d03115) | 2e8a:0005 | a2961e5cac65b25f | pi33 |
+| Host       | Slug   | Switch Port | IP         | RPi MAC           | RPi Model (rev)              | USB VID:PID | RP2350 Serial    | `verify_hardware.py` |
+| ---------- | ------ | ----------- | ---------- | ----------------- | ---------------------------- | ----------- | ---------------- | -------------------- |
+| pi-sw2-p33 | [fpga-1](https://tinytapeout.fpgas.online/board/fpga-1/) | sw2 p33 | 10.21.2.33 | e4:5f:01:97:0e:77 | RPi 4 2 GB Rev 1.5 (b03115) | 2e8a:0005 | 4df39a7a6856f86f | welland-pi27 |
+| pi-sw2-p34 | [fpga-2](https://tinytapeout.fpgas.online/board/fpga-2/) | sw2 p34 | 10.21.2.34 | e4:5f:01:97:27:f2 | RPi 4 2 GB Rev 1.5 (b03115) | 2e8a:0005 | fd1a167bd863a198 | welland-pi29 |
+| pi-sw2-p35 | [fpga-3](https://tinytapeout.fpgas.online/board/fpga-3/) | sw2 p35 | 10.21.2.35 | e4:5f:01:97:0c:e3 | RPi 4 2 GB Rev 1.5 (b03115) | 2e8a:0005 | 8c46329b33590ecb | welland-pi31 |
+| pi-sw2-p36 | [fpga-4](https://tinytapeout.fpgas.online/board/fpga-4/) | sw2 p36 | 10.21.2.36 | e4:5f:01:8e:02:27 | RPi 4 8 GB Rev 1.5 (d03115) | 2e8a:0005 | a2961e5cac65b25f | welland-pi33 |
 
 Like the ASIC boards, these appear as "MicroPython Board in FS mode" (VID:PID
 `2e8a:0005`) with the `/dev/ttboard` symlink, and the `fpgas-tt` daemon owns
-the port. See [tt-fpga.md](tt-fpga.md) for the firmware history and the
+the port. See [tt-fpga.md](tt-fpga.md) for the firmware and its
 consequences for this repo's `mpremote`-based tooling.
 
 Source: live probe 2026-09-03 (`lsusb`, `/dev/serial/by-id`, daemon `/health`).
@@ -420,22 +415,14 @@ The PMOD HAT provides 3 PMOD ports (JA, JB, JC) connecting RPi GPIO pins to stan
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### Disconnected Hosts
-
-| Host | MAC               | IP          | Notes                                   |
-| ---- | ----------------- | ----------- | --------------------------------------- |
-| pi44 | dc:a6:32:b4:5e:c9 | 10.21.0.144 | Not connected (old MAC, may be reassigned) |
-
-Source: `pibs.conf` on tweed.
-
 ## Known Issues
 
 - **pi-sw2-p43 / pi-sw2-p44** (Acorn): `openFPGALoader --detect` finds an empty JTAG chain although PCIe enumerates — P1 cable/wiring needs a physical check. Until then nothing can be loaded on them.
 - **pi-sw2-p47** (Acorn): P2 connector reversed (K2↔J2 and J5↔H5) — transpose both pairs, not a 180° re-seat.
 - **pi-sw2-p29** (Acorn): J5 (spare GPIO 0) wire is open; serial pair fine.
-- **All Acorn hosts**: openFPGALoader 0.10.0 cannot read Device DNA and needs the `gpiochip15` symlink on a Pi 5 (infra PR #48 upgrades it).
-- **pi-sw2-p3** (tt03p5): the web Commander does not support demo-board firmware 1.2.x yet — camera-only until fpgas-online/tt-commander-app#10 lands.
-- **Stale NFS handles after package upgrades in the shared NFS root**: on 2026-08-30 upgrading `fpgas-online-cam` under running Pis left them with `ESTALE` on the replaced files (cameras off air, 11 boards); on 2026-09-03 the TT hosts still show `dpkg-query … Stale file handle`. Only a reboot fixes it — expect it after any NFS-root package update.
-- **Legacy entries from the 2026-03-17 survey** (not re-checked): pi9 Arty A7 FTDI disconnected; pi18 NeTV2 offline; pi21 Cythion/LUNA + Fomu offline. The former "pi19 TT ASIC (version unconfirmed)" is TT07, now pi-sw2-p7 and online.
+- **All Acorn hosts**: openFPGALoader 0.10.0 cannot read Device DNA and needs the `gpiochip15` symlink on a Pi 5.
+- **pi-sw2-p3** (tt03p5): demo-board firmware 1.2.x needs the web Commander's `legacy` port (fpgas-online/tt-commander-app#10); the page is camera-first.
+- **Stale NFS handles after package upgrades in the shared NFS root**: upgrading a package (`fpgas-online-cam`, say) under running Pis leaves them with `ESTALE` on the replaced files: cameras go off air and `dpkg-query` reports `Stale file handle`. Only a reboot fixes it — expect it after any NFS-root package update.
+- **From the 2026-03-17 survey** (not re-checked): pi9 Arty A7 FTDI disconnected; pi21 Cythion/LUNA + Fomu offline.
 - **rpi5-netv2**: NeTV2 FPGA not visible on PCIe bus — needs bitstream loaded first.
 - **rpi3-netv2**: SSH access via `pi@rpi3-netv2.iot.welland.mithis.com`.
