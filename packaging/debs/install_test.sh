@@ -51,15 +51,15 @@ set +e; fpgas-arty-verify --no-publish --report /tmp/r2.json 2>/tmp/err2; rc=$?;
 fpgas-verify --list
 find /usr/lib/python3/dist-packages/fpgas_online_verify -name __pycache__ | grep -q . && fail "bytecode left in dist-packages"
 
-echo "--- swapping to fpgas-online-fomu removes fpgas-online-arty (the mode packages conflict)"
+echo "--- swapping to fpgas-online-fomu removes fpgas-online-arty (the boards' packages conflict)"
 apt-get install -qq fpgas-online-fomu >/dev/null
-installed fpgas-online-arty && fail "two mode packages installed"
+installed fpgas-online-arty && fail "two boards' packages installed"
 [ "$(ls /usr/share/fpgas-online/verify/mode.d)" = "fpgas-online-fomu.ini" ] || fail "mode.d: $(ls /usr/share/fpgas-online/verify/mode.d)"
 enabled || fail "fpgas-verify.service not enabled after the swap"
 
-echo "--- removing the mode package disables the boot check"
+echo "--- removing fpgas-online-fomu turns the boot check off"
 apt-get remove -qq fpgas-online-fomu >/dev/null
-enabled && fail "fpgas-verify.service still enabled with no mode package"
+enabled && fail "fpgas-verify.service still enabled with no board's package"
 apt-get purge -qq 'fpgas-online-*' >/dev/null
 apt-get autoremove -qq --purge >/dev/null
 
