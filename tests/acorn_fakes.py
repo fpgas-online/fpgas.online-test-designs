@@ -1,0 +1,331 @@
+"""Fakes for the Acorn check's tests.
+
+  FakeSoC   the fpgas.online Acorn SoC's CSRs: the identifier memory, device DNA, XADC, ctrl scratch, the P2
+            GPIOTristate and, through tests/test_spi_flash.py's FakeBus, the SPI master and its S25FL256S. It
+            is the BAR0 bus, and (SoCLink) the far end of the P2 UARTBone link.
+  FakePi    the Pi's side as the check drives it: `pinctrl get/set` on its pins, and openFPGALoader on P1. The
+            spare balls J5/H5 are wired to GPIO3/GPIO4 as on the Pi 5 setup; a wire can be cut.
+  release   an installed fpgas-online-acorn-bitstreams: both flash images, both builds' csr.json, a manifest.
+
+Register addresses are the ones in the pinned release's csr.csv (vivado-bitstreams-acorn-pcie-20260923).
+"""
+
+import hashlib
+import json
+
+from tests.test_spi_flash import FakeBus, FakeS25FL, image, sf
+from tests.test_uartbone_link import FakeFPGA
+
+# What csr.json records (lower case) and what the SoC's identifier memory holds (as written in the gateware).
+OP_IDENT = "fpgas-online acorn pcie soc cle-215+ 2026-09-21 14:23:32"
+GOLDEN_IDENT = "fpgas-online acorn pcie soc cle-215+ golden 2026-09-21 14:31:19"
+OP_IDENT_ON_CHIP = "fpgas-online Acorn PCIe SoC cle-215+ 2026-09-21 14:23:32"
+GOLDEN_IDENT_ON_CHIP = "fpgas-online Acorn PCIe SoC cle-215+ golden 2026-09-21 14:31:19"
+TAG = "vivado-bitstreams-acorn-pcie-20260921-gf3355dccf443"
+
+DNA = 0x54B48664B04854  # pi-sw2-p48's, over BAR0 and over JTAG (2026-10-01)
+REGS = {
+    "ctrl_scratch": 0xF0000004,
+    "uartbone_bridge_phy_tuning_word": 0xF0001800,
+    "dna_id": 0xF0002800,
+    "xadc_temperature": 0xF0003000,
+    "xadc_vccint": 0xF0003004,
+    "xadc_vccaux": 0xF0003008,
+    "xadc_vccbram": 0xF000300C,
+    "p2_gpio_oe": 0xF0008000,
+    "p2_gpio_in": 0xF0008004,
+    "p2_gpio_out": 0xF0008008,
+}
+GOLDEN_HAS_NO = ("p2_gpio_oe", "p2_gpio_in", "p2_gpio_out")
+# pi-sw2-p48's readings: 39.1 °C, VCCINT 1.022 V, VCCAUX 1.789 V, VCCBRAM 1.022 V
+XADC_RAW = {"xadc_temperature": 0x9EA, "xadc_vccint": 0x573, "xadc_vccaux": 0x98A, "xadc_vccbram": 0x573}
+BALLS = {"J5": (0, 3), "H5": (1, 4)}  # ball -> (p2_gpio bit, Pi GPIO) on the Pi 5 setup
+
+PI5 = "Raspberry Pi 5 Model B Rev 1.1"
+CM4 = "Raspberry Pi Compute Module 4 Rev 1.1"
+CM5 = "Raspberry Pi Compute Module 5 Rev 1.0"
+
+
+def csr_json(golden=False):
+    regs = {n: {"addr": a, "size": 2 if n == "dna_id" else 1, "type": "ro"} for n, a in REGS.items()}
+    if golden:
+        regs = {n: r for n, r in regs.items() if n not in GOLDEN_HAS_NO}
+    return {
+        "csr_bases": {"identifier_mem": 0xF0000800, "flash": 0xF0003800, "flash_cs_n": 0xF0004000},
+        "csr_registers": regs,
+        "constants": {"uart_fast_baud": 921600, "uart_fast_tuning_word": 39582418},
+    }
+
+
+def golden_image():
+    return image(wbstar=sf.OPERATIONAL_ADDR, iprog=True, fill=0x11)
+
+
+def operational_image():
+    return image(fill=0x22)
+
+
+def release(d):
+    """An installed images directory in `d`: the flash images for cle-215+, both builds' csr.json, a manifest."""
+    d.mkdir(exist_ok=True)
+    files = []
+
+    def add(asset, data, variant, golden, name, ident, slot):
+        (d / asset).write_bytes(data)
+        files.append({"asset": asset, "variant": variant, "golden": golden, "file": name,
+                      "config_identifier": ident, "slot": slot, "size": len(data),
+                      "sha256": hashlib.sha256(data).hexdigest()})  # fmt: skip
+
+    add("acorn-cle-215p-golden-sqrl_acorn_fallback.bin", golden_image(), "cle-215+-golden", True,
+        "sqrl_acorn_fallback.bin", GOLDEN_IDENT, "0x000000")  # fmt: skip
+    add("acorn-cle-215p-sqrl_acorn_operational.bin", operational_image(), "cle-215+", False,
+        "sqrl_acorn_operational.bin", OP_IDENT, "0x400000")  # fmt: skip
+    add("acorn-cle-215p-csr.json", json.dumps(csr_json()).encode(), "cle-215+", False, "csr.json", OP_IDENT, None)
+    add("acorn-cle-215p-golden-csr.json", json.dumps(csr_json(golden=True)).encode(), "cle-215+-golden", True,
+        "csr.json", GOLDEN_IDENT, None)  # fmt: skip
+    manifest = {
+        "schema_version": 1,
+        "tag": TAG,
+        "flash_layout": {"cle-215+": {"0x000000": "acorn-cle-215p-golden-sqrl_acorn_fallback.bin",
+                                      "0x400000": "acorn-cle-215p-sqrl_acorn_operational.bin"}},
+        "files": files,
+    }  # fmt: skip
+    (d / "manifest.json").write_text(json.dumps(manifest))
+    return d
+
+
+def rewrite(images, asset, data):
+    """Replace an installed file and keep the manifest's sha256 right, as a different release would."""
+    (images / asset).write_bytes(data)
+    manifest = json.loads((images / "manifest.json").read_text())
+    for f in manifest["files"]:
+        if f["asset"] == asset:
+            f["sha256"], f["size"] = hashlib.sha256(data).hexdigest(), len(data)
+    (images / "manifest.json").write_text(json.dumps(manifest))
+
+
+def chip():
+    c = FakeS25FL()
+    golden, operational = golden_image(), operational_image()
+    c.mem[: len(golden)] = golden
+    c.mem[sf.OPERATIONAL_ADDR : sf.OPERATIONAL_ADDR + len(operational)] = operational
+    return c
+
+
+class FakeSoC(FakeBus):
+    """The SoC's CSRs. `pi` (a FakePi) is on the other end of the P2 balls."""
+
+    def __init__(self, flash=None, identifier=OP_IDENT_ON_CHIP, dna=DNA, golden=False):
+        super().__init__(flash or chip())
+        self.identifier = identifier.encode() + b"\0"
+        self.dna = dna
+        self.xadc = dict(XADC_RAW)
+        self.scratch = 0x12345678
+        self.scratch_stuck = None  # a bit that never sets
+        self.golden = golden
+        self.oe = self.out = 0
+        self.pi = None
+        self.flash_touched = False
+
+    def read(self, addr):
+        base = 0xF0000800
+        if base <= addr < base + 4 * 256:
+            i = (addr - base) // 4
+            return self.identifier[i] if i < len(self.identifier) else 0
+        if addr == REGS["dna_id"]:
+            return self.dna >> 32
+        if addr == REGS["dna_id"] + 4:
+            return self.dna & 0xFFFFFFFF
+        for name, a in REGS.items():
+            if a == addr and name in self.xadc:
+                return self.xadc[name]
+        if addr == REGS["ctrl_scratch"]:
+            return self.scratch
+        if not self.golden and addr == REGS["p2_gpio_oe"]:
+            return self.oe
+        if not self.golden and addr == REGS["p2_gpio_out"]:
+            return self.out
+        if not self.golden and addr == REGS["p2_gpio_in"]:
+            return self.pi.fpga_reads() if self.pi else 0b11
+        self.flash_touched = True
+        return super().read(addr)
+
+    def write(self, addr, value):
+        if addr == REGS["ctrl_scratch"]:
+            self.scratch = value & ~(self.scratch_stuck or 0)
+        elif addr == REGS["uartbone_bridge_phy_tuning_word"]:
+            pass
+        elif not self.golden and addr == REGS["p2_gpio_oe"]:
+            self.oe = value & 0b11
+        elif not self.golden and addr == REGS["p2_gpio_out"]:
+            self.out = value & 0b11
+        else:
+            self.flash_touched = True
+            super().write(addr, value)
+
+
+class _Mem:
+    """FakeFPGA's memory, as the SoC's CSRs."""
+
+    def __init__(self, soc):
+        self.soc = soc
+
+    def get(self, addr, default=0):
+        return self.soc.read(addr)
+
+    def __setitem__(self, addr, value):
+        if addr != "corrupted":
+            self.soc.write(addr, value)
+
+
+class SoCLink(FakeFPGA):
+    """The far end of the P2 UARTBone link: tests/test_uartbone_link.py's FakeFPGA over the SoC's CSRs."""
+
+    def __init__(self, soc):
+        super().__init__()
+        self.mem = _Mem(soc)
+
+
+class Cut(FakeFPGA):
+    """A P2 UART with no wires: nothing ever answers."""
+
+    def __init__(self):
+        super().__init__()
+        self.silent = True
+
+
+DETECT = "index 0:\n\tidcode {idcode:#x}\n\tmanufacturer xilinx\n\tfamily artix a7 200t\n\tmodel  xc7a200\n"
+
+
+class FakePi:
+    """The Pi's pins, through pinctrl, and openFPGALoader on P1. Pins start as fpgas.online Pi 5s have them."""
+
+    def __init__(self, soc=None, idcode=0x3636093, jtag_dna=DNA, chain=True, cut=(), tool=True):
+        self.soc, self.idcode, self.jtag_dna, self.chain, self.cut, self.tool = soc, idcode, jtag_dna, chain, cut, tool
+        if soc is not None:
+            soc.pi = self
+        self.pins = {g: ["no", "pu", None] for g in (2, 3, 4)}
+        self.pins.update({g: ["ip", "pd", None] for g in (8, 9, 10, 11)})
+        self.pins.update({14: ["a4", "pn", None], 15: ["a4", "pu", None]})
+        self.calls = []
+
+    def _pull(self, gpio):
+        return {"pu": 1, "pd": 0}.get(self.pins[gpio][1], 1)
+
+    def level(self, gpio):
+        func, _, drive = self.pins[gpio]
+        if func == "op":
+            return drive
+        for ball, (bit, g) in BALLS.items():
+            if g == gpio and ball not in self.cut and self.soc and self.soc.oe >> bit & 1:
+                return self.soc.out >> bit & 1
+        return self._pull(gpio)
+
+    def fpga_reads(self):
+        value = 0
+        for ball, (bit, gpio) in BALLS.items():
+            if ball in self.cut:
+                value |= 1 << bit  # a floating input, read high
+            elif self.pins[gpio][0] == "op":
+                value |= self.pins[gpio][2] << bit
+            else:
+                value |= self._pull(gpio) << bit
+        return value
+
+    def __call__(self, argv, timeout):
+        argv = [str(a) for a in argv]
+        self.calls.append(argv)
+        if argv[:2] == ["pinctrl", "get"]:
+            gpios = [int(g) for g in argv[2].split(",")]
+            lines = []
+            for g in gpios:
+                func, pull, _ = self.pins[g]
+                level = {1: "hi", 0: "lo"}[self.level(g)] if func != "no" else "--"
+                drive = (" dh" if self.pins[g][2] else " dl") if func == "op" else ""
+                lines.append(f"{g:2}: {func}{drive} {pull} | {level} // GPIO{g}")
+            return 0, "\n".join(lines) + "\n"
+        if argv[:2] == ["pinctrl", "set"]:
+            for g in (int(x) for x in argv[2].split(",")):
+                for word in argv[3:]:
+                    if word in ("pu", "pd", "pn"):
+                        self.pins[g][1] = word
+                    elif word in ("dh", "dl"):
+                        self.pins[g][2] = int(word == "dh")
+                    else:
+                        self.pins[g][0] = word
+            return 0, ""
+        if argv[0] == "openFPGALoader":
+            if not self.tool:
+                from fpgas_online_verify.core import Problem
+
+                raise Problem("error", "openFPGALoader is not installed")
+            pins = [int(p) for p in argv[argv.index("--pins") + 1].split(":")]
+            for g in pins:  # it leaves TDI, TCK and TMS driven
+                self.pins[g] = ["op", self.pins[g][1], 0]
+            if not self.chain:
+                return 1, "JTAG init failed with: no device found\n"
+            if "--detect" in argv:
+                return 0, DETECT.format(idcode=self.idcode)
+            if "--read-dna" in argv:
+                return 0, json.dumps({"dna": f"{self.jtag_dna:#018x}"}) + "\n"
+        raise AssertionError(f"unexpected command {argv}")
+
+    def ran(self, program):
+        return [c for c in self.calls if c[0] == program]
+
+
+class Bar:
+    """open_bar for a FakeSoC: a context manager per call, counting the opens."""
+
+    def __init__(self, soc):
+        self.soc, self.opened = soc, 0
+
+    def __call__(self, bdf):
+        outer = self
+
+        class _Ctx:
+            def __enter__(self):
+                outer.opened += 1
+                return outer.soc
+
+            def __exit__(self, *exc):
+                return False
+
+        return _Ctx()
+
+
+def refuse(bdf):
+    raise AssertionError("BAR0 of a design we did not build must not be touched")
+
+
+OURS = ("0x10ee", "0x7021", "0x1e24", "0x021f")
+FACTORY = ("0x1e24", "0x021f", "0x0000", "0x0000")
+VENDOR_XDMA = ("0x10ee", "0x7011", "0x0000", "0x0000")
+RP1 = ("0x1de4", "0x0001", "0x0000", "0x0000")
+
+
+def pci(root, bdf="0001:01:00.0", ids=OURS, cls="0x058000", bars=(0x100000,), driver=None, speed="5.0 GT/s PCIe",
+        width="1"):  # fmt: skip
+    """One function in a fake /sys/bus/pci/devices (`root`), as the kernel shows it. `bars` are BAR sizes by
+    index (0 for none). A driver gets a /sys/bus/pci/drivers/<name> with bind and unbind files."""
+    d = root / bdf
+    d.mkdir(parents=True)
+    for name, value in zip(("vendor", "device", "subsystem_vendor", "subsystem_device"), ids):
+        (d / name).write_text(f"{value}\n")
+    (d / "class").write_text(f"{cls}\n")
+    lines = []
+    for i in range(13):
+        size = bars[i] if i < len(bars) else 0
+        start = 0x1B00000000 + i * 0x1000000 if size else 0
+        lines.append(f"{start:#018x} {start + size - 1 if size else 0:#018x} {0x40200 if size else 0:#018x}")
+    (d / "resource").write_text("\n".join(lines) + "\n")
+    for name, value in (("current_link_speed", speed), ("current_link_width", width),
+                        ("max_link_speed", "5.0 GT/s PCIe"), ("max_link_width", "1")):  # fmt: skip
+        (d / name).write_text(f"{value}\n")
+    if driver:
+        target = root.parent / "drivers" / driver
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "bind").write_text("")
+        (target / "unbind").write_text("")
+        (d / "driver").symlink_to(target)
+    return root

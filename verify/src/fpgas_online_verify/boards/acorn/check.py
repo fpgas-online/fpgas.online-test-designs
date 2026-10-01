@@ -1,21 +1,24 @@
-"""Check that an Acorn runs the expected fpgas.online image and holds the expected images in its flash.
+"""The PCIe side of the Acorn check: what runs on the board, its CSRs over BAR0, and its flash.
 
-The Acorn's part of fpgas-verify (the board module is fpgas_online_verify.boards.acorn): run at boot by
-fpgas-verify.service when the host is set up for an Acorn, and on demand as fpgas-acorn-verify. Three tiers:
+The Acorn's part of fpgas-verify (the board module is fpgas_online_verify.boards.acorn; suite.py runs the
+tests in order). What lives here:
 
-  1. PCI IDs, from sysfs: which image family is running. The fpgas.online SoC is LitePCIe's 10ee:7021 with
-     the board named in the subsystem IDs; SQRL's factory image and the vendor XDMA sample are recognised and
-     fail, with "unconverted" in the reason. Nothing past this tier runs against a design we did not build:
-     its BAR0 has a register layout we do not know.
-  2. The SoC's identifier string, over BAR0: which build is running. It carries the build timestamp, so it
-     names one image exactly. It must be the operational or golden build of the installed release; the
-     golden one means the operational slot did not boot (degraded).
-  3. The flash, over BAR0 through spi_flash.py (read opcodes only): the golden slot (0x000000) and the
-     operational slot (0x400000) are read whole and compared with the images the release puts there; their
-     sha256s, with the flash's identity, are the board's state (fpgas_online_verify.state).
+  * PCI IDs, from sysfs: which image family is running. The fpgas.online SoC is LitePCIe's 10ee:7021 with
+    the board named in the subsystem IDs; SQRL's factory image and the vendor XDMA sample are recognised and
+    fail, with "unconverted" in the reason. Two other Xilinx PCIe boards on the fleet are named (a PCIe
+    Screamer running PCILeech, a stock XDMA design that is most likely a PicoEVB) and fail because
+    fpgas.online has no test design for them. Nothing past the IDs is sent to a design we did not build:
+    its BARs have a register layout we do not know.
+  * The SoC's identifier string, over BAR0: which build is running. It carries the build timestamp, so it
+    names one image exactly. It must be the operational or golden build of the installed release, and only
+    then is anything else on BAR0 touched: the release's csr.json for that build gives the CSR addresses.
+  * The CSRs the design has for the board itself: device DNA, XADC temperature and voltages, and the ctrl
+    scratch register.
+  * The flash, through spi_flash.py (read opcodes only): its identity, and the golden slot (0x000000) and the
+    operational slot (0x400000) read whole and compared with the images the release puts there.
 
-A board whose BAR0 a kernel driver holds (litepcie.ko, loaded by an operator) is not read at all: it is
-reported "driver-bound", because two users of BAR0 would drive the same CSRs at once.
+A kernel driver bound to the board (litepcie.ko, loaded by an operator) owns BAR0. The check unbinds it for
+the duration and binds it again afterwards (driver_released), so the board is still tested.
 
 Nothing is ever written to the flash or reconfigured: a board that fails is reported, not repaired. The
 images and manifest come from the fpgas-online-acorn-bitstreams package; each installed file is checked
@@ -25,7 +28,6 @@ Stdlib only: the Pi hosts boot a tmpfs root with no LiteX.
 """
 
 import contextlib
-import datetime
 import hashlib
 import json
 import mmap
@@ -49,41 +51,76 @@ CSR_EXPECTED = {"identifier_mem": IDENTIFIER_BASE, "flash": spi_flash.SPI_CONTRO
 BAR0_SIZE = 0x10000
 
 XILINX, SQRL = 0x10EE, 0x1E24
-LITEPCIE_X1, VENDOR_XDMA = 0x7021, 0x7011
+LITEPCIE_X1, VENDOR_XDMA, PCILEECH = 0x7021, 0x7011, 0x0666
+XDMA_CLASS = 0x070001  # the XDMA IP's default class code; the fpgas.online SoC's is 0x058000
 # designs/acorn-pcie/gateware/acorn_pcie_soc.py PCIE_SUBSYSTEM_*: tests/test_acorn_verify.py holds them equal.
 OUR_SUBSYSTEMS = {(SQRL, 0x021F): "cle-215+", (SQRL, 0x0101): "cle-101"}
 # SQRL's factory images use these as their own vendor:device, with the subsystem left at 0000:0000.
 SQRL_FACTORY = {0x021F: "cle-215+", 0x0101: "cle-101"}
 SLOTS = (("0x000000", spi_flash.GOLDEN_ADDR), ("0x400000", spi_flash.OPERATIONAL_ADDR))
+# Xilinx PCIe boards that are not Acorns, seen on the fleet (pi-sw1-p38, pi-sw2-p37).
+OTHER_BOARDS = {
+    "pcileech": "PCIe Screamer (PCILeech image)",
+    "xilinx-xdma": "Xilinx XDMA design (likely PicoEVB)",
+}
+NO_TEST_DESIGN = "fpgas.online has no test design for this board yet"
 
-# Worst first wins when there is more than one board.
-# driver-bound: a kernel driver (litepcie.ko) holds BAR0, so nothing was read. Not a fault, but not a pass either.
-SEVERITY = ("none", "pass", "driver-bound", "degraded", "fail", "error")
+# Worst last. "none": no Acorn at all; "read": identify() read what it was asked to.
+SEVERITY = ("none", "read", "pass", "fail", "error")
+
+XADC_TEMPERATURE = ("temperature_c", "xadc_temperature")
+XADC_VOLTAGES = (("vccint_v", "xadc_vccint"), ("vccaux_v", "xadc_vccaux"), ("vccbram_v", "xadc_vccbram"))
+DNA_BITS = 57
+SCRATCH_PATTERNS = (0xA5A55A5A, 0x5A5AA5A5)
 
 
-# -- tier 1: PCI IDs ---------------------------------------------------------------------------------
+# -- PCI IDs -------------------------------------------------------------------------------------------
 
 
-def classify(vendor, device, sub_vendor, sub_device):
-    """(kind, variant) of an endpoint, from its config-space IDs alone."""
+def classify(vendor, device, sub_vendor, sub_device, pci_class=None, bars=()):
+    """(kind, variant) of an endpoint, from its config space alone: IDs, class code, which BARs it has."""
     if (vendor, device) == (XILINX, LITEPCIE_X1):
         variant = OUR_SUBSYSTEMS.get((sub_vendor, sub_device))
-        return ("fpgas-online", variant) if variant else ("litex-other", None)
+        if variant:
+            return "fpgas-online", variant
+        if pci_class == XDMA_CLASS and 2 in bars:  # the XDMA IP's DMA BAR as well as BAR0; LitePCIe has one BAR
+            return "xilinx-xdma", None
+        return "litex-other", None
     if (vendor, device) == (XILINX, VENDOR_XDMA):
         return "vendor-xdma", None
+    if (vendor, device) == (XILINX, PCILEECH):
+        return "pcileech", None
     if vendor == SQRL and device in SQRL_FACTORY:
         return "sqrl-factory", SQRL_FACTORY[device]
     return "unknown", None
 
 
+def _class_and_bars(dev_dir):
+    """The class code and the indexes of the BARs a function has, from sysfs (no config-space access)."""
+    try:
+        pci_class = int((dev_dir / "class").read_text(), 16)
+    except (OSError, ValueError):
+        pci_class = None
+    bars = []
+    try:
+        for i, line in enumerate((dev_dir / "resource").read_text().splitlines()[:6]):
+            end = int(line.split()[1], 16)
+            if end:
+                bars.append(i)
+    except (OSError, ValueError):
+        pass
+    return pci_class, tuple(bars)
+
+
 def describe(dev, root=SYSFS_PCI):
-    """A Xilinx or SQRL function from core.pci_devices(), classified, with the kernel driver bound to it (a
-    driver holding BAR0 means the board is left alone); None for anyone else's."""
+    """A Xilinx or SQRL function from core.pci_devices(), classified, with the kernel driver bound to it;
+    None for anyone else's."""
     if dev["vendor"] not in (XILINX, SQRL):
         return None
     ids = (dev["vendor"], dev["device"], dev["subsystem_vendor"], dev["subsystem_device"])
-    kind, variant = classify(*ids)
-    return {
+    pci_class, bars = _class_and_bars(pathlib.Path(root) / dev["bdf"])
+    kind, variant = classify(*ids, pci_class, bars)
+    out = {
         "bdf": dev["bdf"],
         "ids": f"{ids[0]:04x}:{ids[1]:04x}",
         "subsystem": f"{ids[2]:04x}:{ids[3]:04x}",
@@ -91,6 +128,9 @@ def describe(dev, root=SYSFS_PCI):
         "variant": variant,
         "driver": spi_flash.bound_driver(dev["bdf"], root),
     }
+    if kind in OTHER_BOARDS:
+        out["title"] = OTHER_BOARDS[kind]
+    return out
 
 
 def scan_pci(root=SYSFS_PCI):
@@ -102,7 +142,86 @@ def scan_pci(root=SYSFS_PCI):
     return [d for d in (describe(dev, root) for dev in pci_devices(root)) if d]
 
 
-# -- BAR0 --------------------------------------------------------------------------------------------
+def not_ours(dev):
+    """The reason a board found on PCI is not running the fpgas.online SoC, or None if it is.
+
+    A board still on SQRL's factory image (or the vendor XDMA sample) cannot be offered to users; the reason
+    says it is unconverted, so the fix (fpgas-acorn-flash) is plain from the report."""
+    kind = dev["kind"]
+    if kind == "fpgas-online":
+        return None
+    if kind in ("sqrl-factory", "vendor-xdma"):
+        what = "SQRL's factory image" if kind == "sqrl-factory" else "the vendor XDMA sample image"
+        return f"unconverted: runs {what}, not the fpgas.online design"
+    if kind in OTHER_BOARDS:
+        return f"{OTHER_BOARDS[kind]}: {NO_TEST_DESIGN}"
+    return f"{dev['ids']} subsystem {dev['subsystem']} is not a design we built"
+
+
+def is_acorn(dev):
+    """True for a board known to be an Acorn, whatever it runs."""
+    return dev["kind"] in ("fpgas-online", "sqrl-factory")
+
+
+# -- the PCIe link -------------------------------------------------------------------------------------
+
+
+def link_status(bdf, root=SYSFS_PCI):
+    """{speed_gt_s, width, max_speed_gt_s, max_width} from sysfs ("5.0 GT/s PCIe" -> 5.0)."""
+    dev = pathlib.Path(root) / bdf
+    out = {}
+    for key, name in (("speed_gt_s", "current_link_speed"), ("width", "current_link_width"),
+                      ("max_speed_gt_s", "max_link_speed"), ("max_width", "max_link_width")):  # fmt: skip
+        try:
+            text = (dev / name).read_text().split()[0]
+            out[key] = int(text) if key.endswith("width") else float(text)
+        except (OSError, ValueError, IndexError) as e:
+            raise Problem("error", f"cannot read {dev / name}: {e}") from None
+    return out
+
+
+def link_faults(status, expected):
+    """What differs from the expected link, as sentences."""
+    faults = []
+    if status["speed_gt_s"] != expected["speed_gt_s"]:
+        faults.append(f"link runs at {status['speed_gt_s']} GT/s, expected {expected['speed_gt_s']} GT/s")
+    if status["width"] != expected["width"]:
+        faults.append(f"link is x{status['width']}, expected x{expected['width']}")
+    return faults
+
+
+# -- a driver that holds BAR0 --------------------------------------------------------------------------
+
+
+@contextlib.contextmanager
+def driver_released(dev, note, root=SYSFS_PCI):
+    """Unbind the kernel driver bound to the board for the duration, and bind it again afterwards.
+
+    A bound driver (litepcie.ko) owns BAR0, and nothing in the kernel stops a second user mapping resource0:
+    both would drive the same CSRs at once. So the driver lets go while the check reads, and `note` records
+    what happened ({"driver", "unbound", "rebound" or "rebind_error"})."""
+    driver = dev.get("driver")
+    if not driver:
+        yield
+        return
+    control = (pathlib.Path(root) / dev["bdf"] / "driver").resolve()  # /sys/bus/pci/drivers/<driver>
+    note["driver"] = driver
+    try:
+        (control / "unbind").write_text(dev["bdf"])
+    except OSError as e:
+        raise Problem("error", f"the {driver} driver holds the board and could not be unbound: {e}") from None
+    note["unbound"] = True
+    try:
+        yield
+    finally:
+        try:
+            (control / "bind").write_text(dev["bdf"])
+            note["rebound"] = True
+        except OSError as e:
+            note["rebind_error"] = f"the {driver} driver could not be bound again: {e}"
+
+
+# -- BAR0 ----------------------------------------------------------------------------------------------
 
 
 class _Bar0:
@@ -185,7 +304,8 @@ def _checked_file(images, entry):
     return data
 
 
-def _expectations(manifest, files, variant):
+def expectations(manifest, files, variant):
+    """({"golden": entry, "operational": entry}, flash layout) for a variant."""
     layout = manifest.get("flash_layout", {}).get(variant)
     if not layout or set(layout) != {s for s, _ in SLOTS}:
         raise Problem("error", f"release {manifest.get('tag')} has no flash layout for {variant}")
@@ -200,60 +320,117 @@ def _csr_file(files, build_variant):
     raise Problem("error", f"the release has no csr.json for the {build_variant} build")
 
 
-# -- the check ---------------------------------------------------------------------------------------
+class Csrs:
+    """A build's CSR map, from the release's csr.json: the addresses are the build's, not this tool's."""
+
+    def __init__(self, data, asset="csr.json"):
+        self.asset = asset
+        self.bases = data.get("csr_bases", {})
+        self.registers = data.get("csr_registers", {})
+        self.constants = data.get("constants", {})
+
+    def addr(self, name):
+        reg = self.registers.get(name)
+        if reg is None:
+            raise Problem("fail", f"the running build has no {name} CSR ({self.asset})")
+        return reg["addr"]
+
+    def words(self, name):
+        return self.registers.get(name, {}).get("size", 1)
+
+    def has(self, name):
+        return name in self.registers
 
 
-def check_board(dev, images, release, open_bar):
-    board = dict(dev)
-    try:
-        board.update(_check_board(dev, images, release, open_bar))
-    except Problem as p:
-        board.update(p.seen, result=p.result, reason=p.reason)
-    return board
-
-
-def _tier1(dev):
-    """Refuse, from the PCI IDs alone, anything that is not our SoC: its BAR0 layout is unknown to us.
-
-    A board still on SQRL's factory image (or the vendor XDMA sample) fails like any other board not
-    running the release: it cannot be offered to users. The reason says it is unconverted, so the fix
-    (fpgas-acorn-flash) is plain from the report."""
-    kind = dev["kind"]
-    if kind in ("sqrl-factory", "vendor-xdma"):
-        what = "SQRL's factory image" if kind == "sqrl-factory" else "the vendor XDMA sample image"
-        raise Problem("fail", f"unconverted: runs {what}, not the fpgas.online design")
-    if kind != "fpgas-online":
-        raise Problem("fail", f"{dev['ids']} subsystem {dev['subsystem']} is not a design we built")
-
-
-def _not_driver_bound(dev):
-    """Refuse a board whose BAR0 a kernel driver holds: see spi_flash.bound_driver()."""
-    if dev.get("driver"):
-        raise Problem("driver-bound", spi_flash.driver_bound_reason(dev["driver"]))
-
-
-def _known_build(bus, images, files, builds, tag):
-    """Tier 2, and the gate for everything after it: the running build must be one of the release's, and
-    its register map must be the one spi_flash.py drives. Returns what was seen and which build runs."""
-    identifier = read_identifier(bus)
-    running = next(
-        (name for name, f in builds.items() if f["config_identifier"].casefold() == identifier.casefold()), None
-    )
-    seen = {"running": {"identifier": identifier, "build": running}}
-    if running is None:  # its CSR map is unknown to us, so the flash is not read
-        raise Problem("fail", f"runs {identifier!r}, which is not in release {tag}", **seen)
-    csr_entry = _csr_file(files, builds[running]["variant"])
-    bases = json.loads(_checked_file(images, csr_entry)).get("csr_bases", {})
+def build_csrs(images, files, build):
+    """The Csrs of a build (a manifest entry), refused unless its bases are the ones spi_flash.py drives."""
+    entry = _csr_file(files, build["variant"])
+    csrs = Csrs(json.loads(_checked_file(images, entry)), entry["asset"])
     for name, want in CSR_EXPECTED.items():
-        if bases.get(name) != want:
-            got = "missing" if bases.get(name) is None else f"{bases[name]:#x}"
-            raise Problem(
-                "error", f"{csr_entry['asset']} puts {name} at {got}, not {want:#x}: not reading this flash", **seen
-            )
-    return seen, running
+        if csrs.bases.get(name) != want:
+            got = "missing" if csrs.bases.get(name) is None else f"{csrs.bases[name]:#x}"
+            raise Problem("error", f"{entry['asset']} puts {name} at {got}, not {want:#x}: not reading this board")
+    return csrs
 
 
-def _flash_identity(flash):
+def known_build(identifier, builds):
+    """The name of the release build ("golden", "operational") whose identifier this is, or None."""
+    return next((n for n, f in builds.items() if f["config_identifier"].casefold() == identifier.casefold()), None)
+
+
+def gate(bus, images, files, builds, tag):
+    """The gate for everything on BAR0 after the identifier: the running build must be one of the release's,
+    and its register map the one spi_flash.py drives. Returns (what was seen, build name, Csrs)."""
+    identifier = read_identifier(bus)
+    running = known_build(identifier, builds)
+    seen = {"running": {"identifier": identifier, "build": running}}
+    if running is None:  # its CSR map is unknown to us, so nothing more is read
+        raise Problem("fail", f"runs {identifier!r}, which is not in release {tag}", **seen)
+    try:
+        csrs = build_csrs(images, files, builds[running])
+    except Problem as p:
+        raise Problem(p.result, p.reason, **seen) from None
+    return seen, running, csrs
+
+
+# -- the design's own CSRs, over either bridge ---------------------------------------------------------
+#
+# `read(addr) -> int` and `write(addr, value)` are a bus: BAR0, or the P2 UARTBone link.
+
+
+def read_dna(read, csrs):
+    """The device DNA from the `dna_id` CSR: 57 bits in two words, the upper word first."""
+    addr = csrs.addr("dna_id")
+    value = 0
+    for i in range(csrs.words("dna_id")):
+        value = value << 32 | read(addr + 4 * i)
+    return value
+
+
+def dna_faults(dna, where):
+    if dna == 0 or dna == (1 << DNA_BITS) - 1:
+        return [f"device DNA over {where} reads {dna:#x}: the DNA port is not being read"]
+    return []
+
+
+def read_xadc(read, csrs):
+    """XADC temperature (°C) and supply voltages (V), from the raw 12-bit readings (UG480 transfer functions)."""
+    key, name = XADC_TEMPERATURE
+    out = {key: round(read(csrs.addr(name)) * 503.975 / 4096 - 273.15, 1)}
+    for key, name in XADC_VOLTAGES:
+        out[key] = round(read(csrs.addr(name)) * 3.0 / 4096, 3)
+    return out
+
+
+def xadc_faults(xadc, ranges, where):
+    faults = []
+    for key, value in xadc.items():
+        low, high = ranges.get(key, (None, None))
+        if low is not None and not low <= value <= high:
+            faults.append(f"XADC {key} over {where} is {value}, outside {low} to {high}")
+    return faults
+
+
+def scratch_faults(read, write, csrs, where):
+    """Write two patterns to the ctrl scratch register, read each back, and put the old value back."""
+    addr = csrs.addr("ctrl_scratch")
+    old = read(addr)
+    faults = []
+    try:
+        for pattern in SCRATCH_PATTERNS:
+            write(addr, pattern)
+            got = read(addr)
+            if got != pattern:
+                faults.append(f"scratch over {where}: wrote {pattern:#010x}, read {got:#010x}")
+    finally:
+        write(addr, old)
+    return faults
+
+
+# -- the flash -----------------------------------------------------------------------------------------
+
+
+def flash_identity(flash):
     """The flash row of an rpi-hwid label. openFPGALoader reads an S25FL-S's unique id with the same OTPR
     (0x4B, 3 address + 1 dummy, 16 bytes from 0) that spi_flash.identify() sends; on pi-sw2-p48 the two gave
     the same 128 bits in the same order."""
@@ -273,49 +450,41 @@ def _first_difference(held, want):
     return next(i for i in range(len(want)) if held[i] != want[i])
 
 
-def _check_board(dev, images, release, open_bar):
-    _tier1(dev)
-    _not_driver_bound(dev)
-    manifest, files = release
-    tag = manifest.get("tag")
-    builds, layout = _expectations(manifest, files, dev["variant"])
+def flash_slots(bus, images, files, layout):
+    """Both slots read whole and compared with the release's images: [{slot, asset, result, sha256, ...}]."""
     slot_images = {slot: _checked_file(images, files[layout[slot]]) for slot, _ in SLOTS}
-
-    with open_bar(dev["bdf"]) as bus:
-        out, running = _known_build(bus, images, files, builds, tag)
-        flash = spi_flash.Flash(bus)  # read opcodes only
-        identity = _flash_identity(flash)
-        slots = []
-        for slot, addr in SLOTS:
-            held = flash.read(addr, spi_flash.SLOT_SIZE)  # the whole slot: its sha256 is part of the state
-            diff = _first_difference(held, slot_images[slot])
-            entry = {"slot": slot, "asset": layout[slot], "result": "match" if diff is None else "mismatch",
-                     "sha256": hashlib.sha256(held).hexdigest()}  # fmt: skip
-            if diff is not None:
-                entry["first_difference"] = f"{addr + diff:#x}"
-            slots.append(entry)
-        out["flash"] = {**identity, "slots": slots}
-
-    if any(s["result"] != "match" for s in slots):
-        bad = ", ".join(f"{s['slot']} differs at {s['first_difference']}" for s in slots if s["result"] != "match")
-        return {**out, "result": "fail", "reason": f"flash does not hold release {tag}: {bad}"}
-    if running == "golden":
-        return {**out, "result": "degraded", "reason": "running the golden image: the operational slot did not boot"}
-    return {**out, "result": "pass"}
+    flash = spi_flash.Flash(bus)  # read opcodes only
+    slots = []
+    for slot, addr in SLOTS:
+        held = flash.read(addr, spi_flash.SLOT_SIZE)  # the whole slot: its sha256 is part of the state
+        diff = _first_difference(held, slot_images[slot])
+        entry = {"slot": slot, "asset": layout[slot], "result": "match" if diff is None else "mismatch",
+                 "sha256": hashlib.sha256(held).hexdigest()}  # fmt: skip
+        if diff is not None:
+            entry["first_difference"] = f"{addr + diff:#x}"
+        slots.append(entry)
+    return slots
 
 
-def _identify_board(dev, images, release, open_bar):
-    _tier1(dev)
-    _not_driver_bound(dev)
+# -- the live identity read, for rpi-hwid's labels -----------------------------------------------------
+
+
+def _identify_board(dev, images, release, open_bar, root):
+    reason = not_ours(dev)
+    if reason:
+        raise Problem("fail", reason)
     manifest, files = release
-    builds, _ = _expectations(manifest, files, dev["variant"])
-    with open_bar(dev["bdf"]) as bus:
-        out, _ = _known_build(bus, images, files, builds, manifest.get("tag"))
-        out["flash"] = _flash_identity(spi_flash.Flash(bus))
+    builds, _ = expectations(manifest, files, dev["variant"])
+    note = {}
+    with driver_released(dev, note, root), open_bar(dev["bdf"]) as bus:
+        out, _, _ = gate(bus, images, files, builds, manifest.get("tag"))
+        out["flash"] = flash_identity(spi_flash.Flash(bus))
+    if "rebind_error" in note:
+        raise Problem("error", note["rebind_error"], **out)
     return {**out, "result": "read"}
 
 
-def identify(devices, images=IMAGES, open_bar=open_bar0):
+def identify(devices, images=IMAGES, open_bar=open_bar0, root=SYSFS_PCI):
     """Each board's flash row, read live and nothing more: no slot is read. For rpi-hwid's labels.
 
     The same gates as the full check apply before anything is sent to the flash. "read" for a board
@@ -332,38 +501,10 @@ def identify(devices, images=IMAGES, open_bar=open_bar0):
         try:
             if failure and dev["kind"] == "fpgas-online":
                 raise failure
-            board.update(_identify_board(dev, images, release, open_bar))
+            board.update(_identify_board(dev, images, release, open_bar, root))
         except Problem as p:
             board.update(p.seen, result=p.result, reason=p.reason)
         boards.append(board)
     worst = max((b["result"] for b in boards if b["result"] != "read"), key=SEVERITY.index, default=None)
     result = worst or ("read" if boards else "none")
     return {"schema_version": SCHEMA_VERSION, "result": result, "boards": boards}
-
-
-def verify(devices, images=IMAGES, open_bar=open_bar0):
-    release, release_error = None, None
-    if any(d["kind"] == "fpgas-online" for d in devices):
-        try:
-            release = load_release(images)
-        except Problem as p:
-            release_error = p
-    boards = []
-    for dev in devices:
-        if release_error and dev["kind"] == "fpgas-online":
-            boards.append({**dev, "result": release_error.result, "reason": release_error.reason})
-        else:
-            boards.append(check_board(dev, images, release, open_bar))
-    result = max((b["result"] for b in boards), key=SEVERITY.index, default="none")
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "result": result,
-        "release": release[0].get("tag") if release else None,
-        "checked_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-        "boards": boards,
-    }
-
-
-def exit_code(report):
-    """0 for what is fine as far as this module goes: pass, an identity read, or no Acorn at all."""
-    return 0 if report["result"] in ("pass", "read", "none") else 1
