@@ -10,16 +10,16 @@ The Acorn has two working programming paths:
 
 | Method | Speed | Persistent? | Requires | Notes |
 |--------|-------|-------------|----------|-------|
-| GPIO JTAG → SRAM | ~16 s for a 1.6 MB XC7A200T bitstream (bit-banged libgpiod, measured 2026-08-31) | No (lost on power cycle) | RPi GPIO wiring | Works with any/no bitstream loaded. **Detach the PCIe endpoint first** (below) |
+| GPIO JTAG → SRAM | ~16 s for a 1.6 MB XC7A200T bitstream (bit-banged libgpiod) | No (lost on power cycle) | RPi GPIO wiring | Works with any/no bitstream loaded. **Detach the PCIe endpoint first** (below) |
 | PCIe → SPI Flash | Fast (~seconds) | Yes | Working LiteX PCIe bitstream | Requires PCIe-capable bitstream already running |
 
 ### Detach the PCIe endpoint before any JTAG reconfiguration
 
 Reconfiguring the FPGA over JTAG while its endpoint is enumerated is a PCIe
-surprise removal. The Pi 5's BCM2712 root complex does not survive it: on
-2026-08-31 a JTAG load on pi-sw2-p47 killed the host outright ("Connection
-closed by remote host", Pi rebooted). With the endpoint removed first, the same
-load completed cleanly and the host was unaffected.
+surprise removal. The Pi 5's BCM2712 root complex does not survive it: the
+host dies outright ("Connection closed by remote host", the Pi reboots). With
+the endpoint removed first, the load completes cleanly and the host is
+unaffected.
 
 ```bash
 echo 1 | sudo tee /sys/bus/pci/devices/0001:01:00.0/remove   # before openFPGALoader
@@ -36,9 +36,9 @@ rescan does not. An endpoint found by a rescan keeps its reset MPS of 128
 bytes while the root port `0001:00:00.0` stays at 512. The root port then
 returns read completions of up to 512 bytes, the 7-series PCIe core rejects
 them as malformed TLPs and sets FatalErr, and LitePCIe's DMA waits forever for
-its read data. On pi-sw2-p48 (2026-09-26), `litepcie_util dma_test` moved
-nothing (TX 128, RX 0, no MSI) until the endpoint's MPS was set to 512. After
-that it ran at 3.6 Gb/s.
+its read data. With the mismatch, `litepcie_util dma_test` moves nothing
+(TX 128, RX 0, no MSI); with the endpoint's MPS set to 512 it runs at
+3.6 Gb/s (pi-sw2-p48).
 
 ```bash
 sudo lspci -vv -s 0001:00:00.0 | grep MaxPayload   # root port: 512
@@ -78,18 +78,20 @@ gh release download vivado-bitstreams-v0.0-496-gf162f60 \
     --pattern 'pmod-pin-id_acorn-cle-215p_vivado-vivado_sqrl_acorn.bit'
 ```
 
-Note that the `pmod-pin-id` design in that release predates test-designs PR #10
-(2026-08-31), which gave the Acorn pin-ID design a real clock; the release
-build of *that one design* configures but never toggles a pin. The fixed
-design must be rebuilt with Vivado until a newer release is cut.
+The `pmod-pin-id` build in that release has no working clock: it configures
+but never toggles a pin. Rebuild *that one design* with Vivado from this
+repository.
 
-**Flash-via-JTAG (`--write-flash`) is not currently working** with openFPGALoader on the Acorn. JTAG can only load bitstreams to volatile SRAM. This has important implications for the recovery strategy.
+**Flash-via-JTAG (`--write-flash`) does not work** with openFPGALoader on the Acorn. JTAG can only load bitstreams to volatile SRAM. This has important implications for the recovery strategy.
 
-### Current Bitstream State
+### Flash contents (2026-09-03 survey)
 
-Five of the six Welland Acorn boards still have the **factory Sqrl
-cryptocurrency mining firmware** in SPI flash (`lspci -nn` on each host,
-2026-09-03):
+What each Welland Acorn's SPI flash held on 2026-09-03 (`lspci -nn` on each
+host); five had the **factory Sqrl cryptocurrency mining firmware**. What each
+board runs at its latest boot is in the
+[current verify results](../verify.md#current-results), and
+[#53](https://github.com/fpgas-online/fpgas.online-test-designs/issues/53)
+tracks moving them all to the pinned release:
 
 | Host       | Flash contents (what enumerates at boot)                                   |
 |------------|----------------------------------------------------------------------------|
@@ -108,14 +110,11 @@ Factory firmware characteristics:
 
 To enable PCIe→Flash programming, the factory firmware must be replaced with a **LiteX Acorn PCIe SoC** bitstream (vendor `10ee`) that includes PCIe+DMA, SPI Flash controller, and ICAP. Building this bitstream requires **Vivado** (the XC7A200T is too large for the openXC7 open source toolchain); the prebuilt release above already contains `pcie-enumeration_acorn-cle-215p_*_{fallback,operational}.bin`.
 
-The litepcie kernel module and `litepcie_util` were built on the host then
-called pi2 (now pi-sw2-p48) — they just need a matching LiteX bitstream to bind
-to. Because the Pi root is `overlayroot=tmpfs`, anything built on a Pi is lost
+Because the Pi root is `overlayroot=tmpfs`, anything built on a Pi is lost
 at reboot unless it is baked into the NFS root.
 
-The longer-term intent (Tim, 2026-08-31) is to flash every board with a LiteX
-design carrying PCIe + UART + GPIO that supports FPGA updates over PCIe, and to
-add JTAG/PCIe/UART/GPIO self-verification to the Pi boot checks.
+The aim is to flash every board with a LiteX design carrying PCIe + UART +
+GPIO that supports FPGA updates over PCIe.
 
 ### What This Means
 
@@ -380,7 +379,7 @@ write_cfgmem -force -format bin -interface spix4 -size 16 \
    # Test it works, then write to flash via PCIe
    ```
 
-4. **Keep JTAG wiring connected** on all deployed Acorn boards. Without JTAG, a corrupted golden image means the board is **permanently bricked** until JTAG is reconnected. As of 2026-08-31 pi-sw2-p43 and pi-sw2-p44 scan an empty JTAG chain and PS1's pi14/pi16 do not answer JTAG at all — those four are in exactly this state and must not be flashed over PCIe until JTAG is restored.
+4. **Keep JTAG wiring connected** on all deployed Acorn boards. Without JTAG, a corrupted golden image means the board is **permanently bricked** until JTAG is reconnected. pi-sw2-p43 and pi-sw2-p44 scan an empty JTAG chain and PS1's pi14/pi16 do not answer JTAG at all (survey of 2026-08-31) — those four are in exactly this state and must not be flashed over PCIe until JTAG is restored.
 
 5. **Detach the PCIe endpoint before every JTAG load** (see the top of this page). A Pi 5 host crashes otherwise.
 
