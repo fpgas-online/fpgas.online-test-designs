@@ -99,7 +99,7 @@ def _keys(targets):
 def compare_state(report, targets, reports, update, path):
     """Compare what the boards reported as their state with the recorded state; record it when asked."""
     current = {k: r["state"] for k, r in zip(_keys(targets), reports) if "state" in r}
-    recorded = state.load(path)
+    recorded, version = state.load_record(path)
     info = {"file": str(path)}
     if update or recorded is None:
         if report["result"] in ("missing", "error") and not update:
@@ -108,11 +108,11 @@ def compare_state(report, targets, reports, update, path):
         state.save(current, report["checked_at"], path)
         info["recorded"] = "--update" if update else "first run"
         return info
-    changes = state.differences(recorded, current)
+    changes = state.differences(recorded, current, state.quiet_facts(version))
     if changes:
         info["changes"] = changes
-    elif "unreadable" not in recorded and state.merged(recorded, current) != recorded:
-        # facts this version reads that the record lacks (an upgrade): added quietly, not a change
+    elif report["result"] != "error" and state.merged(recorded, current) != recorded:
+        # only facts the record's older version did not have (an upgrade): added quietly, not a change
         state.save(state.merged(recorded, current), report["checked_at"], path)
         info["added"] = True
     return info

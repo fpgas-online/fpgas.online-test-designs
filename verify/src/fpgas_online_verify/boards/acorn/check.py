@@ -349,6 +349,9 @@ def gate(bus, images, files, builds, tag):
         csrs = build_csrs(images, files, builds[running])
     except Problem as p:
         raise Problem(p.result, p.reason, **seen) from None
+    except (KeyError, TypeError, ValueError) as e:  # a malformed csr.json: its map cannot be trusted
+        raise Problem("error", f"the release's csr.json for this build cannot be read: {type(e).__name__}: {e}",
+                      **seen) from None  # fmt: skip
     return seen, running, csrs
 
 

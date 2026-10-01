@@ -268,7 +268,9 @@ flash in `/var/lib/fpgas-online/verify-state.json`. A later run that sees a diff
 was rewritten, is `changed` (fatal) until `sudo fpgas-verify --update` records the new state: run it after
 flashing or swapping a board on purpose. Loading a design into SRAM (every check does) and upgrading the
 packages are not changes. A flash that could not be read this time is not compared. A fact the record does
-not have yet (one a newer version reads, such as an Acorn's device DNA) is added to it, and is not a change.
+not have is a change ("not recorded before"): it may not have been readable last time, on a board since
+swapped. The exception is a fact a newer version of the record added (the record has a `schema_version`; 2
+added the Acorn's device DNA): on an older record it is added quietly, unless the run's result is `error`.
 
 ### The debug tool
 

@@ -6,6 +6,11 @@ its flash. A later verify that sees different facts reports "changed", which is 
 `fpgas-verify --update` records the new ones (after flashing a board on purpose, or swapping it). Loading a
 design into SRAM, which every verify does, and upgrading packages change none of these facts.
 
+A fact the record does not have is a change ("not recorded before"): it may be one that could not be read
+last time, on a board that has since been swapped. The one exception is a fact a newer version of the
+record introduced (NEW_FACTS): on a record of an older version it is added quietly, so an upgrade that reads
+more does not make every stateful host report "changed" once.
+
 A netboot root keeps /var/lib in tmpfs, so there every boot is a first run.
 """
 
@@ -13,17 +18,31 @@ import json
 import pathlib
 
 STATE = pathlib.Path("/var/lib/fpgas-online/verify-state.json")
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+# The facts of a board's state that each version of the record introduced: {version: (key, ...)}.
+NEW_FACTS = {2: ("dna",)}  # 2: the Acorn's device DNA
 
 
-def load(path=STATE):
+def load_record(path=STATE):
+    """(boards, schema_version) of the recorded state; (None, None) when there is none."""
     try:
         data = json.loads(pathlib.Path(path).read_text())
     except FileNotFoundError:
-        return None
+        return None, None
     except (OSError, ValueError) as e:
-        return {"unreadable": str(e)}
-    return data.get("boards") if isinstance(data, dict) else {"unreadable": "not a JSON object"}
+        return {"unreadable": str(e)}, None
+    if not isinstance(data, dict):
+        return {"unreadable": "not a JSON object"}, None
+    return data.get("boards"), data.get("schema_version", 1)
+
+
+def load(path=STATE):
+    return load_record(path)[0]
+
+
+def quiet_facts(version):
+    """The board-level keys a record of `version` may lack without that being a change."""
+    return {key for v, keys in NEW_FACTS.items() if (version or 1) < v for key in keys}
 
 
 def save(boards, when, path=STATE):
@@ -36,13 +55,15 @@ def save(boards, when, path=STATE):
     tmp.replace(path)
 
 
-def _walk(prefix, old, new, out):
+def _walk(prefix, old, new, out, quiet=()):
     if isinstance(old, dict) and isinstance(new, dict):
         for key in sorted(set(old) | set(new)):
             if key not in new:
                 continue  # not read this time (a flash readback that failed): nothing to compare
             if key not in old:
-                continue  # a fact a newer version reads (an Acorn's DNA): recorded, not a change
+                if key not in quiet:  # quiet: a fact the record's version did not have yet
+                    out.append(f"{prefix}{key}: not recorded before, now {new[key]!r}")
+                continue
             _walk(f"{prefix}{key}.", old[key], new[key], out)
     elif old != new:
         out.append(f"{prefix.rstrip('.')}: was {old!r}, now {new!r}")
@@ -58,8 +79,9 @@ def merged(recorded, current):
     return out
 
 
-def differences(recorded, current):
-    """What differs between the recorded boards and the current ones, as sentences; [] when nothing does."""
+def differences(recorded, current, quiet=()):
+    """What differs between the recorded boards and the current ones, as sentences; [] when nothing does.
+    `quiet`: board-level keys the record may lack (quiet_facts())."""
     if "unreadable" in (recorded or {}):
         return [f"the recorded state cannot be read ({recorded['unreadable']})"]
     out = []
@@ -68,5 +90,5 @@ def differences(recorded, current):
     for board in sorted(set(current) - set(recorded)):
         out.append(f"{board}: found now, not recorded before")
     for board in sorted(set(recorded) & set(current)):
-        _walk(f"{board}.", recorded[board], current[board], out)
+        _walk(f"{board}.", recorded[board], current[board], out, quiet)
     return out

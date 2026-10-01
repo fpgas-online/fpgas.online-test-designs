@@ -40,6 +40,13 @@ def _quiet(stage, details):
     pass
 
 
+def _problem(e, what):
+    """A Problem as it is, anything else as the error it is (a malformed file, say)."""
+    if isinstance(e, Problem):
+        return e
+    return Problem("error", f"{what} could not be read: {type(e).__name__}: {e}")
+
+
 class _Suite:
     def __init__(self, found, options):
         self.found = found
@@ -122,14 +129,15 @@ class _Suite:
             builds, layout = check.expectations(manifest, files, self.found["variant"])
             self.release = (manifest, files, builds, layout)
             self.report["bitstreams"] = manifest.get("tag")
-        except Problem as p:
-            self.fault(p)
+        except Exception as e:  # a damaged manifest: the tests that need no release still run
+            self.release = None
+            self.fault(_problem(e, "the installed release"))
             return
         try:
             self.uart_builds = {b["config_identifier"].casefold(): check.build_csrs(self.images, files, b)
                                 for b in builds.values()}  # fmt: skip
-        except Problem as p:
-            self.fault(p)
+        except Exception as e:
+            self.fault(_problem(e, "the release's csr.json"))
 
     def _open_bar0(self, stack):
         """Release the driver, map BAR0 and pass the gate; on any failure, say why in bar0_problem."""

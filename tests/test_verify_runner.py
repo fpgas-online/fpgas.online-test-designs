@@ -525,6 +525,7 @@ def test_a_fact_the_old_record_lacks_is_added_quietly_not_a_change(opts):
     """An upgrade that reads more (the Acorn's DNA) must not make every stateful host report "changed" once."""
     old = Fake("arty", seen=[{"variant": "a7-35", "serial": "A"}])
     runner.verify(opts, _boards(old), usb=[], pci=[], mode=("auto", "test"))
+    _record(opts, state.load(opts["state"]), 1)  # recorded by the version before dna
 
     class Reads(Fake):
         def check(self, host, found, options):
@@ -548,3 +549,52 @@ def test_a_fact_that_differs_is_still_a_change(opts):
     report = runner.verify(opts, _boards(Fake("arty", seen=[{"variant": "a7-35", "serial": "A"}], flash="bbbb")),
                            usb=[], pci=[], mode=("auto", "test"))  # fmt: skip
     assert report["result"] == "changed"
+
+
+class Seen(Fake):
+    """A board whose state this run is `facts`."""
+
+    def __init__(self, name, facts, **kw):
+        super().__init__(name, seen=[{"variant": "cle-215+"}], **kw)
+        self.now = facts
+
+    def check(self, host, found, options):
+        return {"board": self.name, "variant": "cle-215+", "result": self.result, "state": dict(self.now)}
+
+
+def _record(opts, boards, version):
+    state.save(boards, "then", opts["state"])
+    data = json.loads(opts["state"].read_text())
+    data["schema_version"] = version
+    opts["state"].write_text(json.dumps(data))
+
+
+def test_a_swapped_board_whose_flash_was_not_read_last_time_is_changed(opts):
+    """Recorded when BAR0 could not be read (no flash, no DNA); then the Acorn was swapped for another of the
+    same variant. Its flash IDs were never recorded, so they are not an upgrade's new facts: changed."""
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "variant": "cle-215+"}}, state.SCHEMA_VERSION)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "variant": "cle-215+", "dna": "0x1", "flash": {"jedec": "0x010219"}})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "changed"
+    assert any("flash: not recorded before" in c for c in report["state"]["changes"])
+    assert any("dna: not recorded before" in c for c in report["state"]["changes"])  # the record's version has dna
+
+
+def test_on_a_record_from_before_dna_only_dna_is_added_quietly(opts):
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "flash": {"jedec": "0x010219"}}}, 1)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "flash": {"jedec": "0x010219"}, "dna": "0x1"})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and report["state"]["added"]
+    boards, version = state.load_record(opts["state"])
+    assert boards["acorn"]["dna"] == "0x1" and version == state.SCHEMA_VERSION
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0"}}, 1)
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "changed"  # the flash is not one of the version's new facts
+
+
+def test_a_run_that_errs_adds_nothing_to_the_record(opts):
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0"}}, 1)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "dna": "0x1"}, result="error")
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert "added" not in report["state"]
+    assert "dna" not in state.load(opts["state"])["acorn"]

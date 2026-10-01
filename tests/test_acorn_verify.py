@@ -600,3 +600,16 @@ def test_missing_expected_figures_are_said_once(tmp_path, images, monkeypatch):
     report = Rig(tmp_path, images).check()
     assert report["reason"].count("expected.toml is not installed") == 1
     assert report["setup"] == "Raspberry Pi 5"
+
+
+def test_a_malformed_csr_json_is_an_error_and_what_needs_no_csr_map_still_runs(tmp_path, images):
+    csr = fk.csr_json()
+    del csr["csr_registers"]["dna_id"]["addr"]
+    fk.rewrite(images, "acorn-cle-215p-csr.json", json.dumps(csr).encode())
+    rig = Rig(tmp_path, images)
+    report = rig.check()
+    assert report["result"] == "error"
+    assert "the release's csr.json could not be read: KeyError" in report["reason"]
+    assert "the check crashed" not in report["reason"]
+    assert _results(report)["pcie-link"] == _results(report)["jtag"] == "pass"
+    assert not rig.soc.flash_touched
