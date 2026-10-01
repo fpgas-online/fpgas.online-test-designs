@@ -27,7 +27,7 @@ LiteX. Runs over PCIe BAR0 by default, or over the UART bridge with `--uart`.
     sudo fpgas-acorn-flash id
     sudo fpgas-acorn-flash dump factory.bin
     sudo fpgas-acorn-flash verify sqrl_acorn_operational.bin 0x400000
-    sudo fpgas-acorn-flash write  sqrl_acorn_operational.bin 0x400000
+    sudo fpgas-acorn-flash write  sqrl_acorn_operational.bin 0x400000 --idcode 0x03636093
 """
 
 import argparse
@@ -336,19 +336,41 @@ def _progress(done, total):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--bdf", default="0001:01:00.0", help="PCIe address of the SoC")
+    parser = argparse.ArgumentParser(
+        prog="fpgas-acorn-flash",
+        usage="%(prog)s [options] COMMAND [FILE ADDR]",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Read, check or write the Acorn's SPI flash, through the fpgas.online SoC\n"
+        "running on it. Prints RESULT: PASS or RESULT: FAIL last.",
+        epilog=f"""\
+commands:
+  id                print the flash's part, size and IDs as JSON
+  dump FILE         read the whole flash into FILE
+  verify FILE ADDR  compare the flash at ADDR with FILE
+  write FILE ADDR   write FILE at ADDR, then read it back (needs --idcode)
+
+write takes a slot: {OPERATIONAL_ADDR:#x} (operational) or {GOLDEN_ADDR:#x} (golden, which also
+needs --i-know-this-writes-golden). Its --idcode is the FPGA's JTAG IDCODE:
+0x03636093 (CLE-215+) or 0x03631093 (CLE-101).
+
+examples:
+  sudo %(prog)s id
+  sudo %(prog)s dump backup.bin
+  sudo %(prog)s verify operational.bin 0x400000
+  sudo %(prog)s write operational.bin 0x400000 --idcode 0x03636093""",
+    )
+    parser.add_argument("--bdf", default="0001:01:00.0", help="the SoC's PCIe address (default: %(default)s)")
     parser.add_argument("--uart", metavar="PORT", help="use the UART bridge on PORT instead of PCIe")
-    sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("id", help="print what the flash says it is, as JSON")
-    dump = sub.add_parser("dump", help="read the whole flash to a file")
-    dump.add_argument("file")
+    sub = parser.add_subparsers(dest="command", required=True, help=argparse.SUPPRESS)
+    sub.add_parser("id")
+    sub.add_parser("dump").add_argument("file")
     for name in ("verify", "write"):
         p = sub.add_parser(name)
         p.add_argument("file")
         p.add_argument("addr", type=lambda s: int(s, 0))
-        p.add_argument("--idcode", type=lambda s: int(s, 0), required=name == "write", help="the FPGA's JTAG IDCODE")
-    sub.choices["write"].add_argument("--i-know-this-writes-golden", action="store_true")
+    write = sub.choices["write"]
+    write.add_argument("--idcode", type=lambda s: int(s, 0), required=True, help="the FPGA's JTAG IDCODE")
+    write.add_argument("--i-know-this-writes-golden", action="store_true", help="allow writing the golden slot")
     args = parser.parse_args(argv)
 
     lock = hold_lock(LOCK)  # noqa: F841 -- held until main returns
