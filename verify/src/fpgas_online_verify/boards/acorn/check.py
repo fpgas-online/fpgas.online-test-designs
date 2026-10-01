@@ -60,6 +60,15 @@ USED_CSRS = (
     "p2_gpio_in",
     "p2_gpio_out",
     "uartbone_bridge_phy_tuning_word",
+    "uart_xover_rxtx",
+    "uart_xover_rxempty",
+    *(
+        f"dram_{core}_{reg}"
+        for core in ("generator", "checker")
+        for reg in ("reset", "start", "done", "base", "end", "length", "random", "ticks")
+    ),
+    "dram_checker_errors",
+    *(f"p2_serial_{reg}" for reg in ("mode", "oe", "in", "out", "timeout")),
 )
 
 XILINX, SQRL = 0x10EE, 0x1E24
@@ -301,6 +310,7 @@ class Csrs:
         self.bases = data.get("csr_bases", {})
         self.registers = data.get("csr_registers", {})
         self.constants = data.get("constants", {})
+        self.memories = data.get("memories", {})
 
     def addr(self, name):
         reg = self.registers.get(name)

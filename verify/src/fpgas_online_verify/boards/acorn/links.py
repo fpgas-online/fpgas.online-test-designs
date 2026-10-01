@@ -1,4 +1,4 @@
-"""The Acorn's links to its Pi besides PCIe: P1 (JTAG) and P2 (the UART, and the spare balls J5 and H5).
+"""The Acorn's links to its Pi besides PCIe: P1 (JTAG) and P2 (the UART on J2/K2, and the spare balls J5/H5).
 
 The pins, the cable and the GPIO chip come from the host's setup (setup.py, from wiring.toml).
 
@@ -13,10 +13,14 @@ The pins, the cable and the GPIO chip come from the host's setup (setup.py, from
            gave; then the fast rate the gateware supports (921600, set through the PHY's tuning word); and
            at that rate the identifier again, the device DNA and the XADC readings. The link is left at the
            reset rate.
-  p2-gpio  J5 and H5 through the `p2_gpio` GPIOTristate CSR over BAR0, in both directions: the FPGA drives,
-           the Pi reads, then the Pi drives and the FPGA reads. Each ball is seen at 0 and at 1, and the
-           reading side's pull is set against the driven level, so a floating wire cannot pass. Only on a
-           setup whose cable carries them (the Pi 5's); everything goes back to an input afterwards.
+  p2-serial  J2 and K2, borrowed from the UART with the `p2_serial` switch (a finite timeout, so a killed run
+           gives the link back), in both directions as bist.balls() does; then the switch must go back to
+           serial by itself after its timeout, and the UARTBone must answer again with BAR0's identifier.
+           On every setup: both carriers wire J2/K2.
+  p2-gpio  J5 and H5 through the `p2_gpio` GPIOTristate CSR over BAR0, in both directions (bist.balls()).
+           Only on a setup whose cable carries them (the Pi 5's).
+
+Every Pi pin a P2 test drives is put back exactly as it was found.
 
 Each gives a test entry in the board's report: {test, result, reason, output, ...what it read}.
 """
@@ -26,7 +30,7 @@ import os
 import re
 
 from ...core import Problem
-from . import check, uartbone_link
+from . import bist, check, uartbone_link
 
 JTAG_TIMEOUT = 60
 # The IDCODE of each variant's FPGA, the revision nibble masked off (check.py's variants).
@@ -37,35 +41,15 @@ DNA_RE = re.compile(r"\bdna\"?\s*[:=]\s*\"?(0x[0-9a-fA-F]+)", re.IGNORECASE)
 # compatible (wiring.toml), not by number: a Pi 5 can have gpiochip11-15, 15 the RP1.
 GPIOCHIP = "/dev/gpiochip0"
 SYSFS_GPIO = "/sys/bus/gpio/devices"
-# pinctrl get: "14: a4    pn | hi // GPIO14 = TXD0", "8: op dl pd | lo // GPIO8 = output"
-PIN_RE = re.compile(r"^\s*(\d+):\s+(\w+)(?:\s+d[hl])?\s+(p[udn])\s*\|\s*(\w+|--)", re.MULTILINE)
 # designs/_shared/acorn_p2.py SPARE_GPIO = ("J5", "H5"), the pins of p2_gpio: bit 0 is J5, bit 1 is H5.
-P2_GPIO_BITS = {"J5": 0, "H5": 1}
-
-
-# -- the Pi's pins -------------------------------------------------------------------------------------
-
-
-def pin_states(run, gpios):
-    """{gpio: (function, pull, level)} from pinctrl."""
-    rc, out = run(["pinctrl", "get", ",".join(str(g) for g in gpios)], 10)
-    found = {int(m[0]): (m[1], m[2], m[3]) for m in PIN_RE.findall(out)}
-    if rc != 0 or set(found) != set(gpios):
-        raise Problem("error", f"pinctrl get {','.join(map(str, gpios))} gave {out.strip()[:200]!r}")
-    return found
+P2_GPIO_BITS = {b: bit for b, (module, bit) in bist.FPGA_SIDE.items() if module == "p2_gpio"}
+pin_states = bist.pin_states
 
 
 def restore_pins(run, saved):
-    """Put each pin back as it was found; a pin found as an output goes back as an input. Returns faults."""
-    faults = []
-    for gpio, (func, pull, _) in sorted(saved.items()):
-        try:
-            rc, out = run(["pinctrl", "set", str(gpio), "ip" if func == "op" else func, pull], 10)
-        except Problem as p:
-            rc, out = 1, p.reason
-        if rc != 0:
-            faults.append(f"could not put GPIO{gpio} back to {func} {pull}: {out.strip()[:200]}")
-    return faults
+    """Put the JTAG pins back as they were found; one found as an output goes back as an input (openFPGALoader
+    leaves its outputs driven, and a crashed run would leave them so)."""
+    return bist.restore_pins(run, saved, exact=False)
 
 
 def header_chip(compatible, sysfs=SYSFS_GPIO, dev="/dev"):
@@ -239,55 +223,59 @@ def uart_scratch(setup, builds, open_port=None, settle=None):
 # -- P2: the spare balls -------------------------------------------------------------------------------
 
 
-def _levels(run, gpios):
-    return {g: {"hi": 1, "lo": 0}.get(level) for g, (_, _, level) in pin_states(run, gpios).items()}
-
-
 def p2_gpio(setup, bus, csrs, run):
     """J5/H5 both ways through `p2_gpio` over BAR0 (`bus`), the Pi's side with pinctrl."""
-    balls = {ball: gpio for ball, gpio in setup.p2_gpio.items() if ball in P2_GPIO_BITS}
-    faults, output = [], []
+    wired = {ball: gpio for ball, gpio in setup.p2_gpio.items() if ball in P2_GPIO_BITS}
+    regs = bist.Regs(bus.read, bus.write, csrs)
     try:
-        oe, din, dout = csrs.addr("p2_gpio_oe"), csrs.addr("p2_gpio_in"), csrs.addr("p2_gpio_out")
+        for name in ("p2_gpio_oe", "p2_gpio_in", "p2_gpio_out"):
+            csrs.addr(name)
+        faults, output = bist.balls(regs, "p2_gpio", wired, run)
     except Problem as p:
         return _entry("p2-gpio", [(p.result, f"J5/H5 not checked: {p.reason}")])
-    gpios = sorted(balls.values())
+    seen = {"wired": {ball: f"GPIO{gpio}" for ball, gpio in wired.items()}}
+    return _entry("p2-gpio", [("fail" if "drove" in f else "error", f) for f in faults], output, **seen)
+
+
+def p2_serial(setup, bus, csrs, run, identifier=None, open_port=None, settle=None, sleep=None):
+    """J2/K2 both ways through `p2_serial` over BAR0, the switch's own timeout, and the UARTBone afterwards."""
+    jtag = dict(zip(("TDI", "TDO", "TCK", "TMS"), setup.jtag_gpios))
+    wired, skipped = bist.testable(setup.p2_serial, jtag)
+    regs = bist.Regs(bus.read, bus.write, csrs)
+    faults, output = [], [f"{ball} not driven: {why}" for ball, why in skipped.items()]
+    seen = {"wired": {ball: f"GPIO{gpio}" for ball, gpio in wired.items()}}
     try:
-        saved = pin_states(run, gpios)
+        for name in ("p2_serial_mode", "p2_serial_oe", "p2_serial_in", "p2_serial_out", "p2_serial_timeout"):
+            csrs.addr(name)
+        with bist.borrowed_serial(regs):
+            got, lines = bist.balls(regs, "p2_serial", wired, run)
+        faults += [("fail" if "drove" in f else "error", f) for f in got]
+        output += lines
+        if regs["p2_serial_mode"] != 0:
+            faults.append(("fail", "p2_serial did not go back to serial"))
+        ok, detail = bist.switch_times_out(regs, sleep=sleep)
+        output.append(f"switch timeout: {detail}")
+        if not ok:
+            faults.append(("fail", f"p2_serial did not go back to serial by itself ({detail})"))
     except Problem as p:
-        return _entry("p2-gpio", [("error", f"J5/H5 not checked: {p.reason}")])
-    mask = sum(1 << P2_GPIO_BITS[b] for b in balls)
-    # all low, all high, and each ball high on its own: each ball at 0 and at 1, and a short between two shows
-    patterns = sorted({0, mask, *(1 << P2_GPIO_BITS[b] for b in balls)})
+        faults.append((p.result, f"J2/K2: {p.reason}"))
+        return _entry("p2-serial", faults, output, **seen)
+    # the UARTBone answers again, as the switch left it: at the reset rate
     try:
-        bus.write(oe, 0)
-        for pattern in patterns:  # the FPGA drives, the Pi reads with its pull against the driven level
-            for ball, gpio in balls.items():
-                bit = pattern >> P2_GPIO_BITS[ball] & 1
-                run(["pinctrl", "set", str(gpio), "ip", "pd" if bit else "pu"], 10)
-            bus.write(dout, pattern)
-            bus.write(oe, mask)
-            levels = _levels(run, gpios)
-            bus.write(oe, 0)
-            for ball, gpio in balls.items():
-                bit = pattern >> P2_GPIO_BITS[ball] & 1
-                if levels[gpio] != bit:
-                    faults.append(("fail", f"{ball} -> GPIO{gpio}: the FPGA drove {bit}, the Pi read {levels[gpio]}"))
-            output.append(f"FPGA drives {pattern:02b}: Pi reads " + " ".join(f"GPIO{g}={levels[g]}" for g in gpios))
-        for pattern in patterns:  # the Pi drives, the FPGA reads (its pins are inputs)
-            for ball, gpio in balls.items():
-                run(["pinctrl", "set", str(gpio), "op", "dh" if pattern >> P2_GPIO_BITS[ball] & 1 else "dl"], 10)
-            got = bus.read(din) & mask
-            for ball, gpio in balls.items():
-                bit, read = pattern >> P2_GPIO_BITS[ball] & 1, got >> P2_GPIO_BITS[ball] & 1
-                if read != bit:
-                    faults.append(("fail", f"GPIO{gpio} -> {ball}: the Pi drove {bit}, the FPGA read {read}"))
-            output.append(f"Pi drives {pattern:02b}: FPGA reads {got:02b}")
-    except Problem as p:
-        faults.append((p.result, f"J5/H5: {p.reason}"))
+        link = _uart_link(setup, open_port, settle)
+    except ImportError as e:
+        faults.append(("error", f"UARTBone not checked after the switch: {e}"))
+        return _entry("p2-serial", faults, output, **seen)
+    try:
+        link.connect(fast=False)
+        again = link.ident()
+        output.append(f"UARTBone after the switch: {again!r}")
+        if identifier and again != identifier:
+            faults.append(("fail", f"after the switch the UARTBone answers {again!r}, not {identifier!r}"))
+    except (uartbone_link.LinkError, OSError) as e:
+        faults.append(("fail", f"the UARTBone does not answer on {setup.uart} after the switch ({e})"))
     finally:
-        bus.write(oe, 0)
-        bus.write(dout, 0)
-        faults += [("error", f) for f in restore_pins(run, saved)]
-    seen = {"wired": {ball: f"GPIO{gpio}" for ball, gpio in balls.items()}}
-    return _entry("p2-gpio", faults, output, **seen)
+        with contextlib.suppress(OSError):
+            link.reset()
+        link.close()
+    return _entry("p2-serial", faults, output, **seen)
