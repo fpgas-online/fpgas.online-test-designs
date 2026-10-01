@@ -8,7 +8,7 @@
 # Options (for example --no-probe): FPGAS_VERIFY_ARGS in /etc/default/fpgas-verify.
 [Unit]
 Description=Verify this Pi's FPGA board with the fpgas.online test bitstreams
-Documentation=https://github.com/fpgas-online/fpgas.online-test-designs/blob/main/docs/plans/2026-09-26-fpgas-online-verify-design.md
+Documentation=https://github.com/fpgas-online/fpgas.online-test-designs/blob/main/docs/verify.md https://github.com/fpgas-online/fpgas.online-test-designs/blob/main/docs/plans/2026-09-26-fpgas-online-verify-design.md
 Wants=network-online.target
 # After the fleet agent: the site knows the Pi is up (registered, online) before the check starts, and hears
 # `fpga-verifying` when it does, so it can say the board is being verified rather than show nothing.
