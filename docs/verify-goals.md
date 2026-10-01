@@ -44,6 +44,9 @@ or fail. It passes only when all of these hold:
   wherever it can: a board can have more than one fault.
 * **A Pi with no board fails.** Every Pi runs the check and reports that it started; a Pi with no FPGA board
   found (an Orange Pi, a board powered off) reports that and fails.
+* **GPIO pins are checked in both directions.** Today pin-id checks FPGA to Pi (each FPGA pin sends its own
+  name to the Pi) and pmod-loopback checks Pi to FPGA (the Pi drives a pin, and the FPGA sends it back inverted
+  on another). The full test design must do both.
 * **The check runs at every boot, and only then.** To check a Pi again, reboot it.
 * **Users are assumed not to write the flash.** Most never touch it. If one does, the check sees the flash no
   longer holds the golden design and fails the board. Letting users have part of the flash, locking the
@@ -62,6 +65,17 @@ or fail. It passes only when all of these hold:
 | 3 | Report what changed since the last run, on a machine that keeps its state | A board, flash content, or wiring that differs from what the same machine saw before |
 | 4 | Report what changed compared with the site's records | Match the board to the site's record by its FPGA and flash IDs first; if those do not match any record, by the switch port the Pi is on. Then report what differs (a board moved, swapped, rewired, reflashed) |
 | 5 | Make [rpi-hwid](https://github.com/mithro/rpi-hwid) labels | Labels for the Pi, the FPGA board, extra Ethernet adapters and other attached hardware, so every piece is labelled correctly |
+
+### Decisions for the second job
+
+* **A board that passes is good, wherever it is.** Pis and boards on the fleet move between switch ports quite
+  often. A Pi and its board are normally kept together, but may be split when hardware fails or new hardware
+  is deployed. So a difference from the site's records never fails the check. It is reported, as a debugging
+  aid.
+* **A stateful host is different.** On a machine that keeps its state, what is attached and how it is wired is
+  not expected to change, so a change fails the check. When a person runs the check by hand after changing
+  something, the report shows them the change, so they can confirm it is the one they meant, and they then
+  accept it.
 
 ## 3. Third job: tell the site what it is doing, as it goes
 
