@@ -96,12 +96,12 @@ sudo fpgas-verify --update                         # accept a board or flash tha
 |---|---|
 | `--board B` | `fpgas-verify` only: check board `B`, whatever the configuration says (as `fpgas-B-verify` does) |
 | `--no-probe` | `fpgas-verify` only: with `fpga-board = auto`, never drive anything to find a board (no NeTV2 JTAG scan) |
-| `--test T` | run only test `T` (repeatable): any test in `fpgas-<board>-debug list`, boot check or not. This is part of the check, not the board's result: it is never published (no `fpga-verifying` / `fpga-verified`, so the site's gate never sees it), its report goes to stdout unless `--report` says otherwise (never over the boot's `/run/fpgas-online/verify.json`), and it neither records nor compares the state, so it never causes a later `changed`. Not with `--update`. Configured for one board, a name it does not have is an `error`, as is any name for the Acorn, whose check has no selectable tests. With `auto`, each board found runs the named tests it has (the rest are listed as `tests_skipped`); a board with none of them is not checked (`not_checked`), and if no board has any of them the result is `error` |
+| `--test T` | run only test `T` (repeatable): any test in `fpgas-<board>-debug list`, boot check or not. This is part of the check, not the board's result: it is never published (no `fpga-verifying` / `fpga-verified`, so the site's gate never sees it), its report goes to stdout unless `--report` says otherwise (never over the boot's `/run/fpgas-online/verify.json`), and it neither records nor compares the state, so it never causes a later `changed`. Not with `--update`. Configured for one board, a name it does not have is an `error`. With `auto`, each board found runs the named tests it has (the rest are listed as `tests_skipped`); a board with none of them is not checked (`not_checked`), and if no board has any of them the result is `error` |
 | `--variant V`, `--port P`, `--images DIR` | override the detected variant, the board's UART on the Pi, the installed bitstreams |
 | `--report PATH` | where the JSON report goes (default `/run/fpgas-online/verify.json`, or stdout with `--test`; `-` for stdout) |
 | `--state PATH` | the recorded state (default `/var/lib/fpgas-online/verify-state.json`) |
 | `--update` | record what is found now as the state, instead of failing on a difference |
-| `--no-publish` | do not send the `fpga-verifying` / `fpga-verified` fleet-events |
+| `--no-publish` | do not send any fleet-events |
 
 Which board a host has is read from `[verify] fpga-board = <board>|auto` in `*.ini` files: the mode package's
 in `/usr/share/fpgas-online/verify/mode.d/`, then the admin's in `/etc/fpgas-verify/`, which wins. Two files
@@ -138,7 +138,7 @@ board's result is the worst of its tests'.
 | NeTV2 | JTAG IDCODE over GPIO 4/17/27/22, which also gives the variant | openocd `bcm2835gpio` (Pi 3/4), openFPGALoader `rp1pio` (Pi 5) | `uart`, `ddr`, `spiflash` (UART `/dev/ttyAMA0`; `spiflash` listens before the load, its ID is printed only once) | `ethernet`, `pmod`, `pin-id` | IDCODE, flash JEDEC ID, sha256 of the flash's boot image region |
 | Fomu EVT | USB `1209:5bf0` (foboot DFU) | openFPGALoader over DFU | `uart` only (UART `/dev/serial0`): a DFU load replaces the bootloader until the next power cycle | `spiflash`, `pmod`, `pin-id` | foboot's USB serial (every load rewrites the user image) |
 | TT FPGA | USB `2e8a:*` (the demo board's Raspberry Pi microcontroller) | `tt_fpga_program.py` over `mpremote` | `pin-id`, then `uart`, `spiflash` through the microcontroller's UART bridge (`tt_test_wrapper.py`, `/dev/ttyACM0`); `fpgas-tt.service` is stopped for the tests and started again | `pmod` | the microcontroller's USB serial (every load rewrites the bitstream file on it) |
-| Acorn | PCI `10ee:*` / `1e24:*` | nothing: runs from its flash | see below | | PCI slot and IDs, flash part, JEDEC ID and unique ID, sha256 of both flash slots |
+| Acorn | PCI `10ee:*` / `1e24:*` | nothing: runs from its flash | `pcie-link`, `pcie-bar0`, `jtag`, `flash`, `p2-uart`, `scratch`, `p2-gpio` (see below) | | PCI slot and IDs, device DNA, flash part, JEDEC ID and unique ID, sha256 of both flash slots |
 
 The board is left running the last design loaded, except where the flash is read back afterwards: the Arty
 and NeTV2 are left running openFPGALoader's SPI-over-JTAG bridge. Each comes back to its flash image at
@@ -148,35 +148,71 @@ The NeTV2 has no USB, so finding it means driving the GPIO header. On a host set
 it looks for; with `auto` the JTAG scan runs only when nothing was found by USB/PCI IDs (or only a Xilinx PCIe
 design the Acorn module cannot name, which may be a NeTV2 on PCIe), and `--no-probe` rules it out.
 
-The **Acorn** check ([`boards/acorn/check.py`](../verify/src/fpgas_online_verify/boards/acorn/check.py),
-[`links.py`](../verify/src/fpgas_online_verify/boards/acorn/links.py)) loads nothing and never writes the
-flash:
+The **Acorn** check ([`boards/acorn/suite.py`](../verify/src/fpgas_online_verify/boards/acorn/suite.py),
+[`check.py`](../verify/src/fpgas_online_verify/boards/acorn/check.py),
+[`links.py`](../verify/src/fpgas_online_verify/boards/acorn/links.py)) loads nothing, never writes the flash and
+never reconfigures the FPGA. It runs every test it can, in the order below, and a fault in one does not stop
+the others: the board's reason lists every fault.
 
-1. **PCI IDs**: which image family runs. The fpgas.online SoC is `10ee:7021` with SQRL subsystem `1e24:021f`
-   (CLE-215+) or `1e24:0101` (CLE-101). SQRL's factory image (`1e24:021f` as vendor:device) and the vendor
-   XDMA sample (`10ee:7011`) fail with a reason starting `unconverted:`. Any other Xilinx design fails as
-   "not a design we built". Nothing further runs against a design we did not build.
-2. **The SoC's identifier**, read over BAR0: it must be the operational or golden build of the installed
-   release. Running golden is `degraded` (the operational slot did not boot).
-3. **The flash**, read over BAR0 with read opcodes only: both 4 MiB slots (golden at `0x000000`, operational at
-   `0x400000`) are read whole and compared with the release's images.
-4. **`jtag`**: `openFPGALoader --detect` over the P1 cable (GPIO 10/9/11/8) must find exactly the variant's
-   IDCODE. It does not reconfigure the FPGA.
-5. **`p2-uart`**, only when the SoC runs: the UARTBone identifier read over P2 (`/dev/ttyAMA0`) must equal the
-   one read over BAR0.
+**Which board it is.** From the PCI IDs alone:
 
-A board whose BAR0 a kernel driver (`litepcie.ko`) holds is not read at all: `driver-bound`.
+| PCI IDs | Is | Result |
+|---|---|---|
+| `10ee:7021`, subsystem `1e24:021f` (CLE-215+) or `1e24:0101` (CLE-101) | the fpgas.online Acorn SoC | tested |
+| `1e24:021f` or `1e24:0101` as vendor:device | an Acorn on SQRL's factory image | `fail`, `unconverted: …`; only `pcie-link` and `jtag` run |
+| `10ee:7011` | the vendor XDMA sample (an Acorn or a NeTV2) | `fail`, `unconverted: …` |
+| `10ee:0666` | a PCIe Screamer running PCILeech | `fail`: fpgas.online has no test design for this board yet |
+| `10ee:7021`, subsystem `10ee:0007`, class `070001` with a second BAR | a stock Xilinx XDMA design (most likely a PicoEVB) | `fail`: fpgas.online has no test design for this board yet |
+| any other Xilinx or SQRL ID | not a design we built | `fail` |
+
+Nothing is sent to a BAR, or over the P2 UART, unless the design there is a build of the installed release
+(its identifier is one the release's manifest lists). The CSR addresses then come from that build's `csr.json`
+in the release.
+
+**Which setup the host is.** The Acorn has two setups, each with its own wiring, both in
+[`docs/wiring/acorn/wiring.toml`](wiring/acorn/wiring.toml), which the tools package installs:
+
+| Host (`/proc/device-tree/model`) | Setup | JTAG `--pins` (TDI:TDO:TCK:TMS) | GPIO chip | J5 / H5 |
+|---|---|---|---|---|
+| `Raspberry Pi 5 Model B` | Pi 5 with the Waveshare HAT | `10:9:11:8` | `raspberrypi,rp1-gpio` | GPIO3 / GPIO4 |
+| `Raspberry Pi Compute Module 4` | Compute Blade | `2:3:4:14` | `brcm,bcm2711-gpio` | not wired |
+| `Raspberry Pi Compute Module 5` | Compute Blade | `2:3:4:14` | `raspberrypi,rp1-gpio` | not wired |
+
+Both use openFPGALoader's `libgpiod` cable (a CM4 has no RP1, so `rp1pio` cannot be used there), and the P2
+UART is `/dev/ttyAMA0`. Any other host is an `error`; the tests that do not need the wiring still run. The
+figures each setup must meet are in [`expected.toml`](wiring/acorn/expected.toml) beside it.
+
+**The tests:**
+
+| Test | Over | Passes when |
+|---|---|---|
+| `pcie-link` | sysfs | `current_link_speed` and `current_link_width` are the setup's (5.0 GT/s, x1) |
+| `pcie-bar0` | BAR0 | the operational build runs (the golden build means the operational slot did not boot), the flash identifies itself, the device DNA is neither all zeros nor all ones, and the XADC temperature and VCCINT, VCCAUX and VCCBRAM are in range |
+| `jtag` | P1 | `openFPGALoader --detect` finds one device with the variant's IDCODE, and `openFPGALoader --read-dna` reads the DNA BAR0 gave. The IDCODE read does not use TDI; the DNA read does |
+| `flash` | BAR0 | both 4 MiB slots (golden at `0x000000`, operational at `0x400000`), read whole with read opcodes only, hold the release's images |
+| `p2-uart` | P2 | the UARTBone identifier at 1200 baud is BAR0's; the link moves to 921600 baud; there the identifier, DNA and XADC readings are right and the DNA is BAR0's. The link is left at 1200 baud |
+| `scratch` | BAR0 and P2 | the `ctrl` scratch register holds two patterns written over each bridge; its value is put back |
+| `p2-gpio` | BAR0 and the Pi's GPIO | Pi 5 setup only. Through the `p2_gpio` CSR, the FPGA drives J5/H5 and the Pi reads GPIO3/GPIO4, then the Pi drives and the FPGA reads, each ball at 0 and at 1, with the reading side's pull set against the driven level. Both sides go back to inputs |
+
+openFPGALoader leaves the JTAG pins driven, so they are put back as they were found (`pinctrl`): on a Compute
+Blade GPIO14 is both TMS and the UART's TX, and goes back to its UART function.
+
+A test that cannot run because of an earlier fault (no BAR0 on a factory image, say) is listed in the
+report's `not_run` with why; the fault that stopped it is in the reason. A kernel driver bound to the board
+(`litepcie.ko`) is unbound for the check and bound again after it.
+
+`--test` runs any of these on their own: `--test pcie-link --test pcie-bar0 --test flash` only reads.
+
+The PCIe transfer rate (DMA) is not measured yet.
 
 ### Reading the result
 
-The run's result is the worst of its boards'. Only `pass` exits 0; anything else also leaves
-`fpgas-verify.service` failed.
+The run's result is the worst of its boards'. Only `pass` exits 0; anything else is a fail of the check, and
+also leaves `fpgas-verify.service` failed. The other results say what kind of fail it is.
 
 | Result | Meaning |
 |---|---|
 | `pass` | every test passed, and the board and its flash are the ones recorded |
-| `driver-bound` | Acorn: a kernel driver holds the board's BAR0, so it was not read |
-| `degraded` | Acorn: running its golden image |
 | `changed` | a different board, or a different flash, from the recorded state |
 | `fail` | a test, a load or a flash comparison failed, or the board runs a design that is not ours (`unconverted: …` for an Acorn on SQRL's image) |
 | `missing` | the configured board (or with `auto`, any board) is not there |
@@ -210,7 +246,7 @@ The full result is JSON in `/run/fpgas-online/verify.json` (tmpfs: this boot's).
 | `result`, `reason` | the run's result, and why, when it found no board |
 | `checked_at` | when (UTC, ISO 8601) |
 | `mode`, `configured_by`, `chosen_by` | `auto` or the board, the file (or "command line") that said so, and how the boards were found |
-| `boards[]` | per board: `board`, `variant`, `found` (what identified it), `result`, `reason`, `bitstreams` (the package or release version), `tests[]` (`test`, `bitstream`, `result`, `reason`, `output` lines, `flash_jedec`), `state`, and `flash_note` / `flash_error`. The Acorn's also has `running` (`identifier`, `build`) and `flash` (`part`, `jedec`, `unique_id`, `slots[]` with `match`/`mismatch` and `first_difference`) |
+| `boards[]` | per board: `board`, `variant`, `found` (what identified it), `result`, `reason`, `bitstreams` (the package or release version), `tests[]` (`test`, `bitstream`, `result`, `reason`, `output` lines, `flash_jedec`), `state`, and `flash_note` / `flash_error`. The Acorn's tests also carry what they read (`speed_gt_s`, `width`, `dna`, `xadc`, `idcode`, `baud`, ...), and the board has `setup`, `identity` (PCI slot and IDs, build, DNA, IDCODE, flash IDs), `running` (`identifier`, `build`), `flash` (`part`, `jedec`, `unique_id`, `slots[]` with `match`/`mismatch` and `first_difference`), `not_run`, and `driver` when a driver was unbound |
 | `state` | `file`, and `recorded` (`first run` or `--update`) or `changes` |
 
 ```bash
@@ -261,6 +297,11 @@ Each takes `--port`, `--variant` and `--images` like the check. `fpgas-acorn-fla
 | `fail`: `unconverted: …` | an Acorn still on SQRL's factory image (or the XDMA sample): convert it ([acorn-pcie-programming.md](hardware/acorn-pcie-programming.md)) |
 | `fail`: `… is not a design we built` | a Xilinx PCIe design the Acorn module does not know; its flash is not read |
 | `fail`: `no device on the P1 JTAG chain` / `no UARTBone reply on /dev/ttyAMA0` | an Acorn whose JTAG or P2 UART cable to the Pi is off or miswired |
+| `fail`: `device DNA over JTAG … is not the one over BAR0` | the P1 TDI wire does not carry, or the DNA readout is wrong |
+| `fail`: `J5 -> GPIO3: the FPGA drove 0, the Pi read 1` (or the other way) | a P2 spare wire is cut or miswired |
+| `fail`: `running the golden image` | the Acorn's operational slot did not boot; it fell back to golden |
+| `fail`: `… has no test design for this board yet` | a Xilinx PCIe board that is not an Acorn (a PCIe Screamer, a PicoEVB) |
+| `error`: `this host (…) is not an Acorn setup in wiring.toml` | an Acorn on a host neither setup has: add the host to `wiring.toml` if it is a real setup |
 | `changed` | see [above](#the-recorded-state-and-changed) |
 | `could not publish fpga-verified` (warning) | no `fleet-event` (not a fleet Pi) or the broker is down; the result is unchanged and still in the report |
 | `waiting for another user of the <board> to finish...` | someone is using the board with `fpgas-<board>-debug` or `fpgas-acorn-flash`; the check waits for them |
@@ -297,14 +338,23 @@ Anything but `pass` leaves the unit failed; the banner is in `journalctl -b -u f
 
 ### Publishing the result
 
-The check publishes two fleet-events through `fleet-event` (from
+The check publishes fleet-events through `fleet-event` (from
 [fpgas.online-setup-pi](https://github.com/fpgas-online/fpgas.online-setup-pi)), which sends them over MQTT to
-the site's broker (`fpgas/<site>/pi/<serial>/event`):
+the site's broker (`fpgas/<site>/pi/<serial>/event`). Each is small, and its details are flat strings with
+fixed names (`EVENTS` in [`runner.py`](../verify/src/fpgas_online_verify/runner.py)):
 
-* `fpga-verifying` as it starts (15 s timeout, so a dead broker does not hold up the check);
-* `fpga-verified` when it is done, with the report flattened to strings: `result`, `mode`, `reason`, and per
-  board `board0` (`netv2 a7-35 fail`), `board0_reason`, `board0_tests` (`uart=pass ddr=fail spiflash=pass`),
-  `board0_bitstreams` and `board0_state_*`.
+| Event | When | Details |
+|---|---|---|
+| `fpga-verifying` | the check starts (15 s timeout, so a dead broker does not hold up the check) | `started_at` |
+| `fpga-board-found` | for each board found | `board`, `variant`, `where` (PCI slot, USB path or JTAG IDCODE) |
+| `fpga-no-board` | no board was found | `reason` |
+| `fpga-board-identified` | an Acorn, once PCIe and JTAG have said who it is | `board`, `bdf`, `pci_ids`, `subsystem`, `variant`, `identifier`, `build`, `dna`, `idcode`, `flash_part`, `flash_jedec`, `flash_unique_id` |
+| `fpga-test-started` | each test starts | `board`, `test` |
+| `fpga-test-finished` | each test ends | `board`, `test`, `result`, `reason` |
+| `fpga-verified` | the check is done | the report flattened: `result`, `mode`, `reason`, and per board `board0` (`netv2 a7-35 fail`), `board0_reason`, `board0_tests` (`uart=pass ddr=fail spiflash=pass`), `board0_bitstreams`, `board0_state_*` and `board0_identity_*` |
+
+`board` is the board's name, or `name@where` when there are two of a kind. Every event but the first and the
+last is progress: if one cannot be sent, no more progress events are tried this run, but `fpga-verified` is.
 
 A failure to publish is reported on stderr but does not change the result; the report stays in
 `/run/fpgas-online/verify.json`.

@@ -2,7 +2,7 @@
 
 # Sqrl Acorn CLE-215+ / LiteFury
 
-The Sqrl Acorn CLE-215+ is an M.2 form factor PCIe FPGA accelerator card, pin-compatible with the [NiteFury and LiteFury](https://github.com/RHSResearchLLC/NiteFury-and-LiteFury) boards. In the fpgas.online infrastructure, it connects to Raspberry Pi 5 hosts via an mPCIe HAT adapter, with JTAG and UART via adapted Pico-EZmate cables to the RPi GPIO header.
+The Sqrl Acorn CLE-215+ is an M.2 form factor PCIe FPGA accelerator card, pin-compatible with the [NiteFury and LiteFury](https://github.com/RHSResearchLLC/NiteFury-and-LiteFury) boards. In the fpgas.online infrastructure it has two setups: on a Raspberry Pi 5 through a Waveshare HAT (Welland), and on a Compute Blade with a CM4 or CM5 (PS1). Either way JTAG (P1) and the UART and spare GPIOs (P2) reach the host's GPIO pins through adapted Pico-EZmate cables. How each setup is wired is in [`docs/wiring/acorn/wiring.toml`](../wiring/acorn/wiring.toml), which fpgas-verify reads.
 
 See [acorn-pinmap.md](acorn-pinmap.md) for the full RPi GPIO pinmap.
 
@@ -17,13 +17,37 @@ sudo apt install fpgas-online-acorn
 | Package | Version scheme | Installs |
 |---------|----------------|----------|
 | `fpgas-online-acorn` | `X.Y.postN` from `git describe` (e.g. `0.0.post576`) | sets the host up as having an Acorn, and enables `fpgas-verify.service` |
-| `fpgas-online-acorn-tools` | `X.Y.postN` | the Acorn's module of `fpgas_online_verify` (`check.py`, `links.py`, `spi_flash.py`, `uartbone_link.py`), `/usr/bin/fpgas-acorn-verify` and `/usr/bin/fpgas-acorn-flash`; with openFPGALoader for the P1 JTAG check (recommending `raspi-utils-core`, whose `pinctrl` releases the JTAG pins after it; Raspberry Pi OS only), and `python3-serial` for the P2 UART check |
+| `fpgas-online-acorn-tools` | `X.Y.postN` | the Acorn's module of `fpgas_online_verify` (`suite.py`, `check.py`, `links.py`, `setup.py`, `spi_flash.py`, `uartbone_link.py`, and `data/wiring.toml` and `data/expected.toml`), `/usr/bin/fpgas-acorn-verify` and `/usr/bin/fpgas-acorn-flash`; with openFPGALoader for the P1 JTAG check (recommending `raspi-utils-core`, whose `pinctrl` puts the JTAG pins back after it and drives the Pi's side of J5/H5; Raspberry Pi OS only), and `python3-serial` for the P2 UART check |
 | `fpgas-online-acorn-bitstreams` | pinned release date + commit (e.g. `20260923+ge48a750c8303`) | `/usr/share/fpgas-online/acorn-pcie/images/`: `manifest.json`, and for each of `cle-215p` / `cle-101` the golden (`0x000000`) and operational (`0x400000`) flash images, the operational `.bit`, and the CSR maps |
 | `fpgas-online-verify` | `X.Y.postN` | `fpgas-verify` and its unit |
 
 The tools package depends on one exact bitstreams version. Which release that is comes from [`packaging/acorn-pcie/release.toml`](../../packaging/acorn-pcie/release.toml), and a new release reaches hosts only when a reviewed PR moves that pin. Every package is built, and its install rules are checked in clean Debian bookworm and trixie, by [`collect-bitstreams.yml`](../../.github/workflows/collect-bitstreams.yml).
 
-At boot the check finds the Acorn on PCI (Xilinx `10ee` or SQRL `1e24`), reads which build is running over BAR0, and reads both 4 MiB flash slots back whole, comparing them with the release's images. It never writes the flash. It also checks the Acorn's two links to the Pi: `openFPGALoader --detect` over the P1 JTAG cable must find the variant's FPGA, and, when our SoC runs, a UARTBone read over the P2 UART (`/dev/ttyAMA0`) must return the same identifier as BAR0. A board whose PCIe side is fine fails if either link is dead. The PCI slot and IDs, the flash's identity and the sha256 of each slot are what `changed` compares, so a flash rewritten since the last run (by `fpgas-acorn-flash write`, say) is fatal until `sudo fpgas-verify --update`.
+At boot the check finds the Acorn on PCI (Xilinx `10ee` or SQRL `1e24`), works out which setup the host is
+from its device-tree model, and runs these tests ([verify.md](../verify.md#what-each-boards-check-tests) has the
+details). It never writes the flash and never reconfigures the FPGA, and a fault in one test does not stop
+the others:
+
+| Test | Checks |
+|---|---|
+| `pcie-link` | the link is 5.0 GT/s x1 ([`expected.toml`](../wiring/acorn/expected.toml)) |
+| `pcie-bar0` | over BAR0: the operational build of the installed release runs, the flash identifies itself, the device DNA reads, and the XADC temperature and voltages are in range |
+| `jtag` | over P1: the variant's IDCODE, and the device DNA, which must be BAR0's (this proves TDI) |
+| `flash` | both 4 MiB slots hold the release's images |
+| `p2-uart` | the UARTBone bridge on P2 at 1200 and 921600 baud: identifier, DNA and XADC, as over BAR0 |
+| `scratch` | the `ctrl` scratch register written and read back over BAR0 and over P2 |
+| `p2-gpio` | Pi 5 setup only: J5 and H5 driven from the FPGA and read on GPIO3/GPIO4, then driven from the Pi and read on the FPGA |
+
+| Setup | JTAG `--pins` | openFPGALoader cable | J5 / H5 |
+|---|---|---|---|
+| Pi 5 + Waveshare HAT | `10:9:11:8` | `libgpiod` (the RP1's GPIO chip, linked as `/dev/gpiochip0`) | GPIO3 / GPIO4 |
+| Compute Blade, CM4 | `2:3:4:14` | `libgpiod` (the BCM2711's GPIO chip; a CM4 has no RP1, so no `rp1pio`) | cut |
+| Compute Blade, CM5 | `2:3:4:14` | `libgpiod` (the RP1's GPIO chip) | cut |
+
+On the Blade J2 shares GPIO14 with TMS through 470 Ω, so after the JTAG test GPIO14 goes back to its UART
+function. The PCI slot and IDs, the device DNA, the flash's identity and the sha256 of each slot are what
+`changed` compares, so a flash rewritten since the last run (by `fpgas-acorn-flash write`, say) is fatal
+until `sudo fpgas-verify --update`. The PCIe transfer rate (DMA) is not measured yet.
 
 **Check the board now:**
 
@@ -32,7 +56,15 @@ sudo fpgas-verify                                    # what the boot unit runs
 sudo fpgas-acorn-verify --no-publish --report -      # the Acorn only, the JSON report on stdout
 ```
 
-Besides the [results every board has](../verify.md#reading-the-result), the Acorn's can be `degraded` (running the golden image: the operational slot did not boot) or `driver-bound` (a kernel driver such as `litepcie.ko` holds the board's BAR0, so nothing was read; `fpgas-acorn-flash` likewise refuses a board a driver is bound to). A board still on SQRL's factory image, or the vendor XDMA sample, is `fail` with a reason starting `unconverted:`: it does not run the fpgas.online image, so it cannot be offered to users until `fpgas-acorn-flash` converts it (the XDMA sample can also be a NeTV2 on PCIe, which that tool does not apply to). A PCIe FPGA whose design the check does not recognise is `fail` too. A Pi with no Acorn is `missing`: fatal, since the host was set up for one.
+The result is `pass` only when every test passes. A board running its golden image (the operational slot did
+not boot) fails. A kernel driver bound to the board (`litepcie.ko`) is unbound for the check and bound again
+afterwards (`fpgas-acorn-flash` instead refuses a board a driver is bound to). A board still on SQRL's factory
+image, or the vendor XDMA sample, is `fail` with a reason starting `unconverted:`: it does not run the
+fpgas.online image, so it cannot be offered to users until `fpgas-acorn-flash` converts it (the XDMA sample can
+also be a NeTV2 on PCIe, which that tool does not apply to). A PCIe Screamer (PCILeech, `10ee:0666`) or a stock
+Xilinx XDMA design (most likely a PicoEVB) is named, and fails: fpgas.online has no test design for it yet. Any
+other PCIe FPGA whose design the check does not recognise is `fail` too. A Pi with no Acorn is `missing`:
+fatal, since the host was set up for one.
 
 **When a check fails**, `sudo apt install fpgas-online-acorn-debug`. It brings openFPGALoader for loading the `.bit` over GPIO JTAG ([below](#via-gpio-jtag-openfpgaloader--what-the-fleet-uses)), which is how a board still on SQRL's factory image is converted, and `python3-serial` for `fpgas-acorn-flash --uart`:
 

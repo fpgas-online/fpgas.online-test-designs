@@ -482,7 +482,7 @@ which boards each phase can use:
 
 | Board | Fix                                                                 | Unblocks                       |
 |-------|---------------------------------------------------------------------|--------------------------------|
-| p47   | Transpose both P2 pairs so K2→GPIO15, J2→GPIO14, J5→GPIO3, H5→GPIO4 (not a 180° re-seat) | UART, GPIO, all Phase 3 tests |
+| p47   | ~~Transpose both P2 pairs~~ not needed: p47's P2 UART passed fpgas-verify's `p2-uart` on 2026-09-29 and 2026-09-30. The transposed reading was taken with the DDR test image, which swaps the UART pins | — |
 | p29   | Re-terminate the J5 (P2 pin 3) wire to GPIO3                        | `pcie-gpio`                    |
 | p43   | Check/reseat P1 (JTAG) cable; TCK pull-up test from the PS1 notes   | everything (no JTAG = no safe flashing) |
 | p44   | Same as p43. Also find out what LiteX design is in its flash (ident via UART once JTAG works) | everything |
@@ -554,27 +554,22 @@ Decided with Tim on 2026-09-20, while locking the pinout ahead of the boards
 being plugged back in one at a time. Where this section disagrees with §1–§7,
 this section wins; the older text is left in place so the change is visible.
 
-### 9.1 One P2 map on every carrier; the blades get their spare GPIOs
+### 9.1 The P2 UART is the same on every carrier; J5/H5 are cut on the blades
 
-The four P2 wires are identical on the Pi 5 HAT and the Compute Blade:
-K2 → GPIO15, J2 → GPIO14, J5 → GPIO3, H5 → GPIO4. JTAG differs
-(`10:9:11:8` on the Pi 5, `2:3:4:14` on the blade) because GPIO8–11 do not
-reach the blade's connectors.
+K2 → GPIO15 and J2 → GPIO14 on both the Pi 5 HAT and the Compute Blade. On the Pi 5 the spare balls go to
+J5 → GPIO3 and H5 → GPIO4. JTAG differs (`10:9:11:8` on the Pi 5, `2:3:4:14` on the blade) because GPIO8–11
+do not reach the blade's connectors.
 
-This replaces the Phase 3b statement "No spare GPIOs on the blade connector:
-`pcie-gpio` is reported as `SKIP`". On a blade J5 shares GPIO3 with TDO, H5
-shares GPIO4 with TCK and J2 shares GPIO14 with TMS, so:
+On a blade GPIO3 is TDO, GPIO4 is TCK and GPIO14 is TMS, so:
 
-- The blade cable carries **470 Ω in series in the J5, H5 and J2 wires**, at
-  the housing end. The JTAG wire reaches the same header pin with no resistor,
-  so JTAG wins any contention and a design that drives those balls can no
-  longer lock out `openFPGALoader` until a PoE cycle.
-- `pcie-gpio` runs on the blades like anywhere else.
-- To confirm on the first blade: GPIO3 carries the blade's I²C pull-up, so J5
-  pulling low through 470 Ω must still read low on the Pi.
+- **J5 and H5 are cut back on the blade cable** (Tim, 2026-10-01). They would share GPIO3 and GPIO4 with
+  TDO and TCK. `pcie-gpio` (fpgas-verify's `p2-gpio`) runs only on the Pi 5 setup.
+- **J2 has 470 Ω in series**, at the housing end. It reaches GPIO14 through the UART header while TMS
+  reaches it through the Extension Port with no resistor, so JTAG wins any contention and a design that
+  drives J2 can no longer lock out `openFPGALoader` until a PoE cycle.
 
-Reference drawings, generated from one pin table:
-<http://ten64.welland.mithis.com/~tim/acorn-wiring/>.
+The wiring of both carriers is [`docs/wiring/acorn/wiring.toml`](../wiring/acorn/wiring.toml), which also
+draws the sheets.
 
 Measured on 2026-09-20 (passive pull-fight plus `--detect`): pi20 answers JTAG
 (`0x3631093`) with J2 floating on GPIO14 and GPIO15 driven; pi14 and pi16 do
@@ -583,8 +578,7 @@ no card. `openFPGALoader` leaves GPIO2/4/14 as driven outputs when it exits, so
 the harness must set them back to inputs after every JTAG operation (Phase 2
 work: nothing in `verify_hardware.py` does it yet; the bring-up scripts did it by
 hand). pi20's cable has **no J5/H5 wires**: with the SoC loaded, neither end
-could move the other's pin in either direction, so `pcie-gpio` cannot pass on
-any blade until a cable is built to this pinout.
+could move the other's pin in either direction. That is the blade wiring above.
 
 ### 9.2 The UART carries a Wishbone bridge, not a raw BIOS console (changes R4)
 
