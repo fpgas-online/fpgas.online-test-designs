@@ -13,7 +13,7 @@ This page has two parts:
    every netbooted Pi, and as the gate that decides which boards the site offers. It ends with the
    [current results](#current-results) on the Welland Pis.
 
-What the tool must do, and where it is heading: [verify-goals.md](verify-goals.md). The design notes are in [plans/2026-09-26-fpgas-online-verify-design.md](plans/2026-09-26-fpgas-online-verify-design.md).
+Goals for the tool: [verify-goals.md](verify-goals.md). The design notes are in [plans/2026-09-26-fpgas-online-verify-design.md](plans/2026-09-26-fpgas-online-verify-design.md).
 `verify_hardware.py` ([verify-hardware.md](verify-hardware.md)) is a different tool: a developer's script that
 uploads freshly built bitstreams from a workstation over SSH. `fpgas-verify` runs on the Pi, from packages.
 
