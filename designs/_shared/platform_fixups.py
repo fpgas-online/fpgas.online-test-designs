@@ -151,7 +151,9 @@ def require_litex_boards_timing(soc, sys_clk_freq):
         phy_freq = {"LiteEthPHYMII": 25e6, "LiteEthPHYRMII": 50e6}.get(type(phy).__name__)
         if phy_freq is None:
             raise ValueError(f"Ethernet PHY {type(phy).__name__}: its clock frequency is unknown to this helper")
-        for name in ("cd_eth_rx", "cd_eth_tx"):  # clocked from the PHY's pins; MII's are not constrained
+        # Clocked from the PHY's pins. SoC.add_ethernet constrains these too, at the same periods: naming them
+        # here keeps the helper complete if a design builds the PHY without add_ethernet.
+        for name in ("cd_eth_rx", "cd_eth_tx"):
             if hasattr(phy.crg, name):
                 domains[getattr(phy.crg, name)] = phy_freq
     require_timing(soc.platform, domains)
