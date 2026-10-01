@@ -159,6 +159,7 @@ def test_a_link_that_only_works_at_1200_fails():
     far.ignore_tuning_write = True
     t = links.p2_uart(PI5, _builds(), {}, {}, far.open, far.settle)
     assert t["result"] == "fail" and "at the fast rate" in t["reason"]
+    assert far.baud == uartbone_link.RESET_BAUD  # the failed probe, then the reset, leave it at 1200
 
 
 def test_a_dna_over_p2_that_is_not_bar0s_fails():
@@ -222,3 +223,37 @@ def test_the_p2_gpio_bits_are_the_ones_the_soc_is_built_with():
     soc = pathlib.Path(__file__).resolve().parents[1] / "designs" / "acorn-pcie" / "gateware" / "acorn_pcie_soc.py"
     m = re.search(r'\("p2_gpio", 0, Pins\("([^"]+)"\)', soc.read_text())
     assert {ball: bit for bit, ball in enumerate(m.group(1).split())} == links.P2_GPIO_BITS
+
+
+def test_with_no_pin_state_to_put_back_openfpgaloader_is_not_run():
+    """openFPGALoader leaves the pins driven: on a Blade GPIO14 is TMS and the UART's TX. Unless their state can
+    be read, and so put back, nothing is probed."""
+
+    class NoPinctrl(fk.FakePi):
+        def __call__(self, argv, timeout):
+            if argv[0] == "pinctrl":
+                raise Problem("error", "pinctrl is not installed")
+            return super().__call__(argv, timeout)
+
+    pi = NoPinctrl()
+    t = links.jtag(BLADE, "cle-101", pi, gpiochip=_no_chip)
+    assert t["result"] == "error" and "P1 JTAG not probed" in t["reason"] and "pinctrl is not installed" in t["reason"]
+    assert not pi.ran("openFPGALoader")
+
+
+def test_a_pinctrl_get_that_fails_stops_the_probe_too():
+    class Fails(fk.FakePi):
+        def __call__(self, argv, timeout):
+            if argv[:2] == ["pinctrl", "get"]:
+                return 1, "pinctrl: permission denied\n"
+            return super().__call__(argv, timeout)
+
+    pi = Fails()
+    assert links.jtag(PI5, "cle-215+", pi, gpiochip=_no_chip)["result"] == "error"
+    assert not pi.ran("openFPGALoader")
+
+
+def test_scratch_over_p2_leaves_the_link_at_the_reset_rate():
+    far = fk.SoCLink(fk.FakeSoC())
+    assert links.uart_scratch(PI5, _builds(), far.open, far.settle) == []
+    assert uartbone_link.FAST_BAUD in far.opened_at and far.baud == uartbone_link.RESET_BAUD

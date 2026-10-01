@@ -5,9 +5,10 @@ after a fault wherever it can, so the report lists all of them. A test that cann
 earlier fault (no BAR0 on a board running SQRL's factory image, say) is listed in `not_run` with why; the
 fault that stopped it is already in the report.
 
-The safety rules hold throughout: nothing is sent to a BAR, or over the P2 UART, unless the design there
-is a build of the installed release, whose CSR map is then read from the release's csr.json; the flash is
-only ever read; and the FPGA is never reconfigured.
+The safety rules hold throughout: nothing past the identifier read is sent over BAR0 or over the P2 UART
+unless that identifier is a build of the installed release, whose CSR map is then read from the release's
+csr.json; nothing at all is sent to the BARs of a design whose PCI IDs are not ours; the flash is only ever
+read; and the FPGA is never reconfigured.
 
   pcie-link  the link speed and width in sysfs, against the setup's expected figures (expected.toml)
   pcie-bar0  over BAR0: which build runs (golden is a fault: the operational slot did not boot), the
@@ -18,7 +19,11 @@ only ever read; and the FPGA is never reconfigured.
   scratch    the ctrl scratch register written and read back over BAR0 and over the P2 UART
   p2-gpio    J5/H5 in both directions (links.py), on a setup whose cable carries them
 
-A kernel driver holding BAR0 (litepcie.ko) is unbound for the check and bound again after it.
+A kernel driver holding BAR0 (litepcie.ko) is unbound for the check, only when a test asked for needs BAR0,
+and bound again after it. No events are sent while it is unbound: they are held and sent once it is bound
+again.
+
+A test that raises something unexpected is recorded as an error with what it raised, and the rest still run.
 """
 
 import contextlib
@@ -28,6 +33,7 @@ from . import check, links
 from . import setup as setups
 
 TESTS = ("pcie-link", "pcie-bar0", "jtag", "flash", "p2-uart", "scratch", "p2-gpio")
+NEEDS_BAR0 = ("pcie-bar0", "flash", "scratch", "p2-gpio")
 
 
 def _quiet(stage, details):
@@ -40,7 +46,8 @@ class _Suite:
         self.options = options
         self.images = options.get("images") or check.IMAGES
         self.root = options.get("sysfs_pci", check.SYSFS_PCI)
-        self.event = options.get("event") or _quiet
+        self._send = options.get("event") or _quiet
+        self._held = []  # events held while a driver is unbound
         self.run = options.get("run", run)
         self.wanted = list(options.get("tests") or TESTS)
         self.report = {"board": "acorn", "found": found, "variant": found["variant"], "tests": []}
@@ -57,6 +64,18 @@ class _Suite:
     def fault(self, problem):
         self.faults.append((problem.result, problem.reason))
 
+    def event(self, stage, details):
+        """Send an event, or hold it while a kernel driver is unbound from the board."""
+        if self.driver.get("unbound") and not ("rebound" in self.driver or "rebind_error" in self.driver):
+            self._held.append((stage, details))
+        else:
+            self._send(stage, details)
+
+    def _flush(self):
+        held, self._held = self._held, []
+        for stage, details in held:
+            self._send(stage, details)
+
     def test(self, name, why_not, fn):
         """Run test `name` if it was asked for and nothing stops it; record it and say so as it goes."""
         if name not in self.wanted:
@@ -69,8 +88,8 @@ class _Suite:
             entry = fn()
         except Problem as p:
             entry = {"test": name, "result": p.result, "reason": p.reason}
-        except OSError as e:
-            entry = {"test": name, "result": "error", "reason": str(e)}
+        except Exception as e:  # anything else is the check's own fault: say so, and go on with the rest
+            entry = {"test": name, "result": "error", "reason": f"{type(e).__name__}: {e}"}
         self.report["tests"].append(entry)
         self.event("fpga-test-finished", {"test": name, "result": entry["result"], "reason": entry.get("reason", "")})
 
@@ -86,16 +105,16 @@ class _Suite:
 
     def _load(self):
         try:
-            model = self.options["model"] if "model" in self.options else pi_model()
-            self.setup = setups.detect(model, self.options.get("wiring"), self.options.get("expected"))
-            self.report["setup"] = self.setup.name
-        except Problem as p:
-            self.fault(p)
-        try:
             self.figures = self.options.get("expected") or setups.load(setups.EXPECTED)
         except Problem as p:
             self.fault(p)
-            self.figures = {}
+            self.figures = {}  # said once: the setup below is still found, with no figures
+        try:
+            model = self.options["model"] if "model" in self.options else pi_model()
+            self.setup = setups.detect(model, self.options.get("wiring"), self.figures)
+            self.report["setup"] = self.setup.name
+        except Problem as p:
+            self.fault(p)
         if self.found["kind"] != "fpgas-online":
             return
         try:
@@ -117,6 +136,9 @@ class _Suite:
         reason = check.not_ours(self.found)
         if reason or self.release is None:
             self.bar0_problem = Problem("fail", reason or "the installed release could not be read")
+            return
+        if not set(self.wanted) & set(NEEDS_BAR0):  # nothing asked for needs it: leave the board and its driver be
+            self.bar0_problem = Problem("pass", "no test asked for needs BAR0")
             return
         manifest, files, builds, _ = self.release
         self.bar0_problem = None
@@ -240,6 +262,7 @@ class _Suite:
             return self.finish()
         self._load()
         with contextlib.ExitStack() as stack:
+            stack.callback(self._flush)  # whatever happens, the held events go out once the driver is back
             self._open_bar0(stack)
             no_bar0 = self._needs_bar0()
             no_variant = None if self.found["variant"] else "the variant is not known"
@@ -256,6 +279,7 @@ class _Suite:
                 None if self.setup.p2_gpio else f"J5 and H5 are not wired on the {self.setup.name} setup"
             )
             self.test("p2-gpio", no_gpio or no_bar0, self.p2_gpio)
+        self._flush()
         if self.driver:
             self.report["driver"] = self.driver
             if "rebind_error" in self.driver:

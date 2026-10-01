@@ -492,3 +492,59 @@ def test_the_gate_events_are_the_ones_the_site_reads():
     progress, and must not be mistaken for them."""
     assert {"fpga-verifying", "fpga-verified"} <= set(runner.EVENTS)
     assert all(s.startswith("fpga-") for s in runner.EVENTS)
+
+
+class Crashes(Fake):
+    def check(self, host, found, options):
+        raise IndexError("list index out of range")
+
+
+def test_a_board_check_that_crashes_is_an_error_and_the_others_are_still_checked(opts):
+    bad, good = Crashes("acorn", seen=[{"variant": "cle-215+"}]), Fake("arty", seen=[{"variant": "a7-35"}])
+    report = runner.verify(opts, _boards(bad, good), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "error"
+    assert report["boards"][0]["reason"] == "the check crashed: IndexError: list index out of range"
+    assert report["boards"][1]["result"] == "pass"
+
+
+def test_even_a_crash_outside_any_board_gives_a_report_and_fpga_verified(opts, tmp_path, monkeypatch):
+    def broken(options):
+        raise KeyError("boards")
+
+    monkeypatch.setattr(runner, "verify", broken)
+    sent = []
+    monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append((stage, details)) or True)
+    out = tmp_path / "r.json"
+    assert runner.run({**opts, "report": str(out), "no_publish": False}) == 1
+    report = json.loads(out.read_text())
+    assert report["result"] == "error" and "KeyError" in report["reason"]
+    assert sent[-1][0] == "fpga-verified" and sent[-1][1]["result"] == "error"
+
+
+def test_a_fact_the_old_record_lacks_is_added_quietly_not_a_change(opts):
+    """An upgrade that reads more (the Acorn's DNA) must not make every stateful host report "changed" once."""
+    old = Fake("arty", seen=[{"variant": "a7-35", "serial": "A"}])
+    runner.verify(opts, _boards(old), usb=[], pci=[], mode=("auto", "test"))
+
+    class Reads(Fake):
+        def check(self, host, found, options):
+            report = super().check(host, found, options)
+            report["state"]["dna"] = "0x54b48664b04854"
+            return report
+
+    report = runner.verify(opts, _boards(Reads("arty", seen=[{"variant": "a7-35", "serial": "A"}])), usb=[], pci=[],
+                           mode=("auto", "test"))  # fmt: skip
+    assert report["result"] == "pass" and "changes" not in report["state"] and report["state"]["added"]
+    assert state.load(opts["state"])["arty"]["dna"] == "0x54b48664b04854"
+    # and the next run sees the same facts: nothing to add, nothing changed
+    report = runner.verify(opts, _boards(Reads("arty", seen=[{"variant": "a7-35", "serial": "A"}])), usb=[], pci=[],
+                           mode=("auto", "test"))  # fmt: skip
+    assert report["result"] == "pass" and "added" not in report["state"]
+
+
+def test_a_fact_that_differs_is_still_a_change(opts):
+    runner.verify(opts, _boards(Fake("arty", seen=[{"variant": "a7-35", "serial": "A"}])), usb=[], pci=[],
+                  mode=("auto", "test"))  # fmt: skip
+    report = runner.verify(opts, _boards(Fake("arty", seen=[{"variant": "a7-35", "serial": "A"}], flash="bbbb")),
+                           usb=[], pci=[], mode=("auto", "test"))  # fmt: skip
+    assert report["result"] == "changed"

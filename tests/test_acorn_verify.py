@@ -515,3 +515,88 @@ def test_the_check_and_spi_flash_share_one_lock(tmp_path):
             fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
     finally:
         held.close()
+
+
+# -- review fixes ----------------------------------------------------------------------------------------
+
+
+def test_something_unexpected_in_one_test_is_an_error_and_the_rest_still_run(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    real = rig.soc.read
+
+    def read(addr):
+        if addr == fk.REGS["xadc_vccaux"]:
+            raise ValueError("a bus that misbehaves")
+        return real(addr)
+
+    rig.soc.read = read
+    report = rig.check()
+    results = _results(report)
+    assert results["pcie-bar0"] == "error"
+    assert "pcie-bar0 error: ValueError: a bus that misbehaves" in report["reason"]
+    assert [t for t in suite.TESTS if t not in results] == []  # every test after it ran
+    assert results["flash"] == results["jtag"] == results["p2-gpio"] == "pass"
+
+
+def test_a_csr_beyond_the_mapped_bar0_is_refused_before_anything_is_read(tmp_path, images):
+    csr = fk.csr_json()
+    csr["csr_registers"]["p2_gpio_oe"]["addr"] = 0xF0010000
+    fk.rewrite(images, "acorn-cle-215p-csr.json", json.dumps(csr).encode())
+    rig = Rig(tmp_path, images)
+    report = rig.check()
+    assert report["result"] == "error"
+    assert "puts p2_gpio_oe at 0xf0010000, outside the 0x10000 bytes of BAR0" in report["reason"]
+    assert not rig.soc.flash_touched
+
+
+def test_the_driver_is_left_bound_when_no_test_asked_for_needs_bar0(tmp_path, images):
+    rig = Rig(tmp_path, images, driver="litepcie")
+    report = rig.check(tests=["pcie-link", "jtag"])
+    assert _results(report) == {"pcie-link": "pass", "jtag": "pass"}
+    assert (tmp_path / "sys" / "drivers" / "litepcie" / "unbind").read_text() == ""
+    assert "driver" not in report and rig.bar.opened == 0
+
+
+def test_no_event_goes_out_while_the_driver_is_unbound(tmp_path, images):
+    rig = Rig(tmp_path, images, driver="litepcie")
+    unbind = tmp_path / "sys" / "drivers" / "litepcie" / "unbind"
+    bind = tmp_path / "sys" / "drivers" / "litepcie" / "bind"
+    sent_while_unbound = []
+
+    def event(stage, details):
+        if unbind.read_text() and not bind.read_text():
+            sent_while_unbound.append(stage)
+        rig.events.append((stage, details))
+
+    report = rig.check(event=event)
+    assert report["result"] == "pass", report.get("reason")
+    assert sent_while_unbound == []
+    assert [s for s, _ in rig.events].count("fpga-test-finished") == len(suite.TESTS)  # all sent, after the rebind
+
+
+def test_a_driver_that_cannot_be_unbound_is_an_error_and_bar0_is_not_touched(tmp_path, images):
+    rig = Rig(tmp_path, images, driver="litepcie")
+    (tmp_path / "sys" / "drivers" / "litepcie" / "unbind").unlink()
+    (tmp_path / "sys" / "drivers" / "litepcie" / "unbind").mkdir()  # writing it fails, root or not
+    report = rig.check()
+    assert report["result"] == "error"
+    assert "the litepcie driver holds the board and could not be unbound" in report["reason"]
+    assert rig.bar.opened == 0
+    assert {"pcie-bar0", "flash", "p2-gpio"} <= set(report["not_run"])
+    assert _results(report)["jtag"] == "pass"  # what does not need BAR0 still runs
+
+
+def test_missing_expected_figures_are_said_once(tmp_path, images, monkeypatch):
+    from fpgas_online_verify.boards.acorn import setup
+
+    real = setup.load
+
+    def load(name, dirs=setup.DATA_DIRS):
+        if name == setup.EXPECTED:
+            raise core.Problem("error", "expected.toml is not installed")
+        return real(name, dirs)
+
+    monkeypatch.setattr(setup, "load", load)
+    report = Rig(tmp_path, images).check()
+    assert report["reason"].count("expected.toml is not installed") == 1
+    assert report["setup"] == "Raspberry Pi 5"

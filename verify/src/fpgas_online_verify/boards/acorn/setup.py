@@ -78,7 +78,7 @@ def detect(model, wiring=None, expected=None):
     for key, carrier in wiring["carriers"].items():
         for prefix, host in carrier.get("hosts", {}).items():
             if model.startswith(prefix):
-                return _setup(key, carrier, prefix, host, expected or load(EXPECTED))
+                return _setup(key, carrier, prefix, host, load(EXPECTED) if expected is None else expected)
     known = ", ".join(f"{m} ({c['name']})" for c in wiring["carriers"].values() for m in c.get("hosts", {}))
     raise Problem("error", f"this host ({model or 'no device-tree model'}) is not an Acorn setup in {WIRING}: "
                            f"{known}")  # fmt: skip

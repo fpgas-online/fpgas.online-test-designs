@@ -42,11 +42,20 @@ def _walk(prefix, old, new, out):
             if key not in new:
                 continue  # not read this time (a flash readback that failed): nothing to compare
             if key not in old:
-                out.append(f"{prefix}{key}: not recorded before, now {new[key]!r}")
-                continue
+                continue  # a fact a newer version reads (an Acorn's DNA): recorded, not a change
             _walk(f"{prefix}{key}.", old[key], new[key], out)
     elif old != new:
         out.append(f"{prefix.rstrip('.')}: was {old!r}, now {new!r}")
+
+
+def merged(recorded, current):
+    """The recorded state with what is new in `current` added, and nothing recorded dropped."""
+    if not (isinstance(recorded, dict) and isinstance(current, dict)):
+        return current
+    out = dict(recorded)
+    for key, value in current.items():
+        out[key] = merged(recorded[key], value) if key in recorded else value
+    return out
 
 
 def differences(recorded, current):

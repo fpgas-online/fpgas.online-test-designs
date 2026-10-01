@@ -111,6 +111,10 @@ def compare_state(report, targets, reports, update, path):
     changes = state.differences(recorded, current)
     if changes:
         info["changes"] = changes
+    elif "unreadable" not in recorded and state.merged(recorded, current) != recorded:
+        # facts this version reads that the record lacks (an upgrade): added quietly, not a change
+        state.save(state.merged(recorded, current), report["checked_at"], path)
+        info["added"] = True
     return info
 
 
@@ -179,6 +183,10 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
                 reports.append(board.check(host, found, board_options))
         except Problem as p:
             reports.append({"board": board.name, "found": found, "result": p.result, "reason": p.reason})
+            skipped = []
+        except Exception as e:  # a bug in a board's check: that board is an error, the others are still checked
+            reports.append({"board": board.name, "found": found, "result": "error",
+                            "reason": f"the check crashed: {type(e).__name__}: {e}"})  # fmt: skip
             skipped = []
         if skipped:
             reports[-1]["tests_skipped"] = skipped
@@ -304,7 +312,11 @@ def run(options, prog="fpgas-verify"):
         # The site hears the check has started, and says the board is being verified until the result follows.
         working = publish("fpga-verifying", {"started_at": _now()}, prog=prog, timeout=EVENT_TIMEOUT)
         options = {**options, "event": _Progress(prog, working)}
-    report = verify(options)
+    try:
+        report = verify(options)
+    except Exception as e:  # whatever went wrong, the site still hears a result, and the report says why
+        report = {"schema_version": SCHEMA_VERSION, "result": "error", "checked_at": _now(), "boards": [],
+                  "reason": f"fpgas-verify crashed: {type(e).__name__}: {e}"}  # fmt: skip
     kept_in = write(report, kept_in)
     print(summary(report), file=sys.stderr)
     if not options.get("no_publish"):

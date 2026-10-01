@@ -111,8 +111,10 @@ def jtag(setup, variant, run, bar0_dna=None, gpiochip=None):
     try:
         saved = pin_states(run, setup.jtag_gpios)
     except Problem as p:
-        saved = None
-        faults.append(("error", f"the JTAG pins' state could not be read, so it cannot be put back: {p.reason}"))
+        # openFPGALoader leaves the pins driven; with no way to put them back (on a Blade GPIO14 is also the
+        # UART's TX) the probe is not run at all
+        reason = f"P1 JTAG not probed: the JTAG pins' state could not be read, so it could not be put back: {p.reason}"
+        return _entry("jtag", [("error", reason)])
     try:
         (gpiochip or header_gpiochip)(setup.gpiochip)
         rc, out = run([*base, "--detect"], JTAG_TIMEOUT)
@@ -141,8 +143,7 @@ def jtag(setup, variant, run, bar0_dna=None, gpiochip=None):
         result = e.result if isinstance(e, Problem) else "error"
         faults.append((result, f"P1 JTAG could not be probed: {e}"))
     finally:
-        if saved:
-            faults += [("error", f) for f in restore_pins(run, saved)]
+        faults += [("error", f) for f in restore_pins(run, saved)]
     return _entry("jtag", faults, output, **seen)
 
 

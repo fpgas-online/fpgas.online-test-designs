@@ -2,10 +2,11 @@
 
 Every Xilinx or SQRL PCIe endpoint is claimed. The Acorn-family images are recognised: the fpgas.online SoC
 (10ee:7021 with our subsystem IDs), SQRL's factory image and the vendor XDMA sample. Two Xilinx PCIe boards
-that are not Acorns are named (a PCIe Screamer running PCILeech, a stock XDMA design that is most likely a
-PicoEVB). Anything else (an older build of ours without the subsystem IDs, 10ee:7021 subsystem 10ee:0007, or
-another design) fails as "not a design we built": an FPGA is plainly there, so reporting no board at all
-would hide it.
+that are not Acorns are named: a PCIe Screamer running PCILeech (10ee:0666), and a stock XDMA design that is
+most likely a PicoEVB (10ee:7021 subsystem 10ee:0007, told apart from an old LitePCIe build of ours with the
+same IDs by the XDMA class code 070001 and its BAR2). Anything else (such an older build of ours: one BAR,
+LitePCIe's class; or another design) fails as "not a design we built": an FPGA is plainly there, so
+reporting no board at all would hide it.
 
 An Acorn has its links to the Pi checked as well as PCIe (links.py): P1 JTAG, the P2 UART and, on the Pi 5
 setup, the P2 spare balls. Which setup the host is, and how it is wired, comes from wiring.toml (setup.py).
