@@ -215,9 +215,7 @@ daemon's `/health` plus `reachable`, and is the quickest liveness check.
 
 **Board firmware:** all four run TT SDK **3.1.0** (the stock `ttdbv3` build
 stalls at boot). With 3.1.0 the SDK's `tt` object comes up as `Shuttle FPGA`
-and the Commander connects. The boards' custom bitstreams (`custom.bin`,
-`fabfox_mirror.bin`, …) are backed up on tweed in
-`/root/fpgas-tt-setup/fpga-backup/<host>/`.
+and the Commander connects.
 
 **USB device:** `/dev/ttyACM0` (VID:PID `2e8a:0005` — MicroPython Board in FS
 mode), with a udev symlink **`/dev/ttboard`** that the Pi daemon opens.
