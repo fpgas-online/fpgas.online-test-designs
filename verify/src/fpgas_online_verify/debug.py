@@ -120,16 +120,16 @@ def acorn_identify(board, host, args):
 
 def commands(board):
     """{name: (function, help, takes a test)} for this board."""
-    out = {"detect": (detect, "find the board and show what was found", False)}
+    out = {"detect": (detect, "find the board; exit 1 if it is not there", False)}
     if isinstance(board, TestBoard):
         out.update({
-            "list": (listing, "the tests and their installed bitstreams", False),
-            "check": (check_files, "check every installed bitstream against the manifest", False),
-            "program": (program, "load a test's design and leave it running", True),
-            "test": (lambda b, h, a: program(b, h, a, then_test=True), "load a test's design and run its test", True),
+            "list": (listing, "list the tests and their bitstreams", False),
+            "check": (check_files, "check the bitstreams' sha256s", False),
+            "program": (program, "load TEST's design and leave it running", True),
+            "test": (lambda b, h, a: program(b, h, a, then_test=True), "load TEST's design and run its test", True),
         })  # fmt: skip
     if board.name == "acorn":
-        out["identify"] = (acorn_identify, "the running build and the flash's identity, read live", False)
+        out["identify"] = (acorn_identify, "show the running build and the flash's ID", False)
     return out
 
 
