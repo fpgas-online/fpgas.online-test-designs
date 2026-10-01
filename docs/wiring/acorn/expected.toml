@@ -23,3 +23,17 @@ temperature_c = [0.0, 85.0]
 vccint_v = [0.95, 1.05]
 vccaux_v = [1.71, 1.89]
 vccbram_v = [0.95, 1.05]
+
+# The DRAM BIST over the whole DRAM, per variant: no errors, and write and read bandwidth (MB/s, bytes / time
+# at the SoC's 100 MHz) at least these. Both variants run one x16 DDR3 at 400 MHz (DDR3-800), so 1600 MB/s
+# peak; pi-sw2-p48 (cle-215+) measured 1327 MB/s write and 1350 MB/s read on 2026-10-01. 1100 leaves about
+# 17 % for board-to-board and run-to-run spread, and is still far above the 800 MB/s a controller that lost
+# one of its two byte lanes would at best give. The cle-101 has the same DRAM width and clock and the same
+# controller; it has not been measured yet.
+[ddr."cle-215+"]
+min_write_MBps = 1100
+min_read_MBps = 1100
+
+[ddr."cle-101"]
+min_write_MBps = 1100
+min_read_MBps = 1100

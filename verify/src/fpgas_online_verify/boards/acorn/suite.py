@@ -15,9 +15,16 @@ read; and the FPGA is never reconfigured.
              flash's identity, the device DNA and the XADC temperature and voltages
   jtag       IDCODE and device DNA over P1 (links.py); the DNA must be BAR0's
   flash      both flash slots read whole and compared with the release's images
+  ddr        the BIOS console read out (it lets the BIOS finish DRAM set-up, #47), then the DRAM BIST over
+             the whole DRAM, two passes (bist.py): no errors, and write and read bandwidth at least the
+             variant's minimum (expected.toml)
   p2-uart    the UARTBone bridge on P2 at both baud rates: identifier, DNA, XADC (links.py)
+  p2-serial  J2/K2 in both directions through the p2_serial switch, then the UARTBone again (links.py)
   scratch    the ctrl scratch register written and read back over BAR0 and over the P2 UART
   p2-gpio    J5/H5 in both directions (links.py), on a setup whose cable carries them
+
+The golden image has no DRAM and no P2 switch or spare GPIO: on it `ddr`, `p2-serial` and `p2-gpio` are
+not run, and running it is already a fault (`pcie-bar0`).
 
 A kernel driver holding BAR0 (litepcie.ko) is unbound for the check, only when a test asked for needs BAR0,
 and bound again after it. No events are sent while it is unbound: they are held and sent once it is bound
@@ -27,13 +34,15 @@ A test that raises something unexpected is recorded as an error with what it rai
 """
 
 import contextlib
+import time
 
 from ...core import Problem, pi_model, run, worst
-from . import check, links
+from . import bist, check, links
 from . import setup as setups
 
-TESTS = ("pcie-link", "pcie-bar0", "jtag", "flash", "p2-uart", "scratch", "p2-gpio")
-NEEDS_BAR0 = ("pcie-bar0", "flash", "scratch", "p2-gpio")
+TESTS = ("pcie-link", "pcie-bar0", "jtag", "flash", "ddr", "p2-uart", "p2-serial", "scratch", "p2-gpio")
+NEEDS_BAR0 = ("pcie-bar0", "flash", "ddr", "p2-serial", "scratch", "p2-gpio")
+CONSOLE_TAIL = 8  # BIOS console lines kept in the ddr test's output
 
 
 def _quiet(stage, details):
@@ -242,6 +251,33 @@ class _Suite:
     def p2_gpio(self):
         return links.p2_gpio(self.setup, self.bus, self.csrs, self.run)
 
+    def p2_serial(self):
+        return links.p2_serial(self.setup, self.bus, self.csrs, self.run, self.bar0.get("identifier"),
+                               self.options.get("uart_opener"), self.options.get("settle"),
+                               self.options.get("sleep"))  # fmt: skip
+
+    def ddr(self):
+        regs = bist.Regs(self.bus.read, self.bus.write, self.csrs)
+        sleep = self.options.get("sleep")
+        started = time.monotonic()
+        text = bist.console(regs, quiet_s=self.options.get("console_quiet_s", 2.0), sleep=sleep)
+        out = bist.dram(regs, self.options.get("ddr_bytes"), sleep=sleep)
+        faults = out.pop("faults")
+        entry = {"test": "ddr", **{k: out[k] for k in ("bytes", "passes", "errors") if k in out}}
+        entry.update({k: out[k] for k in ("write_MBps", "read_MBps") if k in out})
+        entry["seconds"] = round(time.monotonic() - started, 1)
+        entry["bios_memtest"] = bist.memtest_line(text)
+        entry["output"] = [line for line in text.splitlines() if line.strip()][-CONSOLE_TAIL:]
+        least = self.figures.get("ddr", {}).get(self.found["variant"])
+        if least is None:
+            faults.append(f"no DDR figures for {self.found['variant']} in expected.toml")
+        elif "write_MBps" in out:
+            for what in ("write", "read"):
+                got, want = out[f"{what}_MBps"], least[f"min_{what}_MBps"]
+                if got < want:
+                    faults.append(f"DRAM {what} {got} MB/s, below the {want} MB/s expected of {self.found['variant']}")
+        return {**entry, "result": "fail", "reason": "; ".join(faults)} if faults else {**entry, "result": "pass"}
+
     # -- the whole check -------------------------------------------------------------------------------
 
     def identity(self):
@@ -280,13 +316,20 @@ class _Suite:
             self.test("jtag", self._needs_setup() or no_variant, self.jtag)
             self.report["identity"] = self.identity()
             self.event("fpga-board-identified", self.report["identity"])
+            golden = "the golden image has no {}" if self.bar0.get("build") == "golden" else None
             self.test("flash", no_bar0, self.flash)
+            self.test("ddr", no_bar0 or (golden and golden.format("DRAM")), self.ddr)
             self.test("p2-uart", no_uart, self.p2_uart)
+            no_serial = self._needs_setup() or (
+                None if self.setup.p2_serial else f"J2 and K2 are not wired on the {self.setup.name} setup"
+            )
+            self.test("p2-serial", no_serial or no_bar0 or (golden and golden.format("P2 serial switch")),
+                      self.p2_serial)  # fmt: skip
             self.test("scratch", None if self.bus is not None or not no_uart else no_bar0, self.scratch)
             no_gpio = self._needs_setup() or (
                 None if self.setup.p2_gpio else f"J5 and H5 are not wired on the {self.setup.name} setup"
             )
-            self.test("p2-gpio", no_gpio or no_bar0, self.p2_gpio)
+            self.test("p2-gpio", no_gpio or no_bar0 or (golden and golden.format("P2 spare GPIO")), self.p2_gpio)
         self._flush()
         if self.driver:
             self.report["driver"] = self.driver
