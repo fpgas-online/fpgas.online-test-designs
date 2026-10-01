@@ -76,17 +76,17 @@ Source: [LiteX sqrl_acorn.py](https://github.com/litex-hub/litex-boards/blob/mas
 
 All boards share the same PCB layout and pin assignments. The LiteX platform file `sqrl_acorn.py` works for all variants — change only the device string.
 
-| Board          | FPGA            | Speed Grade | DDR3   | PCIe    |
-| -------------- | --------------- | ----------- | ------ | ------- |
-| LiteFury       | XC7A100T-FBG484 | -2          | 512 MB | Gen2 x4 |
-| NiteFury       | XC7A200T-FBG484 | -2          | 512 MB | Gen2 x4 |
-| Acorn CLE-101  | XC7A100T-FBG484 | -2          | 512 MB | Gen2 x4 |
-| Acorn CLE-215  | XC7A200T-FBG484 | -2          | 1 GB   | Gen2 x4 |
-| Acorn CLE-215+ | XC7A200T-FBG484 | -3          | 1 GB   | Gen2 x4 |
+| Board          | FPGA            | Speed Grade | DDR3                  | PCIe    |
+| -------------- | --------------- | ----------- | --------------------- | ------- |
+| LiteFury       | XC7A100T-FBG484 | -2          | 512 MiB (MT41K256M16) | Gen2 x4 |
+| NiteFury       | XC7A200T-FBG484 | -2          | 1 GiB (MT41K512M16)   | Gen2 x4 |
+| Acorn CLE-101  | XC7A100T-FBG484 | -2          | 512 MiB (MT41K256M16) | Gen2 x4 |
+| Acorn CLE-215  | XC7A200T-FBG484 | -2          | 1 GiB (MT41K512M16)   | Gen2 x4 |
+| Acorn CLE-215+ | XC7A200T-FBG484 | -3          | 1 GiB (MT41K512M16)   | Gen2 x4 |
 
 Source: [NiteFury and LiteFury](https://github.com/RHSResearchLLC/NiteFury-and-LiteFury), [LiteX Acorn CLE-215 wiki](https://github.com/enjoy-digital/litex/wiki/Use-LiteX-on-the-Acorn-CLE-215)
 
-The CLE-215+ is equivalent to the RHSResearchLLC NiteFury board but with 1 GB DDR3 (vs 512 MB).
+The CLE-215+ is the RHSResearchLLC NiteFury (CLE-215) in the faster -3 speed grade; both have 1 GiB of DDR3. The designs here build the `cle-215` variant for both the CLE-215 and the NiteFury, with the same DDR3 part.
 
 ## PCIe Interface
 
@@ -236,11 +236,22 @@ fails if one moves). Each release ships each image's `csr.json` and `csr.csv` be
 | +0x1c | `ticks` | sys clock cycles the pass took |
 | +0x20 | `errors` | checker only: words that did not match |
 
-A pass: write `reset`, `base`, `end`, `length` and `random`, write `start`, wait for `done`, read `ticks`. Run
-the generator, then the checker over the same range with the same `random`. Bandwidth is
-`length / (ticks / sys clock)`; the sys clock is `CONFIG_CLOCK_FREQUENCY` in `csr.json` (100 MHz). `base`,
-`end` and `length` are as wide as a DRAM byte address, so the whole DRAM takes two halves. The check is per
-128-bit word: each word holds one 32-bit pattern value four times.
+A run: write `reset`, `base`, `end`, `length` and `random`, write `start`, wait for `done`, read `ticks`.
+Run the generator, then the checker over the same range with the same `random`. Bandwidth is
+`length / (ticks / sys clock)`; the sys clock is `CONFIG_CLOCK_FREQUENCY` in `csr.json` (100 MHz).
+
+The data is a 31-bit value per 128-bit word, repeated and cut off at 128 bits (four copies and the low 4 bits
+of a fifth): a PRBS31 value with `random` bit 0 set, otherwise a counter of the words written. `reset`
+restarts both, so every run of one pattern writes the same data from its `base`. The check counts words that
+differ, not bits.
+
+`base`, `end` and `length` are as wide as a DRAM byte address, so the whole DRAM takes two halves. To catch a
+dead top address bit (or an image for twice the DRAM the board has), write both halves before checking
+either, with different patterns in each: with the same pattern, a high half that lands on the low one writes
+the same data there and every check passes. `designs/acorn-pcie/host/selftest.py` does two passes, PRBS low and
+counter high, then the other way round, so each half gets both patterns. That does not guarantee every bit
+is written as both 0 and 1: the counter's top bits stay 0 over a half, so those bits see only the PRBS value
+and 0.
 
 The BIOS sets the DRAM up after printing its banner on the crossover UART, and stops once that console is full
 and nobody reads it ([#47](https://github.com/fpgas-online/fpgas.online-test-designs/pull/47)). On a board

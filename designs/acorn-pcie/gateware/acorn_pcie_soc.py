@@ -210,7 +210,7 @@ class AcornPCIeSoC(SoCCore):
         # Not uart_name="crossover+uartbone": see designs/_shared/uartbone_break.py for what that lacks.
         serial = platform.request("serial")
         if not golden:
-            # J2/K2 can be borrowed as GPIOs (R3): every P2 pin is then checkable in both directions.
+            # A host can borrow J2/K2 as GPIOs, so every P2 pin can be checked in both directions.
             self.p2_serial = P2SerialSwitch(serial, sys_clk_freq)
             serial = self.p2_serial.uart_pads
         self.uartbone = BreakResetUARTBone(
@@ -294,7 +294,7 @@ class AcornPCIeSoC(SoCCore):
         self.flash_cs_n = GPIOOut(platform.request("flash_cs_n"), reset=1)
         self.flash = S7SPIFlash(platform.request("flash"), sys_clk_freq, 25e6)
 
-        # P2 spare GPIOs (R3): inputs out of reset, so they never fight the Pi or JTAG -------------
+        # P2 spare GPIOs J5/H5: inputs out of reset, so they never fight the Pi or JTAG ----------
         if not golden:
             self.p2_gpio = GPIOTristate(platform.request("p2_gpio"))
 
@@ -313,7 +313,7 @@ def main():
         "--variant",
         default="cle-215+",
         choices=sorted(_DDR3_MODULE),
-        help="Board variant: cle-215+ (Acorn), cle-215 (NiteFury), cle-101 (LiteFury).",
+        help="Board variant: cle-215+ (Acorn, 1 GiB), cle-215 (NiteFury, 1 GiB), cle-101 (LiteFury, 512 MiB).",
     )
     parser.add_target_argument("--sys-clk-freq", default=100e6, type=float, help="System clock frequency.")
     parser.add_target_argument("--golden", action="store_true", help="Build the minimal recovery image.")

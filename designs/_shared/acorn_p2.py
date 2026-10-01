@@ -3,12 +3,12 @@
 P2 carries four FPGA balls to the host (docs/wiring/acorn/wiring.toml is the source of truth;
 tests/test_acorn_p2_pins.py fails if this file or any Acorn design disagrees with it):
 
-| P2 pin | Ball | Use                       | Host pin (Pi 5 HAT and Compute Blade) |
-|--------|------|---------------------------|---------------------------------------|
-| 2      | J2   | serial RX, FPGA input     | GPIO14 (TXD)                          |
-| 3      | K2   | serial TX, FPGA output    | GPIO15 (RXD)                          |
-| 4      | J5   | spare GPIO                | GPIO3                                 |
-| 5      | H5   | spare GPIO                | GPIO4                                 |
+| P2 pin | Ball | Use                    | Pi 5 HAT     | Compute Blade                           |
+|--------|------|------------------------|--------------|-----------------------------------------|
+| 2      | J2   | serial RX, FPGA input  | GPIO14 (TXD) | GPIO14 (TXD), also JTAG TMS via 470 ohm |
+| 3      | K2   | serial TX, FPGA output | GPIO15 (RXD) | GPIO15 (RXD)                            |
+| 4      | J5   | spare GPIO             | GPIO3        | cut (GPIO3 is JTAG TDO there)           |
+| 5      | H5   | spare GPIO             | GPIO4        | cut (GPIO4 is JTAG TCK there)           |
 
 Every Acorn design gets its platform from `fleet_platform()`, so its `serial` resource comes from
 here, not from whatever litex-boards happens to define.
