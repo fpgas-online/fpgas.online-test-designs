@@ -18,8 +18,8 @@ before changing this page.
 
 ## 1. Main job: prove a board is set up correctly
 
-The tool answers one question per Pi: **is this Pi and its FPGA board ready for users, or does a technician
-need to fix something?** It is ready only when all of these hold:
+The tool answers one question per Pi: **is this Pi and its FPGA board ready for users?** The answer is pass
+or fail. It passes only when all of these hold:
 
 | # | Check | What that means |
 |---|---|---|
@@ -35,8 +35,13 @@ need to fix something?** It is ready only when all of these hold:
   single-function test designs are used only when a person is debugging (job 2.1).
 * **So the full test design must contain every function the single-function designs test.** A function that is
   only in a single-function design is not checked at boot, so it does not count as checked.
-* **A flash without the golden full test design is reported, not fixed.** The result is "needs a technician";
-  a person writes the flash (job 2.2). Letting the site trigger the fix may come later.
+* **Fomu and TT FPGA: the tool loads the full test design itself, then tests it.** On these boards another chip
+  loads the FPGA (foboot on the Fomu, the RP2040 on the TT demo board), so there is no flashed design to check.
+* **A flash without the golden full test design is reported, not fixed.** The check fails; a person writes the
+  flash (job 2.2). Letting the site trigger the fix may come later.
+* **There is one result: pass or fail.** Any problem fails the check, whether it is in the board, the wiring or
+  the tool itself. The report lists every problem found, so the check keeps going after the first failure
+  wherever it can: a board can have more than one fault.
 * **Each setup's expected wiring and expected figures (DDR bandwidth, PCIe link width and speed, Ethernet
   throughput, ...) are data files in this repository**, one per setup. The tool, the test designs and the docs
   are generated from, or checked against, those files, so they cannot drift apart.
@@ -61,16 +66,22 @@ The tool sends the site an event at each step, not only the final result:
 | Board found | the kind of board |
 | Board identified | the first identifying details: serial numbers, IDCODE, flash ID, ... |
 | Test started / progress / finished | per test; finished carries its result |
-| Final result | whether the Pi and board are ready for users, or need an admin or technician, with the problems found |
+| Final result | pass (ready for users) or fail, with every problem found |
 
-The site uses this to show each Pi's state live and to offer only the ready ones to users.
+The site uses this to show each Pi's state live and to offer only the Pis that passed to users.
 
 ## 4. Fourth job: check new bitstreams before they become golden
 
-A new or changed test design must be shown to still work on real boards before it replaces the golden one.
-The tool runs the candidate bitstreams on boards and compares their results and measurements with the
-current golden ones. A candidate is promoted to golden only when it does at least as well. After that, the
-tool checks every board against the new golden set.
+A new or changed test design must be shown to still work on real boards before it replaces the golden one:
+
+1. Take one board of each setup out of service.
+2. Run the check with the current golden bitstreams, then with the candidates, and compare the two results and
+   their measurements.
+3. Promote the candidates to golden only when they do at least as well.
+4. Separately, update the whole fleet to the new golden set, recording each board's result before and after
+   the update, and compare them.
+
+From then on the tool checks every board against the new golden set.
 
 Because of this, every result must be comparable between two runs: the same tests, the same named
 measurements, in a stable machine-readable form.
