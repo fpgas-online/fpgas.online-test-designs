@@ -123,6 +123,41 @@ def require_timing(platform, domains):
         toolchain.build = strict_build
 
 
+def require_litex_boards_timing(soc, sys_clk_freq):
+    """require_timing() for a SoC built from a litex-boards target (its _CRG, and its Ethernet PHY if any).
+
+    Those CRGs make a different set of domains with and without DRAM; each one must be named here, so a CRG
+    with one this does not know fails the build rather than have it timed at the wrong frequency.
+    """
+    known = {
+        "sys": sys_clk_freq,
+        "sys4x": 4 * sys_clk_freq,
+        "sys4x_dqs": 4 * sys_clk_freq,
+        "idelay": 200e6,
+        "clk100": 100e6,
+        "eth": None,  # the Arty's MII reference (25 MHz) or the NeTV2's RMII one (50 MHz): read off the PHY
+    }
+    phy = getattr(soc, "ethphy", None)
+    phy_freq = {"LiteEthPHYMII": 25e6, "LiteEthPHYRMII": 50e6}.get(type(phy).__name__) if phy else None
+    domains = {}
+    for name, cd in vars(soc.crg).items():
+        if not name.startswith("cd_"):
+            continue
+        if name[3:] not in known:
+            raise ValueError(f"{type(soc).__name__}'s CRG has clock domain {name[3:]}, unknown to this helper")
+        freq = known[name[3:]]
+        if freq is None:
+            freq = 25e6 if phy_freq is None else phy_freq
+        domains[cd] = freq
+    if phy is not None:
+        if phy_freq is None:
+            raise ValueError(f"Ethernet PHY {type(phy).__name__}: its clock frequency is unknown to this helper")
+        for name in ("cd_eth_rx", "cd_eth_tx"):  # clocked from the PHY's pins; MII's are not constrained
+            if hasattr(phy.crg, name):
+                domains[getattr(phy.crg, name)] = phy_freq
+    require_timing(soc.platform, domains)
+
+
 OPENXC7_TIMING_SEEDS = 5
 _MISSED_CLOCK = re.compile(r"^ERROR: Max frequency for clock .*FAIL at", re.MULTILINE)
 

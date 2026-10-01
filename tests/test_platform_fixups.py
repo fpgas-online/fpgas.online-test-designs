@@ -1,6 +1,7 @@
 """openXC7 fixups for litex-boards platforms (designs/_shared/platform_fixups.py)."""
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from litex.build.generic_platform import IOStandard, Subsignal
@@ -10,6 +11,7 @@ from migen import ClockDomain
 from designs._shared.platform_fixups import (
     constrain_openxc7_clocks,
     fix_openxc7_reduced_drive_iostandards,
+    require_litex_boards_timing,
     require_timing,
 )
 
@@ -220,3 +222,29 @@ def test_require_timing_leaves_vivado_alone():
     require_timing(platform, {ClockDomain("sys"): 75e6})
     assert platform.toolchain.build == build
     assert not platform.toolchain.clocks
+
+
+class LiteEthPHYMII:  # named as LiteEth's: the helper reads the PHY's clock off its class name
+    def __init__(self):
+        self.crg = SimpleNamespace(cd_eth_rx=ClockDomain("eth_rx"), cd_eth_tx=ClockDomain("eth_tx"))
+
+
+def _litex_boards_soc(platform, *domains):
+    return SimpleNamespace(platform=platform, crg=SimpleNamespace(**{f"cd_{n}": ClockDomain(n) for n in domains}))
+
+
+def test_a_litex_boards_soc_has_every_crg_domain_and_its_phy_clocks_constrained():
+    platform = digilent_arty.Platform(variant="a7-35", toolchain="openxc7")
+    soc = _litex_boards_soc(platform, "sys", "eth", "sys4x", "sys4x_dqs", "idelay")
+    soc.ethphy = LiteEthPHYMII()
+    require_litex_boards_timing(soc, 50e6)
+    periods = {cd.name: platform.toolchain.clocks[cd.clk][0] for cd in vars(soc.crg).values()}
+    assert periods == {"sys": 20.0, "eth": 40.0, "sys4x": 5.0, "sys4x_dqs": 5.0, "idelay": 5.0}
+    assert platform.toolchain.clocks[soc.ethphy.crg.cd_eth_rx.clk][0] == 40.0
+    assert platform.toolchain.clocks[soc.ethphy.crg.cd_eth_tx.clk][0] == 40.0
+
+
+def test_a_crg_domain_the_helper_does_not_know_fails_the_build():
+    soc = _litex_boards_soc(digilent_arty.Platform(variant="a7-35", toolchain="openxc7"), "sys", "hdmi")
+    with pytest.raises(ValueError, match="clock domain hdmi"):
+        require_litex_boards_timing(soc, 50e6)

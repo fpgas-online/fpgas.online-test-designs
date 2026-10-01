@@ -20,6 +20,7 @@ from litex_boards.platforms.digilent_arty import Platform
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+from designs._shared.platform_fixups import require_timing
 from designs._shared.yosys_workarounds import YOSYS_TEMPLATE_STRIP_SCOPEINFO
 
 # Pin extension: use PMOD A as input, PMOD B as output.
@@ -57,6 +58,7 @@ def main():
     if args.toolchain == "openxc7" and hasattr(platform.toolchain, "_yosys_template"):
         platform.toolchain._yosys_template = list(YOSYS_TEMPLATE_STRIP_SCOPEINFO)
 
+    require_timing(platform, {})  # no clock: strict mode only
     if args.build:
         build_dir = str(Path(__file__).resolve().parent.parent / "build" / "arty")
         platform.build(module, build_dir=build_dir)

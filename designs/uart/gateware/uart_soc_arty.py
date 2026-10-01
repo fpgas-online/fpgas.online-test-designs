@@ -27,7 +27,12 @@ from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
 from designs._shared.build_helpers import build_soc, default_soc_kwargs
+from designs._shared.platform_fixups import require_timing
 from designs._shared.yosys_workarounds import patch_yosys_template
+
+# nextpnr-xilinx places this SoC at 66-93 MHz depending on the build, so 100 MHz builds shipped that garbled
+# the UART (2026-09-30: 82.8 MHz, every Arty's uart test failed). Vivado makes 100 MHz.
+SYS_CLK_FREQ = {"openxc7": 75e6}
 
 # CRG (Clock Reset Generator) ---------------------------------------------------------------------
 
@@ -47,6 +52,7 @@ class _CRG(LiteXModule):
         pll.register_clkin(clk100, 100e6)
         pll.create_clkout(self.cd_sys, sys_clk_freq)
         platform.add_false_path_constraints(self.cd_sys.clk, pll.clkin)
+        require_timing(platform, {self.cd_sys: sys_clk_freq})
 
 
 # BaseSoC -----------------------------------------------------------------------------------------
@@ -68,7 +74,8 @@ def main():
     from litex.build.parser import LiteXArgumentParser
     parser = LiteXArgumentParser(platform=digilent_arty.Platform, description="UART Test SoC for Arty A7")
     parser.add_target_argument("--variant",      default="a7-35",     help="Board variant (a7-35 or a7-100).")
-    parser.add_target_argument("--sys-clk-freq", default=100e6, type=float, help="System clock frequency.")
+    parser.add_target_argument("--sys-clk-freq", default=None, type=float,
+        help="System clock frequency (default: 75 MHz with openXC7, 100 MHz with Vivado).")
     args = parser.parse_args()
 
     soc_kwargs = default_soc_kwargs(parser, ident="fpgas-online UART Test SoC -- Arty A7")
@@ -76,7 +83,7 @@ def main():
     soc = BaseSoC(
         variant      = args.variant,
         toolchain    = args.toolchain,
-        sys_clk_freq = int(args.sys_clk_freq),
+        sys_clk_freq = int(args.sys_clk_freq or SYS_CLK_FREQ.get(args.toolchain, 100e6)),
         **soc_kwargs,
     )
 
