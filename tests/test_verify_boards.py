@@ -369,6 +369,21 @@ def test_the_board_commands_take_the_board_from_their_name(monkeypatch):
         cli.board_main([], prog="fpgas-nothing-verify")
 
 
+def test_update_and_test_cannot_be_given_together(monkeypatch):
+    monkeypatch.setattr(cli.runner, "run", lambda options, prog: 0)
+    with pytest.raises(SystemExit):
+        cli.board_main(["--update", "--test", "uart"], prog="fpgas-arty-verify")
+    with pytest.raises(SystemExit):
+        cli.verify_main(["--update", "--test", "uart"])
+
+
+def test_the_report_goes_to_the_boot_path_only_when_not_given(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(cli.runner, "run", lambda options, prog: seen.update(options) or 0)
+    cli.board_main([], prog="fpgas-arty-verify")
+    assert "report" not in seen  # runner.run picks: the boot report, or stdout for --test
+
+
 def test_test_option_reaches_the_check_as_the_tests_to_run(monkeypatch):
     seen = {}
     monkeypatch.setattr(cli.runner, "run", lambda options, prog: seen.update(options) or 0)

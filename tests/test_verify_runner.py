@@ -178,7 +178,7 @@ def test_the_first_run_records_the_state_and_passes(opts):
 
 
 def test_a_test_run_neither_records_nor_compares_the_state(opts):
-    arty = Fake("arty", seen=[{"variant": "a7-35", "serial": "A"}])
+    arty = WithTests("arty", ["uart"], seen=[{"variant": "a7-35", "serial": "A"}])
     report = runner.verify({**opts, "board": "arty", "tests": ["uart"]}, _boards(arty), usb=[], pci=[])
     assert report["state"]["recorded"] is False and not opts["state"].exists()
     full = runner.verify({**opts, "board": "arty"}, _boards(arty), usb=[], pci=[])
@@ -208,6 +208,35 @@ def test_with_auto_a_board_skips_the_tests_it_does_not_have(opts):
                            mode=("auto", "test"))  # fmt: skip
     assert arty.options["tests"] == ["uart", "ethernet"] and tt.options["tests"] == ["uart"]
     assert [b.get("tests_skipped") for b in report["boards"]] == [None, ["ethernet"]]
+
+
+def test_with_auto_a_board_with_none_of_the_tests_is_not_checked_and_not_passed(opts):
+    arty = WithTests("arty", ["uart", "ddr"], seen=[{"variant": "a7-35", "serial": "A"}])
+    tt = WithTests("tt", ["uart"], seen=[{"variant": "tt-fpga", "serial": "T"}], result="fail")
+    report = runner.verify({**opts, "tests": ["ddr"]}, _boards(arty, tt), usb=[], pci=[], mode=("auto", "test"))
+    assert tt.options is None and tt.checked == []
+    assert [b["board"] for b in report["boards"]] == ["arty"] and report["not_checked"] == ["tt"]
+    assert report["result"] == "pass"  # arty's ddr ran and passed
+
+
+def test_with_auto_a_test_no_board_found_has_is_an_error(opts):
+    tt = WithTests("tt", ["uart"], seen=[{"variant": "tt-fpga", "serial": "T"}])
+    report = runner.verify({**opts, "tests": ["ddr"]}, _boards(tt), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "error" and "has the test ddr" in report["reason"]
+    assert report["boards"] == [] and tt.checked == []
+
+
+def test_with_auto_a_board_with_no_selectable_tests_is_not_checked(opts):
+    acorn = Fake("acorn", seen=[{"variant": "cle-215+"}])
+    report = runner.verify({**opts, "tests": ["uart"]}, _boards(acorn), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "error" and acorn.checked == []
+
+
+def test_configured_for_a_board_with_no_selectable_tests_test_is_an_error(opts):
+    acorn = Fake("acorn", seen=[{"variant": "cle-215+"}])
+    report = runner.verify({**opts, "board": "acorn", "tests": ["uart"]}, _boards(acorn), usb=[], pci=[])
+    assert report["result"] == "error" and "no selectable tests" in report["boards"][0]["reason"]
+    assert acorn.checked == []
 
 
 def test_configured_for_one_board_the_check_sees_every_test_asked_for(opts):
@@ -356,6 +385,21 @@ def test_the_start_is_published_before_the_result(opts, tmp_path, monkeypatch):
     sent.clear()
     runner.run({**opts, "board": "arty", "report": str(out), "no_publish": True})
     assert sent == []
+
+
+def test_a_test_run_is_never_published_nor_written_over_the_boot_report(opts, monkeypatch, capsys):
+    arty = WithTests("arty", ["uart"], seen=[{"variant": "a7-35"}])
+    monkeypatch.setattr(runner, "installed", lambda: _boards(arty))
+    monkeypatch.setattr(runner, "usb_devices", lambda: [])
+    monkeypatch.setattr(runner, "pci_devices", lambda: [])
+    sent, written = [], []
+    monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append(stage))
+    monkeypatch.setattr(runner, "write", lambda report, where: written.append(where) or where)
+    assert runner.run({**opts, "board": "arty", "tests": ["uart"], "no_publish": False}) == 0
+    assert sent == [] and written == ["-"]
+    written.clear()
+    runner.run({**opts, "board": "arty", "tests": ["uart"], "report": "elsewhere.json"})
+    assert written == ["elsewhere.json"]  # --report still says where
 
 
 def test_a_publish_that_times_out_is_said_and_changes_nothing(monkeypatch, capsys):

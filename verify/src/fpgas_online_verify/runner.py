@@ -99,15 +99,22 @@ def compare_state(report, targets, reports, update, path):
 
 
 def _for_board(board, options, mode):
-    """The options for one board's check, and the --test names skipped for it.
+    """The options for one board's check, and the --test names skipped for it; None for the options when the
+    board has none of the named tests (with `auto`), so it is not checked at all.
 
     With `auto`, --test names the tests of whichever boards are found: a board runs those it has and skips the
-    rest. Configured for one board, a name it does not have is the check's error (testbench.py)."""
+    rest. Configured for one board, a name it does not have is the check's error (testbench.py), and a board
+    whose check has no selectable tests (the Acorn) cannot take --test."""
     wanted = options.get("tests")
-    have = getattr(board, "tests", None)  # None: a board whose check has no selectable tests (the Acorn)
-    if not wanted or have is None or mode != config.AUTO:
+    if not wanted:
         return options, []
-    return {**options, "tests": [t for t in wanted if t in have]}, [t for t in wanted if t not in have]
+    have = getattr(board, "tests", None) or {}  # none: a board whose check has no selectable tests (the Acorn)
+    if mode != config.AUTO:
+        if not have:
+            raise Problem("error", f"{board.title}'s check has no selectable tests: run it without --test")
+        return options, []
+    run = [t for t in wanted if t in have]
+    return ({**options, "tests": run} if run else None), [t for t in wanted if t not in have]
 
 
 def verify(options, boards=None, usb=None, pci=None, mode=None):
@@ -130,18 +137,28 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
         if p.result == "missing":  # say what was recorded, if anything: nothing is recorded now
             report["state"] = compare_state(report, [], [], False, options.get("state", state.STATE))
         return report
-    reports = []
+    reports, not_checked = [], []
     for board, host, found in targets:
-        board_options, skipped = _for_board(board, options, report["mode"])
         try:
+            board_options, skipped = _for_board(board, options, report["mode"])
+            if board_options is None:  # none of the named tests: not checked, and no "pass" for it
+                not_checked.append(board.name)
+                continue
             with hold_lock(board.lock, board.title):
                 reports.append(board.check(host, found, board_options))
         except Problem as p:
             reports.append({"board": board.name, "found": found, "result": p.result, "reason": p.reason})
+            skipped = []
         if skipped:
             reports[-1]["tests_skipped"] = skipped
     report["boards"] = reports
-    report["result"] = worst(r["result"] for r in reports)
+    if not_checked:
+        report["not_checked"] = not_checked
+    if not reports:  # --test named only tests that no board found has
+        report.update(result="error", reason=f"no board found ({', '.join(not_checked)}) has the test "
+                                             f"{', '.join(options['tests'])}")  # fmt: skip
+    else:
+        report["result"] = worst(r["result"] for r in reports)
     if options.get("tests"):
         # Only some tests ran, so some of the state (the flash JEDEC ID) may not have been read: recording it would
         # make the next full run report "changed", and comparing it says nothing about what was not run.
@@ -188,6 +205,8 @@ def summary(report):
     lines.append(f"fpgas-verify: {report['result']} (mode {report.get('mode', '-')}, {report.get('chosen_by', '-')})")
     if "reason" in report:
         lines.append(f"  {report['reason']}")
+    if report.get("not_checked"):
+        lines.append(f"  not checked (none of the tests asked for): {', '.join(report['not_checked'])}")
     for b in report["boards"]:
         lines.append(
             f"  {b['board']} {b.get('variant') or '-'}: {b['result']}" + (f": {b['reason']}" if "reason" in b else "")
@@ -228,6 +247,10 @@ def write(report, where):
 
 
 def run(options, prog="fpgas-verify"):
+    if options.get("tests"):
+        # Part of the check is not the board's verified result: never published (the site would offer a board
+        # on a partial pass), and never written over the boot's report unless --report says where.
+        options = {**options, "no_publish": True, "report": options.get("report") or "-"}
     kept_in = options.get("report") or str(REPORT)
     if not options.get("no_publish"):
         # The site hears the check has started, and says the board is being verified until the result follows.
