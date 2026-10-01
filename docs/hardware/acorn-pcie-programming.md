@@ -109,7 +109,7 @@ GPIO that supports FPGA updates over PCIe.
 ### What This Means
 
 - JTAG can always load a bitstream into SRAM (volatile), but it is lost on power cycle
-- The only way to write to SPI flash (persistent) is via PCIe: `fpgas-acorn-flash` over BAR0 (no kernel module, what the fleet uses), or `litepcie_util` with `litepcie.ko` loaded
+- SPI flash (persistent) can only be written through our running SoC: `fpgas-acorn-flash` over PCIe (no kernel module; what the fleet uses) or over the P2 UART bridge (`--uart`, slow), or `litepcie_util` with `litepcie.ko` loaded
 - PCIe→Flash requires our LiteX bitstream running (not the factory Sqrl firmware)
 - The golden bitstream at flash address 0x0 is **irreplaceable without PCIe** — if it is corrupted, recovery requires the SRAM bootstrap procedure (see below)
 
@@ -276,109 +276,174 @@ If the golden bitstream at address 0x0 is corrupted, PCIe will not come up on bo
 | Bad golden | No | — | SRAM bootstrap: JTAG→SRAM, then PCIe→Flash | No (manual) |
 | Bad golden + no JTAG wiring | No | — | **Bricked** — requires physical JTAG reconnection | No |
 
-## Converting a factory board on the fleet
+## Converting a factory board on a Pi 5 with the Waveshare HAT
 
-This is how pi-sw2-p47 was moved from Sqrl's factory firmware to the release
-`vivado-bitstreams-acorn-pcie-20260923-ge48a750c8303` on 2026-09-29, after which
-`fpgas-verify` passed at boot. Everything runs on the Acorn's own Pi, from the
-installed packages: the images and `manifest.json` come from
-`fpgas-online-acorn-bitstreams` (`/usr/share/fpgas-online/acorn-pcie/images/`),
-the flash tool is `fpgas-acorn-flash`, and nothing needs `litepcie.ko`. Writing
-flash, the golden slot especially, needs the owner's explicit go-ahead for that
-board.
+These steps replace Sqrl's factory firmware (or an older release of ours) with
+the images of the release pinned in
+[`packaging/acorn-pcie/release.toml`](../../packaging/acorn-pcie/release.toml).
+Everything runs on the Acorn's own Pi, using what the fleet installs: the
+images and `manifest.json` from `fpgas-online-acorn-bitstreams` in
+`/usr/share/fpgas-online/acorn-pcie/images/`, and `fpgas-acorn-flash`. Nothing
+needs `litepcie.ko`. Writing the flash, the fallback slot at `0x0` especially,
+needs the owner's go-ahead for that board.
 
-Run each step as root (`sudo bash -s` with the script on stdin). Do not write
-files under `/tmp`.
+Each step is one block. Paste it into a root shell on the Pi (`sudo -i`), or
+feed it to `sudo bash -s` over ssh. Every block sets the variables it uses.
+The JTAG steps (1 and 4) hold `/run/lock/fpgas-acorn.lock`, the lock
+`fpgas-verify` and `fpgas-acorn-flash` use, for their whole block. Steps 2
+and 3 must not: `fpgas-acorn-flash` takes that lock itself for each command,
+and waits for it, so wrapping it in the same lock would hang.
 
-**0. Identify the board.** `lspci -nn -d 1e24:` gives `1e24:021f` for a
-CLE-215+ and `1e24:0101` for a CLE-101. The manifest's `flash_layout` names the
-two images for that variant: CLE-215+ uses `acorn-cle-215p-golden-sqrl_acorn_fallback.bin`
-at `0x000000` and `acorn-cle-215p-sqrl_acorn_operational.bin` at `0x400000`.
-`--idcode` below is `0x03636093` for the 200T boards and `0x03631093` for
-the CLE-101. Check each file's `sha256sum` against its `manifest.json` entry
-first.
+**0. Pick the images.** The board's PCIe ID, before conversion, gives the
+variant:
 
-**1. SRAM-load our SoC over JTAG.** Hold the Acorn lock that `fpgas-acorn-flash`
-and `fpgas-verify` take (`/run/lock/fpgas-acorn.lock`; root-only), and detach
-the factory endpoint first:
+| Variant | Factory `lspci -nn` ID | `--idcode` | File for `0x000000` (fallback slot) | File for `0x400000` (operational slot) |
+|---|---|---|---|---|
+| CLE-215+ | `1e24:021f` | `0x03636093` | `acorn-cle-215p-golden-sqrl_acorn_fallback.bin` | `acorn-cle-215p-sqrl_acorn_operational.bin` |
+| CLE-101 | `1e24:0101` | `0x03631093` | `acorn-cle-101-golden-sqrl_acorn_fallback.bin` | `acorn-cle-101-sqrl_acorn_operational.bin` |
+
+The same names are in `manifest.json` under `flash_layout`. The blocks below
+use the CLE-215+ names. Check that the installed files are the ones the
+manifest describes; every line must say `ok`:
 
 ```bash
-flock -n /run/lock/fpgas-acorn.lock bash -s <<'EOF'
-I=/usr/share/fpgas-online/acorn-pcie/images
-echo 1 > /sys/bus/pci/devices/0001:01:00.0/remove
-openFPGALoader --cable libgpiod --pins 10:9:11:8 $I/acorn-cle-215p-sqrl_acorn.bit
-for p in 8 9 10 11; do pinctrl set $p ip pd; done   # openFPGALoader leaves them driven
-echo 1 > /sys/bus/pci/rescan
-lspci -nn -s 0001:01:00.0      # now 10ee:7021, subsystem 1e24:021f
-EOF
+cd /usr/share/fpgas-online/acorn-pcie/images
+python3 -c '
+import hashlib, json, os
+for f in json.load(open("manifest.json"))["files"]:
+    if os.path.exists(f["asset"]):
+        ok = hashlib.sha256(open(f["asset"], "rb").read()).hexdigest() == f["sha256"]
+        print("ok " if ok else "BAD", f["asset"])
+'
 ```
 
-openFPGALoader's `libgpiod` cable opens `/dev/gpiochip0`. On a Pi 5 the header
-is the chip labelled `pinctrl-rp1` (`gpiodetect`), which kernel 6.12 numbers
-`gpiochip15`. Where `/dev/gpiochip0` is not that chip, symlink it first. The
-operational `.bit` is the SoC to load. BAR0-only work needs no
-`pcie_match_mps.py`; DMA would. **From here until step 4 the board must not
-lose power**: the SoC is only in SRAM.
-
-**2. Back up the whole flash, off the Pi.** `fpgas-acorn-flash` does not switch
-on the endpoint's memory decoding. Without it every read is `0xff` (RDID
-`ffffffffffff`):
+**1. Load our SoC into the FPGA's SRAM over JTAG.** The factory design can't
+write its own flash, so first load ours into the FPGA's configuration memory.
+This is temporary: it lasts until the FPGA is reset or loses power, and it
+touches nothing in flash. The file is the operational design as a plain
+`.bit` (`acorn-cle-215p-sqrl_acorn.bit`), not one of the `.bin` slot images.
+PCIe is detached first, because reconfiguring an enumerated endpoint crashes
+a Pi 5 (see [above](#detach-the-pcie-endpoint-before-any-jtag-reconfiguration)).
 
 ```bash
+flock -n /run/lock/fpgas-acorn.lock bash -s <<'JTAG' || echo "Acorn busy, or a step failed"
+set -u
 D=0001:01:00.0
-orig=$(setpci -s $D COMMAND); setpci -s $D COMMAND=0002:0002
-fpgas-acorn-flash id                                    # part, size, unique_id
-fpgas-acorn-flash dump /home/pi/factory.bin             # 32 MiB, ~53 s
+I=/usr/share/fpgas-online/acorn-pcie/images
+ls -l /dev/gpiochip0      # must point at the RP1's chip (see below)
+echo 1 > /sys/bus/pci/devices/$D/remove
+openFPGALoader --cable libgpiod --pins 10:9:11:8 $I/acorn-cle-215p-sqrl_acorn.bit
+for p in 8 9 10 11; do pinctrl set $p ip pd; done   # openFPGALoader leaves the JTAG pins driven
+echo 1 > /sys/bus/pci/rescan
+lspci -nn -s $D           # expect 10ee:7021, subsystem 1e24:021f
+JTAG
+```
+
+openFPGALoader's `libgpiod` cable opens `/dev/gpiochip0`, which must be the
+40-pin header's chip. On a Pi 5 that is the RP1's GPIO chip, whose number
+varies (11 to 15). The boot check makes `/dev/gpiochip0` a symlink to it
+(`verify/src/fpgas_online_verify/boards/acorn/links.py` finds it by its
+`raspberrypi,rp1-gpio` compatible). If `ls -l /dev/gpiochip0` shows nothing,
+or another chip, run `fpgas-acorn-verify` once, or link it by hand to the
+chip `gpiodetect` lists as `pinctrl-rp1`.
+
+From here until step 4, **the board must not lose power**. The SoC is only in
+SRAM, and step 3 changes the flash.
+
+**2. Back up the whole flash, and copy it off the Pi.**
+
+```bash
+set -u
+D=0001:01:00.0
+# Our SoC must be the one answering, or the tool would poke the factory design's registers.
+[ "$(cat /sys/bus/pci/devices/$D/vendor):$(cat /sys/bus/pci/devices/$D/device)" = "0x10ee:0x7021" ] || { echo "our SoC is not running: redo step 1"; exit 1; }
+orig=$(setpci -s $D COMMAND)
+setpci -s $D COMMAND=0002:0002     # memory decode on: fpgas-acorn-flash doesn't do this, and reads all 0xff without it
+fpgas-acorn-flash id               # part, size, unique_id, quad_enabled
+fpgas-acorn-flash dump /home/pi/factory.bin
 sha256sum /home/pi/factory.bin
 setpci -s $D COMMAND=$orig
 ```
 
-`/home/pi` is on the RAM overlay, so the dump never touches the shared NFS
-root, and it disappears at reboot. Copy it off the Pi (`ssh pi@<host> cat
-/home/pi/factory.bin > <file>`), compare the sha256 at both ends, and only
-then go on. Keep the copy named by board identity:
-`acorn-<variant>_dna-<DNA>_flashuid-<unique_id>_<host>_factory_<date>.bin`.
-
-**3. Write and verify both slots, operational first:**
+`/home/pi` lives in the Pi's RAM: the fleet's root filesystem is a RAM
+overlay on top of the shared network root. So the 32 MiB dump never reaches
+the network root, and it is gone at reboot. (`/tmp` is on the same overlay;
+`/home/pi` just keeps the copy easy to find.) From another machine, copy it
+off and check its sha256 matches the one printed above:
 
 ```bash
+ssh pi@<host> cat /home/pi/factory.bin > <backup file>
+sha256sum <backup file>
+```
+
+Name the backup by board identity:
+`acorn-<variant>_dna-<DNA>_flashuid-<unique_id>_<host>_factory_<YYYY-MM-DD>.bin`.
+
+**3. Write and check both slots, operational first.** Put the off-Pi copy's
+sha256 in the first command, so the block stops unless the dump on the Pi is
+the one you saved:
+
+```bash
+set -u
+D=0001:01:00.0
 I=/usr/share/fpgas-online/acorn-pcie/images
-orig=$(setpci -s $D COMMAND); setpci -s $D COMMAND=0002:0002
-fpgas-acorn-flash write --idcode 0x03636093 $I/acorn-cle-215p-sqrl_acorn_operational.bin 0x400000
-fpgas-acorn-flash write --idcode 0x03636093 --i-know-this-writes-golden \
-    $I/acorn-cle-215p-golden-sqrl_acorn_fallback.bin 0x0
-fpgas-acorn-flash verify --idcode 0x03636093 $I/acorn-cle-215p-sqrl_acorn_operational.bin 0x400000
-fpgas-acorn-flash verify --idcode 0x03636093 $I/acorn-cle-215p-golden-sqrl_acorn_fallback.bin 0x0
+echo "<sha256 of the off-Pi copy>  /home/pi/factory.bin" | sha256sum -c || exit 1
+[ "$(cat /sys/bus/pci/devices/$D/vendor):$(cat /sys/bus/pci/devices/$D/device)" = "0x10ee:0x7021" ] || exit 1
+orig=$(setpci -s $D COMMAND)
+setpci -s $D COMMAND=0002:0002
+fpgas-acorn-flash write --idcode 0x03636093 $I/acorn-cle-215p-sqrl_acorn_operational.bin 0x400000 &&
+fpgas-acorn-flash write --idcode 0x03636093 --i-know-this-writes-golden $I/acorn-cle-215p-golden-sqrl_acorn_fallback.bin 0x0 &&
+fpgas-acorn-flash verify $I/acorn-cle-215p-sqrl_acorn_operational.bin 0x400000 &&
+fpgas-acorn-flash verify $I/acorn-cle-215p-golden-sqrl_acorn_fallback.bin 0x0
 setpci -s $D COMMAND=$orig
 ```
 
-Each `write` reads back what it wrote (`wrote and verified … RESULT: PASS`);
-the separate `verify` calls confirm both slots afterwards.
+Each `write` reads back what it wrote (`wrote and verified … RESULT: PASS`),
+and the two `verify` commands check both slots again at the end.
 
-**4. Make the FPGA boot from flash, then reboot the Pi.** A Pi reboot alone is
-not enough, because the FPGA keeps the SRAM-loaded SoC. Use a JTAG reset (the
-FPGA reconfigures from flash; no PoE cycle needed), or a PoE cycle of the port:
+If `write` refuses with "the flash's QUAD bit is clear", stop and ask. The
+images load from flash in x4 mode, and this tool cannot set that bit. Nothing
+has been written, and the board keeps the SRAM-loaded SoC until it loses power.
+
+**4. Make the FPGA load from flash, then reboot the Pi.** Rebooting the Pi
+alone is not enough, because the FPGA keeps running the SRAM-loaded SoC. A
+JTAG reset makes it reload from flash (a PoE cycle of the port does the same):
 
 ```bash
-flock -n /run/lock/fpgas-acorn.lock bash -s <<'EOF'
-echo 1 > /sys/bus/pci/devices/0001:01:00.0/remove
+flock -n /run/lock/fpgas-acorn.lock bash -s <<'JTAG' || echo "Acorn busy, or a step failed"
+D=0001:01:00.0
+echo 1 > /sys/bus/pci/devices/$D/remove
 openFPGALoader --cable libgpiod --pins 10:9:11:8 --reset
 for p in 8 9 10 11; do pinctrl set $p ip pd; done
-EOF
+JTAG
 systemctl reboot
 ```
 
-**5. Check.** After the boot, `fpgas-verify` has already run
-(`journalctl -b -u fpgas-verify`), and `fpgas-acorn-verify` re-runs the board.
-A converted board enumerates as `10ee:7021`, subsystem `1e24:021f`, and passes
-with `flash 0x000000 match` and `flash 0x400000 match`. Its identifier names
-the release's operational build. If verify reports the board as `changed`
-against a state it recorded before the conversion, record the new one with
-`sudo fpgas-verify --update`. The fleet's RAM root starts every boot with no
-state (`recorded (first run)`).
+**5. Check.** `fpgas-verify` runs at boot (`journalctl -b -u fpgas-verify`),
+and `fpgas-acorn-verify` runs the same checks on demand. A converted board
+enumerates as `10ee:7021`, subsystem `1e24:021f`, and passes with
+`flash 0x000000 match` and `flash 0x400000 match`; its identifier is the
+release's operational build. On the fleet there is nothing to record: the root
+keeps no verify state across the reboot. On a host with a persistent
+`/var/lib`, run `sudo fpgas-verify --update` to accept a change made on
+purpose.
 
-A board already running our SoC (an older release) skips step 1, and starts at
-step 2.
+A board already running one of our releases skips step 1.
+
+### On a Compute Blade
+
+The steps are the same, with these differences (pins from
+[`docs/wiring/acorn/wiring.toml`](../wiring/acorn/wiring.toml), `[carriers.blade]`):
+
+| | Pi 5 + Waveshare HAT | Compute Blade |
+|---|---|---|
+| JTAG `--pins` | `10:9:11:8` | `2:3:4:14` |
+| `/dev/gpiochip0` | a symlink to the RP1 chip | CM4: already the header chip. CM5: the RP1 chip, as on a Pi 5 |
+| PCIe address (`D=`, and `--bdf` for `fpgas-acorn-flash`) | `0001:01:00.0` | the one `lspci -D` shows (`0000:01:00.0` on a CM4) |
+| Pins after openFPGALoader | `8 9 10 11` to `ip pd` | `2 3 4` to `ip pd`. `14` is shared with the P2 UART (J2, through 470 Ω), so put it back to its UART function: `pinctrl set 14 a0` on a CM4, `a4` on a CM5 |
+
+`fpgas-acorn-flash --uart PORT` reaches the flash over the P2 UART bridge
+instead of PCIe. It works, but slowly.
 
 ## Initial Setup (New Board), with `litepcie_util`
 
