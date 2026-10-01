@@ -74,6 +74,9 @@ enabled || fail "not enabled by fpgas-online-acorn"
 set +e; fpgas-verify --no-publish --report /tmp/r.json; rc=$?; set -e
 [ $rc -ne 0 ] && python3 -c 'import json; assert json.load(open("/tmp/r.json"))["result"] == "missing"' || fail "Acorn not missing"
 fpgas-acorn-flash --help >/dev/null
+# the setups' wiring and figures are installed with the module, where it reads them
+python3 -c 'from fpgas_online_verify.boards.acorn import setup; s = setup.detect("Raspberry Pi 5 Model B Rev 1.1"); assert s.jtag_pins == "10:9:11:8" and s.expected["pcie"]["width"] == 1' \
+  || fail "the Acorn's wiring.toml / expected.toml are not installed"
 apt-get purge -qq 'fpgas-online-*' >/dev/null
 apt-get autoremove -qq --purge >/dev/null
 

@@ -40,11 +40,23 @@ VCC = { label = "VCC", what = "3.3 V from the Acorn" }
 #   tag: the host's name for the pin as the sheet prints it beside the wire; rpi: the same pin on a
 #   Raspberry Pi 40-pin header, where the numbers differ.
 # wires maps each connected signal to [header, pin]. Signals not listed are cut back: VCC always.
+#
+# What fpgas-verify reads to check a host of this carrier (verify/.../boards/acorn/setup.py):
+#   jtag_cable: openFPGALoader's --cable for the P1 JTAG pins.
+#   uart: the host's serial port on the K2/J2 wires.
+#   hosts: which hosts are this carrier, by the start of their device-tree model
+#     (/proc/device-tree/model); gpiochip is the device-tree compatible of the GPIO chip that carries
+#     the pins above on that host.
 # ---------------------------------------------------------------------------------------------------
 [carriers.pi5]
 name = "Raspberry Pi 5"
 jtag_pins = "10:9:11:8"
+jtag_cable = "libgpiod"
+uart = "/dev/ttyAMA0"
 resistors = []
+
+[carriers.pi5.hosts]
+"Raspberry Pi 5 Model B" = { gpiochip = "raspberrypi,rp1-gpio" }
 
 [carriers.pi5.headers.gpio]
 name = "40-pin header"
@@ -89,10 +101,17 @@ GND1 = ["gpio", 25]
 [carriers.blade]
 name = "Compute Blade"
 jtag_pins = "2:3:4:14"
+# A CM4 has no RP1, so no rp1pio cable: libgpiod drives the BCM2711's own GPIO chip there.
+jtag_cable = "libgpiod"
+uart = "/dev/ttyAMA0"
 # J2 reaches GPIO14 through the UART header while TMS reaches it through the Extension Port: the
 # resistor lets JTAG win if a design drives J2.
 resistors = ["J2"]
 resistor_value = "470 Ω"
+
+[carriers.blade.hosts]
+"Raspberry Pi Compute Module 4" = { gpiochip = "brcm,bcm2711-gpio" }
+"Raspberry Pi Compute Module 5" = { gpiochip = "raspberrypi,rp1-gpio" }
 
 # Printed numbers: 1 to 5 down the left column, 6 to 10 down the right. Electrically RPi header
 # pins 1 to 10 in the same arrangement. Read off the vendor's board photo.
