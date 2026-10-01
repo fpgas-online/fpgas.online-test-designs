@@ -177,6 +177,45 @@ def test_the_first_run_records_the_state_and_passes(opts):
     assert saved == {"arty": {"serial": "A", "flash": {"sha256": "aaaa"}}}
 
 
+def test_a_test_run_neither_records_nor_compares_the_state(opts):
+    arty = Fake("arty", seen=[{"variant": "a7-35", "serial": "A"}])
+    report = runner.verify({**opts, "board": "arty", "tests": ["uart"]}, _boards(arty), usb=[], pci=[])
+    assert report["state"]["recorded"] is False and not opts["state"].exists()
+    full = runner.verify({**opts, "board": "arty"}, _boards(arty), usb=[], pci=[])
+    assert full["result"] == "pass" and full["state"]["recorded"] == "first run"
+    arty.flash = "bbbb"  # a partial run is no evidence either way
+    assert (
+        runner.verify({**opts, "board": "arty", "tests": ["uart"]}, _boards(arty), usb=[], pci=[])["result"] == "pass"
+    )
+
+
+class WithTests(Fake):
+    """A Fake with selectable tests, which remembers the options its check was given."""
+
+    def __init__(self, name, tests, **kw):
+        super().__init__(name, **kw)
+        self.tests, self.options = {t: {} for t in tests}, None
+
+    def check(self, host, found, options):
+        self.options = options
+        return super().check(host, found, options)
+
+
+def test_with_auto_a_board_skips_the_tests_it_does_not_have(opts):
+    arty = WithTests("arty", ["uart", "ethernet"], seen=[{"variant": "a7-35", "serial": "A"}])
+    tt = WithTests("tt", ["uart", "pin-id"], seen=[{"variant": "tt-fpga", "serial": "T"}])
+    report = runner.verify({**opts, "tests": ["uart", "ethernet"]}, _boards(arty, tt), usb=[], pci=[],
+                           mode=("auto", "test"))  # fmt: skip
+    assert arty.options["tests"] == ["uart", "ethernet"] and tt.options["tests"] == ["uart"]
+    assert [b.get("tests_skipped") for b in report["boards"]] == [None, ["ethernet"]]
+
+
+def test_configured_for_one_board_the_check_sees_every_test_asked_for(opts):
+    arty = WithTests("arty", ["uart"], seen=[{"variant": "a7-35", "serial": "A"}])
+    runner.verify({**opts, "board": "arty", "tests": ["uart", "nope"]}, _boards(arty), usb=[], pci=[])
+    assert arty.options["tests"] == ["uart", "nope"]  # TestBoard.check makes "nope" an error
+
+
 def test_the_same_board_and_flash_again_passes(opts):
     arty = Fake("arty", seen=[{"variant": "a7-35", "serial": "A"}])
     runner.verify({**opts, "board": "arty"}, _boards(arty), usb=[], pci=[])

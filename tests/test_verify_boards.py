@@ -202,6 +202,19 @@ def test_a_failing_test_fails_the_check_and_keeps_its_output(tmp_path):
     assert ddr["output"][-1] == "RESULT: FAIL" and report["tests"][2]["result"] == "pass"
 
 
+def test_only_the_tests_asked_for_run(tmp_path):
+    run = Runner(flash=b"\0" * ARTY.flash_region["a7-35"])
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run, tests=["ddr"])
+    assert [t["test"] for t in report["tests"]] == ["ddr"]
+
+
+def test_a_test_the_board_does_not_have_is_an_error_not_a_crash(tmp_path):
+    run = Runner(flash=b"\0" * ARTY.flash_region["a7-35"])
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run, tests=["uart", "nope"])
+    assert report["result"] == "error" and "has no test nope" in report["reason"]
+    assert run.calls == []  # nothing loaded
+
+
 def test_a_load_that_fails_skips_that_test(tmp_path):
     run = Runner([("uart-test-arty", (1, "JTAG init failed"))], flash=b"\0" * ARTY.flash_region["a7-35"])
     uart = _check(ARTY, tmp_path, ARTY_FOUND, run)["tests"][0]

@@ -98,6 +98,18 @@ def compare_state(report, targets, reports, update, path):
     return info
 
 
+def _for_board(board, options, mode):
+    """The options for one board's check, and the --test names skipped for it.
+
+    With `auto`, --test names the tests of whichever boards are found: a board runs those it has and skips the
+    rest. Configured for one board, a name it does not have is the check's error (testbench.py)."""
+    wanted = options.get("tests")
+    have = getattr(board, "tests", None)  # None: a board whose check has no selectable tests (the Acorn)
+    if not wanted or have is None or mode != config.AUTO:
+        return options, []
+    return {**options, "tests": [t for t in wanted if t in have]}, [t for t in wanted if t not in have]
+
+
 def verify(options, boards=None, usb=None, pci=None, mode=None):
     boards = installed() if boards is None else boards
     report = {"schema_version": SCHEMA_VERSION, "result": "pass", "checked_at": _now(), "boards": []}
@@ -120,13 +132,22 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
         return report
     reports = []
     for board, host, found in targets:
+        board_options, skipped = _for_board(board, options, report["mode"])
         try:
             with hold_lock(board.lock, board.title):
-                reports.append(board.check(host, found, options))
+                reports.append(board.check(host, found, board_options))
         except Problem as p:
             reports.append({"board": board.name, "found": found, "result": p.result, "reason": p.reason})
+        if skipped:
+            reports[-1]["tests_skipped"] = skipped
     report["boards"] = reports
     report["result"] = worst(r["result"] for r in reports)
+    if options.get("tests"):
+        # Only some tests ran, so some of the state (the flash JEDEC ID) may not have been read: recording it would
+        # make the next full run report "changed", and comparing it says nothing about what was not run.
+        report["state"] = {"file": str(options.get("state", state.STATE)), "recorded": False,
+                           "note": "not compared or recorded: --test runs only part of the check"}  # fmt: skip
+        return report
     report["state"] = compare_state(report, targets, reports, options.get("update"), options.get("state", state.STATE))
     if report["state"].get("changes"):
         report["result"] = worst([report["result"], "changed"])

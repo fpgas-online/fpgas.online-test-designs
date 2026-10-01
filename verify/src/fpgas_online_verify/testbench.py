@@ -199,7 +199,13 @@ class TestBoard(Board):
         variant = options.get("variant") or found["variant"]
         report = {"board": self.name, "variant": variant, "found": found, "tests": []}
         images = bitstreams.images_dir(self.slug, options.get("images"))
+        tests = self.verify_tests if options.get("tests") is None else options["tests"]
         try:
+            unknown = [t for t in tests if t not in self.tests]
+            if unknown:
+                raise Problem(
+                    "error", f"{self.title} has no test {', '.join(unknown)} (it has {', '.join(self.tests)})"
+                )
             if variant not in self.variants:
                 raise Problem("error", f"{found} is no {self.title} variant this package has bitstreams for "
                                        f"({', '.join(self.variants)})")  # fmt: skip
@@ -208,7 +214,7 @@ class TestBoard(Board):
             return {**report, "result": p.result, "reason": p.reason}
         report["bitstreams"] = manifest.get("version")
         with self.services_stopped(runner) as held:
-            for test in options.get("tests") or self.verify_tests:
+            for test in tests:
                 report["tests"].append(self.run_test(test, variant, host, images, manifest, runner))
         if held["stopped"]:
             report["services_stopped"] = held["stopped"]
