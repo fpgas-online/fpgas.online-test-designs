@@ -1,4 +1,4 @@
-# Installed by fpgas-online-verify; enabled by the mode package (fpgas-online-<board>, or fpgas-online-multi-board
+# Installed by fpgas-online-verify; turned on by fpgas-online-<board> (or fpgas-online-multi-board
 # and so fpgas-online-all-boards). Runs fpgas-verify once per boot: check the board (or boards) the host is set
 # up for, with the fpgas.online test bitstreams, and compare it with the state recorded last time. The board
 # is left running a test design. It publishes the fleet-event stage `fpga-verifying` as it starts; the result is
