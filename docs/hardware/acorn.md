@@ -203,6 +203,67 @@ Flash a persistent bitstream using OpenOCD or openFPGALoader. The S25FL256S supp
 
 LiteX provides PCIe-based programming via `litepcie_util` when a LiteX bitstream with PCIe support is already loaded. Which Welland boards run the fpgas.online SoC is in the [current verify results](../verify.md#current-results) and [#53](https://github.com/fpgas-online/fpgas.online-test-designs/issues/53).
 
+## Self-test registers
+
+The operational image of the fpgas.online Acorn SoC (`designs/acorn-pcie/`) lets a host check the DRAM and
+every P2 pin with no driver and no BIOS, over PCIe BAR0 or the P2 UARTBone. The golden image has none of
+this. Every CSR module sits at a fixed address (`csr_map` in `acorn_pcie_soc.py`; `tests/test_acorn_pcie_csr_map.py`
+fails if one moves). Each release ships each image's `csr.json` and `csr.csv` beside it, and
+`fpgas-online-acorn-bitstreams` installs them. `designs/acorn-pcie/host/selftest.py` runs all of it from the Pi.
+
+| Module | Base | What it is |
+|---|---|---|
+| `ddrphy` | `0xf0007800` | LiteDRAM's PHY (calibration) |
+| `p2_gpio` | `0xf0008000` | J5 (bit 0) and H5 (bit 1): `oe` +0x0, `in` +0x4, `out` +0x8 |
+| `sdram` | `0xf0008800` | LiteDRAM's controller (DFI) |
+| `dram_generator` | `0xf0009000` | BIST pattern writer |
+| `dram_checker` | `0xf0009800` | BIST pattern checker |
+| `p2_serial` | `0xf000a000` | the J2/K2 serial/GPIO switch |
+
+### DRAM BIST
+
+`dram_generator` and `dram_checker` have the same registers, at the same offsets. The checker adds `errors`.
+
+| Offset | Register | Meaning |
+|---|---|---|
+| +0x00 | `reset` | any write resets the core |
+| +0x04 | `start` | any write starts a pass |
+| +0x08 | `done` | 1 when the pass has finished |
+| +0x0c | `base` | first byte address |
+| +0x10 | `end` | end of the range, used only to wrap random addresses (`end - base` a power of two) |
+| +0x14 | `length` | bytes to write or check |
+| +0x18 | `random` | bit 0: PRBS data (else a counter); bit 1: random addresses |
+| +0x1c | `ticks` | sys clock cycles the pass took |
+| +0x20 | `errors` | checker only: words that did not match |
+
+A pass: write `reset`, `base`, `end`, `length` and `random`, write `start`, wait for `done`, read `ticks`. Run
+the generator, then the checker over the same range with the same `random`. Bandwidth is
+`length / (ticks / sys clock)`; the sys clock is `CONFIG_CLOCK_FREQUENCY` in `csr.json` (100 MHz). `base`,
+`end` and `length` are as wide as a DRAM byte address, so the whole DRAM takes two halves. The check is per
+128-bit word: each word holds one 32-bit pattern value four times.
+
+### P2 serial/GPIO switch
+
+J5 and H5 are always GPIOs (`p2_gpio`). J2 and K2 carry the UARTBone, so to check them in both directions a
+host borrows them with `p2_serial`. Bit 0 is J2, bit 1 is K2.
+
+| Offset | Register | Meaning |
+|---|---|---|
+| +0x00 | `mode` | 0: serial link (reset). 1: GPIOs |
+| +0x04 | `oe` | output enables in GPIO mode; 0 = input |
+| +0x08 | `in` | the two balls as the FPGA sees them, in either mode |
+| +0x0c | `out` | output values in GPIO mode |
+| +0x10 | `timeout` | ms after the last write to `mode` before GPIO mode ends by itself; 0 = never; 5000 at reset |
+
+While `mode` is 1 the UARTBone sees an idle line and is held in reset, as by a break: any half-received
+command is dropped and the baud rate returns to 1200. Switch over BAR0, not over the UARTBone: switching over
+the UARTBone cuts the link that sent the write, until `timeout` brings it back. Before writing `mode` back to
+0, set the Pi's GPIO14 back to its UART function, or the UART sees the level the Pi left on J2. After that,
+reopen the link at 1200 baud (break, probe, raise the rate), as at any other start.
+
+On a Compute Blade, J2 shares GPIO14 with JTAG TMS through a 470 Ω resistor, so do not run JTAG while J2 is a
+GPIO.
+
 ## Host Inventory
 
 ### Welland Site ([site-welland.md](site-welland.md))
