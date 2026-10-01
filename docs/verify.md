@@ -36,11 +36,7 @@ sudo apt update
 ```
 
 This is the setup every fpgas.online apt repository uses
-([convention](https://github.com/mithro/apt-repo-action/blob/main/docs/conventions.md)). If you added the
-repository before 2026-09-24 with `pubkey.gpg` and `https://apt.fpgas.online <suite> main`, that path is a
-frozen snapshot that gets no new packages: remove it with
-`sudo rm /etc/apt/sources.list.d/fpgas-online.list /usr/share/keyrings/fpgas-online.gpg` and run the commands
-above.
+([convention](https://github.com/mithro/apt-repo-action/blob/main/docs/conventions.md)).
 
 For openFPGALoader, add the [fpgas.online-fpga-tools repository](https://github.com/fpgas-online/fpgas.online-fpga-tools#debian-packages-bookworm-trixie-sid-arm64-armhf)
 **before** installing. Without it apt installs Debian's `openfpgaloader`, which is enough for the Arty and
@@ -371,8 +367,8 @@ It checks the jump host first and exits 2 if that cannot be reached. It exits 1 
 Pi answered but could not be read (a refused key, a timeout, a broken report), or if an address given with
 `--host` did not answer; otherwise 0.
 
-Every Pi boots the same root, so they all have one host key. That key survives root rebuilds: infra
-`7d0a7000` keeps the root's `/etc/ssh/ssh_host_*` out of the image rsync. The collector checks it under the
+Every Pi boots the same root, so they all have one host key. That key survives root rebuilds: infra keeps
+the root's `/etc/ssh/ssh_host_*` out of the image rsync. The collector checks it under the
 alias `fpgas-netboot-pi` in its own known-hosts file, `~/.config/fpgas-online/netboot_known_hosts`
 (`--known-hosts`, `FPGAS_NETBOOT_KNOWN_HOSTS`), learning it on first use (`StrictHostKeyChecking=accept-new`,
 `CheckHostIP=no`, unhashed, no agent forwarding). After a deliberate rekey of the netboot root, forget the
@@ -383,7 +379,7 @@ The site's `/fleet/` page shows the same overall result per Pi, but not the test
 
 ### Current results
 
-Collected 2026-10-01T01:51:27Z by `scripts/collect_verify_status.py`, after the Welland deploy of `0.0.post673`.
+Collected 2026-10-01T01:51:27Z by `scripts/collect_verify_status.py`, from the Welland Pis running `0.0.post673`.
 Rerun it to refresh this section.
 
 | Board | Pis | Result | Tests (passed / run) |
@@ -424,30 +420,27 @@ Rerun it to refresh this section.
 
 No Pi answered on 63 ports: sw1 p1-9,p11,p13,p15,p19-37,p39-40; sw2 p1-8,p11,p13-14,p16-17,p25-29,p31-32,p34,p38-46.
 
-What the failures are, as far as known on 2026-10-01. The Pis run `0.0.post673`, which predates
-[#57](https://github.com/fpgas-online/fpgas.online-test-designs/pull/57): its fixes are merged on `main` but not yet deployed, so the DDR failures below remain until
-the next deploy brings a later bitstreams package.
+What the failures are:
 
-* **NeTV2 `ddr`** (all five): read leveling failed on every lane, so the memtest reads nothing back right (on
+* **NeTV2 `ddr`** (all five): read leveling fails on every lane, so the memtest reads nothing back right (on
   pi-sw1-p10: 256/256 bus errors, every word a data error). Cause: nextpnr-xilinx does not know `SSTL15_R`,
-  the NeTV2's DDR3 I/O standard, so the DQ pins were built with no input buffer
-  ([#50](https://github.com/fpgas-online/fpgas.online-test-designs/issues/50)). **Fixed in [#57](https://github.com/fpgas-online/fpgas.online-test-designs/pull/57), not yet deployed**:
-  `fix_openxc7_reduced_drive_iostandards` builds them as `SSTL15`, and a FASM step sets the bank VREF and the
-  reduced drive. `uart` and `spiflash` pass.
-* **Arty `ddr`** (all four): DRAM calibration is never reported. Cause: the openXC7 builds missed 100 MHz
-  timing (the deployed DDR build reached 70 MHz) and were shipped anyway ([#50](https://github.com/fpgas-online/fpgas.online-test-designs/issues/50)). **Fixed in [#57](https://github.com/fpgas-online/fpgas.online-test-designs/pull/57), not yet deployed**:
-  the Arty DDR design runs at 75 MHz under openXC7, and its build now fails if it misses timing.
-* **Arty `uart`** (all four): the design prints nothing and the test times out. Cause: a confirmed nextpnr
-  timing failure (82.8 MHz achieved against 100 MHz). **Not fixed yet**: the fix in progress makes CI fail on
-  missed timing and runs the Arty UART design at 75 MHz.
+  the NeTV2's DDR3 I/O standard, so the DQ pins are built with no input buffer. The fix is in main's
+  bitstreams (`fix_openxc7_reduced_drive_iostandards` builds them as `SSTL15`, and a FASM step sets the bank
+  VREF and the reduced drive); the devices run `0.0.post673`. `uart` and `spiflash` pass.
+* **Arty `ddr`** (all four): DRAM calibration is never reported. Cause: the `0.0.post673` DDR build misses
+  100 MHz timing (it reaches 70 MHz). Main's bitstreams run the Arty DDR design at 75 MHz under openXC7, and its
+  build fails if it misses timing; the devices run `0.0.post673`.
+* **Arty `uart`** (all four): the design prints nothing and the test times out. Cause: the build misses
+  timing (82.8 MHz achieved against 100 MHz). Tracked by
+  [#64](https://github.com/fpgas-online/fpgas.online-test-designs/pull/64), which fails CI on missed timing
+  and runs the Arty UART design at 75 MHz.
 * **Arty and TT `pin-id`**: the Pmod HAT cabling differs from the expected maps
   ([#58](https://github.com/fpgas-online/fpgas.online-test-designs/issues/58)), pending recabling.
 * **Arty `ethernet` on pi-sw2-p10**: no ARP reply through the USB adapter.
 * **TT `spiflash`** (all three): the JEDEC ID reads `0x000000`
   ([#52](https://github.com/fpgas-online/fpgas.online-test-designs/issues/52)).
 * **pi-sw1-p38 and pi-sw2-p37**: Pi 5s with a Xilinx PCIe design that is not an fpgas.online Acorn image.
-* **pi-sw1-p17**: only its OpenVizsla is on USB; its Fomu does not enumerate, so `missing`. No Fomu check has
-  run on hardware yet.
+* **pi-sw1-p17**: only its OpenVizsla is on USB; its Fomu does not enumerate, so `missing`.
 * **pi-sw2-p18 … p24**: Orange Pi PCs on the same root with no FPGA: `missing` is expected. pi-sw2-p30, their
   FEL host, is not on the fpgas root and is not read.
-* Nothing answered on pi-sw2-p34, the fourth TT FPGA board.
+* Nothing answers on pi-sw2-p34, the fourth TT FPGA board.
