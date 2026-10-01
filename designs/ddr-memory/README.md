@@ -10,7 +10,7 @@ verifying memory integrity and bandwidth.
 |--------|-------|------|------|
 | `gateware/ddr_soc_arty.py` | Digilent Arty A7 | XC7A35T | MT41K128M16 |
 | `gateware/ddr_soc_netv2.py` | Kosagi NeTV2 | XC7A35T / XC7A100T | MT41K256M16 |
-| `gateware/ddr_soc_acorn.py` | SQRL Acorn (CLE-215+/215/101) | XC7A200T / XC7A100T | MT41K512M16 |
+| `gateware/ddr_soc_acorn.py` | SQRL Acorn (CLE-215+/215/101) | XC7A200T / XC7A100T | MT41K512M16 (CLE-215+/215), MT41K256M16 (CLE-101) |
 
 Boards without DDR3 (Fomu, TT FPGA) are not supported by this design.
 

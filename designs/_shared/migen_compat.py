@@ -18,14 +18,20 @@ import sys
 
 if sys.version_info >= (3, 11):
     import dis
+    import functools
     import inspect
 
     # ---- patched helpers ------------------------------------------------
 
+    @functools.cache
+    def _instructions(code):
+        # Disassembled once per code object: every Signal() calls the tracer, and a large
+        # __init__ (S7PCIEPHY's, say) creates hundreds of them.
+        return list(dis.get_instructions(code))
+
     def _patched_get_var_name(frame):
         """Walk bytecode instructions to find the STORE target after a CALL."""
-        code = frame.f_code
-        instructions = list(dis.get_instructions(code))
+        instructions = _instructions(frame.f_code)
 
         # Find instruction at (or near) frame.f_lasti
         call_idx = None

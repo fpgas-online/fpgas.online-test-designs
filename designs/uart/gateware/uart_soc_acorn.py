@@ -27,6 +27,7 @@ from litex_boards.platforms import sqrl_acorn
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+from designs._shared.acorn_p2 import fleet_platform
 from designs._shared.build_helpers import build_soc, default_soc_kwargs
 from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name, require_timing
 from designs._shared.yosys_workarounds import patch_yosys_template
@@ -62,7 +63,7 @@ class _CRG(LiteXModule):
 
 class BaseSoC(SoCCore):
     def __init__(self, variant="cle-215+", toolchain="openxc7", sys_clk_freq=100e6, **kwargs):
-        platform = sqrl_acorn.Platform(variant=variant, toolchain=toolchain)
+        platform = fleet_platform(variant, toolchain)
 
         # Fix dashed device name for openXC7 compatibility.
         if toolchain == "openxc7":
