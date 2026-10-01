@@ -19,12 +19,12 @@ Internet ─── eth-uplink ──│  Debian 13 (trixie)                │
         ┌──────────────┬──────────────┼──────────────┬──────────────┐
         │              │              │              │              │
   ┌─────┴─────┐  ┌─────┴─────┐  ┌─────┴─────┐  ┌─────┴─────┐  ┌─────┴─────┐
-  │ RPi 4/3B+ │  │ RPi 3B+   │  │ RPi 5     │  │ RPi 4/3B+ │  │ RPi 4     │
+  │ RPi 4     │  │ RPi 3B+   │  │ RPi 5     │  │ RPi 4/3B+ │  │ RPi 4     │
   │ +Arty A7  │  │ +NeTV2    │  │ +M.2 HAT  │  │ +TT ASIC  │  │ +TT FPGA  │
   │ +PMOD HAT │  │ (GPIO     │  │ +Acorn    │  │ demo board│  │ Demo Board│
   │ +USB Eth  │  │  JTAG)    │  │  CLE-215+ │  │ +PMOD HAT │  │ +PMOD HAT │
   └───────────┘  └───────────┘  └───────────┘  └───────────┘  └───────────┘
-   (sw2 ×4)       (sw1 ×5)      (sw2 ×6)       (sw2 p3–p8)     (sw2 p33–36)
+   (sw2 ×4)       (sw1 ×5)      (sw2 ×7)       (sw2 p3–p8)     (sw2 p33–36)
                                             + Fomu EVT on sw1 p17
 ```
 
@@ -43,11 +43,11 @@ Switch `s`, port `p` → VLAN `2000 + 100·s + p`, IPv4 `10.21.s.p`, IPv6
 `2404:e80:a137:210s::p`, hostname `pi-sw<s>-p<p>`. Gateway 10.21.0.1. Moving a
 Pi to another port renames and re-addresses it.
 On the S3300, Tim's rule is **port N carries Tiny Tapeout N** (ports 1–10), the
-TT FPGA emulation boards sit on 33–36, and the Acorn Pi 5s on 29 and 43–48.
+TT FPGA emulation boards sit on 33–36, and the Acorn Pi 5s on 29, 37 and 43–48.
 
 Source: `ansible/inventory/host_vars/fpgas.online.yml` in fpgas.online-infra
-(the `switches:` block and the `tt_boards` catalogue), the switches' LLDP
-tables, and live probes of every host below on 2026-09-03.
+(the `switches:` block and the `tt_boards` catalogue) and the switches' LLDP
+tables.
 
 ## Gateway: tweed.welland.mithis.com
 
@@ -61,7 +61,7 @@ tables, and live probes of every host below on 2026-09-03.
 | eth-local  | 10.21.0.1/16 trunk to the switches (per-port VLAN sub-interfaces)                    |
 | Domain     | fpgas.welland.mithis.com                                                             |
 | PCI        | 2× Intel 82574L GbE, Tundra PCI bridge, Matrox G200eW                                |
-| NFS roots  | `/srv/nfs/rpi/bookworm/{boot,root}` (armhf + arm64 kernels, `overlayroot=tmpfs`); apt packages `fpgas-online-tt` 0.0.post52, `fpgas-online-tt-demos` 0.0.post21, `fpgas-online-cam` 0.0.post43, `openfpgaloader` 0.10.0 |
+| NFS roots  | `/srv/nfs/rpi/bookworm/{boot,root}` (armhf + arm64 kernels, `overlayroot=tmpfs`); apt packages `fpgas-online-tt` 0.0.post52, `fpgas-online-tt-demos` 0.0.post21, `fpgas-online-cam` 0.0.post43 |
 | SSH access | operators: `ssh tim@10.21.0.1` / `ssh carl@…` over WireGuard (infra `operators` role, passwordless sudo). Automation from ten64: `ssh -i ~/.ssh/fpgas.online-ansible -o IdentitiesOnly=yes -o IdentityAgent=none ansible@10.99.21.2`. Jump only: `pi@tweed.welland.mithis.com` (below) |
 
 Tweed does **not** host any FPGA boards directly. It serves as the network gateway and PXE boot server for the RPi fleet. The RPis are on the `eth-local` (10.21.0.0/16) network.
@@ -88,34 +88,15 @@ so an IPv6 client may hang; over WireGuard the `10.21.0.1` A record works.
 
 ## FPGA Board Inventory
 
-The **Acorn**, **Tiny Tapeout ASIC** and **Tiny Tapeout FPGA** sections are
-from live probes on 2026-09-03. The infrastructure host, Arty A7, NeTV2 and
-Fomu sections are from a 2026-03-17 survey and name the Pis by flat `piNN` /
-`10.21.0.1NN` names, which the VLAN-per-port scheme does not use
-(`verify_hardware.py`'s `HOSTS` uses them too:
-[#17](https://github.com/fpgas-online/fpgas.online-test-designs/issues/17)).
-Where those boards are on the switches is in the
-[current verify results](../verify.md#current-results): NeTV2 on pi-sw1-p10,
-p12, p14, p16 and p18 (the first four have the MACs of pi10, pi12, pi14 and
-pi16 below), the Fomu on pi-sw1-p17, the Artys on pi-sw2-p9, p10, p12 and p15.
+What each board runs and whether it passes its boot check is in the
+[current verify results](../verify.md#current-results) (and, for the Acorns,
+[#53](https://github.com/fpgas-online/fpgas.online-test-designs/issues/53)).
+The tables here hold what is recorded nowhere else: the Pis' MACs and revision
+codes, and the FPGAs' serials and DNAs.
 
-### Infrastructure Host
+### Arty A7-35T Boards (on RPi 4 hosts with PMOD HATs, sw2 p9, p10, p12, p15)
 
-| Host | Switch Port | IP          | RPi MAC           | RPi Model   | Role                                         |
-| ---- | ----------- | ----------- | ----------------- | ----------- | -------------------------------------------- |
-| pi1  | port 1      | 10.21.0.101 | b8:27:eb:ec:c2:c9 | RPi 3B+ 1GB | Always-on NFS maintenance system (RW access) |
-
-### Arty A7-35T Boards (×5, on RPi 4/3B+ hosts with PMOD HATs)
-
-| Host | Switch Port | IP          | RPi MAC           | RPi Model   | Arty Serial         | Arty DNA           | USB Ethernet                     | Serial Devices   |
-| ---- | ----------- | ----------- | ----------------- | ----------- | ------------------- | ------------------ | -------------------------------- | ---------------- |
-| [pi7](https://welland.fpgas.online/fpgas/pi7.html)   | port 7      | 10.21.0.107 | e4:5f:01:96:f8:a5 | RPi 4 2GB   | 210319B301DE        | 0x00628502251ea85c | ASIX AX88179 (f8:e4:3b:0f:c1:e6) | ttyUSB0, ttyUSB1 |
-| pi9  | port 9      | 10.21.0.109 | b8:27:eb:86:39:63 | RPi 3B+ 1GB | (FTDI disconnected) | —                  | Apple Eth (48:d7:05:e9:40:52)    | **none**         |
-| [pi11](https://welland.fpgas.online/fpgas/pi11.html) | port 11     | 10.21.0.111 | e4:5f:01:8d:f7:17 | RPi 4 8GB   | 210319B3E5C5        | 0x002c8d02251ea854 | DM9601 (00:e0:4c:53:44:58)       | ttyUSB0, ttyUSB1 |
-| [pi13](https://welland.fpgas.online/fpgas/pi13.html) | port 13     | 10.21.0.113 | b8:27:eb:6d:27:f6 | RPi 3B+ 1GB | 210319A43ADB        | 0x0002f54832290854 | ASIX (8a:ce:4c:ff:ae:83)         | ttyUSB0, ttyUSB1 |
-| [pi26](https://welland.fpgas.online/fpgas/pi26.html) | port 26     | 10.21.0.126 | e4:5f:01:97:1f:7e | RPi 4 2GB   | 210319B0C238        | 0x0144cd2a47442854 | Linksys GbE (60:38:e0:e3:56:4f)  | ttyUSB0, ttyUSB1 |
-
-Each working Arty A7 connects via FTDI FT2232C/D/H (USB VID:PID `0403:6010`, labelled "Digilent USB Device"). The FT2232 provides two interfaces:
+Each Arty A7 connects via FTDI FT2232C/D/H (USB VID:PID `0403:6010`, labelled "Digilent USB Device"). The FT2232 provides two interfaces:
 - **if00** → `/dev/ttyUSB0` — JTAG (used by openFPGALoader)
 - **if01** → `/dev/ttyUSB1` — UART serial console (115200 baud)
 
@@ -123,73 +104,49 @@ The serial device path is: `/dev/serial/by-id/usb-Digilent_Digilent_USB_Device_<
 
 Each RPi also has a separate USB Ethernet adapter connected to the Arty's Ethernet port for network testing.
 
-**pi9 note**: FTDI is disconnected — no USB serial devices present. This board cannot be programmed or tested until the USB connection is restored.
+### NeTV2 Boards (on RPi 3B+ hosts with GPIO JTAG, sw1 p10, p12, p14, p16, p18)
 
-Source: `lsusb` and `ls /dev/serial/by-id/` output from each RPi, dnsmasq pibs.conf.
-
-### NeTV2 Boards (×5, on RPi 3B+ hosts with GPIO JTAG)
-
-| Host | Switch Port | IP          | RPi MAC           | RPi Model   | FPGA    | FPGA DNA           |
-| ---- | ----------- | ----------- | ----------------- | ----------- | ------- | ------------------ |
-| pi10 | port 10     | 10.21.0.110 | b8:27:eb:e3:e7:e4 | RPi 3B+ 1GB | XC7A35T | 0x2a11a4c662251c6f |
-| pi12 | port 12     | 10.21.0.112 | b8:27:eb:eb:5d:bf | RPi 3B+ 1GB | XC7A35T | 0x3a11a4c662372a6b |
-| pi14 | port 14     | 10.21.0.114 | b8:27:eb:e3:7c:3c | RPi 3B+ 1GB | XC7A35T | 0x3a11dcc864222e93 |
-| pi16 | port 16     | 10.21.0.116 | b8:27:eb:c6:29:79 | RPi 3B+ 1GB | XC7A35T | 0x2a11a4c662372a53 |
-| pi18 | port 18     | 10.21.0.118 | b8:27:eb:2c:e8:de | RPi 3B+ 1GB | XC7A35T | 0x3a11dcc864241c0b |
-
+| Host       | IP         | RPi MAC           | RPi Model   | FPGA    | FPGA DNA           |
+| ---------- | ---------- | ----------------- | ----------- | ------- | ------------------ |
+| pi-sw1-p10 | 10.21.1.10 | b8:27:eb:e3:e7:e4 | RPi 3B+ 1GB | XC7A35T | 0x2a11a4c662251c6f |
+| pi-sw1-p12 | 10.21.1.12 | b8:27:eb:eb:5d:bf | RPi 3B+ 1GB | XC7A35T | 0x3a11a4c662372a6b |
+| pi-sw1-p14 | 10.21.1.14 | b8:27:eb:e3:7c:3c | RPi 3B+ 1GB | XC7A35T | 0x3a11dcc864222e93 |
+| pi-sw1-p16 | 10.21.1.16 | b8:27:eb:c6:29:79 | RPi 3B+ 1GB | XC7A35T | 0x2a11a4c662372a53 |
 
 Each NeTV2 is programmed via OpenOCD GPIO bitbang JTAG through the RPi's GPIO header. No USB serial devices — the NeTV2 uses GPIO UART for communication (FPGA TX→GPIO15/RXD, FPGA RX→GPIO14/TXD via `/dev/ttyAMA0`).
 
-Source: dnsmasq pibs.conf, `lsusb` on pi10.
+### Sqrl Acorn CLE-215+ (on RPi 5 hosts with M.2 HAT, sw2 p29, p37, p43–p48)
 
-### Sqrl Acorn CLE-215+ (×6 deployed, on RPi 5 hosts with M.2 HAT)
-
-| Host       | Switch Port | IP         | RPi MAC           | RPi Model (rev)          | PCIe Device at `0001:01:00.0`                          | JTAG          | P2 serial            |
-| ---------- | ----------- | ---------- | ----------------- | ------------------------ | ------------------------------------------------------ | ------------- | -------------------- |
-| pi-sw2-p29 | sw2 p29     | 10.21.2.29 | 88:a2:9e:45:dd:be | RPi 5 Rev 1.1 2 GB (b04171) | Squirrels Research Labs Acorn CLE-215+ `1e24:021f` | OK            | OK (J5 wire dead)    |
-| pi-sw2-p43 | sw2 p43     | 10.21.2.43 | 98:fe:54:13:e0:75 | RPi 5 Rev 1.1 1 GB (a04171) | Squirrels Research Labs Acorn CLE-215+ `1e24:021f` | empty chain   | untestable           |
-| pi-sw2-p44 | sw2 p44     | 10.21.2.44 | 98:fe:54:13:e0:f5 | RPi 5 Rev 1.1 1 GB (a04171) | Xilinx 7-Series FPGA Hard PCIe block `10ee:7011`   | empty chain   | untestable           |
-| pi-sw2-p46 | sw2 p46     | 10.21.2.46 | 88:a2:9e:45:85:77 | RPi 5 Rev 1.1 2 GB (b04171) | Squirrels Research Labs Acorn CLE-215+ `1e24:021f` | OK            | OK                   |
-| pi-sw2-p47 | sw2 p47     | 10.21.2.47 | 98:fe:54:13:f5:75 | RPi 5 Rev 1.1 1 GB (a04171) | Squirrels Research Labs Acorn CLE-215+ `1e24:021f` | OK            | reversed (K2↔J2)     |
-| pi-sw2-p48 | sw2 p48     | 10.21.2.48 | 88:a2:9e:45:c6:87 | RPi 5 Rev 1.1 2 GB (b04171) | Squirrels Research Labs Acorn CLE-215+ `1e24:021f` | OK            | OK                   |
+| Host       | IP         | RPi MAC           | RPi Model (rev)             |
+| ---------- | ---------- | ----------------- | --------------------------- |
+| pi-sw2-p29 | 10.21.2.29 | 88:a2:9e:45:dd:be | RPi 5 Rev 1.1 2 GB (b04171) |
+| pi-sw2-p37 | 10.21.2.37 | not recorded      | RPi 5                       |
+| pi-sw2-p43 | 10.21.2.43 | 98:fe:54:13:e0:75 | RPi 5 Rev 1.1 1 GB (a04171) |
+| pi-sw2-p44 | 10.21.2.44 | 98:fe:54:13:e0:f5 | RPi 5 Rev 1.1 1 GB (a04171) |
+| pi-sw2-p46 | 10.21.2.46 | 88:a2:9e:45:85:77 | RPi 5 Rev 1.1 2 GB (b04171) |
+| pi-sw2-p47 | 10.21.2.47 | 98:fe:54:13:f5:75 | RPi 5 Rev 1.1 1 GB (a04171) |
+| pi-sw2-p48 | 10.21.2.48 | 88:a2:9e:45:c6:87 | RPi 5 Rev 1.1 2 GB (b04171) |
 
 The Sqrl Acorn CLE-215+ is an M.2 PCIe FPGA accelerator card containing a
 Xilinx Artix-7 XC7A200T FPGA (215K logic cells). It connects to the RPi 5 via
 an M.2 HAT and enumerates at `0001:01:00.0` alongside the RPi 5's RP1 south
-bridge on `0002:01:00.0`. Five boards boot the Sqrl factory (mining)
-firmware; pi-sw2-p44 boots a LiteX/Vivado design. Every host also has an
-ov5647 camera and publishes a feed.
+bridge on `0002:01:00.0`. Every host also has an ov5647 camera.
 
 No USB serial devices — **JTAG and UART go over the 40-pin header** (P1 → SPI0
 pins for openFPGALoader bit-bang, P2 → GPIO14/15 with a null-modem crossover)
-and PCIe over the M.2 slot; see [acorn-pinmap.md](acorn-pinmap.md). All six
-have `/dev/ttyAMA0` enabled (`[pi5] dtoverlay=uart0-pi5`), the
-kernel console on `ttyAMA10`, `serial-getty@ttyAMA0` inactive, and
-openFPGALoader 0.10.0 (which needs the `gpiochip15 → gpiochip0` symlink on a
-Pi 5). **Detach the PCIe endpoint before any JTAG load** or the Pi crashes.
-p43/p44 need a physical check of their P1 cable; p47's P2 connector is
-reversed; p29's J5 wire is open. openFPGALoader 0.10.0 cannot read Device
-DNA. A wedged Pi 5 draws ~0.4 W on PoE instead of ~8 W
-and needs a PoE cycle (> 90 s to return).
+and PCIe over the M.2 slot; see [acorn-pinmap.md](acorn-pinmap.md). The NFS
+root enables `/dev/ttyAMA0` (`[pi5] dtoverlay=uart0-pi5`), puts the kernel
+console on `ttyAMA10` and leaves `serial-getty@ttyAMA0` inactive.
+**Detach the PCIe endpoint before any JTAG load** or the Pi crashes. A wedged
+Pi 5 draws ~0.4 W on PoE instead of ~8 W and needs a PoE cycle (> 90 s to
+return).
 
-Source: live probe of all six hosts 2026-09-03 (`/proc/device-tree/model`,
-`/proc/cpuinfo`, `lspci -nn`, `/proc/cmdline`, `openFPGALoader --Version`);
-JTAG/P2 columns from the 2026-08-31 pin-ID survey.
+### Fomu EVT (on an RPi 3B+ host, sw1 p17)
 
-### Fomu EVT (×2, on RPi 3B+ hosts)
-
-| Host | Switch Port | IP          | RPi MAC           | RPi Model   | Fomu USB VID:PID | DFU Version | USB Analyzer             |
-| ---- | ----------- | ----------- | ----------------- | ----------- | ---------------- | ----------- | ------------------------ |
-| [pi17](https://welland.fpgas.online/fpgas/pi17.html) | port 17     | 10.21.0.117 | b8:27:eb:47:9f:d1 | RPi 3B+ 1GB | 1209:5bf0        | v2.0.4      | OpenVizsla (1d50:607c)   |
-| [pi21](https://welland.fpgas.online/fpgas/pi21.html) | port 21     | 10.21.0.121 | b8:27:eb:fc:4d:f8 | RPi 3B+ 1GB | 1209:5bf0        | v2.0.4      | Cythion/LUNA (16d0:05a5) |
-
-Each Fomu EVT appears as "Generic Fomu EVT running DFU Bootloader v2.0.4". No serial devices — the Fomu uses native USB (ValentyUSB) for communication.
-
-Each host also has a USB protocol analyzer connected for sniffing/analyzing the Fomu's USB traffic:
-- **pi17**: OpenVizsla USB sniffer/analyzer (VID:PID `1d50:607c`)
-- **pi21**: Cythion/LUNA USB analyzer (VID:PID `16d0:05a5`)
-
-Source: `lsusb` output from pi17, dnsmasq pibs.conf.
+A Fomu EVT in its bootloader appears as "Generic Fomu EVT running DFU
+Bootloader v2.0.4" (`1209:5bf0`). No serial devices — the Fomu uses native USB
+(ValentyUSB) for communication. The host also has an OpenVizsla USB analyzer
+(`1d50:607c`) for the Fomu's USB traffic.
 
 ### Tiny Tapeout ASIC Boards (×6, on S3300 ports 3–8, RPi 4 / 3B+ hosts with PMOD HATs)
 
@@ -219,9 +176,7 @@ Every host also has a Digilent Pmod HAT and an ov5647 camera.
 Firmware notes: tt04 … tt08 run TT SDK 2.0.4 (the last RP2040 build; 3.x is
 RP2350-only). The tt03p5 chip is not supported by SDK ≥ 2.0, so that board runs demo-board
 firmware 1.2.2 with a hand-pushed `/shuttles/tt03p5.json` and
-`rom_fallback.txt` (TT03p5 has no chip ROM); the web Commander needs the
-upstream `legacy` branch port (fpgas-online/tt-commander-app#10) to drive
-it, and its page is camera-first. The RP2 bootloader's mass-storage
+`rom_fallback.txt` (TT03p5 has no chip ROM). The RP2 bootloader's mass-storage
 path stalls on Pi 3B+ hosts (dwc_otg resets every ~35 s) — flash from those
 with PICOBOOT, and run flashes detached (`setsid nohup … &`).
 
@@ -252,21 +207,12 @@ Source: live probe 2026-09-03 (`lsusb`, `/dev/serial/by-id`, daemon `/health`).
 
 ### NeTV2 Boards (separate network — development/debug hosts)
 
-In addition to the 5 NeTV2 boards on the tweed network above, there are two NeTV2 development hosts on a **separate network** accessible via different hostnames:
+In addition to the NeTV2 boards on the tweed network above, there are two NeTV2 development hosts on a **separate network** accessible via different hostnames:
 
 | Host                              | IP (via DNS)    | RPi Model             | Board                  | Connections         | SSH                                                        |
 | --------------------------------- | --------------- | --------------------- | ---------------------- | ------------------- | ---------------------------------------------------------- |
 | rpi5-netv2.iot.welland.mithis.com | 10.1.90.210/211 | RPi 5 Model B Rev 1.0 | NeTV2 (bare developer) | GPIO + PCIe Gen2 x1 | `tim@rpi5-netv2.iot.welland.mithis.com` (via `wg-desktop`) |
 | rpi3-netv2.iot.welland.mithis.com | 10.1.90.212/213 | RPi 3                 | NeTV2 (stock packaged) | GPIO only           | `pi@rpi3-netv2.iot.welland.mithis.com` (via `wg-desktop`)  |
-
-**rpi5-netv2** details (verified via SSH 2026-03-09):
-- OS: Debian 13 (Trixie), kernel 6.12.47+rpt-rpi-2712 aarch64
-- Software: OpenOCD installed, no openFPGALoader, no LiteX
-- USB: ASIX AX88179 Gigabit Ethernet adapter only (no FTDI/JTAG adapter)
-- PCIe: Only RP1 south bridge visible — NeTV2 FPGA not currently enumerating on PCIe bus
-- No USB serial devices present
-
-**rpi3-netv2**: Accessible via `pi@rpi3-netv2.iot.welland.mithis.com`.
 
 ### PMOD HAT Hosts (separate network)
 
@@ -281,7 +227,7 @@ Additional PMOD-related RPi hosts on a separate `iot.welland.mithis.com` network
 
 ### openFPGALoader
 
-[openFPGALoader](https://github.com/trabucayre/openFPGALoader) is the primary JTAG programming tool used across almost all boards. It supports multiple JTAG transports and FPGA families. Where a device is not yet supported, support is being added upstream.
+[openFPGALoader](https://github.com/trabucayre/openFPGALoader) is the primary JTAG programming tool used across almost all boards. It supports multiple JTAG transports and FPGA families.
 
 **Arty A7** (via USB FTDI FT2232):
 ```bash
@@ -308,17 +254,16 @@ openFPGALoader can drive JTAG signals through the Raspberry Pi GPIO header. The 
 
 ```bash
 echo 1 | sudo tee /sys/bus/pci/devices/0001:01:00.0/remove   # detach the endpoint or the Pi 5 crashes
-sudo ln -sfn /dev/gpiochip15 /dev/gpiochip0                   # openFPGALoader 0.10.0 opens gpiochip0
+sudo ln -sfn /dev/gpiochip15 /dev/gpiochip0                   # the libgpiod cable opens gpiochip0
 openFPGALoader --cable libgpiod --pins 10:9:11:8 design.bit   # TDI:TDO:TCK:TMS, ~16 s, SRAM only
 ```
 
-PCIe-based flash programming (`litepcie_util`) needs a LiteX design already in
-flash, which only pi-sw2-p44 has; see
+PCIe-based flash programming needs the fpgas.online SoC already running; see
 [acorn-pcie-programming.md](acorn-pcie-programming.md).
 
 **Fomu EVT** (via USB DFU):
 
-The Fomu is currently in DFU bootloader mode (v2.0.4) and can be programmed via `dfu-util -D design.dfu` as a fallback. openFPGALoader also supports DFU-based programming.
+A Fomu in its DFU bootloader (v2.0.4) can be programmed via `dfu-util -D design.dfu` as a fallback. openFPGALoader also supports DFU-based programming.
 
 Source: [openFPGALoader](https://github.com/trabucayre/openFPGALoader), [workshop.fomu.im](https://workshop.fomu.im), [alphamax-rpi.cfg](https://github.com/alphamaxmedia/netv2mvp-scripts/blob/master/alphamax-rpi.cfg)
 
@@ -369,17 +314,15 @@ Used for: **NeTV2** (RPi5 only)
 
 ### PCIe
 
-Used for: **Acorn CLE-215+** (all six RPi 5 hosts), **NeTV2** (RPi5 only)
+Used for: **Acorn CLE-215+** (the RPi 5 hosts), **NeTV2** (RPi5 only)
 
-The Acorn enumerates at `0001:01:00.0` as `1e24:021f` (Sqrl factory firmware) or `10ee:7011` (a LiteX design, pi-sw2-p44). Reconfiguring the FPGA over JTAG while the endpoint is enumerated is a surprise removal that crashes the Pi 5 — remove the device from the bus first and rescan afterwards ([acorn-pcie-programming.md](acorn-pcie-programming.md#detach-the-pcie-endpoint-before-any-jtag-reconfiguration)).
+The Acorn enumerates at `0001:01:00.0`: as `10ee:7021` with subsystem `1e24:021f` when it runs the fpgas.online SoC, `1e24:021f` on Sqrl's factory firmware, `10ee:7011` on the vendor XDMA sample. Reconfiguring the FPGA over JTAG while the endpoint is enumerated is a surprise removal that crashes the Pi 5 — remove the device from the bus first and rescan afterwards ([acorn-pcie-programming.md](acorn-pcie-programming.md#detach-the-pcie-endpoint-before-any-jtag-reconfiguration)).
 
 The NeTV2 supports PCIe x1/x2/x4. On RPi5, it connects as PCIe Gen2 x1. The FPGA appears with vendor ID `10ee` (Xilinx) and device ID `7011`.
 
-**Note**: As of 2026-03-09, the NeTV2 FPGA is not currently enumerating on the RPi5's PCIe bus (only the RP1 south bridge is visible in `lspci`).
-
 ### USB (Native)
 
-Used for: **Fomu EVT** (ValentyUSB on pi17/pi21), **Tiny Tapeout ASIC** (RP2040 on pi-sw2-p3…p8), **Tiny Tapeout FPGA Demo Board** (RP2350 on pi-sw2-p33…p36). USB analyzers (OpenVizsla on pi17, Cythion/LUNA on pi21) are also connected for Fomu USB traffic analysis.
+Used for: **Fomu EVT** (ValentyUSB on pi-sw1-p17), **Tiny Tapeout ASIC** (RP2040 on pi-sw2-p3…p8), **Tiny Tapeout FPGA Demo Board** (RP2350 on pi-sw2-p33…p36). An OpenVizsla on pi-sw1-p17 analyzes the Fomu's USB traffic.
 
 ### PMOD HAT
 
@@ -417,12 +360,4 @@ The PMOD HAT provides 3 PMOD ports (JA, JB, JC) connecting RPi GPIO pins to stan
 
 ## Known Issues
 
-- **pi-sw2-p43 / pi-sw2-p44** (Acorn): `openFPGALoader --detect` finds an empty JTAG chain although PCIe enumerates — P1 cable/wiring needs a physical check. Until then nothing can be loaded on them.
-- **pi-sw2-p47** (Acorn): P2 connector reversed (K2↔J2 and J5↔H5) — transpose both pairs, not a 180° re-seat.
-- **pi-sw2-p29** (Acorn): J5 (spare GPIO 0) wire is open; serial pair fine.
-- **All Acorn hosts**: openFPGALoader 0.10.0 cannot read Device DNA and needs the `gpiochip15` symlink on a Pi 5.
-- **pi-sw2-p3** (tt03p5): demo-board firmware 1.2.x needs the web Commander's `legacy` port (fpgas-online/tt-commander-app#10); the page is camera-first.
 - **Stale NFS handles after package upgrades in the shared NFS root**: upgrading a package (`fpgas-online-cam`, say) under running Pis leaves them with `ESTALE` on the replaced files: cameras go off air and `dpkg-query` reports `Stale file handle`. Only a reboot fixes it — expect it after any NFS-root package update.
-- **From the 2026-03-17 survey** (not re-checked): pi9 Arty A7 FTDI disconnected; pi21 Cythion/LUNA + Fomu offline.
-- **rpi5-netv2**: NeTV2 FPGA not visible on PCIe bus — needs bitstream loaded first.
-- **rpi3-netv2**: SSH access via `pi@rpi3-netv2.iot.welland.mithis.com`.
