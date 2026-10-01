@@ -129,27 +129,27 @@ def require_litex_boards_timing(soc, sys_clk_freq):
     Those CRGs make a different set of domains with and without DRAM; each one must be named here, so a CRG
     with one this does not know fails the build rather than have it timed at the wrong frequency.
     """
+    board = type(soc.crg).__module__.rsplit(".", 1)[-1]
+    # The CRG's eth domain is the PHY's reference clock, made whether or not the SoC has Ethernet.
+    eth = {"digilent_arty": 25e6, "kosagi_netv2": 50e6}.get(board)  # MII / RMII reference
     known = {
         "sys": sys_clk_freq,
         "sys4x": 4 * sys_clk_freq,
         "sys4x_dqs": 4 * sys_clk_freq,
         "idelay": 200e6,
         "clk100": 100e6,
-        "eth": None,  # the Arty's MII reference (25 MHz) or the NeTV2's RMII one (50 MHz): read off the PHY
+        "eth": eth,
     }
-    phy = getattr(soc, "ethphy", None)
-    phy_freq = {"LiteEthPHYMII": 25e6, "LiteEthPHYRMII": 50e6}.get(type(phy).__name__) if phy else None
     domains = {}
     for name, cd in vars(soc.crg).items():
         if not name.startswith("cd_"):
             continue
-        if name[3:] not in known:
-            raise ValueError(f"{type(soc).__name__}'s CRG has clock domain {name[3:]}, unknown to this helper")
-        freq = known[name[3:]]
-        if freq is None:
-            freq = 25e6 if phy_freq is None else phy_freq
-        domains[cd] = freq
+        if known.get(name[3:]) is None:
+            raise ValueError(f"{board}'s CRG has clock domain {name[3:]}, whose frequency this helper does not know")
+        domains[cd] = known[name[3:]]
+    phy = getattr(soc, "ethphy", None)
     if phy is not None:
+        phy_freq = {"LiteEthPHYMII": 25e6, "LiteEthPHYRMII": 50e6}.get(type(phy).__name__)
         if phy_freq is None:
             raise ValueError(f"Ethernet PHY {type(phy).__name__}: its clock frequency is unknown to this helper")
         for name in ("cd_eth_rx", "cd_eth_tx"):  # clocked from the PHY's pins; MII's are not constrained

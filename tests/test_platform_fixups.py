@@ -229,8 +229,11 @@ class LiteEthPHYMII:  # named as LiteEth's: the helper reads the PHY's clock off
         self.crg = SimpleNamespace(cd_eth_rx=ClockDomain("eth_rx"), cd_eth_tx=ClockDomain("eth_tx"))
 
 
-def _litex_boards_soc(platform, *domains):
-    return SimpleNamespace(platform=platform, crg=SimpleNamespace(**{f"cd_{n}": ClockDomain(n) for n in domains}))
+def _litex_boards_soc(platform, *domains, board="digilent_arty"):
+    crg = type("_CRG", (), {"__module__": f"litex_boards.targets.{board}"})()
+    for n in domains:
+        setattr(crg, f"cd_{n}", ClockDomain(n))
+    return SimpleNamespace(platform=platform, crg=crg)
 
 
 def test_a_litex_boards_soc_has_every_crg_domain_and_its_phy_clocks_constrained():
@@ -248,3 +251,10 @@ def test_a_crg_domain_the_helper_does_not_know_fails_the_build():
     soc = _litex_boards_soc(digilent_arty.Platform(variant="a7-35", toolchain="openxc7"), "sys", "hdmi")
     with pytest.raises(ValueError, match="clock domain hdmi"):
         require_litex_boards_timing(soc, 50e6)
+
+
+def test_the_eth_reference_clock_comes_from_the_board_not_the_phy():
+    platform = kosagi_netv2.Platform(variant="a7-35", toolchain="openxc7")
+    soc = _litex_boards_soc(platform, "sys", "eth", board="kosagi_netv2")  # no Ethernet PHY in this SoC
+    require_litex_boards_timing(soc, 50e6)
+    assert platform.toolchain.clocks[soc.crg.cd_eth.clk][0] == 20.0
