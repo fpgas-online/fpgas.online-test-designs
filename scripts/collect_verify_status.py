@@ -166,7 +166,7 @@ def ssh_argv(ip, jump=DEFAULT_JUMP, ssh_config=None, user="root", connect_timeou
 
 def jump_argv(jump, ssh_config=None, connect_timeout=10):
     """A no-op on the jump host, to check it can be reached before trying every port through it."""
-    return [*_ssh_base(ssh_config, connect_timeout), jump, "true"]
+    return [*_ssh_base(ssh_config, connect_timeout), "-o", "HashKnownHosts=no", jump, "true"]
 
 
 def collect_one(ip, options):

@@ -98,7 +98,8 @@ def test_ssh_without_jump_or_config():
 
 
 def test_the_jump_host_check_runs_nothing_but_true():
-    assert cvs.jump_argv("ansible@10.99.21.2", "ssh.cfg", 5)[-2:] == ["ansible@10.99.21.2", "true"]
+    argv = cvs.jump_argv("ansible@10.99.21.2", "ssh.cfg", 5)
+    assert argv[-2:] == ["ansible@10.99.21.2", "true"] and "HashKnownHosts=no" in argv
 
 
 def test_the_remote_side_only_reads():
