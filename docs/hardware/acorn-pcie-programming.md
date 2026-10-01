@@ -249,7 +249,7 @@ If the operational bitstream at 0x400000 is corrupted or fails to configure:
 
 ### SRAM Bootstrap Recovery — Golden Bitstream Bad
 
-If the golden bitstream at address 0x0 is corrupted, PCIe will not come up on boot and `litepcie_util` cannot be used. Since flash-via-JTAG is not currently working, recovery uses a **two-stage SRAM bootstrap**:
+If the golden bitstream at address 0x0 is corrupted, PCIe will not come up on boot and `litepcie_util` cannot be used. Since flash-via-JTAG does not work, recovery uses a **two-stage SRAM bootstrap**:
 
 1. **Load a PCIe-capable bitstream to SRAM via JTAG** (volatile — lost on power cycle):
    ```bash
