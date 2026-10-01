@@ -7,11 +7,13 @@ tests in order). What lives here:
     the board named in the subsystem IDs; SQRL's factory image and the vendor XDMA sample are recognised and
     fail, with "unconverted" in the reason. Two other Xilinx PCIe boards on the fleet are named (a PCIe
     Screamer running PCILeech, a stock XDMA design that is most likely a PicoEVB) and fail because
-    fpgas.online has no test design for them. Nothing past the IDs is sent to a design we did not build:
-    its BARs have a register layout we do not know.
+    fpgas.online has no test design for them. The XDMA design has the same IDs as an old LitePCIe build of
+    ours (both keep the Xilinx default subsystem 10ee:0007), so it is told apart by what LitePCIe never has:
+    the XDMA class code 070001 and a BAR2. Nothing is sent to a design we did not build: its BARs have a
+    register layout we do not know.
   * The SoC's identifier string, over BAR0: which build is running. It carries the build timestamp, so it
-    names one image exactly. It must be the operational or golden build of the installed release, and only
-    then is anything else on BAR0 touched: the release's csr.json for that build gives the CSR addresses.
+    names one image exactly. It must be the operational or golden build of the installed release; nothing
+    past the identifier read is sent over BAR0 otherwise: the release's csr.json for that build gives the CSR addresses.
   * The CSRs the design has for the board itself: device DNA, XADC temperature and voltages, and the ctrl
     scratch register.
   * The flash, through spi_flash.py (read opcodes only): its identity, and the golden slot (0x000000) and the
@@ -30,10 +32,7 @@ Stdlib only: the Pi hosts boot a tmpfs root with no LiteX.
 import contextlib
 import hashlib
 import json
-import mmap
-import os
 import pathlib
-import struct
 
 from ...core import Problem, pci_devices
 from . import spi_flash
@@ -48,7 +47,20 @@ IDENTIFIER_BASE = CSR_BASE + 0x800  # csr_map: identifier_mem = 1
 IDENTIFIER_MAX = 256
 # The CSR bases this tool and spi_flash.py drive. A build whose csr.json says otherwise is not read.
 CSR_EXPECTED = {"identifier_mem": IDENTIFIER_BASE, "flash": spi_flash.SPI_CONTROL, "flash_cs_n": spi_flash.FLASH_CS_N}
-BAR0_SIZE = 0x10000
+BAR0_SIZE = spi_flash.BAR0_SIZE
+# Every CSR the check reads or writes; build_csrs() refuses a csr.json that puts one outside the mapped BAR0.
+USED_CSRS = (
+    "ctrl_scratch",
+    "dna_id",
+    "xadc_temperature",
+    "xadc_vccint",
+    "xadc_vccaux",
+    "xadc_vccbram",
+    "p2_gpio_oe",
+    "p2_gpio_in",
+    "p2_gpio_out",
+    "uartbone_bridge_phy_tuning_word",
+)
 
 XILINX, SQRL = 0x10EE, 0x1E24
 LITEPCIE_X1, VENDOR_XDMA, PCILEECH = 0x7021, 0x7011, 0x0666
@@ -224,49 +236,10 @@ def driver_released(dev, note, root=SYSFS_PCI):
 # -- BAR0 ----------------------------------------------------------------------------------------------
 
 
-class _Bar0:
-    def __init__(self, mapping):
-        self._map = mapping
-
-    def read(self, addr):
-        off = addr - CSR_BASE
-        return struct.unpack("<I", self._map[off : off + 4])[0]
-
-    def write(self, addr, value):
-        off = addr - CSR_BASE
-        self._map[off : off + 4] = struct.pack("<I", value)
-
-
-@contextlib.contextmanager
 def open_bar0(bdf, sysfs=SYSFS_PCI):
-    """BAR0 of `bdf`, with memory decoding on for the duration and put back as it was afterwards.
-
-    With no driver bound (litepcie.ko is not loaded on the fleet) the endpoint's COMMAND register has memory
-    decoding off, and every BAR read returns all ones.
-    """
-    dev = pathlib.Path(sysfs) / bdf
-    with open(dev / "config", "r+b") as cfg:
-        cfg.seek(4)
-        command = struct.unpack("<H", cfg.read(2))[0]
-        if not command & 0x2:
-            cfg.seek(4)
-            cfg.write(struct.pack("<H", command | 0x2))
-            cfg.flush()
-        try:
-            fd = os.open(dev / "resource0", os.O_RDWR | os.O_SYNC)
-            try:
-                mapping = mmap.mmap(fd, BAR0_SIZE, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE)
-            finally:
-                os.close(fd)
-            try:
-                yield _Bar0(mapping)
-            finally:
-                mapping.close()
-        finally:
-            if not command & 0x2:
-                cfg.seek(4)
-                cfg.write(struct.pack("<H", command))
-                cfg.flush()
+    """BAR0 of `bdf`, with memory decoding on for the duration (spi_flash.open_bar0, which fpgas-acorn-flash
+    uses too)."""
+    return spi_flash.open_bar0(bdf, sysfs)
 
 
 def read_identifier(bus):
@@ -350,6 +323,12 @@ def build_csrs(images, files, build):
         if csrs.bases.get(name) != want:
             got = "missing" if csrs.bases.get(name) is None else f"{csrs.bases[name]:#x}"
             raise Problem("error", f"{entry['asset']} puts {name} at {got}, not {want:#x}: not reading this board")
+    for name in USED_CSRS:
+        if csrs.has(name):
+            first, last = csrs.registers[name]["addr"], csrs.registers[name]["addr"] + 4 * csrs.words(name)
+            if not CSR_BASE <= first < last <= CSR_BASE + BAR0_SIZE:
+                raise Problem("error", f"{entry['asset']} puts {name} at {first:#x}, outside the {BAR0_SIZE:#x} bytes "
+                                       "of BAR0 this tool maps: not reading this board")  # fmt: skip
     return csrs
 
 

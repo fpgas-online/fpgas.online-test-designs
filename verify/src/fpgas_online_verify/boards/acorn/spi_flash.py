@@ -31,11 +31,14 @@ LiteX. Runs over PCIe BAR0 by default, or over the UART bridge with `--uart`.
 """
 
 import argparse
+import contextlib
 import fcntl
 import hashlib
 import json
+import mmap
 import os
 import pathlib
+import struct
 import sys
 import time
 
@@ -261,25 +264,54 @@ class Flash:
 # -- buses ---------------------------------------------------------------------------------------------
 
 
+BAR0_SIZE = 0x10000  # what is mapped: every CSR this tool and the check use is below it
+
+
 class Bar0Bus:
-    """The SoC's CSRs through PCIe BAR0, with no kernel driver: needs root and memory decoding enabled."""
+    """The SoC's CSRs through a mapping of PCIe BAR0."""
 
-    def __init__(self, bdf):
-        import mmap
-        import os
-        import struct
-
-        self._struct = struct
-        fd = os.open(f"/sys/bus/pci/devices/{bdf}/resource0", os.O_RDWR | os.O_SYNC)
-        self._map = mmap.mmap(fd, 0x10000, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE)
+    def __init__(self, mapping):
+        self._map = mapping
 
     def read(self, addr):
         off = addr - CSR_BASE
-        return self._struct.unpack("<I", self._map[off : off + 4])[0]
+        return struct.unpack("<I", self._map[off : off + 4])[0]
 
     def write(self, addr, value):
         off = addr - CSR_BASE
-        self._map[off : off + 4] = self._struct.pack("<I", value)
+        self._map[off : off + 4] = struct.pack("<I", value)
+
+
+@contextlib.contextmanager
+def open_bar0(bdf, sysfs=None):
+    """BAR0 of `bdf` as a Bar0Bus, with memory decoding on for the duration and put back as it was afterwards.
+
+    With no driver bound (litepcie.ko is not loaded on the fleet) the endpoint's COMMAND register has memory
+    decoding off, and every BAR read returns all ones: the flash then "identifies" as RDID ffffffffffff.
+    Needs root."""
+    dev = pathlib.Path(sysfs or SYSFS_PCI) / bdf
+    with open(dev / "config", "r+b") as cfg:
+        cfg.seek(4)
+        command = struct.unpack("<H", cfg.read(2))[0]
+        if not command & 0x2:
+            cfg.seek(4)
+            cfg.write(struct.pack("<H", command | 0x2))
+            cfg.flush()
+        try:
+            fd = os.open(dev / "resource0", os.O_RDWR | os.O_SYNC)
+            try:
+                mapping = mmap.mmap(fd, BAR0_SIZE, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE)
+            finally:
+                os.close(fd)
+            try:
+                yield Bar0Bus(mapping)
+            finally:
+                mapping.close()
+        finally:
+            if not command & 0x2:
+                cfg.seek(4)
+                cfg.write(struct.pack("<H", command))
+                cfg.flush()
 
 
 class UARTBus:
@@ -357,8 +389,12 @@ def main(argv=None):
         print(f"error: {driver_bound_reason(driver)}")
         print("RESULT: FAIL")
         return 1
-    bus = UARTBus(args.uart) if args.uart else Bar0Bus(args.bdf)
-    flash = Flash(bus, allow_write=args.command == "write")
+    with contextlib.ExitStack() as stack:
+        bus = UARTBus(args.uart) if args.uart else stack.enter_context(open_bar0(args.bdf))
+        return _run(args, Flash(bus, allow_write=args.command == "write"))
+
+
+def _run(args, flash):
     try:
         info = flash.identify()
         if info["size_bytes"] is None:
