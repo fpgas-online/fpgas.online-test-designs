@@ -8,20 +8,21 @@ This repository contains LiteX-based FPGA test designs that run automatically du
 
 ## Installing the Packages
 
-CI builds the boot-time board check, `fpgas-verify`, and the bitstreams it checks with, as Debian packages.
-Every green commit on `main` publishes them to the fpgas.online APT repository at <https://apt.fpgas.online>
-([fpgas-online/apt](https://github.com/fpgas-online/apt)). On a Pi with, say, an Arty, once the repository is
-added:
+Every green commit on `main` publishes the board check, `fpgas-verify`, and its test bitstreams as Debian
+packages at <https://apt.fpgas.online>. On a Pi with, say, an Arty:
 
 ```bash
+sudo install -d -m0755 /etc/apt/keyrings
+curl -fsSL https://apt.fpgas.online/apt.gpg | sudo tee /etc/apt/keyrings/apt.gpg > /dev/null
+echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
+  | sudo tee /etc/apt/sources.list.d/apt.list
+sudo apt update
 sudo apt install fpgas-online-arty     # or -acorn, -netv2, -fomu, -tt-fpga; -all-boards for any of them
-sudo fpgas-verify                      # check the board now; it also runs at every boot
+sudo fpgas-verify --no-publish         # check the board now; it also runs at every boot
 ```
 
-**[docs/verify.md](docs/verify.md)** is the guide to `fpgas-verify`: adding the repository, the packages for
-each board, the commands, what each board's check tests, reading its result and report, the debug tools and
-common failures; then how fpgas.online runs it at every boot of its netbooted Pis and offers only the boards
-that pass, and the current results on the Welland Pis.
+**[docs/verify.md](docs/verify.md)**: installing, running and reading `fpgas-verify`, how fpgas.online uses it,
+and the current results on the Welland Pis.
 
 ## Architecture
 
