@@ -42,6 +42,13 @@ or fail. It passes only when all of these hold:
 * **There is one result: pass or fail.** Any problem fails the check, whether it is in the board, the wiring or
   the tool itself. The report lists every problem found, so the check keeps going after the first failure
   wherever it can: a board can have more than one fault.
+* **A Pi with no board fails.** Every Pi runs the check and reports that it started; a Pi with no FPGA board
+  found (an Orange Pi, a board powered off) reports that and fails.
+* **The check runs at every boot, and only then.** To check a Pi again, reboot it.
+* **Users are assumed not to write the flash.** Most never touch it. If one does, the check sees the flash no
+  longer holds the golden design and fails the board. Letting users have part of the flash, locking the
+  golden region, and restoring a flash a user changed are
+  [#68](https://github.com/fpgas-online/fpgas.online-test-designs/issues/68).
 * **Each setup's expected wiring and expected figures (DDR bandwidth, PCIe link width and speed, Ethernet
   throughput, ...) are data files in this repository**, one per setup. The tool, the test designs and the docs
   are generated from, or checked against, those files, so they cannot drift apart.
