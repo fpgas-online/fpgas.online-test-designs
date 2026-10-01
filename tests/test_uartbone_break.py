@@ -133,3 +133,27 @@ def test_without_a_break_a_stale_command_times_out_after_timeout_s():
     run_simulation(dut, bench())
     assert got["word5"] == 0x66666666
     assert got["reply"] == [0x33, 0x33, 0x33, 0x33]
+
+
+def test_the_reset_input_does_what_a_break_does():
+    """P2SerialSwitch holds `reset` while J2/K2 are GPIOs: on return the link must be as after a break."""
+    dut, got = _DUT(), {}
+    storage = dut.link.bridge.phy._tuning_word.storage
+
+    def bench():
+        yield from _idle(dut, 0.01)
+        yield storage.eq(tuning_word(9600, CLK))
+        yield from _send(dut, [0x01, 0x01, 0x00, 0x00, 0x00, 0x05], bit=CLK // 9600)  # a write, cut off
+        yield dut.link.reset.eq(1)
+        yield from _idle(dut, 0.01)
+        yield dut.link.reset.eq(0)
+        yield
+        got["after"] = yield storage
+        yield from _send(dut, _read_cmd(2))
+        got["reply"] = yield from _receive(dut, 4, within_s=0.2)
+        got["word5"] = yield from _mem(dut, 5)
+
+    run_simulation(dut, bench())
+    assert got["after"] == tuning_word(BAUD, CLK)
+    assert got["word5"] == 0x66666666
+    assert got["reply"] == [0x33, 0x33, 0x33, 0x33]
