@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# The figures fpgas-verify expects from an Acorn (CLE-215+, or the CLE-101 sold as LiteFury) running the
+# fpgas.online Acorn PCIe SoC, per setup. The setups are the carriers in wiring.toml; a figure out of
+# range fails the board (docs/verify-goals.md: "each setup's expected wiring and expected figures are
+# data files in this repository").
+
+# The PCIe link, as the host's sysfs reports it (current_link_speed, current_link_width). The SoC is
+# built Gen2 x1 (designs/acorn-pcie/gateware/acorn_pcie_soc.py), and both carriers give it one lane.
+[setups.pi5.pcie]
+speed_gt_s = 5.0
+width = 1
+
+[setups.blade.pcie]
+speed_gt_s = 5.0
+width = 1
+
+# XADC readings, [lowest, highest]. Voltages are the Artix-7 recommended operating ranges (DS181,
+# table 2: VCCINT and VCCBRAM 0.95-1.05 V, VCCAUX 1.71-1.89 V). Temperature is the commercial
+# junction range, 0-85 °C.
+[xadc]
+temperature_c = [0.0, 85.0]
+vccint_v = [0.95, 1.05]
+vccaux_v = [1.71, 1.89]
+vccbram_v = [0.95, 1.05]

@@ -47,6 +47,9 @@ packages = ["src/fpgas_online_verify"]
 
 # The host test scripts live with their designs (verify_hardware.py uploads them from there too).
 [tool.hatch.build.targets.wheel.force-include]
+# The Acorn's setups: how each is wired, and the figures expected of it (boards/acorn/setup.py).
+"../docs/wiring/acorn/wiring.toml" = "fpgas_online_verify/boards/acorn/data/wiring.toml"
+"../docs/wiring/acorn/expected.toml" = "fpgas_online_verify/boards/acorn/data/expected.toml"
 "../designs/uart/host/test_uart.py" = "fpgas_online_verify/scripts/test_uart.py"
 "../designs/ddr-memory/host/test_ddr.py" = "fpgas_online_verify/scripts/test_ddr.py"
 "../designs/spi-flash-id/host/test_spiflash.py" = "fpgas_online_verify/scripts/test_spiflash.py"

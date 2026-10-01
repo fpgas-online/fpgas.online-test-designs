@@ -1,0 +1,332 @@
+"""The Acorn check: every test that can run, in order, with every fault kept.
+
+There is one result, pass or fail (docs/verify-goals.md): any fault fails the board, and the check goes on
+after a fault wherever it can, so the report lists all of them. A test that cannot run because of an
+earlier fault (no BAR0 on a board running SQRL's factory image, say) is listed in `not_run` with why; the
+fault that stopped it is already in the report.
+
+The safety rules hold throughout: nothing past the identifier read is sent over BAR0 or over the P2 UART
+unless that identifier is a build of the installed release, whose CSR map is then read from the release's
+csr.json; nothing at all is sent to the BARs of a design whose PCI IDs are not ours; the flash is only ever
+read; and the FPGA is never reconfigured.
+
+  pcie-link  the link speed and width in sysfs, against the setup's expected figures (expected.toml)
+  pcie-bar0  over BAR0: which build runs (golden is a fault: the operational slot did not boot), the
+             flash's identity, the device DNA and the XADC temperature and voltages
+  jtag       IDCODE and device DNA over P1 (links.py); the DNA must be BAR0's
+  flash      both flash slots read whole and compared with the release's images
+  p2-uart    the UARTBone bridge on P2 at both baud rates: identifier, DNA, XADC (links.py)
+  scratch    the ctrl scratch register written and read back over BAR0 and over the P2 UART
+  p2-gpio    J5/H5 in both directions (links.py), on a setup whose cable carries them
+
+A kernel driver holding BAR0 (litepcie.ko) is unbound for the check, only when a test asked for needs BAR0,
+and bound again after it. No events are sent while it is unbound: they are held and sent once it is bound
+again.
+
+A test that raises something unexpected is recorded as an error with what it raised, and the rest still run.
+"""
+
+import contextlib
+
+from ...core import Problem, pi_model, run, worst
+from . import check, links
+from . import setup as setups
+
+TESTS = ("pcie-link", "pcie-bar0", "jtag", "flash", "p2-uart", "scratch", "p2-gpio")
+NEEDS_BAR0 = ("pcie-bar0", "flash", "scratch", "p2-gpio")
+
+
+def _quiet(stage, details):
+    pass
+
+
+def _problem(e, what):
+    """A Problem as it is, anything else as the error it is (a malformed file, say)."""
+    if isinstance(e, Problem):
+        return e
+    return Problem("error", f"{what} could not be read: {type(e).__name__}: {e}")
+
+
+class _Suite:
+    def __init__(self, found, options):
+        self.found = found
+        self.options = options
+        self.images = options.get("images") or check.IMAGES
+        self.root = options.get("sysfs_pci", check.SYSFS_PCI)
+        self._send = options.get("event") or _quiet
+        self._held = []  # events held while a driver is unbound
+        self.run = options.get("run", run)
+        self.wanted = list(options.get("tests") or TESTS)
+        self.report = {"board": "acorn", "found": found, "variant": found["variant"], "tests": []}
+        self.faults = []  # (result, reason) that belong to no one test
+        self.not_run = {}
+        self.setup = self.figures = self.release = self.uart_builds = None
+        self.bus = self.csrs = None
+        self.bar0 = {}  # what BAR0 gave: identifier, build, dna
+        self.gate_problem = self.bar0_problem = None
+        self.driver = {}  # a kernel driver unbound for the check (check.driver_released)
+
+    # -- helpers ---------------------------------------------------------------------------------------
+
+    def fault(self, problem):
+        self.faults.append((problem.result, problem.reason))
+
+    def event(self, stage, details):
+        """Send an event, or hold it while a kernel driver is unbound from the board."""
+        if self.driver.get("unbound") and not ("rebound" in self.driver or "rebind_error" in self.driver):
+            self._held.append((stage, details))
+        else:
+            self._send(stage, details)
+
+    def _flush(self):
+        held, self._held = self._held, []
+        for stage, details in held:
+            self._send(stage, details)
+
+    def test(self, name, why_not, fn):
+        """Run test `name` if it was asked for and nothing stops it; record it and say so as it goes."""
+        if name not in self.wanted:
+            return
+        if why_not:
+            self.not_run[name] = why_not
+            return
+        self.event("fpga-test-started", {"test": name})
+        try:
+            entry = fn()
+        except Problem as p:
+            entry = {"test": name, "result": p.result, "reason": p.reason}
+        except Exception as e:  # anything else is the check's own fault: say so, and go on with the rest
+            entry = {"test": name, "result": "error", "reason": f"{type(e).__name__}: {e}"}
+        self.report["tests"].append(entry)
+        self.event("fpga-test-finished", {"test": name, "result": entry["result"], "reason": entry.get("reason", "")})
+
+    def _needs_setup(self):
+        return None if self.setup else "this host's setup is not known"
+
+    def _needs_bar0(self):
+        if self.bus is not None:
+            return None
+        return (self.gate_problem or self.bar0_problem).reason
+
+    # -- the parts --------------------------------------------------------------------------------------
+
+    def _load(self):
+        try:
+            self.figures = self.options.get("expected") or setups.load(setups.EXPECTED)
+        except Problem as p:
+            self.fault(p)
+            self.figures = {}  # said once: the setup below is still found, with no figures
+        try:
+            model = self.options["model"] if "model" in self.options else pi_model()
+            self.setup = setups.detect(model, self.options.get("wiring"), self.figures)
+            self.report["setup"] = self.setup.name
+        except Problem as p:
+            self.fault(p)
+        if self.found["kind"] != "fpgas-online":
+            return
+        try:
+            manifest, files = check.load_release(self.images)
+            builds, layout = check.expectations(manifest, files, self.found["variant"])
+            self.release = (manifest, files, builds, layout)
+            self.report["bitstreams"] = manifest.get("tag")
+        except Exception as e:  # a damaged manifest: the tests that need no release still run
+            self.release = None
+            self.fault(_problem(e, "the installed release"))
+            return
+        try:
+            self.uart_builds = {b["config_identifier"].casefold(): check.build_csrs(self.images, files, b)
+                                for b in builds.values()}  # fmt: skip
+        except Exception as e:
+            self.fault(_problem(e, "the release's csr.json"))
+
+    def _open_bar0(self, stack):
+        """Release the driver, map BAR0 and pass the gate; on any failure, say why in bar0_problem."""
+        reason = check.not_ours(self.found)
+        if reason or self.release is None:
+            self.bar0_problem = Problem("fail", reason or "the installed release could not be read")
+            return
+        if not set(self.wanted) & set(NEEDS_BAR0):  # nothing asked for needs it: leave the board and its driver be
+            self.bar0_problem = Problem("pass", "no test asked for needs BAR0")
+            return
+        manifest, files, builds, _ = self.release
+        self.bar0_problem = None
+        try:
+            stack.enter_context(check.driver_released(self.found, self.driver, self.root))
+            bus = stack.enter_context(self.options.get("open_bar", check.open_bar0)(self.found["bdf"]))
+        except Problem as p:
+            self.fault(p)
+            self.bar0_problem = p
+            return
+        except OSError as e:
+            self.bar0_problem = Problem("error", f"BAR0 of {self.found['bdf']} could not be opened: {e}")
+            self.fault(self.bar0_problem)
+            return
+        try:
+            seen, build, csrs = check.gate(bus, self.images, files, builds, manifest.get("tag"))
+        except Problem as p:
+            self.report.update(p.seen)
+            self.gate_problem = p
+            if "pcie-bar0" not in self.wanted:
+                self.fault(p)
+            return
+        self.report.update(seen)
+        self.bus, self.csrs = bus, csrs
+        self.bar0.update(identifier=seen["running"]["identifier"], build=build)
+
+    # -- the tests ---------------------------------------------------------------------------------------
+
+    def pcie_link(self):
+        status = check.link_status(self.found["bdf"], self.root)
+        expected = self.setup.expected.get("pcie")
+        if not expected:
+            return {"test": "pcie-link", **status, "result": "error",
+                    "reason": f"no expected PCIe figures for the {self.setup.name} setup"}  # fmt: skip
+        faults = check.link_faults(status, expected)
+        entry = {"test": "pcie-link", **status, "expected": expected, "result": "fail" if faults else "pass"}
+        return {**entry, "reason": "; ".join(faults)} if faults else entry
+
+    def pcie_bar0(self):
+        if self.gate_problem:
+            return {"test": "pcie-bar0", "result": self.gate_problem.result, "reason": self.gate_problem.reason,
+                    **self.report.get("running", {})}  # fmt: skip
+        faults, entry = [], {"test": "pcie-bar0", **self.report["running"]}
+        if self.bar0["build"] == "golden":
+            faults.append("running the golden image: the operational slot did not boot")
+        try:
+            self.report["flash"] = check.flash_identity(check.spi_flash.Flash(self.bus))
+        except check.spi_flash.FlashError as e:
+            faults.append(f"the flash did not identify itself: {e}")
+        dna = check.read_dna(self.bus.read, self.csrs)
+        self.bar0["dna"] = dna
+        xadc = check.read_xadc(self.bus.read, self.csrs)
+        entry.update(dna=f"{dna:#x}", xadc=xadc, flash=dict(self.report.get("flash") or {}))
+        faults += check.dna_faults(dna, "BAR0")
+        faults += check.xadc_faults(xadc, self.figures.get("xadc", {}), "BAR0")
+        return {**entry, "result": "fail", "reason": "; ".join(faults)} if faults else {**entry, "result": "pass"}
+
+    def jtag(self):
+        return links.jtag(self.setup, self.found["variant"], self.run, self.bar0.get("dna"),
+                          self.options.get("gpiochip"))  # fmt: skip
+
+    def flash(self):
+        manifest, files, _, layout = self.release
+        slots = check.flash_slots(self.bus, self.images, files, layout)
+        self.report.setdefault("flash", {})["slots"] = slots
+        entry = {"test": "flash", "slots": [{k: s[k] for k in s if k != "sha256"} for s in slots]}
+        bad = [s for s in slots if s["result"] != "match"]
+        if not bad:
+            return {**entry, "result": "pass"}
+        where = ", ".join(f"{s['slot']} differs at {s['first_difference']}" for s in bad)
+        return {**entry, "result": "fail", "reason": f"flash does not hold release {manifest.get('tag')}: {where}"}
+
+    def p2_uart(self):
+        bar0 = {"identifier": self.bar0.get("identifier"), "dna": self.bar0.get("dna")}
+        return links.p2_uart(self.setup, self.uart_builds, self.figures, bar0, self.options.get("uart_opener"),
+                             self.options.get("settle"))  # fmt: skip
+
+    def scratch(self):
+        faults, done = [], []
+        if self.bus is not None:
+            faults += [("fail", f) for f in check.scratch_faults(self.bus.read, self.bus.write, self.csrs, "BAR0")]
+            done.append("BAR0")
+        else:
+            self.not_run["scratch over BAR0"] = self._needs_bar0()
+        if self.setup and self.uart_builds:
+            faults += links.uart_scratch(self.setup, self.uart_builds, self.options.get("uart_opener"),
+                                         self.options.get("settle"))  # fmt: skip
+            done.append("P2 UART")
+        else:
+            self.not_run["scratch over P2 UART"] = self._needs_setup() or "no release builds to talk to"
+        return links._entry("scratch", faults, over=done)
+
+    def p2_gpio(self):
+        return links.p2_gpio(self.setup, self.bus, self.csrs, self.run)
+
+    # -- the whole check -------------------------------------------------------------------------------
+
+    def identity(self):
+        f, r = self.found, self.report
+        out = {"bdf": f["bdf"], "pci_ids": f["ids"], "subsystem": f["subsystem"], "variant": f["variant"]}
+        if r.get("running"):
+            out.update(identifier=r["running"]["identifier"], build=r["running"]["build"])
+        if "dna" in self.bar0:
+            out["dna"] = f"{self.bar0['dna']:#x}"
+        jtag = next((t for t in r["tests"] if t["test"] == "jtag"), {})
+        for key in ("idcode", "dna"):
+            if key in jtag:
+                out.setdefault(key, jtag[key])
+        flash = r.get("flash") or {}
+        out.update({f"flash_{k}": flash[k] for k in ("part", "jedec", "unique_id") if k in flash})
+        return out
+
+    def check(self):
+        unknown = [t for t in self.wanted if t not in TESTS]
+        if unknown:
+            raise Problem("error", f"the Acorn has no test {', '.join(unknown)} (it has {', '.join(TESTS)})")
+        reason = check.not_ours(self.found)
+        if reason:
+            self.faults.append(("fail", reason))
+        if not check.is_acorn(self.found):  # an FPGA we cannot name as an Acorn: nothing else is ours to test
+            return self.finish()
+        self._load()
+        with contextlib.ExitStack() as stack:
+            stack.callback(self._flush)  # whatever happens, the held events go out once the driver is back
+            self._open_bar0(stack)
+            no_bar0 = self._needs_bar0()
+            no_variant = None if self.found["variant"] else "the variant is not known"
+            no_uart = self._needs_setup() or (None if self.uart_builds else "the board does not run a known build")
+            self.test("pcie-link", self._needs_setup(), self.pcie_link)
+            self.test("pcie-bar0", None if self.gate_problem else no_bar0, self.pcie_bar0)
+            self.test("jtag", self._needs_setup() or no_variant, self.jtag)
+            self.report["identity"] = self.identity()
+            self.event("fpga-board-identified", self.report["identity"])
+            self.test("flash", no_bar0, self.flash)
+            self.test("p2-uart", no_uart, self.p2_uart)
+            self.test("scratch", None if self.bus is not None or not no_uart else no_bar0, self.scratch)
+            no_gpio = self._needs_setup() or (
+                None if self.setup.p2_gpio else f"J5 and H5 are not wired on the {self.setup.name} setup"
+            )
+            self.test("p2-gpio", no_gpio or no_bar0, self.p2_gpio)
+        self._flush()
+        if self.driver:
+            self.report["driver"] = self.driver
+            if "rebind_error" in self.driver:
+                self.faults.append(("error", self.driver["rebind_error"]))
+        return self.finish()
+
+    def finish(self):
+        r = self.report
+        if "identity" not in r:
+            r["identity"] = self.identity()
+            self.event("fpga-board-identified", r["identity"])
+        if self.not_run:
+            r["not_run"] = self.not_run
+        bad = [t for t in r["tests"] if t["result"] != "pass"]
+        r["result"] = worst([*(res for res, _ in self.faults), *(t["result"] for t in r["tests"])])
+        reasons = [reason for _, reason in self.faults] + [f"{t['test']} {t['result']}: {t.get('reason', '')}"
+                                                           for t in bad]  # fmt: skip
+        if reasons:
+            r["reason"] = "; ".join(reasons)
+        r["state"] = self.state()
+        return r
+
+    def state(self):
+        f = self.found
+        state = {"bdf": f["bdf"], "ids": f["ids"], "subsystem": f["subsystem"]}
+        if f["variant"]:
+            state["variant"] = f["variant"]
+        dna = self.report.get("identity", {}).get("dna")
+        if dna:
+            state["dna"] = dna
+        flash = self.report.get("flash")
+        if flash:
+            state["flash"] = {k: flash[k] for k in ("part", "jedec", "unique_id") if k in flash}
+            slots = {s["slot"]: s["sha256"] for s in flash.get("slots", []) if "sha256" in s}
+            if slots:
+                state["flash"]["slots"] = slots
+        return state
+
+
+def check_board(found, options):
+    """The board's report: {board, found, variant, result, reason, tests, ...}."""
+    return _Suite(found, options).check()
