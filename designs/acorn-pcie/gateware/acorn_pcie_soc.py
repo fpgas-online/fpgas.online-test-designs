@@ -12,12 +12,25 @@ Reachable two ways, with the same CSRs behind both:
   which puts it back. A command has 1 s to complete, not LiteX's usual 100 ms, so
   multi-word transfers work at 1200.
 
+The operational image also carries what a host needs to check the board without
+a driver or the BIOS:
+
+- **DRAM BIST** (`dram_generator`, `dram_checker`): LiteDRAM's pattern writer
+  and checker on their own crossbar ports. A host sets `base`, `end` and
+  `length` (bytes), starts the generator, waits for `done`, then does the same
+  with the checker and reads `errors`. Each one's `ticks` is the sys clock
+  cycles its pass took, so bytes / (ticks / sys clock) is the bandwidth.
+- **P2 serial/GPIO switch** (`p2_serial`, designs/_shared/acorn_p2.py): J2 and
+  K2 become two GPIOs while `mode` is 1, so every P2 pin can be driven from
+  either end. It is the serial link out of reset, holds the UARTBone in reset
+  while switched, and switches back by itself after `timeout` ms.
+
 The BIOS console is on the crossover UART, so `litex_term crossover` works
 through either bridge.
 
 `--golden` builds the recovery image for flash offset 0x0: same PCIe, flash,
-ICAP, DNA/XADC, CPU and UART, but no DDR3 and no P2 GPIO, so there is nothing
-in it that can fail calibration. Both images pin the shared CSRs to the same
+ICAP, DNA/XADC, CPU and UART, but no DDR3, no BIST and no P2 GPIO or switch, so
+there is nothing in it that can fail calibration. Both images pin the shared CSRs to the same
 addresses (`csr_map`) so one kernel driver and one set of host tools serve both.
 
 Build:
@@ -36,6 +49,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
+from litedram.frontend.bist import LiteDRAMBISTChecker, LiteDRAMBISTGenerator
 from litedram.modules import MT41K256M16, MT41K512M16
 from litedram.phy import s7ddrphy
 from litepcie.phy.s7pciephy import S7PCIEPHY
@@ -54,6 +68,7 @@ from litex_boards.platforms import sqrl_acorn
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+from designs._shared.acorn_p2 import P2SerialSwitch, fleet_platform, spare_gpio_io
 from designs._shared.build_helpers import default_build_dir
 from designs._shared.dna_reader import DNAReader
 from designs._shared.pin_check import check_build
@@ -96,8 +111,6 @@ _extension_io = [
         Subsignal("tx_p", Pins("B6")),
         Subsignal("tx_n", Pins("A6")),
     ),
-    # P2 spare GPIOs: bit 0 = J5 -> Pi GPIO3, bit 1 = H5 -> Pi GPIO4.
-    ("p2_gpio", 0, Pins("J5 H5"), IOStandard("LVCMOS33")),
 ]
 
 # DDR3 fitted per variant.
@@ -158,11 +171,19 @@ class AcornPCIeSoC(SoCCore):
         "pcie_dma0": 12,
         "pcie_endpoint": 13,
         "leds": 14,
+        # Operational image only. Pinned too, because host tools read them by address.
+        "ddrphy": 15,
+        "p2_gpio": 16,
+        "sdram": 17,
+        "dram_generator": 18,
+        "dram_checker": 19,
+        "p2_serial": 20,
     }
 
     def __init__(self, variant="cle-215+", toolchain="vivado", sys_clk_freq=100e6, golden=False, **kwargs):
-        platform = sqrl_acorn.Platform(variant=variant, toolchain=toolchain)
+        platform = fleet_platform(variant, toolchain)
         platform.add_extension(_extension_io)
+        platform.add_extension(spare_gpio_io())
         with_ddr = not golden
 
         # CRG --------------------------------------------------------------------------------------
@@ -188,6 +209,10 @@ class AcornPCIeSoC(SoCCore):
         # UARTBone on P2 (K2/J2) -------------------------------------------------------------------
         # Not uart_name="crossover+uartbone": see designs/_shared/uartbone_break.py for what that lacks.
         serial = platform.request("serial")
+        if not golden:
+            # A host can borrow J2/K2 as GPIOs, so every P2 pin can be checked in both directions.
+            self.p2_serial = P2SerialSwitch(serial, sys_clk_freq)
+            serial = self.p2_serial.uart_pads
         self.uartbone = BreakResetUARTBone(
             serial,
             sys_clk_freq,
@@ -197,6 +222,8 @@ class AcornPCIeSoC(SoCCore):
             address_width=self.bus.address_width,
         )
         self.bus.add_master(name="uartbone", master=self.uartbone.wishbone)
+        if not golden:
+            self.comb += self.uartbone.reset.eq(self.p2_serial.link_reset)
         # J2 floats whenever the host has GPIO14 as an input (and is TMS on a Compute Blade).
         # Every stray byte costs the bridge a timeout, so hold the line at idle.
         platform.add_platform_command("set_property PULLUP TRUE [get_ports {{serial_rx}}]")
@@ -221,6 +248,11 @@ class AcornPCIeSoC(SoCCore):
                 module=_DDR3_MODULE[variant](sys_clk_freq, "1:4"),
                 l2_cache_size=8192,
             )
+            # Pattern writer + checker a host can run over either bridge, with no BIOS or driver. Not
+            # add_sdram(with_bist=True): its names (sdram_generator/_checker) switch on the BIOS's own BIST
+            # code, liblitedram/bist.c, which does not compile with this LiteX (PRIu32 without <inttypes.h>).
+            self.dram_generator = LiteDRAMBISTGenerator(self.sdram.crossbar.get_port())
+            self.dram_checker = LiteDRAMBISTChecker(self.sdram.crossbar.get_port())
 
         # PCIe Gen2 x1 -----------------------------------------------------------------------------
         self.comb += platform.request("pcie_clkreq_n").eq(0)
@@ -262,7 +294,7 @@ class AcornPCIeSoC(SoCCore):
         self.flash_cs_n = GPIOOut(platform.request("flash_cs_n"), reset=1)
         self.flash = S7SPIFlash(platform.request("flash"), sys_clk_freq, 25e6)
 
-        # P2 spare GPIOs (R3): inputs out of reset, so they never fight the Pi or JTAG -------------
+        # P2 spare GPIOs J5/H5: inputs out of reset, so they never fight the Pi or JTAG ----------
         if not golden:
             self.p2_gpio = GPIOTristate(platform.request("p2_gpio"))
 
@@ -281,7 +313,7 @@ def main():
         "--variant",
         default="cle-215+",
         choices=sorted(_DDR3_MODULE),
-        help="Board variant: cle-215+ (Acorn), cle-215 (NiteFury), cle-101 (LiteFury).",
+        help="Board variant: cle-215+ (Acorn, 1 GiB), cle-215 (NiteFury, 1 GiB), cle-101 (LiteFury, 512 MiB).",
     )
     parser.add_target_argument("--sys-clk-freq", default=100e6, type=float, help="System clock frequency.")
     parser.add_target_argument("--golden", action="store_true", help="Build the minimal recovery image.")
