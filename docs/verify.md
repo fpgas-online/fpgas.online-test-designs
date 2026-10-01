@@ -100,9 +100,9 @@ sudo fpgas-verify --update                         # accept a board or flash tha
 |---|---|
 | `--board B` | `fpgas-verify` only: check board `B`, whatever the configuration says (as `fpgas-B-verify` does) |
 | `--no-probe` | `fpgas-verify` only: with `fpga-board = auto`, never drive anything to find a board (no NeTV2 JTAG scan) |
-| `--test T` | run only test `T` (repeatable); any test in `fpgas-<board>-debug list`, boot check or not. A name the board does not have is an `error`; with `auto`, each board found runs the named tests it has and lists the rest as `tests_skipped`. The Acorn's check has no selectable tests. A `--test` run neither records nor compares the state (it reads only part of it), so it never causes a later `changed`, and `--update` does nothing with it |
+| `--test T` | run only test `T` (repeatable): any test in `fpgas-<board>-debug list`, boot check or not. This is part of the check, not the board's result: it is never published (no `fpga-verifying` / `fpga-verified`, so the site's gate never sees it), its report goes to stdout unless `--report` says otherwise (never over the boot's `/run/fpgas-online/verify.json`), and it neither records nor compares the state, so it never causes a later `changed`. Not with `--update`. Configured for one board, a name it does not have is an `error`, as is any name for the Acorn, whose check has no selectable tests. With `auto`, each board found runs the named tests it has (the rest are listed as `tests_skipped`); a board with none of them is not checked (`not_checked`), and if no board has any of them the result is `error` |
 | `--variant V`, `--port P`, `--images DIR` | override the detected variant, the board's UART on the Pi, the installed bitstreams |
-| `--report PATH` | where the JSON report goes (default `/run/fpgas-online/verify.json`; `-` for stdout) |
+| `--report PATH` | where the JSON report goes (default `/run/fpgas-online/verify.json`, or stdout with `--test`; `-` for stdout) |
 | `--state PATH` | the recorded state (default `/var/lib/fpgas-online/verify-state.json`) |
 | `--update` | record what is found now as the state, instead of failing on a difference |
 | `--no-publish` | do not send the `fpga-verifying` / `fpga-verified` fleet-events |
