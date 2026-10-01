@@ -57,12 +57,13 @@ sudo fpgas-acorn-verify --no-publish --report -      # the Acorn only, the JSON 
 ```
 
 The result is `pass` only when every test passes. A board running its golden image (the operational slot did
-not boot) fails. A kernel driver bound to the board (`litepcie.ko`) is unbound for the check and bound again
-afterwards (`fpgas-acorn-flash` instead refuses a board a driver is bound to). A board still on SQRL's factory
+not boot) fails. A kernel driver bound to the board (`litepcie.ko`) is unbound for the check, when a test asked for
+uses BAR0, and bound again afterwards (`fpgas-acorn-flash` instead refuses a board a driver is bound to). A board still on SQRL's factory
 image, or the vendor XDMA sample, is `fail` with a reason starting `unconverted:`: it does not run the
 fpgas.online image, so it cannot be offered to users until `fpgas-acorn-flash` converts it (the XDMA sample can
 also be a NeTV2 on PCIe, which that tool does not apply to). A PCIe Screamer (PCILeech, `10ee:0666`) or a stock
-Xilinx XDMA design (most likely a PicoEVB) is named, and fails: fpgas.online has no test design for it yet. Any
+Xilinx XDMA design (most likely a PicoEVB: `10ee:7021` with the Xilinx default subsystem, told apart
+from an old fpgas.online build by its XDMA class code and BAR2) is named, and fails: fpgas.online has no test design for it yet. Any
 other PCIe FPGA whose design the check does not recognise is `fail` too. A Pi with no Acorn is `missing`:
 fatal, since the host was set up for one.
 

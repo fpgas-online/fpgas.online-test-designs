@@ -162,12 +162,16 @@ the others: the board's reason lists every fault.
 | `1e24:021f` or `1e24:0101` as vendor:device | an Acorn on SQRL's factory image | `fail`, `unconverted: …`; only `pcie-link` and `jtag` run |
 | `10ee:7011` | the vendor XDMA sample (an Acorn or a NeTV2) | `fail`, `unconverted: …` |
 | `10ee:0666` | a PCIe Screamer running PCILeech | `fail`: fpgas.online has no test design for this board yet |
-| `10ee:7021`, subsystem `10ee:0007`, class `070001` with a second BAR | a stock Xilinx XDMA design (most likely a PicoEVB) | `fail`: fpgas.online has no test design for this board yet |
+| `10ee:7021`, subsystem `10ee:0007`, class `070001`, with a BAR2 | a stock Xilinx XDMA design (most likely a PicoEVB) | `fail`: fpgas.online has no test design for this board yet |
 | any other Xilinx or SQRL ID | not a design we built | `fail` |
 
-Nothing is sent to a BAR, or over the P2 UART, unless the design there is a build of the installed release
-(its identifier is one the release's manifest lists). The CSR addresses then come from that build's `csr.json`
-in the release.
+The XDMA design and an old LitePCIe build of ours have the same IDs, since both keep the Xilinx default
+subsystem `10ee:0007`, so the class code and the BAR2 that only the XDMA IP has tell them apart.
+
+Nothing is sent to the BARs of a board whose PCI IDs are not ours. On ours, nothing past the identifier read
+is sent over BAR0 or over the P2 UART unless that identifier is a build of the installed release (one the
+release's manifest lists). The CSR addresses then come from that build's `csr.json` in the release, and a
+`csr.json` that puts a CSR the check uses outside the 64 KiB of BAR0 it maps is an `error`.
 
 **Which setup the host is.** The Acorn has two setups, each with its own wiring, both in
 [`docs/wiring/acorn/wiring.toml`](wiring/acorn/wiring.toml), which the tools package installs:
@@ -198,8 +202,12 @@ openFPGALoader leaves the JTAG pins driven, so they are put back as they were fo
 Blade GPIO14 is both TMS and the UART's TX, and goes back to its UART function.
 
 A test that cannot run because of an earlier fault (no BAR0 on a factory image, say) is listed in the
-report's `not_run` with why; the fault that stopped it is in the reason. A kernel driver bound to the board
-(`litepcie.ko`) is unbound for the check and bound again after it.
+report's `not_run` with why; the fault that stopped it is in the reason. A test that fails in a way the
+check did not foresee is an `error` naming what went wrong, and the others still run.
+
+A kernel driver bound to the board (`litepcie.ko`) is unbound for the check, but only when a test asked for
+uses BAR0 (`pcie-bar0`, `flash`, `scratch`, `p2-gpio`), and bound again after it. The events of the tests
+run meanwhile are held and sent once it is bound again.
 
 `--test` runs any of these on their own: `--test pcie-link --test pcie-bar0 --test flash` only reads.
 
@@ -259,7 +267,8 @@ On a host with persistent storage the first run records each board's identity an
 flash in `/var/lib/fpgas-online/verify-state.json`. A later run that sees a different board, or a flash that
 was rewritten, is `changed` (fatal) until `sudo fpgas-verify --update` records the new state: run it after
 flashing or swapping a board on purpose. Loading a design into SRAM (every check does) and upgrading the
-packages are not changes. A flash that could not be read this time is not compared.
+packages are not changes. A flash that could not be read this time is not compared. A fact the record does
+not have yet (one a newer version reads, such as an Acorn's device DNA) is added to it, and is not a change.
 
 ### The debug tool
 
