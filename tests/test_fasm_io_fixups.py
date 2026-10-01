@@ -112,3 +112,25 @@ def test_the_command_line_rewrites_the_file_in_place(tmp_path):
     fasm.write_text("".join(FASM))
     main([str(fasm), "--vref-mv", "750", "--sstl15-reduced-drive"])
     assert fasm.read_text() == "".join(fix_lines(FASM, vref_mv=750, sstl15_reduced_drive=True))
+
+
+def test_a_vref_asked_for_with_no_vref_feature_fails_the_build(tmp_path):
+    fasm = tmp_path / "top.fasm"
+    no_vref = "".join(line for line in FASM if "VREF" not in line)
+    fasm.write_text(no_vref)
+    with pytest.raises(SystemExit, match="no HCLK_IOI3 VREF feature"):
+        main([str(fasm), "--vref-mv", "750"])
+    assert fasm.read_text() == no_vref  # left as it was
+
+
+def test_reduced_drive_asked_for_with_no_sstl15_output_fails_the_build(tmp_path):
+    fasm = tmp_path / "top.fasm"
+    fasm.write_text("".join(line for line in FASM if "SSTL135_SSTL15.SLEW.FAST" not in line))
+    with pytest.raises(SystemExit, match="no SSTL15 output to rewrite"):
+        main([str(fasm), "--sstl15-reduced-drive"])
+
+
+def test_a_vref_already_right_is_no_failure(tmp_path):
+    fasm = tmp_path / "top.fasm"
+    fasm.write_text("".join(fix_lines(FASM, vref_mv=750)))
+    main([str(fasm), "--vref-mv", "750"])

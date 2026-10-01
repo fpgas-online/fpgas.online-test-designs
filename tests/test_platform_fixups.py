@@ -4,10 +4,14 @@ from pathlib import Path
 
 import pytest
 from litex.build.generic_platform import IOStandard, Subsignal
-from litex_boards.platforms import digilent_arty, kosagi_netv2
+from litex_boards.platforms import digilent_arty, kosagi_fomu_evt, kosagi_netv2
 from migen import ClockDomain
 
-from designs._shared.platform_fixups import constrain_openxc7_clocks, fix_openxc7_reduced_drive_iostandards
+from designs._shared.platform_fixups import (
+    constrain_openxc7_clocks,
+    fix_openxc7_reduced_drive_iostandards,
+    require_timing,
+)
 
 
 def iostandards(resource):
@@ -165,3 +169,54 @@ def test_nextpnr_logs_to_a_file_the_retry_can_read():
     constrain_openxc7_clocks(platform, {ClockDomain("sys"): 75e6})
     tc.finalize()
     assert "--log digilent_arty_nextpnr.log" in tc._nextpnr._pnr_opts
+
+
+def test_a_second_call_adds_its_clocks_but_wraps_nothing_twice():
+    platform = digilent_arty.Platform(variant="a7-35", toolchain="openxc7")
+    tc = platform.toolchain
+
+    class _Nextpnr:
+        _pnr_opts = "--seed 1 "
+
+    def finalize():
+        tc._nextpnr = _Nextpnr()
+
+    tc.finalize = finalize
+    tc._build_name = "digilent_arty"
+    sys, eth = ClockDomain("sys"), ClockDomain("eth")
+    constrain_openxc7_clocks(platform, {sys: 75e6})
+    constrain_openxc7_clocks(platform, {eth: 25e6})
+    tc.finalize()
+    assert tc._nextpnr._pnr_opts.count("--log ") == 1
+    assert tc.clocks[eth.clk][0] == 40.0
+
+
+def test_require_timing_on_openxc7_is_constrain_openxc7_clocks():
+    platform = digilent_arty.Platform(variant="a7-35", toolchain="openxc7")
+    seen = {}
+    platform.toolchain.build = lambda *args, **kwargs: seen.update(kwargs)
+    sys = ClockDomain("sys")
+    require_timing(platform, {sys: 75e6})
+    platform.toolchain.build(platform, None, timingstrict=False)
+    assert seen["timingstrict"] is True
+    assert platform.toolchain.clocks[sys.clk][0] == pytest.approx(1e3 / 75, abs=1e-3)
+
+
+def test_ice40_builds_fail_when_timing_fails():
+    platform = kosagi_fomu_evt.Platform()
+    seen = []
+    platform.toolchain.build = lambda *args, **kwargs: seen.append(kwargs)
+    sys = ClockDomain("sys")
+    require_timing(platform, {sys: 12e6})
+    require_timing(platform, {})  # a second call wraps nothing again
+    platform.toolchain.build(platform, None, timingstrict=False)
+    assert seen == [{"timingstrict": True}]
+    assert platform.toolchain.clocks[sys.clk][0] == pytest.approx(1e3 / 12, abs=1e-3)
+
+
+def test_require_timing_leaves_vivado_alone():
+    platform = digilent_arty.Platform(variant="a7-35", toolchain="vivado")
+    build = platform.toolchain.build
+    require_timing(platform, {ClockDomain("sys"): 75e6})
+    assert platform.toolchain.build == build
+    assert not platform.toolchain.clocks

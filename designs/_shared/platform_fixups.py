@@ -13,8 +13,10 @@ from litex.build.generic_platform import IOStandard, Subsignal
 # nextpnr-xilinx (openXC7 0.8.2, and its master as of 2026-09) only knows SSTL12/SSTL135/SSTL15.
 # For any other SSTL name it writes no input-buffer, drive or VREF bits, so an input in, say,
 # SSTL15_R has no receiver: the NeTV2's DDR3 data pins read back nothing at any IDELAY tap.
-# The _R ("reduced drive") standards differ from their plain ones only in output drive strength,
-# and prjxray has no bits for that difference, so the plain standard is all this flow can build.
+# The _R ("reduced drive") standards differ from their plain ones only in output drive strength, and
+# nextpnr-xilinx has no _R standards, so they are built as the plain ones. For SSTL15_R the reduced drive is
+# put back in the FASM (fasm_io_fixups.py: LVCMOS15.DRIVE.I8, as Vivado encodes it); for SSTL135_R no such
+# feature has been decoded, so it builds at full drive (no board here uses it).
 _REDUCED_DRIVE_IOSTANDARDS = {
     "SSTL15_R": "SSTL15",
     "DIFF_SSTL15_R": "DIFF_SSTL15",
@@ -53,12 +55,14 @@ def constrain_openxc7_clocks(platform, domains):
     """
     if not getattr(platform.toolchain, "is_openxc7", False):
         return
-    for domain, freq in domains.items():
-        if freq <= 0:
-            raise ValueError(f"clock domain {domain.name}: frequency {freq} is not positive")
-        platform.add_period_constraint(domain.clk, 1e9 / freq)
+    _add_period_constraints(platform, domains)
 
     toolchain = platform.toolchain
+    # Wrap the toolchain once: a second call (two CRG helpers, say) only adds its periods. Wrapping again
+    # would pass nextpnr --log twice, which it refuses, and nest the seed retries.
+    if getattr(toolchain, "_fpgas_online_strict_timing", False):
+        return
+    toolchain._fpgas_online_strict_timing = True
 
     # build() resets timingstrict from its keyword argument, so force it there.
     build = toolchain.build
@@ -81,6 +85,42 @@ def constrain_openxc7_clocks(platform, domains):
 
     toolchain.finalize = finalize_with_log
     toolchain.run_script = _retry_missed_timing(toolchain)
+
+
+def _add_period_constraints(platform, domains):
+    for domain, freq in domains.items():
+        if freq <= 0:
+            raise ValueError(f"clock domain {domain.name}: frequency {freq} is not positive")
+        platform.add_period_constraint(domain.clk, 1e9 / freq)
+
+
+def require_timing(platform, domains):
+    """Fail the build if the design misses timing: every design calls this once, before building.
+
+    *domains* maps each ClockDomain the design's CRG makes (a PLL output, or a board clock used as sys
+    through a buffer) to its frequency in Hz; a design clocked straight from a board input passes {}, as the
+    board's own constraint covers it. Every clock that drives logic must be named: nextpnr times any other at
+    the fastest constrained frequency.
+
+    openXC7: constrain_openxc7_clocks (real PLL periods, strict nextpnr, retries with other seeds).
+    iCE40 (icestorm): the periods, and strict nextpnr, which LiteX otherwise runs with --timing-allow-fail.
+    Vivado: nothing; it derives PLL clocks itself and reports timing in its own way.
+    """
+    toolchain = platform.toolchain
+    if getattr(toolchain, "is_openxc7", False):
+        constrain_openxc7_clocks(platform, domains)
+    elif getattr(toolchain, "family", None) == "ice40":
+        _add_period_constraints(platform, domains)
+        if getattr(toolchain, "_fpgas_online_strict_timing", False):
+            return
+        toolchain._fpgas_online_strict_timing = True
+        build = toolchain.build
+
+        def strict_build(*args, **kwargs):
+            kwargs["timingstrict"] = True
+            return build(*args, **kwargs)
+
+        toolchain.build = strict_build
 
 
 OPENXC7_TIMING_SEEDS = 5
