@@ -11,7 +11,7 @@ before changing this page.
 |---|---|
 | board | one FPGA board (Arty A7, NeTV2, Acorn/LiteFury, Fomu, TT FPGA demo board, ...) |
 | setup | a kind of board together with the kind of Raspberry Pi it is attached to, and how the two are wired |
-| full test design | the one fpgas.online bitstream for a board: every function the board has (soft CPU, UART, DDR, SPI flash, Ethernet, PCIe, Wishbone bridges, device DNA, temperature sensor, ...) in one design. It is written to the board's flash and the board boots it |
+| full test design | the one fpgas.online bitstream for a board: every function the board has (soft CPU, UART, DDR, SPI flash, Ethernet, PCIe, Wishbone bridges, device DNA, temperature sensor, ...) in one design. On a board that boots from its own flash, it is written there and the board boots it |
 | single-function test design | a bitstream that tests one function (the UART, the DDR, the Pmod pins, ...) on its own |
 | golden bitstreams | the set of bitstreams currently approved for every fpgas.online board. The tool checks boards against them |
 | site | the fpgas.online website of one location, such as `welland.fpgas.online` |
@@ -47,7 +47,7 @@ or fail. It passes only when all of these hold:
 * **GPIO pins are checked in both directions.** Today pin-id checks FPGA to Pi (each FPGA pin sends its own
   name to the Pi) and pmod-loopback checks Pi to FPGA (the Pi drives a pin, and the FPGA sends it back inverted
   on another). The full test design must do both.
-* **The check runs at every boot, and only then.** To check a Pi again, reboot it.
+* **On the fleet, the check runs at every boot, and only then.** To check a Pi again, reboot it.
 * **Users are assumed not to write the flash.** Most never touch it. If one does, the check sees the flash no
   longer holds the golden design and fails the board. Letting users have part of the flash, locking the
   golden region, and restoring a flash a user changed are
