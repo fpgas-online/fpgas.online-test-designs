@@ -213,9 +213,13 @@ class TestBoard(Board):
         except Problem as p:
             return {**report, "result": p.result, "reason": p.reason}
         report["bitstreams"] = manifest.get("version")
+        event = options.get("event") or (lambda stage, details: None)
         with self.services_stopped(runner) as held:
             for test in tests:
+                event("fpga-test-started", {"test": test})
                 report["tests"].append(self.run_test(test, variant, host, images, manifest, runner))
+                done = report["tests"][-1]
+                event("fpga-test-finished", {"test": test, "result": done["result"], "reason": done.get("reason", "")})
         if held["stopped"]:
             report["services_stopped"] = held["stopped"]
         state = self.identity({**found, "variant": variant})

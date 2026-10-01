@@ -421,3 +421,74 @@ def test_a_publish_that_times_out_is_said_and_changes_nothing(monkeypatch, capsy
 
 def test_every_board_module_is_found():
     assert set(installed()) == {"acorn", "arty", "fomu", "netv2", "tt"}
+
+
+# -- the progress events ---------------------------------------------------------------------------------------
+
+
+class Busy(Fake):
+    """A board whose check runs two tests and says so through options["event"], as the board modules do."""
+
+    def check(self, host, found, options):
+        for test, result in (("uart", "pass"), ("ddr", self.result)):
+            options["event"]("fpga-test-started", {"test": test})
+            options["event"]("fpga-test-finished", {"test": test, "result": result, "reason": ""})
+        return super().check(host, found, options)
+
+
+def test_the_site_hears_each_board_found_and_each_test_with_its_board(opts):
+    events = []
+    arty = Busy("arty", seen=[{"variant": "a7-35", "usb": "1-1"}], result="fail")
+    runner.verify({**opts, "event": lambda s, d: events.append((s, d))}, _boards(arty), usb=[], pci=[],
+                  mode=("auto", "test"))  # fmt: skip
+    assert events[0] == ("fpga-board-found", {"board": "arty", "variant": "a7-35", "where": "1-1"})
+    assert events[1:] == [
+        ("fpga-test-started", {"board": "arty", "test": "uart"}),
+        ("fpga-test-finished", {"board": "arty", "test": "uart", "result": "pass", "reason": ""}),
+        ("fpga-test-started", {"board": "arty", "test": "ddr"}),
+        ("fpga-test-finished", {"board": "arty", "test": "ddr", "result": "fail", "reason": ""}),
+    ]
+
+
+def test_two_boards_of_a_kind_are_told_apart_in_the_events(opts):
+    events = []
+    acorns = Busy("acorn", seen=[{"variant": "cle-215+", "bdf": "0001:01:00.0"},
+                                    {"variant": "cle-101", "bdf": "0002:01:00.0"}])  # fmt: skip
+    runner.verify({**opts, "event": lambda s, d: events.append((s, d))}, _boards(acorns), usb=[], pci=[],
+                  mode=("auto", "test"))  # fmt: skip
+    found = [d["board"] for s, d in events if s == "fpga-board-found"]
+    assert found == ["acorn@0001:01:00.0", "acorn@0002:01:00.0"]
+    assert {d["board"] for s, d in events if s == "fpga-test-started"} == set(found)
+
+
+def test_no_board_is_an_event_too(opts):
+    events = []
+    runner.verify({**opts, "event": lambda s, d: events.append((s, d))}, _boards(Fake("arty")), usb=[], pci=[],
+                  mode=("auto", "test"))  # fmt: skip
+    assert [s for s, _ in events] == ["fpga-no-board"]
+    assert "none of the installed boards" in events[0][1]["reason"]
+
+
+def test_the_events_go_out_in_order_and_a_dead_broker_stops_the_progress_ones(opts, tmp_path, monkeypatch):
+    monkeypatch.setattr(runner, "installed", lambda: _boards(Busy("arty", seen=[{"variant": "a7-35"}])))
+    monkeypatch.setattr(runner, "usb_devices", lambda: [])
+    monkeypatch.setattr(runner, "pci_devices", lambda: [])
+    sent = []
+    monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append((stage, details)) or True)
+    out = tmp_path / "r.json"
+    runner.run({**opts, "board": "arty", "report": str(out), "no_publish": False})
+    assert [s for s, _ in sent] == ["fpga-verifying", "fpga-board-found", "fpga-test-started", "fpga-test-finished",
+                                    "fpga-test-started", "fpga-test-finished", "fpga-verified"]  # fmt: skip
+    assert all(isinstance(v, str) for _, d in sent for v in d.values())
+    assert sent[1][1] == {"board": "arty", "variant": "a7-35", "where": "-"}
+    sent.clear()
+    monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append(stage) and False)
+    runner.run({**opts, "board": "arty", "report": str(out), "no_publish": False})
+    assert sent == ["fpga-verifying", "fpga-verified"]  # one timeout, not one per test; the result is still tried
+
+
+def test_the_gate_events_are_the_ones_the_site_reads():
+    """fpgas.online-site's fpga_states() reads only fpga-verifying and fpga-verified (FPGA_STAGES); the rest are
+    progress, and must not be mistaken for them."""
+    assert {"fpga-verifying", "fpga-verified"} <= set(runner.EVENTS)
+    assert all(s.startswith("fpga-") for s in runner.EVENTS)

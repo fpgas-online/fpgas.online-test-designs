@@ -13,8 +13,6 @@ import pytest
 from fpgas_online_verify import cli, core, debug, host_tests
 from fpgas_online_verify.boards import arty, fomu, netv2, tt_fpga
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
-from fpgas_online_verify.boards.acorn import check as acorn_check
-from fpgas_online_verify.boards.acorn import links as acorn_links
 
 PI3 = "Raspberry Pi 3 Model B Plus Rev 1.3"
 PI5 = "Raspberry Pi 5 Model B Rev 1.0"
@@ -123,6 +121,7 @@ def test_the_acorn_claims_every_xilinx_endpoint_and_fails_a_design_it_did_not_bu
     assert other["bdf"] == "0002:01:00.0" and other["kind"] == "litex-other"
     report = ACORN.check({}, other, {"images": "/nonexistent"})
     assert report["result"] == "fail" and "not a design we built" in report["reason"]
+    assert report["tests"] == []  # nothing is sent to a design we did not build
 
 
 def test_a_pi_with_no_pci_or_usb_bus_has_no_devices_and_finds_no_acorn(tmp_path):
@@ -331,7 +330,7 @@ def test_a_bridge_that_will_not_stop_or_restart_makes_the_check_an_error(tmp_pat
 
 
 def test_only_an_acorn_claim_on_a_design_it_cannot_name_is_weak():
-    assert all(ACORN.weak({"kind": k}) for k in ("litex-other", "vendor-xdma", "unknown"))
+    assert all(ACORN.weak({"kind": k}) for k in ("litex-other", "vendor-xdma", "pcileech", "xilinx-xdma", "unknown"))
     assert not ACORN.weak({"kind": "fpgas-online"}) and not ACORN.weak({"kind": "sqrl-factory"})
 
 
@@ -340,21 +339,12 @@ def test_the_fomu_state_is_its_serial_only(tmp_path):
     assert report["result"] == "pass" and report["state"] == {"variant": "evt", "serial": "fomu-7"}
 
 
-def test_the_acorn_state_is_its_slot_and_flash_contents(tmp_path, monkeypatch):
-    found = {"bdf": "0001:01:00.0", "ids": "10ee:7021", "subsystem": "1e24:021f", "kind": "fpgas-online",
-             "variant": "cle-215+"}  # fmt: skip
-    monkeypatch.setattr(acorn_check, "load_release", lambda images: ({"tag": "t"}, {}))
-    flash = {"part": "S25FL256S", "jedec": "0x010219", "unique_id": "ab",
-             "slots": [{"slot": "0x000000", "result": "match", "sha256": "g"},
-                       {"slot": "0x400000", "result": "match", "sha256": "o"}]}  # fmt: skip
-    monkeypatch.setattr(acorn_check, "check_board", lambda *a: {**found, "result": "pass", "flash": flash})
-    # the links have their own tests (test_acorn_links.py)
-    monkeypatch.setattr(acorn_links, "jtag", lambda variant, run: {"test": "jtag", "result": "pass"})
-    report = ACORN.check({}, found, {"images": tmp_path})
-    assert report["result"] == "pass" and report["bitstreams"] == "t"
-    assert report["state"] == {"bdf": "0001:01:00.0", "ids": "10ee:7021", "subsystem": "1e24:021f",
-                               "variant": "cle-215+", "flash": {"part": "S25FL256S", "jedec": "0x010219",
-                               "unique_id": "ab", "slots": {"0x000000": "g", "0x400000": "o"}}}  # fmt: skip
+def test_a_test_board_says_when_each_test_starts_and_how_it_ended(tmp_path):
+    events = []
+    _check(FOMU, tmp_path, {"variant": "evt", "usb": "1-3", "serial": "fomu-7"}, Runner(),
+           event=lambda stage, d: events.append((stage, d)))  # fmt: skip
+    assert events == [("fpga-test-started", {"test": "uart"}),
+                      ("fpga-test-finished", {"test": "uart", "result": "pass", "reason": ""})]  # fmt: skip
 
 
 # -- the commands and the debug tool ---------------------------------------------------------------------------

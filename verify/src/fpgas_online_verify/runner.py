@@ -9,6 +9,9 @@
 Then each board found is checked (its board module), and what it reported as its state (identity, flash) is
 compared with what was recorded last time (state.py): any difference is "changed", which is fatal, unless
 --update, which records what was found instead.
+
+The site hears how it goes through fleet-events, each small and flat (EVENTS): the check starting, each board
+found or no board, a board identified, each test started and finished, and the final result.
 """
 
 import datetime
@@ -22,6 +25,19 @@ from .core import Problem, flatten, hold_lock, pci_devices, publish, usb_devices
 
 SCHEMA_VERSION = 2
 REPORT = pathlib.Path("/run/fpgas-online/verify.json")
+# The fleet-events, and the details each carries. Every one but the last two is progress: the site's gate reads
+# only fpga-verifying and fpga-verified (fpgas.online-site fleet/services.py FPGA_STAGES).
+EVENTS = {
+    "fpga-verifying": "started_at",
+    "fpga-board-found": "board, variant, where (PCI slot, USB path or JTAG IDCODE)",
+    "fpga-no-board": "reason",
+    "fpga-board-identified": "board, then what identifies it (an Acorn's: bdf, pci_ids, subsystem, variant, "
+    "identifier, build, dna, idcode, flash_part, flash_jedec, flash_unique_id)",
+    "fpga-test-started": "board, test",
+    "fpga-test-finished": "board, test, result, reason",
+    "fpga-verified": "the report, flattened (details())",
+}
+EVENT_TIMEOUT = 15  # a broker that is down must not hold up the check (nor fpgas-tt, which waits for it)
 
 
 def _now():
@@ -117,8 +133,18 @@ def _for_board(board, options, mode):
     return ({**options, "tests": run} if run else None), [t for t in wanted if t not in have]
 
 
+def _quiet(stage, details):
+    pass
+
+
+def _where(found):
+    return found.get("bdf") or found.get("usb") or found.get("idcode") or "-"
+
+
 def verify(options, boards=None, usb=None, pci=None, mode=None):
+    """The report. options["event"], when given, is called as event(stage, details) as the check goes."""
     boards = installed() if boards is None else boards
+    event = options.get("event") or _quiet
     report = {"schema_version": SCHEMA_VERSION, "result": "pass", "checked_at": _now(), "boards": []}
     try:
         if options.get("board"):
@@ -135,15 +161,20 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
     except Problem as p:
         report.update(result=p.result, reason=p.reason)
         if p.result == "missing":  # say what was recorded, if anything: nothing is recorded now
+            event("fpga-no-board", {"reason": p.reason})
             report["state"] = compare_state(report, [], [], False, options.get("state", state.STATE))
         return report
     reports, not_checked = [], []
-    for board, host, found in targets:
+    keys = _keys(targets)
+    for (_, _, found), key in zip(targets, keys):
+        event("fpga-board-found", {"board": key, "variant": found.get("variant"), "where": _where(found)})
+    for (board, host, found), key in zip(targets, keys):
         try:
             board_options, skipped = _for_board(board, options, report["mode"])
             if board_options is None:  # none of the named tests: not checked, and no "pass" for it
                 not_checked.append(board.name)
                 continue
+            board_options = {**board_options, "event": lambda stage, d, key=key: event(stage, {"board": key, **d})}
             with hold_lock(board.lock, board.title):
                 reports.append(board.check(host, found, board_options))
         except Problem as p:
@@ -188,6 +219,8 @@ def details(report):
         if b.get("bitstreams"):
             out[f"board{i}_bitstreams"] = str(b["bitstreams"])
         flatten(f"board{i}_state", b.get("state", {}), out)
+        if b.get("identity"):
+            flatten(f"board{i}_identity", b["identity"], out)
     for j, change in enumerate(report.get("state", {}).get("changes", [])):
         out[f"changed{j}"] = change
     return out
@@ -215,6 +248,8 @@ def summary(report):
             lines.append(f"    {t['test']:<10} {t['result']}" + (f": {t['reason']}" if "reason" in t else ""))
             if t["result"] != "pass":
                 lines += [f"        {line}" for line in t.get("output", [])[-8:]]
+        for test, why in (b.get("not_run") or {}).items():
+            lines.append(f"    {test:<10} not run: {why}")
         for s in b.get("flash", {}).get("slots", []) if isinstance(b.get("flash"), dict) else []:
             lines.append(
                 f"    flash {s['slot']} {s['result']}"
@@ -233,6 +268,19 @@ def summary(report):
         lines.append("  more: fpgas-<board>-debug (fpgas-online-<board>-debug)")
         lines += ["*" * 78, ""]
     return "\n".join(lines)
+
+
+class _Progress:
+    """The progress events, sent as the check goes. A broker that does not answer stops them, so a dead broker
+    costs one timeout, not one per test; the final fpga-verified is still tried."""
+
+    def __init__(self, prog, working=True):
+        self.prog, self.working = prog, working
+
+    def __call__(self, stage, details):
+        if self.working:
+            flat = {k: "-" if v is None else str(v) for k, v in details.items()}
+            self.working = publish(stage, flat, prog=self.prog, timeout=EVENT_TIMEOUT)
 
 
 def write(report, where):
@@ -254,8 +302,8 @@ def run(options, prog="fpgas-verify"):
     kept_in = options.get("report") or str(REPORT)
     if not options.get("no_publish"):
         # The site hears the check has started, and says the board is being verified until the result follows.
-        # A short timeout: a broker that is down must not hold up the check (nor fpgas-tt, which waits for it).
-        publish("fpga-verifying", {"started_at": _now()}, prog=prog, timeout=15)
+        working = publish("fpga-verifying", {"started_at": _now()}, prog=prog, timeout=EVENT_TIMEOUT)
+        options = {**options, "event": _Progress(prog, working)}
     report = verify(options)
     kept_in = write(report, kept_in)
     print(summary(report), file=sys.stderr)
