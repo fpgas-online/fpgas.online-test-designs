@@ -13,10 +13,16 @@ and its `verified_serials` gate read; this shows every test in it, not just the 
         --ssh-config ../fpgas.online-infra/ansible/ssh.cfg
     uv run --no-project python scripts/collect_verify_status.py --host 10.21.2.47 --json tmp/verify.json
 
-By default it tries every access port on both Welland switches (Pi on switch s, port p = 10.21.s.p);
-ports with no Pi on them are listed as unreachable at the end. The Pis share one netboot root whose host
-key changes with every root rebuild, so the Pi hop does not check or record host keys (the jump host's are
-checked as the SSH config says). Run it from a host that can reach the jump host: the WireGuard network or
+By default it tries every access port on both Welland switches (Pi on switch s, port p = 10.21.s.p) but
+the Orange Pis' FEL host (sw2 p30), and lists the ports with no Pi on them at the end. It first checks the
+jump host, and exits 2 if that cannot be reached; it exits 1 if it read no Pi at all, if a Pi answered but
+could not be read, or if an address given with --host did not answer.
+
+Every Pi boots the same netboot root, so they share one host key, which survives root rebuilds (infra
+7d0a7000 keeps the root's /etc/ssh/ssh_host_* out of the image rsync). It is checked under one alias,
+`fpgas-netboot-pi`, in its own known-hosts file (--known-hosts), learned on first use. After a deliberate
+rekey, forget it with `ssh-keygen -R fpgas-netboot-pi -f <that file>` (never -H). The jump host's key is
+checked as the SSH config says. Run it from a host that can reach the jump host: the WireGuard network or
 the site LAN.
 """
 
@@ -33,6 +39,9 @@ import sys
 
 DEFAULT_JUMP = "ansible@10.99.21.2"  # tweed, the Welland gateway, as fpgas.online-infra's automation reaches it
 DEFAULT_PORTS = "1:1-40 2:1-48"  # gsm7252ps-s2 (sw1) access ports 1-40, s3300-1 (sw2) 1-48
+DEFAULT_EXCLUDE = "2:30"  # the Orange Pis' FEL host: not on the fpgas root, and it refuses the key
+DEFAULT_KNOWN_HOSTS = "~/.config/fpgas-online/netboot_known_hosts"
+HOST_KEY_ALIAS = "fpgas-netboot-pi"  # every Pi shares the netboot root's host key
 SUBNET = "10.21"
 SSH_TIMEOUT = 60
 
@@ -47,11 +56,9 @@ BOARD_TITLES = {
 # The Acorn module claims every Xilinx or SQRL PCIe endpoint, but only these are Acorns it recognised.
 ACORN_KINDS = ("fpgas-online", "sqrl-factory")
 REASON_MAX = 140
-# What ssh (or the jump host's forward) says when there is no Pi on a port.
-UNREACHABLE = re.compile(
-    r"No route to host|timed out|Connection refused|no answer within|Network is unreachable|Host is unreachable"
-    r"|administratively prohibited|Connection closed by UNKNOWN"
-)
+# What ssh says when the jump host could not forward to the port: there is no Pi there. Anything else (a
+# timeout, a refused key) is a Pi, or the jump host, that answered badly.
+NO_PI = re.compile(r"channel \d+: open failed|stdio forwarding failed")
 
 # Runs on the Pi under `python3 -`: read-only, stdlib only, prints one JSON object.
 REMOTE = r"""
@@ -97,15 +104,20 @@ print(json.dumps({
 
 
 def parse_ports(spec):
-    """(switch, port) pairs from a spec: "1:1-40 2:1-48,50" -> [(1, 1), ..., (1, 40), (2, 1), ..., (2, 48), (2, 50)]."""
+    """(switch, port) pairs from a spec: "1:1-40 2:1-48,50" -> [(1, 1), ..., (1, 40), (2, 1), ..., (2, 48), (2, 50)].
+
+    A malformed spec is a ValueError that says what was expected."""
     out = []
     for part in spec.split():
         switch, _, ports = part.partition(":")
-        if not ports:
-            raise ValueError(f"{part!r}: expected SWITCH:PORTS, e.g. 2:1-48")
-        for item in ports.split(","):
-            first, _, last = item.partition("-")
-            out += [(int(switch), p) for p in range(int(first), int(last or first) + 1)]
+        try:
+            if not ports:
+                raise ValueError
+            for item in ports.split(","):
+                first, _, last = item.partition("-")
+                out += [(int(switch), p) for p in range(int(first), int(last or first) + 1)]
+        except ValueError:
+            raise ValueError(f"{part!r}: expected SWITCH:PORTS, e.g. 2:1-48 or 1:10,12,14-18") from None
     return out
 
 
@@ -127,32 +139,49 @@ def sort_key(name):
 # -- reading one Pi -------------------------------------------------------------------------------------------
 
 
-def ssh_argv(ip, jump=DEFAULT_JUMP, ssh_config=None, user="root", connect_timeout=10):
+def _ssh_base(ssh_config, connect_timeout):
     argv = ["ssh"]
     if ssh_config:
         argv += ["-F", str(ssh_config)]
-    argv += [
-        "-o", "BatchMode=yes",
-        "-o", f"ConnectTimeout={connect_timeout}",
-        # The netboot root's host key changes with every rebuild, and every Pi shares it.
-        "-o", "StrictHostKeyChecking=no",
-        "-o", "UserKnownHostsFile=/dev/null",
-        "-o", "LogLevel=ERROR",
+    return [*argv, "-o", "BatchMode=yes", "-o", f"ConnectTimeout={connect_timeout}"]
+
+
+def ssh_argv(ip, jump=DEFAULT_JUMP, ssh_config=None, user="root", connect_timeout=10,
+             known_hosts=DEFAULT_KNOWN_HOSTS):  # fmt: skip
+    """ssh to one Pi, running REMOTE from stdin. The -o options apply to the Pi only, not the jump host."""
+    argv = [
+        *_ssh_base(ssh_config, connect_timeout),
+        # Every Pi has the netboot root's one host key: checked under one alias, whatever the address.
+        "-o", f"UserKnownHostsFile={known_hosts}",
+        "-o", f"HostKeyAlias={HOST_KEY_ALIAS}",
+        "-o", "CheckHostIP=no",
+        "-o", "StrictHostKeyChecking=accept-new",
+        "-o", "HashKnownHosts=no",
+        "-o", "ForwardAgent=no",
     ]  # fmt: skip
     if jump:
         argv += ["-J", jump]
     return [*argv, f"{user}@{ip}", "python3", "-"]
 
 
+def jump_argv(jump, ssh_config=None, connect_timeout=10):
+    """A no-op on the jump host, to check it can be reached before trying every port through it."""
+    return [*_ssh_base(ssh_config, connect_timeout), jump, "true"]
+
+
 def collect_one(ip, options):
-    argv = ssh_argv(ip, options.jump, options.ssh_config, options.user, options.connect_timeout)
+    argv = ssh_argv(ip, options.jump, options.ssh_config, options.user, options.connect_timeout,
+                    options.known_hosts)  # fmt: skip
     try:
         r = subprocess.run(argv, input=REMOTE, capture_output=True, text=True, timeout=SSH_TIMEOUT, check=False)
     except subprocess.TimeoutExpired:
         return {"address": ip, "error": f"no answer within {SSH_TIMEOUT} s"}
     if r.returncode != 0:
         err = [line for line in (r.stderr or "").splitlines() if line.strip()]
-        return {"address": ip, "error": "; ".join(err[-3:]) or f"ssh exited {r.returncode}"}
+        record = {"address": ip, "error": "; ".join(err[-3:]) or f"ssh exited {r.returncode}"}
+        if NO_PI.search(r.stderr or ""):
+            record["no_pi"] = True
+        return record
     return parse_remote(ip, r.stdout)
 
 
@@ -176,7 +205,7 @@ def parse_remote(ip, text):
     try:
         report = None if raw.get("report") is None else json.loads(raw["report"])
     except ValueError:
-        return {**record, "status": "error", "reason": "/run/fpgas-online/verify.json is not JSON", "boards": []}
+        return {**record, "error": "/run/fpgas-online/verify.json is not JSON"}
     return {**record, **summarize(report, record["unit"], raw.get("journal")), "report": report}
 
 
@@ -312,8 +341,8 @@ def compact(addresses):
 
 
 def is_unreachable(record):
-    """No Pi there at all, as opposed to a Pi that answered badly."""
-    return bool(UNREACHABLE.search(record.get("error", "")))
+    """No Pi there at all (the jump host could not forward to it), as opposed to a Pi that answered badly."""
+    return bool(record.get("no_pi"))
 
 
 # -- the command ---------------------------------------------------------------------------------------------
@@ -333,19 +362,48 @@ def main(argv=None):
         help="an ssh_config for the jump host and identity, e.g. fpgas.online-infra's "
         "ansible/ssh.cfg (default $FPGAS_SSH_CONFIG, else your own)",
     )
+    parser.add_argument(
+        "--known-hosts",
+        default=os.environ.get("FPGAS_NETBOOT_KNOWN_HOSTS", DEFAULT_KNOWN_HOSTS),
+        help=f"where the netboot Pis' shared host key is kept, as {HOST_KEY_ALIAS} "
+        f"(default $FPGAS_NETBOOT_KNOWN_HOSTS or {DEFAULT_KNOWN_HOSTS})",
+    )
     parser.add_argument("--user", default="root", help="the login on the Pis (default root)")
     parser.add_argument(
         "--ports",
         default=DEFAULT_PORTS,
         help=f"SWITCH:PORTS ... to try, the Pi at 10.21.SWITCH.PORT (default {DEFAULT_PORTS!r})",
     )
+    parser.add_argument(
+        "--exclude",
+        default=DEFAULT_EXCLUDE,
+        help=f"SWITCH:PORTS ... not to try (default {DEFAULT_EXCLUDE!r}, the Orange Pis' FEL host; '' for none)",
+    )
     parser.add_argument("--host", action="append", help="read only this address (repeatable); overrides --ports")
     parser.add_argument("--connect-timeout", type=int, default=10, help="seconds for each SSH connection")
     parser.add_argument("--parallel", type=int, default=8, help="Pis read at once (default 8)")
     parser.add_argument("--json", type=pathlib.Path, help="also write every record, with the full reports, here")
     options = parser.parse_args(argv)
+    try:
+        excluded = set(parse_ports(options.exclude))
+        ports = [sp for sp in parse_ports(options.ports) if sp not in excluded]
+    except ValueError as e:
+        parser.error(str(e))
+    options.known_hosts = os.path.expanduser(options.known_hosts)
+    pathlib.Path(options.known_hosts).parent.mkdir(parents=True, exist_ok=True)
 
-    addresses = options.host or [address(s, p) for s, p in parse_ports(options.ports)]
+    if options.jump:
+        try:
+            r = subprocess.run(jump_argv(options.jump, options.ssh_config, options.connect_timeout),
+                               capture_output=True, text=True, timeout=SSH_TIMEOUT, check=False)  # fmt: skip
+            why = (r.stderr or "").strip() or f"ssh exited {r.returncode}"
+        except subprocess.TimeoutExpired:
+            r, why = None, f"no answer within {SSH_TIMEOUT} s"
+        if r is None or r.returncode != 0:
+            print(f"collect_verify_status: cannot reach the jump host {options.jump}: {why}", file=sys.stderr)
+            return 2
+
+    addresses = options.host or [address(s, p) for s, p in ports]
     collected_at = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     with concurrent.futures.ThreadPoolExecutor(max_workers=options.parallel) as pool:
         records = list(pool.map(lambda ip: collect_one(ip, options), addresses))
@@ -357,7 +415,14 @@ def main(argv=None):
         options.json.parent.mkdir(parents=True, exist_ok=True)
         payload = {"collected_at": collected_at, "pis": records, "unreachable": unreachable}
         options.json.write_text(json.dumps(payload, indent=2) + "\n")
-    return 1 if any("error" in r for r in records) else 0
+    read = [r for r in records if "error" not in r]
+    if not read:
+        print("collect_verify_status: no Pi could be read", file=sys.stderr)
+        return 1
+    if options.host and unreachable:
+        print(f"collect_verify_status: no Pi at {', '.join(unreachable)}", file=sys.stderr)
+        return 1
+    return 1 if len(read) < len(records) else 0
 
 
 if __name__ == "__main__":

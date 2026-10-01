@@ -53,9 +53,10 @@ def test_ports_spec_expands_ranges_and_lists():
     assert cvs.parse_ports("1:1-3 2:5,7-8") == [(1, 1), (1, 2), (1, 3), (2, 5), (2, 7), (2, 8)]
 
 
-def test_ports_spec_without_a_switch_is_refused():
-    with pytest.raises(ValueError):
-        cvs.parse_ports("1-40")
+@pytest.mark.parametrize("spec", ["1-40", "1:", "x:1-2", "1:a-b"])
+def test_a_bad_ports_spec_is_refused(spec):
+    with pytest.raises(ValueError, match="expected SWITCH:PORTS"):
+        cvs.parse_ports(spec)
 
 
 def test_default_ports_are_every_access_port_on_both_switches():
@@ -79,12 +80,13 @@ def test_compact_groups_consecutive_ports():
 # -- reaching a Pi -------------------------------------------------------------------------------------------
 
 
-def test_ssh_goes_through_the_jump_host_and_never_records_the_pis_host_key():
-    argv = cvs.ssh_argv("10.21.2.47", jump="ansible@10.99.21.2", ssh_config="ssh.cfg")
+def test_ssh_goes_through_the_jump_host_and_checks_the_shared_netboot_key():
+    argv = cvs.ssh_argv("10.21.2.47", jump="ansible@10.99.21.2", ssh_config="ssh.cfg", known_hosts="/k/nb")
     assert argv[:3] == ["ssh", "-F", "ssh.cfg"]
-    assert "StrictHostKeyChecking=no" in argv
-    assert "UserKnownHostsFile=/dev/null" in argv
-    assert "BatchMode=yes" in argv
+    for option in ("BatchMode=yes", "UserKnownHostsFile=/k/nb", "HostKeyAlias=fpgas-netboot-pi", "CheckHostIP=no",
+                   "StrictHostKeyChecking=accept-new", "HashKnownHosts=no", "ForwardAgent=no"):  # fmt: skip
+        assert option in argv
+    assert "StrictHostKeyChecking=no" not in argv and "UserKnownHostsFile=/dev/null" not in argv
     assert argv[argv.index("-J") + 1] == "ansible@10.99.21.2"
     assert argv[-3:] == ["root@10.21.2.47", "python3", "-"]
 
@@ -95,22 +97,96 @@ def test_ssh_without_jump_or_config():
     assert argv[-3] == "pi@10.21.2.47"
 
 
+def test_the_jump_host_check_runs_nothing_but_true():
+    assert cvs.jump_argv("ansible@10.99.21.2", "ssh.cfg", 5)[-2:] == ["ansible@10.99.21.2", "true"]
+
+
 def test_the_remote_side_only_reads():
     for word in ("--update", "systemctl stop", "systemctl start", "restart", "reboot", "rmmod", "openFPGALoader"):
         assert word not in cvs.REMOTE
     assert "fpgas-verify" not in cvs.REMOTE.replace("fpgas-verify.service", "")
 
 
+class FakeSSH:
+    """Stands in for subprocess.run: the jump host answers `jump_rc`; each Pi address answers from `pis`
+    (an Exception is raised; a string is the stdout of a successful run; a (rc, stderr) pair fails)."""
+
+    def __init__(self, pis=(), jump_rc=0):
+        self.pis, self.jump_rc, self.calls = dict(pis), jump_rc, []
+
+    def __call__(self, argv, **kw):
+        self.calls.append(argv)
+        if argv[-1] == "true":
+            return cvs.subprocess.CompletedProcess(argv, self.jump_rc, "", "" if self.jump_rc == 0 else "refused")
+        ip = argv[-3].split("@")[1]
+        answer = self.pis.get(ip, (255, "channel 0: open failed: connect failed: No route to host\n"
+                                      "stdio forwarding failed\n"))  # fmt: skip
+        if isinstance(answer, Exception):
+            raise answer
+        if isinstance(answer, str):
+            return cvs.subprocess.CompletedProcess(argv, 0, answer, "")
+        return cvs.subprocess.CompletedProcess(argv, answer[0], "", answer[1])
+
+
+def _main(monkeypatch, tmp_path, fake, *args):
+    monkeypatch.setattr(cvs.subprocess, "run", fake)
+    return cvs.main(["--known-hosts", str(tmp_path / "kh"), *args])
+
+
 @pytest.mark.parametrize(
-    ("error", "unreachable"),
+    ("answer", "no_pi"),
     [
-        ("channel 0: open failed: connect failed: No route to host; stdio forwarding failed", True),
-        ("no answer within 60 s", True),
-        ("root@10.21.2.30: Permission denied (publickey).", False),
+        ((255, "channel 0: open failed: connect failed: No route to host\nstdio forwarding failed\n"), True),
+        ((255, "stdio forwarding failed\n"), True),
+        ((255, "root@10.21.2.30: Permission denied (publickey).\n"), False),
+        ((255, "ssh: connect to host 10.21.2.30 port 22: Connection timed out\n"), False),
+        (cvs.subprocess.TimeoutExpired("ssh", 60), False),
     ],
 )
-def test_unreachable_ports_are_told_apart_from_pis_that_refuse(error, unreachable):
-    assert cvs.is_unreachable({"address": "10.21.2.30", "error": error}) is unreachable
+def test_only_the_jump_hosts_forward_failures_mean_no_pi(answer, no_pi, monkeypatch):
+    monkeypatch.setattr(cvs.subprocess, "run", FakeSSH({"10.21.2.30": answer}))
+    options = cvs.argparse.Namespace(jump="j", ssh_config=None, user="root", connect_timeout=1, known_hosts="kh")
+    record = cvs.collect_one("10.21.2.30", options)
+    assert "error" in record and cvs.is_unreachable(record) is no_pi
+
+
+def test_main_exits_2_when_the_jump_host_cannot_be_reached(monkeypatch, tmp_path, capsys):
+    fake = FakeSSH(jump_rc=255)
+    assert _main(monkeypatch, tmp_path, fake) == 2
+    assert len(fake.calls) == 1 and "cannot reach the jump host" in capsys.readouterr().err
+
+
+def test_main_exits_1_when_no_pi_was_read(monkeypatch, tmp_path, capsys):
+    assert _main(monkeypatch, tmp_path, FakeSSH(), "--ports", "1:1-3") == 1
+    assert "no Pi could be read" in capsys.readouterr().err
+
+
+def test_main_exits_0_when_every_pi_answered_and_the_rest_have_none(monkeypatch, tmp_path):
+    fake = FakeSSH({"10.21.1.10": answer(netv2_report())})
+    assert _main(monkeypatch, tmp_path, fake, "--ports", "1:9-11") == 0
+    assert (tmp_path / "kh").parent.is_dir()
+
+
+def test_main_exits_1_when_a_pi_answered_badly_or_timed_out(monkeypatch, tmp_path):
+    fake = FakeSSH({"10.21.1.10": answer(netv2_report()), "10.21.1.11": cvs.subprocess.TimeoutExpired("ssh", 60)})
+    assert _main(monkeypatch, tmp_path, fake, "--ports", "1:10-11") == 1
+
+
+def test_main_exits_1_when_a_named_host_did_not_answer(monkeypatch, tmp_path):
+    fake = FakeSSH({"10.21.1.10": answer(netv2_report())})
+    assert _main(monkeypatch, tmp_path, fake, "--host", "10.21.1.10", "--host", "10.21.1.11") == 1
+
+
+def test_main_skips_the_excluded_ports(monkeypatch, tmp_path):
+    fake = FakeSSH({"10.21.2.29": answer(acorn_report())})
+    assert _main(monkeypatch, tmp_path, fake, "--ports", "2:29-31") == 0
+    assert not any(c[-3] == "root@10.21.2.30" for c in fake.calls[1:])
+
+
+def test_main_refuses_a_bad_ports_spec_with_a_usage_error(monkeypatch, tmp_path, capsys):
+    with pytest.raises(SystemExit) as e:
+        _main(monkeypatch, tmp_path, FakeSSH(), "--ports", "1:a-b")
+    assert e.value.code == 2 and "expected SWITCH:PORTS" in capsys.readouterr().err
 
 
 # -- what a Pi says --------------------------------------------------------------------------------------------
@@ -166,7 +242,7 @@ def test_an_old_report_while_a_new_check_runs_says_so():
 def test_a_broken_report_or_answer_is_an_error_not_a_crash():
     raw = json.loads(answer())
     raw["report"] = "{not json"
-    assert cvs.parse_remote("10.21.1.10", json.dumps(raw))["status"] == "error"
+    assert cvs.parse_remote("10.21.1.10", json.dumps(raw))["error"] == "/run/fpgas-online/verify.json is not JSON"
     assert "error" in cvs.parse_remote("10.21.1.10", "Traceback (most recent call last):")
 
 
