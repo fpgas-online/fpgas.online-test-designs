@@ -7,6 +7,9 @@ side of the P2 pins. Run as root:
 
     sudo python3 selftest.py --csr acorn-cle-215p-csr.json [--bdf 0001:01:00.0] [--uart /dev/ttyAMA0]
 
+0. The BIOS console (the crossover UART) is read out over BAR0 first. The BIOS sets the DRAM up after its
+   banner, and with this LiteX it stops when its console fills and nobody reads it (PR #47), so on a
+   board nobody has attached to, reading it is what lets DRAM initialisation finish.
 1. DRAM: write a PRBS pattern over the whole DRAM with `dram_generator`, read it back with `dram_checker`,
    and report the errors and both passes' bandwidth (bytes / (ticks / sys clock)).
 2. P2: each of J2, K2, J5 and H5, driven low then high from the FPGA and read on the Pi, then driven from the
@@ -104,6 +107,21 @@ def check(name, ok, detail=""):
     results.append(ok)
     print(f"{'PASS' if ok else 'FAIL'} {name}{': ' + detail if detail else ''}", flush=True)
     return ok
+
+
+# -- BIOS console ---------------------------------------------------------------------------------------------
+
+
+def drain_console(csr, quiet_s=2.0, max_s=60.0):
+    """Everything the BIOS has printed, read until it has been quiet for `quiet_s`."""
+    text, start, last = bytearray(), time.monotonic(), time.monotonic()
+    while time.monotonic() - last < quiet_s and time.monotonic() - start < max_s:
+        if csr["uart_xover_rxempty"]:
+            time.sleep(0.005)
+            continue
+        text.append(csr["uart_xover_rxtx"] & 0xFF)  # the read pops it
+        last = time.monotonic()
+    return text.decode(errors="replace")
 
 
 # -- DRAM --------------------------------------------------------------------------------------------------
@@ -255,6 +273,7 @@ def main():
     parser.add_argument("--bdf", default="0001:01:00.0")
     parser.add_argument("--uart", metavar="PORT", help="also check the UARTBone on PORT afterwards")
     parser.add_argument("--dram-bytes", type=lambda s: int(s, 0), help="test this much DRAM (default: all of it)")
+    parser.add_argument("--skip-console", action="store_true", help="do not read the BIOS console first")
     parser.add_argument("--skip-dram", action="store_true")
     parser.add_argument("--skip-p2", action="store_true")
     args = parser.parse_args()
@@ -266,6 +285,9 @@ def main():
         ident = read_ident(csr, csr_json)
         print(f"     running: {ident}", flush=True)
         report["ident"] = ident
+        if not args.skip_console:
+            console = drain_console(csr)
+            print("     BIOS console:\n" + "\n".join("       " + line for line in console.splitlines()), flush=True)
         if not args.skip_dram:
             report["dram"] = dram(csr, args.dram_bytes)
         if not args.skip_p2:
