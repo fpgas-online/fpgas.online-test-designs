@@ -54,6 +54,7 @@ from litex_boards.platforms import sqrl_acorn
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+from designs._shared.acorn_p2 import fleet_platform
 from designs._shared.build_helpers import default_build_dir
 from designs._shared.dna_reader import DNAReader
 from designs._shared.pin_check import check_build
@@ -161,7 +162,7 @@ class AcornPCIeSoC(SoCCore):
     }
 
     def __init__(self, variant="cle-215+", toolchain="vivado", sys_clk_freq=100e6, golden=False, **kwargs):
-        platform = sqrl_acorn.Platform(variant=variant, toolchain=toolchain)
+        platform = fleet_platform(variant, toolchain)
         platform.add_extension(_extension_io)
         with_ddr = not golden
 

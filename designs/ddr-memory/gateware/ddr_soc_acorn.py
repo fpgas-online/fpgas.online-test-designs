@@ -33,6 +33,7 @@ from litex_boards.platforms import sqrl_acorn
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+from designs._shared.acorn_p2 import fleet_platform
 from designs._shared.platform_fixups import constrain_openxc7_clocks
 
 # nextpnr-xilinx cannot place this SoC at 100 MHz (a constrained build reached 64.9 MHz). Over three seeds
@@ -89,7 +90,7 @@ class _CRG(LiteXModule):
 
 class BaseSoC(SoCCore):
     def __init__(self, variant="cle-215+", toolchain="openxc7", sys_clk_freq=100e6, **kwargs):
-        platform = sqrl_acorn.Platform(variant=variant, toolchain=toolchain)
+        platform = fleet_platform(variant, toolchain)
 
         if toolchain == "openxc7":
             from designs._shared.fasm_io_fixups import add_openxc7_fasm_io_fixups
