@@ -33,10 +33,9 @@ local ──ssh -o ProxyJump=pi@tweed.welland.mithis.com──> pi@10.21.2.46 's
 - The gateway login is the restricted `pi` jump account (rbash, only `ssh`
   and `ssh-keyscan`, an sshd `ForceCommand` wrapper, no sudo), managed by
   fpgas.online-infra `roles/jump`. It only provides the TCP forward; the
-  Pi authenticates your own key. tweed's copy was lost in the 2026-08-26
-  reinstall and restored from Ansible on 2026-09-03 (infra PR #61).
+  Pi authenticates your own key.
   `tweed.welland.mithis.com` resolves to `10.21.0.1` over WireGuard and to
-  tweed's public IPv6; see the DNS notes in that PR if the IPv6 path hangs.
+  tweed's public IPv6.
 - Each host entry names its **login user** (`user`, default `root`). The
   Welland Acorn Pi 5s only allow `pi` (pubkey) with passwordless sudo, so
   `_build_ssh_cmd(..., as_root=True)` wraps the command in
@@ -46,8 +45,9 @@ local ──ssh -o ProxyJump=pi@tweed.welland.mithis.com──> pi@10.21.2.46 's
   resolve to `/root`.
 - Only the six Welland Acorn hosts (`welland-sw2-p29` … `p48`, i.e.
   `10.21.2.<port>` under the [VLAN-per-port scheme](hardware/site-welland.md))
-  have been migrated. The Arty/NeTV2/Fomu/TT entries still carry the
-  pre-2026-08-23 `10.21.0.1NN` addresses and have not been re-probed.
+  have current addresses. The Arty/NeTV2/Fomu/TT entries carry flat
+  `10.21.0.1NN` addresses that Welland does not use
+  ([#17](https://github.com/fpgas-online/fpgas.online-test-designs/issues/17)).
 
 **Direct-SSH hosts** (rpi5-netv2, rpi3-netv2): reachable directly by
 hostname; the login user is part of `target`.
@@ -56,8 +56,8 @@ Use `--dry-run` to print the exact argv for every selected test before
 touching hardware.
 
 Run **one `verify_hardware.py` at a time**. Two instances going through the
-same jump host concurrently produced spurious "Host … is unreachable" and
-rc 255 failures on 2026-09-03; the same boards passed when run sequentially.
+same jump host concurrently get spurious "Host … is unreachable" and rc 255
+failures; the same boards pass when run sequentially.
 
 ## Host and Board Definitions
 
@@ -124,14 +124,13 @@ Programming varies by board:
 finding recorded in [acorn-pinmap.md](hardware/acorn-pinmap.md):
 
 1. `echo 1 > /sys/bus/pci/devices/0001:01:00.0/remove` — reconfiguring the
-   FPGA while its PCIe endpoint is enumerated crashes the Pi 5 outright
-   (2026-08-31, pi-sw2-p47). Skipped if nothing is enumerated.
+   FPGA while its PCIe endpoint is enumerated crashes the Pi 5 outright.
+   Skipped if nothing is enumerated.
 2. `ln -sfn /dev/gpiochip15 /dev/gpiochip0` — the fleet's openFPGALoader
    0.10.0 opens `gpiochip0` unconditionally, but the 40-pin header is
    `gpiochip15` on the deployed kernel. devtmpfs, so it is redone every time.
 3. `openFPGALoader --cable libgpiod --pins 10:9:11:8 <bitstream>` — bit-banged
-   JTAG on the SPI0 pins, TDI:TDO:TCK:TMS, about 16 s for an XC7A200T. The
-   `rp1pio` cable arrives with infra PR #48.
+   JTAG on the SPI0 pins, TDI:TDO:TCK:TMS, about 16 s for an XC7A200T.
 4. `echo 1 > /sys/bus/pci/rescan` — brings the endpoint back (the flash
    design's, or the newly loaded design's if it has PCIe).
 
@@ -174,8 +173,7 @@ The sequence:
 3. `snmpset ... i 1` (on)
 4. Poll `ssh_check_connectivity()` until the host responds (a Pi 5 PXE boot needs more than 90 s; the bound is 240 s)
 
-No fixed sleeps — all waits use polling with bounded timeouts. (The old
-`poe.sh` helper did not survive tweed's 2026-08-30 reinstall.)
+No fixed sleeps — all waits use polling with bounded timeouts.
 
 ## TT FPGA Programming
 
