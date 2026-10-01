@@ -6,7 +6,7 @@ The TinyTapeout (TT) FPGA Demo Board is a development platform that combines an 
 
 ## Installing the TT FPGA Packages
 
-Add the fpgas.online APT repository first ([README: Installing the Packages](../../README.md#installing-the-packages)), then on the demo board's Pi:
+Add the fpgas.online APT repository first ([verify.md: Installing](../verify.md#installing)), then on the demo board's Pi:
 
 ```bash
 sudo apt install fpgas-online-tt-fpga
@@ -23,25 +23,16 @@ sudo apt install fpgas-online-tt-fpga
 
 The check finds the board by its Raspberry Pi microcontroller on USB (vendor `2e8a`). It first loads the PMOD pin identification design and checks the PMOD HAT cabling against the expected map (uo_out on HAT JA, uio on JB, ui_in on JC, [tt-fpga-pin-mapping.md](tt-fpga-pin-mapping.md)); a miswired HAT fails the board. It then loads the UART and SPI flash test designs through that microcontroller (`tt_fpga_program.py`, over `mpremote`), and runs each design's host test through its UART bridge on `/dev/ttyACM0`. Every load writes the bitstream to the microcontroller's filesystem, so its flash is not part of what `changed` compares; its USB serial number is. `mpremote` is `micropython-mpremote` in trixie, but only in bookworm-backports for bookworm: without it the check reports an `error`. Only the PMOD loopback test is left to `fpgas-tt-fpga-debug`.
 
-The TT FPGA board's check has not yet been run on the board.
+It runs at every boot of the Welland TT FPGA boards: [current results](../verify.md#current-results).
 
-**Check the board now**, and see what each test printed:
-
-```bash
-sudo fpgas-verify                          # what the boot unit runs: report, publish, exit 0 only for pass
-sudo fpgas-tt-fpga-verify --no-publish --report -   # this board only, the JSON report on stdout
-```
-
-The results are in the [README](../../README.md#installing-the-packages). `changed` means the board, or its flash, differs from what was recorded last time; after flashing or swapping it on purpose, `sudo fpgas-verify --update` records the new state.
-
-**When a check fails**, `sudo apt install fpgas-online-tt-fpga-debug` for step-by-step tools:
+**Check the board now**, or run one test with its output live (`fpgas-tt-fpga-debug` is in `fpgas-online-tt-fpga-debug`):
 
 ```bash
-sudo fpgas-tt-fpga-debug detect           # is the board there, and what was found
-fpgas-tt-fpga-debug list                  # every test, whether the boot check runs it, and its bitstream
-sudo fpgas-tt-fpga-debug check            # the installed bitstreams against their manifest
-sudo fpgas-tt-fpga-debug test spiflash   # load one test's design and run its test, output live
+sudo fpgas-tt-fpga-verify --no-publish --report -  # this board only, the JSON report on stdout
+sudo fpgas-tt-fpga-debug test spiflash             # load one test's design and run its test
 ```
+
+What the results mean, the report, `changed` and `--update`, the debug tool and common failures: [verify.md](../verify.md#reading-the-result).
 
 ## Key Specifications
 

@@ -19,15 +19,19 @@ def _verify_parser(prog, board=None):
             "--no-probe", action="store_true",
             help="with fpga-board = auto, never drive anything to find a board (no JTAG scan)",
         )  # fmt: skip
-    parser.add_argument("--update", action="store_true",
-                        help="record what is found now as this host's state (after flashing or swapping a board "
-                             "on purpose), instead of failing on the difference")  # fmt: skip
-    parser.add_argument("--test", action="append", help="run only this test (repeatable)")
+    partial = parser.add_mutually_exclusive_group()
+    partial.add_argument("--update", action="store_true",
+                         help="record what is found now as this host's state (after flashing or swapping a board "
+                              "on purpose), instead of failing on the difference")  # fmt: skip
+    partial.add_argument("--test", action="append", dest="tests",
+                         help="run only this test (repeatable); not published, the report on stdout unless "
+                              "--report")  # fmt: skip
     parser.add_argument("--variant", help="use this variant's bitstreams instead of the detected one")
     parser.add_argument("--port", help="the board's UART on this Pi (default: the board's usual one)")
     parser.add_argument("--images", type=pathlib.Path, help="the installed bitstreams to use")
     parser.add_argument("--state", type=pathlib.Path, default=state.STATE, help="the recorded state")
-    parser.add_argument("--report", default=str(runner.REPORT), help="where to write the JSON report ('-': stdout)")
+    parser.add_argument("--report", help=f"where to write the JSON report ('-': stdout; default {runner.REPORT}, "
+                                          "or stdout with --test)")  # fmt: skip
     parser.add_argument("--no-publish", action="store_true", help="do not send the fleet-event")
     return parser
 

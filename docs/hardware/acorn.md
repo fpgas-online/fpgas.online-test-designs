@@ -8,7 +8,7 @@ See [acorn-pinmap.md](acorn-pinmap.md) for the full RPi GPIO pinmap.
 
 ## Installing the Acorn Packages
 
-Add the fpgas.online APT repository first ([README: Installing the Packages](../../README.md#installing-the-packages)), then on the Acorn's Pi 5 host:
+Add the fpgas.online APT repository first ([verify.md: Installing](../verify.md#installing)), then on the Acorn's Pi 5 host:
 
 ```bash
 sudo apt install fpgas-online-acorn
@@ -32,7 +32,7 @@ sudo fpgas-verify                                    # what the boot unit runs
 sudo fpgas-acorn-verify --no-publish --report -      # the Acorn only, the JSON report on stdout
 ```
 
-Besides the [results every board has](../../README.md#installing-the-packages), the Acorn's can be `degraded` (running the golden image: the operational slot did not boot) or `driver-bound` (a kernel driver such as `litepcie.ko` holds the board's BAR0, so nothing was read; `fpgas-acorn-flash` likewise refuses a board a driver is bound to). A board still on SQRL's factory image, or the vendor XDMA sample, is `fail` with a reason starting `unconverted:`: it does not run the fpgas.online image, so it cannot be offered to users until `fpgas-acorn-flash` converts it (the XDMA sample can also be a NeTV2 on PCIe, which that tool does not apply to). A PCIe FPGA whose design the check does not recognise is `fail` too. A Pi with no Acorn is `missing`: fatal, since the host was set up for one.
+Besides the [results every board has](../verify.md#reading-the-result), the Acorn's can be `degraded` (running the golden image: the operational slot did not boot) or `driver-bound` (a kernel driver such as `litepcie.ko` holds the board's BAR0, so nothing was read; `fpgas-acorn-flash` likewise refuses a board a driver is bound to). A board still on SQRL's factory image, or the vendor XDMA sample, is `fail` with a reason starting `unconverted:`: it does not run the fpgas.online image, so it cannot be offered to users until `fpgas-acorn-flash` converts it (the XDMA sample can also be a NeTV2 on PCIe, which that tool does not apply to). A PCIe FPGA whose design the check does not recognise is `fail` too. A Pi with no Acorn is `missing`: fatal, since the host was set up for one.
 
 **When a check fails**, `sudo apt install fpgas-online-acorn-debug`. It brings openFPGALoader for loading the `.bit` over GPIO JTAG ([below](#via-gpio-jtag-openfpgaloader--what-the-fleet-uses)), which is how a board still on SQRL's factory image is converted, and `python3-serial` for `fpgas-acorn-flash --uart`:
 
