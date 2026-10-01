@@ -196,11 +196,11 @@ openocd -f openocd_xc7_ft232.cfg -c "init; pld load 0 <bitstream>; exit"
 
 ### Via SPI Flash
 
-Flash a persistent bitstream using OpenOCD or openFPGALoader. The S25FL256S supports multiboot with fallback. `openFPGALoader --write-flash` does **not** currently work over the GPIO JTAG wiring (the open-source spiOverJtag bridge never toggles CCLK after configuration); see [acorn-pcie-programming.md](acorn-pcie-programming.md).
+Flash a persistent bitstream using OpenOCD or openFPGALoader. The S25FL256S supports multiboot with fallback. `openFPGALoader --write-flash` does **not** work over the GPIO JTAG wiring (the open-source spiOverJtag bridge never toggles CCLK after configuration); see [acorn-pcie-programming.md](acorn-pcie-programming.md).
 
 ### Via PCIe (LiteX)
 
-LiteX provides PCIe-based programming via `litepcie_util` when a LiteX bitstream with PCIe support is already loaded. Only pi-sw2-p44 currently boots such a design; the other Welland boards still carry the Sqrl factory firmware.
+LiteX provides PCIe-based programming via `litepcie_util` when a LiteX bitstream with PCIe support is already loaded. Only pi-sw2-p44 boots such a design; the other Welland boards carry the Sqrl factory firmware.
 
 ## Host Inventory
 
@@ -212,23 +212,22 @@ hostname `pi-sw2-p<port>`, IP `10.21.2.<port>`. Probed live 2026-09-03; JTAG /
 P2 columns from the 2026-08-31 pin-ID survey in
 [the Welland Acorn table](https://docs.fpgas.online/en/latest/sites/welland.html#sqrl-acorn-cle-215).
 
-| Host       | Port | IP         | RPi MAC           | RPi (rev)          | Flash contents        | JTAG (P1)          | P2 serial            | Camera | Old name |
-| ---------- | ---- | ---------- | ----------------- | ------------------ | --------------------- | ------------------ | -------------------- | ------ | -------- |
-| pi-sw2-p29 | 29   | 10.21.2.29 | 88:a2:9e:45:dd:be | Pi 5 2 GB (b04171) | Sqrl `1e24:021f`      | OK                 | OK (J5 wire dead)    | ov5647 | pi4      |
-| pi-sw2-p43 | 43   | 10.21.2.43 | 98:fe:54:13:e0:75 | Pi 5 1 GB (a04171) | Sqrl `1e24:021f`      | **empty chain**    | untestable           | ov5647 | —        |
-| pi-sw2-p44 | 44   | 10.21.2.44 | 98:fe:54:13:e0:f5 | Pi 5 1 GB (a04171) | LiteX `10ee:7011`     | **empty chain**    | untestable           | ov5647 | —        |
-| pi-sw2-p46 | 46   | 10.21.2.46 | 88:a2:9e:45:85:77 | Pi 5 2 GB (b04171) | Sqrl `1e24:021f`      | OK                 | OK                   | ov5647 | pi6      |
-| pi-sw2-p47 | 47   | 10.21.2.47 | 98:fe:54:13:f5:75 | Pi 5 1 GB (a04171) | Sqrl `1e24:021f`      | OK                 | **reversed** (K2↔J2) | ov5647 | —        |
-| pi-sw2-p48 | 48   | 10.21.2.48 | 88:a2:9e:45:c6:87 | Pi 5 2 GB (b04171) | Sqrl `1e24:021f`      | OK                 | OK                   | ov5647 | pi2      |
+| Host       | Port | IP         | RPi MAC           | RPi (rev)          | Flash contents        | JTAG (P1)          | P2 serial            | Camera |
+| ---------- | ---- | ---------- | ----------------- | ------------------ | --------------------- | ------------------ | -------------------- | ------ |
+| pi-sw2-p29 | 29   | 10.21.2.29 | 88:a2:9e:45:dd:be | Pi 5 2 GB (b04171) | Sqrl `1e24:021f`      | OK                 | OK (J5 wire dead)    | ov5647 |
+| pi-sw2-p43 | 43   | 10.21.2.43 | 98:fe:54:13:e0:75 | Pi 5 1 GB (a04171) | Sqrl `1e24:021f`      | **empty chain**    | untestable           | ov5647 |
+| pi-sw2-p44 | 44   | 10.21.2.44 | 98:fe:54:13:e0:f5 | Pi 5 1 GB (a04171) | LiteX `10ee:7011`     | **empty chain**    | untestable           | ov5647 |
+| pi-sw2-p46 | 46   | 10.21.2.46 | 88:a2:9e:45:85:77 | Pi 5 2 GB (b04171) | Sqrl `1e24:021f`      | OK                 | OK                   | ov5647 |
+| pi-sw2-p47 | 47   | 10.21.2.47 | 98:fe:54:13:f5:75 | Pi 5 1 GB (a04171) | Sqrl `1e24:021f`      | OK                 | **reversed** (K2↔J2) | ov5647 |
+| pi-sw2-p48 | 48   | 10.21.2.48 | 88:a2:9e:45:c6:87 | Pi 5 2 GB (b04171) | Sqrl `1e24:021f`      | OK                 | OK                   | ov5647 |
 
 All six run the shared bookworm NFS root (kernel 6.12.96, `overlayroot=tmpfs`),
 have `/dev/ttyAMA0` enabled with the kernel console on `ttyAMA10`, and publish a
-camera feed. The earlier revision of this table listed the first three as
-"RPi 5 8GB"; the revision codes say 2 GB.
+camera feed.
 
 ### PS1 Site ([site-ps1.md](site-ps1.md))
 
-Four Compute Blades (val2 gateway, legacy `10.21.0.1xx` addressing). Probed
+Four Compute Blades (val2 gateway, flat `10.21.0.1xx` addressing). Probed
 2026-08-31.
 
 | Host | Port | IP          | Module               | Flash contents                                   | JTAG (P1)                     | P2 serial                   |
@@ -238,8 +237,8 @@ Four Compute Blades (val2 gateway, legacy `10.21.0.1xx` addressing). Probed
 | pi18 | e18  | 10.21.0.118 | CM4 Rev 1.1 4 GB     | none — M.2 slot empty                            | n/a                           | n/a                         |
 | pi20 | e20  | 10.21.0.120 | CM5 Lite Rev 1.0 8 GB| XC7A100T design `10ee:7011`, DNA `0x0028e5c45e304854` | OK (openFPGALoader 0.13.1) | OK, crossover present       |
 
-These boards have been documented as LiteFury; the factory PCI ID on pi14/pi16
-identifies them as Sqrl Acorn CLE-101 (same PCB family, XC7A100T, 512 MB).
+The factory PCI ID on pi14/pi16 identifies these boards as Sqrl Acorn CLE-101
+(the LiteFury's PCB family, XC7A100T, 512 MB).
 
 ### Deployment Summary
 
