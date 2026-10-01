@@ -23,6 +23,7 @@ from migen import *
 from pmod_pin_id import UARTTxIdentifier
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+from designs._shared.platform_fixups import require_timing
 from designs._shared.tt_fpga_platform import Platform
 
 # Use connector names (not _io resource names) to avoid conflicts
@@ -89,6 +90,7 @@ def main():
 
     module = PMODPinIdentifier(platform, pin_list)
 
+    require_timing(platform, {})  # runs on the board clock, which the platform constrains
     if args.build:
         build_dir = str(Path(__file__).resolve().parent.parent / "build" / "tt")
         platform.build(module, build_dir=build_dir)

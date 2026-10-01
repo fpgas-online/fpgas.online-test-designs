@@ -26,7 +26,11 @@ from litex_boards.targets.kosagi_netv2 import BaseSoC
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer for Python >= 3.11
 from designs._shared.build_helpers import default_build_dir
-from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
+from designs._shared.platform_fixups import (
+    ensure_chipdb_symlink,
+    fix_openxc7_device_name,
+    require_litex_boards_timing,
+)
 from designs._shared.yosys_workarounds import apply_nodram_workaround, patch_yosys_template
 
 
@@ -65,6 +69,7 @@ def main():
     fix_openxc7_device_name(soc.platform)
     ensure_chipdb_symlink(soc.platform)
 
+    require_litex_boards_timing(soc, args.sys_clk_freq)
     patch_yosys_template(soc)
     apply_nodram_workaround(soc)
 

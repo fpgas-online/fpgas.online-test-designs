@@ -27,7 +27,7 @@ from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
 from designs._shared.build_helpers import build_soc, default_soc_kwargs
-from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
+from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name, require_timing
 from designs._shared.yosys_workarounds import patch_yosys_template
 
 # CRG (Clock Reset Generator) ---------------------------------------------------------------------
@@ -47,6 +47,7 @@ class _CRG(LiteXModule):
         pll.register_clkin(clk50, 50e6)
         pll.create_clkout(self.cd_sys, sys_clk_freq)
         platform.add_false_path_constraints(self.cd_sys.clk, pll.clkin)
+        require_timing(platform, {self.cd_sys: sys_clk_freq})
 
 
 # BaseSoC -----------------------------------------------------------------------------------------

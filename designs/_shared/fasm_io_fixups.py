@@ -9,6 +9,10 @@ Vivado encodes an SSTL15_R output as LVCMOS15.DRIVE.I8 (seen in bit2fasm of the 
 Only features nextpnr-xilinx already wrote are rewritten, and only to features prjxray-db has for the same
 tiles, so the rewritten FASM still assembles with fasm2frames.
 
+Both fixes are whole-device: every bank's VREF, and every SSTL15 output with SLEW=FAST. That is right for
+the designs that use them (the DDR3 SoCs: the NeTV2's SSTL15 outputs are all its SSTL15_R DDR pins), and
+wrong for a design that mixes SSTL15 with SSTL15_R outputs, or SSTL15 with SSTL135 banks.
+
 usage: fasm_io_fixups.py <file.fasm> [--vref-mv {600,675,750,900}] [--sstl15-reduced-drive]  (rewrites in place)
 """
 
@@ -90,6 +94,13 @@ def main(argv=None):
     args = parser.parse_args(argv)
     lines = args.fasm.read_text().splitlines(keepends=True)
     fixed = fix_lines(lines, vref_mv=args.vref_mv, sstl15_reduced_drive=args.sstl15_reduced_drive)
+    # A fix asked for that finds nothing to fix means nextpnr-xilinx or prjxray-db named the features
+    # differently from what this expects: fail, rather than ship a bank at the wrong VREF or drive.
+    if args.vref_mv is not None and not any(_VREF.match(line.strip()) for line in lines):
+        sys.exit(f"fasm_io_fixups: --vref-mv given, but {args.fasm} has no HCLK_IOI3 VREF feature")
+    drive = f".{_SSTL15_R_DRIVE}"
+    if args.sstl15_reduced_drive and not any(a != b and b.strip().endswith(drive) for a, b in zip(lines, fixed)):
+        sys.exit(f"fasm_io_fixups: --sstl15-reduced-drive given, but {args.fasm} has no SSTL15 output to rewrite")
     changed = sum(a != b for a, b in zip(lines, fixed))
     args.fasm.write_text("".join(fixed))
     print(f"fasm_io_fixups: {changed} feature(s) rewritten in {args.fasm}", file=sys.stderr)

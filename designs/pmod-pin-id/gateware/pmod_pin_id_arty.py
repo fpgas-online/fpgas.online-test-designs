@@ -23,6 +23,7 @@ from migen import *
 from pmod_pin_id import UARTTxIdentifier
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+from designs._shared.platform_fixups import require_timing
 from designs._shared.yosys_workarounds import YOSYS_TEMPLATE_STRIP_SCOPEINFO
 
 # Connector names to scan (all PMOD connectors on the Arty).
@@ -89,6 +90,7 @@ def main():
     if args.toolchain == "openxc7" and hasattr(platform.toolchain, "_yosys_template"):
         platform.toolchain._yosys_template = list(YOSYS_TEMPLATE_STRIP_SCOPEINFO)
 
+    require_timing(platform, {})  # runs on the board clock, which the platform constrains
     if args.build:
         build_dir = str(Path(__file__).resolve().parent.parent / "build" / "arty")
         platform.build(module, build_dir=build_dir)
