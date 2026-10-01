@@ -32,6 +32,12 @@ from litex_boards.platforms import sqrl_acorn
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+from designs._shared.platform_fixups import constrain_openxc7_clocks
+
+# nextpnr-xilinx cannot place this SoC at 100 MHz (a constrained build reached 64.9 MHz). Over three seeds
+# each (2026-09-29), 80 MHz builds reached 81.4-93.2 MHz and 75 MHz ones 74.0-92.5 MHz. 80 MHz keeps the
+# DDR3 at 640 MT/s, inside its 300 MHz DLL-on minimum clock.
+SYS_CLK_FREQ = {"openxc7": 80e6}
 
 # CRG ----------------------------------------------------------------------------------------------
 
@@ -56,6 +62,15 @@ class _CRG(LiteXModule):
         pll.create_clkout(self.cd_sys4x_dqs, 4 * sys_clk_freq, phase=90)
         pll.create_clkout(self.cd_idelay, 200e6)
         platform.add_false_path_constraints(self.cd_sys.clk, pll.clkin)
+        constrain_openxc7_clocks(
+            platform,
+            {
+                self.cd_sys: sys_clk_freq,
+                self.cd_sys4x: 4 * sys_clk_freq,
+                self.cd_sys4x_dqs: 4 * sys_clk_freq,
+                self.cd_idelay: 200e6,
+            },
+        )
 
         # IdelayCtrl.
         self.idelayctrl = S7IDELAYCTRL(self.cd_idelay)
@@ -69,9 +84,12 @@ class BaseSoC(SoCCore):
         platform = sqrl_acorn.Platform(variant=variant, toolchain=toolchain)
 
         if toolchain == "openxc7":
+            from designs._shared.fasm_io_fixups import add_openxc7_fasm_io_fixups
             from designs._shared.platform_fixups import fix_openxc7_device_name
 
             fix_openxc7_device_name(platform)
+            # nextpnr-xilinx gives every SSTL bank 0.675 V; the platform (and Vivado) want 0.75 V for SSTL15.
+            add_openxc7_fasm_io_fixups(platform, vref_mv=750)
 
         # CRG --------------------------------------------------------------------------------------
         self.crg = _CRG(platform, sys_clk_freq)
@@ -114,13 +132,19 @@ def main():
         choices=["cle-215+", "cle-215", "cle-101"],
         help="Board variant: cle-215+ (Acorn), cle-215 (NiteFury), cle-101 (LiteFury).",
     )
-    parser.add_target_argument("--sys-clk-freq", default=100e6, type=float, help="System clock frequency.")
+    parser.add_target_argument(
+        "--sys-clk-freq",
+        default=None,
+        type=float,
+        help="System clock frequency (default: 80 MHz for openxc7, 100 MHz otherwise).",
+    )
     args = parser.parse_args()
+    sys_clk_freq = args.sys_clk_freq or SYS_CLK_FREQ.get(args.toolchain, 100e6)
 
     soc = BaseSoC(
         variant=args.variant,
         toolchain=args.toolchain,
-        sys_clk_freq=int(args.sys_clk_freq),
+        sys_clk_freq=int(sys_clk_freq),
         **parser.soc_argdict,
     )
 
