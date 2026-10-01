@@ -32,7 +32,7 @@ The openXC7 flow (yosys + nextpnr-xilinx) needs three things the Vivado flow doe
   80 MHz on the Acorn (640 MT/s) and 50 MHz on the NeTV2 (400 MT/s). nextpnr-xilinx
   cannot place the SoC at 100 MHz. Vivado builds keep 100 MHz on the Arty and the Acorn.
 - **IO fixes.** nextpnr-xilinx does not know SSTL15_R, which is the NeTV2's DDR3 IO
-  standard: asked for it, it builds the data pins with no input buffer at all. It also gives every SSTL
+  standard: a design that asks for it gets data pins with no input buffer. It also gives every SSTL
   bank VREF 0.675 V. The NeTV2 target asks for SSTL15 instead. `designs/_shared/fasm_io_fixups.py`
   then sets VREF 0.75 V (NeTV2, Acorn) and SSTL15_R's reduced drive (NeTV2) in the FASM, so the
   DDR3 pins match what Vivado builds.

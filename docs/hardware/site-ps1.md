@@ -54,7 +54,7 @@ All Arty boards connect via FTDI FT2232C/D/H (`0403:6010`). Each provides:
 
 Each RPi also has a separate USB Ethernet adapter for the Arty's Ethernet port.
 
-**pi2 note**: Uses Apple Ethernet adapter (A1277). Currently offline.
+**pi2 note**: Uses Apple Ethernet adapter (A1277).
 
 ### LiteFury / Compute Blade Hosts
 
