@@ -30,8 +30,8 @@ from designs._shared.build_helpers import build_soc, default_soc_kwargs
 from designs._shared.platform_fixups import require_timing
 from designs._shared.yosys_workarounds import patch_yosys_template
 
-# nextpnr-xilinx places this SoC at 66-93 MHz depending on the build, so 100 MHz builds shipped that garbled
-# the UART (2026-09-30: 82.8 MHz, every Arty's uart test failed). Vivado makes 100 MHz.
+# nextpnr-xilinx places this SoC at 66-93 MHz depending on the seed, so 100 MHz misses timing under openXC7;
+# Vivado makes 100 MHz.
 SYS_CLK_FREQ = {"openxc7": 75e6}
 
 # CRG (Clock Reset Generator) ---------------------------------------------------------------------

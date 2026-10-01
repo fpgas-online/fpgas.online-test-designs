@@ -36,8 +36,8 @@ from designs._shared.yosys_workarounds import patch_yosys_template
 kB = 1024
 
 
-# nextpnr-xilinx places this SoC at 76-94 MHz on the CLE-215 (NiteFury), short of 100 MHz on every seed
-# (2026-10-01, the first timing-strict CI run). Vivado makes 100 MHz.
+# nextpnr-xilinx places this SoC at 87-94 MHz on the CLE-215 (NiteFury), short of 100 MHz on every seed;
+# Vivado makes 100 MHz.
 SYS_CLK_FREQ = {"openxc7": 75e6}
 
 # CRG (Clock Reset Generator) ---------------------------------------------------------------------

@@ -48,10 +48,9 @@ def constrain_openxc7_clocks(platform, domains):
 
     *domains* maps each ClockDomain to its frequency in Hz. Vivado derives PLL output clocks itself,
     so this does nothing unless the toolchain is openXC7. nextpnr-xilinx does not: LiteX constrains
-    only the board's input clock and passes that frequency as `--freq`, so every PLL output was timed
-    at the input frequency (the Arty's 100 MHz, the Acorn's 200 MHz), and LiteX also passes
-    `--timing-allow-fail`. Arty DDR images that missed 100 MHz by up to a third were shipped, and
-    whether one could read its DDR3 depended on where that build happened to place things.
+    only the board's input clock and passes that frequency as `--freq`, so without this every PLL output
+    is timed at the input frequency (the Arty's 100 MHz, the Acorn's 200 MHz), and LiteX also passes
+    `--timing-allow-fail`, so a build that misses timing still produces a bitstream.
     """
     if not getattr(platform.toolchain, "is_openxc7", False):
         return
