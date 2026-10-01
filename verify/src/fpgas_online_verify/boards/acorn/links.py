@@ -39,7 +39,7 @@ GPIOCHIP = "/dev/gpiochip0"
 SYSFS_GPIO = "/sys/bus/gpio/devices"
 # pinctrl get: "14: a4    pn | hi // GPIO14 = TXD0", "8: op dl pd | lo // GPIO8 = output"
 PIN_RE = re.compile(r"^\s*(\d+):\s+(\w+)(?:\s+d[hl])?\s+(p[udn])\s*\|\s*(\w+|--)", re.MULTILINE)
-# designs/acorn-pcie/gateware/acorn_pcie_soc.py: ("p2_gpio", 0, Pins("J5 H5")): bit 0 is J5, bit 1 is H5.
+# designs/_shared/acorn_p2.py SPARE_GPIO = ("J5", "H5"), the pins of p2_gpio: bit 0 is J5, bit 1 is H5.
 P2_GPIO_BITS = {"J5": 0, "H5": 1}
 
 

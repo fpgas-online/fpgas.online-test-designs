@@ -5,9 +5,9 @@ Real output from pi-sw2-p48 (2026-10-01): `openFPGALoader --cable libgpiod --pin
 BAR0 and over the P2 UARTBone. tests/test_acorn_verify.py runs them inside the whole check.
 """
 
+import ast
 import os
 import pathlib
-import re
 
 import pytest
 from fpgas_online_verify.boards.acorn import check, links, setup, uartbone_link
@@ -220,9 +220,12 @@ def test_pinctrl_output_is_read_as_pinctrl_prints_it():
 
 
 def test_the_p2_gpio_bits_are_the_ones_the_soc_is_built_with():
-    soc = pathlib.Path(__file__).resolve().parents[1] / "designs" / "acorn-pcie" / "gateware" / "acorn_pcie_soc.py"
-    m = re.search(r'\("p2_gpio", 0, Pins\("([^"]+)"\)', soc.read_text())
-    assert {ball: bit for bit, ball in enumerate(m.group(1).split())} == links.P2_GPIO_BITS
+    """designs/_shared/acorn_p2.py imports LiteX, which the verify tests do without: read SPARE_GPIO from its
+    source, as test_acorn_verify.py reads the subsystem IDs."""
+    p2 = pathlib.Path(__file__).resolve().parents[1] / "designs" / "_shared" / "acorn_p2.py"
+    (spare,) = [ast.literal_eval(node.value) for node in ast.parse(p2.read_text()).body
+                if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", None) == "SPARE_GPIO"]  # fmt: skip
+    assert {ball: bit for bit, ball in enumerate(spare)} == links.P2_GPIO_BITS
 
 
 def test_with_no_pin_state_to_put_back_openfpgaloader_is_not_run():
