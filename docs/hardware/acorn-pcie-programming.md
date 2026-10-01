@@ -84,23 +84,13 @@ repository.
 
 **Flash-via-JTAG (`--write-flash`) does not work** with openFPGALoader on the Acorn. JTAG can only load bitstreams to volatile SRAM. This has important implications for the recovery strategy.
 
-### Flash contents (2026-09-03 survey)
+### Sqrl's factory firmware
 
-What each Welland Acorn's SPI flash held on 2026-09-03 (`lspci -nn` on each
-host); five had the **factory Sqrl cryptocurrency mining firmware**. What each
-board runs at its latest boot is in the
-[current verify results](../verify.md#current-results), and
+What each Welland Acorn runs is in the
+[current verify results](../verify.md#current-results);
 [#53](https://github.com/fpgas-online/fpgas.online-test-designs/issues/53)
-tracks moving them all to the pinned release:
-
-| Host       | Flash contents (what enumerates at boot)                                   |
-|------------|----------------------------------------------------------------------------|
-| pi-sw2-p29 | Sqrl factory firmware `1e24:021f`                                          |
-| pi-sw2-p43 | Sqrl factory firmware `1e24:021f`                                          |
-| pi-sw2-p44 | `10ee:7011` — Xilinx 7-Series Hard PCIe block (a LiteX/Vivado design)      |
-| pi-sw2-p46 | Sqrl factory firmware `1e24:021f`                                          |
-| pi-sw2-p47 | Sqrl factory firmware `1e24:021f`                                          |
-| pi-sw2-p48 | Sqrl factory firmware `1e24:021f`                                          |
+tracks moving them all to the pinned release. A board still on Sqrl's factory
+(cryptocurrency mining) firmware cannot be programmed over PCIe.
 
 Factory firmware characteristics:
 
@@ -379,7 +369,7 @@ write_cfgmem -force -format bin -interface spix4 -size 16 \
    # Test it works, then write to flash via PCIe
    ```
 
-4. **Keep JTAG wiring connected** on all deployed Acorn boards. Without JTAG, a corrupted golden image means the board is **permanently bricked** until JTAG is reconnected. pi-sw2-p43 and pi-sw2-p44 scan an empty JTAG chain and PS1's pi14/pi16 do not answer JTAG at all (survey of 2026-08-31) — those four are in exactly this state and must not be flashed over PCIe until JTAG is restored.
+4. **Keep JTAG wiring connected** on all deployed Acorn boards. Without JTAG, a corrupted golden image means the board is **permanently bricked** until JTAG is reconnected. Check that `fpgas-verify`'s `jtag` test passes on a board before flashing it over PCIe.
 
 5. **Detach the PCIe endpoint before every JTAG load** (see the top of this page). A Pi 5 host crashes otherwise.
 
