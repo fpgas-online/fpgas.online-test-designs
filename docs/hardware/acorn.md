@@ -176,7 +176,7 @@ lost at power cycle, which is what makes it safe to experiment with.
 
 ```bash
 echo 1 | sudo tee /sys/bus/pci/devices/0001:01:00.0/remove   # MUST detach the endpoint first on a Pi 5
-sudo ln -sfn /dev/gpiochip15 /dev/gpiochip0                   # openFPGALoader 0.10.0 on a Pi 5 only
+sudo ln -sfn /dev/gpiochip15 /dev/gpiochip0                   # Pi 5 only: the libgpiod cable opens gpiochip0
 openFPGALoader --cable libgpiod --pins 10:9:11:8 <bitstream.bit>
 ```
 
@@ -200,30 +200,24 @@ Flash a persistent bitstream using OpenOCD or openFPGALoader. The S25FL256S supp
 
 ### Via PCIe (LiteX)
 
-LiteX provides PCIe-based programming via `litepcie_util` when a LiteX bitstream with PCIe support is already loaded. Only pi-sw2-p44 boots such a design; the other Welland boards carry the Sqrl factory firmware.
+LiteX provides PCIe-based programming via `litepcie_util` when a LiteX bitstream with PCIe support is already loaded. Which Welland boards run the fpgas.online SoC is in the [current verify results](../verify.md#current-results) and [#53](https://github.com/fpgas-online/fpgas.online-test-designs/issues/53).
 
 ## Host Inventory
 
 ### Welland Site ([site-welland.md](site-welland.md))
 
-Six Acorn CLE-215+ hosts, all Raspberry Pi 5 Rev 1.1, all on the S3300 switch
-(switch index 2) under the [VLAN-per-port scheme](site-welland.md#network-topology):
-hostname `pi-sw2-p<port>`, IP `10.21.2.<port>`. Probed live 2026-09-03; JTAG /
-P2 columns from the 2026-08-31 pin-ID survey in
-[the Welland Acorn table](https://docs.fpgas.online/en/latest/sites/welland.html#sqrl-acorn-cle-215).
+Seven Acorn CLE-215+ hosts, all Raspberry Pi 5, on the S3300 switch (switch
+index 2) under the [VLAN-per-port scheme](site-welland.md#network-topology):
+hostname `pi-sw2-p<port>`, IP `10.21.2.<port>`. Their MACs and revision codes
+are in [site-welland.md](site-welland.md#sqrl-acorn-cle-215-on-rpi-5-hosts-with-m2-hat-sw2-p29-p37-p43p48).
+What each board runs and whether its JTAG and P2 links pass is in the
+[current verify results](../verify.md#current-results); moving them all to the
+pinned release is
+[#53](https://github.com/fpgas-online/fpgas.online-test-designs/issues/53).
 
-| Host       | Port | IP         | RPi MAC           | RPi (rev)          | Flash contents        | JTAG (P1)          | P2 serial            | Camera |
-| ---------- | ---- | ---------- | ----------------- | ------------------ | --------------------- | ------------------ | -------------------- | ------ |
-| pi-sw2-p29 | 29   | 10.21.2.29 | 88:a2:9e:45:dd:be | Pi 5 2 GB (b04171) | Sqrl `1e24:021f`      | OK                 | OK (J5 wire dead)    | ov5647 |
-| pi-sw2-p43 | 43   | 10.21.2.43 | 98:fe:54:13:e0:75 | Pi 5 1 GB (a04171) | Sqrl `1e24:021f`      | **empty chain**    | untestable           | ov5647 |
-| pi-sw2-p44 | 44   | 10.21.2.44 | 98:fe:54:13:e0:f5 | Pi 5 1 GB (a04171) | LiteX `10ee:7011`     | **empty chain**    | untestable           | ov5647 |
-| pi-sw2-p46 | 46   | 10.21.2.46 | 88:a2:9e:45:85:77 | Pi 5 2 GB (b04171) | Sqrl `1e24:021f`      | OK                 | OK                   | ov5647 |
-| pi-sw2-p47 | 47   | 10.21.2.47 | 98:fe:54:13:f5:75 | Pi 5 1 GB (a04171) | Sqrl `1e24:021f`      | OK                 | **reversed** (K2↔J2) | ov5647 |
-| pi-sw2-p48 | 48   | 10.21.2.48 | 88:a2:9e:45:c6:87 | Pi 5 2 GB (b04171) | Sqrl `1e24:021f`      | OK                 | OK                   | ov5647 |
-
-All six run the shared bookworm NFS root (kernel 6.12.96, `overlayroot=tmpfs`),
-have `/dev/ttyAMA0` enabled with the kernel console on `ttyAMA10`, and publish a
-camera feed.
+Hosts: pi-sw2-p29, p37, p43, p44, p46, p47 and p48. All run the shared NFS root
+(`overlayroot=tmpfs`), have `/dev/ttyAMA0` enabled with the kernel console on
+`ttyAMA10`, and have an ov5647 camera.
 
 ### PS1 Site ([site-ps1.md](site-ps1.md))
 
@@ -244,7 +238,7 @@ The factory PCI ID on pi14/pi16 identifies these boards as Sqrl Acorn CLE-101
 
 | Variant                  | FPGA          | DDR3   | Welland (deployed) | Welland (pending) | PS1 (deployed) | PS1 (pending)        |
 | ------------------------ | ------------- | ------ | ------------------ | ----------------- | -------------- | -------------------- |
-| Acorn CLE-215+           | XC7A200T (-3) | 1 GB   | ×6                 | —                 | —              | —                    |
+| Acorn CLE-215+           | XC7A200T (-3) | 1 GB   | ×7                 | —                 | —              | —                    |
 | LiteFury / Acorn CLE-101 | XC7A100T (-2) | 512 MB | —                  | —                 | ×3             | ×1 host (pi18) empty |
 
 No USB serial devices on any host — JTAG and UART are connected via adapted Pico-EZmate cables to the RPi GPIO header (see [acorn-pinmap.md](acorn-pinmap.md)). PCIe is via the M.2 HAT.
