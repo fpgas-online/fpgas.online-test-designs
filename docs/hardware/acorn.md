@@ -242,6 +242,12 @@ the generator, then the checker over the same range with the same `random`. Band
 `end` and `length` are as wide as a DRAM byte address, so the whole DRAM takes two halves. The check is per
 128-bit word: each word holds one 32-bit pattern value four times.
 
+The BIOS sets the DRAM up after printing its banner on the crossover UART, and stops once that console is full
+and nobody reads it ([#47](https://github.com/fpgas-online/fpgas.online-test-designs/pull/47)). On a board
+nobody has attached to, the DRAM is then never initialised and every word of a BIST pass is an error. Read the
+console out first (`uart_xover_rxempty` at `0xf0001028`, `uart_xover_rxtx` at `0xf0001020`, where each read
+takes one character) until it is quiet; that also gives the BIOS's calibration and memtest output.
+
 ### P2 serial/GPIO switch
 
 J5 and H5 are always GPIOs (`p2_gpio`). J2 and K2 carry the UARTBone, so to check them in both directions a
