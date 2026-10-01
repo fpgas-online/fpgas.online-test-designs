@@ -6,21 +6,30 @@ Needs the operational image of a release that has the BIST and the P2 switch (cs
 side of the P2 pins. Run as root:
 
     sudo python3 selftest.py --csr acorn-cle-215p-csr.json [--bdf 0001:01:00.0] [--uart /dev/ttyAMA0]
+        [--carrier pi5|blade]
 
 0. The BIOS console (the crossover UART) is read out over BAR0 first. The BIOS sets the DRAM up after its
    banner, and with this LiteX it stops when its console fills and nobody reads it (PR #47), so on a
    board nobody has attached to, reading it is what lets DRAM initialisation finish.
-1. DRAM: write a PRBS pattern over the whole DRAM with `dram_generator`, read it back with `dram_checker`,
-   and report the errors and both passes' bandwidth (bytes / (ticks / sys clock)).
-2. P2: each of J2, K2, J5 and H5, driven low then high from the FPGA and read on the Pi, then driven from the
-   Pi and read on the FPGA. J2/K2 are borrowed from the UART with `p2_serial`; J5/H5 are `p2_gpio`.
+1. DRAM: two passes over the whole DRAM, each split into a low and a high half. A pass writes both halves
+   with `dram_generator` before it checks either with `dram_checker`, and the halves get different data: a
+   PRBS in one, a counter in the other, swapped in the second pass. A broken top address bit, or a board
+   with half the DRAM the image expects, makes the high half overwrite the low one, and the check of the
+   half written first fails. Reports the errors and the bandwidth (bytes / (ticks / sys clock)).
+2. P2: each P2 ball the carrier wires to the Pi (docs/wiring/acorn/wiring.toml), driven low then high from
+   the FPGA and read on the Pi, then driven from the Pi and read on the FPGA. J2/K2 are borrowed from the
+   UART with `p2_serial`; J5/H5 are `p2_gpio`. Balls the carrier does not wire are skipped, and so is any
+   ball whose Pi GPIO is also a JTAG net (on the Compute Blade, J2 shares GPIO14 with TMS): this test never
+   drives JTAG.
 3. The switch's own timeout: switch to GPIO with a 200 ms timeout and see it come back to serial alone.
 4. With `--uart`: the UARTBone answers on P2 afterwards, with the identifier BAR0 reads.
 
 Every Pi pin is put back as it was (`pinctrl get` before, `pinctrl set` after), and the switch is back on serial,
-even when a step fails. Prints one line per check and exits 1 if any failed.
+even when a step fails. If the script is killed while the pins are GPIOs, the switch goes back to serial by
+itself after SWITCH_TIMEOUT_MS. Prints one line per check and exits 1 if any failed.
 
-Self-contained (stdlib only) for the Pis' tmpfs root.
+Uses only the Python standard library, except `--uart`, which needs pyserial and the installed
+fpgas_online_verify package (fpgas-online-acorn-tools).
 """
 
 import argparse
@@ -36,14 +45,31 @@ import time
 
 BAR0_SIZE = 0x20000
 
-# Pi GPIO on the other end of each P2 ball (docs/wiring/acorn/wiring.toml; the same on the Pi 5 HAT and the
-# Compute Blade), and where the FPGA side lives: (CSR module, bit).
-P2 = {
-    "J2": (14, "p2_serial", 0),
-    "K2": (15, "p2_serial", 1),
-    "J5": (3, "p2_gpio", 0),
-    "H5": (4, "p2_gpio", 1),
+# Where the FPGA side of each P2 ball lives: (CSR module, bit).
+FPGA_SIDE = {
+    "J2": ("p2_serial", 0),
+    "K2": ("p2_serial", 1),
+    "J5": ("p2_gpio", 0),
+    "H5": ("p2_gpio", 1),
 }
+# Per carrier, from docs/wiring/acorn/wiring.toml (tests/test_acorn_selftest.py checks these against it): the
+# Pi GPIO each wired P2 ball reaches, and the Pi GPIOs that carry JTAG (TDI, TDO, TCK, TMS).
+P2_GPIO = {
+    "pi5": {"J2": 14, "K2": 15, "J5": 3, "H5": 4},
+    "blade": {"J2": 14, "K2": 15},
+}
+JTAG_GPIO = {
+    "pi5": {10, 9, 11, 8},
+    "blade": {2, 3, 4, 14},
+}
+# The P2 switch's timeout while this test has the pins: longer than the test, short enough that a killed run
+# gives the serial link back soon. The gateware's reset value is put back afterwards.
+SWITCH_TIMEOUT_MS = 10000
+SWITCH_RESET_TIMEOUT_MS = 5000
+
+# The BIST's `random` register: bit 0 = PRBS data (else a counter), bit 1 = random addresses (not used here).
+PRBS, COUNTER = 1, 0
+PATTERN_NAMES = {PRBS: "prbs", COUNTER: "counter"}
 
 
 class Bar0:
@@ -127,13 +153,15 @@ def drain_console(csr, quiet_s=2.0, max_s=60.0):
 # -- DRAM --------------------------------------------------------------------------------------------------
 
 
-def _bist_pass(csr, core, base, length, timeout_s):
+def _bist_pass(csr, core, base, length, pattern, timeout_s):
+    """One generator or checker run. `reset` restarts the PRBS and the counter, so every run of a pattern
+    produces the same data: the halves differ only because they get different patterns."""
     csr[f"{core}_reset"] = 1
     csr[f"{core}_reset"] = 0
     csr[f"{core}_base"] = base
     csr[f"{core}_end"] = base + length
     csr[f"{core}_length"] = length
-    csr[f"{core}_random"] = 1  # PRBS data, sequential addresses
+    csr[f"{core}_random"] = pattern  # sequential addresses
     csr[f"{core}_start"] = 1
     deadline = time.monotonic() + timeout_s
     while not csr[f"{core}_done"]:
@@ -144,26 +172,32 @@ def _bist_pass(csr, core, base, length, timeout_s):
 
 
 def dram(csr, length=None):
-    """The whole DRAM in two halves: `length` and `end` are as wide as a DRAM address, so the full size
-    does not fit them."""
+    """The whole DRAM, twice, in two halves (`length` and `end` are as wide as a DRAM address, so the full
+    size does not fit them). Both halves are written before either is checked, with different data."""
     clk = csr.constants["config_clock_frequency"]
-    size = csr.memories["main_ram"]["size"]
-    length = length or size
+    length = length or csr.memories["main_ram"]["size"]
     half = length // 2
-    out = {"bytes": length, "sys_clk_hz": clk, "write_ticks": 0, "read_ticks": 0, "errors": 0}
-    for base in (0, half):
+    halves = (0, half)
+    out = {"bytes": length, "passes": 2, "sys_clk_hz": clk, "write_ticks": 0, "read_ticks": 0, "errors": 0}
+    for n, patterns in enumerate(((PRBS, COUNTER), (COUNTER, PRBS)), start=1):
         for core, what in (("dram_generator", "write"), ("dram_checker", "read")):
-            ticks = _bist_pass(csr, core, base, half, timeout_s=30)
-            if not check(f"dram {what} pass at {base:#x} finished", ticks is not None):
-                return out
-            out[f"{what}_ticks"] += ticks
-        out["errors"] += csr["dram_checker_errors"]
+            for base, pattern in zip(halves, patterns, strict=True):
+                name = PATTERN_NAMES[pattern]
+                ticks = _bist_pass(csr, core, base, half, pattern, timeout_s=30)
+                if not check(f"pass {n}: dram {what} {name} at {base:#x} finished", ticks is not None):
+                    return out
+                out[f"{what}_ticks"] += ticks
+                if core == "dram_checker":
+                    errors = csr["dram_checker_errors"]
+                    check(f"pass {n}: {name} at {base:#x}", errors == 0, f"{errors} errors")
+                    out["errors"] += errors
     for what in ("write", "read"):
-        out[f"{what}_MBps"] = round(length / (out[f"{what}_ticks"] / clk) / 1e6, 1)
+        out[f"{what}_MBps"] = round(2 * length / (out[f"{what}_ticks"] / clk) / 1e6, 1)
     check(
         "dram bist",
         out["errors"] == 0,
-        f"{length >> 20} MiB, {out['errors']} errors, write {out['write_MBps']} MB/s, read {out['read_MBps']} MB/s",
+        f"{length >> 20} MiB x 2 passes, {out['errors']} errors, "
+        f"write {out['write_MBps']} MB/s, read {out['read_MBps']} MB/s",
     )
     return out
 
@@ -199,14 +233,38 @@ def fpga_read(csr, module, bit):
     return (csr[f"{module}_in"] >> bit) & 1
 
 
-def p2(csr):
-    saved = {gpio: pi_state(gpio) for gpio, _, _ in P2.values()}
+def carrier_of(model_path="/proc/device-tree/model"):
+    """`pi5` or `blade`, from the Pi's model string."""
+    model = pathlib.Path(model_path).read_text(errors="replace").rstrip("\0")
+    if model.startswith("Raspberry Pi 5"):
+        return "pi5"
+    if "Compute Module" in model:
+        return "blade"
+    sys.exit(f"error: no Acorn carrier known for {model!r}; pass --carrier")
+
+
+def pins_to_test(carrier):
+    """{ball: Pi GPIO} for the balls this carrier wires to the Pi that are not also JTAG nets, and
+    {ball: why} for the rest."""
+    wired, jtag = P2_GPIO[carrier], JTAG_GPIO[carrier]
+    test = {ball: gpio for ball, gpio in wired.items() if gpio not in jtag}
+    skipped = {ball: "not wired on this carrier" for ball in FPGA_SIDE if ball not in wired}
+    skipped |= {ball: f"GPIO{gpio} is also a JTAG net" for ball, gpio in wired.items() if gpio in jtag}
+    return test, skipped
+
+
+def p2(csr, carrier):
+    pins, skipped = pins_to_test(carrier)
+    for ball, why in skipped.items():
+        print(f"SKIP {ball}: {why} ({carrier})", flush=True)
+    saved = {gpio: pi_state(gpio) for gpio in pins.values()}
     print(f"     Pi pins before: {saved}", flush=True)
     try:
-        csr["p2_serial_timeout"] = 0  # this test switches back itself
+        csr["p2_serial_timeout"] = SWITCH_TIMEOUT_MS  # back to serial by itself if this script is killed
         csr["p2_serial_mode"] = 1
         check("p2_serial switched to GPIO", csr["p2_serial_mode"] == 1)
-        for ball, (gpio, module, bit) in P2.items():
+        for ball, gpio in pins.items():
+            module, bit = FPGA_SIDE[ball]
             # FPGA -> Pi
             _pinctrl("set", str(gpio), "ip", "pn")
             seen = []
@@ -230,7 +288,7 @@ def p2(csr):
         for gpio, args in saved.items():
             _pinctrl("set", str(gpio), *args)
         csr["p2_serial_mode"] = 0
-        csr["p2_serial_timeout"] = 5000
+        csr["p2_serial_timeout"] = SWITCH_RESET_TIMEOUT_MS
     check("p2_serial back on serial", csr["p2_serial_mode"] == 0)
     print(f"     Pi pins after: { {gpio: pi_state(gpio) for gpio in saved} }", flush=True)
 
@@ -240,7 +298,7 @@ def p2(csr):
     time.sleep(0.5)
     later = csr["p2_serial_mode"]
     csr["p2_serial_mode"] = 0
-    csr["p2_serial_timeout"] = 5000
+    csr["p2_serial_timeout"] = SWITCH_RESET_TIMEOUT_MS
     check("p2_serial returns to serial by itself", (at_once, later) == (1, 0), f"mode {at_once}, 0.5 s later {later}")
 
 
@@ -272,18 +330,20 @@ def main():
     parser.add_argument("--csr", required=True, type=pathlib.Path, help="the running image's csr.json")
     parser.add_argument("--bdf", default="0001:01:00.0")
     parser.add_argument("--uart", metavar="PORT", help="also check the UARTBone on PORT afterwards")
+    parser.add_argument("--carrier", choices=sorted(P2_GPIO), help="default: from /proc/device-tree/model")
     parser.add_argument("--dram-bytes", type=lambda s: int(s, 0), help="test this much DRAM (default: all of it)")
     parser.add_argument("--skip-console", action="store_true", help="do not read the BIOS console first")
     parser.add_argument("--skip-dram", action="store_true")
     parser.add_argument("--skip-p2", action="store_true")
     args = parser.parse_args()
     csr_json = json.loads(args.csr.read_text())
+    carrier = args.carrier or carrier_of()
 
-    report = {}
+    report = {"carrier": carrier}
     with Bar0(args.bdf) as bus:
         csr = Csr(bus, csr_json)
         ident = read_ident(csr, csr_json)
-        print(f"     running: {ident}", flush=True)
+        print(f"     running: {ident} (carrier {carrier})", flush=True)
         report["ident"] = ident
         if not args.skip_console:
             console = drain_console(csr)
@@ -291,7 +351,7 @@ def main():
         if not args.skip_dram:
             report["dram"] = dram(csr, args.dram_bytes)
         if not args.skip_p2:
-            p2(csr)
+            p2(csr, carrier)
     if args.uart:
         uart(args.uart, ident)
     print(json.dumps(report))
