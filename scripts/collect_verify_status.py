@@ -231,7 +231,8 @@ def short(text, limit=REASON_MAX):
 
 
 def tests_cell(tests):
-    return " ".join(f"{name}={'**' + result + '**' if result != 'pass' else result}" for name, result in tests)
+    cells = [f"{name}={'**' + result + '**' if result != 'pass' else result}" for name, result in tests]
+    return " ".join(cells) or "-"
 
 
 def rows(records):

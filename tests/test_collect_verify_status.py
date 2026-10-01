@@ -213,3 +213,10 @@ def test_markdown_summarises_by_board_and_lists_every_pi():
 def test_reasons_are_one_line_and_cannot_break_the_table():
     assert cvs.short("a |\n b") == "a \\| b"
     assert len(cvs.short("x" * 500)) == cvs.REASON_MAX
+
+
+def test_a_board_with_no_tests_shows_a_dash():
+    board = {"board": "acorn", "kind": "litex-other", "result": "fail", "reason": "not a design we built"}
+    report = {"schema_version": 2, "result": "fail", "checked_at": "2026-09-30T18:06:51+00:00", "boards": [board]}
+    row = cvs.rows([cvs.parse_remote("10.21.2.37", answer(report))])[0]
+    assert row[2:7] == ["Unrecognised PCIe FPGA", "-", "fail", "-", "not a design we built"]
