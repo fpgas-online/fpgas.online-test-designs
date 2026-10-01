@@ -6,7 +6,7 @@ The NeTV2 is a Xilinx Artix-7 based video overlay/processing board designed by b
 
 ## Installing the NeTV2 Packages
 
-Add the fpgas.online APT repository first ([README: Installing the Packages](../../README.md#installing-the-packages)), then on the NeTV2's Pi:
+Add the fpgas.online APT repository first ([verify.md: Installing](../verify.md#installing)), then on the NeTV2's Pi:
 
 ```bash
 sudo apt install fpgas-online-netv2
@@ -23,25 +23,16 @@ The NeTV2 has no USB, so the check finds it with a JTAG scan over the Pi's heade
 
 On a Pi 5, add the [fpgas.online-fpga-tools repository](https://github.com/fpgas-online/fpgas.online-fpga-tools#debian-packages-bookworm-trixie-sid-arm64-armhf) **before** installing: only its openFPGALoader builds have the `rp1pio` cable. They also have the SPI-over-JTAG bridge for the XC7A35T-FGG484, which Debian bookworm's `openfpgaloader` lacks, so on bookworm the flash readback of an XC7A35T board fails without them.
 
-The NeTV2's check has not yet been run on a NeTV2.
+It runs at every boot of the Welland NeTV2s: [current results](../verify.md#current-results).
 
-**Check the board now**, and see what each test printed:
-
-```bash
-sudo fpgas-verify                          # what the boot unit runs: report, publish, exit 0 only for pass
-sudo fpgas-netv2-verify --no-publish --report -   # this board only, the JSON report on stdout
-```
-
-The results are in the [README](../../README.md#installing-the-packages). `changed` means the board, or its flash, differs from what was recorded last time; after flashing or swapping it on purpose, `sudo fpgas-verify --update` records the new state.
-
-**When a check fails**, `sudo apt install fpgas-online-netv2-debug` for step-by-step tools:
+**Check the board now**, or run one test with its output live (`fpgas-netv2-debug` is in `fpgas-online-netv2-debug`):
 
 ```bash
-sudo fpgas-netv2-debug detect           # is the board there, and what was found
-fpgas-netv2-debug list                  # every test, whether the boot check runs it, and its bitstream
-sudo fpgas-netv2-debug check            # the installed bitstreams against their manifest
-sudo fpgas-netv2-debug test uart   # load one test's design and run its test, output live
+sudo fpgas-netv2-verify --no-publish --report -  # this board only, the JSON report on stdout
+sudo fpgas-netv2-debug test uart                 # load one test's design and run its test
 ```
+
+What the results mean, the report, `changed` and `--update`, the debug tool and common failures: [verify.md](../verify.md#reading-the-result).
 
 ## Key Specifications
 

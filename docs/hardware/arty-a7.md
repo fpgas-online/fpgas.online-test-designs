@@ -6,7 +6,7 @@ The Digilent Arty A7 is a Xilinx Artix-7 development board used in the fpgas.onl
 
 ## Installing the Arty Packages
 
-Add the fpgas.online APT repository first ([README: Installing the Packages](../../README.md#installing-the-packages)), then on the Arty's Pi:
+Add the fpgas.online APT repository first ([verify.md: Installing](../verify.md#installing)), then on the Arty's Pi:
 
 ```bash
 sudo apt install fpgas-online-arty
@@ -23,25 +23,16 @@ At boot the check finds the Arty by its FT2232H on USB (`0403:6010`). It then lo
 
 For the fpgas.online openFPGALoader build, add the [fpgas.online-fpga-tools repository](https://github.com/fpgas-online/fpgas.online-fpga-tools#debian-packages-bookworm-trixie-sid-arm64-armhf) **before** installing; otherwise apt installs Debian's `openfpgaloader`, which also works for the Arty.
 
-The Arty's check has not yet been run on an Arty.
+It runs at every boot of the Welland Arties: [current results](../verify.md#current-results).
 
-**Check the board now**, and see what each test printed:
-
-```bash
-sudo fpgas-verify                          # what the boot unit runs: report, publish, exit 0 only for pass
-sudo fpgas-arty-verify --no-publish --report -   # this board only, the JSON report on stdout
-```
-
-The results are in the [README](../../README.md#installing-the-packages). `changed` means the board, or its flash, differs from what was recorded last time; after flashing or swapping it on purpose, `sudo fpgas-verify --update` records the new state.
-
-**When a check fails**, `sudo apt install fpgas-online-arty-debug` for step-by-step tools:
+**Check the board now**, or run one test with its output live (`fpgas-arty-debug` is in `fpgas-online-arty-debug`):
 
 ```bash
-sudo fpgas-arty-debug detect           # is the board there, and what was found
-fpgas-arty-debug list                  # every test, whether the boot check runs it, and its bitstream
-sudo fpgas-arty-debug check            # the installed bitstreams against their manifest
-sudo fpgas-arty-debug test ddr   # load one test's design and run its test, output live
+sudo fpgas-arty-verify --no-publish --report -  # this board only, the JSON report on stdout
+sudo fpgas-arty-debug test ddr                  # load one test's design and run its test
 ```
+
+What the results mean, the report, `changed` and `--update`, the debug tool and common failures: [verify.md](../verify.md#reading-the-result).
 
 ## Key Specifications
 
