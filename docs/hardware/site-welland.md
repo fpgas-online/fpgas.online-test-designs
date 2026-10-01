@@ -115,7 +115,9 @@ Each RPi also has a separate USB Ethernet adapter connected to the Arty's Ethern
 
 Each NeTV2 is programmed via OpenOCD GPIO bitbang JTAG through the RPi's GPIO header. No USB serial devices — the NeTV2 uses GPIO UART for communication (FPGA TX→GPIO15/RXD, FPGA RX→GPIO14/TXD via `/dev/ttyAMA0`).
 
-### Sqrl Acorn CLE-215+ (on RPi 5 hosts with M.2 HAT, sw2 p29, p37, p43–p48)
+### Sqrl Acorn CLE-215+
+
+On RPi 5 hosts with an M.2 HAT, on sw2 p29, p37 and p43–p48.
 
 | Host       | IP         | RPi MAC           | RPi Model (rev)             |
 | ---------- | ---------- | ----------------- | --------------------------- |
@@ -130,7 +132,7 @@ Each NeTV2 is programmed via OpenOCD GPIO bitbang JTAG through the RPi's GPIO he
 The Sqrl Acorn CLE-215+ is an M.2 PCIe FPGA accelerator card containing a
 Xilinx Artix-7 XC7A200T FPGA (215K logic cells). It connects to the RPi 5 via
 an M.2 HAT and enumerates at `0001:01:00.0` alongside the RPi 5's RP1 south
-bridge on `0002:01:00.0`. Every host also has an ov5647 camera.
+bridge on `0002:01:00.0`. p29 and p43–p48 also have an ov5647 camera.
 
 No USB serial devices — **JTAG and UART go over the 40-pin header** (P1 → SPI0
 pins for openFPGALoader bit-bang, P2 → GPIO14/15 with a null-modem crossover)

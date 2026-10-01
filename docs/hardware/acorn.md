@@ -209,20 +209,19 @@ LiteX provides PCIe-based programming via `litepcie_util` when a LiteX bitstream
 Seven Acorn CLE-215+ hosts, all Raspberry Pi 5, on the S3300 switch (switch
 index 2) under the [VLAN-per-port scheme](site-welland.md#network-topology):
 hostname `pi-sw2-p<port>`, IP `10.21.2.<port>`. Their MACs and revision codes
-are in [site-welland.md](site-welland.md#sqrl-acorn-cle-215-on-rpi-5-hosts-with-m2-hat-sw2-p29-p37-p43p48).
+are in [site-welland.md](site-welland.md#sqrl-acorn-cle-215).
 What each board runs and whether its JTAG and P2 links pass is in the
 [current verify results](../verify.md#current-results); moving them all to the
 pinned release is
 [#53](https://github.com/fpgas-online/fpgas.online-test-designs/issues/53).
 
 Hosts: pi-sw2-p29, p37, p43, p44, p46, p47 and p48. All run the shared NFS root
-(`overlayroot=tmpfs`), have `/dev/ttyAMA0` enabled with the kernel console on
-`ttyAMA10`, and have an ov5647 camera.
+(`overlayroot=tmpfs`) and have `/dev/ttyAMA0` enabled with the kernel console on
+`ttyAMA10`; p29 and p43–p48 also have an ov5647 camera.
 
 ### PS1 Site ([site-ps1.md](site-ps1.md))
 
-Four Compute Blades (val2 gateway, flat `10.21.0.1xx` addressing). Probed
-2026-08-31.
+Four Compute Blades (val2 gateway, flat `10.21.0.1xx` addressing).
 
 | Host | Port | IP          | Module               | Flash contents                                   | JTAG (P1)                     | P2 serial                   |
 | ---- | ---- | ----------- | -------------------- | ------------------------------------------------ | ----------------------------- | --------------------------- |
