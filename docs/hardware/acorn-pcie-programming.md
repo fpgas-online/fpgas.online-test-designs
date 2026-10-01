@@ -109,8 +109,8 @@ GPIO that supports FPGA updates over PCIe.
 ### What This Means
 
 - JTAG can always load a bitstream into SRAM (volatile), but it is lost on power cycle
-- The only way to write to SPI flash (persistent) is via PCIe using `litepcie_util`
-- PCIe→Flash requires a LiteX bitstream (not the factory Sqrl firmware)
+- The only way to write to SPI flash (persistent) is via PCIe: `fpgas-acorn-flash` over BAR0 (no kernel module, what the fleet uses), or `litepcie_util` with `litepcie.ko` loaded
+- PCIe→Flash requires our LiteX bitstream running (not the factory Sqrl firmware)
 - The golden bitstream at flash address 0x0 is **irreplaceable without PCIe** — if it is corrupted, recovery requires the SRAM bootstrap procedure (see below)
 
 ## SPI Flash Layout
@@ -276,9 +276,114 @@ If the golden bitstream at address 0x0 is corrupted, PCIe will not come up on bo
 | Bad golden | No | — | SRAM bootstrap: JTAG→SRAM, then PCIe→Flash | No (manual) |
 | Bad golden + no JTAG wiring | No | — | **Bricked** — requires physical JTAG reconnection | No |
 
-## Initial Setup (New Board)
+## Converting a factory board on the fleet
 
-Since flash-via-JTAG is not working, initial multiboot setup uses the SRAM bootstrap method:
+This is how pi-sw2-p47 was moved from Sqrl's factory firmware to the release
+`vivado-bitstreams-acorn-pcie-20260923-ge48a750c8303` on 2026-09-29, after which
+`fpgas-verify` passed at boot. Everything runs on the Acorn's own Pi, from the
+installed packages: the images and `manifest.json` come from
+`fpgas-online-acorn-bitstreams` (`/usr/share/fpgas-online/acorn-pcie/images/`),
+the flash tool is `fpgas-acorn-flash`, and nothing needs `litepcie.ko`. Writing
+flash, the golden slot especially, needs the owner's explicit go-ahead for that
+board.
+
+Run each step as root (`sudo bash -s` with the script on stdin). Do not write
+files under `/tmp`.
+
+**0. Identify the board.** `lspci -nn -d 1e24:` gives `1e24:021f` for a
+CLE-215+ and `1e24:0101` for a CLE-101. The manifest's `flash_layout` names the
+two images for that variant: CLE-215+ uses `acorn-cle-215p-golden-sqrl_acorn_fallback.bin`
+at `0x000000` and `acorn-cle-215p-sqrl_acorn_operational.bin` at `0x400000`.
+`--idcode` below is `0x03636093` for the 200T boards and `0x03631093` for
+the CLE-101. Check each file's `sha256sum` against its `manifest.json` entry
+first.
+
+**1. SRAM-load our SoC over JTAG.** Hold the Acorn lock that `fpgas-acorn-flash`
+and `fpgas-verify` take (`/run/lock/fpgas-acorn.lock`; root-only), and detach
+the factory endpoint first:
+
+```bash
+flock -n /run/lock/fpgas-acorn.lock bash -s <<'EOF'
+I=/usr/share/fpgas-online/acorn-pcie/images
+echo 1 > /sys/bus/pci/devices/0001:01:00.0/remove
+openFPGALoader --cable libgpiod --pins 10:9:11:8 $I/acorn-cle-215p-sqrl_acorn.bit
+for p in 8 9 10 11; do pinctrl set $p ip pd; done   # openFPGALoader leaves them driven
+echo 1 > /sys/bus/pci/rescan
+lspci -nn -s 0001:01:00.0      # now 10ee:7021, subsystem 1e24:021f
+EOF
+```
+
+openFPGALoader's `libgpiod` cable opens `/dev/gpiochip0`. On a Pi 5 the header
+is the chip labelled `pinctrl-rp1` (`gpiodetect`), which kernel 6.12 numbers
+`gpiochip15`. Where `/dev/gpiochip0` is not that chip, symlink it first. The
+operational `.bit` is the SoC to load. BAR0-only work needs no
+`pcie_match_mps.py`; DMA would. **From here until step 4 the board must not
+lose power**: the SoC is only in SRAM.
+
+**2. Back up the whole flash, off the Pi.** `fpgas-acorn-flash` does not switch
+on the endpoint's memory decoding. Without it every read is `0xff` (RDID
+`ffffffffffff`):
+
+```bash
+D=0001:01:00.0
+orig=$(setpci -s $D COMMAND); setpci -s $D COMMAND=0002:0002
+fpgas-acorn-flash id                                    # part, size, unique_id
+fpgas-acorn-flash dump /home/pi/factory.bin             # 32 MiB, ~53 s
+sha256sum /home/pi/factory.bin
+setpci -s $D COMMAND=$orig
+```
+
+`/home/pi` is on the RAM overlay, so the dump never touches the shared NFS
+root, and it disappears at reboot. Copy it off the Pi (`ssh pi@<host> cat
+/home/pi/factory.bin > <file>`), compare the sha256 at both ends, and only
+then go on. Keep the copy named by board identity:
+`acorn-<variant>_dna-<DNA>_flashuid-<unique_id>_<host>_factory_<date>.bin`.
+
+**3. Write and verify both slots, operational first:**
+
+```bash
+I=/usr/share/fpgas-online/acorn-pcie/images
+orig=$(setpci -s $D COMMAND); setpci -s $D COMMAND=0002:0002
+fpgas-acorn-flash write --idcode 0x03636093 $I/acorn-cle-215p-sqrl_acorn_operational.bin 0x400000
+fpgas-acorn-flash write --idcode 0x03636093 --i-know-this-writes-golden \
+    $I/acorn-cle-215p-golden-sqrl_acorn_fallback.bin 0x0
+fpgas-acorn-flash verify --idcode 0x03636093 $I/acorn-cle-215p-sqrl_acorn_operational.bin 0x400000
+fpgas-acorn-flash verify --idcode 0x03636093 $I/acorn-cle-215p-golden-sqrl_acorn_fallback.bin 0x0
+setpci -s $D COMMAND=$orig
+```
+
+Each `write` reads back what it wrote (`wrote and verified … RESULT: PASS`);
+the separate `verify` calls confirm both slots afterwards.
+
+**4. Make the FPGA boot from flash, then reboot the Pi.** A Pi reboot alone is
+not enough, because the FPGA keeps the SRAM-loaded SoC. Use a JTAG reset (the
+FPGA reconfigures from flash; no PoE cycle needed), or a PoE cycle of the port:
+
+```bash
+flock -n /run/lock/fpgas-acorn.lock bash -s <<'EOF'
+echo 1 > /sys/bus/pci/devices/0001:01:00.0/remove
+openFPGALoader --cable libgpiod --pins 10:9:11:8 --reset
+for p in 8 9 10 11; do pinctrl set $p ip pd; done
+EOF
+systemctl reboot
+```
+
+**5. Check.** After the boot, `fpgas-verify` has already run
+(`journalctl -b -u fpgas-verify`), and `fpgas-acorn-verify` re-runs the board.
+A converted board enumerates as `10ee:7021`, subsystem `1e24:021f`, and passes
+with `flash 0x000000 match` and `flash 0x400000 match`. Its identifier names
+the release's operational build. If verify reports the board as `changed`
+against a state it recorded before the conversion, record the new one with
+`sudo fpgas-verify --update`. The fleet's RAM root starts every boot with no
+state (`recorded (first run)`).
+
+A board already running our SoC (an older release) skips step 1, and starts at
+step 2.
+
+## Initial Setup (New Board), with `litepcie_util`
+
+The same SRAM bootstrap with LiteX's own tools, for a host that has
+`litepcie.ko` and `litepcie_util` built:
 
 1. **Build a golden bitstream** with Vivado (LiteX SoC with PCIe + SPI Flash + ICAP + NEXT_CONFIG_ADDR)
 
