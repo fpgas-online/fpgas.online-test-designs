@@ -117,16 +117,21 @@ def _gpio(carrier, signal):
 def test_the_p2_map_is_the_wiring(carrier):
     wires = WIRING["carriers"][carrier]["wires"]
     assert selftest.P2_GPIO[carrier] == {b: _gpio(carrier, b) for b in P2_BALLS if b in wires}
-    assert selftest.JTAG_GPIO[carrier] == {_gpio(carrier, s) for s in JTAG}
+    assert selftest.JTAG_GPIO[carrier] == {s: _gpio(carrier, s) for s in JTAG}
 
 
-def test_the_blade_never_drives_jtag_or_unwired_pins():
+def test_the_blade_tests_j2_and_k2_but_not_the_cut_pins():
     pins, skipped = selftest.pins_to_test("blade")
-    assert pins == {"K2": 15}
-    assert set(skipped) == {"J2", "J5", "H5"}
-    for carrier in selftest.P2_GPIO:
-        pins, _ = selftest.pins_to_test(carrier)
-        assert not set(pins.values()) & selftest.JTAG_GPIO[carrier]
+    assert pins == {"J2": 14, "K2": 15}  # J2 shares GPIO14 with TMS, which is allowed
+    assert skipped == {b: "not wired on this carrier (wiring.toml)" for b in ("J5", "H5")}
+
+
+@pytest.mark.parametrize("carrier", sorted(WIRING["carriers"]))
+def test_no_ball_is_tested_on_tdi_tdo_or_tck(carrier):
+    pins, _ = selftest.pins_to_test(carrier)
+    jtag = selftest.JTAG_GPIO[carrier]
+    assert not set(pins.values()) & {jtag[s] for s in ("TDI", "TDO", "TCK")}
+    assert {"TMS"} == selftest.SHARED_JTAG_OK
 
 
 def test_the_pi5_tests_every_p2_pin():

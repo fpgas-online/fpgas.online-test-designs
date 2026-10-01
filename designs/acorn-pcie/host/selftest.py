@@ -18,9 +18,10 @@ side of the P2 pins. Run as root:
    half written first fails. Reports the errors and the bandwidth (bytes / (ticks / sys clock)).
 2. P2: each P2 ball the carrier wires to the Pi (docs/wiring/acorn/wiring.toml), driven low then high from
    the FPGA and read on the Pi, then driven from the Pi and read on the FPGA. J2/K2 are borrowed from the
-   UART with `p2_serial`; J5/H5 are `p2_gpio`. Balls the carrier does not wire are skipped, and so is any
-   ball whose Pi GPIO is also a JTAG net (on the Compute Blade, J2 shares GPIO14 with TMS): this test never
-   drives JTAG.
+   UART with `p2_serial`; J5/H5 are `p2_gpio`. Balls the carrier does not wire are skipped (on the
+   Compute Blade, J5/H5). No ball is tested on the Pi's TDI, TDO or TCK. A ball may share TMS (on the Compute
+   Blade, J2 meets TMS on GPIO14): the Pi's UART TX drives GPIO14 all the time anyway, and with TCK still,
+   TMS changing does nothing to JTAG.
 3. The switch's own timeout: switch to GPIO with a 200 ms timeout and see it come back to serial alone.
 4. With `--uart`: the UARTBone answers on P2 afterwards, with the identifier BAR0 reads.
 
@@ -53,15 +54,18 @@ FPGA_SIDE = {
     "H5": ("p2_gpio", 1),
 }
 # Per carrier, from docs/wiring/acorn/wiring.toml (tests/test_acorn_selftest.py checks these against it): the
-# Pi GPIO each wired P2 ball reaches, and the Pi GPIOs that carry JTAG (TDI, TDO, TCK, TMS).
+# Pi GPIO each wired P2 ball reaches, and the Pi GPIO of each JTAG signal.
 P2_GPIO = {
     "pi5": {"J2": 14, "K2": 15, "J5": 3, "H5": 4},
     "blade": {"J2": 14, "K2": 15},
 }
 JTAG_GPIO = {
-    "pi5": {10, 9, 11, 8},
-    "blade": {2, 3, 4, 14},
+    "pi5": {"TDI": 10, "TDO": 9, "TCK": 11, "TMS": 8},
+    "blade": {"TDI": 2, "TDO": 3, "TCK": 4, "TMS": 14},
 }
+# The JTAG signals a P2 ball may share: toggling TMS does nothing while TCK is still, and this test never moves
+# TCK. TDI/TDO/TCK are never driven.
+SHARED_JTAG_OK = {"TMS"}
 # The P2 switch's timeout while this test has the pins: longer than the test, short enough that a killed run
 # gives the serial link back soon. The gateware's reset value is put back afterwards.
 SWITCH_TIMEOUT_MS = 10000
@@ -244,19 +248,20 @@ def carrier_of(model_path="/proc/device-tree/model"):
 
 
 def pins_to_test(carrier):
-    """{ball: Pi GPIO} for the balls this carrier wires to the Pi that are not also JTAG nets, and
+    """{ball: Pi GPIO} for the balls this carrier wires to the Pi, except any on TDI/TDO/TCK, and
     {ball: why} for the rest."""
-    wired, jtag = P2_GPIO[carrier], JTAG_GPIO[carrier]
-    test = {ball: gpio for ball, gpio in wired.items() if gpio not in jtag}
-    skipped = {ball: "not wired on this carrier" for ball in FPGA_SIDE if ball not in wired}
-    skipped |= {ball: f"GPIO{gpio} is also a JTAG net" for ball, gpio in wired.items() if gpio in jtag}
+    wired = P2_GPIO[carrier]
+    forbidden = {gpio: sig for sig, gpio in JTAG_GPIO[carrier].items() if sig not in SHARED_JTAG_OK}
+    test = {ball: gpio for ball, gpio in wired.items() if gpio not in forbidden}
+    skipped = {ball: "not wired on this carrier (wiring.toml)" for ball in FPGA_SIDE if ball not in wired}
+    skipped |= {ball: f"GPIO{gpio} is JTAG {forbidden[gpio]}" for ball, gpio in wired.items() if gpio in forbidden}
     return test, skipped
 
 
 def p2(csr, carrier):
     pins, skipped = pins_to_test(carrier)
     for ball, why in skipped.items():
-        print(f"SKIP {ball}: {why} ({carrier})", flush=True)
+        print(f"     {ball}: {why}, carrier {carrier}", flush=True)
     saved = {gpio: pi_state(gpio) for gpio in pins.values()}
     print(f"     Pi pins before: {saved}", flush=True)
     try:
