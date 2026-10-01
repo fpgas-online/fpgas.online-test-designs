@@ -29,6 +29,18 @@ need to fix something?** It is ready only when all of these hold:
 | 4 | Everything in the full test design works | Every feature of the running design does its job: the Wishbone bridges (over UART, JTAG, PCIe, Ethernet), device DNA and temperature readout, the soft CPU and its BIOS, and the rest |
 | 5 | Everything about the board is reported | Board type and variant, serial numbers, FPGA IDCODE and device DNA, flash part and unique ID, MAC addresses, bitstream and package versions, and every measurement from 1-4 |
 
+### Decisions for the main job
+
+* **At boot, test the board as it booted from flash.** The check does not load any other design. The
+  single-function test designs are used only when a person is debugging (job 2.1).
+* **So the full test design must contain every function the single-function designs test.** A function that is
+  only in a single-function design is not checked at boot, so it does not count as checked.
+* **A flash without the golden full test design is reported, not fixed.** The result is "needs a technician";
+  a person writes the flash (job 2.2). Letting the site trigger the fix may come later.
+* **Each setup's expected wiring and expected figures (DDR bandwidth, PCIe link width and speed, Ethernet
+  throughput, ...) are data files in this repository**, one per setup. The tool, the test designs and the docs
+  are generated from, or checked against, those files, so they cannot drift apart.
+
 ## 2. Second job: help a person find and fix problems
 
 | # | Feature | What it is for |
