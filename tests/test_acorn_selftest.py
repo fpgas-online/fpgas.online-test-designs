@@ -50,3 +50,11 @@ def test_every_wired_pin_both_ways_on_the_pi5_and_the_switch_given_back(monkeypa
 
 def test_a_killed_run_gives_the_link_back():
     assert 0 < bist.SWITCH_TIMEOUT_MS <= 30_000
+
+
+def test_from_a_checkout_its_own_code_comes_before_an_installed_older_one():
+    """A fleet Pi may have an older fpgas-online-acorn-tools installed (with no bist.py)."""
+    assert selftest.CHECKOUT == REPO / "verify" / "src"
+    assert (selftest.CHECKOUT / "fpgas_online_verify" / "boards" / "acorn" / "bist.py").is_file()
+    source = SELFTEST.read_text()
+    assert source.index("sys.path.insert(0, str(CHECKOUT))") < source.index("from fpgas_online_verify")

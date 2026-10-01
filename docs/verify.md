@@ -224,11 +224,12 @@ nothing while TCK is still.
    5.3 s with the 2 s console wait.
 
 The golden image has no DRAM, no P2 switch and no spare GPIO: on it `ddr`, `p2-serial` and `p2-gpio` are in
-`not_run`, and the board already fails for running golden.
+`not_run`, and the board fails for running golden, whichever tests were asked for.
 
 A test that cannot run because of an earlier fault (no BAR0 on a factory image, say) is listed in the
 report's `not_run` with why; the fault that stopped it is in the reason. A test that fails in a way the
-check did not foresee is an `error` naming what went wrong, and the others still run.
+check did not foresee is an `error` naming what went wrong, and the others still run. A run in which none
+of the tests asked for ran (`--test p2-gpio` on a Blade, say) fails: it has not shown the board works.
 
 A kernel driver bound to the board (`litepcie.ko`) is unbound for the check, but only when a test asked for
 uses BAR0 (`pcie-bar0`, `flash`, `ddr`, `p2-serial`, `scratch`, `p2-gpio`), and bound again after it. The events of the tests

@@ -28,10 +28,16 @@ def test_a_healthy_dram_passes_with_its_bandwidth():
     assert out["write_MBps"] == out["read_MBps"] == pytest.approx(fk.P48_MBPS, rel=0.02)  # ticks are whole cycles
 
 
-def test_a_dead_top_address_bit_fails():
+WORDS = fk.DRAM_BYTES // fk.DramModel.WORD
+TOP = WORDS.bit_length() - 2  # the word-address bit that picks the half
+
+
+@pytest.mark.parametrize("dead_bit", [0, 1, 3, TOP - 1, TOP], ids=["column 0", "column 1", "bank", "row", "top"])
+def test_a_dead_address_bit_fails(dead_bit):
+    """The top bit only shows because the halves are written before either is checked; a lower one (a column
+    or bank bit) makes two words of one half share a cell, so the second write of a pass spoils the first."""
     soc = fk.FakeSoC()
-    top = (fk.DRAM_BYTES // fk.DramModel.WORD).bit_length() - 2  # the word-address bit that picks the half
-    soc.dram = fk.DramModel(fk.DRAM_BYTES, dead_bit=top)
+    soc.dram = fk.DramModel(fk.DRAM_BYTES, dead_bit=dead_bit)
     out = bist.dram(_regs(soc), sleep=soc.sleep)
     assert out["errors"] > 0
     assert any("words wrong" in f for f in out["faults"])
@@ -60,7 +66,7 @@ def test_the_bios_memtest_line_is_found():
 def test_the_console_is_read_until_it_is_quiet():
     soc = fk.FakeSoC()
     soc.console = bytearray(b"BIOS built on ...\nMemtest OK\n")
-    assert bist.console(_regs(soc), quiet_s=0.05, sleep=soc.sleep) == "BIOS built on ...\nMemtest OK\n"
+    assert bist.console(_regs(soc), clock=soc.clock, sleep=soc.sleep) == "BIOS built on ...\nMemtest OK\n"
     assert soc.console == bytearray()
 
 
@@ -122,3 +128,49 @@ def test_balls_put_an_output_back_as_an_output_at_its_level():
     faults, _ = bist.balls(_regs(soc), "p2_gpio", {"J5": 3}, pi)
     assert pi.pins[3] == ["op", "pn", 1]
     assert [f for f in faults if "drove" not in f] == []
+
+
+@pytest.mark.parametrize(
+    ("high", "low"),
+    [(0xFF << 8, 0), (0, 0xFF << 8), (0, 0xFF), (1 << 20, 0)],
+    ids=["byte lane 1 stuck high", "byte lane 1 stuck low", "byte lane 0 stuck low", "one DQ line stuck high"],
+)
+def test_a_stuck_byte_lane_or_data_line_fails(high, low):
+    soc = fk.FakeSoC()
+    soc.dram = fk.DramModel(fk.DRAM_BYTES, stuck_high=high, stuck_low=low)
+    out = bist.dram(_regs(soc), sleep=soc.sleep)
+    assert out["errors"] > 0 and out["faults"]
+
+
+def test_the_switch_timeout_is_put_back_even_when_reading_fails():
+    soc = fk.FakeSoC()
+    real = soc.read
+
+    def read(addr):
+        if addr == fk.REGS["p2_serial_mode"] and soc.serial["timeout"] == bist.SELF_TIMEOUT_MS:
+            raise OSError("bus error")
+        return real(addr)
+
+    soc.read = read
+    with pytest.raises(OSError):
+        bist.switch_times_out(_regs(soc), sleep=soc.sleep)
+    assert soc.serial["timeout"] == 5000 and soc.serial["mode"] == 0
+
+
+def test_a_slow_pinctrl_never_lets_j2_k2_go_back_to_serial_mid_test():
+    """Each pinctrl call takes 3 s here: a whole ball test is far longer than the switch's 10 s timeout, but the
+    switch is renewed before each pattern, so it never times out while the Pi drives J2/K2."""
+    soc = fk.FakeSoC()
+    pi = fk.FakePi(soc)
+    returned = []
+
+    def slow(argv, timeout):
+        soc.sleep(3.0)
+        if soc._serial_mode() == 0:
+            returned.append(argv)
+        return pi(argv, timeout)
+
+    regs = _regs(soc)
+    with bist.borrowed_serial(regs):
+        faults, _ = bist.balls(regs, "p2_serial", {"J2": 14, "K2": 15}, slow)
+    assert faults == [] and returned == []

@@ -43,6 +43,7 @@ REGS = {
     **{f"p2_serial_{reg}": 0xF000A000 + 4 * i for i, reg in enumerate(("mode", "oe", "in", "out", "timeout"))},
 }  # fmt: skip
 GOLDEN_HAS_NO = tuple(n for n in REGS if n.startswith(("p2_gpio_", "p2_serial_", "dram_")))
+NAMES = {a: n for n, a in REGS.items()}  # address -> name
 DRAM_BYTES = 64 * 16  # 64 words of the BIST's 128 bits
 P48_MBPS = 1327.4  # pi-sw2-p48's DRAM write bandwidth, 2026-10-01
 # pi-sw2-p48's readings: 39.1 °C, VCCINT 1.022 V, VCCAUX 1.789 V, VCCBRAM 1.022 V
@@ -146,6 +147,9 @@ class FakeSoC(FakeBus):
     def sleep(self, seconds):
         self.now += seconds
 
+    def clock(self):
+        return self.now
+
     def _serial_mode(self):
         s = self.serial
         if s["mode"] and s["timeout"] and not self.switch_stuck and self.now - self.mode_at >= s["timeout"] / 1000:
@@ -153,7 +157,7 @@ class FakeSoC(FakeBus):
         return s["mode"]
 
     def _named(self, addr):
-        return next((n for n, a in REGS.items() if a == addr), None)
+        return NAMES.get(addr)
 
     def read(self, addr):
         name = self._named(addr)
@@ -178,9 +182,8 @@ class FakeSoC(FakeBus):
             return self.dna >> 32
         if addr == REGS["dna_id"] + 4:
             return self.dna & 0xFFFFFFFF
-        for name, a in REGS.items():
-            if a == addr and name in self.xadc:
-                return self.xadc[name]
+        if NAMES.get(addr) in self.xadc:
+            return self.xadc[NAMES[addr]]
         if addr == REGS["ctrl_scratch"]:
             return self.scratch
         if not self.golden and addr == REGS["p2_gpio_oe"]:
@@ -403,8 +406,10 @@ class DramModel:
 
     WORD = 16
 
-    def __init__(self, size, dead_bit=None, mbps=P48_MBPS, clk=100_000_000):
+    def __init__(self, size, dead_bit=None, mbps=P48_MBPS, clk=100_000_000, stuck_high=0, stuck_low=0):
         self.size, self.mbps, self.clk = size, mbps, clk
+        # data bits stuck at 1 or at 0, as a dead DQ line or byte lane gives (a byte lane: 0xFF << 8 * lane)
+        self.stuck_high, self.stuck_low = stuck_high, stuck_low
         self.mask = ~(1 << dead_bit) if dead_bit is not None else -1
         self.mem, self.regs, self.errors, self.runs = {}, {}, 0, []
 
@@ -436,7 +441,7 @@ class DramModel:
             addr = (base // self.WORD + i) & self.mask
             want = self.pattern(prbs & 1, i)
             if core == "generator":
-                self.mem[addr] = want
+                self.mem[addr] = (want | self.stuck_high) & ~self.stuck_low
             elif self.mem.get(addr) != want:
                 self.errors += 1
         self.regs[f"{core}_ticks"] = round(length * self.clk / (self.mbps * 1e6))

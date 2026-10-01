@@ -43,6 +43,7 @@ from . import setup as setups
 TESTS = ("pcie-link", "pcie-bar0", "jtag", "flash", "ddr", "p2-uart", "p2-serial", "scratch", "p2-gpio")
 NEEDS_BAR0 = ("pcie-bar0", "flash", "ddr", "p2-serial", "scratch", "p2-gpio")
 CONSOLE_TAIL = 8  # BIOS console lines kept in the ddr test's output
+GOLDEN = "running the golden image: the operational slot did not boot"
 
 
 def _quiet(stage, details):
@@ -200,7 +201,7 @@ class _Suite:
                     **self.report.get("running", {})}  # fmt: skip
         faults, entry = [], {"test": "pcie-bar0", **self.report["running"]}
         if self.bar0["build"] == "golden":
-            faults.append("running the golden image: the operational slot did not boot")
+            faults.append(GOLDEN)
         try:
             self.report["flash"] = check.flash_identity(check.spi_flash.Flash(self.bus))
         except check.spi_flash.FlashError as e:
@@ -260,8 +261,9 @@ class _Suite:
         regs = bist.Regs(self.bus.read, self.bus.write, self.csrs)
         sleep = self.options.get("sleep")
         started = time.monotonic()
-        text = bist.console(regs, quiet_s=self.options.get("console_quiet_s", 2.0), sleep=sleep)
-        out = bist.dram(regs, self.options.get("ddr_bytes"), sleep=sleep)
+        clock = self.options.get("clock", time.monotonic)
+        text = bist.console(regs, quiet_s=self.options.get("console_quiet_s", 2.0), clock=clock, sleep=sleep)
+        out = bist.dram(regs, self.options.get("ddr_bytes"), sleep=sleep, clock=clock)
         faults = out.pop("faults")
         entry = {"test": "ddr", **{k: out[k] for k in ("bytes", "passes", "errors") if k in out}}
         entry.update({k: out[k] for k in ("write_MBps", "read_MBps") if k in out})
@@ -317,6 +319,8 @@ class _Suite:
             self.report["identity"] = self.identity()
             self.event("fpga-board-identified", self.report["identity"])
             golden = "the golden image has no {}" if self.bar0.get("build") == "golden" else None
+            if golden and "pcie-bar0" not in self.wanted:  # pcie-bar0 says so when it runs
+                self.faults.append(("fail", GOLDEN))
             self.test("flash", no_bar0, self.flash)
             self.test("ddr", no_bar0 or (golden and golden.format("DRAM")), self.ddr)
             self.test("p2-uart", no_uart, self.p2_uart)
@@ -344,6 +348,10 @@ class _Suite:
             self.event("fpga-board-identified", r["identity"])
         if self.not_run:
             r["not_run"] = self.not_run
+        asked = [t for t in self.wanted if t in TESTS]
+        if check.is_acorn(self.found) and asked and not r["tests"]:
+            # a check that tested nothing has not shown the board works, whatever else it found
+            self.faults.append(("fail", f"none of the tests asked for ran ({', '.join(asked)})"))
         bad = [t for t in r["tests"] if t["result"] != "pass"]
         r["result"] = worst([*(res for res, _ in self.faults), *(t["result"] for t in r["tests"])])
         reasons = [reason for _, reason in self.faults] + [f"{t['test']} {t['result']}: {t.get('reason', '')}"

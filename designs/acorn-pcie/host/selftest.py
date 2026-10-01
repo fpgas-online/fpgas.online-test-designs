@@ -34,13 +34,14 @@ import json
 import pathlib
 import sys
 
-try:
-    import fpgas_online_verify  # noqa: F401  -- installed (fpgas-online-acorn-tools)
-except ImportError:  # a checkout
-    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "verify" / "src"))
+# Run from a checkout, the checkout's own code, before any older fpgas-online-acorn-tools installed on the Pi;
+# otherwise the installed package.
+CHECKOUT = pathlib.Path(__file__).resolve().parents[3] / "verify" / "src"
+if (CHECKOUT / "fpgas_online_verify").is_dir():
+    sys.path.insert(0, str(CHECKOUT))
 
-from fpgas_online_verify.boards.acorn import bist, check, setup, spi_flash
-from fpgas_online_verify.core import pi_model, run
+from fpgas_online_verify.boards.acorn import bist, check, setup, spi_flash  # noqa: E402  -- after sys.path
+from fpgas_online_verify.core import pi_model, run  # noqa: E402
 
 results = []
 

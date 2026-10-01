@@ -55,7 +55,7 @@ class Rig:
         return {"images": self.images, "model": self.model, "open_bar": self.bar, "run": self.pi,
                 "gpiochip": lambda compatible: None, "uart_opener": self.uart.open, "settle": self.uart.settle,
                 "sysfs_pci": self.root, "event": lambda stage, d: self.events.append((stage, d)),
-                "sleep": self.soc.sleep, "console_quiet_s": 0.05, **extra}  # fmt: skip
+                "sleep": self.soc.sleep, "clock": self.soc.clock, **extra}  # fmt: skip
 
     def check(self, **extra):
         return suite.check_board(self.found(), self.options(**extra))
@@ -683,3 +683,26 @@ def test_on_a_blade_j2_and_k2_are_tested_and_j5_h5_are_not_wired(tmp_path, image
     assert _results(report)["p2-serial"] == "pass"
     assert report["not_run"] == {"p2-gpio": "J5 and H5 are not wired on the Compute Blade setup"}
     assert rig.pi.pins[14][:2] == ["a4", "pn"]
+
+
+@pytest.mark.parametrize("asked", [["ddr"], ["p2-gpio"], ["p2-serial"], ["ddr", "p2-serial", "p2-gpio"]])
+def test_a_test_run_on_a_golden_board_fails_even_when_pcie_bar0_was_not_asked_for(tmp_path, images, asked):
+    rig = Rig(tmp_path, images, identifier=fk.GOLDEN_IDENT_ON_CHIP, golden=True)
+    report = rig.check(tests=asked)
+    assert report["result"] == "fail"
+    assert "running the golden image: the operational slot did not boot" in report["reason"]
+    assert report["reason"].count("running the golden image") == 1
+    assert f"none of the tests asked for ran ({', '.join(asked)})" in report["reason"]
+
+
+def test_golden_is_said_once_when_pcie_bar0_runs(tmp_path, images):
+    report = Rig(tmp_path, images, identifier=fk.GOLDEN_IDENT_ON_CHIP, golden=True).check()
+    assert report["reason"].count("running the golden image") == 1
+
+
+def test_a_run_in_which_nothing_asked_for_ran_fails(tmp_path, images):
+    """J5/H5 are not wired on a Blade: asked for only that, nothing is tested, which is not a pass."""
+    rig = Rig(tmp_path, images, model=fk.CM4)
+    report = rig.check(tests=["p2-gpio"])
+    assert report["tests"] == [] and report["result"] == "fail"
+    assert report["reason"] == "none of the tests asked for ran (p2-gpio)"

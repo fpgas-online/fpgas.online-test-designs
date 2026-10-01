@@ -84,7 +84,7 @@ def memtest_line(text):
 # -- the DRAM --------------------------------------------------------------------------------------------
 
 
-def _run(regs, core, base, length, pattern, timeout_s, sleep):
+def _run(regs, core, base, length, pattern, timeout_s, sleep, clock):
     """One generator or checker run; its ticks, or None if it did not finish. `reset` restarts the PRBS and the
     counter, so every run of a pattern produces the same data: the halves differ only by their pattern."""
     regs[f"{core}_reset"] = 1
@@ -94,15 +94,15 @@ def _run(regs, core, base, length, pattern, timeout_s, sleep):
     regs[f"{core}_length"] = length
     regs[f"{core}_random"] = pattern  # sequential addresses
     regs[f"{core}_start"] = 1
-    deadline = time.monotonic() + timeout_s
+    deadline = clock() + timeout_s
     while not regs[f"{core}_done"]:
-        if time.monotonic() > deadline:
+        if clock() > deadline:
             return None
         sleep(0.01)
     return regs[f"{core}_ticks"]
 
 
-def dram(regs, length=None, timeout_s=BIST_TIMEOUT_S, log=None, sleep=None):
+def dram(regs, length=None, timeout_s=BIST_TIMEOUT_S, log=None, sleep=None, clock=time.monotonic):
     """Two passes over `length` bytes (default: the whole DRAM, from csr.json). Returns the measurements and
     `faults`, a list of sentences. `log(name, ok, detail)` hears each step (selftest.py prints them)."""
     log = log or (lambda name, ok, detail="": None)
@@ -113,12 +113,12 @@ def dram(regs, length=None, timeout_s=BIST_TIMEOUT_S, log=None, sleep=None):
     halves = (0, half)
     out = {"bytes": length, "passes": 2, "sys_clk_hz": clk, "write_ticks": 0, "read_ticks": 0, "errors": 0}
     faults = []
-    started = time.monotonic()
+    started = clock()
     for n, patterns in enumerate(((PRBS, COUNTER), (COUNTER, PRBS)), start=1):
         for core, what in (("dram_generator", "write"), ("dram_checker", "read")):
             for base, pattern in zip(halves, patterns):
                 name = PATTERN_NAMES[pattern]
-                ticks = _run(regs, core, base, half, pattern, timeout_s, sleep)
+                ticks = _run(regs, core, base, half, pattern, timeout_s, sleep, clock)
                 log(f"pass {n}: dram {what} {name} at {base:#x} finished", ticks is not None)
                 if ticks is None:
                     faults.append(f"pass {n}: the DRAM {what} of {name} at {base:#x} did not finish in {timeout_s} s")
@@ -133,7 +133,7 @@ def dram(regs, length=None, timeout_s=BIST_TIMEOUT_S, log=None, sleep=None):
                         faults.append(f"pass {n}: {errors} words wrong in the {name} half at {base:#x}")
     for what in ("write", "read"):
         out[f"{what}_MBps"] = round(2 * length / (out[f"{what}_ticks"] / clk) / 1e6, 1) if out[f"{what}_ticks"] else 0.0
-    out["seconds"] = round(time.monotonic() - started, 1)
+    out["seconds"] = round(clock() - started, 1)
     out["faults"] = faults
     return out
 
@@ -176,8 +176,16 @@ def _levels(run, gpios):
 
 def balls(regs, module, wired, run, log=None):
     """`wired`: {ball: Pi GPIO} of balls whose FPGA side is `module` (p2_gpio, or p2_serial in GPIO mode).
-    Returns (faults, output lines). The Pi's pins are put back exactly as they were, and the FPGA's are inputs."""
+    Returns (faults, output lines). The Pi's pins are put back exactly as they were, and the FPGA's are inputs.
+
+    For p2_serial the switch is renewed (its `mode` written again, which restarts its timeout) before each
+    pattern, so however slow pinctrl is, J2/K2 cannot go back to serial while the Pi is driving them."""
     log = log or (lambda name, ok, detail="": None)
+
+    def renew():
+        if module == "p2_serial":
+            regs["p2_serial_mode"] = 1
+
     bit = {ball: FPGA_SIDE[ball][1] for ball in wired}
     gpios = sorted(wired.values())
     saved = pin_states(run, gpios)
@@ -188,6 +196,7 @@ def balls(regs, module, wired, run, log=None):
     try:
         regs[f"{module}_oe"] = 0
         for pattern in patterns:  # the FPGA drives, the Pi reads with its pull against the driven level
+            renew()
             for ball, gpio in wired.items():
                 run(["pinctrl", "set", str(gpio), "ip", "pd" if pattern >> bit[ball] & 1 else "pu"], 10)
             regs[f"{module}_out"] = pattern
@@ -202,6 +211,7 @@ def balls(regs, module, wired, run, log=None):
                     faults.append(f"{ball} -> GPIO{gpio}: the FPGA drove {want}, the Pi read {levels[gpio]}")
             output.append(f"FPGA drives {pattern:02b}: Pi reads " + " ".join(f"GPIO{g}={levels[g]}" for g in gpios))
         for pattern in patterns:  # the Pi drives, the FPGA reads (its pins are inputs)
+            renew()
             for ball, gpio in wired.items():
                 run(["pinctrl", "set", str(gpio), "op", "dh" if pattern >> bit[ball] & 1 else "dl"], 10)
             got = regs[f"{module}_in"] & mask
@@ -214,6 +224,7 @@ def balls(regs, module, wired, run, log=None):
     finally:
         regs[f"{module}_oe"] = 0
         regs[f"{module}_out"] = 0
+        renew()  # the Pi's pins go back while J2/K2 are still GPIOs
         faults += restore_pins(run, saved)
     return faults, output
 
@@ -252,11 +263,13 @@ def switch_times_out(regs, timeout_ms=SELF_TIMEOUT_MS, sleep=None):
     """The switch goes back to serial by itself `timeout_ms` after the last write to `mode`: (ok, detail)."""
     sleep = sleep or time.sleep
     before = regs["p2_serial_timeout"]
-    regs["p2_serial_timeout"] = timeout_ms
-    regs["p2_serial_mode"] = 1
-    at_once = regs["p2_serial_mode"]
-    sleep(timeout_ms / 1000 * 2.5)
-    later = regs["p2_serial_mode"]
-    regs["p2_serial_mode"] = 0
-    regs["p2_serial_timeout"] = before
+    try:
+        regs["p2_serial_timeout"] = timeout_ms
+        regs["p2_serial_mode"] = 1
+        at_once = regs["p2_serial_mode"]
+        sleep(timeout_ms / 1000 * 2.5)
+        later = regs["p2_serial_mode"]
+    finally:
+        regs["p2_serial_mode"] = 0
+        regs["p2_serial_timeout"] = before
     return (at_once, later) == (1, 0), f"mode {at_once}, {timeout_ms * 2.5 / 1000:g} s later {later}"
