@@ -36,6 +36,10 @@ from designs._shared.yosys_workarounds import patch_yosys_template
 kB = 1024
 
 
+# nextpnr-xilinx places this SoC at 76-94 MHz on the CLE-215 (NiteFury), short of 100 MHz on every seed
+# (2026-10-01, the first timing-strict CI run). Vivado makes 100 MHz.
+SYS_CLK_FREQ = {"openxc7": 75e6}
+
 # CRG (Clock Reset Generator) ---------------------------------------------------------------------
 
 
@@ -101,7 +105,8 @@ def main():
     target_group = parser.target_group
     target_group.add_argument("--variant", default="cle-215+", choices=["cle-215+", "cle-215", "cle-101"],
                               help="Board variant: cle-215+ (Acorn), cle-215 (NiteFury), cle-101 (LiteFury).")
-    target_group.add_argument("--sys-clk-freq", default=100e6, type=float, help="System clock frequency.")
+    target_group.add_argument("--sys-clk-freq", default=None, type=float,
+        help="System clock frequency (default: 75 MHz with openXC7, 100 MHz with Vivado).")
     parser.set_defaults(
         ident="fpgas-online SPI Flash Test SoC -- Acorn/LiteFury",
         uart_baudrate=115200,
@@ -112,7 +117,7 @@ def main():
     soc = BaseSoC(
         variant=args.variant,
         toolchain=args.toolchain,
-        sys_clk_freq=int(args.sys_clk_freq),
+        sys_clk_freq=int(args.sys_clk_freq or SYS_CLK_FREQ.get(args.toolchain, 100e6)),
         **parser.soc_argdict,
     )
 
