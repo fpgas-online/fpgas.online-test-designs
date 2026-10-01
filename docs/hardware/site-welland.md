@@ -89,15 +89,15 @@ so an IPv6 client may hang; over WireGuard the `10.21.0.1` A record works.
 ## FPGA Board Inventory
 
 The **Acorn**, **Tiny Tapeout ASIC** and **Tiny Tapeout FPGA** sections are
-from live probes on 2026-09-03. The infrastructure host, Arty A7, NeTV2 and Fomu
-sections are from a
-2026-03-17 survey and name the Pis by flat `piNN` / `10.21.0.1NN` names, which
-the VLAN-per-port scheme does not use (`verify_hardware.py`'s `HOSTS` uses
-them too: [#17](https://github.com/fpgas-online/fpgas.online-test-designs/issues/17)).
+from live probes on 2026-09-03. The infrastructure host, Arty A7, NeTV2 and
+Fomu sections are from a 2026-03-17 survey and name the Pis by flat `piNN` /
+`10.21.0.1NN` names, which the VLAN-per-port scheme does not use
+(`verify_hardware.py`'s `HOSTS` uses them too:
+[#17](https://github.com/fpgas-online/fpgas.online-test-designs/issues/17)).
 Where those boards are on the switches is in the
 [current verify results](../verify.md#current-results): NeTV2 on pi-sw1-p10,
-p12, p14, p16 and p18 (the same MACs as pi10 … pi18 below), the Fomu on
-pi-sw1-p17, the Artys on pi-sw2-p9, p10, p12 and p15.
+p12, p14, p16 and p18 (the first four have the MACs of pi10, pi12, pi14 and
+pi16 below), the Fomu on pi-sw1-p17, the Artys on pi-sw2-p9, p10, p12 and p15.
 
 ### Infrastructure Host
 
