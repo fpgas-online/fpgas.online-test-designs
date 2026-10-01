@@ -133,8 +133,8 @@ currently exercises these 4 empirically verified pairs:
 | 2 | GPIO 20 | JA9 | GPIO 3 | JC8 | Yes |
 | 3 | GPIO 21 | JA10 | GPIO 13 | JA2 | Yes |
 
-The remaining 4 pairs (to cover all 8 FPGA bit lanes) have not yet been
-identified. A comprehensive GPIO scan (test_diag16.py) found no additional
+The remaining 4 pairs (to cover all 8 FPGA bit lanes) are not identified
+([#20](https://github.com/fpgas-online/fpgas.online-test-designs/issues/20)). A comprehensive GPIO scan (test_diag16.py) found no additional
 responding pairs, suggesting those pins may not be physically connected
 by the current cable setup.
 
