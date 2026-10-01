@@ -22,7 +22,7 @@ def _verify_parser(prog, board=None):
     parser.add_argument("--update", action="store_true",
                         help="record what is found now as this host's state (after flashing or swapping a board "
                              "on purpose), instead of failing on the difference")  # fmt: skip
-    parser.add_argument("--test", action="append", help="run only this test (repeatable)")
+    parser.add_argument("--test", action="append", dest="tests", help="run only this test (repeatable)")
     parser.add_argument("--variant", help="use this variant's bitstreams instead of the detected one")
     parser.add_argument("--port", help="the board's UART on this Pi (default: the board's usual one)")
     parser.add_argument("--images", type=pathlib.Path, help="the installed bitstreams to use")

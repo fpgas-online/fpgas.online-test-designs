@@ -356,6 +356,13 @@ def test_the_board_commands_take_the_board_from_their_name(monkeypatch):
         cli.board_main([], prog="fpgas-nothing-verify")
 
 
+def test_test_option_reaches_the_check_as_the_tests_to_run(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(cli.runner, "run", lambda options, prog: seen.update(options) or 0)
+    cli.board_main(["--test", "uart", "--test", "ddr"], prog="fpgas-arty-verify")
+    assert seen["tests"] == ["uart", "ddr"]  # what TestBoard.check reads
+
+
 def test_debug_list_shows_every_test_and_whether_the_boot_check_runs_it(tmp_path, capsys):
     args = cli.argparse.Namespace(command="list", images=_install(tmp_path, ARTY), variant=None, port=None)
     assert debug.run(ARTY, args) == 0
