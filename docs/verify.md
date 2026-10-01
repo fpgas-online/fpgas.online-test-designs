@@ -77,7 +77,8 @@ in the packages below. `<board>` is one of:
 | `fpgas-online-all-boards` | depends on `fpgas-online-multi-board` and every `-tools`; recommends every `-debug` |
 
 Versions are `0.0.postN` from `git describe` against the `v0.0` tag (for example `0.0.post673`); every
-package of one build depends on the others at exactly that version, so `apt upgrade` moves them together. The
+package of one build depends on the others at exactly that version, so an upgrade moves them together:
+`sudo apt update && sudo apt upgrade`. The
 packages are built and their install rules checked in clean bookworm and trixie by
 [`collect-bitstreams.yml`](../.github/workflows/collect-bitstreams.yml)
 ([`packaging/debs/build_debs.py`](../packaging/debs/build_debs.py),
@@ -99,7 +100,7 @@ sudo fpgas-verify --update                         # accept a board or flash tha
 |---|---|
 | `--board B` | `fpgas-verify` only: check board `B`, whatever the configuration says (as `fpgas-B-verify` does) |
 | `--no-probe` | `fpgas-verify` only: with `fpga-board = auto`, never drive anything to find a board (no NeTV2 JTAG scan) |
-| `--test T` | run only test `T` (repeatable); any test in `fpgas-<board>-debug list`, boot check or not. Not the Acorn's |
+| `--test T` | run only test `T` (repeatable); any test in `fpgas-<board>-debug list`, boot check or not. A name the board does not have is an `error`; with `auto`, each board found runs the named tests it has and lists the rest as `tests_skipped`. The Acorn's check has no selectable tests. A `--test` run neither records nor compares the state (it reads only part of it), so it never causes a later `changed`, and `--update` does nothing with it |
 | `--variant V`, `--port P`, `--images DIR` | override the detected variant, the board's UART on the Pi, the installed bitstreams |
 | `--report PATH` | where the JSON report goes (default `/run/fpgas-online/verify.json`; `-` for stdout) |
 | `--state PATH` | the recorded state (default `/var/lib/fpgas-online/verify-state.json`) |
@@ -112,7 +113,8 @@ in one directory that disagree are an `error`. Options for the boot unit (`--no-
 `FPGAS_VERIFY_ARGS` in `/etc/default/fpgas-verify`.
 
 Only one user drives a board at a time: the check and `fpgas-<board>-debug` hold
-`/run/fpgas-online/<board>.lock` (the Acorn's lock is shared with `fpgas-acorn-flash`), and the second waits,
+`/run/fpgas-online/<board>.lock` (the Acorn's is `/run/lock/fpgas-acorn.lock`, shared with
+`fpgas-acorn-flash`), and the second waits,
 saying so.
 
 From a checkout, without installing: `PYTHONPATH=verify/src uv run --no-project python -m fpgas_online_verify --help`.
@@ -142,7 +144,9 @@ board's result is the worst of its tests'.
 | TT FPGA | USB `2e8a:*` (the demo board's Raspberry Pi microcontroller) | `tt_fpga_program.py` over `mpremote` | `pin-id`, then `uart`, `spiflash` through the microcontroller's UART bridge (`tt_test_wrapper.py`, `/dev/ttyACM0`); `fpgas-tt.service` is stopped for the tests and started again | `pmod` | the microcontroller's USB serial (every load rewrites the bitstream file on it) |
 | Acorn | PCI `10ee:*` / `1e24:*` | nothing: runs from its flash | see below | | PCI slot and IDs, flash part, JEDEC ID and unique ID, sha256 of both flash slots |
 
-The board is left running the last design loaded.
+The board is left running the last design loaded, except where the flash is read back afterwards: the Arty
+and NeTV2 are left running openFPGALoader's SPI-over-JTAG bridge. Each comes back to its flash image at
+its next power cycle.
 
 The NeTV2 has no USB, so finding it means driving the GPIO header. On a host set up for `netv2` that is all
 it looks for; with `auto` the JTAG scan runs only when nothing was found by USB/PCI IDs (or only a Xilinx PCIe
@@ -310,7 +314,7 @@ A failure to publish is reported on stderr but does not change the result; the r
 `/run/fpgas-online/verify.json`.
 
 The fleet agent (`fpgas-fleet-agent.service`) has already registered the Pi by its serial number and reported the boot it is running. The site's fleet app
-([fpgas.online-site](https://github.com/fpgas-online/fpgas.online-site) `fleet/services.py`) records each event
+([fpgas.online-site](https://github.com/fpgas-online/fpgas.online-site) `fleet/src/fleet/services.py`) records each event
 as a `BootEvent`. `fpga_states()` gives each Pi's check for **the boot it is running now**: `verifying` from
 `fpga-verifying` until an `fpga-verified` follows, then that event's `result`. An earlier boot's result says
 nothing about the board now. `/fleet/` lists every Pi with that state, and `/fleet/<serial>/` shows this boot's
@@ -359,17 +363,28 @@ uv run --no-project python scripts/collect_verify_status.py --host 10.21.2.47 --
 ```
 
 By default it goes through the jump host `ansible@10.99.21.2` (tweed) as `root` to `10.21.<switch>.<port>`
-for switch 1 ports 1-40 and switch 2 ports 1-48 (`--jump`, `--user`, `--ports`, `--host`, or
-`FPGAS_JUMP_HOST` / `FPGAS_SSH_CONFIG`). The Pis share the netboot root's host key, which changes with every
-root rebuild, so the Pi hop neither checks nor records host keys; the jump host's are checked as the SSH config
-says. It exits 1 when a Pi answered but could not be read.
+for switch 1 ports 1-40 and switch 2 ports 1-48, except sw2 p30, the Orange Pis' FEL host, which is not on
+the fpgas root (`--jump`, `--user`, `--ports`, `--exclude`, `--host`, or `FPGAS_JUMP_HOST` /
+`FPGAS_SSH_CONFIG`). A port counts as having no Pi only when the jump host cannot forward to it.
+
+It checks the jump host first and exits 2 if that cannot be reached. It exits 1 if it read no Pi at all, if a
+Pi answered but could not be read (a refused key, a timeout, a broken report), or if an address given with
+`--host` did not answer; otherwise 0.
+
+Every Pi boots the same root, so they all have one host key. That key survives root rebuilds: infra
+`7d0a7000` keeps the root's `/etc/ssh/ssh_host_*` out of the image rsync. The collector checks it under the
+alias `fpgas-netboot-pi` in its own known-hosts file, `~/.config/fpgas-online/netboot_known_hosts`
+(`--known-hosts`, `FPGAS_NETBOOT_KNOWN_HOSTS`), learning it on first use (`StrictHostKeyChecking=accept-new`,
+`CheckHostIP=no`, unhashed, no agent forwarding). After a deliberate rekey of the netboot root, forget the
+old key with `ssh-keygen -R fpgas-netboot-pi -f ~/.config/fpgas-online/netboot_known_hosts`, never with
+`-H`. The jump host's key is checked as the SSH config says.
 
 The site's `/fleet/` page shows the same overall result per Pi, but not the tests.
 
 ### Current results
 
-Collected 2026-10-01T01:27:42Z by `scripts/collect_verify_status.py`, after the Welland deploy of
-`0.0.post673`. Rerun it to refresh this section.
+Collected 2026-10-01T01:51:27Z by `scripts/collect_verify_status.py`, after the Welland deploy of `0.0.post673`.
+Rerun it to refresh this section.
 
 | Board | Pis | Result | Tests (passed / run) |
 |---|---|---|---|
@@ -407,16 +422,24 @@ Collected 2026-10-01T01:27:42Z by `scripts/collect_verify_status.py`, after the 
 | pi-sw2-p47 | Pi 5B | Acorn | cle-215+ | pass | jtag=pass p2-uart=pass |  | 2026-09-30T18:11:30Z | 0.0.post673 |
 | pi-sw2-p48 | Pi 5B | Acorn | cle-215+ | pass | jtag=pass p2-uart=pass |  | 2026-09-30T21:09:08Z | 0.0.post673 |
 
-Could not be read: 10.21.2.30 (root@10.21.2.30: Permission denied (publickey).)
-
 No Pi answered on 63 ports: sw1 p1-9,p11,p13,p15,p19-37,p39-40; sw2 p1-8,p11,p13-14,p16-17,p25-29,p31-32,p34,p38-46.
 
-What the failures are, as far as known on 2026-10-01:
+What the failures are, as far as known on 2026-10-01. The Pis run `0.0.post673`, which predates
+[#57](https://github.com/fpgas-online/fpgas.online-test-designs/pull/57): its fixes are merged on `main` but not yet deployed, so the DDR failures below remain until
+the next deploy brings a later bitstreams package.
 
-* **NeTV2 `ddr`** (all five): the memtest reads back nothing right (on pi-sw1-p10: 256/256 bus errors,
-  every word a data error). `uart` and `spiflash` pass.
-* **Arty `uart` and `ddr`** (all four): the designs print nothing (`uart` times out) or never calibrate DRAM.
-  The cause is timing failures in the nextpnr-xilinx builds of these designs, being fixed.
+* **NeTV2 `ddr`** (all five): read leveling failed on every lane, so the memtest reads nothing back right (on
+  pi-sw1-p10: 256/256 bus errors, every word a data error). Cause: nextpnr-xilinx does not know `SSTL15_R`,
+  the NeTV2's DDR3 I/O standard, so the DQ pins were built with no input buffer
+  ([#50](https://github.com/fpgas-online/fpgas.online-test-designs/issues/50)). **Fixed in [#57](https://github.com/fpgas-online/fpgas.online-test-designs/pull/57), not yet deployed**:
+  `fix_openxc7_reduced_drive_iostandards` builds them as `SSTL15`, and a FASM step sets the bank VREF and the
+  reduced drive. `uart` and `spiflash` pass.
+* **Arty `ddr`** (all four): DRAM calibration is never reported. Cause: the openXC7 builds missed 100 MHz
+  timing (the deployed DDR build reached 70 MHz) and were shipped anyway ([#50](https://github.com/fpgas-online/fpgas.online-test-designs/issues/50)). **Fixed in [#57](https://github.com/fpgas-online/fpgas.online-test-designs/pull/57), not yet deployed**:
+  the Arty DDR design runs at 75 MHz under openXC7, and its build now fails if it misses timing.
+* **Arty `uart`** (all four): the design prints nothing and the test times out. Cause: a confirmed nextpnr
+  timing failure (82.8 MHz achieved against 100 MHz). **Not fixed yet**: the fix in progress makes CI fail on
+  missed timing and runs the Arty UART design at 75 MHz.
 * **Arty and TT `pin-id`**: the Pmod HAT cabling differs from the expected maps
   ([#58](https://github.com/fpgas-online/fpgas.online-test-designs/issues/58)), pending recabling.
 * **Arty `ethernet` on pi-sw2-p10**: no ARP reply through the USB adapter.
@@ -425,6 +448,6 @@ What the failures are, as far as known on 2026-10-01:
 * **pi-sw1-p38 and pi-sw2-p37**: Pi 5s with a Xilinx PCIe design that is not an fpgas.online Acorn image.
 * **pi-sw1-p17**: only its OpenVizsla is on USB; its Fomu does not enumerate, so `missing`. No Fomu check has
   run on hardware yet.
-* **pi-sw2-p18 … p24**: Orange Pi PCs on the same root with no FPGA: `missing` is expected. pi-sw2-p30 (their
-  FEL host) is not on the fpgas root and refuses the key.
+* **pi-sw2-p18 … p24**: Orange Pi PCs on the same root with no FPGA: `missing` is expected. pi-sw2-p30, their
+  FEL host, is not on the fpgas root and is not read.
 * Nothing answered on pi-sw2-p34, the fourth TT FPGA board.
