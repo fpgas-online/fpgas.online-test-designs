@@ -21,7 +21,7 @@ sudo apt install fpgas-online-fomu
 
 The check finds the Fomu by its foboot DFU bootloader on USB (`1209:5bf0`), which is there from power-up until a design is loaded. It loads the UART test design with openFPGALoader over DFU and runs its host test on `/dev/serial0`. That is the only test at boot: a DFU load replaces the bootloader until the next power cycle, and it writes the design into the flash's user image. So the Fomu's flash is not part of what `changed` compares; its USB serial number is. `fpgas-fomu-debug` runs the SPI flash, PMOD loopback and pin identification tests, one per power cycle.
 
-The Fomu's check has not yet run on a Fomu: Welland's (pi-sw1-p17) does not enumerate, so that Pi reports `missing` ([current results](../verify.md#current-results)).
+Welland's Fomu (pi-sw1-p17) does not enumerate, so that Pi reports `missing` ([current results](../verify.md#current-results)).
 
 **Check the board now**, or run one test with its output live (`fpgas-fomu-debug` is in `fpgas-online-fomu-debug`):
 

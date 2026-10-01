@@ -216,7 +216,7 @@ takes the package marking or the sticker, read by eye, or an SFDP probe
 (5Ah), which only the S25FL127S answers. openFPGALoader needs the bridge
 bitstream at `/usr/share/openFPGALoader/spiOverJtag_xc7a35tcsg324.bit.gz`
 (and the `xc7a100t` one for a -100); the rp1-jtag build of openFPGALoader
-on the welland pool image does not ship them, so they were fetched from
+on the welland pool image does not ship them, so fetch them from
 [upstream](https://github.com/trabucayre/openFPGALoader/tree/master/spiOverJtag)
 by hand.
 
