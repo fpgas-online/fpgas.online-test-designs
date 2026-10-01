@@ -1,6 +1,9 @@
 # fpgas-online-verify: boot-time FPGA board verification, packaged per board
 
-Date: 2026-09-26. Status: implemented (`verify/`, `packaging/debs/`); the non-Acorn boards not yet run on hardware.
+Date: 2026-09-26. Status: implemented (`verify/`, `packaging/debs/`), and run at every boot of the Welland
+Pis since 2026-09-27. How to use it, how fpgas.online runs it and its current results:
+[docs/verify.md](../verify.md). Corrected 2026-10-01 to match the code (the boot-check tests, the results,
+the commands).
 
 ## What it is for
 
@@ -37,7 +40,7 @@ Shared:
 
 | Package | Contents |
 |---|---|
-| `fpgas-online-verify` | The `fpgas_online_verify` Python package: detection, bitstream checks, reports, fleet-events, state, the host test scripts; `fpgas-verify`, `fpgas-debug`; `fpgas-verify.service` (installed, enabled only by a mode package) |
+| `fpgas-online-verify` | The `fpgas_online_verify` Python package: detection, bitstream checks, reports, fleet-events, state, the host test scripts; `fpgas-verify`; `fpgas-verify.service` (installed, enabled only by a mode package). Each board's `fpgas-<board>-debug` is in its `-debug` package |
 | `fpgas-online-multi-board` | `mode.d/auto.ini` (`fpga-board = auto`); enables the unit. Provides and Conflicts `fpgas-online-verify-mode` |
 | `fpgas-online-all-boards` | Depends on `fpgas-online-multi-board` and every `fpgas-online-B-tools`; Recommends every `-debug` |
 
@@ -56,9 +59,11 @@ single-board.
 
 ## Results
 
-`pass`, `degraded` (Acorn running its golden image), `unconverted` (Acorn on SQRL's factory image),
-`changed` (identity or flash differs from the recorded state), `fail` (a test or load failed), `missing` (the
-configured board, or with `auto` any board, was not found), `error` (the check itself could not run).
+`pass`, `driver-bound` (Acorn: a kernel driver holds its BAR0, so it was not read), `degraded` (Acorn
+running its golden image), `changed` (identity or flash differs from the recorded state), `fail` (a test or
+load failed, or the board runs a design that is not ours: an Acorn on SQRL's factory image is `fail` with a
+reason starting `unconverted:`), `missing` (the configured board, or with `auto` any board, was not found),
+`error` (the check itself could not run).
 Worst wins; the exit status is 0 only for `pass`. Reports go to `/run/fpgas-online/verify.json` and are
 published as the fleet-event stage `fpga-verified`.
 
@@ -66,13 +71,13 @@ published as the fleet-event stage `fpga-verified`.
 
 | Board | Found by | Loaded with | Boot-check tests | State (a change is fatal) |
 |---|---|---|---|---|
-| Acorn | PCI 10ee/1e24 | (runs from its flash) | running image, flash slots vs release | PCI slot and IDs, flash part and unique id, sha256 of both flash slots |
-| Arty A7 | USB 0403:6010 | openFPGALoader | uart, ddr, spiflash | FTDI serial; flash JEDEC id; sha256 of the flash's boot image region, read with `openFPGALoader --dump-flash` |
+| Acorn | PCI 10ee/1e24 | (runs from its flash) | running image, flash slots vs release; `jtag` (P1 `openFPGALoader --detect`), `p2-uart` (UARTBone identifier over P2) | PCI slot and IDs, flash part and unique id, sha256 of both flash slots |
+| Arty A7 | USB 0403:6010 | openFPGALoader | uart, ddr, spiflash, ethernet, pin-id | FTDI serial; flash JEDEC id; sha256 of the flash's boot image region, read with `openFPGALoader --dump-flash` |
 | NeTV2 | JTAG IDCODE over GPIO 4/17/22/27 (only when no other board is found, or when configured) | openocd (Pi 3/4), openFPGALoader rp1pio (Pi 5) | uart, ddr, spiflash | IDCODE (part); flash JEDEC id; sha256 of the boot image region via openFPGALoader |
 | Fomu EVT | USB 1209:5bf0 (foboot) | openFPGALoader DFU | uart | foboot's USB serial only: loading by DFU rewrites the user image in flash, so its flash cannot be a state |
-| TT FPGA | USB 2e8a (RP2350) | RP2350 bridge | uart, spiflash | the RP2350's USB serial only: every load rewrites the bitstream file on the RP2350 |
+| TT FPGA | USB 2e8a (RP2350) | RP2350 bridge | pin-id, uart, spiflash | the RP2350's USB serial only: every load rewrites the bitstream file on the RP2350 |
 
-The Arty and NeTV2 flash readback and every non-Acorn verify are not yet run on hardware.
+The Fomu's check is the only one not yet run on hardware.
 
 ## Python packaging (PyPI later)
 
@@ -80,5 +85,5 @@ The code is one importable package, `verify/src/fpgas_online_verify/`, with a `p
 and future wheels share it. `fpgas_online_verify.boards` is a namespace package: each board's module can
 ship in its own deb (and later its own wheel), and the installed boards are the ones whose modules are there.
 The host test scripts stay in `designs/*/host/` (verify_hardware.py uses them) and are copied into
-`fpgas_online_verify/host_tests/` when a package is built. Bitstreams are found at the deb path, or (later)
+`fpgas_online_verify/scripts/` when a package is built. Bitstreams are found at the deb path, or (later)
 in an installed `fpgas_online_bitstreams_<board>` package.
