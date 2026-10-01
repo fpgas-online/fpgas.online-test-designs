@@ -9,7 +9,7 @@
 # vivado-bitstreams-acorn-pcie-20260923-ge48a750c8303: built with Vivado 2025.2 from e48a750 (test-designs
 # #35, the PIPECLK/USERCLK skew fix; its gateware is byte-identical to main at 938b7cb), published 2026-09-24.
 # Its cle-215+ operational image (identifier "... cle-215+ 2026-09-24 00:16:54") ran on pi-sw2-p48 from SRAM:
-# Gen2 x1, clean identifier and scratch round trips. No board carries it in flash yet.
+# Gen2 x1, clean identifier and scratch round trips.
 repo = "fpgas-online/fpgas.online-test-designs"
 tag = "vivado-bitstreams-acorn-pcie-20260923-ge48a750c8303"
 manifest_sha256 = "1104f545b34e87dc3007755e64490444514d5d2e90a6ea7604f9a54c0175a654"

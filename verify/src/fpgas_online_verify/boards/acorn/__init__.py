@@ -3,7 +3,7 @@
 Every Xilinx or SQRL PCIe endpoint is claimed. The Acorn-family images are recognised: the fpgas.online SoC
 (10ee:7021 with our subsystem IDs), SQRL's factory image and the vendor XDMA sample. Anything else (an older
 build of ours without the subsystem IDs, 10ee:7021 subsystem 10ee:0007, or another design) fails as "not a
-design we built": an FPGA is plainly there, so reporting no board at all would hide it (pi-sw2-p37, 2026-09-27).
+design we built": an FPGA is plainly there, so reporting no board at all would hide it.
 
 A board whose variant is known also has its links to the Pi checked (links.py): P1 JTAG, and, when our SoC
 runs, the P2 UART. A failure there fails the board: its PCIe side may be fine, but it cannot be loaded or
