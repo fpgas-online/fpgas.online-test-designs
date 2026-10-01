@@ -1,8 +1,8 @@
 """The Acorn's links to its Pi besides PCIe, checked at boot: P1 (JTAG) and P2 (the UART).
 
-check.py proves only what PCIe can see: which image runs and what the flash holds. A board passed that with
-its JTAG cable off, or with nothing on its P2 UART (test-designs #55), and nothing noticed until someone
-tried to load a design or talk to the SoC. So:
+check.py proves only what PCIe can see: which image runs and what the flash holds. A board passes that with
+its JTAG cable off, or with nothing on its P2 UART, and nothing notices until someone tries to load a design
+or talk to the SoC. So:
 
   jtag     `openFPGALoader --detect` over the P1 cable (GPIO bit-bang, docs/wiring/acorn/generated/
            acorn-pi5-p1.md: TDI 10, TDO 9, TCK 11, TMS 8) must find one device with the variant's IDCODE.
@@ -28,7 +28,7 @@ JTAG_TIMEOUT = 60
 IDCODES = {"cle-215+": 0x3636093, "cle-215": 0x3636093, "cle-101": 0x3631093}
 IDCODE_RE = re.compile(r"idcode\s+(0x[0-9a-fA-F]+)")
 # openFPGALoader's libgpiod cable opens /dev/gpiochip0. On a Pi 5 the 40-pin header is the RP1's GPIO chip,
-# found by its device-tree compatible, not by number: pi-sw2-p37 (2026-09-30) had gpiochip11-15, 15 the RP1.
+# found by its device-tree compatible, not by number: a Pi 5 can have gpiochip11-15, 15 the RP1.
 GPIOCHIP = "/dev/gpiochip0"
 SYSFS_GPIO = "/sys/bus/gpio/devices"
 HEADER_COMPATIBLE = b"raspberrypi,rp1-gpio"

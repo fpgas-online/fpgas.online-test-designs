@@ -19,7 +19,7 @@ jump host, and exits 2 if that cannot be reached; it exits 1 if it read no Pi at
 could not be read, or if an address given with --host did not answer.
 
 Every Pi boots the same netboot root, so they share one host key, which survives root rebuilds (infra
-7d0a7000 keeps the root's /etc/ssh/ssh_host_* out of the image rsync). It is checked under one alias,
+keeps the root's /etc/ssh/ssh_host_* out of the image rsync). It is checked under one alias,
 `fpgas-netboot-pi`, in its own known-hosts file (--known-hosts), learned on first use. After a deliberate
 rekey, forget it with `ssh-keygen -R fpgas-netboot-pi -f <that file>` (never -H). The jump host's key is
 checked as the SSH config says. Run it from a host that can reach the jump host: the WireGuard network or

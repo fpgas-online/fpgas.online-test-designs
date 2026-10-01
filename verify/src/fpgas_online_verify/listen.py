@@ -7,9 +7,8 @@ once it has PORT open (Linux: /proc/<pid>/fd) and a moment more for the flush py
 is loaded, and the exit status is the test's (or the programmer's, if loading failed).
 
 A design that prints its result once, the moment it starts (the SPI flash test's JEDEC ID), is otherwise lost on
-a UART the kernel only receives on while it is open: the NeTV2's, on the Pi's own ttyAMA0 (pi-sw1-p10,
-2026-09-27). An FTDI UART (the Arty's) keeps what arrives in the chip until the port is opened, so it did not
-need this.
+a UART the kernel only receives on while it is open: the NeTV2's, on the Pi's own ttyAMA0. An FTDI UART (the
+Arty's) keeps what arrives in the chip until the port is opened, so it does not need this.
 """
 
 import os

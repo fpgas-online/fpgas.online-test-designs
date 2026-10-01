@@ -212,15 +212,7 @@ Verified using the `pmod-pin-id` design which transmits each FPGA pin's ball nam
 | 9       | GPIO5    | T13              | T13                | yes   |
 | 10      | GPIO6    | U13              | U13                | yes   |
 
-HAT JC pins 1 and 2 read V12 and U12, the reverse of Arty JC's documented pin 1/pin 2. This was first put down to a cable crossover, but it follows the Arty's JC connector, not the cable: on 2026-09-29 all four Welland Artys, whose JC is cabled to HAT JA, read V12 on HAT JA pin 1 as well. The boot check's expected map (`identify_pmod_pins.BOARDS["arty"]`) therefore expects V12/U12 on HAT JC pins 1/2. All other pins match 1:1.
-
-### Pi3 (2026-03-17)
-
-Pi3 detected fewer pins (12 of 21 unique GPIOs). All detected pins match pi9's results exactly, confirming the same cable routing. HAT JC top-row and some JA/JB pins showed no signal — likely loose cables or missing connections on this host.
-
-### Pi5 (offline, 2026-03-17)
-
-Pi5 (10.21.0.105) was unreachable during scanning — host appears powered off.
+HAT JC pins 1 and 2 read V12 and U12, the reverse of Arty JC's documented pin 1/pin 2. This follows the Arty's JC connector, not the cable: all four Welland Artys, whose JC is cabled to HAT JA, read V12 on HAT JA pin 1 as well. The boot check's expected map (`identify_pmod_pins.BOARDS["arty"]`) therefore expects V12/U12 on HAT JC pins 1/2. All other pins match 1:1.
 
 ## GPIO Loopback Test
 

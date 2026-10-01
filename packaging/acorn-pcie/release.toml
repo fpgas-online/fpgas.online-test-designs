@@ -6,10 +6,9 @@
 # images an operator's reset puts back: change it only in a reviewed PR, after the new release has been
 # published by designs/acorn-pcie/tools/publish_release.py and checked on a board.
 #
-# vivado-bitstreams-acorn-pcie-20260923-ge48a750c8303: built with Vivado 2025.2 from e48a750 (test-designs
-# #35, the PIPECLK/USERCLK skew fix; its gateware is byte-identical to main at 938b7cb), published 2026-09-24.
-# Its cle-215+ operational image (identifier "... cle-215+ 2026-09-24 00:16:54") ran on pi-sw2-p48 from SRAM:
-# Gen2 x1, clean identifier and scratch round trips. No board carries it in flash yet.
+# This release is pinned because it carries the PIPECLK/USERCLK skew fix (built with Vivado 2025.2 from
+# e48a750), and its cle-215+ operational image links at Gen2 x1 on a Pi 5 with clean identifier and scratch
+# round trips.
 repo = "fpgas-online/fpgas.online-test-designs"
 tag = "vivado-bitstreams-acorn-pcie-20260923-ge48a750c8303"
 manifest_sha256 = "1104f545b34e87dc3007755e64490444514d5d2e90a6ea7604f9a54c0175a654"
