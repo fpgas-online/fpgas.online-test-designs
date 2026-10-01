@@ -15,7 +15,7 @@ Reachable two ways, with the same CSRs behind both:
 The operational image also carries what a host needs to check the board without
 a driver or the BIOS:
 
-- **DRAM BIST** (`sdram_generator`, `sdram_checker`): LiteDRAM's pattern writer
+- **DRAM BIST** (`dram_generator`, `dram_checker`): LiteDRAM's pattern writer
   and checker on their own crossbar ports. A host sets `base`, `end` and
   `length` (bytes), starts the generator, waits for `done`, then does the same
   with the checker and reads `errors`. Each one's `ticks` is the sys clock
@@ -49,6 +49,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
+from litedram.frontend.bist import LiteDRAMBISTChecker, LiteDRAMBISTGenerator
 from litedram.modules import MT41K256M16, MT41K512M16
 from litedram.phy import s7ddrphy
 from litepcie.phy.s7pciephy import S7PCIEPHY
@@ -174,8 +175,8 @@ class AcornPCIeSoC(SoCCore):
         "ddrphy": 15,
         "p2_gpio": 16,
         "sdram": 17,
-        "sdram_generator": 18,
-        "sdram_checker": 19,
+        "dram_generator": 18,
+        "dram_checker": 19,
         "p2_serial": 20,
     }
 
@@ -246,9 +247,12 @@ class AcornPCIeSoC(SoCCore):
                 phy=self.ddrphy,
                 module=_DDR3_MODULE[variant](sys_clk_freq, "1:4"),
                 l2_cache_size=8192,
-                # Pattern writer + checker a host can run over either bridge, with no BIOS or driver.
-                with_bist=True,
             )
+            # Pattern writer + checker a host can run over either bridge, with no BIOS or driver. Not
+            # add_sdram(with_bist=True): its names (sdram_generator/_checker) switch on the BIOS's own BIST
+            # code, liblitedram/bist.c, which does not compile with this LiteX (PRIu32 without <inttypes.h>).
+            self.dram_generator = LiteDRAMBISTGenerator(self.sdram.crossbar.get_port())
+            self.dram_checker = LiteDRAMBISTChecker(self.sdram.crossbar.get_port())
 
         # PCIe Gen2 x1 -----------------------------------------------------------------------------
         self.comb += platform.request("pcie_clkreq_n").eq(0)
