@@ -6,6 +6,121 @@ and the openXC7 toolchain expectations.
 
 import os
 import re
+from pathlib import Path
+
+from litex.build.generic_platform import IOStandard, Subsignal
+
+# nextpnr-xilinx (openXC7 0.8.2, and its master as of 2026-09) only knows SSTL12/SSTL135/SSTL15.
+# For any other SSTL name it writes no input-buffer, drive or VREF bits, so an input in, say,
+# SSTL15_R has no receiver: the NeTV2's DDR3 data pins read back nothing at any IDELAY tap.
+# The _R ("reduced drive") standards differ from their plain ones only in output drive strength,
+# and prjxray has no bits for that difference, so the plain standard is all this flow can build.
+_REDUCED_DRIVE_IOSTANDARDS = {
+    "SSTL15_R": "SSTL15",
+    "DIFF_SSTL15_R": "DIFF_SSTL15",
+    "SSTL135_R": "SSTL135",
+    "DIFF_SSTL135_R": "DIFF_SSTL135",
+}
+
+
+def _plain_iostandard(item):
+    if isinstance(item, IOStandard) and item.name in _REDUCED_DRIVE_IOSTANDARDS:
+        return IOStandard(_REDUCED_DRIVE_IOSTANDARDS[item.name])
+    if isinstance(item, Subsignal):
+        return Subsignal(item.name, *[_plain_iostandard(c) for c in item.constraints])
+    return item
+
+
+def fix_openxc7_reduced_drive_iostandards(platform):
+    """Replace SSTL*_R IO standards with the plain SSTL ones that nextpnr-xilinx can build.
+
+    Call before any resource is requested. Only this platform instance's constraint list is
+    rebuilt; the litex-boards definition (shared with Vivado builds) is left as it is.
+    """
+    cm = platform.constraint_manager
+    cm.available = [(r[0], r[1], *[_plain_iostandard(item) for item in r[2:]]) for r in cm.available]
+
+
+def constrain_openxc7_clocks(platform, domains):
+    """Give nextpnr-xilinx the real period of each PLL output, and fail the build if one is not met.
+
+    *domains* maps each ClockDomain to its frequency in Hz. Vivado derives PLL output clocks itself,
+    so this does nothing unless the toolchain is openXC7. nextpnr-xilinx does not: LiteX constrains
+    only the board's input clock and passes that frequency as `--freq`, so every PLL output was timed
+    at the input frequency (the Arty's 100 MHz, the Acorn's 200 MHz), and LiteX also passes
+    `--timing-allow-fail`. Arty DDR images that missed 100 MHz by up to a third were shipped, and
+    whether one could read its DDR3 depended on where that build happened to place things.
+    """
+    if not getattr(platform.toolchain, "is_openxc7", False):
+        return
+    for domain, freq in domains.items():
+        if freq <= 0:
+            raise ValueError(f"clock domain {domain.name}: frequency {freq} is not positive")
+        platform.add_period_constraint(domain.clk, 1e9 / freq)
+
+    toolchain = platform.toolchain
+
+    # build() resets timingstrict from its keyword argument, so force it there.
+    build = toolchain.build
+
+    def strict_build(*args, **kwargs):
+        kwargs["timingstrict"] = True
+        return build(*args, **kwargs)
+
+    toolchain.build = strict_build
+
+    # nextpnr-xilinx's result varies a lot with its seed (a 75 MHz Acorn SoC reached 74.0-92.5 MHz over three
+    # seeds), and every build's BIOS timestamp changes the netlist, so a strict build would fail now and then.
+    # Log nextpnr to a file, and when that shows a missed clock, place and route again with the next seed.
+    finalize = toolchain.finalize
+
+    def finalize_with_log(*args, **kwargs):
+        result = finalize(*args, **kwargs)
+        toolchain._nextpnr._pnr_opts += f"--log {toolchain._build_name}_nextpnr.log "
+        return result
+
+    toolchain.finalize = finalize_with_log
+    toolchain.run_script = _retry_missed_timing(toolchain)
+
+
+OPENXC7_TIMING_SEEDS = 5
+_MISSED_CLOCK = re.compile(r"^ERROR: Max frequency for clock .*FAIL at", re.MULTILINE)
+
+
+def _retry_missed_timing(toolchain):
+    run_script = toolchain.run_script
+
+    def missed_timing(log):
+        return log.exists() and _MISSED_CLOCK.search(log.read_text(errors="replace")) is not None
+
+    def run_script_retrying(script):
+        log = Path(f"{toolchain._build_name}_nextpnr.log")  # run_script runs in the build directory
+        log.unlink(missing_ok=True)  # never judge this build by an older one's log
+        try:
+            return run_script(script)
+        except OSError:
+            if not missed_timing(log):
+                raise
+        text = Path(script).read_text()
+        first = re.search(r"--seed (\d+)", text)
+        if first is None:
+            raise OSError(f"timing not met, and no --seed in {script} to vary")
+        first = int(first.group(1))
+        # Synthesis does not depend on the seed: rerun only nextpnr and what follows it.
+        pnr = "".join(line for line in text.splitlines(keepends=True) if not line.startswith("yosys "))
+        retry = Path(script).with_name(Path(script).stem + "_retry" + Path(script).suffix)
+        for seed in range(first + 1, first + OPENXC7_TIMING_SEEDS):
+            print(f"constrain_openxc7_clocks: timing not met with nextpnr seed {seed - 1}, trying seed {seed}")
+            retry.write_text(re.sub(r"--seed \d+", f"--seed {seed}", pnr))
+            log.unlink(missing_ok=True)
+            try:
+                return run_script(str(retry))
+            except OSError:
+                if not missed_timing(log):
+                    raise
+        raise OSError(f"timing not met with any nextpnr seed {first}..{first + OPENXC7_TIMING_SEEDS - 1}")
+
+    return run_script_retrying
 
 
 def fix_openxc7_device_name(platform):

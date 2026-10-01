@@ -29,6 +29,14 @@ from litex_boards.platforms import digilent_arty
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+from designs._shared.platform_fixups import constrain_openxc7_clocks
+
+# nextpnr-xilinx cannot place this SoC at 100 MHz: with the clocks constrained, 100 MHz builds reach 69-90 MHz
+# and 80 MHz ones 75-95 MHz, while 75 MHz builds reached 80-86 MHz in every seed tried (2026-09-29). With a
+# 100 MHz input, the PLL's next choices below 80 MHz that still give 4x sys and the 200 MHz IDELAY reference
+# are 75 and 70 MHz. 75 MHz runs the DDR3 at 600 MT/s, a tCK of 3.33 ns (1% beyond the 3.3 ns DLL-on
+# maximum); every Welland Arty passes memtest there.
+SYS_CLK_FREQ = {"openxc7": 75e6}
 
 # CRG ----------------------------------------------------------------------------------------------
 
@@ -53,6 +61,12 @@ class _CRG(LiteXModule):
         pll.create_clkout(self.cd_sys4x_dqs, 4*sys_clk_freq, phase=90)
         pll.create_clkout(self.cd_idelay,    200e6)
         platform.add_false_path_constraints(self.cd_sys.clk, pll.clkin)
+        constrain_openxc7_clocks(platform, {
+            self.cd_sys:       sys_clk_freq,
+            self.cd_sys4x:     4*sys_clk_freq,
+            self.cd_sys4x_dqs: 4*sys_clk_freq,
+            self.cd_idelay:    200e6,
+        })
 
         # IdelayCtrl.
         self.idelayctrl = S7IDELAYCTRL(self.cd_idelay)
@@ -92,13 +106,15 @@ def main():
     from litex.build.parser import LiteXArgumentParser
     parser = LiteXArgumentParser(platform=digilent_arty.Platform, description="DDR Memory Test SoC for Arty A7")
     parser.add_target_argument("--variant",       default="a7-35",     help="Board variant (a7-35 or a7-100).")
-    parser.add_target_argument("--sys-clk-freq",  default=100e6, type=float, help="System clock frequency.")
+    parser.add_target_argument("--sys-clk-freq",  default=None, type=float,
+        help="System clock frequency (default: 75 MHz for openxc7, 100 MHz otherwise).")
     args = parser.parse_args()
+    sys_clk_freq = args.sys_clk_freq or SYS_CLK_FREQ.get(args.toolchain, 100e6)
 
     soc = BaseSoC(
         variant      = args.variant,
         toolchain    = args.toolchain,
-        sys_clk_freq = int(args.sys_clk_freq),
+        sys_clk_freq = int(sys_clk_freq),
         **parser.soc_argdict,
     )
 
