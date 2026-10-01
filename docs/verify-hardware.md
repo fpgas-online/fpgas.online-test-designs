@@ -126,9 +126,9 @@ finding recorded in [acorn-pinmap.md](hardware/acorn-pinmap.md):
 1. `echo 1 > /sys/bus/pci/devices/0001:01:00.0/remove` — reconfiguring the
    FPGA while its PCIe endpoint is enumerated crashes the Pi 5 outright.
    Skipped if nothing is enumerated.
-2. `ln -sfn /dev/gpiochip15 /dev/gpiochip0` — the fleet's openFPGALoader
-   0.10.0 opens `gpiochip0` unconditionally, but the 40-pin header is
-   `gpiochip15` on the deployed kernel. devtmpfs, so it is redone every time.
+2. `ln -sfn /dev/gpiochip15 /dev/gpiochip0` — openFPGALoader's libgpiod
+   cable opens `gpiochip0`, but on a Pi 5 the 40-pin header is the RP1's
+   chip. devtmpfs, so it is redone every time.
 3. `openFPGALoader --cable libgpiod --pins 10:9:11:8 <bitstream>` — bit-banged
    JTAG on the SPI0 pins, TDI:TDO:TCK:TMS, about 16 s for an XC7A200T.
 4. `echo 1 > /sys/bus/pci/rescan` — brings the endpoint back (the flash
