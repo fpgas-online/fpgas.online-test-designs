@@ -34,15 +34,17 @@ the others:
 | `pcie-bar0` | over BAR0: the operational build of the installed release runs, the flash identifies itself, the device DNA reads, and the XADC temperature and voltages are in range |
 | `jtag` | over P1: the variant's IDCODE, and the device DNA, which must be BAR0's (this proves TDI) |
 | `flash` | both 4 MiB slots hold the release's images |
+| `ddr` | the BIOS console read out, then the DRAM BIST over the whole DRAM, two passes: no errors, and write and read at least 1100 MB/s ([`expected.toml`](../wiring/acorn/expected.toml)); p48 measures 1327 / 1350 MB/s |
 | `p2-uart` | the UARTBone bridge on P2 at 1200 and 921600 baud: identifier, DNA and XADC, as over BAR0 |
+| `p2-serial` | both setups: J2 and K2 borrowed with `p2_serial` and tested both ways, the switch's own timeout, and the UARTBone answering again |
 | `scratch` | the `ctrl` scratch register written and read back over BAR0 and over P2 |
 | `p2-gpio` | Pi 5 setup only: J5 and H5 driven from the FPGA and read on GPIO3/GPIO4, then driven from the Pi and read on the FPGA |
 
-| Setup | JTAG `--pins` | openFPGALoader cable | J5 / H5 |
+| Setup | JTAG `--pins` | openFPGALoader cable | J2 / K2 | J5 / H5 |
 |---|---|---|---|
-| Pi 5 + Waveshare HAT | `10:9:11:8` | `libgpiod` (the RP1's GPIO chip, linked as `/dev/gpiochip0`) | GPIO3 / GPIO4 |
-| Compute Blade, CM4 | `2:3:4:14` | `libgpiod` (the BCM2711's GPIO chip; a CM4 has no RP1, so no `rp1pio`) | cut |
-| Compute Blade, CM5 | `2:3:4:14` | `libgpiod` (the RP1's GPIO chip) | cut |
+| Pi 5 + Waveshare HAT | `10:9:11:8` | `libgpiod` (the RP1's GPIO chip, linked as `/dev/gpiochip0`) | GPIO14 / GPIO15 | GPIO3 / GPIO4 |
+| Compute Blade, CM4 | `2:3:4:14` | `libgpiod` (the BCM2711's GPIO chip; a CM4 has no RP1, so no `rp1pio`) | GPIO14 / GPIO15 | cut |
+| Compute Blade, CM5 | `2:3:4:14` | `libgpiod` (the RP1's GPIO chip) | GPIO14 / GPIO15 | cut |
 
 On the Blade J2 shares GPIO14 with TMS through 470 Ω, so after the JTAG test GPIO14 goes back to its UART
 function. The PCI slot and IDs, the device DNA, the flash's identity and the sha256 of each slot are what
@@ -242,7 +244,10 @@ The operational image of the fpgas.online Acorn SoC (`designs/acorn-pcie/`) lets
 every P2 pin with no driver and no BIOS, over PCIe BAR0 or the P2 UARTBone. The golden image has none of
 this. Every CSR module sits at a fixed address (`csr_map` in `acorn_pcie_soc.py`; `tests/test_acorn_pcie_csr_map.py`
 fails if one moves). Each release ships each image's `csr.json` and `csr.csv` beside it, and
-`fpgas-online-acorn-bitstreams` installs them. `designs/acorn-pcie/host/selftest.py` runs all of it from the Pi.
+`fpgas-online-acorn-bitstreams` installs them. `designs/acorn-pcie/host/selftest.py` runs all of it from the Pi,
+through the same code as the boot check's `ddr`, `p2-serial` and `p2-gpio` tests
+([`boards/acorn/bist.py`](../../verify/src/fpgas_online_verify/boards/acorn/bist.py)), with the pins from
+`wiring.toml`. From a checkout it finds that code in `verify/src`; otherwise it needs `fpgas-online-acorn-tools`.
 
 | Module | Base | What it is |
 |---|---|---|

@@ -54,7 +54,8 @@ class Rig:
     def options(self, **extra):
         return {"images": self.images, "model": self.model, "open_bar": self.bar, "run": self.pi,
                 "gpiochip": lambda compatible: None, "uart_opener": self.uart.open, "settle": self.uart.settle,
-                "sysfs_pci": self.root, "event": lambda stage, d: self.events.append((stage, d)), **extra}  # fmt: skip
+                "sysfs_pci": self.root, "event": lambda stage, d: self.events.append((stage, d)),
+                "sleep": self.soc.sleep, "clock": self.soc.clock, **extra}  # fmt: skip
 
     def check(self, **extra):
         return suite.check_board(self.found(), self.options(**extra))
@@ -146,7 +147,7 @@ def test_a_board_on_sqrl_factory_image_still_has_its_link_and_jtag_checked(tmp_p
     rig = Rig(tmp_path, images, ids=fk.FACTORY)
     report = suite.check_board(rig.found(), rig.options(open_bar=fk.refuse))
     assert _results(report) == {"pcie-link": "pass", "jtag": "pass"}
-    assert set(report["not_run"]) == {"pcie-bar0", "flash", "p2-uart", "scratch", "p2-gpio"}
+    assert set(report["not_run"]) == {"pcie-bar0", "flash", "ddr", "p2-uart", "p2-serial", "scratch", "p2-gpio"}
     assert "unconverted" in report["not_run"]["flash"]
 
 
@@ -250,8 +251,10 @@ def test_running_the_golden_image_fails_and_the_flash_is_still_checked(tmp_path,
     results = _results(report)
     assert results["pcie-bar0"] == "fail" and results["flash"] == "pass" and results["jtag"] == "pass"
     assert "running the golden image: the operational slot did not boot" in report["reason"]
-    assert results["p2-gpio"] == "fail"  # the golden build has no P2 GPIO: J5/H5 cannot be checked
-    assert "no p2_gpio_oe CSR" in report["reason"]
+    # the golden image has no DRAM, P2 switch or spare GPIO: not run, and the board fails for running golden
+    assert report["not_run"] == {"ddr": "the golden image has no DRAM",
+                                 "p2-serial": "the golden image has no P2 serial switch",
+                                 "p2-gpio": "the golden image has no P2 spare GPIO"}  # fmt: skip
 
 
 def test_a_changed_operational_slot_fails_and_says_where(tmp_path, images):
@@ -273,7 +276,7 @@ def test_several_faults_are_all_listed_and_every_test_still_runs(tmp_path, image
     report = rig.check()
     assert report["result"] == "fail"
     results = _results(report)
-    assert [t for t, r in results.items() if r != "pass"] == ["pcie-link", "jtag", "p2-uart", "scratch"]
+    assert [t for t, r in results.items() if r != "pass"] == ["pcie-link", "jtag", "p2-uart", "p2-serial", "scratch"]
     assert "link is x2, expected x1" in report["reason"]
     assert "device DNA over JTAG 0x1 is not the one over BAR0 0x54b48664b04854" in report["reason"]
     assert "no UARTBone reply on /dev/ttyAMA0 (P2 K2/J2)" in report["reason"]
@@ -378,7 +381,7 @@ def test_a_host_that_is_no_acorn_setup_is_an_error_but_the_pcie_side_is_still_ch
     report = Rig(tmp_path, images, model="Raspberry Pi 4 Model B Rev 1.4").check()
     assert report["result"] == "error"
     assert "is not an Acorn setup in wiring.toml" in report["reason"]
-    assert _results(report) == {"pcie-bar0": "pass", "flash": "pass", "scratch": "pass"}
+    assert _results(report) == {"pcie-bar0": "pass", "flash": "pass", "ddr": "pass", "scratch": "pass"}
     assert set(report["not_run"]) >= {"pcie-link", "jtag", "p2-uart", "p2-gpio"}
 
 
@@ -613,3 +616,93 @@ def test_a_malformed_csr_json_is_an_error_and_what_needs_no_csr_map_still_runs(t
     assert "the check crashed" not in report["reason"]
     assert _results(report)["pcie-link"] == _results(report)["jtag"] == "pass"
     assert not rig.soc.flash_touched
+
+
+# -- the DRAM BIST and J2/K2 -----------------------------------------------------------------------------
+
+
+def test_ddr_reports_its_errors_and_bandwidth_as_named_measurements(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    rig.soc.console = bytearray(b"Initializing SDRAM @0x40000000...\nMemtest at 0x40000000 (2.0MiB)...\nMemtest OK\n")
+    t = {x["test"]: x for x in rig.check()["tests"]}["ddr"]
+    assert t["result"] == "pass"
+    assert (t["bytes"], t["passes"], t["errors"]) == (fk.DRAM_BYTES, 2, 0)
+    assert t["write_MBps"] > 1100 and t["read_MBps"] > 1100
+    assert t["bios_memtest"] == "Memtest OK" and t["output"][-1] == "Memtest OK"
+    assert rig.soc.console == bytearray()  # the console was read out first
+
+
+def test_a_bandwidth_below_the_variants_minimum_fails_ddr_and_the_rest_still_run(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    rig.soc.dram.mbps = 700
+    report = rig.check()
+    assert _results(report)["ddr"] == "fail"
+    assert "DRAM write 7" in report["reason"] and "below the 1100 MB/s expected of cle-215+" in report["reason"]
+    assert [t for t, r in _results(report).items() if r != "pass"] == ["ddr"]
+
+
+def test_a_dead_dram_address_bit_fails_ddr(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    rig.soc.dram = fk.DramModel(fk.DRAM_BYTES, dead_bit=(fk.DRAM_BYTES // fk.DramModel.WORD).bit_length() - 2)
+    report = rig.check()
+    assert _results(report)["ddr"] == "fail" and "words wrong" in report["reason"]
+
+
+def test_j2_and_k2_both_ways_then_the_uartbone_again_and_the_pins_back(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    report = rig.check()
+    t = {x["test"]: x for x in report["tests"]}["p2-serial"]
+    assert t["result"] == "pass", t
+    assert t["wired"] == {"J2": "GPIO14", "K2": "GPIO15"}
+    assert "switch timeout: mode 1, 0.5 s later 0" in t["output"]
+    assert t["output"][-1] == f"UARTBone after the switch: {fk.OP_IDENT_ON_CHIP!r}"
+    assert rig.pi.pins[14][:2] == ["a4", "pn"] and rig.pi.pins[15][:2] == ["a4", "pu"]  # as they were found
+    assert rig.soc.serial == {"mode": 0, "oe": 0, "out": 0, "timeout": 5000}
+
+
+def test_a_cut_k2_fails_both_ways(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    rig.pi.cut = ("K2",)
+    report = rig.check()
+    assert _results(report)["p2-serial"] == "fail"
+    assert "K2 -> GPIO15: the FPGA drove 1, the Pi read 0" in report["reason"]
+    assert "GPIO15 -> K2: the Pi drove 0, the FPGA read 1" in report["reason"]
+
+
+def test_a_switch_that_never_times_out_fails(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    rig.soc.switch_stuck = True
+    report = rig.check()
+    assert "p2_serial did not go back to serial by itself" in report["reason"]
+
+
+def test_on_a_blade_j2_and_k2_are_tested_and_j5_h5_are_not_wired(tmp_path, images):
+    rig = Rig(tmp_path, images, model=fk.CM4)
+    rig.pi.pins.update({2: ["a0", "pu", None], 3: ["a0", "pu", None], 4: ["ip", "pu", None]})
+    report = rig.check()
+    assert _results(report)["p2-serial"] == "pass"
+    assert report["not_run"] == {"p2-gpio": "J5 and H5 are not wired on the Compute Blade setup"}
+    assert rig.pi.pins[14][:2] == ["a4", "pn"]
+
+
+@pytest.mark.parametrize("asked", [["ddr"], ["p2-gpio"], ["p2-serial"], ["ddr", "p2-serial", "p2-gpio"]])
+def test_a_test_run_on_a_golden_board_fails_even_when_pcie_bar0_was_not_asked_for(tmp_path, images, asked):
+    rig = Rig(tmp_path, images, identifier=fk.GOLDEN_IDENT_ON_CHIP, golden=True)
+    report = rig.check(tests=asked)
+    assert report["result"] == "fail"
+    assert "running the golden image: the operational slot did not boot" in report["reason"]
+    assert report["reason"].count("running the golden image") == 1
+    assert f"none of the tests asked for ran ({', '.join(asked)})" in report["reason"]
+
+
+def test_golden_is_said_once_when_pcie_bar0_runs(tmp_path, images):
+    report = Rig(tmp_path, images, identifier=fk.GOLDEN_IDENT_ON_CHIP, golden=True).check()
+    assert report["reason"].count("running the golden image") == 1
+
+
+def test_a_run_in_which_nothing_asked_for_ran_fails(tmp_path, images):
+    """J5/H5 are not wired on a Blade: asked for only that, nothing is tested, which is not a pass."""
+    rig = Rig(tmp_path, images, model=fk.CM4)
+    report = rig.check(tests=["p2-gpio"])
+    assert report["tests"] == [] and report["result"] == "fail"
+    assert report["reason"] == "none of the tests asked for ran (p2-gpio)"

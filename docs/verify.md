@@ -138,7 +138,7 @@ board's result is the worst of its tests'.
 | NeTV2 | JTAG IDCODE over GPIO 4/17/27/22, which also gives the variant | openocd `bcm2835gpio` (Pi 3/4), openFPGALoader `rp1pio` (Pi 5) | `uart`, `ddr`, `spiflash` (UART `/dev/ttyAMA0`; `spiflash` listens before the load, its ID is printed only once) | `ethernet`, `pmod`, `pin-id` | IDCODE, flash JEDEC ID, sha256 of the flash's boot image region |
 | Fomu EVT | USB `1209:5bf0` (foboot DFU) | openFPGALoader over DFU | `uart` only (UART `/dev/serial0`): a DFU load replaces the bootloader until the next power cycle | `spiflash`, `pmod`, `pin-id` | foboot's USB serial (every load rewrites the user image) |
 | TT FPGA | USB `2e8a:*` (the demo board's Raspberry Pi microcontroller) | `tt_fpga_program.py` over `mpremote` | `pin-id`, then `uart`, `spiflash` through the microcontroller's UART bridge (`tt_test_wrapper.py`, `/dev/ttyACM0`); `fpgas-tt.service` is stopped for the tests and started again | `pmod` | the microcontroller's USB serial (every load rewrites the bitstream file on it) |
-| Acorn | PCI `10ee:*` / `1e24:*` | nothing: runs from its flash | `pcie-link`, `pcie-bar0`, `jtag`, `flash`, `p2-uart`, `scratch`, `p2-gpio` (see below) | | PCI slot and IDs, device DNA, flash part, JEDEC ID and unique ID, sha256 of both flash slots |
+| Acorn | PCI `10ee:*` / `1e24:*` | nothing: runs from its flash | `pcie-link`, `pcie-bar0`, `jtag`, `flash`, `ddr`, `p2-uart`, `p2-serial`, `scratch`, `p2-gpio` (see below) | | PCI slot and IDs, device DNA, flash part, JEDEC ID and unique ID, sha256 of both flash slots |
 
 The board is left running the last design loaded, except where the flash is read back afterwards: the Arty
 and NeTV2 are left running openFPGALoader's SPI-over-JTAG bridge. Each comes back to its flash image at
@@ -194,19 +194,45 @@ figures each setup must meet are in [`expected.toml`](wiring/acorn/expected.toml
 | `pcie-bar0` | BAR0 | the operational build runs (the golden build means the operational slot did not boot), the flash identifies itself, the device DNA is neither all zeros nor all ones, and the XADC temperature and VCCINT, VCCAUX and VCCBRAM are in range |
 | `jtag` | P1 | `openFPGALoader --detect` finds one device with the variant's IDCODE, and `openFPGALoader --read-dna` reads the DNA BAR0 gave. The IDCODE read does not use TDI; the DNA read does |
 | `flash` | BAR0 | both 4 MiB slots (golden at `0x000000`, operational at `0x400000`), read whole with read opcodes only, hold the release's images |
+| `ddr` | BAR0 | the BIOS console is read out first (below), then the DRAM BIST (`dram_generator` / `dram_checker`) makes two passes over the whole DRAM: no errors, and write and read bandwidth at least the variant's minimum in `expected.toml` |
 | `p2-uart` | P2 | the UARTBone identifier at 1200 baud is BAR0's; the link moves to 921600 baud; there the identifier, DNA and XADC readings are right and the DNA is BAR0's. The link is left at 1200 baud |
+| `p2-serial` | BAR0 and the Pi's GPIO | both setups. J2/K2 are borrowed from the UART with the `p2_serial` switch (with a 10 s timeout, so a killed check gives the link back), and tested both ways as `p2-gpio` tests J5/H5. Then the switch must go back to serial by itself 200 ms after it is set, and the UARTBone must answer again with BAR0's identifier |
 | `scratch` | BAR0 and P2 | the `ctrl` scratch register holds two patterns written over each bridge; its value is put back |
-| `p2-gpio` | BAR0 and the Pi's GPIO | Pi 5 setup only. Through the `p2_gpio` CSR, the FPGA drives J5/H5 and the Pi reads GPIO3/GPIO4, then the Pi drives and the FPGA reads, each ball at 0 and at 1, with the reading side's pull set against the driven level. Both sides go back to inputs |
+| `p2-gpio` | BAR0 and the Pi's GPIO | Pi 5 setup only. Through the `p2_gpio` CSR, the FPGA drives J5/H5 and the Pi reads GPIO3/GPIO4, then the Pi drives and the FPGA reads, each ball at 0 and at 1, with the reading side's pull set against the driven level |
 
 openFPGALoader leaves the JTAG pins driven, so they are put back as they were found (`pinctrl`): on a Compute
-Blade GPIO14 is both TMS and the UART's TX, and goes back to its UART function.
+Blade GPIO14 is both TMS and the UART's TX, and goes back to its UART function. `p2-serial` and `p2-gpio` put
+every Pi pin they drive back exactly as it was (function, pull, and an output's level), and leave the FPGA's
+side as inputs. No P2 ball is driven on the Pi's TDI, TDO or TCK; on the Blade J2 meets TMS, which does
+nothing while TCK is still.
+
+**`ddr` in detail.** The DRAM test is the BIST in the operational image, driven over BAR0 by
+[`boards/acorn/bist.py`](../verify/src/fpgas_online_verify/boards/acorn/bist.py), the same code
+`designs/acorn-pcie/host/selftest.py` runs:
+
+1. The BIOS console (the crossover UART) is read until it has been quiet for 2 s. The BIOS sets the DRAM up
+   after its banner, and stops once that console is full and nobody reads it
+   ([#47](https://github.com/fpgas-online/fpgas.online-test-designs/pull/47)), so on a board nobody has
+   attached to, reading it is what lets DRAM initialisation finish. The BIOS's own memtest line, when the
+   console still holds it (the first read after the SoC starts), is reported as `bios_memtest`, and the last
+   lines as the test's output.
+2. Two passes over the whole DRAM in a low and a high half. A pass writes both halves before it checks either,
+   with different data in each (a PRBS and a counter), and the second pass swaps them, so a dead top address
+   bit, or a board with half the DRAM the image expects, fails.
+3. Measurements: `bytes`, `passes`, `errors`, `write_MBps`, `read_MBps` (bytes over BIST time at the 100 MHz
+   sys clock) and `seconds`. On pi-sw2-p48 (CLE-215+, 1 GiB): 0 errors, 1327.4 MB/s write, 1350.1 MB/s read,
+   5.3 s with the 2 s console wait.
+
+The golden image has no DRAM, no P2 switch and no spare GPIO: on it `ddr`, `p2-serial` and `p2-gpio` are in
+`not_run`, and the board fails for running golden, whichever tests were asked for.
 
 A test that cannot run because of an earlier fault (no BAR0 on a factory image, say) is listed in the
 report's `not_run` with why; the fault that stopped it is in the reason. A test that fails in a way the
-check did not foresee is an `error` naming what went wrong, and the others still run.
+check did not foresee is an `error` naming what went wrong, and the others still run. A run in which none
+of the tests asked for ran (`--test p2-gpio` on a Blade, say) fails: it has not shown the board works.
 
 A kernel driver bound to the board (`litepcie.ko`) is unbound for the check, but only when a test asked for
-uses BAR0 (`pcie-bar0`, `flash`, `scratch`, `p2-gpio`), and bound again after it. The events of the tests
+uses BAR0 (`pcie-bar0`, `flash`, `ddr`, `p2-serial`, `scratch`, `p2-gpio`), and bound again after it. The events of the tests
 run meanwhile are held and sent once it is bound again.
 
 `--test` runs any of these on their own: `--test pcie-link --test pcie-bar0 --test flash` only reads.
@@ -310,6 +336,8 @@ Each takes `--port`, `--variant` and `--images` like the check. `fpgas-acorn-fla
 | `fail`: `no device on the P1 JTAG chain` / `no UARTBone reply on /dev/ttyAMA0` | an Acorn whose JTAG or P2 UART cable to the Pi is off or miswired |
 | `fail`: `device DNA over JTAG … is not the one over BAR0` | the P1 TDI wire does not carry, or the DNA readout is wrong |
 | `fail`: `J5 -> GPIO3: the FPGA drove 0, the Pi read 1` (or the other way) | a P2 spare wire is cut or miswired |
+| `fail`: `K2 -> GPIO15: …` / `GPIO14 -> J2: …` | a P2 serial wire is cut or miswired |
+| `fail`: `DRAM write … MB/s, below the … MB/s expected` / `… words wrong in the … half` | the DRAM is slow or broken; `fpgas-acorn-debug` and `selftest.py` show more |
 | `fail`: `running the golden image` | the Acorn's operational slot did not boot; it fell back to golden |
 | `fail`: `… has no test design for this board yet` | a Xilinx PCIe board that is not an Acorn (a PCIe Screamer, a PicoEVB) |
 | `error`: `this host (…) is not an Acorn setup in wiring.toml` | an Acorn on a host neither setup has: add the host to `wiring.toml` if it is a real setup |

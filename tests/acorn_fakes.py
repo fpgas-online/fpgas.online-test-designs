@@ -35,11 +35,21 @@ REGS = {
     "p2_gpio_oe": 0xF0008000,
     "p2_gpio_in": 0xF0008004,
     "p2_gpio_out": 0xF0008008,
-}
-GOLDEN_HAS_NO = ("p2_gpio_oe", "p2_gpio_in", "p2_gpio_out")
+    "uart_xover_rxtx": 0xF0001020,
+    "uart_xover_rxempty": 0xF0001028,
+    **{f"dram_{core}_{reg}": base + 4 * i for core, base in (("generator", 0xF0009000), ("checker", 0xF0009800))
+       for i, reg in enumerate(("reset", "start", "done", "base", "end", "length", "random", "ticks", "errors"))
+       if (core, reg) != ("generator", "errors")},
+    **{f"p2_serial_{reg}": 0xF000A000 + 4 * i for i, reg in enumerate(("mode", "oe", "in", "out", "timeout"))},
+}  # fmt: skip
+GOLDEN_HAS_NO = tuple(n for n in REGS if n.startswith(("p2_gpio_", "p2_serial_", "dram_")))
+NAMES = {a: n for n, a in REGS.items()}  # address -> name
+DRAM_BYTES = 64 * 16  # 64 words of the BIST's 128 bits
+P48_MBPS = 1327.4  # pi-sw2-p48's DRAM write bandwidth, 2026-10-01
 # pi-sw2-p48's readings: 39.1 °C, VCCINT 1.022 V, VCCAUX 1.789 V, VCCBRAM 1.022 V
 XADC_RAW = {"xadc_temperature": 0x9EA, "xadc_vccint": 0x573, "xadc_vccaux": 0x98A, "xadc_vccbram": 0x573}
-BALLS = {"J5": (0, 3), "H5": (1, 4)}  # ball -> (p2_gpio bit, Pi GPIO) on the Pi 5 setup
+# ball -> (FPGA module, bit, Pi GPIO): J2/K2 as on both setups, J5/H5 as on the Pi 5's
+BALLS = {"J2": ("p2_serial", 0, 14), "K2": ("p2_serial", 1, 15), "J5": ("p2_gpio", 0, 3), "H5": ("p2_gpio", 1, 4)}
 
 PI5 = "Raspberry Pi 5 Model B Rev 1.1"
 CM4 = "Raspberry Pi Compute Module 4 Rev 1.1"
@@ -53,8 +63,10 @@ def csr_json(golden=False):
     return {
         "csr_bases": {"identifier_mem": 0xF0000800, "flash": 0xF0003800, "flash_cs_n": 0xF0004000},
         "csr_registers": regs,
-        "constants": {"uart_fast_baud": 921600, "uart_fast_tuning_word": 39582418},
-    }
+        "constants": {"uart_fast_baud": 921600, "uart_fast_tuning_word": 39582418,
+                      "config_clock_frequency": 100_000_000},
+        "memories": {} if golden else {"main_ram": {"base": 0x40000000, "size": DRAM_BYTES, "type": "cached"}},
+    }  # fmt: skip
 
 
 def golden_image():
@@ -126,8 +138,42 @@ class FakeSoC(FakeBus):
         self.oe = self.out = 0
         self.pi = None
         self.flash_touched = False
+        self.console = bytearray(b"")  # what the BIOS has printed and nobody has read yet
+        self.dram = DramModel(DRAM_BYTES)
+        self.serial = {"mode": 0, "oe": 0, "out": 0, "timeout": 5000}
+        self.now, self.mode_at = 0.0, 0.0
+        self.switch_stuck = False  # a switch whose timeout never fires
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+    def clock(self):
+        return self.now
+
+    def _serial_mode(self):
+        s = self.serial
+        if s["mode"] and s["timeout"] and not self.switch_stuck and self.now - self.mode_at >= s["timeout"] / 1000:
+            s["mode"] = 0
+        return s["mode"]
+
+    def _named(self, addr):
+        return NAMES.get(addr)
 
     def read(self, addr):
+        name = self._named(addr)
+        if name and not (self.golden and name in GOLDEN_HAS_NO):
+            if name == "uart_xover_rxempty":
+                return 0 if self.console else 1
+            if name == "uart_xover_rxtx":
+                return self.console.pop(0) if self.console else 0
+            if name.startswith("dram_"):
+                return self.dram.read(name.removeprefix("dram_"))
+            if name == "p2_serial_mode":
+                return self._serial_mode()
+            if name == "p2_serial_in":
+                return self.pi.fpga_reads("p2_serial") if self.pi else 0b11
+            if name.startswith("p2_serial_"):
+                return self.serial[name.removeprefix("p2_serial_")]
         base = 0xF0000800
         if base <= addr < base + 4 * 256:
             i = (addr - base) // 4
@@ -136,9 +182,8 @@ class FakeSoC(FakeBus):
             return self.dna >> 32
         if addr == REGS["dna_id"] + 4:
             return self.dna & 0xFFFFFFFF
-        for name, a in REGS.items():
-            if a == addr and name in self.xadc:
-                return self.xadc[name]
+        if NAMES.get(addr) in self.xadc:
+            return self.xadc[NAMES[addr]]
         if addr == REGS["ctrl_scratch"]:
             return self.scratch
         if not self.golden and addr == REGS["p2_gpio_oe"]:
@@ -146,11 +191,20 @@ class FakeSoC(FakeBus):
         if not self.golden and addr == REGS["p2_gpio_out"]:
             return self.out
         if not self.golden and addr == REGS["p2_gpio_in"]:
-            return self.pi.fpga_reads() if self.pi else 0b11
+            return self.pi.fpga_reads("p2_gpio") if self.pi else 0b11
         self.flash_touched = True
         return super().read(addr)
 
     def write(self, addr, value):
+        name = self._named(addr)
+        if name and name.startswith(("dram_", "p2_serial_")) and not self.golden:
+            if name.startswith("dram_"):
+                self.dram.write(name.removeprefix("dram_"), value)
+            else:
+                self.serial[name.removeprefix("p2_serial_")] = value & (1 if name.endswith("mode") else 0xFFFFFFFF)
+                if name.endswith("mode"):
+                    self.mode_at = self.now
+            return
         if addr == REGS["ctrl_scratch"]:
             self.scratch = value & ~(self.scratch_stuck or 0)
         elif addr == REGS["uartbone_bridge_phy_tuning_word"]:
@@ -212,18 +266,31 @@ class FakePi:
     def _pull(self, gpio):
         return {"pu": 1, "pd": 0}.get(self.pins[gpio][1], 1)
 
+    def _fpga_drives(self, module, bit):
+        """The level the FPGA drives on a ball, or None."""
+        soc = self.soc
+        if module == "p2_gpio":
+            return soc.out >> bit & 1 if soc.oe >> bit & 1 else None
+        if not soc._serial_mode():
+            return 1 if bit == 1 else None  # serial: K2 is the UART's TX, idle high; J2 its RX
+        return soc.serial["out"] >> bit & 1 if soc.serial["oe"] >> bit & 1 else None
+
     def level(self, gpio):
         func, _, drive = self.pins[gpio]
         if func == "op":
             return drive
-        for ball, (bit, g) in BALLS.items():
-            if g == gpio and ball not in self.cut and self.soc and self.soc.oe >> bit & 1:
-                return self.soc.out >> bit & 1
+        for ball, (module, bit, g) in BALLS.items():
+            if g == gpio and ball not in self.cut and self.soc:
+                level = self._fpga_drives(module, bit)
+                if level is not None:
+                    return level
         return self._pull(gpio)
 
-    def fpga_reads(self):
+    def fpga_reads(self, module):
         value = 0
-        for ball, (bit, gpio) in BALLS.items():
+        for ball, (mod, bit, gpio) in BALLS.items():
+            if mod != module:
+                continue
             if ball in self.cut:
                 value |= 1 << bit  # a floating input, read high
             elif self.pins[gpio][0] == "op":
@@ -329,3 +396,52 @@ def pci(root, bdf="0001:01:00.0", ids=OURS, cls="0x058000", bars=(0x100000,), dr
         (target / "unbind").write_text("")
         (d / "driver").symlink_to(target)
     return root
+
+
+class DramModel:
+    """LiteDRAM's BIST cores (dram_generator/dram_checker) over a DRAM of `size` bytes: `reset` restarts the
+    pattern, `random` bit 0 picks a PRBS or a counter, one 16-byte word per address. Address bit `dead_bit` (a
+    word-address bit) can do nothing, as an open top address line, or an image for twice the DRAM, looks from
+    the controller. Each run takes as long as `MBps` says."""
+
+    WORD = 16
+
+    def __init__(self, size, dead_bit=None, mbps=P48_MBPS, clk=100_000_000, stuck_high=0, stuck_low=0):
+        self.size, self.mbps, self.clk = size, mbps, clk
+        # data bits stuck at 1 or at 0, as a dead DQ line or byte lane gives (a byte lane: 0xFF << 8 * lane)
+        self.stuck_high, self.stuck_low = stuck_high, stuck_low
+        self.mask = ~(1 << dead_bit) if dead_bit is not None else -1
+        self.mem, self.regs, self.errors, self.runs = {}, {}, 0, []
+
+    @staticmethod
+    def pattern(prbs, i):
+        # stand-ins for the PRBS and the counter: what matters is that they differ, and restart at reset
+        return (i * 2654435761 + 0x5A5A) & 0x7FFFFFFF if prbs else i
+
+    def read(self, name):
+        core, reg = name.split("_", 1)
+        if reg == "done":
+            return 1
+        if reg == "errors":
+            return self.errors
+        return self.regs.get(f"{core}_{reg}", 0)
+
+    def write(self, name, value):
+        core, reg = name.split("_", 1)
+        self.regs[f"{core}_{reg}"] = value
+        if reg == "start":
+            self._run(core)
+
+    def _run(self, core):
+        base, length, prbs = (self.regs.get(f"{core}_{r}", 0) for r in ("base", "length", "random"))
+        self.runs.append((core, base, length, prbs & 1))
+        if core == "checker":
+            self.errors = 0
+        for i in range(length // self.WORD):
+            addr = (base // self.WORD + i) & self.mask
+            want = self.pattern(prbs & 1, i)
+            if core == "generator":
+                self.mem[addr] = (want | self.stuck_high) & ~self.stuck_low
+            elif self.mem.get(addr) != want:
+                self.errors += 1
+        self.regs[f"{core}_ticks"] = round(length * self.clk / (self.mbps * 1e6))

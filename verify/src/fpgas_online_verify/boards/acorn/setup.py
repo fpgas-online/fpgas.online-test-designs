@@ -48,6 +48,7 @@ class Setup:
     jtag_pins: str  # TDI:TDO:TCK:TMS, as openFPGALoader --pins takes them
     uart: str
     p2_gpio: dict = field(default_factory=dict)  # P2 ball -> Pi GPIO number, for the wired spare balls
+    p2_serial: dict = field(default_factory=dict)  # J2/K2 -> Pi GPIO number
     expected: dict = field(default_factory=dict)  # this setup's figures from expected.toml, and "xadc"
 
     @property
@@ -99,5 +100,6 @@ def _setup(key, carrier, prefix, host, expected):
         jtag_pins=carrier["jtag_pins"],
         uart=carrier["uart"],
         p2_gpio={s: g for s, g in spare.items() if g is not None},
+        p2_serial={s: g for s in ("J2", "K2") if (g := _gpio_of(carrier, s)) is not None},
         expected={**expected.get("setups", {}).get(key, {}), "xadc": expected.get("xadc", {})},
     )
