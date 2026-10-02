@@ -48,10 +48,13 @@ The words are [docs/verify-goals.md](../verify-goals.md)'s: a board has one *ful
    its debs: one file per (design, board, variant, flow), named `<design>_<board>-<variant>_<flow>.<ext>` as PR
    #14 names them, and a `manifest.json` (per file: design, board, variant, flow, sha256; for a full test
    design also its identifier, the flash slot it is for and its `csr.json`).
-3. **Vivado builds are added to the same release.** On the Vivado host, one script checks out the release's
-   commit, builds the Vivado flows of every Xilinx design for every Xilinx board, and uploads them to
-   `build-<version>` with their manifest entries. It is `scripts/publish_vivado_bitstreams.py` from PR #14,
-   pointed at the build's release. A release may have no Vivado builds: nothing waits for them.
+3. **Vivado builds are added to the same release.** One script checks out the release's commit, builds the
+   Vivado flows of every Xilinx design for every Xilinx board, and uploads them to `build-<version>` with
+   their manifest entries. It is `scripts/publish_vivado_bitstreams.py` from PR #14, pointed at the build's
+   release. A release may have no Vivado builds: nothing waits for them.
+   - With the self-hosted Vivado runners of PR #93, the script's builds are CI jobs of the same commit, and
+     a job on `ubuntu-latest` uploads what they built (those runners have `contents: read` only).
+   - Until those runners exist, it is run by hand on a machine with Vivado, as the Acorn's releases are now.
 4. **One pin names the golden bitstreams, for every board.** `packaging/golden.toml`: the release, its
    manifest's sha256 and, per board, which flow is golden. Moving it is a reviewed pull request, after the
    candidates were checked on a board of each setup (verify-goals, fourth job). It is what
