@@ -504,7 +504,14 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 * The Arty, NeTV2, Fomu and TT FPGA are checked with the single-function test designs, loaded one at a time,
   not with the full test design.
 * `pin-id` checks each Pmod pin in one direction only, FPGA to Pi.
-* The Acorn's PCIe transfer rate is not measured.
+* The Acorn's PCIe transfer rate is not measured, nor the Arty's and NeTV2's DDR and Ethernet bandwidth:
+  their `ddr` and `ethernet` tests pass or fail only.
+* The Arty's and NeTV2's flash is fingerprinted (a sha256 of its boot image region) and compared only with the
+  last run's, not checked against a golden full test design.
+* Only the Acorn's flash can be written with its golden images (`fpgas-acorn-flash write`).
+* `fpga-board-identified` is sent only for an Acorn.
+* Nothing is compared with the site's records.
+* No rpi-hwid labels are made. `fpgas-acorn-debug identify` reads the Acorn's identity and flash IDs for them.
 
 ### Common failures
 
