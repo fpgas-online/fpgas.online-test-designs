@@ -31,14 +31,16 @@ env:
     tests/test_verify_runner.py tests/test_verify_boards.py tests/test_debs_packaging.py
     tests/test_acorn_verify.py tests/test_acorn_links.py tests/test_acorn_setup.py tests/test_acorn_packaging.py
     tests/test_spi_flash.py tests/test_uartbone_link.py tests/test_acorn_pcie_publish_release.py tests/test_pcie_match_mps.py
-    tests/test_acorn_bist.py tests/test_acorn_selftest.py tests/test_release.py
+    tests/test_acorn_bist.py tests/test_acorn_selftest.py tests/test_jtag_idcode.py tests/test_identity.py
+    tests/test_identify_label.py tests/test_release.py
   VERIFY_PY: >-
     verify/src packaging/debs/build_debs.py packaging/acorn-pcie/build_debs.py tests/conftest.py
     tests/test_verify_runner.py tests/test_verify_boards.py tests/test_debs_packaging.py
     tests/test_acorn_verify.py tests/test_acorn_links.py tests/test_acorn_setup.py tests/acorn_fakes.py
     tests/test_acorn_packaging.py tests/test_spi_flash.py tests/test_uartbone_link.py
     designs/acorn-pcie/host/pcie_match_mps.py tests/test_pcie_match_mps.py
-    designs/acorn-pcie/host/selftest.py tests/test_acorn_bist.py tests/test_acorn_selftest.py
+    designs/acorn-pcie/host/selftest.py tests/test_acorn_bist.py tests/test_acorn_selftest.py tests/test_jtag_idcode.py
+    tests/test_identity.py tests/test_identify_label.py
     packaging/release.py tests/test_release.py
 
 jobs:

@@ -248,13 +248,22 @@ class Cut(FakeFPGA):
         self.silent = True
 
 
-DETECT = "index 0:\n\tidcode {idcode:#x}\n\tmanufacturer xilinx\n\tfamily artix a7 200t\n\tmodel  xc7a200\n"
+# What openFPGALoader 1.1.1 printed on pi-sw2-p48 (2026-10-02) for `--detect --verbose-level 2`: the raw scan
+# has the whole IDCODE; its part table, keyed without the version, gives the masked one after "idcode".
+DETECT = (
+    "index 0:\n\tidcode {masked:#x}\n\tmanufacturer xilinx\n\tfamily artix a7 200t\n\tmodel  xc7a200\n\tirlength 6\n"
+)
+RAW_SCAN = (
+    "libgpiod jtag bitbang driver, dev=/dev/gpiochip0, tck_pin=11, tms_pin=8, tdi_pin=10, tdo_pin=9\n"
+    "Raw IDCODE:\n- 0 -> {idcode:#010x}\n- 1 -> 0xffffffff\nFetched TDI, end-of-chain\nfound 1 devices\n"
+)
+P48_IDCODE = 0x13636093  # its XC7A200T is silicon version 1
 
 
 class FakePi:
     """The Pi's pins, through pinctrl, and openFPGALoader on P1. Pins start as fpgas.online Pi 5s have them."""
 
-    def __init__(self, soc=None, idcode=0x3636093, jtag_dna=DNA, chain=True, cut=(), tool=True):
+    def __init__(self, soc=None, idcode=P48_IDCODE, jtag_dna=DNA, chain=True, cut=(), tool=True):
         self.soc, self.idcode, self.jtag_dna, self.chain, self.cut, self.tool = soc, idcode, jtag_dna, chain, cut, tool
         if soc is not None:
             soc.pi = self
@@ -332,7 +341,8 @@ class FakePi:
             if not self.chain:
                 return 1, "JTAG init failed with: no device found\n"
             if "--detect" in argv:
-                return 0, DETECT.format(idcode=self.idcode)
+                raw = RAW_SCAN.format(idcode=self.idcode) if argv[-2:] == ["--verbose-level", "2"] else ""
+                return 0, raw + DETECT.format(masked=self.idcode & 0x0FFFFFFF)
             if "--read-dna" in argv:
                 return 0, json.dumps({"dna": f"{self.jtag_dna:#018x}"}) + "\n"
         raise AssertionError(f"unexpected command {argv}")

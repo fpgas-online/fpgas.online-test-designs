@@ -14,12 +14,13 @@ The site hears how it goes through fleet-events, each small and flat (EVENTS): t
 found or no board, a board identified, each test started and finished, and the final result.
 """
 
+import contextlib
 import datetime
 import json
 import pathlib
 import sys
 
-from . import config, state
+from . import config, identity, state
 from .board import installed
 from .core import Problem, flatten, hold_lock, pci_devices, publish, usb_devices, worst
 
@@ -31,8 +32,7 @@ EVENTS = {
     "fpga-verifying": "started_at",
     "fpga-board-found": "board, variant, where (PCI slot, USB path or JTAG IDCODE)",
     "fpga-no-board": "reason",
-    "fpga-board-identified": "board, then what identifies it (an Acorn's: bdf, pci_ids, subsystem, variant, "
-    "identifier, build, dna, idcode, flash_part, flash_jedec, flash_unique_id)",
+    "fpga-board-identified": "schema (fpga-identity/1), board, then who it is (identity.py, docs/identity.md)",
     "fpga-test-started": "board, test",
     "fpga-test-finished": "board, test, result, reason",
     "fpga-verified": "the report, flattened (details())",
@@ -44,8 +44,23 @@ def _now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
 
 
+@contextlib.contextmanager
+def probing(board):
+    """find's `probing` for the boot check and fpgas-<board>-debug: hold the board's lock while its pins are
+    driven to look for it, waiting as long as it takes (as the check does), and let it go once it has been."""
+    with hold_lock(board.lock, board.title):
+        yield True
+
+
 def find(boards, mode, options, usb, pci):
-    """[(board, host, found)] to check, and how they were chosen. A board that is not there is a Problem."""
+    """[(board, host, found)] to check, and how they were chosen. A board that is not there is a Problem.
+
+    options["probing"] is called with each `probes` board and gives a context manager that is held around
+    anything that drives the board's pins to look for it (its find or probe), and says whether to go ahead:
+    False skips the board, as not looked for. By default (`probing`) it holds the board's lock, unbounded;
+    --identify's waits at most LOCK_WAIT. Either way no board's pins are driven without its lock.
+    """
+    probing_board = options.get("probing") or probing
     if mode != config.AUTO:
         board = boards.get(mode) or next((b for b in boards.values() if b.slug == mode), None)
         if board is None:
@@ -53,7 +68,8 @@ def find(boards, mode, options, usb, pci):
             raise Problem("error", f"this host is set up for {mode!r}, but no such board module is installed "
                                    f"(fpgas-online-{mode}-tools?); installed: {have}")  # fmt: skip
         host = board.facts(options.get("port"))
-        found = board.find(host, usb, pci)
+        with probing_board(board) if board.probes else contextlib.nullcontext(True) as free:
+            found = board.find(host, usb, pci) if free else []
         if not found:
             raise Problem(
                 "missing", f"no {board.title} found: this host is set up for one, and nothing else is looked for"
@@ -71,7 +87,11 @@ def find(boards, mode, options, usb, pci):
         how = "auto: USB/PCI IDs, probing disabled"
     else:
         try:
-            probed = [(b, hosts[n], f) for n, b in boards.items() if b.probes for f in b.probe(hosts[n])]
+            probed = []
+            for n, b in boards.items():
+                if b.probes:
+                    with probing_board(b) as free:
+                        probed += [(b, hosts[n], f) for f in b.probe(hosts[n])] if free else []
         except Problem as p:
             if not spotted:
                 raise
@@ -108,12 +128,13 @@ def compare_state(report, targets, reports, update, path):
         state.save(current, report["checked_at"], path)
         info["recorded"] = "--update" if update else "first run"
         return info
-    changes = state.differences(recorded, current, state.quiet_facts(version))
+    upgraded = state.widened(recorded, current, version)
+    changes = state.differences(upgraded, current, state.quiet_facts(version))
     if changes:
         info["changes"] = changes
-    elif report["result"] != "error" and state.merged(recorded, current) != recorded:
-        # only facts the record's older version did not have (an upgrade): added quietly, not a change
-        state.save(state.merged(recorded, current), report["checked_at"], path)
+    elif report["result"] != "error" and state.merged(upgraded, current) != recorded:
+        # only facts the record's older version did not have, or had less of (an upgrade): recorded quietly
+        state.save(state.merged(upgraded, current), report["checked_at"], path)
         info["added"] = True
     return info
 
@@ -173,12 +194,21 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
     for (_, _, found), key in zip(targets, keys):
         event("fpga-board-found", {"board": key, "variant": found.get("variant"), "where": _where(found)})
     for (board, host, found), key in zip(targets, keys):
+        identified, kept = [], []  # the identified event sent; the identity the check built (identity.keep())
+
+        def board_event(stage, d, key=key, identified=identified):
+            if stage == "fpga-board-identified":
+                identified.append(key)
+            event(stage, {"board": key, **d})
+
         try:
             board_options, skipped = _for_board(board, options, report["mode"])
             if board_options is None:  # none of the named tests: not checked, and no "pass" for it
                 not_checked.append(board.name)
+                # still found, so still identified (once), from what finding it showed
+                board_event("fpga-board-identified", identity.details(identity.base(key, board.name, found)))
                 continue
-            board_options = {**board_options, "event": lambda stage, d, key=key: event(stage, {"board": key, **d})}
+            board_options = {**board_options, "event": board_event, "board_key": key, identity.KEEP: kept.append}
             with hold_lock(board.lock, board.title):
                 reports.append(board.check(host, found, board_options))
         except Problem as p:
@@ -188,6 +218,14 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
             reports.append({"board": board.name, "found": found, "result": "error",
                             "reason": f"the check crashed: {type(e).__name__}: {e}"})  # fmt: skip
             skipped = []
+        if kept:  # a check that stopped after saying who the board is keeps it in its error report
+            reports[-1].setdefault("identity", kept[-1])
+        if not identified:  # the check stopped before saying who the board is: say what finding it showed
+            reports[-1].setdefault("identity", identity.base(key, board.name, found))
+        if "identity" in reports[-1]:
+            _sendable_identity(reports[-1], identity.base(key, board.name, found))
+        if not identified:
+            board_event("fpga-board-identified", identity.details(reports[-1]["identity"]))
         if skipped:
             reports[-1]["tests_skipped"] = skipped
     report["boards"] = reports
@@ -210,6 +248,23 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
     return report
 
 
+def _sendable_identity(report, base):
+    """Leave out of a board's identity any field whose name or value cannot be sent (a bug in the board's
+    module), and make each one an error on that board, so the other boards are still checked and fpga-verified
+    is sent. An identity that is not a dict is replaced by `base` (what finding the board showed)."""
+    try:
+        bad = identity.refused(report["identity"])
+    except TypeError as e:
+        report["identity"], reasons = base, [f"the identity cannot be sent: {e}"]
+    else:
+        if not bad:
+            return
+        report["identity"] = {k: v for k, v in report["identity"].items() if k not in bad}
+        reasons = [f"the identity field {k} cannot be sent: {why}" for k, why in bad.items()]
+    report["result"] = worst([report.get("result", "error"), "error"])
+    report["reason"] = "; ".join([report["reason"], *reasons] if report.get("reason") else reasons)
+
+
 # -- telling people ------------------------------------------------------------------------------------------
 
 
@@ -228,7 +283,13 @@ def details(report):
             out[f"board{i}_bitstreams"] = str(b["bitstreams"])
         flatten(f"board{i}_state", b.get("state", {}), out)
         if b.get("identity"):
-            flatten(f"board{i}_identity", b["identity"], out)
+            try:
+                flat = identity.details(b["identity"])
+            except TypeError as e:  # never ends the event: that board's identity says why it is not there
+                out[f"board{i}_identity_error"] = str(e)
+            else:
+                del flat["schema"]
+                out.update({f"board{i}_identity_{k}": v for k, v in flat.items()})
     for j, change in enumerate(report.get("state", {}).get("changes", [])):
         out[f"changed{j}"] = change
     return out
