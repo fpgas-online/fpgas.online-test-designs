@@ -224,12 +224,29 @@ def test_an_arty_whose_jtag_chain_is_empty_fails_and_an_arty_of_another_version_
     scan = (1, "Raw IDCODE:\n- 0 -> 0xffffffff\nJTAG init failed: no device found\n")
     run = Runner([("--detect", scan)], flash=b"\0" * ARTY.flash_region["a7-35"])
     report = _check(ARTY, tmp_path, ARTY_FOUND, run)
-    assert report["result"] == "fail" and report["jtag"]["reason"] == "no device on the JTAG chain (exit 1)"
+    assert report["result"] == "fail"
+    assert report["jtag"]["reason"] == "no device on the JTAG chain; openFPGALoader exited 1 reading the IDCODE"
     run = Runner([("--detect", (0, _scan(0x2362D093)))], flash=b"\0" * ARTY.flash_region["a7-35"])
     report = _check(ARTY, tmp_path, ARTY_FOUND, run)
     assert report["result"] == "pass" and (report["jtag"]["idcode"], report["jtag"]["idcode_version"]) == (
         "0x2362d093",
         2,
+    )
+
+
+def test_an_arty_scan_that_exits_non_zero_fails_even_with_the_right_idcode(tmp_path):
+    run = Runner([("--detect", (2, ARTY_SCAN))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    assert report["result"] == "fail" and report["jtag"]["result"] == "fail"
+    assert report["jtag"]["reason"] == "openFPGALoader exited 2 reading the IDCODE"
+    assert report["jtag"]["idcode_device"] == "XC7A35T"  # still decoded, for the report
+
+
+def test_an_arty_of_the_wrong_part_whose_scan_exits_non_zero_gives_both_faults(tmp_path):
+    run = Runner([("--detect", (1, _scan(0x13631093)))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    reason = _check(ARTY, tmp_path, ARTY_FOUND, run)["jtag"]["reason"]
+    assert reason.startswith("the JTAG IDCODE 0x13631093 is an XC7A100T") and reason.endswith(
+        "; openFPGALoader exited 1 reading the IDCODE"
     )
 
 

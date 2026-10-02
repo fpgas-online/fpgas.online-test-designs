@@ -516,6 +516,8 @@ Every board with JTAG has its FPGA's whole 32-bit IDCODE read and decoded
   `fpgas-acorn-flash`), and on the Acorn the JTAG pins are put back as they were found.
 * The part is compared without the version, so another silicon revision of the right part passes. A part
   that is not the variant's fails the board, and so does an IDCODE with bit 0 clear.
+* A scan whose tool exits with an error fails, even when it printed the right IDCODE; the reason gives the
+  exit code. The IDCODE it printed is still decoded in the report.
 
 | Field | Bits | Example (pi-sw2-p48's Acorn CLE-215+) |
 |---|---|---|
