@@ -27,7 +27,8 @@ OPENOCD = re.compile(r"tap/device found:\s*(0x[0-9a-fA-F]{1,8})")
 OPENFPGALOADER_RAW_ARGS = ("--verbose-level", "2")
 # Output that shows the chain was scanned and nothing answered, besides a raw scan of only all-ones or all-zeros.
 EMPTY_CHAIN = re.compile(r"found 0 devices|no device found|TDO is stuck|JTAG scan chain interrogation failed")
-# Why no IDCODE was read when the output has no scan at all: the tool's output, not the board, is the problem.
+# Why no IDCODE was read when openFPGALoader exited 0 and printed no scan at all: the tool's version, not the
+# board, is the problem. A tool that exited non-zero is said to have failed (scan_failed).
 NO_RAW_SCAN = "openFPGALoader printed no raw IDCODE scan (needs --verbose-level 2 output)"
 
 # JEP106 codes, as bits 11:1 of an IDCODE (bank in the top four bits), as openFPGALoader's src/part.hpp has them.
@@ -54,6 +55,13 @@ def empty_chain(text):
     """Whether output with no IDCODE in it shows an empty chain (a raw scan of only all-ones or all-zeros,
     "found 0 devices", a stuck TDO), rather than no scan at all."""
     return bool(OPENFPGALOADER_RAW.search(text) or EMPTY_CHAIN.search(text))
+
+
+def scan_failed(tool, rc, text):
+    """Why no IDCODE was read when the scan exited non-zero with no scan in its output (a cable or gpiochip
+    that would not open, say): the tool failed, and its last line says why."""
+    last = next((line.strip() for line in reversed(text.splitlines()) if line.strip()), "no output")
+    return f"{tool} failed (exit {rc}) before scanning the JTAG chain: {last}"
 
 
 def scan_lines(text):

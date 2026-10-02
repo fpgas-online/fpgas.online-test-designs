@@ -80,15 +80,15 @@ def test_a_pin_state_that_cannot_be_read_is_a_dna_error_as_well():
 
 
 class NoRawScan(fk.FakePi):
-    """openFPGALoader --detect that prints `text` in place of its raw scan and part table."""
+    """openFPGALoader --detect that prints `text` in place of its raw scan and part table, and exits `rc`."""
 
-    def __init__(self, text, **kw):
+    def __init__(self, text, rc=0, **kw):
         super().__init__(**kw)
-        self.text = text
+        self.text, self.rc = text, rc
 
     def __call__(self, argv, timeout):
         rc, out = super().__call__(argv, timeout)
-        return (0, self.text) if "--detect" in argv else (rc, out)
+        return (self.rc, self.text) if "--detect" in argv else (rc, out)
 
 
 def test_output_without_the_raw_scan_says_so_not_that_the_chain_is_empty():
@@ -96,6 +96,15 @@ def test_output_without_the_raw_scan_says_so_not_that_the_chain_is_empty():
     t = links.jtag(PI5, "cle-215+", NoRawScan(part_table), gpiochip=_no_chip)
     assert t["result"] == "fail" and t["reason"] == (
         "P1 JTAG: openFPGALoader printed no raw IDCODE scan (needs --verbose-level 2 output)"
+    )
+
+
+def test_a_detect_that_fails_before_scanning_says_the_tool_failed_and_why():
+    text = "unable to open gpiochip: /dev/gpiochip15: No such file or directory\n"
+    t = links.jtag(PI5, "cle-215+", NoRawScan(text, rc=1), gpiochip=_no_chip)
+    assert t["result"] == "fail" and t["reason"] == (
+        "P1 JTAG: openFPGALoader --detect failed (exit 1) before scanning the JTAG chain: "
+        "unable to open gpiochip: /dev/gpiochip15: No such file or directory"
     )
 
 
