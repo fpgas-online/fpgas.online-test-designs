@@ -10,14 +10,16 @@ has (EXTRA_FIELDS). docs/identity.md lists them all, with their types and when e
     unique ID is bare hex, as rpi-hwid has it.
 
 The dict is the typed form: integers are numbers and booleans booleans. details() is the event form: flat
-key=value strings, integers in decimal, booleans "true"/"false", plus schema=fpga-identity/1. document() wraps
-the dicts of every board found in the versioned document fpgas-verify --identify prints.
+key=value strings, integers in decimal, booleans "true"/"false", lists and dicts compact JSON, "-" for read
+and none, plus schema=fpga-identity/1. document() wraps the dicts of every board found in the versioned
+document fpgas-verify --identify prints.
 
 Stdlib only: the Pi hosts boot a tmpfs root with no LiteX.
 """
 
 import datetime
 import importlib.metadata
+import json
 
 SCHEMA = "fpga-identity/1"  # the event's schema detail
 DOCUMENT_SCHEMA = "fpgas-verify/identity"
@@ -142,18 +144,36 @@ def _version():
         return "unknown"
 
 
+def detail(value):
+    """One value as an event detail (label contract §13, §17): a string as it is; None (read, and there is
+    none) "-"; a boolean "true"/"false"; an integer in decimal; a list or dict compact JSON with sorted keys.
+    Never a Python repr: any other type is a bug, and raises."""
+    if value is None:
+        return "-"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (str, int)):
+        return str(value)
+    if isinstance(value, (list, tuple, dict)):
+        return json.dumps(value, separators=(",", ":"), sort_keys=True)
+    raise TypeError(f"an identity value must be a string, number, boolean, list, dict or None, not {value!r}")
+
+
 def details(board):
-    """The fpga-board-identified event's details: the dict as flat strings, and its schema."""
-    out = {}
-    for key, value in board.items():
-        if isinstance(value, bool):
-            out[key] = "true" if value else "false"
-        elif isinstance(value, (list, tuple)):
-            out[key] = " ".join(str(v) for v in value)
-        else:
-            out[key] = str(value)
+    """The fpga-board-identified event's details: the dict as flat strings, and its schema. A field not read
+    is not in the dict, so not in the details either."""
+    out = {key: detail(value) for key, value in board.items()}
     out["schema"] = SCHEMA
     return out
+
+
+KEEP = "keep_identity"  # the option the runner gives a board's check: called with the dict once it is built
+
+
+def keep(options, board):
+    """Hand the board's dict to the runner as soon as it is built, so a check that stops after sending
+    fpga-board-identified still has it in its error report (and so in verify.json and fpga-verified)."""
+    (options.get(KEEP) or (lambda board: None))(board)
 
 
 def document(boards, source="live", tool=None, read_at=None):

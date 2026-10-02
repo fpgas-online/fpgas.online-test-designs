@@ -173,7 +173,7 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
     for (_, _, found), key in zip(targets, keys):
         event("fpga-board-found", {"board": key, "variant": found.get("variant"), "where": _where(found)})
     for (board, host, found), key in zip(targets, keys):
-        identified = []
+        identified, kept = [], []  # the identified event sent; the identity the check built (identity.keep())
 
         def board_event(stage, d, key=key, identified=identified):
             if stage == "fpga-board-identified":
@@ -184,8 +184,10 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
             board_options, skipped = _for_board(board, options, report["mode"])
             if board_options is None:  # none of the named tests: not checked, and no "pass" for it
                 not_checked.append(board.name)
+                # still found, so still identified (once), from what finding it showed
+                board_event("fpga-board-identified", identity.details(identity.base(key, board.name, found)))
                 continue
-            board_options = {**board_options, "event": board_event, "board_key": key}
+            board_options = {**board_options, "event": board_event, "board_key": key, identity.KEEP: kept.append}
             with hold_lock(board.lock, board.title):
                 reports.append(board.check(host, found, board_options))
         except Problem as p:
@@ -195,6 +197,8 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
             reports.append({"board": board.name, "found": found, "result": "error",
                             "reason": f"the check crashed: {type(e).__name__}: {e}"})  # fmt: skip
             skipped = []
+        if kept:  # a check that stopped after saying who the board is keeps it in its error report
+            reports[-1].setdefault("identity", kept[-1])
         if not identified:  # the check stopped before saying who the board is: say what finding it showed
             reports[-1].setdefault("identity", identity.base(key, board.name, found))
             board_event("fpga-board-identified", identity.details(reports[-1]["identity"]))

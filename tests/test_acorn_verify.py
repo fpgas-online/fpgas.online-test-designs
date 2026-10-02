@@ -143,6 +143,37 @@ def test_a_board_on_factory_or_vendor_firmware_fails_as_unconverted_and_its_bar_
     assert not rig.uart.opened_at  # no UARTBone traffic to a design we did not build
 
 
+@pytest.mark.parametrize(
+    ("kind", "identifier", "model"),
+    [
+        ("fpgas-online", fk.OP_IDENT_ON_CHIP, "cle-215+"),
+        ("fpgas-online", "fpgas-online Acorn PCIe SoC cle-101 2026-09-21 14:23:32", "cle-101"),
+        ("fpgas-online", fk.GOLDEN_IDENT_ON_CHIP, "cle-215+"),
+        ("fpgas-online", "fpgas-online Acorn PCIe SoC 2026-09-21 14:23:32", None),  # names no variant
+        ("fpgas-online", "LiteX SoC on Acorn CLE-215+ 2026-09-21", None),  # not our SoC's identifier
+        ("fpgas-online", None, None),  # BAR0 not read
+        ("sqrl-factory", fk.OP_IDENT_ON_CHIP, None),  # not our design, whatever it says
+        ("litex-other", fk.OP_IDENT_ON_CHIP, None),
+    ],
+)
+def test_the_soc_model_is_what_our_socs_identifier_names(kind, identifier, model):
+    assert av.soc_model(kind, identifier) == model
+
+
+def test_the_identity_is_handed_to_the_runner_once_it_is_built(tmp_path, images):
+    kept = []
+    report = Rig(tmp_path, images).check(**{identity.KEEP: kept.append})
+    assert kept == [report["identity"]]
+
+
+def test_the_soc_model_comes_from_the_identifier_and_not_the_pci_ids(tmp_path, images):
+    ident = Rig(tmp_path, images).check()["identity"]
+    assert ident["soc_model"] == "cle-215+" and ident["identifier"] == fk.OP_IDENT_ON_CHIP
+    rig = Rig(tmp_path / "factory", images, ids=fk.FACTORY)  # the variant is known, from SQRL's IDs
+    ident = suite.check_board(rig.found(), rig.options(open_bar=fk.refuse))["identity"]
+    assert ident["variant"] == "cle-215+" and "soc_model" not in ident and "identifier" not in ident
+
+
 def test_a_board_on_sqrl_factory_image_still_has_its_link_and_jtag_checked(tmp_path, images):
     """Its variant is known from the factory IDs, so its P1 JTAG and PCIe link are tested; nothing on BAR0."""
     rig = Rig(tmp_path, images, ids=fk.FACTORY)
@@ -272,8 +303,34 @@ def test_a_jtag_probe_that_could_not_run_is_an_idcode_and_dna_error(tmp_path, im
     report = rig.check(tests=["jtag"])  # nothing that needs BAR0: no DNA from there either
     ident = report["identity"]
     assert "openFPGALoader is not installed" in ident["idcode_error"]
-    assert ident["dna_error"] == ident["idcode_error"]
+    assert ident["dna_error"] == "not read over P1 JTAG: P1 JTAG could not be probed: openFPGALoader is not installed"
     assert "idcode" not in ident and "dna" not in ident and "flash_source" not in ident
+
+
+def test_with_bar0_down_and_the_wrong_idcode_the_dna_error_says_why_the_dna_was_not_read(tmp_path, images):
+    """The JTAG test's reason is about the IDCODE; the DNA's is that --read-dna was never run."""
+    rig = Rig(tmp_path, images)
+    rig.pi.idcode = 0x13631093  # an XC7A100T on a cle-215+
+    report = rig.check(tests=["jtag"])
+    ident = report["identity"]
+    assert "expected one XC7A200T" in report["tests"][0]["reason"] and ident["idcode"] == "0x13631093"
+    assert ident["dna_error"] == (
+        "not read over P1 JTAG: --read-dna runs only once --detect has found the one FPGA expected"
+    )
+    assert "XC7A200T" not in ident["dna_error"]
+
+
+def test_with_bar0_down_a_failed_dna_read_says_so(tmp_path, images, monkeypatch):
+    rig = Rig(tmp_path, images)
+    real = rig.pi.__call__
+
+    def no_dna(argv, timeout):
+        return (1, "JTAG error\n") if "--read-dna" in argv else real(argv, timeout)
+
+    monkeypatch.setattr(rig, "pi", no_dna)
+    ident = rig.check(tests=["jtag"])["identity"]
+    assert ident["idcode"] == "0x13636093" and "idcode_error" not in ident
+    assert ident["dna_error"] == "openFPGALoader --read-dna read no device DNA over P1 JTAG (exit status 1)"
 
 
 def test_an_s25fs256s_is_named_by_its_extended_id(tmp_path, images, monkeypatch):

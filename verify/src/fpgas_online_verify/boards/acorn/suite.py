@@ -292,9 +292,10 @@ class _Suite:
         """Who the board is (identity.py), from what PCIe, BAR0 and JTAG read."""
         f, r = self.found, self.report
         out = identity.base(self.options.get("board_key", "acorn"), "acorn", f)
-        if f["variant"]:
-            out["soc_model"] = f["variant"]
         running = r.get("running") or {}
+        soc_model = check.soc_model(f["kind"], running.get("identifier"))
+        if soc_model:
+            out["soc_model"] = soc_model
         if running.get("identifier"):
             out["identifier"] = running["identifier"]
         if running.get("build"):
@@ -304,8 +305,10 @@ class _Suite:
             out["dna"] = identity.dna(self.bar0["dna"])
         elif jtag and "dna" in jtag:
             out["dna"] = identity.dna(jtag["dna"])
-        elif jtag and jtag["result"] != "pass":
-            out["dna_error"] = jtag.get("reason") or jtag["result"]
+        elif jtag and jtag.get("dna_error"):
+            out["dna_error"] = jtag["dna_error"]  # why the DNA read itself failed, not the IDCODE's faults
+        elif jtag and jtag["result"] != "pass":  # the jtag test stopped before it said
+            out["dna_error"] = f"not read over P1 JTAG: the jtag test stopped: {jtag.get('reason') or jtag['result']}"
         if jtag:
             out.update(identity.idcode_fields(jtag))
         if (r.get("flash") or {}).get("rdid"):
@@ -313,6 +316,12 @@ class _Suite:
         elif self.flash_error:
             out.update(flash_error=self.flash_error, flash_source="pcie")
         return out
+
+    def identified(self):
+        """Put who the board is in the report, hand it to the runner and send fpga-board-identified."""
+        self.report["identity"] = self.identity()
+        identity.keep(self.options, self.report["identity"])
+        self.event("fpga-board-identified", identity.details(self.report["identity"]))
 
     def check(self):
         unknown = [t for t in self.wanted if t not in TESTS]
@@ -333,8 +342,7 @@ class _Suite:
             self.test("pcie-link", self._needs_setup(), self.pcie_link)
             self.test("pcie-bar0", None if self.gate_problem else no_bar0, self.pcie_bar0)
             self.test("jtag", self._needs_setup() or no_variant, self.jtag)
-            self.report["identity"] = self.identity()
-            self.event("fpga-board-identified", identity.details(self.report["identity"]))
+            self.identified()
             golden = "the golden image has no {}" if self.bar0.get("build") == "golden" else None
             if golden and "pcie-bar0" not in self.wanted:  # pcie-bar0 says so when it runs
                 self.faults.append(("fail", GOLDEN))
@@ -361,8 +369,7 @@ class _Suite:
     def finish(self):
         r = self.report
         if "identity" not in r:
-            r["identity"] = self.identity()
-            self.event("fpga-board-identified", identity.details(r["identity"]))
+            self.identified()
         if self.not_run:
             r["not_run"] = self.not_run
         asked = [t for t in self.wanted if t in TESTS]

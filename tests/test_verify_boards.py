@@ -426,10 +426,11 @@ def test_a_test_board_says_when_each_test_starts_and_how_it_ended(tmp_path):
 
 
 def test_an_arty_says_who_it_is_before_its_tests_with_its_whole_idcode(tmp_path):
-    events = []
+    events, kept = [], []
     report = _check(ARTY, tmp_path, ARTY_FOUND, Runner(), board_key="arty",
-                    event=lambda stage, d: events.append((stage, d)))  # fmt: skip
+                    event=lambda stage, d: events.append((stage, d)), **{identity.KEEP: kept.append})  # fmt: skip
     assert events[0][0] == "fpga-board-identified" and events[1][0] == "fpga-test-started"
+    assert kept == [report["identity"]]  # handed to the runner, so a crash after this keeps it
     assert report["identity"] == {
         "board": "arty", "kind": "arty", "variant": "a7-35", "serial": "210319B", "usb": "1-1",
         "idcode": "0x0362d093", "idcode_version": 0, "idcode_part_number": "0x362d", "idcode_manufacturer_id": "0x049",

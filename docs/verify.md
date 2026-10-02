@@ -637,6 +637,9 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
   Later runs compare the whole IDCODE as usual.
 * A device DNA recorded without its leading zeros (a record with `schema_version` below 4) takes the 16-digit
   spelling quietly. Another DNA is a change.
+* On a record with `schema_version` below 4, a flash part name that changed while its JEDEC ID and unique ID
+  did not is a corrected name, taken quietly: the part is now named from RDID byte 6, so an S25FS256S is no
+  longer called an S25FL256S. A different JEDEC ID or unique ID is still a change, and so is a rewritten flash.
 * A `--test` run neither records nor compares the state.
 
 ---
@@ -665,7 +668,7 @@ The check tells the site what it is doing as it goes. `fleet-event` (from
 | `fpga-verifying` | the check starts | `started_at` |
 | `fpga-board-found` | for each board found | `board`, `variant`, `where` (PCI slot, USB path or JTAG IDCODE) |
 | `fpga-no-board` | no board was found | `reason` |
-| `fpga-board-identified` | once for each board found: an Acorn once PCIe and JTAG have said who it is, any other board before its tests | `schema` (`fpga-identity/1`) and the board's [identity](identity.md) |
+| `fpga-board-identified` | exactly once for each board found: an Acorn once PCIe and JTAG have said who it is, any other board before its tests; a board whose check stops first, or that is not checked (`--test` naming none of its tests), from what finding it showed | `schema` (`fpga-identity/1`) and the board's [identity](identity.md) |
 | `fpga-test-started` | each test starts | `board`, `test` |
 | `fpga-test-finished` | each test ends | `board`, `test`, `result`, `reason` |
 | `fpga-verified` | the check is done | the report, flattened: `result`, `mode`, `reason`; per board `board0` (`netv2 a7-35 fail`), `board0_reason`, `board0_tests` (`uart=pass ddr=fail spiflash=pass`), `board0_bitstreams`, `board0_state_*`, `board0_identity_*` |
@@ -690,7 +693,7 @@ fpga-test-started {"board": "acorn", "test": "pcie-bar0"}
 fpga-test-finished {"board": "acorn", "test": "pcie-bar0", "result": "pass", "reason": ""}
 fpga-test-started {"board": "acorn", "test": "jtag"}
 fpga-test-finished {"board": "acorn", "test": "jtag", "result": "pass", "reason": ""}
-fpga-board-identified {"board": "acorn", "bdf": "0001:01:00.0", "pci_ids": "10ee:7021", "subsystem": "1e24:021f", "variant": "cle-215+", "identifier": "fpgas-online Acorn PCIe SoC cle-215+ 2026-09-21 14:23:32", "build": "operational", "dna": "0x54b48664b04854", "idcode": "0x13636093", "flash_part": "S25FL256S", "flash_jedec": "0x010219", "flash_unique_id": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf"}
+fpga-board-identified {"board": "acorn", "kind": "acorn", "variant": "cle-215+", "bdf": "0001:01:00.0", "soc_model": "cle-215+", "identifier": "fpgas-online Acorn PCIe SoC cle-215+ 2026-09-21 14:23:32", "build": "operational", "dna": "0x0054b48664b04854", "idcode": "0x13636093", "idcode_version": "1", "idcode_part_number": "0x3636", "idcode_manufacturer_id": "0x049", "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A200T", "flash_jedec": "0x010219", "flash_extended_id": "0x4d0180", "flash": "S25FL256S", "flash_size_bytes": "33554432", "flash_status": "0x00", "flash_config": "0x02", "flash_quad": "true", "flash_uid": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf", "flash_uid_bits": "128", "flash_uid_state": "read", "flash_uid_opcode": "0x4b", "flash_source": "pcie", "schema": "fpga-identity/1"}
 ```
 
 They come between `fpga-verifying` and `fpga-verified`.

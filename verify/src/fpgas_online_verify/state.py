@@ -11,8 +11,9 @@ last time, on a board that has since been swapped. The one exception is a fact a
 record introduced (NEW_FACTS): on a record of an older version it is added quietly, so an upgrade that reads
 more does not make every stateful host report "changed" once. Likewise a fact a newer version reads more of,
 or writes differently (WIDENED: the IDCODE, once read without its version; the device DNA, once written
-without its leading zeros): on an older record, a recorded value that the new one only adds to, or only
-respells, is replaced quietly.
+without its leading zeros; the flash's part name, once given from RDID bytes 1-3 only): on an older record, a
+recorded value that the new one only adds to, respells, or renames is replaced quietly. A flash is renamed
+quietly only when its JEDEC ID and unique ID are the ones recorded: a different flash is still a change.
 
 A netboot root keeps /var/lib in tmpfs, so there every boot is a first run.
 """
@@ -42,9 +43,30 @@ def _same_number(old, new):
         return False
 
 
+def _whole(same):
+    """A rule replacing the recorded value with the new one when same(old, new)."""
+    return lambda old, new: new if same(old, new) else None
+
+
+def _part_renamed(old, new):
+    """The recorded flash with the new part name, when only the name differs: the same JEDEC ID and unique ID
+    under a corrected name (since schema 4 the part is named from RDID byte 6, so an S25FS256S is no longer
+    called an S25FL256S). Anything else recorded about the flash (its slots) is kept, and compared as before."""
+    if not (isinstance(old, dict) and isinstance(new, dict)):
+        return None
+    if not all(k in old and k in new and old[k] == new[k] for k in ("jedec", "unique_id")):
+        return None
+    if "part" not in new or old.get("part") == new["part"]:
+        return None
+    return {**old, "part": new["part"]}
+
+
 # The facts each version of the record reads more of, or writes differently:
-# {version: {key: old value is the new one, less or respelled}}.
-WIDENED = {3: {"idcode": _idcode_widened}, 4: {"dna": _same_number}}
+# {version: {key: rule(old, new) -> the value to record in its place, or None when it is a change}}.
+WIDENED = {
+    3: {"idcode": _whole(_idcode_widened)},
+    4: {"dna": _whole(_same_number), "flash": _part_renamed},
+}
 
 
 def load_record(path=STATE):
@@ -70,9 +92,9 @@ def quiet_facts(version):
 
 
 def widened(recorded, current, version):
-    """The recorded boards with each fact that a newer version reads more of (WIDENED) replaced by the current
-    value, where the recorded one is that value, less; the record itself when there is nothing to replace."""
-    rules = {key: same for v, keys in WIDENED.items() if (version or 1) < v for key, same in keys.items()}
+    """The recorded boards with each fact that a newer version reads more of, respells or renames (WIDENED)
+    replaced by what its rule gives; the record itself when there is nothing to replace."""
+    rules = {key: rule for v, keys in WIDENED.items() if (version or 1) < v for key, rule in keys.items()}
     if not rules or not isinstance(recorded, dict) or "unreadable" in recorded:
         return recorded
     out = dict(recorded)
@@ -80,9 +102,11 @@ def widened(recorded, current, version):
         now = current.get(board)
         if not (isinstance(facts, dict) and isinstance(now, dict)):
             continue
-        for key, same in rules.items():
-            if key in facts and key in now and facts[key] != now[key] and same(facts[key], now[key]):
-                out[board] = {**out[board], key: now[key]}
+        for key, rule in rules.items():
+            if key in facts and key in now and facts[key] != now[key]:
+                value = rule(facts[key], now[key])
+                if value is not None:
+                    out[board] = {**out[board], key: value}
     return out
 
 

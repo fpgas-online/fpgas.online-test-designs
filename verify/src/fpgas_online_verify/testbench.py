@@ -246,6 +246,7 @@ class TestBoard(Board):
         if "jtag" in report:
             out.update(identity.idcode_fields(report["jtag"]))
         report["identity"] = out
+        identity.keep(options, out)
         (options.get("event") or (lambda stage, details: None))("fpga-board-identified", identity.details(out))
 
     # The flash is read back with a design loaded (openFPGALoader's SPI-over-JTAG bridge): --identify takes it
