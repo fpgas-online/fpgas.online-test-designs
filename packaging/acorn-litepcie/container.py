@@ -1,23 +1,28 @@
 #!/usr/bin/env python3
-"""The LitePCIe builds and tests that run inside debian:bookworm containers.
+"""The LitePCIe builds and tests that run inside Debian containers.
 
-Design: docs/plans/2026-09-25-acorn-litepcie-packages-design.md (§3.6, §3.9).
+Design: docs/plans/2026-09-25-acorn-litepcie-packages-design.md (§3.6, §3.9, §4.1, §4.4).
 
-Each subcommand runs inside a container of the architecture it is for, started by `run`, which mounts this
-repository at /w and bootstraps python3 (stdlib only: bookworm's 3.11). Paths are relative to the repository.
+Each subcommand runs inside a container of the architecture and suite it is for, started by `run`, which
+mounts this repository at /w and bootstraps python3 (stdlib only: bookworm's 3.11). Paths are relative to the
+repository.
 
-    utils         compile the struct-layout asserts, then litepcie_util and litepcie_test, and record the
-                  glibc floor they need (utils.json), for build_debs.py to package
-    install-test  install the -common and -utils debs and run litepcie_util
-    module        build litepcie.ko and liteuart.ko against the fleet kernel's headers (kernels.toml) from the
-                  Raspberry Pi archive, and check their vermagic: the CI artifact of §3.6
-    dkms-test     install the newest rpi-v8 headers and the -common and -dkms debs, have DKMS build the
-                  modules, and check modinfo finds them
+    utils                 compile the struct-layout asserts, then litepcie_util and litepcie_test, and record
+                          the glibc floor they need (utils.json), for build_debs.py to package
+    install-test          install the -common and -utils debs and run litepcie_util
+    module                build litepcie.ko and liteuart.ko against one kernel's headers from the Raspberry Pi
+                          archive (default: the fleet kernel of kernels.toml), check their vermagic, and
+                          record what they were built for (modules.json), for build_debs.py to package
+    modules-install-test  in the fleet's shape, an armhf root with an arm64 kernel: install a
+                          -modules-<kver> deb and -utils through apt from a flat repository of the given
+                          debs, and check modinfo finds the modules for that kernel
+    dkms-test             install kernel headers (the newest rpi-v8 on arm64, Debian's on amd64) and the
+                          -common and -dkms debs, have DKMS build the modules, and check modinfo finds them
 
     python3 packaging/acorn-litepcie/container.py run --arch armhf -- \
         utils --arch armhf --driver dist/driver --out dist/utils-armhf
-    python3 packaging/acorn-litepcie/container.py run --arch arm64 --docker "sudo -n docker" -- \
-        module --driver dist/driver --out dist/modules
+    python3 packaging/acorn-litepcie/container.py run --arch arm64 --suite trixie --docker "sudo -n docker" -- \
+        module --suite trixie --kver 6.18.50+rpt-rpi-v8 --driver dist/driver --out dist/modules
 """
 
 import argparse
@@ -36,12 +41,18 @@ import tomllib
 HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 IN_CONTAINER = "packaging/acorn-litepcie/container.py"
-PLATFORMS = {"arm64": "linux/arm64", "armhf": "linux/arm/v7"}
+PLATFORMS = {"arm64": "linux/arm64", "armhf": "linux/arm/v7", "amd64": "linux/amd64"}
+SUITES = ("bookworm", "trixie")  # the Debian images
 RPI_ARCHIVE = "https://archive.raspberrypi.com/debian"
 RPI_KEY = f"{RPI_ARCHIVE}/raspberrypi.gpg.key"
 RPI_KEYRING = "/usr/share/keyrings/raspberrypi-archive.gpg"
 NAME = "fpgas-online-acorn-litepcie"
 TOOLS = ("litepcie_util", "litepcie_test")
+MODULES = ("litepcie", "liteuart")
+BLACKLIST = "/etc/modprobe.d/fpgas-online-acorn-litepcie.conf"
+FLAT_REPO = "/srv/fpgas-online-acorn-litepcie"
+# The DKMS test's kernel per architecture: (headers meta package, flavour, from the Raspberry Pi archive?).
+DKMS_KERNELS = {"arm64": ("linux-headers-rpi-v8", "rpi-v8", True), "amd64": ("linux-headers-amd64", "amd64", False)}
 
 
 class ContainerError(Exception):
@@ -79,15 +90,15 @@ def newest_kernel(header_packages, flavour):
     return max(kvers)[1]
 
 
-def docker_argv(platform, args, docker=("docker",)):
-    """Run this script's `args` in debian:bookworm for `platform`, with the repository at /w."""
+def docker_argv(platform, args, docker=("docker",), suite="bookworm"):
+    """Run this script's `args` in debian:<suite> for `platform`, with the repository at /w."""
     boot = (
         "apt-get update -qq && apt-get install -y -qq --no-install-recommends python3 >/dev/null; "
         f"exec python3 {IN_CONTAINER} {shlex.join(args)}"
     )
     return [
         *docker, "run", "--rm", "--pull=always", "--platform", platform, "--network", "host",
-        "-e", "DEBIAN_FRONTEND=noninteractive", "-v", f"{REPO}:/w", "-w", "/w", "debian:bookworm",
+        "-e", "DEBIAN_FRONTEND=noninteractive", "-v", f"{REPO}:/w", "-w", "/w", f"debian:{suite}",
         "sh", "-ec", boot,
     ]  # fmt: skip
 
@@ -100,8 +111,8 @@ def sh(*argv, **kw):
     return subprocess.run([str(a) for a in argv], check=True, **kw)
 
 
-def out(*argv):
-    return subprocess.run([str(a) for a in argv], check=True, capture_output=True, text=True).stdout
+def out(*argv, **kw):
+    return subprocess.run([str(a) for a in argv], check=True, capture_output=True, text=True, **kw).stdout
 
 
 def apt_install(*packages):
@@ -113,6 +124,15 @@ def expect_arch(arch):
     got = out("dpkg", "--print-architecture").strip()
     if got != arch:
         raise ContainerError(f"this container is {got}, not {arch}")
+
+
+def expect_suite(suite):
+    """The container really is `suite`: a module is only right for the suite whose compiler built it."""
+    got = dict(
+        line.split("=", 1) for line in pathlib.Path("/etc/os-release").read_text().splitlines() if "=" in line
+    ).get("VERSION_CODENAME")
+    if got != suite:
+        raise ContainerError(f"this container is {got}, not {suite}")
 
 
 def add_rpi_archive(suite):
@@ -162,51 +182,109 @@ def cmd_utils(args):
     print(f"built {', '.join(TOOLS)} for {args.arch}, needing glibc {info['glibc']}")
 
 
+def check_tools(what):
+    """litepcie_util and litepcie_test are installed and run, and the blacklist is in place."""
+    for tool in TOOLS:
+        if not shutil.which(tool):
+            raise ContainerError(f"{tool} is not on PATH after installing {what}")
+    run = subprocess.run(["litepcie_util"], capture_output=True, text=True)
+    if "usage: litepcie_util" not in run.stdout + run.stderr:
+        raise ContainerError(f"litepcie_util did not print its usage:\n{run.stdout}{run.stderr}")
+    if "blacklist litepcie" not in pathlib.Path(BLACKLIST).read_text().splitlines():
+        raise ContainerError(f"{BLACKLIST} does not blacklist litepcie")
+
+
 def cmd_install_test(args):
     expect_arch(args.arch)
     debs = [f"./{d}" for d in args.debs]
     apt_install(*debs)
-    for tool in TOOLS:
-        if not shutil.which(tool):
-            raise ContainerError(f"{tool} is not on PATH after installing {', '.join(args.debs)}")
-    run = subprocess.run(["litepcie_util"], capture_output=True, text=True)
-    if "usage: litepcie_util" not in run.stdout + run.stderr:
-        raise ContainerError(f"litepcie_util did not print its usage:\n{run.stdout}{run.stderr}")
-    blacklist = pathlib.Path("/etc/modprobe.d/fpgas-online-acorn-litepcie.conf")
-    if "blacklist litepcie" not in blacklist.read_text().splitlines():
-        raise ContainerError(f"{blacklist} does not blacklist litepcie")
+    check_tools(", ".join(args.debs))
     print(f"installed {', '.join(args.debs)}: litepcie_util runs and litepcie is blacklisted")
 
 
 def cmd_module(args):
     kernels = tomllib.loads((HERE / "kernels.toml").read_text())
     kver = args.kver or kernels["fleet_kernel"]
-    expect_arch("arm64")  # every rpi-v8 kernel is arm64
-    add_rpi_archive(kernels["fleet_suite"])
-    apt_install("make", f"linux-headers-{kver}")
+    suite = args.suite or kernels["fleet_suite"]
+    expect_arch(args.arch)
+    expect_suite(suite)
+    add_rpi_archive(suite)
+    apt_install("make", "kmod", f"linux-headers-{kver}")
     dest = fresh(args.out)
     work = dest / ".build"
     shutil.copytree(pathlib.Path(args.driver) / "kernel", work)
     sh("make", "-C", f"/usr/src/linux-headers-{kver}", f"M={work.resolve()}", "modules")
-    for module in ("litepcie", "liteuart"):
+    info = {"kver": kver, "suite": suite, "arch": args.arch, "vermagic": {}}
+    for module in MODULES:
         vermagic = out("modinfo", "-F", "vermagic", work / f"{module}.ko").strip()
         if not vermagic_ok(vermagic, kver):
             raise ContainerError(f"{module}.ko has vermagic {vermagic!r}, not one for {kver}")
         print(f"{module}.ko vermagic: {vermagic}")
+        info["vermagic"][module] = vermagic
         shutil.copy2(work / f"{module}.ko", dest / f"{module}.ko")
     shutil.rmtree(work)
     (dest / "kernel.txt").write_text(kver + "\n")
+    (dest / "modules.json").write_text(json.dumps(info) + "\n")
     # litepcie's BSD-2-Clause notice travels with the binaries; liteuart.c is GPL-2.0 (its SPDX header).
     shutil.copyfile(pathlib.Path(args.driver) / "LICENSE", dest / "LICENSE")
     give_back(dest, args.driver)
+    print(f"built {', '.join(MODULES)} for {kver} ({suite}, {args.arch})")
+
+
+def cmd_modules_install_test(args):
+    """The netbooted fleet's shape (§4.4): an armhf root whose kernel, and so whose modules package, is arm64."""
+    kver, arch = args.kver, args.arch
+    package = f"{NAME}-modules-{kver}"
+    expect_arch("armhf")
+    expect_suite(args.suite)
+    if arch != "armhf":
+        sh("dpkg", "--add-architecture", arch)
+    add_rpi_archive(args.suite)
+    apt_install("apt-utils")
+    repo = fresh(FLAT_REPO)
+    for deb in args.debs:
+        shutil.copy2(deb, repo)
+    (repo / "Packages").write_text(out("apt-ftparchive", "packages", ".", cwd=repo))
+    pathlib.Path("/etc/apt/sources.list.d/fpgas-online-acorn-litepcie.list").write_text(
+        f"deb [trusted=yes] file:{FLAT_REPO} ./\n"
+    )
+    sh("apt-get", "update", "-qq")
+    # Only the modules and the tools are named: apt has to find -common (Architecture: all, for an arm64
+    # package on an armhf root) and the kernel image (arm64) from the modules package's Depends by itself.
+    apt_install(f"{package}:{arch}", f"{NAME}-utils")
+    installed = {}
+    for name in (package, f"linux-image-{kver}", f"{NAME}-common", f"{NAME}-utils"):
+        installed[name] = out("dpkg-query", "-W", "-f", "${Architecture} ${Version}", name).strip()
+        print(f"installed: {name} {installed[name]}")
+    want = {package: arch, f"linux-image-{kver}": arch, f"{NAME}-common": "all", f"{NAME}-utils": "armhf"}
+    for name, architecture in want.items():
+        if installed[name].split()[0] != architecture:
+            raise ContainerError(f"{name} is installed as {installed[name]}, not as {architecture}")
+    for module in MODULES:
+        path = out("modinfo", "-k", kver, "-F", "filename", module).strip()
+        vermagic = out("modinfo", "-k", kver, "-F", "vermagic", module).strip()
+        if not path.endswith(f"/modules/{kver}/updates/fpgas-online/{module}.ko") or not vermagic_ok(vermagic, kver):
+            raise ContainerError(f"{module}: modinfo -k {kver} gives {path} with vermagic {vermagic!r}")
+        print(f"{module}: {path} ({vermagic})")
+    aliases = out("modinfo", "-k", kver, "-F", "alias", "liteuart").split()
+    if "platform:liteuart" not in aliases:
+        raise ContainerError(f"liteuart.ko has aliases {aliases}: litepcie's platform device would not load it")
+    check_tools(f"{package} and {NAME}-utils")
+    sh("apt-get", "remove", "-y", "-qq", f"{package}:{arch}")
+    gone = subprocess.run(["modinfo", "-k", kver, "litepcie"], capture_output=True, text=True)
+    if gone.returncode == 0:
+        raise ContainerError(f"modinfo -k {kver} still finds litepcie after removing {package}:\n{gone.stdout}")
+    print(f"apt installed {package}:{arch} with its kernel on an armhf {args.suite} root, and removed it")
 
 
 def cmd_dkms_test(args):
-    expect_arch("arm64")
-    add_rpi_archive("bookworm")
-    apt_install("dkms", "linux-headers-rpi-v8")
+    meta, flavour, rpi = DKMS_KERNELS[args.arch]
+    expect_arch(args.arch)
+    if rpi:
+        add_rpi_archive("bookworm")
+    apt_install("dkms", meta)
     installed = out("dpkg-query", "-W", "-f", "${Package}\\n", "linux-headers-*").split()
-    kver = newest_kernel(installed, "rpi-v8")
+    kver = newest_kernel(installed, flavour)
     apt_install(*(f"./{d}" for d in args.debs))
     version = out("dpkg-query", "-W", "-f", "${Version}", f"{NAME}-dkms").strip()
     # The package's postinst (common.postinst) must have built and installed the modules by itself: no
@@ -215,7 +293,7 @@ def cmd_dkms_test(args):
     print(f"dkms status after install: {status.strip()}")
     if "installed" not in status:
         raise ContainerError(f"installing {NAME}-dkms did not build and install it for {kver}: {status!r}")
-    for module in ("litepcie", "liteuart"):
+    for module in MODULES:
         path = out("modinfo", "-k", kver, "-F", "filename", module).strip()
         vermagic = out("modinfo", "-k", kver, "-F", "vermagic", module).strip()
         if "/updates/dkms/" not in path or not vermagic_ok(vermagic, kver):
@@ -234,7 +312,7 @@ def cmd_dkms_test(args):
 
 def cmd_run(args):
     inner = args.inner[1:] if args.inner[:1] == ["--"] else args.inner
-    argv = docker_argv(PLATFORMS[args.arch], inner, docker=tuple(shlex.split(args.docker)))
+    argv = docker_argv(PLATFORMS[args.arch], inner, docker=tuple(shlex.split(args.docker)), suite=args.suite)
     print("+", shlex.join(argv), flush=True)
     return subprocess.run(argv, check=False).returncode
 
@@ -242,8 +320,9 @@ def cmd_run(args):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
-    run = sub.add_parser("run", help="on the host: run a subcommand in debian:bookworm for --arch")
+    run = sub.add_parser("run", help="on the host: run a subcommand in debian:<suite> for --arch")
     run.add_argument("--arch", choices=sorted(PLATFORMS), required=True)
+    run.add_argument("--suite", choices=SUITES, default="bookworm")
     run.add_argument("--docker", default="docker", help='the docker command, e.g. "sudo -n docker"')
     run.add_argument("inner", nargs=argparse.REMAINDER)
     p = sub.add_parser("utils")
@@ -257,15 +336,27 @@ def main(argv=None):
     p.add_argument("--driver", required=True)
     p.add_argument("--out", required=True)
     p.add_argument("--kver", help="default: fleet_kernel from kernels.toml")
+    p.add_argument("--suite", choices=SUITES, help="default: fleet_suite from kernels.toml")
+    p.add_argument("--arch", choices=("arm64", "armhf"), default="arm64", help="the kernel's architecture")
+    p = sub.add_parser("modules-install-test")
+    p.add_argument("--suite", choices=SUITES, required=True)
+    p.add_argument("--kver", required=True)
+    p.add_argument("--arch", choices=("arm64", "armhf"), default="arm64", help="the kernel's architecture")
+    p.add_argument("debs", nargs="+", help="the -common, -utils (armhf) and -modules-<kver> debs")
     p = sub.add_parser("dkms-test")
+    p.add_argument("--arch", choices=sorted(DKMS_KERNELS), default="arm64")
     p.add_argument("debs", nargs="+", help="the -common and -dkms debs")
     args = parser.parse_args(argv)
     if args.command == "run":
         return cmd_run(args)
     try:
-        {"utils": cmd_utils, "install-test": cmd_install_test, "module": cmd_module, "dkms-test": cmd_dkms_test}[
-            args.command
-        ](args)
+        {
+            "utils": cmd_utils,
+            "install-test": cmd_install_test,
+            "module": cmd_module,
+            "modules-install-test": cmd_modules_install_test,
+            "dkms-test": cmd_dkms_test,
+        }[args.command](args)
     except (ContainerError, subprocess.CalledProcessError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

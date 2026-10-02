@@ -680,7 +680,25 @@ def test_the_docker_command_mounts_the_repository_and_bootstraps_python(tmp_path
 
 
 def test_every_architecture_has_its_docker_platform():
-    assert ct.PLATFORMS == {"arm64": "linux/arm64", "armhf": "linux/arm/v7"}
+    assert ct.PLATFORMS == {"arm64": "linux/arm64", "armhf": "linux/arm/v7", "amd64": "linux/amd64"}
+
+
+def test_a_module_is_built_in_its_suites_own_image():
+    """The same kernel name is built with GCC 12 in bookworm and GCC 14 in trixie (§4.2)."""
+    assert ct.docker_argv("linux/arm64", ["module"])[-4] == "debian:bookworm"
+    assert ct.docker_argv("linux/arm64", ["module"], suite="trixie")[-4] == "debian:trixie"
+
+
+def test_the_dkms_test_finds_debians_own_amd64_kernel():
+    names = ["linux-headers-amd64", "linux-headers-6.1.0-40-common", "linux-headers-6.1.0-40-amd64"]
+    assert ct.newest_kernel(names, "amd64") == "6.1.0-40-amd64"
+    assert ct.vermagic_ok("6.1.0-40-amd64 SMP preempt mod_unload modversions ", "6.1.0-40-amd64")
+    assert ct.DKMS_KERNELS["amd64"] == ("linux-headers-amd64", "amd64", False)
+
+
+def test_the_container_and_the_packager_agree_on_names():
+    assert (ct.NAME, ct.TOOLS, ct.MODULES) == (bd.NAME, bd.TOOLS, bd.MODULES)
+    assert set(bd.SUITE_RELEASE) >= set(ct.SUITES) >= set(bd.read_kernels()["suites"])
 
 
 def test_the_command_line_prints_the_version_for_the_workflow(monkeypatch, capsys):
