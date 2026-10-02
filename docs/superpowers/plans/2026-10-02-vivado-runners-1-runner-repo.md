@@ -10,13 +10,14 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-25-vivado-runners-design.md` (moves into the new repo in Task 1).
 
-**This is plan 1 of 3.** Plan 2 deploys this to big-storage and proves the sandbox. Plan 3 adds the Vivado jobs to test-designs.
+**This is plan 1 of 3.** Plan 2 deploys this to a runner host and proves the sandbox. Plan 3 adds the Vivado jobs to test-designs.
 
 ## Global Constraints
 
 - Repository: `fpgas-online/fpgas.online-vivado-runners`, Apache-2.0, default branch `main`.
 - Python package `vivado_runners`, console script `vivado-runners`, Debian package `vivado-runners`, system user `vivado-runners`.
-- Target OS: Debian 13 (trixie) only. Python floor 3.11 (`tomllib`).
+- Target OS: Debian 13 (trixie) on x86-64 with KVM. That is all the system assumes about a runner host. Python floor 3.11 (`tomllib`).
+- **Host independence.** No code, package file, unit, image script or test may contain a host's name, address, CPU list or memory size. A host's short name is read from the hostname (overridable in the config); its NUMA layout, CPU count, memory and addresses are read from the host at run time. Tests use the made-up hosts `alpha` and `beta`. The only per-host settings are how much of the host the runners may use (`slots.count`, `slots.vcpus`, `slots.memory_gib`, `slots.scratch_gib`).
 - Runtime Python dependencies: stdlib, `PyJWT`, `cryptography`. Nothing else.
 - All Python commands run through `uv` (`uv run pytest`, `uv run ruff`). Never plain `python` or `pip`.
 - No shell with loops, conditionals or more than two commands: write Python.
@@ -42,7 +43,7 @@
 2. **Threads, not asyncio.** Every hypervisor call is a blocking subprocess, so each slot is a thread.
 3. **Seed is a read-only virtio disk holding an ISO 9660 image**, found in the guest by its serial (`vr-seed`).
 4. **`--disableupdate` is a `config.sh` flag and JIT runners never run `config.sh`.** Whether a JIT runner self-updates is checked in Plan 2 by decoding a JIT config. Either way GitHub stops sending jobs to a runner more than 30 days behind the latest release, so the base image is rebuilt at least monthly (Plan 2 adds the reminder).
-5. **Phase 1's exit check "image boots under the controller locally" moves to Plan 2.** desktop.buddy has no libvirt; the first boot happens on big-storage.
+5. **Phase 1's exit check "image boots under the controller locally" moves to Plan 2.** The machine with the Vivado install has no libvirt; the first boot happens on the first runner host.
 6. **Packages publish through `mithro/apt-repo-action`** (signed apt repo on GitHub Pages), as nfsroot-watchdog does, not through a `debs` release.
 
 ## File Structure
@@ -299,10 +300,11 @@ Expected: the `CI` workflow passes. Then close test-designs PR #93 with a commen
 - Test: `tests/test_config.py`
 
 **Interfaces:**
-- Produces: `load(path: Path) -> Config`; `ConfigError`; `MAX_SLOTS = 8`; `SUBNET = "192.168.76"`.
+- Produces: `load(path: Path) -> Config`; `ConfigError`; `MAX_SLOTS = 8`; `SUBNET = "192.168.76"`. The file describes no host: the same file is valid on any machine.
   `Config` fields: `host: str`, `state_dir: Path`, `min_free_gib: int`, `network: str`, `proxy: str`, `github: GithubConfig`, `slots: SlotsConfig`; properties/methods `images_dir`, `status_dir`, `console_dir`, `runner_prefix`, `slot_dir(i)`, `slot_mac(i)`, `slot_ip(i)`, `domain_name(i)`, `domain_prefix`.
   `GithubConfig`: `org`, `app_id: int`, `installation_id: int`, `key_file: Path`, `runner_group`.
-  `SlotsConfig`: `count`, `vcpus`, `memory_gib`, `scratch_gib`, `wall_limit_minutes`, `register_timeout_minutes`, `labels: tuple[str, ...]`, `numa_nodes: tuple[int, ...]`.
+  `SlotsConfig`: `count`, `vcpus`, `memory_gib`, `scratch_gib`, `wall_limit_minutes`, `register_timeout_minutes`, `labels: tuple[str, ...]`, `numa_pinning: bool = True`.
+  Also `BRIDGE = "vrbr0"`. `host` defaults to the machine's short hostname, lower-cased, and must match `^[a-z0-9][a-z0-9-]{0,30}$`: it is part of every runner and VM name, and start-up cleanup removes whatever carries it.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -316,7 +318,7 @@ import pytest
 from vivado_runners import config
 
 GOOD = """
-host = "big-storage"
+host = "alpha"
 
 [github]
 org = "fpgas-online"
@@ -332,7 +334,6 @@ memory_gib = 24
 scratch_gib = 60
 wall_limit_minutes = 120
 labels = ["self-hosted", "linux", "x64", "vivado-2025.2"]
-numa_nodes = [0, 0, 1, 1]
 """
 
 
@@ -344,10 +345,10 @@ def write(tmp_path: Path, text: str) -> Path:
 
 def test_loads_a_complete_file(tmp_path):
     cfg = config.load(write(tmp_path, GOOD))
-    assert cfg.host == "big-storage"
+    assert cfg.host == "alpha"
     assert cfg.github.app_id == 123
     assert cfg.slots.labels == ("self-hosted", "linux", "x64", "vivado-2025.2")
-    assert cfg.slots.numa_nodes == (0, 0, 1, 1)
+    assert cfg.slots.numa_pinning is True
     assert cfg.slots.register_timeout_minutes == 5
     assert cfg.state_dir == Path("/var/lib/vivado-runners")
     assert cfg.proxy == "http://192.168.76.1:3128"
@@ -360,17 +361,31 @@ def test_slot_addressing(tmp_path):
     assert cfg.slot_mac(0) == "52:54:00:76:00:00"
     assert cfg.slot_mac(3) == "52:54:00:76:00:03"
     assert cfg.slot_ip(3) == "192.168.76.13"
-    assert cfg.domain_name(3) == "vr-big-storage-3"
-    assert cfg.domain_prefix == "vr-big-storage-"
-    assert cfg.runner_prefix == "big-storage-slot"
+    assert cfg.domain_name(3) == "vr-alpha-3"
+    assert cfg.domain_prefix == "vr-alpha-"
+    assert cfg.runner_prefix == "alpha-slot"
     assert cfg.slot_dir(3) == Path("/var/lib/vivado-runners/slot-3")
     assert cfg.images_dir == Path("/var/lib/vivado-runners/images")
 
 
 def test_host_defaults_to_short_hostname(tmp_path, monkeypatch):
-    monkeypatch.setattr(config.socket, "gethostname", lambda: "buddy.mithis.com")
-    cfg = config.load(write(tmp_path, GOOD.replace('host = "big-storage"\n', "")))
-    assert cfg.host == "buddy"
+    monkeypatch.setattr(config.socket, "gethostname", lambda: "beta.example.org")
+    cfg = config.load(write(tmp_path, GOOD.replace('host = "alpha"\n', "")))
+    assert cfg.host == "beta"
+
+
+def test_numa_pinning_can_be_switched_off(tmp_path):
+    cfg = config.load(write(tmp_path, GOOD + "numa_pinning = false\n"))
+    assert cfg.slots.numa_pinning is False
+
+
+def test_nothing_about_the_host_is_required(tmp_path, monkeypatch):
+    """The same file works on any host: its name is the only host-specific value, and it has a default."""
+    monkeypatch.setattr(config.socket, "gethostname", lambda: "Gamma.example.org")
+    cfg = config.load(write(tmp_path, GOOD.replace('host = "alpha"\n', "")))
+    assert cfg.host == "gamma"
+    assert cfg.domain_name(0) == "vr-gamma-0"
+    assert cfg.runner_prefix == "gamma-slot"
 
 
 @pytest.mark.parametrize(
@@ -378,7 +393,7 @@ def test_host_defaults_to_short_hostname(tmp_path, monkeypatch):
     [
         ("count = 4", "count = 9", "slots.count must be 1..8"),
         ("count = 4", "count = 0", "slots.count must be 1..8"),
-        ("numa_nodes = [0, 0, 1, 1]", "numa_nodes = [0, 1]", "numa_nodes must have one entry per slot"),
+        ('host = "alpha"', 'host = "Alpha Host"', "host must be lower-case letters, digits and hyphens"),
         ('labels = ["self-hosted", "linux", "x64", "vivado-2025.2"]', "labels = []", "slots.labels must not be empty"),
         ("app_id = 123", "", "missing github.app_id"),
     ],
@@ -403,13 +418,16 @@ Expected: FAIL, `cannot import name 'config'`.
 
 from __future__ import annotations
 
+import re
 import socket
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
 SUBNET = "192.168.76"
+BRIDGE = "vrbr0"
 MAX_SLOTS = 8
+HOST_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,30}$")
 
 
 class ConfigError(ValueError):
@@ -433,7 +451,7 @@ class SlotsConfig:
     scratch_gib: int
     wall_limit_minutes: int
     labels: tuple[str, ...]
-    numa_nodes: tuple[int, ...] = ()
+    numa_pinning: bool = True
     register_timeout_minutes: int = 5
 
 
@@ -505,18 +523,21 @@ def load(path: Path) -> Config:
         scratch_gib=int(_need(sl, "slots", "scratch_gib")),
         wall_limit_minutes=int(_need(sl, "slots", "wall_limit_minutes")),
         labels=tuple(_need(sl, "slots", "labels")),
-        numa_nodes=tuple(sl.get("numa_nodes", ())),
+        numa_pinning=bool(sl.get("numa_pinning", True)),
         register_timeout_minutes=int(sl.get("register_timeout_minutes", 5)),
     )
     if not 1 <= slots.count <= MAX_SLOTS:
         raise ConfigError(f"slots.count must be 1..{MAX_SLOTS}")
     if not slots.labels:
         raise ConfigError("slots.labels must not be empty")
-    if slots.numa_nodes and len(slots.numa_nodes) != slots.count:
-        raise ConfigError("slots.numa_nodes must have one entry per slot")
+    # The name is part of every runner and VM name, and start-up cleanup removes
+    # whatever carries it, so it has to be this host's alone.
+    host = raw.get("host") or socket.gethostname().split(".")[0].lower()
+    if not HOST_NAME.match(host):
+        raise ConfigError(f"host must be lower-case letters, digits and hyphens, at most 31 characters: {host!r}")
 
     return Config(
-        host=raw.get("host") or socket.gethostname().split(".")[0],
+        host=host,
         state_dir=Path(raw.get("state_dir", "/var/lib/vivado-runners")),
         min_free_gib=int(raw.get("min_free_gib", 100)),
         network=raw.get("network", "vivado-runners"),
@@ -813,12 +834,12 @@ def test_installation_token_is_refreshed_five_minutes_before_expiry():
 
 def test_create_jit_posts_the_documented_body():
     rec = Recorder(TOKEN, (201, {"runner": {"id": 23}, "encoded_jit_config": "abc=="}))
-    jit = client(rec).create_jit("big-storage-slot0-deadbeef", 7, ["self-hosted", "vivado-2025.2"])
+    jit = client(rec).create_jit("alpha-slot0-deadbeef", 7, ["self-hosted", "vivado-2025.2"])
     assert jit == JitRunner(id=23, encoded_jit_config="abc==")
     method, url, _, body = rec.calls[1]
     assert (method, url) == ("POST", "https://api.github.com/orgs/fpgas-online/actions/runners/generate-jitconfig")
     assert json.loads(body) == {
-        "name": "big-storage-slot0-deadbeef",
+        "name": "alpha-slot0-deadbeef",
         "runner_group_id": 7,
         "labels": ["self-hosted", "vivado-2025.2"],
     }
@@ -1030,7 +1051,7 @@ from pathlib import Path
 from vivado_runners.domain_xml import DomainSpec, render
 
 SPEC = DomainSpec(
-    name="vr-big-storage-2",
+    name="vr-alpha-2",
     vcpus=8,
     memory_gib=24,
     mac="52:54:00:76:00:02",
@@ -1055,7 +1076,7 @@ def disks(r):
 def test_basics():
     r = root()
     assert r.get("type") == "kvm"
-    assert r.findtext("name") == "vr-big-storage-2"
+    assert r.findtext("name") == "vr-alpha-2"
     assert (r.find("memory").get("unit"), r.findtext("memory")) == ("GiB", "24")
     assert r.findtext("vcpu") == "8"
     assert r.find("vcpu").get("cpuset") is None
@@ -1112,8 +1133,8 @@ def test_console_goes_to_a_log_file():
 def test_numa_pinning_when_configured():
     from dataclasses import replace
 
-    r = root(replace(SPEC, cpuset="0-21,44-65", numa_node=0))
-    assert r.find("vcpu").get("cpuset") == "0-21,44-65"
+    r = root(replace(SPEC, cpuset="0-3,8-11", numa_node=0))
+    assert r.find("vcpu").get("cpuset") == "0-3,8-11"
     mem = r.find("numatune/memory")
     assert (mem.get("mode"), mem.get("nodeset")) == ("strict", "0")
 ```
@@ -1254,7 +1275,8 @@ git commit -m "domain_xml: one-job VM with four disks and an isolated NIC"
     - `destroy(name: str) -> None` (no error if the domain is already gone)
     - `wipe(slot_dir: Path) -> None`
     - `free_gib(path: Path) -> float`
-    - `node_cpulist(node: int) -> str`
+    - what the host has, read at run time: `numa_nodes() -> list[int]`, `node_cpulist(node: int) -> str`, `host_cpus() -> int`, `host_memory_gib() -> float`, `host_addresses(exclude: tuple[str, ...]) -> list[str]`
+  - `VirshHypervisor(run=_run, root=Path("/"))`: `root` is where `/sys` and `/proc` are read from, so tests can describe any host
 - The same method set is the contract `tests/fakes.py::FakeHypervisor` implements in Task 7.
 
 - [ ] **Step 1: Write the failing tests**
@@ -1262,6 +1284,7 @@ git commit -m "domain_xml: one-job VM with four disks and an isolated NIC"
 `tests/test_hypervisor.py`:
 
 ```python
+import json
 import subprocess
 from pathlib import Path
 
@@ -1287,8 +1310,8 @@ class Shell:
 
 
 def test_list_domains_filters_by_prefix():
-    sh = Shell({"list --all --name": "vr-big-storage-0\nvr-big-storage-1\ndocker\n\n"})
-    assert VirshHypervisor(sh).list_domains("vr-big-storage-") == ["vr-big-storage-0", "vr-big-storage-1"]
+    sh = Shell({"list --all --name": "vr-alpha-0\nvr-alpha-1\ndocker\n\n"})
+    assert VirshHypervisor(sh).list_domains("vr-alpha-") == ["vr-alpha-0", "vr-alpha-1"]
     assert sh.cmds == [["virsh", "-c", "qemu:///system", "list", "--all", "--name"]]
 
 
@@ -1362,6 +1385,47 @@ def test_wipe_removes_the_directory_and_tolerates_its_absence(tmp_path):
 
 def test_free_gib_reports_the_filesystem(tmp_path):
     assert VirshHypervisor(Shell()).free_gib(tmp_path) > 0
+
+
+def fake_host(tmp_path, nodes, mem_kb=64 * 2**20):
+    for node, cpus in nodes.items():
+        d = tmp_path / f"sys/devices/system/node/node{node}"
+        d.mkdir(parents=True)
+        (d / "cpulist").write_text(cpus + "\n")
+    (tmp_path / "sys/devices/system/node").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "sys/devices/system/node/possible").write_text("0-1\n")
+    (tmp_path / "proc").mkdir()
+    (tmp_path / "proc/meminfo").write_text(f"MemTotal:       {mem_kb} kB\nMemFree:         1000 kB\n")
+    return tmp_path
+
+
+def test_numa_layout_is_read_from_the_host(tmp_path):
+    hv = VirshHypervisor(Shell(), root=fake_host(tmp_path, {0: "0-3,8-11", 1: "4-7,12-15", 10: "16-19"}))
+    assert hv.numa_nodes() == [0, 1, 10]
+    assert hv.node_cpulist(1) == "4-7,12-15"
+
+
+def test_a_host_without_numa_information_has_no_nodes(tmp_path):
+    assert VirshHypervisor(Shell(), root=fake_host(tmp_path, {})).numa_nodes() == []
+
+
+def test_host_memory_is_read_from_meminfo(tmp_path):
+    hv = VirshHypervisor(Shell(), root=fake_host(tmp_path, {0: "0-11"}, mem_kb=32 * 2**20))
+    assert hv.host_memory_gib() == 32.0
+    assert hv.host_cpus() >= 1
+
+
+def test_host_addresses_leave_out_loopback_and_the_runner_bridge():
+    interfaces = [
+        {"ifname": "lo", "flags": ["LOOPBACK", "UP"], "addr_info": [{"local": "127.0.0.1"}]},
+        {"ifname": "eth0", "flags": ["UP"], "addr_info": [{"local": "203.0.113.7"}, {"local": "203.0.113.8"}]},
+        {"ifname": "virbr0", "flags": ["UP"], "addr_info": [{"local": "198.51.100.1"}]},
+        {"ifname": "vrbr0", "flags": ["UP"], "addr_info": [{"local": "192.168.76.1"}]},
+        {"ifname": "eth1", "flags": ["UP"], "addr_info": []},
+    ]
+    sh = Shell({"addr show": json.dumps(interfaces)})
+    assert VirshHypervisor(sh).host_addresses(exclude=("vrbr0",)) == ["203.0.113.7", "203.0.113.8", "198.51.100.1"]
+    assert sh.cmds == [["ip", "-j", "-4", "addr", "show"]]
 ```
 
 - [ ] **Step 2: Run to see them fail**
@@ -1382,6 +1446,9 @@ scratch disks are created empty, handed to the VM, and unlinked.
 
 from __future__ import annotations
 
+import json
+import os
+import re
 import shutil
 import subprocess
 from collections.abc import Callable
@@ -1404,8 +1471,9 @@ class SlotDisks:
 
 
 class VirshHypervisor:
-    def __init__(self, run: Run = _run):
+    def __init__(self, run: Run = _run, root: Path = Path("/")):
         self._run = run
+        self._root = root  # where /sys and /proc are; tests point it at a copy
 
     def list_domains(self, prefix: str) -> list[str]:
         out = self._run([*VIRSH, "list", "--all", "--name"]).stdout
@@ -1451,8 +1519,33 @@ class VirshHypervisor:
     def free_gib(self, path: Path) -> float:
         return shutil.disk_usage(path).free / 2**30
 
+    # -- what this host has; nothing about a host is configured by hand ----------
+
+    def numa_nodes(self) -> list[int]:
+        nodes = (self._root / "sys/devices/system/node").glob("node[0-9]*")
+        return sorted(int(re.sub(r"\D", "", n.name)) for n in nodes)
+
     def node_cpulist(self, node: int) -> str:
-        return Path(f"/sys/devices/system/node/node{node}/cpulist").read_text().strip()
+        return (self._root / f"sys/devices/system/node/node{node}/cpulist").read_text().strip()
+
+    def host_cpus(self) -> int:
+        return os.cpu_count() or 1
+
+    def host_memory_gib(self) -> float:
+        for line in (self._root / "proc/meminfo").read_text().splitlines():
+            if line.startswith("MemTotal:"):
+                return int(line.split()[1]) / 2**20
+        raise RuntimeError("no MemTotal in /proc/meminfo")
+
+    def host_addresses(self, exclude: tuple[str, ...]) -> list[str]:
+        """This host's IPv4 addresses, leaving out loopback and the named interfaces."""
+        interfaces = json.loads(self._run(["ip", "-j", "-4", "addr", "show"]).stdout)
+        return [
+            info["local"]
+            for iface in interfaces
+            if iface["ifname"] not in exclude and "LOOPBACK" not in iface.get("flags", [])
+            for info in iface.get("addr_info", [])
+        ]
 ```
 
 Note for the reviewer: `slot_dir` is mode 0700 and owned by the controller's user, so other host users cannot read the seed ISO. libvirt reaches the files because qemu's user is given access by libvirt's DAC driver when the domain starts (it chowns each disk to `libvirt-qemu`) and because Plan 2 puts `libvirt-qemu` in a group that can traverse the directory. If Plan 2's first boot shows qemu cannot open the disks, the fix belongs there (directory group and mode), not here.
@@ -1497,6 +1590,8 @@ How each outcome is decided:
 | `jit-error` | GitHub refused or could not be reached for a JIT config |
 | `low-disk` | Free space under `min_free_gib`; nothing was started |
 | `stopped` | The controller is shutting down |
+
+NUMA: when `slots.numa_pinning` is on (the default) and the host reports more than one NUMA node, slot `i` is pinned (vCPUs and memory) to node `nodes[i % len(nodes)]`. On a single-node host nothing is pinned. The layout comes from `hv.numa_nodes()`, never from configuration.
 
 Three `FAILURES` in a row halt the slot. `jit-error` backs off 30 s doubling to 600 s. `low-disk` retries after 60 s.
 
@@ -1582,6 +1677,9 @@ class FakeHypervisor:
         self.run_seconds: float | None = 600.0  # None: the VM never powers off
         self.runs_job = True
         self.free = 1000.0
+        self.nodes = [0]
+        self.cpus = 64
+        self.memory_gib = 256.0
         self.start_error: Exception | None = None
         self.domains: dict[str, float] = {}  # name -> start time
         self.events: list[tuple] = []
@@ -1622,8 +1720,17 @@ class FakeHypervisor:
     def free_gib(self, path):
         return self.free
 
+    def numa_nodes(self):
+        return self.nodes
+
+    def host_cpus(self):
+        return self.cpus
+
+    def host_memory_gib(self):
+        return self.memory_gib
+
     def node_cpulist(self, node):
-        return {0: "0-21,44-65", 1: "22-43,66-87"}[node]
+        return {0: "0-3,8-11", 1: "4-7,12-15"}[node]
 ```
 
 - [ ] **Step 2: Write the failing tests**
@@ -1652,7 +1759,7 @@ def env(tmp_path):
     (images / "runner-base-current").symlink_to("runner-base-2026-10-02.1.qcow2")
     (images / "vivado-current").symlink_to("vivado-2025.2-2026-10-02.squashfs")
     cfg = Config(
-        host="big-storage",
+        host="alpha",
         state_dir=tmp_path,
         min_free_gib=100,
         network="vivado-runners",
@@ -1679,7 +1786,7 @@ def env(tmp_path):
 def test_a_normal_job(env):
     out = env.make().run_once()
     assert out.reason == "finished"
-    assert out.runner == "big-storage-slot0-deadbeef"
+    assert out.runner == "alpha-slot0-deadbeef"
     assert (out.base, out.vivado) == ("runner-base-2026-10-02.1.qcow2", "vivado-2025.2-2026-10-02.squashfs")
     assert 600 <= out.seconds < 610
     assert env.gh.deleted == [], "GitHub already removed the runner; nothing to delete"
@@ -1696,17 +1803,33 @@ def test_a_normal_job(env):
 
 def test_the_domain_xml_uses_the_slot_addressing(env):
     env.make(index=1).run_once()
-    assert "<name>vr-big-storage-1</name>" in env.hv.last_xml
+    assert "<name>vr-alpha-1</name>" in env.hv.last_xml
     assert 'address="52:54:00:76:00:01"' in env.hv.last_xml
     assert 'value="192.168.76.11"' in env.hv.last_xml
     assert "cpuset" not in env.hv.last_xml
 
 
-def test_numa_pinning_comes_from_the_host(env):
-    cfg = replace(env.cfg, slots=replace(env.cfg.slots, numa_nodes=(0, 1)))
-    env.make(index=1, cfg=cfg).run_once()
-    assert 'cpuset="22-43,66-87"' in env.hv.last_xml
-    assert 'nodeset="1"' in env.hv.last_xml
+def test_a_single_node_host_is_not_pinned(env):
+    env.hv.nodes = [0]
+    env.make(index=1).run_once()
+    assert "cpuset" not in env.hv.last_xml
+    assert "numatune" not in env.hv.last_xml
+
+
+@pytest.mark.parametrize(("index", "node", "cpus"), [(0, 0, "0-3,8-11"), (1, 1, "4-7,12-15"), (2, 0, "0-3,8-11")])
+def test_slots_are_spread_over_the_hosts_numa_nodes(env, index, node, cpus):
+    env.hv.nodes = [0, 1]
+    cfg = replace(env.cfg, slots=replace(env.cfg.slots, count=3))
+    env.make(index=index, cfg=cfg).run_once()
+    assert f'cpuset="{cpus}"' in env.hv.last_xml
+    assert f'nodeset="{node}"' in env.hv.last_xml
+
+
+def test_numa_pinning_can_be_switched_off(env):
+    env.hv.nodes = [0, 1]
+    cfg = replace(env.cfg, slots=replace(env.cfg.slots, numa_pinning=False))
+    env.make(cfg=cfg).run_once()
+    assert "cpuset" not in env.hv.last_xml
 
 
 def test_vm_that_powers_off_without_running_a_job(env):
@@ -1723,7 +1846,7 @@ def test_runner_never_registers(env):
     out = env.make().run_once()
     assert out.reason == "register-timeout"
     assert 300 < out.seconds < 340
-    assert ("destroy", "vr-big-storage-0") in env.hv.events
+    assert ("destroy", "vr-alpha-0") in env.hv.events
     assert env.gh.deleted == [100]
 
 
@@ -1732,7 +1855,7 @@ def test_wall_limit_kills_a_job_that_never_ends(env):
     out = env.make().run_once()
     assert out.reason == "wall-limit"
     assert 7200 < out.seconds < 7210
-    assert ("destroy", "vr-big-storage-0") in env.hv.events
+    assert ("destroy", "vr-alpha-0") in env.hv.events
 
 
 def test_registration_is_not_polled_once_seen(env):
@@ -1778,7 +1901,7 @@ def test_stop_destroys_the_running_vm(env):
     s = Slot(0, env.cfg, env.gh, env.hv, group_id=7, stop=env.stop, clock=env.clock, sleep=sleep, new_id=lambda: "ab")
     out = s.run_once()
     assert out.reason == "stopped"
-    assert ("destroy", "vr-big-storage-0") in env.hv.events
+    assert ("destroy", "vr-alpha-0") in env.hv.events
 
 
 def test_status_file_tracks_the_slot(env):
@@ -1786,7 +1909,7 @@ def test_status_file_tracks_the_slot(env):
     status = json.loads((env.cfg.status_dir / "slot-0.json").read_text())
     assert status["state"] == "idle"
     assert status["last_reason"] == "finished"
-    assert status["last_runner"] == "big-storage-slot0-deadbeef"
+    assert status["last_runner"] == "alpha-slot0-deadbeef"
 
 
 def test_run_forever_halts_after_three_failures_in_a_row(env):
@@ -1955,7 +2078,7 @@ class Slot:
                 cfg.slots.scratch_gib,
                 {"jitconfig": jit.encoded_jit_config, "proxy": cfg.proxy},
             )
-            node = cfg.slots.numa_nodes[self.index] if cfg.slots.numa_nodes else None
+            node = self._numa_node()
             cfg.console_dir.mkdir(parents=True, exist_ok=True)
             xml = render(
                 DomainSpec(
@@ -1984,6 +2107,14 @@ class Slot:
             self.hv.wipe(slot_dir)
             reason = self._reap_runner(jit.id, reason)
         return done(reason, runner, versions)
+
+    def _numa_node(self) -> int | None:
+        """On a host with several NUMA nodes, keep each VM's CPUs and memory on one,
+        spreading the slots across the nodes. The layout is read from the host."""
+        if not self.cfg.slots.numa_pinning:
+            return None
+        nodes = self.hv.numa_nodes()
+        return nodes[self.index % len(nodes)] if len(nodes) > 1 else None
 
     def _wait(self, domain: str, runner: str, started: float) -> str:
         wall = self.cfg.slots.wall_limit_minutes * 60
@@ -2077,7 +2208,7 @@ git commit -m "slot: one VM per job, with the failure policy from the spec"
 
 **Interfaces:**
 - Consumes: `Slot` (Task 7), `GitHubClient` (Task 4), `VirshHypervisor` (Task 6), `Config`, `MAX_SLOTS` (Task 2).
-- Produces: `startup_cleanup(cfg, github, hv) -> None`; `run(cfg, github=None, hv=None, stop=None, install_signals=False) -> int` (exit code: 0 when stopped, 1 when every slot halted). `install_signals=True` makes SIGTERM and SIGINT set `stop`; only the CLI passes it, so tests never replace pytest's handlers.
+- Produces: `check_capacity(cfg, hv) -> None`, which raises `ConfigError` when the slots need more vCPUs than the host has or more than 75% of its memory (checked on whatever host the controller starts on, before anything else); `startup_cleanup(cfg, github, hv) -> None`; `run(cfg, github=None, hv=None, stop=None, install_signals=False) -> int` (exit code: 0 when stopped, 1 when every slot halted). `install_signals=True` makes SIGTERM and SIGINT set `stop`; only the CLI passes it, so tests never replace pytest's handlers.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2087,15 +2218,17 @@ git commit -m "slot: one VM per job, with the failure policy from the spec"
 import threading
 from pathlib import Path
 
+import pytest
+
 from tests.fakes import FakeClock, FakeGitHub, FakeHypervisor
 from vivado_runners import controller
-from vivado_runners.config import Config, GithubConfig, SlotsConfig
+from vivado_runners.config import Config, ConfigError, GithubConfig, SlotsConfig
 from vivado_runners.github import GitHubError, Runner
 
 
 def make_cfg(tmp_path, count=2):
     return Config(
-        host="big-storage",
+        host="alpha",
         state_dir=tmp_path,
         min_free_gib=100,
         network="vivado-runners",
@@ -2110,16 +2243,16 @@ def test_startup_cleanup_removes_only_this_hosts_leftovers(tmp_path):
     clock = FakeClock()
     gh = FakeGitHub()
     hv = FakeHypervisor(clock, gh)
-    hv.domains = {"vr-big-storage-0": 0.0, "vr-buddy-0": 0.0, "docker": 0.0}
+    hv.domains = {"vr-alpha-0": 0.0, "vr-beta-0": 0.0, "docker": 0.0}
     gh.runners = {
-        1: Runner(1, "big-storage-slot0-aaaa", "offline", False),
-        2: Runner(2, "buddy-slot0-bbbb", "online", False),
-        3: Runner(3, "big-storage-slot1-cccc", "online", True),
+        1: Runner(1, "alpha-slot0-aaaa", "offline", False),
+        2: Runner(2, "beta-slot0-bbbb", "online", False),
+        3: Runner(3, "alpha-slot1-cccc", "online", True),
     }
     gh._born = {1: 0.0, 2: 0.0, 3: 0.0}
     controller.startup_cleanup(cfg, gh, hv)
-    assert ("destroy", "vr-big-storage-0") in hv.events
-    assert ("destroy", "vr-buddy-0") not in hv.events
+    assert ("destroy", "vr-alpha-0") in hv.events
+    assert ("destroy", "vr-beta-0") not in hv.events
     assert [e for e in hv.events if e[0] == "wipe"] == [("wipe", f"slot-{i}") for i in range(8)]
     assert sorted(gh.deleted) == [1, 3]
 
@@ -2128,7 +2261,7 @@ def test_startup_cleanup_survives_a_runner_github_will_not_delete(tmp_path):
     cfg = make_cfg(tmp_path)
     gh = FakeGitHub()
     hv = FakeHypervisor(FakeClock(), gh)
-    gh.runners = {1: Runner(1, "big-storage-slot0-aaaa", "online", True)}
+    gh.runners = {1: Runner(1, "alpha-slot0-aaaa", "online", True)}
     gh._born = {1: 0.0}
 
     def refuse(runner_id):
@@ -2176,6 +2309,29 @@ def test_run_returns_0_when_stopped(tmp_path, monkeypatch):
     threading.Timer(0.2, stop.set).start()
     assert controller.run(cfg, github=gh, hv=hv, stop=stop) == 0
     assert sorted(started) == [(0, 7), (1, 7)]
+
+
+def test_capacity_is_checked_against_the_host_it_runs_on(tmp_path):
+    cfg = make_cfg(tmp_path, count=4)  # 4 slots of 8 vCPUs and 24 GiB
+    hv = FakeHypervisor(FakeClock(), FakeGitHub())
+    hv.cpus, hv.memory_gib = 32, 128.0
+    controller.check_capacity(cfg, hv)
+    hv.cpus = 12
+    with pytest.raises(ConfigError, match="need 32 CPUs; this host has 12"):
+        controller.check_capacity(cfg, hv)
+    hv.cpus, hv.memory_gib = 32, 125.0
+    with pytest.raises(ConfigError, match=r"need 96 GiB; the limit is 94 GiB \(75% of this host's 125 GiB\)"):
+        controller.check_capacity(cfg, hv)
+
+
+def test_run_refuses_to_start_on_a_host_that_is_too_small(tmp_path):
+    cfg = make_cfg(tmp_path, count=4)
+    gh = FakeGitHub()
+    hv = FakeHypervisor(FakeClock(), gh)
+    hv.cpus = 8
+    with pytest.raises(ConfigError):
+        controller.run(cfg, github=gh, hv=hv, stop=threading.Event())
+    assert hv.events == [], "nothing was cleaned up or started"
 ```
 
 - [ ] **Step 2: Run to see them fail**
@@ -2196,12 +2352,31 @@ import logging
 import signal
 import threading
 
-from .config import MAX_SLOTS, Config
+from .config import MAX_SLOTS, Config, ConfigError
 from .github import GitHubClient, GitHubError
 from .hypervisor import VirshHypervisor
 from .slot import Slot
 
 log = logging.getLogger("vivado_runners.controller")
+
+
+MEMORY_SHARE = 0.75
+
+
+def check_capacity(cfg: Config, hv) -> None:
+    """Refuse a configuration this host cannot carry, whichever host it is."""
+    vcpus = cfg.slots.count * cfg.slots.vcpus
+    if vcpus > hv.host_cpus():
+        raise ConfigError(
+            f"{cfg.slots.count} slots of {cfg.slots.vcpus} vCPUs need {vcpus} CPUs; this host has {hv.host_cpus()}"
+        )
+    memory = cfg.slots.count * cfg.slots.memory_gib
+    limit = hv.host_memory_gib() * MEMORY_SHARE
+    if memory > limit:
+        raise ConfigError(
+            f"{cfg.slots.count} slots of {cfg.slots.memory_gib} GiB need {memory} GiB; "
+            f"the limit is {limit:.0f} GiB ({MEMORY_SHARE:.0%} of this host's {hv.host_memory_gib():.0f} GiB)"
+        )
 
 
 def startup_cleanup(cfg: Config, github, hv) -> None:
@@ -2222,10 +2397,11 @@ def startup_cleanup(cfg: Config, github, hv) -> None:
 
 
 def run(cfg: Config, github=None, hv=None, stop: threading.Event | None = None, install_signals: bool = False) -> int:
+    hv = hv or VirshHypervisor()
+    check_capacity(cfg, hv)
     github = github or GitHubClient(
         cfg.github.org, cfg.github.app_id, cfg.github.installation_id, cfg.github.key_file.read_text()
     )
-    hv = hv or VirshHypervisor()
     stop = stop or threading.Event()
 
     startup_cleanup(cfg, github, hv)
@@ -2279,6 +2455,7 @@ git commit -m "controller: clean up leftovers, run the slots, stop on a signal"
   - `run [--config PATH]`
   - `cleanup [--config PATH]`
   - `status [--config PATH]`
+  - `sandbox-targets`: prints this host's IPv4 addresses on every interface except loopback and the runner bridge, as space-separated `address:22` pairs. Plan 2 passes them to the sandbox check, so no host's address is ever written into the check script
   - `images list [--config PATH]`
   - `images activate {base,vivado} NAME [--config PATH]`
   Default config path `/etc/vivado-runners/config.toml`.
@@ -2295,7 +2472,7 @@ import pytest
 from vivado_runners import cli
 
 CONFIG = """
-host = "big-storage"
+host = "alpha"
 state_dir = "{state}"
 
 [github]
@@ -2357,14 +2534,12 @@ def test_status_prints_one_line_per_slot(cfg_path, capsys):
     status = cfg_path.parent / "status"
     status.mkdir()
     (status / "slot-0.json").write_text(
-        json.dumps(
-            {"slot": 0, "state": "running", "since": "2026-10-02T01:00:00+00:00", "runner": "big-storage-slot0-ab"}
-        )
+        json.dumps({"slot": 0, "state": "running", "since": "2026-10-02T01:00:00+00:00", "runner": "alpha-slot0-ab"})
     )
     assert cli.main(["status", "--config", str(cfg_path)]) == 0
     out = capsys.readouterr().out.splitlines()
     assert out[0].split() == ["SLOT", "STATE", "SINCE", "RUNNER", "LAST"]
-    assert out[1].split() == ["0", "running", "2026-10-02T01:00:00+00:00", "big-storage-slot0-ab", "-"]
+    assert out[1].split() == ["0", "running", "2026-10-02T01:00:00+00:00", "alpha-slot0-ab", "-"]
     assert out[2].split() == ["1", "unknown", "-", "-", "-"]
 
 
@@ -2372,7 +2547,7 @@ def test_run_hands_the_config_to_the_controller(cfg_path, monkeypatch):
     seen = {}
     monkeypatch.setattr(cli.controller, "run", lambda cfg, install_signals: seen.setdefault("host", cfg.host) and 0)
     assert cli.main(["run", "--config", str(cfg_path)]) == 0
-    assert seen == {"host": "big-storage"}
+    assert seen == {"host": "alpha"}
 
 
 def test_a_bad_config_is_exit_code_2(tmp_path, capsys):
@@ -2380,6 +2555,26 @@ def test_a_bad_config_is_exit_code_2(tmp_path, capsys):
     path.write_text("[github]\n")
     assert cli.main(["status", "--config", str(path)]) == 2
     assert "missing github.org" in capsys.readouterr().err
+
+
+def test_sandbox_targets_prints_the_hosts_own_addresses(monkeypatch, capsys):
+    class Host:
+        def host_addresses(self, exclude):
+            assert exclude == ("vrbr0",)
+            return ["203.0.113.7", "198.51.100.1"]
+
+    monkeypatch.setattr(cli, "VirshHypervisor", Host)
+    assert cli.main(["sandbox-targets"]) == 0
+    assert capsys.readouterr().out == "203.0.113.7:22 198.51.100.1:22\n"
+
+
+def test_a_host_too_small_for_the_config_is_exit_code_2(cfg_path, monkeypatch, capsys):
+    def too_small(cfg, install_signals):
+        raise cli.config.ConfigError("2 slots of 8 vCPUs need 16 CPUs; this host has 4")
+
+    monkeypatch.setattr(cli.controller, "run", too_small)
+    assert cli.main(["run", "--config", str(cfg_path)]) == 2
+    assert "this host has 4" in capsys.readouterr().err
 ```
 
 - [ ] **Step 2: Run to see them fail**
@@ -2436,6 +2631,13 @@ def _images_activate(cfg: config.Config, kind: str, name: str) -> int:
     return 0
 
 
+def _sandbox_targets() -> int:
+    """This host's own addresses, as targets a job VM must not be able to reach."""
+    addresses = VirshHypervisor().host_addresses(exclude=(config.BRIDGE,))
+    print(" ".join(f"{address}:22" for address in addresses))
+    return 0
+
+
 def _cleanup(cfg: config.Config) -> int:
     github = GitHubClient(
         cfg.github.org, cfg.github.app_id, cfg.github.installation_id, cfg.github.key_file.read_text()
@@ -2453,6 +2655,10 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("run", parents=[common], help="run the controller (what the systemd unit starts)")
     sub.add_parser("cleanup", parents=[common], help="destroy this host's VMs and deregister its runners")
     sub.add_parser("status", parents=[common], help="show each slot")
+    sub.add_parser(
+        "sandbox-targets",
+        help="print this host's addresses as host:port pairs for the sandbox check's extra_targets input",
+    )
     img = sub.add_parser("images", help="list images or select the current one").add_subparsers(
         dest="images_command", required=True
     )
@@ -2465,6 +2671,8 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    if args.command == "sandbox-targets":
+        return _sandbox_targets()
     try:
         cfg = config.load(args.config)
         if args.command == "run":
@@ -2659,7 +2867,7 @@ print(
             seed=Path("/var/lib/vivado-runners/slot-0/seed.iso"),
             scratch=Path("/var/lib/vivado-runners/slot-0/scratch.qcow2"),
             console_log=Path("/var/lib/vivado-runners/console/slot-0.log"),
-            cpuset="0-21,44-65",
+            cpuset="0-3,8-11",
             numa_node=0,
         )
     )
@@ -3490,7 +3698,7 @@ Expected: all pass.
 git add image/build_vivado_disk.py tests/test_build_vivado_disk.py
 git commit -m "image: pack a Vivado install into a versioned squashfs disk"
 git push -u origin image-build
-gh pr create --title "Image build: runner base image and Vivado disk" --body "Build scripts with unit tests for their command construction. Neither script has been run against a hypervisor or a real Vivado install yet: Plan 1 Task 14 runs the Vivado disk build on desktop.buddy, and Plan 2 runs the image build on big-storage."
+gh pr create --title "Image build: runner base image and Vivado disk" --body "Build scripts with unit tests for their command construction. Neither script has been run against a hypervisor or a real Vivado install yet: Plan 1 Task 14 runs the Vivado disk build on the machine with the Vivado install, and Plan 2 runs the image build on a runner host."
 ```
 
 ---
@@ -3613,7 +3821,8 @@ var/log/vivado-runners
 
 ```toml
 # /etc/vivado-runners/config.toml
-# host defaults to this machine's short hostname.
+# Nothing here names or describes the machine: host defaults to its short
+# hostname, and the NUMA layout, CPU count and memory are read from it.
 
 [github]
 org = "fpgas-online"
@@ -3623,14 +3832,13 @@ key_file = "/etc/vivado-runners/app.pem"
 runner_group = "vivado"
 
 [slots]
-count = 4
+count = 1
 vcpus = 8
 memory_gib = 16
 scratch_gib = 60
 wall_limit_minutes = 120
 labels = ["self-hosted", "linux", "x64", "vivado-2025.2"]
-# One NUMA node per slot; omit on single-socket hosts.
-numa_nodes = [0, 0, 1, 1]
+# numa_pinning = false   # default true: on a multi-node host each VM stays on one node
 ```
 
 `debian/vivado-runners.postinst`:
@@ -3670,6 +3878,8 @@ Group=vivado-runners
 ExecStart=/usr/bin/vivado-runners run
 Restart=on-failure
 RestartSec=300
+# Exit status 2 is a configuration this host cannot run; retrying cannot fix it.
+RestartPreventExitStatus=2
 TimeoutStopSec=90
 NoNewPrivileges=yes
 ProtectSystem=strict
@@ -3928,7 +4138,7 @@ gh pr create --title "Debian package" --body "Builds and install-tests in a clea
 
 ### Task 14: Measurements (spec Phase 0)
 
-Run on desktop.buddy (this is where Vivado 2025.2 is installed). No hypervisor is needed.
+Run on a machine that has the Vivado install (today that is desktop.buddy.mithis.com). It does not have to be a runner host, and no hypervisor is needed.
 
 **Files:**
 - Create: `tools/allowlist_proxy.py`, `docs/measurements.md`
@@ -4035,7 +4245,7 @@ bash -c 'source /opt/Xilinx/2025.2/Vivado/settings64.sh && /usr/bin/time -v uv r
 grep -E "Maximum resident set size|Elapsed \(wall clock\)" tmp/time-acorn-pcie.txt
 ```
 
-`acorn-pcie` on `cle-215+` (xc7a200t) is the largest design in the repo. `Maximum resident set size` is the largest single process (Vivado itself), in kB. Record both numbers and the machine (12 threads, 31 GiB) in `docs/measurements.md`.
+`acorn-pcie` on `cle-215+` (xc7a200t) is the largest design in the repo. `Maximum resident set size` is the largest single process (Vivado itself), in kB. Record both numbers and the machine they were taken on (`nproc`, `free -g`) in `docs/measurements.md`.
 
 What to expect: when Plan 3 was written (2026-10-02, same machine) this build took 8 min 25 s and peaked at 3.3 GB. A result several times larger means something differs (thread count, a different design revision): find out what before recording it.
 
@@ -4102,7 +4312,7 @@ Use exactly these headings and fill every value from the commands above (no esti
 ```markdown
 # Measurements
 
-Taken on desktop.buddy.mithis.com (12 threads, 31 GiB RAM), Vivado 2025.2,
+Taken on <machine> (<n> threads, <n> GiB RAM), Vivado 2025.2,
 fpgas.online-test-designs at <commit>, on <date>.
 
 ## Vivado peak memory
@@ -4140,7 +4350,7 @@ The angle-bracket fields are the measured values; a committed file must have non
 git add tools/allowlist_proxy.py docs/measurements.md debian/config.toml.example README.md docs/superpowers/specs
 git commit -m "Measurements: Vivado memory, Vivado disk size, uv without PyPI"
 git push -u origin measurements
-gh pr create --title "Measurements: Vivado memory, disk size, uv without PyPI" --body "Phase 0 numbers measured on desktop.buddy, and the slot size and README text that follow from them. The GitHub blob hostnames are measured in Plan 2, where a real runner exists."
+gh pr create --title "Measurements: Vivado memory, disk size, uv without PyPI" --body "Phase 0 numbers, the machine they were measured on, and the slot size and README text that follow from them. The GitHub blob hostnames are measured in Plan 2, where a real runner exists."
 ```
 
 ---
@@ -4149,4 +4359,5 @@ gh pr create --title "Measurements: Vivado memory, disk size, uv without PyPI" -
 
 - Spec coverage: controller, slot loop, failure table, observability (`status`, one log line per job, proxy log), images and rollback, network policy, credentials (App key on host, JIT config in VM), Vivado disk, packaging: Tasks 2-13. Phase 0: Task 14, except the blob hostnames and the first boot, which need a real runner (Plan 2). Workflows and releases: Plan 3.
 - The spec's `_diag` copy is deliberately dropped (difference 1).
+- Host independence: a search of every code block for a real host name, address or CPU list finds none; tests use `alpha` and `beta`; `tests/test_config.py::test_nothing_about_the_host_is_required`, the NUMA tests in `tests/test_slot.py` and `tests/test_hypervisor.py`, and `tests/test_controller.py::test_capacity_is_checked_against_the_host_it_runs_on` hold it in place.
 - Names used across tasks: `Config.slot_dir/slot_mac/slot_ip/domain_name/domain_prefix/runner_prefix/images_dir/status_dir/console_dir` (Task 2) are the ones Tasks 7-9 call; `VirshHypervisor` and `FakeHypervisor` share one method set; disk serials `vr-vivado`, `vr-seed`, `vr-scratch` match between Task 5 and Task 11; seed files `jitconfig` and `proxy` match between Task 7 and Task 11.

@@ -35,7 +35,7 @@ Not checked, because it needs the runners: anything in a real GitHub Actions run
 
 ## Global Constraints
 
-- Runner labels, exactly: `runs-on: [self-hosted, vivado-2025.2]`.
+- Runner labels, exactly: `runs-on: [self-hosted, vivado-2025.2]`. Runners are selected by label only. No workflow, script or document in this repository names a runner host or depends on which machine a job lands on.
 - Guard on every job that uses those runners, exactly: `if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository`.
 - Those jobs declare `permissions: contents: read` and `timeout-minutes: 90`, and reference no secrets.
 - Job names on those runners start with `Vivado:`. Their artifact names start with `vivado-`.
@@ -1521,8 +1521,8 @@ In `docs/toolchains/github-actions.md`, insert before the line `## Toolchain Ins
 ## Vivado builds (sandboxed self-hosted runners)
 
 The builds above use open toolchains on GitHub-hosted runners. The Xilinx designs are also built with AMD
-Vivado 2025.2, by the `Build: Vivado` workflow (`.github/workflows/build-vivado.yml`), on self-hosted
-runners at big-storage.welland.mithis.com. Vivado cannot go in a public runner image: its licence allows
+Vivado 2025.2, by the `Build: Vivado` workflow (`.github/workflows/build-vivado.yml`), on sandboxed
+self-hosted runners (selected by label; which machines they are on does not matter). Vivado cannot go in a public runner image: its licence allows
 installing it, not redistributing it.
 
 The design is in

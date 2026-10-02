@@ -2,13 +2,17 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ] `) syntax for tracking.
 
-**Goal:** Put the runner controller from Plan 1 into service on big-storage.welland.mithis.com, prove with a workflow that a job VM can reach GitHub and nothing else and leaves nothing behind, narrow the proxy's Azure storage rule, and document how to operate it.
+**Goal:** Put the runner controller from Plan 1 into service on a runner host, prove with a workflow that a job VM can reach GitHub and nothing else and leaves nothing behind, narrow the proxy's Azure storage rule, and document how to operate it.
 
 **Architecture:** An Ansible playbook in the runner repo installs the `vivado-runners` package and its configuration and leaves the controller off until told otherwise. Images are built on the host. A dispatch-only workflow in fpgas.online-test-designs runs a check script inside two consecutive VMs; its results, the proxy log and the nftables counters are the evidence.
 
 **Tech Stack:** Ansible (ansible-core, builtin modules only), libvirt/KVM, squid, nftables, GitHub Apps, GitHub Actions, Python 3 stdlib.
 
 **Spec:** `docs/superpowers/specs/2026-09-25-vivado-runners-design.md` in `fpgas-online/fpgas.online-vivado-runners`.
+
+**Which host.** The system does not depend on where it runs. A runner host is any Debian 13 (trixie) x86-64 machine with KVM; the playbook checks that and nothing else about it. Everything a host contributes (its name, NUMA layout, CPU count, memory, addresses) is read from the host, not written into the code, the package or the workflows. The only place a host is named is `deploy/inventory.yml`.
+
+In this plan `<host>` is the inventory name of the host being deployed and `<name>` is its short name (the part before the first dot), which is what runner and VM names start with. Tasks 3, 4 and 6 are written once and run per host. The first host is the inventory's first entry; at the time of writing that is big-storage.welland.mithis.com. "Notes on particular hosts" at the end holds what is known about individual machines.
 
 **This is plan 2 of 3.** It needs Plan 1 merged and its package published (or a locally built deb). Plan 3 adds the Vivado build jobs.
 
@@ -17,12 +21,13 @@
 - **Nothing in this plan is deployed without Tim saying so for that step.** Each task that changes a host or the GitHub organisation starts by asking. Merging a PR is not permission to deploy it.
 - Run the whole playbook every time. No `--tags`, no `--skip-tags`; scope with `--limit` and `-e` only.
 - Never restart or stop a service on the machine the session runs on. All service changes happen on the runner host, through the playbook.
-- big-storage first, one slot. buddy is not touched unless Tim decides D-3 in favour (Task 9).
+- One host first, with one slot. A further host is added only when Tim says so (Task 9).
+- Nothing host-specific goes into code, package files, workflows or the check script. If a step seems to need a host's address or layout written down, it belongs in `deploy/inventory.yml` or is read from the host at run time.
 - Repositories: runner code and playbook in `fpgas-online/fpgas.online-vivado-runners`; the sandbox workflow in `fpgas-online/fpgas.online-test-designs`.
 - Names and addresses, from Plan 1: package `vivado-runners`; units `vivado-runners.service`, `vivado-runners-proxy.service`, `vivado-runners-firewall.service`, `vivado-runners-firewall.timer`; libvirt network `vivado-runners` on bridge `vrbr0`; host `192.168.76.1`, proxy port 3128, slot `i` at `192.168.76.<10+i>`; state in `/var/lib/vivado-runners`; config `/etc/vivado-runners/config.toml`; App key `/etc/vivado-runners/app.pem`; runner group `vivado`; labels `self-hosted`, `linux`, `x64`, `vivado-2025.2`.
 - The GitHub App's private key is never committed, never printed, never copied into a VM, and never leaves Tim's machine and the runner host.
-- Vivado, the Vivado disk and the runner image are copied only between Tim's own machines (desktop.buddy to big-storage). Never to GitHub, a registry or any other host.
-- big-storage over ssh: if `big-storage.welland.mithis.com` hangs, use `HostName=2404:e80:a137:111::155` with `HostKeyAlias=big-storage.welland.mithis.com`. One simple remote command per ssh call; anything longer is a Python script copied to the host.
+- Vivado, the Vivado disk and the runner image are copied only between Tim's own machines (from the machine with the Vivado install to a runner host). Never to GitHub, a registry or any other host.
+- Over ssh to a runner host: one simple remote command per call; anything longer is a Python script copied to the host.
 - Python via `uv`; no shell with loops or conditionals; ISO dates; no `/tmp`; never redirect stderr to `/dev/null`.
 - PRs only, CI green, merge with `gh pr merge --merge`. A PR is ready to merge only when it is based on current `origin/main` and a sub-agent review found it good; say both when asking Tim to merge.
 - When reporting a result, say what was really exercised. "CI is green" is not "it works".
@@ -135,7 +140,9 @@ Record from its output, in `docs/measurements.md` under a new heading "JIT runne
   - `vivado_runners_app_key_src` (optional): path on the control machine to the App key; when unset the key must already be on the host
   - `vivado_runners_deb` (optional): path on the control machine to a locally built deb, used instead of the apt repository
   - `vivado_runners_version` (optional): exact package version to install from the apt repository. Unset, the package is installed if missing and never upgraded; an upgrade is a reviewed change of this value in the inventory
-  - per host: `vivado_runners_slots`, `vivado_runners_vcpus`, `vivado_runners_memory_gib`, `vivado_runners_scratch_gib`, `vivado_runners_numa_nodes`, `vivado_runners_app_id`, `vivado_runners_installation_id`
+  - for the group, overridable per host: `vivado_runners_slots`, `vivado_runners_vcpus`, `vivado_runners_memory_gib`, `vivado_runners_scratch_gib` (how much of a host the runners may use), and `vivado_runners_app_id`, `vivado_runners_installation_id`
+  - nothing describes a host: its short name is taken from the inventory name, and the controller reads the NUMA layout, CPU count and memory from the host
+- The play starts with preflight checks and changes nothing if one fails: Debian 13 on x86-64; `/dev/kvm` exists; no two inventory hosts share a short name; the host is not already running its own squid; nothing else on the host uses 192.168.76.0/24.
 
 - [ ] **Step 1: Write the inspection tool**
 
@@ -221,27 +228,29 @@ pipelining = true
 `deploy/inventory.yml`:
 
 ```yaml
-# Runner hosts. App and installation IDs are not secret; the key is, and is
-# never in this repository.
+# Runner hosts. Any Debian 13 x86-64 machine with KVM can be one: add it here
+# and run the playbook. A host's entry holds only how much of it the runners may
+# use; its name, NUMA layout, CPU count and memory are read from the host.
+#
+# App and installation IDs are not secret. The key is, and is never in this
+# repository.
 vivado_runners:
   vars:
-    vivado_runners_app_id: 0            # set in Task 3 from Task 1
-    vivado_runners_installation_id: 0   # set in Task 3 from Task 1
+    vivado_runners_app_id: 0            # from the GitHub App (Task 1)
+    vivado_runners_installation_id: 0   # from the GitHub App (Task 1)
+    vivado_runners_slots: 1
     vivado_runners_vcpus: 8
     vivado_runners_memory_gib: 16       # docs/measurements.md decides the real value
     vivado_runners_scratch_gib: 60
   hosts:
     big-storage.welland.mithis.com:
-      vivado_runners_host: big-storage
-      vivado_runners_slots: 1
-      vivado_runners_numa_nodes: [0]
 ```
 
 `deploy/templates/config.toml.j2`:
 
 ```
 # Written by deploy/site.yml. Edit deploy/inventory.yml, not this file.
-host = "{{ vivado_runners_host }}"
+host = "{{ inventory_hostname_short }}"
 
 [github]
 org = "fpgas-online"
@@ -257,9 +266,6 @@ memory_gib = {{ vivado_runners_memory_gib }}
 scratch_gib = {{ vivado_runners_scratch_gib }}
 wall_limit_minutes = 120
 labels = ["self-hosted", "linux", "x64", "vivado-2025.2"]
-{% if vivado_runners_numa_nodes | default([]) %}
-numa_nodes = {{ vivado_runners_numa_nodes | to_json }}
-{% endif %}
 ```
 
 `deploy/site.yml`:
@@ -268,8 +274,11 @@ numa_nodes = {{ vivado_runners_numa_nodes | to_json }}
 # The whole deployment of a Vivado runner host. Always run all of it:
 #
 #   cd deploy
-#   ansible-playbook site.yml --limit big-storage.welland.mithis.com \
+#   ansible-playbook site.yml --limit <host> \
 #       -e vivado_runners_app_key_src=$HOME/.config/vivado-runners/app.pem
+#
+# <host> is any entry of inventory.yml. The play is the same for every host:
+# what it needs from one is checked first, and nothing about a host is assumed.
 #
 # The controller stays off unless -e vivado_runners_enabled=true is given.
 # A changed configuration takes effect when the controller next starts; this
@@ -282,6 +291,53 @@ numa_nodes = {{ vivado_runners_numa_nodes | to_json }}
     vivado_runners_apt_url: https://fpgas.online/fpgas.online-vivado-runners
     vivado_runners_network_xml: /usr/share/vivado-runners/host/network.xml
   tasks:
+    # ---- What a runner host has to be. Fail here, before changing anything. ----
+    - name: The host is Debian 13 on x86-64
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution == "Debian"
+          - ansible_facts.distribution_major_version == "13"
+          - ansible_facts.architecture == "x86_64"
+        fail_msg: A runner host must be Debian 13 (trixie) on x86-64
+
+    - name: Look for KVM
+      ansible.builtin.stat:
+        path: /dev/kvm
+      register: vivado_runners_kvm
+
+    - name: The host can run KVM virtual machines
+      ansible.builtin.assert:
+        that: vivado_runners_kvm.stat.exists
+        fail_msg: /dev/kvm is missing. Enable virtualisation extensions (VT-x or AMD-V) in the firmware
+
+    # A runner's name starts with its host's short name, and a controller removes
+    # every runner and VM that carries its own name when it starts.
+    - name: Every runner host has a different short name
+      ansible.builtin.assert:
+        that: >-
+          (groups["vivado_runners"] | map("split", ".") | map("first") | unique | length)
+          == (groups["vivado_runners"] | length)
+        fail_msg: Two hosts in the inventory share a short name; their controllers would delete each other's runners
+
+    - name: Look at the services already on the host
+      ansible.builtin.service_facts:
+
+    - name: The host does not already run a squid of its own
+      ansible.builtin.assert:
+        that: (ansible_facts.services["squid.service"] | default({})).state | default("") != "running"
+        fail_msg: squid.service is running here. This play would mask it; move that service first
+
+    - name: Look for the runner subnet on the host
+      ansible.builtin.command:
+        argv: [ip, -4, route, show, root, 192.168.76.0/24]
+      register: vivado_runners_routes
+      changed_when: false
+
+    - name: Nothing else on the host uses 192.168.76.0/24
+      ansible.builtin.assert:
+        that: vivado_runners_routes.stdout_lines | reject("search", "dev vrbr0") | list | length == 0
+        fail_msg: "192.168.76.0/24 is already in use here: {{ vivado_runners_routes.stdout }}"
+
     - name: The IDs from the GitHub App are set
       ansible.builtin.assert:
         that:
@@ -463,26 +519,26 @@ gh pr create --title "Deployment playbook and JIT config inspector" --body "One 
 
 ---
 
-### Task 3: First deployment to big-storage, controller off
+### Task 3: First deployment to a host, controller off
 
 **Interfaces:**
 - Consumes: Task 1's IDs and key; PR G merged; the package published, or a deb built locally as in Plan 1 Task 13 Step 4.
-- Produces: big-storage with the bridge, the nftables table and the proxy running, and `vivado-runners.service` stopped and disabled.
+- Produces: the host with the bridge, the nftables table and the proxy running, and `vivado-runners.service` stopped and disabled.
 
 - [ ] **Step 1: Ask Tim**
 
-"Deploy the runner host configuration to big-storage now? It installs the `vivado-runners` package (which pulls in squid, masked), defines a new isolated libvirt network `vivado-runners` on bridge `vrbr0` (192.168.76.0/24), loads an nftables table that only affects that bridge, and starts a squid bound to 192.168.76.1. The controller stays off; no VM starts." Proceed only on yes.
+"Deploy the runner host configuration to `<host>` now? It installs the `vivado-runners` package (which pulls in squid, masked), defines a new isolated libvirt network `vivado-runners` on bridge `vrbr0` (192.168.76.0/24), loads an nftables table that only affects that bridge, and starts a squid bound to 192.168.76.1. The controller stays off; no VM starts." Proceed only on yes.
 
 - [ ] **Step 2: Record the host's state before**
 
-Each as its own ssh call; save the outputs under `tmp/big-storage-before/` in the runner repo checkout (the directory is ignored by git):
+Each as its own ssh call; save the outputs under `tmp/<name>-before/` in the runner repo checkout (the directory is ignored by git):
 
 ```bash
-ssh big-storage.welland.mithis.com 'sudo -n virsh net-list --all'
-ssh big-storage.welland.mithis.com 'sudo -n nft list ruleset'
-ssh big-storage.welland.mithis.com 'ss -ltnH'
-ssh big-storage.welland.mithis.com 'ip -br addr'
-ssh big-storage.welland.mithis.com 'systemctl is-enabled squid.service'
+ssh <host> 'sudo -n virsh net-list --all'
+ssh <host> 'sudo -n nft list ruleset'
+ssh <host> 'ss -ltnH'
+ssh <host> 'ip -br addr'
+ssh <host> 'systemctl is-enabled squid.service'
 ```
 
 The last one is expected to say `not-found` (squid is not installed yet). If it says anything else, stop: the host already runs a squid, and masking it would break something. Tell Tim.
@@ -493,7 +549,7 @@ Set `vivado_runners_app_id` and `vivado_runners_installation_id` in `deploy/inve
 
 ```bash
 cd deploy
-ansible-playbook site.yml --limit big-storage.welland.mithis.com --diff \
+ansible-playbook site.yml --limit <host> --diff \
   -e vivado_runners_app_key_src=$HOME/.config/vivado-runners/app.pem
 ```
 
@@ -504,7 +560,7 @@ Expected: `failed=0`. Run it a second time: `changed=0`. If the second run repor
 Then record which package version is installed and pin it, so later runs cannot change it by accident:
 
 ```bash
-ssh big-storage.welland.mithis.com "dpkg-query -W -f '\${Version}\n' vivado-runners"
+ssh <host> "dpkg-query -W -f '\${Version}\n' vivado-runners"
 ```
 
 Set `vivado_runners_version: "<that version>"` for the `vivado_runners` group in `deploy/inventory.yml` (PR, merge).
@@ -514,32 +570,32 @@ Set `vivado_runners_version: "<that version>"` for the `vivado_runners` group in
 Each its own ssh call:
 
 ```bash
-ssh big-storage.welland.mithis.com 'sudo -n virsh net-info vivado-runners'
+ssh <host> 'sudo -n virsh net-info vivado-runners'
 ```
 Expected: `Active: yes`, `Autostart: yes`, `Bridge: vrbr0`.
 
 ```bash
-ssh big-storage.welland.mithis.com 'ip -br addr show vrbr0'
+ssh <host> 'ip -br addr show vrbr0'
 ```
 Expected: `192.168.76.1/24` and **no** `inet6` address.
 
 ```bash
-ssh big-storage.welland.mithis.com 'sudo -n nft list table inet vivado_runners'
+ssh <host> 'sudo -n nft list table inet vivado_runners'
 ```
 Expected: the `input` and `forward` chains from `host/vivado-runners.nft`, counters at 0.
 
 ```bash
-ssh big-storage.welland.mithis.com 'sudo -n ss -ltnpH sport = :3128'
+ssh <host> 'sudo -n ss -ltnpH sport = :3128'
 ```
 Expected: exactly one listener, on `192.168.76.1:3128`, process `squid`. A listener on `0.0.0.0:3128` or `[::]:3128` means the distribution's squid is running: stop and fix the mask.
 
 ```bash
-ssh big-storage.welland.mithis.com 'systemctl is-active vivado-runners.service vivado-runners-proxy.service vivado-runners-firewall.timer squid.service'
+ssh <host> 'systemctl is-active vivado-runners.service vivado-runners-proxy.service vivado-runners-firewall.timer squid.service'
 ```
 Expected, in order: `inactive`, `active`, `active`, `inactive`.
 
 ```bash
-ssh big-storage.welland.mithis.com 'sudo -n nft list ruleset'
+ssh <host> 'sudo -n nft list ruleset'
 ```
 Compare with the "before" copy: the only difference is the new `table inet vivado_runners` and whatever libvirt added for `vrbr0`. Any other difference: stop and report.
 
@@ -548,21 +604,21 @@ Compare with the "before" copy: the only difference is the new `table inet vivad
 The proxy only accepts clients from 192.168.76.0/24. From the host, bind the source address to the bridge:
 
 ```bash
-ssh big-storage.welland.mithis.com 'curl -s -o /dev/null -m 20 -w "%{http_connect}\n" --interface 192.168.76.1 -x http://192.168.76.1:3128 https://api.github.com/zen'
-ssh big-storage.welland.mithis.com 'curl -s -o /dev/null -m 20 -w "%{http_connect}\n" --interface 192.168.76.1 -x http://192.168.76.1:3128 https://pypi.org/simple/'
+ssh <host> 'curl -s -o /dev/null -m 20 -w "%{http_connect}\n" --interface 192.168.76.1 -x http://192.168.76.1:3128 https://api.github.com/zen'
+ssh <host> 'curl -s -o /dev/null -m 20 -w "%{http_connect}\n" --interface 192.168.76.1 -x http://192.168.76.1:3128 https://pypi.org/simple/'
 ```
 
 Expected: `200` then `403`. Then:
 
 ```bash
-ssh big-storage.welland.mithis.com 'sudo -n tail -2 /var/log/vivado-runners/proxy-access.log'
+ssh <host> 'sudo -n tail -2 /var/log/vivado-runners/proxy-access.log'
 ```
 
 Expected: a `TCP_TUNNEL/200 CONNECT api.github.com:443` line and a `TCP_DENIED/403 CONNECT pypi.org:443` line, both from `192.168.76.1`.
 
 - [ ] **Step 6: Report**
 
-Tell Tim what is now on big-storage (network, table, proxy; controller off), with the verification output, and what was not exercised yet (no VM has booted).
+Tell Tim what is now on the host (network, table, proxy; controller off), with the verification output, and what was not exercised yet (no VM has booted).
 
 ---
 
@@ -570,13 +626,13 @@ Tell Tim what is now on big-storage (network, table, proxy; controller off), wit
 
 **Interfaces:**
 - Consumes: `image/build_vivado_disk.py`, `image/build_image.py` (installed under `/usr/share/vivado-runners/image/`), `vivado-runners images` (Plan 1).
-- Produces: on big-storage, `vivado-2025.2-<date>.squashfs` and `runner-base-<date>.1.qcow2` in `/var/lib/vivado-runners/images`, both selected by their `-current` symlinks.
+- Produces: on the host, `vivado-2025.2-<date>.squashfs` and `runner-base-<date>.1.qcow2` in `/var/lib/vivado-runners/images`, both selected by their `-current` symlinks.
 
 - [ ] **Step 1: Ask Tim**
 
-"Build the Vivado disk on desktop.buddy (about 30 GiB written under the runner repo's `tmp/`), copy it to big-storage, and build the runner image there (downloads Debian's cloud image and packages; one build VM on libvirt's `default` network for about 15 minutes)?" Proceed only on yes.
+"Build the Vivado disk on the machine that has the Vivado install (about 30 GiB written under the runner repo's `tmp/`), copy it to `<host>`, and build the runner image there (downloads Debian's cloud image and packages; one build VM on libvirt's `default` network for about 15 minutes)?" Proceed only on yes.
 
-- [ ] **Step 2: Build the Vivado disk on desktop.buddy**
+- [ ] **Step 2: Build the Vivado disk where Vivado is installed**
 
 In the runner repo checkout, using the exclusions `docs/measurements.md` chose as the default (none if the full disk is the default):
 
@@ -587,81 +643,81 @@ uv run python image/build_vivado_disk.py --source /opt/Xilinx/2025.2 --images-di
 
 Expected last lines: `built vivado-2025.2-<date>.squashfs (<size> GiB)`.
 
-- [ ] **Step 3: Copy it to big-storage**
+- [ ] **Step 3: Copy it to the host**
 
 ```bash
-rsync --partial --progress tmp/vivado-disk/vivado-2025.2-*.squashfs big-storage.welland.mithis.com:
-ssh big-storage.welland.mithis.com 'sudo -n install -o vivado-runners -g libvirt-qemu -m 0440 -t /var/lib/vivado-runners/images vivado-2025.2-*.squashfs'
-ssh big-storage.welland.mithis.com 'rm vivado-2025.2-*.squashfs'
-ssh big-storage.welland.mithis.com 'sudo -n sha256sum /var/lib/vivado-runners/images/vivado-2025.2-*.squashfs'
+rsync --partial --progress tmp/vivado-disk/vivado-2025.2-*.squashfs <host>:
+ssh <host> 'sudo -n install -o vivado-runners -g libvirt-qemu -m 0440 -t /var/lib/vivado-runners/images vivado-2025.2-*.squashfs'
+ssh <host> 'rm vivado-2025.2-*.squashfs'
+ssh <host> 'sudo -n sha256sum /var/lib/vivado-runners/images/vivado-2025.2-*.squashfs'
 sha256sum tmp/vivado-disk/vivado-2025.2-*.squashfs
 ```
 
 Expected: the two checksums are equal. Then delete the local copy (`rm -r tmp/vivado-disk`): it contains Vivado and must not linger in a repository checkout.
 
-- [ ] **Step 4: Build the runner image on big-storage**
+- [ ] **Step 4: Build the runner image on the host**
 
 The image's uv cache is warmed from test-designs' lock file. Fetch the two files to the host:
 
 ```bash
-ssh big-storage.welland.mithis.com 'sudo -n -u vivado-runners mkdir -p /var/lib/vivado-runners/lock'
-ssh big-storage.welland.mithis.com 'sudo -n -u vivado-runners curl -fsSL -o /var/lib/vivado-runners/lock/uv.lock https://raw.githubusercontent.com/fpgas-online/fpgas.online-test-designs/main/uv.lock'
-ssh big-storage.welland.mithis.com 'sudo -n -u vivado-runners curl -fsSL -o /var/lib/vivado-runners/lock/pyproject.toml https://raw.githubusercontent.com/fpgas-online/fpgas.online-test-designs/main/pyproject.toml'
+ssh <host> 'sudo -n -u vivado-runners mkdir -p /var/lib/vivado-runners/lock'
+ssh <host> 'sudo -n -u vivado-runners curl -fsSL -o /var/lib/vivado-runners/lock/uv.lock https://raw.githubusercontent.com/fpgas-online/fpgas.online-test-designs/main/uv.lock'
+ssh <host> 'sudo -n -u vivado-runners curl -fsSL -o /var/lib/vivado-runners/lock/pyproject.toml https://raw.githubusercontent.com/fpgas-online/fpgas.online-test-designs/main/pyproject.toml'
 ```
 
 Start the build detached, so a dropped ssh session does not kill it (the host has `systemd-run`):
 
 ```bash
-ssh big-storage.welland.mithis.com 'sudo -n systemd-run --unit=vivado-runners-image-build --uid=vivado-runners --gid=vivado-runners --property=SupplementaryGroups="libvirt libvirt-qemu" --collect python3 /usr/share/vivado-runners/image/build_image.py --images-dir /var/lib/vivado-runners/images --lock /var/lib/vivado-runners/lock/uv.lock --pyproject /var/lib/vivado-runners/lock/pyproject.toml'
+ssh <host> 'sudo -n systemd-run --unit=vivado-runners-image-build --uid=vivado-runners --gid=vivado-runners --property=SupplementaryGroups="libvirt libvirt-qemu" --collect python3 /usr/share/vivado-runners/image/build_image.py --images-dir /var/lib/vivado-runners/images --lock /var/lib/vivado-runners/lock/uv.lock --pyproject /var/lib/vivado-runners/lock/pyproject.toml'
 ```
 
 Follow it, reporting to Tim at least every 5 minutes while it runs:
 
 ```bash
-ssh big-storage.welland.mithis.com 'sudo -n journalctl -u vivado-runners-image-build --no-pager -n 30'
-ssh big-storage.welland.mithis.com 'sudo -n virsh list --all'
+ssh <host> 'sudo -n journalctl -u vivado-runners-image-build --no-pager -n 30'
+ssh <host> 'sudo -n virsh list --all'
 ```
 
 Expected at the end: the manifest JSON, then `built runner-base-<date>.1.qcow2`. The build VM `vr-image-build` is gone from `virsh list`.
 
-If it ends with "provisioning did not finish", the work disk is kept: read the build VM's own log with `ssh big-storage.welland.mithis.com 'sudo -n virt-cat -a /var/lib/vivado-runners/build/work.qcow2 /var/log/cloud-init-output.log'` (one command; the disk is the trusted build VM's, not a job's). Fix `image/provision.py` in a PR, rebuild the deb, redeploy, rebuild the image. Record what was missing.
+If it ends with "provisioning did not finish", the work disk is kept: read the build VM's own log with `ssh <host> 'sudo -n virt-cat -a /var/lib/vivado-runners/build/work.qcow2 /var/log/cloud-init-output.log'` (one command; the disk is the trusted build VM's, not a job's). Fix `image/provision.py` in a PR, rebuild the deb, redeploy, rebuild the image. Record what was missing.
 
 - [ ] **Step 5: Select both images**
 
 ```bash
-ssh big-storage.welland.mithis.com 'sudo -n -u vivado-runners vivado-runners images list'
-ssh big-storage.welland.mithis.com 'sudo -n -u vivado-runners vivado-runners images activate vivado vivado-2025.2-<date>.squashfs'
-ssh big-storage.welland.mithis.com 'sudo -n -u vivado-runners vivado-runners images activate base runner-base-<date>.1.qcow2'
-ssh big-storage.welland.mithis.com 'sudo -n -u vivado-runners vivado-runners images list'
+ssh <host> 'sudo -n -u vivado-runners vivado-runners images list'
+ssh <host> 'sudo -n -u vivado-runners vivado-runners images activate vivado vivado-2025.2-<date>.squashfs'
+ssh <host> 'sudo -n -u vivado-runners vivado-runners images activate base runner-base-<date>.1.qcow2'
+ssh <host> 'sudo -n -u vivado-runners vivado-runners images list'
 ```
 
 (`<date>` is the date in the names the first command printed.) Expected: the last listing marks both with `*`.
 
 - [ ] **Step 6: Boot one VM through the controller, by hand**
 
-Ask Tim: "Start the controller on big-storage with one slot? One VM will boot, register an idle runner in the `vivado` group and wait for a job." On yes:
+Ask Tim: "Start the controller on `<host>` with one slot? One VM will boot, register an idle runner in the `vivado` group and wait for a job." On yes:
 
 ```bash
 cd deploy
-ansible-playbook site.yml --limit big-storage.welland.mithis.com -e vivado_runners_enabled=true
+ansible-playbook site.yml --limit <host> -e vivado_runners_enabled=true
 ```
 
 Then, each its own call, about a minute apart, until the runner is online or five minutes pass:
 
 ```bash
-ssh big-storage.welland.mithis.com 'sudo -n -u vivado-runners vivado-runners status'
-ssh big-storage.welland.mithis.com 'sudo -n virsh list'
+ssh <host> 'sudo -n -u vivado-runners vivado-runners status'
+ssh <host> 'sudo -n virsh list'
 gh api orgs/fpgas-online/actions/runners --jq '.runners[] | {name, status, busy}'
 ```
 
-Expected: slot 0 `running`; domain `vr-big-storage-0` running; a runner `big-storage-slot0-<hex>` with `status: online`, `busy: false`.
+Expected: slot 0 `running`; domain `vr-<name>-0` running; a runner `<name>-slot0-<hex>` with `status: online`, `busy: false`.
 
 - [ ] **Step 7: If the runner does not come online, read the VM's console**
 
 ```bash
-ssh big-storage.welland.mithis.com 'sudo -n tail -60 /var/lib/vivado-runners/console/slot-0.log'
-ssh big-storage.welland.mithis.com 'sudo -n journalctl -u vivado-runners --no-pager -n 40'
-ssh big-storage.welland.mithis.com 'sudo -n tail -20 /var/log/vivado-runners/proxy-access.log'
+ssh <host> 'sudo -n tail -60 /var/lib/vivado-runners/console/slot-0.log'
+ssh <host> 'sudo -n journalctl -u vivado-runners --no-pager -n 40'
+ssh <host> 'sudo -n tail -20 /var/log/vivado-runners/proxy-access.log'
 ```
 
 Use the `superpowers:systematic-debugging` skill. The three places a first boot most plausibly fails, and where the fix goes:
@@ -687,7 +743,7 @@ What was exercised: a VM booted from the image under the controller and its runn
 
 **Interfaces:**
 - Consumes: the guest contract from Plan 1 Task 11 (user `runner`, proxy variables, `/opt/Xilinx` read-only, disk serials `vr-vivado` / `vr-seed` / `vr-scratch`).
-- Produces: `python3 scripts/ci/sandbox_check.py {first|second} [host:port ...]`. Exit status 0 only if every check passes. In `first` mode it leaves marker files; in `second` mode it requires them to be absent. It writes `runner=<RUNNER_NAME>` to `$GITHUB_OUTPUT`.
+- Produces: `python3 scripts/ci/sandbox_check.py {first|second} [host:port ...]`. The destinations built into the script are the same on every runner host (the internet, GitHub by address, the bridge host, the other slot addresses). A host's own addresses are not in the script: they are passed as arguments, from `vivado-runners sandbox-targets` run on each host. Exit status 0 only if every check passes. In `first` mode it leaves marker files; in `second` mode it requires them to be absent. It writes `runner=<RUNNER_NAME>` to `$GITHUB_OUTPUT`.
 
 What each check proves (spec, "Threat model" items 1-5):
 
@@ -696,7 +752,8 @@ What each check proves (spec, "Threat model" items 1-5):
 | `user` | the job is not root and has no sudo |
 | `dns` | no DNS: names cannot be resolved, so DNS cannot carry data out |
 | `no default route`, `no ipv6` | nothing is routable except the bridge |
-| `direct <host:port>` | the internet, the Welland LAN, the host itself and another slot cannot be reached directly. A refused connection also fails: it means the packet arrived |
+| `direct <host:port>` | the internet, the runner host on the bridge, every other slot, and (from the `extra_targets` input) the host's own addresses on its other networks cannot be reached directly. A refused connection also fails: it means the packet arrived |
+| `own address is a slot address` | the VM is on the runner network and nowhere else |
 | `proxy allows / refuses` | the proxy tunnels GitHub and refuses PyPI, other names, raw addresses and other ports |
 | `vivado read-only` | the toolchain cannot be modified |
 | `seed unreadable` | the job cannot read the (spent) runner registration or the raw Vivado disk |
@@ -716,8 +773,11 @@ What each check proves (spec, "Threat model" items 1-5):
     python3 scripts/ci/sandbox_check.py second [host:port ...]
 
 `first` leaves marker files behind; `second`, run as a later job, requires
-them to be gone. Extra host:port arguments are added to the destinations that
-must be unreachable. Standard library only: the VM has no PyPI.
+them to be gone. Standard library only: the VM has no PyPI.
+
+The destinations built in here are the same on every runner host. What differs
+per host (its own addresses) is passed as extra host:port arguments: run
+`vivado-runners sandbox-targets` on each runner host and pass what it prints.
 """
 
 import errno
@@ -729,15 +789,15 @@ import socket
 import sys
 import urllib.parse
 
+# The runner network is the same on every host: the host is .1, slot i is .10+i.
+BRIDGE_HOST = "192.168.76.1"
+SLOT_ADDRESSES = [f"192.168.76.{10 + i}" for i in range(8)]
 # Must be unreachable without the proxy. A refused connection counts as reached.
 UNREACHABLE = [
     ("1.1.1.1", 443),  # the internet
     ("140.82.112.3", 443),  # GitHub by address, bypassing the proxy
-    ("10.1.11.154", 22),  # the runner host's LAN address (big-storage)
-    ("192.168.76.1", 22),  # the runner host, on the bridge
-    ("192.168.76.1", 53),
-    ("192.168.122.1", 53),  # the host's other libvirt bridge
-    ("192.168.76.11", 22),  # another slot
+    (BRIDGE_HOST, 22),  # the runner host, on the bridge
+    (BRIDGE_HOST, 53),
 ]
 PROXY_ALLOWED = ["github.com:443", "api.github.com:443", "codeload.github.com:443"]
 PROXY_REFUSED = [
@@ -794,13 +854,29 @@ def check_direct(targets: list[tuple[str, int]]) -> None:
     for host, port in targets:
         name = f"direct {host}:{port}"
         try:
-            socket.create_connection((host, port), timeout=5).close()
+            socket.create_connection((host, port), timeout=3).close()
         except ConnectionRefusedError:
             report(False, name, "connection refused: the packet reached the destination")
         except OSError as error:
             report(True, name, f"unreachable ({error})")
         else:
             report(False, name, "connected")
+
+
+def own_address() -> str:
+    """The address this VM uses towards the bridge host (no packet is sent)."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        try:
+            sock.connect((BRIDGE_HOST, 9))
+        except OSError:
+            return ""
+        return sock.getsockname()[0]
+
+
+def other_slots() -> list[tuple[str, int]]:
+    mine = own_address()
+    report(mine in SLOT_ADDRESSES, "own address is a slot address", mine or "none")
+    return [(address, 22) for address in SLOT_ADDRESSES if address != mine]
 
 
 def proxy_status(proxy: tuple[str, int], target: str) -> str:
@@ -896,7 +972,7 @@ def main() -> int:
     check_user()
     check_dns()
     check_routes()
-    check_direct(UNREACHABLE + extra)
+    check_direct(UNREACHABLE + other_slots() + extra)
     check_proxy()
     check_vivado_read_only()
     check_disks()
@@ -917,16 +993,16 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: See it fail on an ordinary machine**
 
-A check script that cannot fail proves nothing. On desktop.buddy:
+A check script that cannot fail proves nothing. On an ordinary development machine:
 
 Run: `uv run python scripts/ci/sandbox_check.py first`
-Expected: exit status 1 and `FAIL` lines for at least `user`, `dns`, `no default route`, `direct 1.1.1.1:443` and `proxy` (this machine has DNS, a default route, the internet and no proxy). When this plan was written it reported 17 failed checks here. It writes marker files; remove them afterwards:
+Expected: exit status 1 and `FAIL` lines for at least `user`, `dns`, `no default route`, `direct 1.1.1.1:443` and `proxy` (this machine has DNS, a default route, the internet and no proxy). When this plan was written it reported 15 failed checks on desktop.buddy. It writes marker files; remove them afterwards:
 
 ```bash
 rm -f ~/sandbox-marker /var/tmp/sandbox-marker ../sandbox-marker
 ```
 
-On a machine where `/opt/Xilinx` is writable (desktop.buddy is), the `vivado not writable` check creates a probe file and removes it again; check with `ls /opt/Xilinx` that only the version directories are there.
+On a machine where `/opt/Xilinx` exists and is writable, the `vivado not writable` check creates a probe file and removes it again; check with `ls /opt/Xilinx` that only the version directories are there.
 
 If any of those five lines says `ok`, the check is wrong: fix it before going on.
 
@@ -945,7 +1021,7 @@ on:
   workflow_dispatch:
     inputs:
       extra_targets:
-        description: "Extra host:port pairs that must be unreachable, space separated"
+        description: "The output of `vivado-runners sandbox-targets` from every runner host (host:port pairs that must be unreachable)"
         required: false
         default: ""
 
@@ -1030,14 +1106,22 @@ gh pr create --title "ci: sandbox acceptance workflow for the Vivado runners" --
 - [ ] **Step 1: Note the host counters before**
 
 ```bash
-ssh big-storage.welland.mithis.com 'sudo -n nft list table inet vivado_runners'
-ssh big-storage.welland.mithis.com 'sudo -n wc -l /var/log/vivado-runners/proxy-access.log'
+ssh <host> 'sudo -n nft list table inet vivado_runners'
+ssh <host> 'sudo -n wc -l /var/log/vivado-runners/proxy-access.log'
 ```
 
 - [ ] **Step 2: Dispatch and watch**
 
+First collect what must be unreachable from every runner host that is in service (one call per host), and join the outputs with spaces:
+
 ```bash
-gh workflow run vivado-runner-sandbox.yml --repo fpgas-online/fpgas.online-test-designs --ref main
+ssh <host> 'vivado-runners sandbox-targets'
+```
+
+It prints the host's own IPv4 addresses on every interface but the runner bridge, each as `address:22`. Then:
+
+```bash
+gh workflow run vivado-runner-sandbox.yml --repo fpgas-online/fpgas.online-test-designs --ref main -f extra_targets="<the joined output>"
 gh run list --repo fpgas-online/fpgas.online-test-designs --workflow vivado-runner-sandbox.yml --limit 3 --json databaseId,headSha,status,createdAt
 ```
 
@@ -1064,26 +1148,26 @@ If Vivado fails to start for a missing shared library, add the Debian package th
 - [ ] **Step 4: Collect the host-side evidence**
 
 ```bash
-ssh big-storage.welland.mithis.com 'sudo -n nft list table inet vivado_runners'
+ssh <host> 'sudo -n nft list table inet vivado_runners'
 ```
 Expected: the `drop` counters in `input` and `forward` are greater than before: the direct connection attempts were dropped by this table.
 
 ```bash
-ssh big-storage.welland.mithis.com 'sudo -n grep -c TCP_DENIED /var/log/vivado-runners/proxy-access.log'
-ssh big-storage.welland.mithis.com 'sudo -n grep TCP_DENIED /var/log/vivado-runners/proxy-access.log'
+ssh <host> 'sudo -n grep -c TCP_DENIED /var/log/vivado-runners/proxy-access.log'
+ssh <host> 'sudo -n grep TCP_DENIED /var/log/vivado-runners/proxy-access.log'
 ```
 Expected: denials from `192.168.76.10` for `pypi.org:443`, `files.pythonhosted.org:443`, `example.com:443`, `1.1.1.1:443`, `140.82.112.3:443`, `github.com:22`, `github.com:80`, and no denial for a GitHub name the job legitimately needed.
 
 ```bash
-ssh big-storage.welland.mithis.com 'sudo -n journalctl -u vivado-runners --no-pager --since "-30min" -g "job "'
+ssh <host> 'sudo -n journalctl -u vivado-runners --no-pager --since "-30min" -g "job "'
 ```
 Expected: two `job {...}` lines with `"reason": "finished"`, different `runner` names, and the image versions.
 
 ```bash
-ssh big-storage.welland.mithis.com 'sudo -n ls -la /var/lib/vivado-runners/slot-0'
-ssh big-storage.welland.mithis.com 'sudo -n virsh list --all'
+ssh <host> 'sudo -n ls -la /var/lib/vivado-runners/slot-0'
+ssh <host> 'sudo -n virsh list --all'
 ```
-Expected: a fresh slot directory for the next idle VM (overlay created after the second job ended), and exactly one `vr-big-storage-0` domain.
+Expected: a fresh slot directory for the next idle VM (overlay created after the second job ended), and exactly one `vr-<name>-0` domain.
 
 - [ ] **Step 5: Report to Tim**
 
@@ -1103,7 +1187,7 @@ State exactly what was exercised (the list of check lines, the Vivado version, t
 - [ ] **Step 1: List the blob hostnames real jobs used**
 
 ```bash
-ssh big-storage.welland.mithis.com 'sudo -n grep -o "CONNECT [^ ]*blob.core.windows.net:443" /var/log/vivado-runners/proxy-access.log'
+ssh <host> 'sudo -n grep -o "CONNECT [^ ]*blob.core.windows.net:443" /var/log/vivado-runners/proxy-access.log'
 ```
 
 Save the output locally and count the distinct names with a short Python snippet (`sorted(set(...))`). Record the distinct names and the date in `docs/measurements.md` under "GitHub's blob storage hostnames".
@@ -1143,7 +1227,7 @@ git push -u origin narrow-blob
 gh pr create --title "proxy: allow only GitHub's blob storage accounts" --body "Replaces the wildcard over every Azure storage account with the names GitHub's runners were seen to use. The proxy test now refuses another Azure account."
 ```
 
-After merge and publish, set `vivado_runners_version` in `deploy/inventory.yml` to the new package version (PR, merge), ask Tim, then run the playbook. `allowed-blob-regex` is a conffile nobody edited on the host, so the upgrade replaces it: confirm with `ssh big-storage.welland.mithis.com 'sudo -n cat /etc/vivado-runners/allowed-blob-regex'`. The running proxy still has the old list; reload it with `ssh big-storage.welland.mithis.com 'sudo -n systemctl reload vivado-runners-proxy.service'` (a reload re-reads the lists and does not drop open tunnels). Rerun Task 6 Steps 2-4.
+After merge and publish, set `vivado_runners_version` in `deploy/inventory.yml` to the new package version (PR, merge), ask Tim, then run the playbook. `allowed-blob-regex` is a conffile nobody edited on the host, so the upgrade replaces it: confirm with `ssh <host> 'sudo -n cat /etc/vivado-runners/allowed-blob-regex'`. The running proxy still has the old list; reload it with `ssh <host> 'sudo -n systemctl reload vivado-runners-proxy.service'` (a reload re-reads the lists and does not drop open tunnels). Rerun Task 6 Steps 2-4.
 Expected: the workflow is still green (the artifact upload still works), and the proxy log shows `TCP_TUNNEL/200` for the blob name.
 
 ---
@@ -1266,7 +1350,7 @@ jobs:
 ```markdown
 # Operating the Vivado runners
 
-Hosts: big-storage.welland.mithis.com. All commands run on the host as shown.
+The runner hosts are the entries of `deploy/inventory.yml`. The procedures are the same on every host. All commands run on the host as shown.
 Deployments go through `deploy/site.yml`, the whole playbook every time.
 
 ## See what is happening
@@ -1369,17 +1453,31 @@ gh pr create --title "Operations document and weekly runner-version check" --bod
 
 ---
 
-### Task 9: Scale up, and decide about buddy (decision D-3)
+### Task 9: Scale up, and add further hosts (decision D-3)
 
 **Interfaces:**
 - Consumes: `docs/measurements.md` slot memory (Plan 1 Task 14); a green acceptance run (Task 6).
-- Produces: big-storage at its full slot count; a recorded decision on buddy.
+- Produces: the first host at the slot count it can carry; a recorded decision on which other hosts run builds; the procedure for adding one.
 
-- [ ] **Step 1: Set big-storage's slots**
+- [ ] **Step 1: Work out how many slots the host can carry**
 
-In `deploy/inventory.yml`, for big-storage: `vivado_runners_slots: 4`, `vivado_runners_numa_nodes: [0, 0, 1, 1]`, and `vivado_runners_memory_gib` to the measured value (16 by the 2026-10-02 measurements). Four slots of 8 vCPUs use 32 of the host's 88 threads and 64 GiB of its 503 GiB. The total must stay under 128 GiB (a quarter of the host's memory), leaving the host's page cache and its storage work alone. PR, merge.
+Read the host, do not assume it:
 
-The controller allows up to 8 slots, and at 16 GiB each 8 slots fit that limit (64 vCPUs, 128 GiB). Going from 4 to 8 roughly halves the wait for the 39-job matrix. It is Tim's call after Step 4's load numbers, not part of this step.
+```bash
+ssh <host> 'nproc'
+ssh <host> 'free -g'
+ssh <host> 'uptime'
+```
+
+The slot count is the largest number that satisfies all of:
+
+- slots x `vivado_runners_vcpus` is at most half the host's CPU threads (the host has other work);
+- slots x `vivado_runners_memory_gib` is at most a quarter of the host's total memory, and less than its `available` memory with room to spare;
+- at most 8 (the controller's limit).
+
+The controller enforces a looser hard limit by itself (all the vCPUs must exist, and at most 75% of the memory): a configuration beyond that makes it exit with status 2 and a message naming the numbers. Set `vivado_runners_slots` (and `vivado_runners_memory_gib` to the measured value) for the host in `deploy/inventory.yml`. PR, merge.
+
+A worked example with the numbers probed on 2026-09-25: a host with 88 threads and 503 GiB carries 5 slots of 8 vCPUs by the CPU rule and 7 of 16 GiB by the memory rule, so 5; a host with 12 threads and 15 GiB available carries none until memory is freed.
 
 - [ ] **Step 2: Deploy (ask Tim) and restart the controller**
 
@@ -1387,44 +1485,67 @@ A slot-count change takes effect when the controller restarts, which kills runni
 
 ```bash
 cd deploy
-ansible-playbook site.yml --limit big-storage.welland.mithis.com
-ansible-playbook site.yml --limit big-storage.welland.mithis.com -e vivado_runners_enabled=true
+ansible-playbook site.yml --limit <host>
+ansible-playbook site.yml --limit <host> -e vivado_runners_enabled=true
 ```
 
 - [ ] **Step 3: Verify**
 
 ```bash
-ssh big-storage.welland.mithis.com 'sudo -n -u vivado-runners vivado-runners status'
-ssh big-storage.welland.mithis.com 'sudo -n virsh vcpupin vr-big-storage-2'
-gh api orgs/fpgas-online/actions/runners --jq '[.runners[] | select(.name | startswith("big-storage-slot")) | .status]'
+ssh <host> 'sudo -n -u vivado-runners vivado-runners status'
+ssh <host> 'lscpu --parse=CPU,NODE'
+ssh <host> 'sudo -n virsh vcpupin vr-<name>-1'
+gh api orgs/fpgas-online/actions/runners --jq '[.runners[] | select(.name | startswith("<name>-slot")) | .status]'
 ```
 
-Expected: four slots `running`; slot 2's vCPUs pinned to NUMA node 1's CPU list (`22-43,66-87`); four `online`.
+Expected: every slot `running` and as many `online` runners as slots. On a host whose `lscpu` output shows more than one NUMA node, slot 1's vCPUs are pinned to the CPUs of the second node (slots go round the nodes in order); on a single-node host `vcpupin` shows every vCPU free to use all CPUs. Nobody told the controller which it is.
 
-Dispatch the sandbox workflow once more (Task 6 Step 2). With four slots the two jobs still run in sequence (`needs:`), now possibly in different slots.
-Expected: green, and `direct 192.168.76.11:22` still `ok` although another slot's VM now really exists at that address.
+Dispatch the sandbox workflow once more (Task 6 Step 2).
+Expected: green, and the `direct 192.168.76.<n>:22` lines still `ok` although other slots' VMs now really exist at those addresses.
 
 - [ ] **Step 4: Watch the host under load**
 
-After Plan 3's first matrix run, or by dispatching the Acorn UART Vivado job four times, read:
+After Plan 3's first matrix run, or by dispatching the Acorn UART Vivado job once per slot, read:
 
 ```bash
-ssh big-storage.welland.mithis.com 'uptime'
-ssh big-storage.welland.mithis.com 'free -g'
+ssh <host> 'uptime'
+ssh <host> 'free -g'
 ```
 
-Expected: load well under the host's 88 threads, no swap in use (the host has none; memory pressure would show as low `available`). Report the numbers to Tim.
+Expected: load under the host's thread count, `available` memory not falling towards zero, swap use not growing. Report the numbers to Tim.
 
-- [ ] **Step 5: Decide D-3**
+- [ ] **Step 5: Decide which other hosts run builds (D-3)**
 
-Put the question to Tim with the AskUserQuestion tool, recommended option first: (1) big-storage only: it has the capacity, and buddy has about 15 GiB of free memory and is already swapping; (2) add one slot on buddy after reducing its other VMs' memory, for redundancy when big-storage or the Welland link is down. Record the answer in the spec's "Open decisions".
+Put the question to Tim with the AskUserQuestion tool, recommended option first, using the numbers from "Notes on particular hosts": (1) the first host only, if Step 4 shows it has capacity to spare; (2) add a named second host for redundancy when the first, or its network link, is down. Record the answer in the spec's "Open decisions".
 
-If the answer is (2): add buddy to `deploy/inventory.yml` with `vivado_runners_host: buddy`, `vivado_runners_slots: 1`, no `vivado_runners_numa_nodes`, then repeat Tasks 3, 4 and 6 with `--limit buddy.mithis.com`, adding buddy's public address to the sandbox workflow's `extra_targets` (`95.216.246.231:22`). buddy is a public host with a routed IPv6 /56: the `no ipv6` check and the nftables comparison in Task 3 Step 4 matter most there.
+- [ ] **Step 6: Adding a host (whenever one is added)**
+
+The procedure is the same for any machine:
+
+1. Check it is a Debian 13 x86-64 machine with KVM and enough free disk for the images (about 60 GiB) plus `vivado_runners_scratch_gib` per slot. The playbook's preflight checks refuse a host that is not.
+2. Add its name under `hosts:` in `deploy/inventory.yml`, with `vivado_runners_slots` from Step 1's rule if it differs from the group's. Nothing else: no addresses, no CPU lists. PR, merge.
+3. Run Task 3 (deploy, controller off), Task 4 (copy the Vivado disk, build the runner image there, boot one VM) and Task 6 (the acceptance workflow) with `--limit` set to the new host. In Task 6, `extra_targets` carries the `sandbox-targets` output of every host in service, the new one included.
+4. Add anything learnt about the machine to "Notes on particular hosts".
+
+Runners on different hosts are interchangeable to a workflow: they carry the same labels, the same image contract and the same network policy. A job cannot tell, and must not need to know, which host it landed on.
+
+---
+
+## Notes on particular hosts
+
+Deployment knowledge about individual machines. None of it is used by the code, the package or the workflows.
+
+| Host | Probed 2026-09-25 | Notes |
+|---|---|---|
+| big-storage.welland.mithis.com | 88 threads (2 NUMA nodes), 503 GiB, about 477 GiB available, 2.7 TiB free on `/`, libvirt and docker running, no VMs | The first runner host. If ssh to its name hangs, use `HostName=2404:e80:a137:111::155` with `HostKeyAlias=big-storage.welland.mithis.com`. It also carries backups under `/backups` and `/space*`; the runners use only `/var/lib/vivado-runners` |
+| buddy.mithis.com | 12 threads, 125 GiB, about 15 GiB available and 24 GiB in swap, 4 other VMs running | A public host with a routed IPv6 /56. It has no memory to spare today. On a public host the `no ipv6` check and the before/after nftables comparison of Task 3 matter most |
+| desktop.buddy.mithis.com | 12 threads, 31 GiB | Not a runner host (no libvirt). It has the Vivado 2025.2 install the Vivado disk is built from |
 
 ---
 
 ## Self-review checklist (done when writing this plan)
 
-- Spec coverage: organisation settings (Task 1); Ansible deployment (Tasks 2-3); first image build and boot, moved here from Phase 1 (Task 4); sandbox acceptance workflow with every check the spec lists, plus the proxy and IPv6 checks the design added (Tasks 5-6); the blob wildcard, D-1 (Task 7); observability and rollback procedures (Task 8); Phase 4 scale-up and D-3 (Task 9). The end-to-end Vivado bitstream build is Plan 3's first PR.
+- Spec coverage: organisation settings (Task 1); Ansible deployment (Tasks 2-3); first image build and boot, moved here from Phase 1 (Task 4); sandbox acceptance workflow with every check the spec lists, plus the proxy and IPv6 checks the design added (Tasks 5-6); the blob wildcard, D-1 (Task 7); observability and rollback procedures (Task 8); Phase 4 scale-up, D-3 and the procedure for any further host (Task 9). The end-to-end Vivado bitstream build is Plan 3's first PR.
 - Names: `vivado_runners_*` variables are the same in `inventory.yml`, `config.toml.j2` and `site.yml`; unit, path and address names are Plan 1's; the disk serials in `sandbox_check.py` are Plan 1 Task 5's.
 - Every host-changing step asks Tim first.
+- Host independence: no task writes a host's name, address, CPU list or memory into code, package files, workflows or the check script. Host names appear in `deploy/inventory.yml`, in "Notes on particular hosts", and in this plan's statement of which host is first.

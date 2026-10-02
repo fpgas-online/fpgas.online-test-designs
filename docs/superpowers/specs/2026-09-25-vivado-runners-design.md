@@ -2,19 +2,69 @@
 
 Date: 2026-09-25
 Status: design approved in conversation. Revised 2026-10-03 with what writing the
-implementation plans found (see "Implementation plans" at the end).
+implementation plans found, and to make the design independent of which
+machines the runners are on (see "Implementation plans" at the end).
 
 ## Goal
 
 Build Xilinx bitstreams for this repository with AMD Vivado in GitHub Actions,
-on self-hosted runners at `buddy.mithis.com` and
-`big-storage.welland.mithis.com`, without the runners becoming a way into those
-hosts, the fpgas.online networks, or the next job.
+on self-hosted runners on our own hardware, without the runners becoming a way
+into the machines they run on, the networks around them, or the next job.
+
+How the system works does not depend on where it runs. A runner host can be
+any machine that meets "Host requirements" below; which machines are used is a
+deployment choice recorded in one inventory file.
 
 The openXC7 builds on `ubuntu-latest` stay exactly as they are. Vivado builds
 are added beside them.
 
-## Hosts (probed 2026-09-25)
+## Host requirements
+
+A runner host is a Debian 13 (trixie) x86-64 machine with the CPU
+virtualisation extensions KVM needs. Nothing else about it is assumed:
+
+* **Nothing host-specific is in the code, the package, the VM image or the
+  workflows.** No host name, address, CPU list or memory size. The only place a
+  host is named is the deployment inventory.
+* **A host is described by itself, not by configuration.** The controller reads
+  the host's short name (the prefix of its runner and VM names), its NUMA
+  layout, its CPU count and its memory at run time. On a host with several NUMA
+  nodes it keeps each VM's vCPUs and memory on one node and spreads the slots
+  across the nodes; on a single-node host it pins nothing.
+* **The only per-host settings say how much of the host the runners may use:**
+  the number of slots and each slot's vCPUs, memory and scratch disk. The
+  controller refuses a configuration the host it starts on cannot carry (more
+  vCPUs than it has, or more than 75% of its memory).
+* **The runner network is private to each host and identical on all of them**
+  (bridge `vrbr0`, `192.168.76.0/24`, not routed anywhere), so the firewall
+  table, the proxy configuration and the VM image are the same everywhere.
+* **Deployment checks the requirements and changes nothing if one is not met:**
+  Debian 13 on x86-64; `/dev/kvm` exists; the host does not already run its own
+  squid; nothing else on it uses `192.168.76.0/24`; no two runner hosts share a
+  short name (a controller removes every runner and VM carrying its own name
+  when it starts).
+* **Runners on different hosts are interchangeable.** They carry the same
+  labels and the same image, so a workflow selects runners by label only and a
+  job cannot tell which host it is on.
+* **The sandbox check does not know any host either.** Its built-in list of
+  destinations that must be unreachable is the same everywhere. Each host's own
+  addresses are supplied when the check is run, from
+  `vivado-runners sandbox-targets` on that host.
+
+What every host deployment must respect, whichever machine it is:
+
+* A host may already run docker and libvirt, whose rules live in the
+  iptables-nft `ip filter`/`nat` tables. The runner rules go in a separate nft
+  table (`inet vivado_runners`) with a higher-priority `forward` and `input`
+  hook, so they apply regardless of other tools' chains.
+* `vrbr0` gets **no IPv6** (no address, no RA, `disable_ipv6=1`). Whatever
+  global IPv6 the host has must never reach a guest.
+* Nothing of the host's is shared into guests, and the controller's paths stay
+  under `/var/lib/vivado-runners`.
+
+### Candidate hosts (probed 2026-09-25)
+
+Deployment knowledge, not part of the design.
 
 | | big-storage.welland.mithis.com | buddy.mithis.com |
 |---|---|---|
@@ -27,22 +77,9 @@ are added beside them.
 | Network | Welland LAN `10.1.8.0/21` + IPv6; docker running | public Hetzner host, `95.216.246.231/26` + a routed IPv6 /56 |
 | Vivado | none | 2025.2 in the `desktop` VM (desktop.buddy), ~50 GiB |
 
-**big-storage is the primary host.** buddy has no spare memory today and would
-host at most one slot, only if its other VMs can give up the RAM (D-3).
-
-Host specifics the deployment must respect:
-
-* Both hosts already run docker and libvirt, whose rules live in the
-  iptables-nft `ip filter`/`nat` tables. The runner rules go in a separate nft
-  table (`inet vivado_runners`) with a higher-priority `forward` and `input`
-  hook, so they apply regardless of docker's or libvirt's chains.
-* `vrbr0` gets **no IPv6** (no address, no RA, `disable_ipv6=1`). buddy's
-  routed /56 and big-storage's global IPv6 must never reach a guest.
-* big-storage mounts the `/space*` and `/backups` volumes; nothing is shared
-  into guests, and the controller's paths stay under `/var/lib/vivado-runners`
-  on `/`.
-* On big-storage each slot is pinned to one NUMA node (vCPUs and memory), so
-  two slots per node do not contend across the interconnect.
+big-storage has the capacity and is deployed first. buddy has no spare memory
+today (D-3). Any other machine that meets the requirements can be added the
+same way.
 
 ## Threat model
 
@@ -77,9 +114,9 @@ publishes from inside a runner (see "Releases").
 
 ```
 GitHub (fpgas-online org)
-   ▲ outbound HTTPS only (no inbound ports on either host)
+   ▲ outbound HTTPS only (no inbound ports on a runner host)
    │
-┌──┴──────────── host: buddy / big-storage ─────────────────────────┐
+┌──┴──────── a runner host (any Debian 13 x86-64 KVM machine) ──────┐
 │ vivado-runners controller (systemd, Python)  GitHub App key (0400) │
 │   • N fixed slots; per slot: overlay → JIT config → boot → reap    │
 │ egress proxy (bound only to the runner bridge address)             │
@@ -208,7 +245,7 @@ guest requests.
 Licence: every current Vivado target is Artix-7 (xc7a35t / xc7a100t /
 xc7a200t), which the free Vivado ML Standard edition covers, so no licence
 server or file is needed. The Vivado disk and any image containing Vivado stay
-on the two hosts and are **never** published (ghcr, releases, public mirrors):
+on the runner hosts and are **never** published (ghcr, releases, public mirrors):
 AMD's EULA permits installation, not redistribution.
 
 ### Versions and rollback
@@ -235,7 +272,8 @@ vivado-current -> vivado-2025.2-2026-09-25.squashfs
 ## Controller
 
 A Python package (`vivado-runners`), run as a systemd service under a dedicated
-user in the `libvirt` group. Configuration per host:
+user in the `libvirt` group. The configuration file describes no host; the
+same file is valid on any machine, apart from how many slots it should run:
 
 ```toml
 [github]
@@ -245,10 +283,9 @@ key_file = "/etc/vivado-runners/app.pem"
 runner_group = "vivado"
 
 [slots]
-count = 4             # big-storage; buddy 0 or 1 (D-3)
+count = 4             # how much of this host the runners may use
 vcpus = 8
 memory_gib = 16
-numa_nodes = [0, 0, 1, 1]   # big-storage only
 scratch_gib = 60
 wall_limit_minutes = 120
 labels = ["self-hosted", "linux", "x64", "vivado-2025.2"]
@@ -374,8 +411,9 @@ tree on buddy.
   controller restart with leftover domains, JIT API errors).
 * Sandbox acceptance workflow (`vivado-runner-sandbox.yml`, dispatch only),
   each check a failing step if the promise is broken:
-  * DNS resolution fails; `1.1.1.1:443`, a LAN address, a fleet VLAN address
-    and the host's non-bridge address are unreachable
+  * DNS resolution fails; `1.1.1.1:443`, the bridge host, every other slot
+    address, and the host's own addresses on its other networks (supplied per
+    host, not written into the check) are unreachable
   * the proxy refuses a non-allowlisted host, an IP literal, and a port other
     than 443; there is no default route and no IPv6 address
   * the job is not root, has no `sudo`, and cannot read the seed disk
@@ -396,9 +434,9 @@ Each phase is a PR with CI green before the next starts.
 |---|---|---|
 | 0 | Host inventory is done (above). Measure Vivado peak RAM for the largest design; build the squashfs and record its size; find out what `uv sync` needs with PyPI blocked | Numbers written into `docs/measurements.md` |
 | 1 | Create the runner repo; controller + unit tests; image build scripts; proxy + nftables; package | Unit tests green; proxy allowlist test green; package builds and installs |
-| 2 | Deploy to big-storage, 1 slot, runner group live; first image build and first boot (desktop.buddy has no libvirt); record GitHub's blob hostnames from the proxy log | Sandbox acceptance workflow passes |
-| 3 | test-designs: the `patch_yosys_template()` fix, then one design end to end, then the whole matrix | Full Vivado matrix green on big-storage |
-| 4 | Raise big-storage to its measured slot count; buddy joins with one slot only if D-3 frees the RAM | Matrix runs in parallel; host load stays within limits |
+| 2 | Deploy to the first host, 1 slot, runner group live; first image build and first boot (the machine with the Vivado install has no libvirt); record GitHub's blob hostnames from the proxy log | Sandbox acceptance workflow passes |
+| 3 | test-designs: the `patch_yosys_template()` fix, then one design end to end, then the whole matrix | Full Vivado matrix green |
+| 4 | Raise the first host to the slot count it can carry; add further hosts by the same procedure if D-3 says so | Matrix runs in parallel; host load stays within limits |
 | 5 | Release workflow replaces the manual publish | A `vivado-bitstreams-*` release made by CI with matching SHA-256s |
 
 ## Out of scope
@@ -414,9 +452,10 @@ Each phase is a PR with CI green before the next starts.
 * **D-1** What to do if `*.blob.core.windows.net` cannot be narrowed.
 * **D-2** Decided 2026-10-02: the runner repository is
   `fpgas-online/fpgas.online-vivado-runners`.
-* **D-3** Whether buddy takes a slot at all. It has ~15 GiB available and is
-  already swapping, so even a 16 GiB slot needs its other VMs trimmed first.
-  big-storage alone (4 slots, room for 8) may be enough.
+* **D-3** Which hosts run builds besides the first. buddy has ~15 GiB
+  available and is already swapping, so even a 16 GiB slot needs its other VMs
+  trimmed first; big-storage alone may be enough. Adding any host is the same
+  procedure (Plan 2, Task 9).
 * **CI-1 to CI-6** are decisions about the test-designs workflows (who
   publishes the first CI-made release, the Acorn PCIe release order, pull
   request #14, the Arty A7-100T, the full matrix on every push, failing on
@@ -428,7 +467,7 @@ In `docs/superpowers/plans/`:
 
 1. `2026-10-02-vivado-runners-1-runner-repo.md`: the runner repository
    (rollout Phases 0 and 1).
-2. `2026-10-02-vivado-runners-2-deployment.md`: deployment to big-storage and
-   the sandbox proof (Phases 2 and 4).
+2. `2026-10-02-vivado-runners-2-deployment.md`: deployment to a runner host
+   and the sandbox proof (Phases 2 and 4).
 3. `2026-10-02-vivado-runners-3-test-designs-ci.md`: the Vivado workflow and
    releases in test-designs (Phases 3 and 5).
