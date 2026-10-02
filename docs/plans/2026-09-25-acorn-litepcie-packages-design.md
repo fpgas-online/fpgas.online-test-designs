@@ -255,8 +255,10 @@ request.
 ### 3.6 Builds
 
 Every Arm build runs in Docker on GitHub's `ubuntu-24.04-arm` runners. armhf builds use
-`docker run --platform linux/arm/v7`, which fpgas.online-fpga-tools' `debs.yml` already does successfully.
-The amd64 builds run in Docker on `ubuntu-latest`.
+`docker run --platform linux/arm/v7`. Most of those runners execute 32-bit ARM code natively; AArch32 is
+optional on a 64-bit ARM CPU, and some answer `exec format error`. `container.py` tries the platform first
+and registers QEMU user emulation only on a runner where the try fails, as `apt-repo-action`'s `build-deb`
+does. The amd64 builds run in Docker on `ubuntu-latest`.
 The driver generation and the architecture-independent `-common` and `-dkms` run on `ubuntu-latest`: they
 are Python and nfpm only, and LiteX elaborates the SoC faster there.
 
