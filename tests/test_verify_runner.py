@@ -12,7 +12,7 @@ import json
 import subprocess
 
 import pytest
-from fpgas_online_verify import config, core, runner, state
+from fpgas_online_verify import config, core, identity, runner, state
 from fpgas_online_verify.board import Board, installed
 from fpgas_online_verify.core import Problem
 
@@ -217,6 +217,20 @@ def test_with_auto_a_board_with_none_of_the_tests_is_not_checked_and_not_passed(
     assert tt.options is None and tt.checked == []
     assert [b["board"] for b in report["boards"]] == ["arty"] and report["not_checked"] == ["tt"]
     assert report["result"] == "pass"  # arty's ddr ran and passed
+
+
+def test_with_auto_a_board_not_checked_is_still_identified_once(opts):
+    events = []
+    arty = WithTests("arty", ["uart", "ddr"], seen=[{"variant": "a7-35", "usb": "1-1"}])
+    fomu = WithTests("fomu", ["uart"], seen=[{"variant": "evt", "usb": "1-2", "serial": "S"}])
+    report = runner.verify({**opts, "tests": ["ddr"], "event": lambda s, d: events.append((s, d))},
+                           _boards(arty, fomu), usb=[], pci=[], mode=("auto", "test"))  # fmt: skip
+    assert report["not_checked"] == ["fomu"]
+    found = [d["board"] for s, d in events if s == "fpga-board-found"]
+    identified = [d for s, d in events if s == "fpga-board-identified"]
+    assert sorted(d["board"] for d in identified) == sorted(found) == ["arty", "fomu"]
+    assert {"board": "fomu", "kind": "fomu", "variant": "evt", "serial": "S", "usb": "1-2",
+            "schema": "fpga-identity/1"} in identified  # fmt: skip
 
 
 def test_with_auto_a_test_no_board_found_has_is_an_error(opts):
@@ -427,9 +441,12 @@ def test_every_board_module_is_found():
 
 
 class Busy(Fake):
-    """A board whose check runs two tests and says so through options["event"], as the board modules do."""
+    """A board whose check says who the board is and runs two tests, through options["event"], as the board
+    modules do."""
 
     def check(self, host, found, options):
+        who = identity.base(options["board_key"], self.name, found)
+        options["event"]("fpga-board-identified", identity.details(who))
         for test, result in (("uart", "pass"), ("ddr", self.result)):
             options["event"]("fpga-test-started", {"test": test})
             options["event"]("fpga-test-finished", {"test": test, "result": result, "reason": ""})
@@ -443,11 +460,179 @@ def test_the_site_hears_each_board_found_and_each_test_with_its_board(opts):
                   mode=("auto", "test"))  # fmt: skip
     assert events[0] == ("fpga-board-found", {"board": "arty", "variant": "a7-35", "where": "1-1"})
     assert events[1:] == [
+        (
+            "fpga-board-identified",
+            {"board": "arty", "kind": "arty", "variant": "a7-35", "usb": "1-1", "schema": "fpga-identity/1"},
+        ),
         ("fpga-test-started", {"board": "arty", "test": "uart"}),
         ("fpga-test-finished", {"board": "arty", "test": "uart", "result": "pass", "reason": ""}),
         ("fpga-test-started", {"board": "arty", "test": "ddr"}),
         ("fpga-test-finished", {"board": "arty", "test": "ddr", "result": "fail", "reason": ""}),
     ]
+
+
+class Stops(Fake):
+    """A board whose check raises `result`."""
+
+    def check(self, host, found, options):
+        raise self.result
+
+
+@pytest.mark.parametrize(
+    "board",
+    [
+        Fake("fomu", seen=[{"variant": "evt", "usb": "1-2", "serial": "S"}]),  # says nothing itself
+        Stops("fomu", seen=[{"variant": "evt", "usb": "1-2", "serial": "S"}], result=Problem("error", "no tool")),
+        Stops("fomu", seen=[{"variant": "evt", "usb": "1-2", "serial": "S"}], result=KeyError("x")),
+    ],
+)
+def test_every_board_found_is_identified_once_even_when_its_check_stops_early(opts, board):
+    events = []
+    report = runner.verify({**opts, "event": lambda s, d: events.append((s, d))}, _boards(board), usb=[], pci=[],
+                           mode=("auto", "test"))  # fmt: skip
+    identified = [d for s, d in events if s == "fpga-board-identified"]
+    assert identified == [{"board": "fomu", "kind": "fomu", "variant": "evt", "serial": "S", "usb": "1-2",
+                           "schema": "fpga-identity/1"}]  # fmt: skip
+    assert report["boards"][0]["identity"] == {"board": "fomu", "kind": "fomu", "variant": "evt", "serial": "S",
+                                               "usb": "1-2"}  # fmt: skip
+
+
+class IdentifiesThenStops(Fake):
+    """A board whose check says who the board is (with what it read: the IDCODE), then raises `result`."""
+
+    def check(self, host, found, options):
+        who = {**identity.base(options["board_key"], self.name, found), "idcode": "0x13631093", "idcode_version": 1}
+        identity.keep(options, who)
+        options["event"]("fpga-board-identified", identity.details(who))
+        raise self.result
+
+
+@pytest.mark.parametrize("raised", [KeyError("x"), Problem("error", "the services would not stop")])
+def test_a_board_that_stops_after_identifying_itself_keeps_its_identity(opts, raised):
+    events = []
+    netv2 = IdentifiesThenStops("netv2", seen=[{"variant": "a7-100", "usb": "1-1"}], result=raised)
+    report = runner.verify({**opts, "event": lambda s, d: events.append((s, d))}, _boards(netv2), usb=[], pci=[],
+                           mode=("auto", "test"))  # fmt: skip
+    (board,) = report["boards"]
+    assert board["result"] == "error"
+    assert board["identity"] == {"board": "netv2", "kind": "netv2", "variant": "a7-100", "usb": "1-1",
+                                 "idcode": "0x13631093", "idcode_version": 1}  # fmt: skip
+    assert [s for s, _ in events].count("fpga-board-identified") == 1
+    flat = runner.details(report)
+    assert flat["board0_identity_idcode"] == "0x13631093" and flat["board0_identity_idcode_version"] == "1"
+
+
+class KeepsABadValue(Fake):
+    """A board whose check keeps an identity holding a value no event can carry, then crashes sending it."""
+
+    def check(self, host, found, options):
+        who = {**identity.base(options["board_key"], self.name, found), "idcode": "0x13631093", "volts": 1.5}
+        identity.keep(options, who)
+        options["event"]("fpga-board-identified", identity.details(who))
+        return super().check(host, found, options)
+
+
+class ReportsABadValue(Fake):
+    """A board whose check passes, with a value no event can carry in the identity it reports."""
+
+    def check(self, host, found, options):
+        return {**super().check(host, found, options), "identity": {"board": options["board_key"], "x": b"\0"}}
+
+
+class ReportsABadName(Fake):
+    """A board whose check passes, with a field name that is not a string in the identity it reports."""
+
+    def check(self, host, found, options):
+        return {**super().check(host, found, options), "identity": {"board": options["board_key"], 5: "x"}}
+
+
+class ReportsANonDict(Fake):
+    """A board whose check passes, reporting an identity that is not a dict."""
+
+    def check(self, host, found, options):
+        return {**super().check(host, found, options), "identity": ["netv2"]}
+
+
+def test_an_identity_field_name_that_cannot_be_sent_is_an_error_on_that_board_only(opts):
+    netv2 = ReportsABadName("netv2", seen=[{"variant": "a7-100", "usb": "1-1"}])
+    arty = Fake("arty", seen=[{"variant": "a7-35", "usb": "1-2"}])
+    report = runner.verify(opts, _boards(netv2, arty), usb=[], pci=[], mode=("auto", "test"))
+    first, second = report["boards"]
+    assert first["result"] == "error" and second["result"] == "pass"
+    assert "the identity field 5 cannot be sent: an identity's field names must be strings" in first["reason"]
+    assert 5 not in first["identity"]
+    flat = runner.details(report)
+    assert "board0_identity_5" not in flat and "board0_identity_error" not in flat
+
+
+def test_an_identity_that_is_not_a_dict_is_replaced_by_what_finding_the_board_showed(opts):
+    events = []
+    netv2 = ReportsANonDict("netv2", seen=[{"variant": "a7-100", "usb": "1-1"}])
+    arty = Fake("arty", seen=[{"variant": "a7-35", "usb": "1-2"}])
+    report = runner.verify({**opts, "event": lambda s, d: events.append((s, d))}, _boards(netv2, arty), usb=[],
+                           pci=[], mode=("auto", "test"))  # fmt: skip
+    first, second = report["boards"]
+    assert first["result"] == "error" and second["result"] == "pass"
+    assert "the identity cannot be sent: an identity must be a dict, not ['netv2']" in first["reason"]
+    assert first["identity"] == identity.base("netv2", "netv2", {"variant": "a7-100", "usb": "1-1"})
+    identified = [d for s, d in events if s == "fpga-board-identified" and d["board"] == "netv2"]
+    assert identified == [{**first["identity"], "schema": identity.SCHEMA}]
+    assert runner.details(report)["result"] == "error"
+
+
+@pytest.mark.parametrize(("ident", "why"), [
+    (["arty"], "an identity must be a dict, not ['arty']"),
+    ("arty", "an identity must be a dict, not 'arty'"),
+    ({"board": "arty", 5: "x"}, "identity field 5: an identity's field names must be strings, not 5"),
+])  # fmt: skip
+def test_the_verified_event_says_why_a_non_dict_identity_or_a_bad_field_name_is_not_there(opts, ident, why):
+    report = {"result": "pass", "boards": [{"board": "arty", "result": "pass", "identity": ident}]}
+    out = runner.details(report)
+    assert out["board0_identity_error"] == why
+    assert not [k for k in out if k.startswith("board0_identity_") and k != "board0_identity_error"]
+
+
+@pytest.mark.parametrize("bad", [KeepsABadValue, ReportsABadValue])
+def test_an_identity_value_that_cannot_be_sent_is_an_error_on_that_board_only(opts, bad):
+    events = []
+    netv2 = bad("netv2", seen=[{"variant": "a7-100", "usb": "1-1"}])
+    arty = Fake("arty", seen=[{"variant": "a7-35", "usb": "1-2"}])
+    report = runner.verify({**opts, "event": lambda s, d: events.append((s, d))}, _boards(netv2, arty), usb=[],
+                           pci=[], mode=("auto", "test"))  # fmt: skip
+    first, second = report["boards"]
+    field = "volts" if bad is KeepsABadValue else "x"
+    assert first["result"] == "error" and f"the identity field {field} cannot be sent" in first["reason"]
+    assert field not in first["identity"] and second["result"] == "pass" and arty.checked
+    flat = runner.details(report)  # fpga-verified is still sent
+    assert flat["result"] == "error" and f"board0_identity_{field}" not in flat
+    if bad is KeepsABadValue:  # the identified event its check could not send is sent without the field
+        identified = [d for s, d in events if s == "fpga-board-identified" and d["board"] == "netv2"]
+        assert identified == [{"board": "netv2", "kind": "netv2", "variant": "a7-100", "usb": "1-1",
+                               "idcode": "0x13631093", "schema": "fpga-identity/1"}]  # fmt: skip
+
+
+def test_the_verified_event_says_why_an_identity_it_cannot_carry_is_not_there(opts):
+    report = {"result": "pass", "boards": [{"board": "arty", "result": "pass", "identity": {"volts": 1.5}}]}
+    out = runner.details(report)
+    assert out["board0_identity_error"].startswith("identity field volts: ")
+    assert "board0_identity_volts" not in out
+
+
+def test_a_board_that_identifies_itself_is_not_identified_again(opts):
+    events = []
+    runner.verify({**opts, "event": lambda s, d: events.append((s, d))},
+                  _boards(Busy("arty", seen=[{"variant": "a7-35", "usb": "1-1"}])), usb=[], pci=[],
+                  mode=("auto", "test"))  # fmt: skip
+    assert [s for s, _ in events].count("fpga-board-identified") == 1
+
+
+def test_the_identity_in_the_verified_event_is_flat_strings(opts):
+    who = {"board": "acorn", "flash_quad": True, "idcode_version": 1}
+    board = {"board": "acorn", "result": "pass", "identity": who}
+    report = {"result": "pass", "boards": [board]}
+    out = runner.details(report)
+    assert out["board0_identity_flash_quad"] == "true" and out["board0_identity_idcode_version"] == "1"
+    assert "board0_identity_schema" not in out
 
 
 def test_two_boards_of_a_kind_are_told_apart_in_the_events(opts):
@@ -477,8 +662,9 @@ def test_the_events_go_out_in_order_and_a_dead_broker_stops_the_progress_ones(op
     monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append((stage, details)) or True)
     out = tmp_path / "r.json"
     runner.run({**opts, "board": "arty", "report": str(out), "no_publish": False})
-    assert [s for s, _ in sent] == ["fpga-verifying", "fpga-board-found", "fpga-test-started", "fpga-test-finished",
-                                    "fpga-test-started", "fpga-test-finished", "fpga-verified"]  # fmt: skip
+    assert [s for s, _ in sent] == ["fpga-verifying", "fpga-board-found", "fpga-board-identified",
+                                    "fpga-test-started", "fpga-test-finished", "fpga-test-started",
+                                    "fpga-test-finished", "fpga-verified"]  # fmt: skip
     assert all(isinstance(v, str) for _, d in sent for v in d.values())
     assert sent[1][1] == {"board": "arty", "variant": "a7-35", "where": "-"}
     sent.clear()
@@ -616,6 +802,60 @@ def test_an_arty_idcode_on_a_record_from_before_it_is_added_quietly(opts):
     now = Seen("arty", {"variant": "a7-35", "serial": "A", "idcode": "0x0362d093"})
     report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
     assert report["result"] == "pass" and report["state"]["added"]
+
+
+def test_a_dna_recorded_without_its_leading_zeros_is_respelled_quietly(opts):
+    """Before schema 4 the Acorn's DNA was recorded as f"{dna:#x}"; identity.py writes all 16 digits."""
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "dna": "0x54b48664b04854"}}, 3)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "dna": "0x0054b48664b04854"})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and report["state"]["added"]
+    boards, version = state.load_record(opts["state"])
+    assert boards["acorn"]["dna"] == "0x0054b48664b04854" and version == 4
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and "added" not in report["state"]
+
+
+def test_another_dna_is_still_a_change_and_a_respelling_is_one_on_a_new_record(opts):
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "dna": "0x54b48664b04855"}}, 3)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "dna": "0x0054b48664b04854"})
+    assert runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))["result"] == "changed"
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "dna": "0x54b48664b04854"}}, 4)
+    assert runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))["result"] == "changed"
+
+
+S25FS = {"part": "S25FS256S", "jedec": "0x010219", "unique_id": "ab" * 16, "slots": {"operational": "1"}}
+
+
+def test_a_flash_part_renamed_with_the_same_ids_is_recorded_quietly(opts):
+    """Before schema 4 an S25FS256S was called an S25FL256S (bytes 1-3 only): a naming correction."""
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "flash": {**S25FS, "part": "S25FL256S"}}}, 3)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "flash": S25FS})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and report["state"]["added"]
+    boards, version = state.load_record(opts["state"])
+    assert boards["acorn"]["flash"] == S25FS and version == 4
+
+
+@pytest.mark.parametrize(
+    "recorded",
+    [
+        {**S25FS, "part": "S25FL256S", "unique_id": "cd" * 16},  # another flash of the same kind
+        {**S25FS, "part": "S25FL512S", "jedec": "0x010220"},  # another kind of flash
+        {**S25FS, "part": "S25FL256S", "slots": {"operational": "0"}},  # renamed, and rewritten
+    ],
+)
+def test_a_flash_that_really_changed_is_still_a_change_through_a_rename(opts, recorded):
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "flash": recorded}}, 3)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "flash": S25FS})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "changed"
+
+
+def test_a_flash_part_renamed_on_a_new_record_is_a_change(opts):
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "flash": {**S25FS, "part": "S25FL256S"}}}, 4)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "flash": S25FS})
+    assert runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))["result"] == "changed"
 
 
 def test_an_acorns_7_digit_idcode_takes_its_whole_one_quietly(opts):

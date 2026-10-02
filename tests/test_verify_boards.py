@@ -10,7 +10,7 @@ import struct
 import sys
 
 import pytest
-from fpgas_online_verify import cli, core, debug, host_tests, idcode
+from fpgas_online_verify import cli, core, debug, host_tests, idcode, identity
 from fpgas_online_verify.boards import arty, fomu, netv2, tt_fpga
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
 
@@ -494,8 +494,39 @@ def test_a_test_board_says_when_each_test_starts_and_how_it_ended(tmp_path):
     events = []
     _check(FOMU, tmp_path, {"variant": "evt", "usb": "1-3", "serial": "fomu-7"}, Runner(),
            event=lambda stage, d: events.append((stage, d)))  # fmt: skip
-    assert events == [("fpga-test-started", {"test": "uart"}),
+    assert events == [("fpga-board-identified", {"board": "fomu", "kind": "fomu", "variant": "evt", "serial": "fomu-7",
+                                                 "usb": "1-3", "schema": "fpga-identity/1"}),
+                      ("fpga-test-started", {"test": "uart"}),
                       ("fpga-test-finished", {"test": "uart", "result": "pass", "reason": ""})]  # fmt: skip
+
+
+def test_an_arty_says_who_it_is_before_its_tests_with_its_whole_idcode(tmp_path):
+    events, kept = [], []
+    report = _check(ARTY, tmp_path, ARTY_FOUND, Runner(), board_key="arty",
+                    event=lambda stage, d: events.append((stage, d)), **{identity.KEEP: kept.append})  # fmt: skip
+    assert events[0][0] == "fpga-board-identified" and events[1][0] == "fpga-test-started"
+    assert kept == [report["identity"]]  # handed to the runner, so a crash after this keeps it
+    assert report["identity"] == {
+        "board": "arty", "kind": "arty", "variant": "a7-35", "serial": "210319B", "usb": "1-1",
+        "idcode": "0x0362d093", "idcode_version": 0, "idcode_part_number": "0x362d", "idcode_manufacturer_id": "0x049",
+        "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A35T",
+    }  # fmt: skip
+    assert events[0][1] == identity.details(report["identity"])
+
+
+def test_a_jtag_chain_with_nothing_on_it_is_an_idcode_error(tmp_path):
+    report = _check(ARTY, tmp_path, ARTY_FOUND, Runner([("--detect", (1, "JTAG init failed"))]))
+    assert report["identity"]["idcode_error"] == report["jtag"]["reason"]
+    assert "idcode" not in report["identity"]
+
+
+def test_a_board_whose_check_stops_before_its_tests_still_says_who_it_is(tmp_path):
+    events = []
+    report = _check(TT, tmp_path, {"variant": "tt-fpga", "usb": "1-2", "serial": "E661"}, Runner(), tests=["nope"],
+                    event=lambda stage, d: events.append((stage, d)))  # fmt: skip
+    assert report["result"] == "error"
+    assert events == [("fpga-board-identified", {"board": "tt", "kind": "tt", "variant": "tt-fpga", "serial": "E661",
+                                                 "usb": "1-2", "schema": "fpga-identity/1"})]  # fmt: skip
 
 
 # -- the commands and the debug tool ---------------------------------------------------------------------------

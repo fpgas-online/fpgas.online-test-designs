@@ -1,0 +1,37 @@
+{
+ "boards": [
+  {
+   "bdf": "0001:01:00.0",
+   "board": "acorn",
+   "build": "operational",
+   "dna": "0x0054b48664b04854",
+   "flash": "S25FL256S",
+   "flash_config": "0x02",
+   "flash_extended_id": "0x4d0180",
+   "flash_jedec": "0x010219",
+   "flash_quad": true,
+   "flash_size_bytes": 33554432,
+   "flash_source": "pcie",
+   "flash_status": "0x00",
+   "flash_uid": "edcbeececb2b2a88b04f914d2e46af90",
+   "flash_uid_bits": 128,
+   "flash_uid_opcode": "0x4b",
+   "flash_uid_state": "read",
+   "idcode": "0x13636093",
+   "idcode_device": "XC7A200T",
+   "idcode_manufacturer": "Xilinx",
+   "idcode_manufacturer_id": "0x049",
+   "idcode_part_number": "0x3636",
+   "idcode_version": 1,
+   "identifier": "fpgas-online Acorn PCIe SoC cle-215+ 2026-09-21 14:23:32",
+   "kind": "acorn",
+   "soc_model": "cle-215+",
+   "variant": "cle-215+"
+  }
+ ],
+ "identity_version": 1,
+ "read_at": "2026-10-02T00:00:00+00:00",
+ "schema": "fpgas-verify/identity",
+ "source": "live",
+ "tool": "fpgas-online-verify 0.0.post808"
+}
