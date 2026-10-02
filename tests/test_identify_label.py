@@ -210,7 +210,7 @@ def test_the_arty_reads_only_its_idcode_and_loads_nothing(tmp_path):
 def test_an_arty_with_no_jtag_chain_is_an_idcode_error(tmp_path):
     run = Runner([("--detect", (1, "JTAG init failed"))])
     out = ARTY.identify(_host(ARTY), ARTY_FOUND, {"board_key": "arty"}, runner=run)
-    assert out["idcode_error"] == "no device on the JTAG chain (exit 1)"
+    assert "exited 1" in out["idcode_error"] and "idcode" not in out  # the check's own reason (testbench.jtag)
 
 
 def test_the_netv2_uses_the_idcode_its_scan_found_and_runs_nothing():

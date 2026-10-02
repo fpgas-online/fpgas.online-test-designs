@@ -689,6 +689,31 @@ def test_another_dna_is_still_a_change_and_a_respelling_is_one_on_a_new_record(o
     assert runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))["result"] == "changed"
 
 
+def test_an_acorns_7_digit_idcode_takes_its_whole_one_quietly(opts):
+    """Before schema 3 the Acorn recorded `f"{idcode & 0x0FFFFFFF:#x}"`: 0x3636093, seven hex digits."""
+    acorn = {"bdf": "0001:01:00.0", "variant": "cle-215+", "dna": "0x1"}
+    _record(opts, {"acorn": {**acorn, "idcode": "0x3636093"}}, 2)
+    now = Seen("acorn", {**acorn, "idcode": "0x13636093"})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and report["state"]["added"] and "changes" not in report["state"]
+    boards, version = state.load_record(opts["state"])
+    assert boards["acorn"]["idcode"] == "0x13636093" and version == state.SCHEMA_VERSION
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))  # and stays so
+    assert report["result"] == "pass" and "added" not in report["state"]
+
+
+def test_an_idcode_on_a_schema_1_record_is_widened_too(opts):
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "idcode": "0x3636093"}}, 1)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "idcode": "0x13636093", "dna": "0x1"})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and report["state"]["added"]  # the DNA (schema 2) is added quietly too
+    boards, _ = state.load_record(opts["state"])
+    assert (boards["acorn"]["idcode"], boards["acorn"]["dna"]) == ("0x13636093", "0x1")
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "idcode": "0x3631093"}}, 1)  # another part
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["state"]["changes"] == ["acorn.idcode: was '0x3631093', now '0x13636093'"]
+
+
 def test_a_run_that_errs_adds_nothing_to_the_record(opts):
     _record(opts, {"acorn": {"bdf": "0001:01:00.0"}}, 1)
     now = Seen("acorn", {"bdf": "0001:01:00.0", "dna": "0x1"}, result="error")
