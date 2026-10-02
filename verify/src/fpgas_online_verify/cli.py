@@ -5,26 +5,25 @@ import argparse
 import pathlib
 import re
 import sys
+import textwrap
 
 from . import config, debug, runner, state
 from .board import installed
+from .testbench import TestBoard
 
+# core.SEVERITY, for --help: tests/test_verify_boards.py holds them equal.
 RESULTS = (
-    ("pass", "every test passed; the board and flash are as recorded"),
-    ("driver-bound", "Acorn: a kernel driver holds the board, so it was not read"),
-    ("degraded", "Acorn: running its golden (fallback) image"),
+    ("pass", "every test passed, and the board and flash are as recorded"),
     ("changed", "a different board or flash from the recorded one"),
-    ("fail", "a test, a load or a flash comparison failed"),
+    ("fail", "a test failed, or the board runs a design that is not ours"),
     ("missing", "no board found"),
     ("error", "the check could not run (a missing tool or file)"),
 )
 
 
-def _results(board):
-    """The results, for --help: the Acorn-only ones only where an Acorn can be checked."""
-    acorn = board is None or board.name == "acorn"
-    rows = [f"  {r:<13} {what}" for r, what in RESULTS if acorn or not what.startswith("Acorn")]
-    return "results, best to worst (exit 0 only for pass):\n" + "\n".join(rows)
+def _results():
+    rows = [f"  {r:<13} {what}" for r, what in RESULTS]
+    return "the result is pass (exit 0) or a fail named for its worst cause (exit 1):\n" + "\n".join(rows)
 
 
 def _files(board):
@@ -42,22 +41,29 @@ def _tests_epilog(board):
     tests = getattr(board, "tests", None)
     if not tests:
         return ""
-    boot = [t for t, v in tests.items() if v.get("verify")]
+    # A board that loads test designs marks which are in the boot check; the Acorn's are all in it.
+    boot = [t for t, v in tests.items() if v.get("verify")] if isinstance(board, TestBoard) else list(tests)
     other = [t for t in tests if t not in boot]
-    out = f"tests in the boot check: {' '.join(boot)}"
-    return out + (f"\ntests only fpgas-{board.slug}-debug runs: {' '.join(other)}" if other else "")
+    out = _listed("tests in the boot check", boot)
+    return out + ("\n" + _listed(f"tests only fpgas-{board.slug}-debug runs", other) if other else "")
+
+
+def _listed(title, words):
+    """`title:` and the words under it, wrapped to fit 80 columns."""
+    return f"{title}:\n" + textwrap.fill(" ".join(words), 78, initial_indent="  ", subsequent_indent="  ")
 
 
 def _verify_parser(prog, board=None):
     what = "this host's FPGA board" if board is None else f"this host's {board.title}"
-    selectable = board is None or bool(getattr(board, "tests", None))  # the Acorn's check has no selectable tests
+    selectable = board is None or bool(getattr(board, "tests", None))
+    loads = board is None or isinstance(board, TestBoard)  # loads test designs: has variants and a UART to choose
     parser = argparse.ArgumentParser(
         prog=prog,
         usage="%(prog)s [options]",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=f"Check {what} with the fpgas.online test designs.\n"
         "Prints a summary to stderr and writes a JSON report.",
-        epilog="\n\n".join(e for e in (board and _tests_epilog(board), _results(board), _files(board)) if e),
+        epilog="\n\n".join(e for e in (board and _tests_epilog(board), _results(), _files(board)) if e),
     )
     if board is None:
         parser.add_argument("--list", action="store_true", help="list the installed boards and the configured one")
@@ -68,7 +74,7 @@ def _verify_parser(prog, board=None):
         partial.add_argument("--test", action="append", dest="tests", metavar="TEST",
                              help="run only TEST (repeatable); not published or recorded")  # fmt: skip
     partial.add_argument("--update", action="store_true", help="accept a changed board or flash: record it")
-    if selectable:
+    if loads:
         parser.add_argument("--variant", help="use VARIANT's bitstreams, not the detected one")
         parser.add_argument("--port", help="the board's UART (default: the board's usual one)")
     parser.add_argument("--images", type=pathlib.Path, metavar="DIR", help="the bitstreams (default: installed)")
@@ -116,7 +122,7 @@ def board_main(argv=None, prog=None):
 
 
 def debug_main(argv, prog, board):
-    tests = getattr(board, "tests", None)
+    tests = getattr(board, "tests", None) if isinstance(board, TestBoard) else None  # tests it loads one by one
     commands = debug.commands(board)
     listing = [
         f"  {name + (' TEST' if takes_test else ''):<13} {help_}" for name, (_, help_, takes_test) in commands.items()
@@ -129,7 +135,7 @@ def debug_main(argv, prog, board):
             examples.append(f"  sudo {prog} test pin-id -- --hat-port JA")
     if board.name == "acorn":
         examples.append(f"  sudo {prog} identify")
-    epilog = ["commands:\n" + "\n".join(listing), _tests_epilog(board), "examples:\n" + "\n".join(examples)]
+    epilog = ["commands:\n" + "\n".join(listing), tests and _tests_epilog(board), "examples:\n" + "\n".join(examples)]
     parser = argparse.ArgumentParser(
         prog=prog,
         usage=f"%(prog)s [options] COMMAND{' [TEST] [-- ARGS]' if tests else ''}",

@@ -386,11 +386,25 @@ def test_every_help_fits_an_80_column_console(prog, monkeypatch, capsys):
     assert text.startswith(f"usage: {prog} ") and max(map(len, text.splitlines())) <= 80
 
 
-def test_the_acorn_commands_offer_only_the_options_its_check_uses(monkeypatch):
-    monkeypatch.setattr(cli.runner, "run", lambda options, prog: 0)
-    for option in (["--test", "jtag"], ["--port", "/dev/ttyAMA0"], ["--variant", "cle-101"]):
+def test_the_acorn_commands_offer_only_the_options_its_check_uses(monkeypatch, capsys):
+    seen = {}
+    monkeypatch.setattr(cli.runner, "run", lambda options, prog: seen.update(options) or 0)
+    cli.board_main(["--test", "jtag"], prog="fpgas-acorn-verify")
+    assert seen["tests"] == ["jtag"]
+    for option in (["--port", "/dev/ttyAMA0"], ["--variant", "cle-101"]):  # it loads nothing: no UART, no variant
         with pytest.raises(SystemExit):
             cli.board_main(option, prog="fpgas-acorn-verify")
+    with pytest.raises(SystemExit):
+        cli.board_main(["--help"], prog="fpgas-acorn-verify")
+    assert f"tests in the boot check:\n  {' '.join(ACORN.tests)}\n" in capsys.readouterr().out
+    with pytest.raises(SystemExit):  # the debug tool has no per-test commands for the Acorn
+        cli.board_main(["--help"], prog="fpgas-acorn-debug")
+    out = capsys.readouterr().out
+    assert "usage: fpgas-acorn-debug [options] COMMAND\n" in out and "tests in the boot check" not in out
+
+
+def test_the_help_lists_every_result_the_check_gives():
+    assert [r for r, _ in cli.RESULTS] == list(core.SEVERITY)
 
 
 def test_the_report_goes_to_the_boot_path_only_when_not_given(monkeypatch):
