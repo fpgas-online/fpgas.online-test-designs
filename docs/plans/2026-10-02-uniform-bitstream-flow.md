@@ -19,12 +19,15 @@ acorn, netv2, arty, etc (all the xilinx based parts)."
 | `fpgas-online-<board>-bitstreams` holds | this commit's CI builds; version `X.Y.postN` | the release pinned in `packaging/acorn-pcie/release.toml`; version `<date>+g<sha>` |
 | Vivado builds | none packaged | the only ones packaged |
 
-Three more facts:
+Four more facts:
 
 - CI already builds the single-function designs for all three Acorn variants with openXC7 (`build-uart-test.yml`,
   `build-ddr-test.yml`, `build-spiflash-test.yml`, `pmod-*.yml`, `pcie-enumeration-build.yml`, on the XC7A200T
   and the XC7A100T). They are in the `all-bitstreams` bundle (18 of its artifacts on `main` at b1218ee), and
   no package carries them.
+- On `main`, 13 of the single-function designs' gateware scripts cannot be built with Vivado at all:
+  `patch_yosys_template()` asserts on an attribute only the Yosys toolchain has, and they call it whatever the
+  toolchain (`designs/uart/gateware/uart_soc_arty.py` is one). PR #14 makes it do nothing under Vivado.
 - Building the Acorn's full test design with open tooling is Phase 5 of the approved
   [Acorn PCIe design](2026-09-03-acorn-pcie-design.md). It has not been started until now.
 - PR #14 (`vivado-xilinx-flows`) is the uniform Vivado side: three flows for every Xilinx design
