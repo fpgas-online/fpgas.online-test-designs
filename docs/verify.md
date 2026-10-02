@@ -150,12 +150,14 @@ the check, publishes anything or records any state.
 
 1. reads the identity, as `--identify` does;
 2. releases every board's lock;
-3. writes the document to `/run/fpgas-online/identity-<pid>.json`;
+3. writes the document to `/run/fpgas-online/identity-<pid>.json`, a new file readable by root alone (it never
+   writes over a file or through a link already there);
 4. runs `rpi-hwid labels --this-host [--out F] [--list]` with `FPGAS_VERIFY_IDENTITY` set to that file;
-5. deletes the file, whatever happened.
+5. deletes the file, whatever happened: an error, Ctrl-C, or a SIGTERM (which exits 143).
 
-Its exit status is rpi-hwid's. `--list` (with `--label`) lists the labels rpi-hwid would make; `--out F` is
-where rpi-hwid writes them.
+Its exit status is rpi-hwid's. It exits 2, saying why, when rpi-hwid is not installed or when the file cannot
+be written: run it as root. `--list` (with `--label`) lists the labels rpi-hwid would make; `--out F` is where
+rpi-hwid writes them.
 
 Nesting: rpi-hwid gets the board's identity by running `fpgas-verify --identify`. So that the inner run never
 waits on a lock the outer run holds, reads a board twice or starts rpi-hwid again, a run with

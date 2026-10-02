@@ -16,6 +16,7 @@ import functools
 import json
 import os
 import pathlib
+import signal
 import subprocess
 import sys
 
@@ -659,6 +660,63 @@ def test_label_deletes_the_identity_even_when_rpi_hwid_cannot_run(labelling, loc
     with pytest.raises(OSError):
         label.run(labelling, runner=rpi_hwid)
     assert not rpi_hwid.seen["path"].exists()
+
+
+def test_label_deletes_the_identity_on_ctrl_c(labelling, locks):
+    rpi_hwid = RpiHwid(locks, raises=KeyboardInterrupt())
+    with pytest.raises(KeyboardInterrupt):
+        label.run(labelling, runner=rpi_hwid)
+    assert not rpi_hwid.seen["path"].exists()
+
+
+def test_label_deletes_the_identity_on_sigterm_and_puts_the_handler_back(labelling, locks):
+    before = signal.getsignal(signal.SIGTERM)
+
+    class Terminated(RpiHwid):
+        def __call__(self, argv, env, check):
+            super().__call__(argv, env, check)
+            os.kill(os.getpid(), signal.SIGTERM)  # as systemd or kill would, while rpi-hwid runs
+            raise AssertionError("SIGTERM did not stop --label")
+
+    rpi_hwid = Terminated(locks)
+    with pytest.raises(SystemExit) as stopped:
+        label.run(labelling, runner=rpi_hwid)
+    assert stopped.value.code == 128 + signal.SIGTERM
+    assert not rpi_hwid.seen["path"].exists()
+    assert signal.getsignal(signal.SIGTERM) == before
+    assert label.run(labelling, runner=RpiHwid(locks)) == 0 and signal.getsignal(signal.SIGTERM) == before
+
+
+def test_label_writes_the_identity_for_root_alone_and_never_over_a_file_or_link(labelling, locks, capsys):
+    class Mode(RpiHwid):
+        def __call__(self, argv, env, check):
+            self.mode = os.stat(env[identify.ENV]).st_mode & 0o777
+            return super().__call__(argv, env, check)
+
+    rpi_hwid = Mode(locks)
+    assert label.run(labelling, runner=rpi_hwid) == 0 and rpi_hwid.mode == 0o600
+    run_dir = labelling["identity_dir"]
+    path = run_dir / f"identity-{os.getpid()}.json"
+    path.write_text("someone else's")
+    rpi_hwid = RpiHwid(locks)
+    assert label.run(labelling, runner=rpi_hwid) == 2
+    assert rpi_hwid.seen == {} and path.read_text() == "someone else's"  # not run, not overwritten, not deleted
+    assert "is already there" in capsys.readouterr().err
+    path.unlink()
+    target = run_dir / "elsewhere"
+    path.symlink_to(target)
+    assert label.run(labelling, runner=rpi_hwid) == 2
+    assert rpi_hwid.seen == {} and not target.exists() and path.is_symlink()
+
+
+def test_label_that_cannot_write_the_identity_says_so_and_exits_2(tmp_path, labelling, locks, capsys):
+    (tmp_path / "not-a-directory").write_text("")
+    rpi_hwid = RpiHwid(locks)
+    options = {**labelling, "identity_dir": tmp_path / "not-a-directory" / "run"}
+    assert label.run(options, runner=rpi_hwid) == 2 and rpi_hwid.seen == {}
+    err = capsys.readouterr().err
+    assert "cannot write the identity for rpi-hwid" in err and "run it as root" in err
+    assert "Traceback" not in err
 
 
 def test_label_without_rpi_hwid_exits_2_says_how_to_install_it_and_reads_nothing(monkeypatch, untouchable, capsys):
