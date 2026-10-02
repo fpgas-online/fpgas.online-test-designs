@@ -7,7 +7,9 @@ Design: docs/plans/2026-09-25-acorn-litepcie-packages-design.md. What must hold:
 """
 
 import importlib.util
+import json
 import pathlib
+import shutil
 import subprocess
 
 import pytest
@@ -815,3 +817,28 @@ def test_a_download_that_keeps_failing_is_a_clear_error_not_a_traceback(tmp_path
     monkeypatch.setattr(cc, "RETRY_DELAY_S", 0)
     with pytest.raises(cc.CheckError, match=r"manifest\.json.*no route to host"):
         cc.fetch_release_csrs(pin, fetch=down)
+
+
+def test_kernels_toml_builds_the_kernels_a_pi_5_boots():
+    """Both suites, the two 64-bit flavours: no 32-bit kernel boots on a Pi 5, and no host runs -rt."""
+    assert bd.read_kernels()["suites"] == {
+        "bookworm": {"arm64": ["rpi-v8", "rpi-2712"]},
+        "trixie": {"arm64": ["rpi-v8", "rpi-2712"]},
+    }
+
+
+def test_a_kernels_toml_without_suites_is_refused(tmp_path):
+    bad = tmp_path / "kernels.toml"
+    bad.write_text('fleet_kernel = "6.12.96+rpt-rpi-v8"\nfleet_suite = "bookworm"\nmin_kernel = "6.12"\n')
+    with pytest.raises(bd.BuildError, match="suites"):
+        bd.read_kernels(bad)
+
+
+def test_a_flavour_for_an_architecture_no_build_exists_for_is_refused(tmp_path):
+    bad = tmp_path / "kernels.toml"
+    bad.write_text(
+        'fleet_kernel = "6.12.96+rpt-rpi-v8"\nfleet_suite = "bookworm"\nmin_kernel = "6.12"\n'
+        '[suites.bookworm]\nriscv64 = ["rpi-v8"]\n'
+    )
+    with pytest.raises(bd.BuildError, match="riscv64"):
+        bd.read_kernels(bad)

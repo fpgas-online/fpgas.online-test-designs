@@ -37,6 +37,9 @@ MODULE = f"{NAME}-module"  # virtual: Provided by -dkms and (Part B) every -modu
 PREBUILT = f"{NAME}-prebuilt"  # virtual: Provided by every -modules-<kver>
 TOOLS = ("litepcie_util", "litepcie_test")
 ARCHES = ("armhf", "arm64")
+KERNEL_ARCHES = ("arm64", "armhf")  # -modules-<kver>: the Raspberry Pi archive's
+# A suite's Debian release number, for the `~deb<R>` suffix of a suite-specific build (§3.8).
+SUITE_RELEASE = {"bookworm": 12, "trixie": 13, "forky": 14}
 MAINTAINER = "fpgas.online <fpgas@fpgas.online>"
 HOMEPAGE = "https://github.com/fpgas-online/fpgas.online-test-designs"
 
@@ -95,6 +98,17 @@ def read_kernels(path=KERNELS):
     for key in ("fleet_kernel", "fleet_suite", "min_kernel"):
         if not isinstance(kernels.get(key), str):
             raise BuildError(f"{path}: {key} is missing")
+    suites = kernels.get("suites")
+    if not isinstance(suites, dict) or not suites:
+        raise BuildError(f"{path}: no [suites.<suite>] table says which kernel flavours to build")
+    for suite, arches in suites.items():
+        if suite not in SUITE_RELEASE:
+            raise BuildError(f"{path}: {suite} is not a suite build_debs.py knows the Debian release of")
+        for arch, flavours in arches.items():
+            if arch not in KERNEL_ARCHES:
+                raise BuildError(f"{path}: {suite} lists flavours for {arch}, which no build exists for")
+            if not (isinstance(flavours, list) and flavours and all(isinstance(f, str) for f in flavours)):
+                raise BuildError(f"{path}: {suite} {arch} is not a list of flavours")
     return kernels
 
 
