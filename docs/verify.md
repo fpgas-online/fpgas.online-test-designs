@@ -76,8 +76,10 @@ sudo fpgas-acorn-verify --test pcie-link --test flash   # only some tests (these
 sudo fpgas-verify --update                 # after flashing or swapping a board on purpose
 fpgas-verify --list                        # the installed boards, and which this host checks
 
+sudo fpgas-verify --identify               # who the board is, as JSON (see "Identity")
+
 sudo fpgas-arty-debug test ddr             # load the DDR design and run its test, all output live
-sudo fpgas-acorn-debug identify            # the Acorn's running build and flash IDs
+sudo fpgas-acorn-debug identify            # the same as fpgas-acorn-verify --identify
 ```
 
 * Run them with `sudo`; `--help`, `--list` and `fpgas-<board>-debug list` do not need it.
@@ -92,6 +94,58 @@ sudo fpgas-acorn-debug identify            # the Acorn's running build and flash
   package puts one in `/usr/share/fpgas-online/verify/mode.d/`; one in `/etc/fpgas-verify/` overrides it.
 * Options for the boot run go in `FPGAS_VERIFY_ARGS` in `/etc/default/fpgas-verify`.
 * From a checkout, without installing: `PYTHONPATH=verify/src python3 -m fpgas_online_verify --help`.
+
+### Identity
+
+`fpgas-verify --identify` (also with `--board B`, as `fpgas-<board>-verify --identify`, and as
+`fpgas-acorn-debug identify`) prints one identity document (JSON) for every board found, for
+[rpi-hwid](https://github.com/mithro/rpi-hwid)'s labels. It does not run the check, publish anything or record
+any state.
+
+* The document and every field in it are described in [identity.md](identity.md). It is printed with sorted
+  keys and an indent of 1.
+* What it reads live:
+
+  | Board | Read live |
+  |---|---|
+  | Acorn | the running build, device DNA and flash identity over BAR0 (the check's `pcie-bar0`), and the IDCODE and DNA over P1 JTAG (`jtag`) |
+  | Arty | the JTAG IDCODE |
+  | NeTV2 | the JTAG IDCODE, from the scan that finds it |
+  | Fomu, TT FPGA | how the board was found (its USB serial) |
+
+* Nothing is loaded into a board and no flash is written. Some reads do change state on the way, and each
+  is put back:
+  * Acorn, BAR0: memory decoding is switched on in the board's PCI COMMAND register for the read and
+    switched off again if it was off. If a kernel driver (litepcie) is bound to the board, it is unbound for
+    the read and bound again afterwards. To read the flash's IDs (RDID and OTPR), the SoC's SPI master
+    registers and the flash's chip select are written. No other CSR of the SoC is written; `--identify`
+    refuses any other write, so the SoC is never reset through `ctrl_reset`.
+  * Acorn, P1 JTAG, and NeTV2: openFPGALoader (or openocd) drives the Pi's JTAG GPIOs. Their state is read
+    with `pinctrl` first and put back afterwards; a pin that was an output goes back as an input. Without
+    `pinctrl` the scan is not run.
+* Each board is read under its lock, as a check is. `--identify` waits at most 30 s for it; a board still in
+  use then has its fields missing, for the reason `board busy`. A NeTV2 is also looked for under its lock,
+  since finding it drives its JTAG pins.
+* A field that needs a design loaded (the Arty's and NeTV2's flash, read through openFPGALoader's
+  SPI-over-JTAG bridge) comes from the boot report, `/run/fpgas-online/verify.json`, when the board there is
+  this one by a key no other board has: the Arty's USB serial, the Acorn's PCI slot, or the device DNA. Those
+  fields are listed in the board's `from_report`. An IDCODE names a part, not a board, so a board known only
+  by its IDCODE (every NeTV2, for now) gets nothing from the report: the fields stay missing, for the reason
+  `no board-unique match in the boot report`.
+* The exit status is 0 when every board's identity is whole (no field missing, no `<field>_error`), 1
+  otherwise. Each missing field is printed on stderr with why. The document is printed either way; readers
+  use it and ignore the exit status.
+
+Nesting: rpi-hwid gets the board's identity by running `fpgas-verify --identify`, and may be run by an
+fpgas-verify that has already read the identity and put it in a file named by `FPGAS_VERIFY_IDENTITY`. So
+that the inner run never waits on a lock the outer run holds or reads a board twice, a run with
+`FPGAS_VERIFY_IDENTITY` set (an empty value counts as not set):
+
+| Mode | Does |
+|---|---|
+| `--identify` (and `fpgas-acorn-debug identify`) | checks that the file is an identity document with `identity_version` 1 and prints it unchanged, byte for byte. It takes no lock and runs no board code |
+| a missing or bad file | an error (exit 1). It never falls back to reading the hardware |
+| any other mode | refuses (exit 2) |
 
 ### Reading the result
 
@@ -215,6 +269,8 @@ options:
   --no-probe         never scan JTAG to find a board (auto only)
   --test TEST        run only TEST (repeatable); not published or recorded
   --update           accept a changed board or flash: record it
+  --identify         print who the board is (an identity document, JSON) and
+                     nothing else
   --variant VARIANT  use VARIANT's bitstreams, not the detected one
   --port PORT        the board's UART (default: the board's usual one)
   --images DIR       the bitstreams (default: installed)
@@ -246,6 +302,8 @@ options:
   -h, --help         show this help message and exit
   --test TEST        run only TEST (repeatable); not published or recorded
   --update           accept a changed board or flash: record it
+  --identify         print who the board is (an identity document, JSON) and
+                     nothing else
   --variant VARIANT  use VARIANT's bitstreams, not the detected one
   --port PORT        the board's UART (default: the board's usual one)
   --images DIR       the bitstreams (default: installed)
@@ -313,6 +371,8 @@ options:
   -h, --help     show this help message and exit
   --test TEST    run only TEST (repeatable); not published or recorded
   --update       accept a changed board or flash: record it
+  --identify     print who the board is (an identity document, JSON) and
+                 nothing else
   --images DIR   the bitstreams (default: installed)
   --state FILE   the recorded state
   --report FILE  the JSON report; '-' for stdout (the default with --test)
@@ -345,7 +405,7 @@ options:
 
 commands:
   detect        find the board; exit 1 if it is not there
-  identify      show the running build and the flash's ID
+  identify      print who the board is (as fpgas-acorn-verify --identify)
 
 examples:
   sudo fpgas-acorn-debug detect

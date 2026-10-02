@@ -428,6 +428,30 @@ def scratch_faults(read, write, csrs, where):
     return faults
 
 
+# -- --identify's bus ----------------------------------------------------------------------------------
+
+# The only CSRs --identify writes: the SPI master's MOSI and control registers and the flash's chip select, which
+# the flash's RDID and OTPR reads need. Nothing else of the SoC is written; ctrl_reset in particular never is
+# (a SoC reset after DMA has wedged a Pi 5's PCIe root complex).
+IDENTIFY_WRITES = frozenset({spi_flash.SPI_MOSI_HI, spi_flash.SPI_MOSI_LO, spi_flash.SPI_CONTROL, spi_flash.FLASH_CS_N})
+
+
+class IdentifyBus:
+    """BAR0 for --identify: every read, and writes only to IDENTIFY_WRITES; any other write is refused."""
+
+    def __init__(self, bus):
+        self._bus = bus
+
+    def read(self, addr):
+        return self._bus.read(addr)
+
+    def write(self, addr, value):
+        if addr not in IDENTIFY_WRITES:
+            raise Problem("error", f"--identify refused to write CSR {addr:#x}: it writes only the SPI master "
+                                   "and the flash's chip select")  # fmt: skip
+        self._bus.write(addr, value)
+
+
 # -- the flash -----------------------------------------------------------------------------------------
 
 

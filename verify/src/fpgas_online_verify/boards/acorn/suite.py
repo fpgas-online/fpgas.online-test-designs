@@ -168,6 +168,8 @@ class _Suite:
         try:
             stack.enter_context(check.driver_released(self.found, self.driver, self.root))
             bus = stack.enter_context(self.options.get("open_bar", check.open_bar0)(self.found["bdf"]))
+            if self.options.get("identify_only"):  # --identify: only the flash's ID reads write anything
+                bus = check.IdentifyBus(bus)
         except Problem as p:
             self.fault(p)
             self.bar0_problem = p

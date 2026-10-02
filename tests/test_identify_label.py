@@ -16,6 +16,7 @@ import pathlib
 import pytest
 from fpgas_online_verify import cli, debug, identify, identity
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
+from fpgas_online_verify.core import Problem
 
 from tests import acorn_fakes as fk
 from tests.test_acorn_verify import Rig
@@ -405,6 +406,39 @@ def test_the_acorn_reads_the_same_identity_as_its_check_without_reading_a_slot_o
     assert all(not c[0].startswith("openFPGALoader") or "--detect" in c or "--read-dna" in c for c in rig.pi.calls)
     assert rig.events == []  # nothing is sent to the fleet
     assert not [f for f in ACORN.label_fields if f not in live]
+
+
+def test_the_acorn_writes_only_the_spi_master_and_chip_select_over_bar0(tmp_path, images):
+    from fpgas_online_verify.boards.acorn import check
+
+    rig = Rig(tmp_path, images)
+    written, write = [], rig.soc.write
+    rig.soc.write = lambda addr, value: written.append(addr) or write(addr, value)
+    live = ACORN.identify({}, rig.found(), rig.options(board_key="acorn"))
+    assert live["flash_jedec"] == "0x010219" and written  # the flash's RDID and OTPR were sent
+    assert set(written) <= check.IDENTIFY_WRITES
+    assert fk.REGS["ctrl_scratch"] - 4 not in written  # ctrl_reset, the CSR before ctrl_scratch
+
+
+def test_identify_refuses_any_other_write_ctrl_reset_above_all():
+    from fpgas_online_verify.boards.acorn import check
+
+    written = []
+
+    class Bus:
+        def read(self, addr):
+            return 0
+
+        def write(self, addr, value):
+            written.append(addr)
+
+    bus = check.IdentifyBus(Bus())
+    ctrl_reset = fk.REGS["ctrl_scratch"] - 4
+    for addr in (ctrl_reset, fk.REGS["ctrl_scratch"], fk.REGS["p2_gpio_oe"]):
+        with pytest.raises(Problem, match="refused to write CSR"):
+            bus.write(addr, 1)
+    bus.write(sf.FLASH_CS_N, 1)
+    assert written == [sf.FLASH_CS_N]
 
 
 def test_the_acorn_never_touches_the_flash_of_a_build_it_does_not_know(tmp_path, images):
