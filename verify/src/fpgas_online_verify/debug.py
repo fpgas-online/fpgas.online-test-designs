@@ -13,11 +13,12 @@ identification (a PMOD HAT) and Ethernet (a USB Ethernet adapter).
     sudo fpgas-acorn-debug identify               # who the Acorn is: fpgas-acorn-verify --identify
 """
 
+import contextlib
 import json
 import subprocess
 import sys
 
-from . import bitstreams, identify
+from . import bitstreams, identify, runner
 from .core import Problem, hold_lock, pci_devices, usb_devices
 from .testbench import TestBoard
 
@@ -32,8 +33,15 @@ def _live(argv):
         return 127
 
 
+def _find(board, host):
+    """board.find, under the board's lock when finding it drives its pins (the NeTV2's JTAG scan), waiting for it
+    as the boot check does (runner.probing). Not for use while the lock is already held (program, test)."""
+    with runner.probing(board) if board.probes else contextlib.nullcontext():
+        return board.find(host, usb_devices(), pci_devices())
+
+
 def detect(board, host, args):
-    found = board.find(host, usb_devices(), pci_devices())
+    found = _find(board, host)
     print(json.dumps({"board": board.name, "host": host, "found": found}, indent=2, default=str))
     return 0 if found else 1
 
@@ -43,7 +51,7 @@ def _variant(board, host, args):
         return args.variant
     if len(board.variants) == 1:
         return next(iter(board.variants))
-    found = board.find(host, usb_devices(), pci_devices())
+    found = board.find(host, usb_devices(), pci_devices())  # only from program and test: the lock is held
     if not found:
         raise Problem("missing", f"no {board.title} found, so no variant to choose: pass --variant")
     return found[0]["variant"]

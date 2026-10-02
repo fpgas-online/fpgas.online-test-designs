@@ -89,7 +89,9 @@ sudo fpgas-acorn-debug identify            # the same as fpgas-acorn-verify --id
 * `--test` runs part of the check. It is never published, never recorded, and its report goes to stdout
   unless `--report` says otherwise.
 * Only one command uses a board at a time. A second one prints
-  `waiting for another user of the <board> to finish...` and waits.
+  `waiting for another user of the <board> to finish...` and waits. Looking for a NeTV2 drives its JTAG pins,
+  so the check and `fpgas-netv2-debug detect` take its lock for that too, waiting as for the check, and let
+  it go before the check takes it again.
 * The locks are files: `/run/fpgas-online/<board>.lock`, and the Acorn's `/run/lock/fpgas-acorn.lock` (shared
   with `fpgas-acorn-flash`). The packages' `/usr/lib/tmpfiles.d/fpgas-online-*.conf` create them at boot,
   root-owned and 0644, so no other user can create one first. A lock file that cannot be opened is an error
