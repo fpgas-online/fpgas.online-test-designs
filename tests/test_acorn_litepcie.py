@@ -6,7 +6,6 @@ Design: docs/plans/2026-09-25-acorn-litepcie-packages-design.md. What must hold:
   * the fleet kernel the CI module is built for is named in one place, above the kernel floor (§3.6, §4.3).
 """
 
-import hashlib
 import importlib.util
 import json
 import pathlib
@@ -930,7 +929,7 @@ def test_a_fleet_kernel_that_is_not_built_fails_the_plan():
 
 
 def test_a_flavour_the_archive_has_no_kernel_for_fails_the_plan():
-    """An empty or truncated index must not read as 'nothing to build': the publish would drop every module."""
+    """An empty or truncated index must not read as 'nothing to build': a new kernel would get no modules."""
     with pytest.raises(plan.PlanError, match="trixie arm64 index has no rpi-2712"):
         plan.jobs(CONFIG, {**INDEXES, ("trixie", "arm64"): _index(("6.18.50+rpt-rpi-v8", "1:6.18.50-1+rpt1"))})
 
@@ -969,16 +968,38 @@ def test_a_suite_or_an_architecture_no_build_exists_for_is_refused(tmp_path, tab
         bd.read_kernels(bad)
 
 
-# -- what a suite's archive holds, and where each deb comes from (§4.3) -------------------------------------------
+# -- which debs a suite wants, which are published, and which a run builds (§4.3) ---------------------------------
 
 
-def _wanted(suite="bookworm"):
+def _wanted(suite="bookworm", versions=VERSIONS):
     jobs = [j for j in plan.jobs(CONFIG, INDEXES) if j.suite == suite]
-    return plan.wanted(suite, VERSIONS[suite], jobs)
+    return plan.wanted(suite, versions[suite], jobs)
 
 
-def test_a_suite_wants_the_complete_set_at_its_own_version():
-    """publish-apt drops a package the deploy does not hold: every publish hands over all of them."""
+def _assets(*debs):
+    """The asset names releases carry for `debs`."""
+    return {deb["asset"] for deb in debs}
+
+
+def _everything(versions=VERSIONS):
+    return _assets(*(deb for suite in versions for deb in _wanted(suite, versions)))
+
+
+def _built(made):
+    """[(suite, kver)] of the modules packages a plan builds."""
+    return [(j["suite"], j["kver"]) for j in plan.matrix(made, plan.jobs(CONFIG, INDEXES))["include"]]
+
+
+SAMPLE = [
+    ("bookworm", "6.12.96+rpt-rpi-v8"),
+    ("bookworm", "6.12.109+rpt-rpi-v8"),
+    ("bookworm", "6.12.120+rpt-rpi-2712"),
+    ("trixie", "6.18.50+rpt-rpi-v8"),
+    ("trixie", "6.18.50+rpt-rpi-2712"),
+]
+
+
+def test_a_suite_wants_common_dkms_utils_and_a_modules_package_per_kernel_at_its_own_version():
     files = [deb["file"] for deb in _wanted("trixie")]
     assert files == [
         f"{P}-common_0.0.post7~deb13_all.deb",
@@ -990,52 +1011,63 @@ def test_a_suite_wants_the_complete_set_at_its_own_version():
         f"{P}-modules-6.18.50+rpt-rpi-v8_0.0.post7~deb13_arm64.deb",
         f"{P}-modules-6.18.50+rpt-rpi-2712_0.0.post7~deb13_arm64.deb",
     ]
-    assert P not in {deb["package"] for deb in _wanted("trixie")}  # the meta package is not in this archive
+    assert P not in {deb["package"] for deb in _wanted("trixie")}  # the meta package has no suite
 
 
-def _site(*debs, version=None):
-    """A live suite's Packages, as publish-apt's dpkg-scanpackages writes it."""
-    return "\n".join(
-        f"Package: {deb['package']}\nVersion: {version or deb['version']}\nArchitecture: {deb['arch']}\n"
-        f"Depends: x\nFilename: ./{deb['file']}\nSize: {len(deb['file'])}\n"
-        f"SHA256: {hashlib.sha256(deb['file'].encode()).hexdigest()}\nDescription: d\n more\n"
-        for deb in debs
-    )
+def test_a_deb_is_looked_up_under_the_name_a_release_stores_it_as():
+    """GitHub stores the `~` of a version as a dot; fpgas-online/apt reads the same names."""
+    deb = _wanted()[-1]
+    assert deb["file"] == f"{P}-modules-6.12.120+rpt-rpi-2712_0.0.post7~deb12_arm64.deb"
+    assert deb["asset"] == f"{P}-modules-6.12.120+rpt-rpi-2712_0.0.post7.deb12_arm64.deb"
+    planned = plan.plan_suite(_wanted(), {deb["asset"]}, "unpublished")
+    assert [d["file"] for d in planned if d["published"]] == [deb["file"]]
+    assert not any(d["published"] for d in plan.plan_suite(_wanted(), {deb["file"]}, "unpublished"))
 
 
-def test_without_a_site_everything_is_built():
-    planned = plan.plan_suite(_wanted(), None, selected={"6.12.96+rpt-rpi-v8"})
-    assert {deb["action"] for deb in planned} == {"build"}
-    assert [deb["kver"] for deb in planned if "kver" in deb and deb["selected"]] == ["6.12.96+rpt-rpi-v8"]
-    assert all(deb["selected"] for deb in planned if "kver" not in deb)  # -common, -dkms, -utils: always built
+def test_the_stored_name_rule_is_release_pys_own():
+    """One rule, in packaging/release.py: the plan and the upload must never disagree on what is published."""
+    assert plan.release.__file__ == str(_DIR.parent / "release.py")
+    assert plan.release.stored_name("a_1~deb12_all.deb") == "a_1.deb12_all.deb"
 
 
-def test_a_deb_the_site_has_at_this_version_is_reused_never_rebuilt():
-    """A published (package, version) never changes its bytes."""
+def test_with_nothing_published_a_run_on_main_builds_everything():
+    made = plan.make_plan(CONFIG, plan.jobs(CONFIG, INDEXES), VERSIONS, set(), "unpublished")
+    assert all(deb["build"] and not deb["published"] for debs in made["suites"].values() for deb in debs)
+    assert len(_built(made)) == 8
+
+
+def test_a_published_modules_package_is_not_built_again():
+    """A published file is never replaced: its kernel's job is not in the matrix at all."""
     debs = _wanted()
-    planned = plan.plan_suite(debs, _site(*debs[:3]), selected={j["kver"] for j in debs if "kver" in j})
-    assert [deb["action"] for deb in planned[:4]] == ["reuse", "reuse", "reuse", "build"]
-    first = planned[0]
-    assert first["filename"] == first["file"] and first["size"] == len(first["file"])
-    assert first["sha256"] == hashlib.sha256(first["file"].encode()).hexdigest()
+    have = _assets(*(deb for deb in debs if deb.get("kver") == "6.12.96+rpt-rpi-v8"))
+    planned = plan.plan_suite(debs, have, "unpublished")
+    assert [deb["kver"] for deb in planned if "kver" in deb and not deb["build"]] == ["6.12.96+rpt-rpi-v8"]
+    assert [deb["kver"] for deb in planned if deb["published"]] == ["6.12.96+rpt-rpi-v8"]
 
 
-def test_another_version_or_architecture_on_the_site_is_not_this_deb():
-    debs = _wanted()
-    older = _site(*debs, version="0.0.post6~deb12")
-    assert {deb["action"] for deb in plan.plan_suite(debs, older)} == {"build"}
-    armhf = next(deb for deb in debs if deb["arch"] == "armhf")
-    other = plan.plan_suite(debs, _site(armhf))
-    assert [deb["arch"] for deb in other if deb["action"] == "reuse"] == ["armhf"]
+def test_common_dkms_and_utils_are_built_by_every_run_for_the_tests():
+    """The modules packages' install tests need them, and release.py uploads none of them a second time."""
+    for mode in ("sample", "unpublished", "full"):
+        planned = plan.plan_suite(_wanted(), _everything(), mode)
+        assert all(deb["build"] and deb["published"] for deb in planned if "kver" not in deb)
 
 
-def test_a_quiet_day_builds_no_module_and_a_new_kernel_only_its_own():
+def test_another_version_suite_or_architecture_on_a_release_is_not_this_deb():
+    older = _everything({"bookworm": "0.0.post6~deb12", "trixie": "0.0.post6~deb13"})
+    assert not any(deb["published"] for deb in plan.plan_suite(_wanted(), older, "unpublished"))
+    trixie = _assets(*_wanted("trixie"))
+    assert not any(deb["published"] for deb in plan.plan_suite(_wanted(), trixie, "unpublished"))
+    armhf = next(deb for deb in _wanted() if deb["arch"] == "armhf")
+    planned = plan.plan_suite(_wanted(), _assets(armhf), "unpublished")
+    assert [deb["arch"] for deb in planned if deb["published"]] == ["armhf"]
+
+
+def test_a_quiet_run_on_main_builds_no_module_and_a_new_kernel_only_its_own():
     jobs = plan.jobs(CONFIG, INDEXES)
-    site = {suite: _site(*_wanted(suite)) for suite in VERSIONS}
-    quiet = plan.make_plan(CONFIG, jobs, VERSIONS, "https://site", site, "full")
+    quiet = plan.make_plan(CONFIG, jobs, VERSIONS, _everything(), "unpublished")
     assert plan.matrix(quiet, jobs) == {"include": []}
-    site["bookworm"] = _site(*[d for d in _wanted() if d.get("kver") != "6.12.120+rpt-rpi-2712"])
-    new = plan.make_plan(CONFIG, jobs, VERSIONS, "https://site", site, "full")
+    new_kernel = f"{P}-modules-6.12.120+rpt-rpi-2712_0.0.post7.deb12_arm64.deb"
+    new = plan.make_plan(CONFIG, jobs, VERSIONS, _everything() - {new_kernel}, "unpublished")
     assert plan.matrix(new, jobs) == {
         "include": [
             {
@@ -1054,39 +1086,46 @@ def test_a_quiet_day_builds_no_module_and_a_new_kernel_only_its_own():
 
 def test_a_new_driver_version_builds_every_kernel():
     jobs = plan.jobs(CONFIG, INDEXES)
-    site = {suite: _site(*_wanted(suite)) for suite in VERSIONS}
     newer = {"bookworm": "0.0.post8~deb12", "trixie": "0.0.post8~deb13"}
-    made = plan.make_plan(CONFIG, jobs, newer, "https://site", site, "full")
+    made = plan.make_plan(CONFIG, jobs, newer, _everything(), "unpublished")
     assert len(plan.matrix(made, jobs)["include"]) == len(jobs) == 8
 
 
-def test_a_sample_run_builds_the_sample_whatever_the_site_has():
+def test_a_pull_request_builds_the_sample_whatever_is_published():
+    """A pull request still exercises the build, even of a deb some release happens to carry."""
     jobs = plan.jobs(CONFIG, INDEXES)
     pr = {"bookworm": "0.0.post8~deb12~pr79", "trixie": "0.0.post8~deb13~pr79"}
-    made = plan.make_plan(CONFIG, jobs, pr, None, {}, "sample")
-    built = plan.matrix(made, jobs)["include"]
-    assert [(j["suite"], j["kver"], j["fleet"]) for j in built] == [
-        ("bookworm", "6.12.96+rpt-rpi-v8", True),
-        ("bookworm", "6.12.109+rpt-rpi-v8", False),
-        ("bookworm", "6.12.120+rpt-rpi-2712", False),
-        ("trixie", "6.18.50+rpt-rpi-v8", False),
-        ("trixie", "6.18.50+rpt-rpi-2712", False),
-    ]
-    assert {j["version"] for j in built} == set(pr.values())
+    for published in (set(), _everything(), _everything(pr)):
+        made = plan.make_plan(CONFIG, jobs, pr, published, "sample")
+        assert _built(made) == SAMPLE
+        built = plan.matrix(made, jobs)["include"]
+        assert [j["kver"] for j in built if j["fleet"]] == ["6.12.96+rpt-rpi-v8"]
+        assert {j["version"] for j in built} == set(pr.values())
+
+
+def test_the_full_input_builds_every_kernel_whatever_is_published():
+    made = plan.make_plan(CONFIG, plan.jobs(CONFIG, INDEXES), VERSIONS, _everything(), "full")
+    assert len(_built(made)) == 8
+    assert all(deb["build"] and deb["published"] for debs in made["suites"].values() for deb in debs)
 
 
 @pytest.mark.parametrize(
-    ("event", "site", "full", "expected"),
+    ("event", "full", "expected"),
     [
-        ("pull_request", "https://site", False, "sample"),  # never published
-        ("push", None, False, "sample"),  # nothing to publish to, or to reuse from
-        ("push", "https://site", False, "full"),
-        ("schedule", "https://site", False, "full"),
-        ("workflow_dispatch", None, True, "full"),  # asked for by hand
+        ("pull_request", False, "sample"),  # never published: the sample exercises the build
+        ("push", False, "unpublished"),
+        ("schedule", False, "unpublished"),
+        ("workflow_dispatch", False, "unpublished"),
+        ("workflow_dispatch", True, "full"),  # asked for by hand
     ],
 )
-def test_a_run_builds_every_missing_kernel_only_when_it_can_publish_or_is_asked_to(event, site, full, expected):
-    assert plan.mode(event, site, full) == expected
+def test_the_event_and_the_full_input_choose_the_mode(event, full, expected):
+    assert plan.mode(event, full) == expected
+
+
+def test_a_mode_that_does_not_exist_is_refused():
+    with pytest.raises(plan.PlanError, match="'missing' is not a mode"):
+        plan.make_plan(CONFIG, plan.jobs(CONFIG, INDEXES), VERSIONS, set(), "missing")
 
 
 def test_a_preview_version_without_its_pull_request_is_the_merged_builds():
@@ -1094,86 +1133,17 @@ def test_a_preview_version_without_its_pull_request_is_the_merged_builds():
     assert plan.main_version("0.0.post8~deb12") == "0.0.post8~deb12"
 
 
-def test_a_site_index_without_a_checksum_is_refused():
-    debs = _wanted()
-    with pytest.raises(plan.PlanError, match="SHA256"):
-        plan.plan_suite(debs, _site(*debs).replace("SHA256", "MD5sum"))
+def test_the_published_names_are_every_releases_assets_as_release_py_lists_them(tmp_path, monkeypatch):
+    monkeypatch.setattr(plan.release, "published", lambda: {"a_1.deb12_all.deb"})
+    assert plan.read_published() == {"a_1.deb12_all.deb"}
+    names = tmp_path / "names"
+    names.write_text("b_1_all.deb\nc_1_all.deb\n")
+    assert plan.read_published(names) == {"b_1_all.deb", "c_1_all.deb"}
 
 
-def _fetcher(files):
-    def fetch(url, missing_ok=False):
-        if url not in files:
-            if missing_ok:
-                return None
-            raise plan.PlanError(f"{url}: HTTP 404")
-        return files[url]
-
-    return fetch
-
-
-def _assembled(tmp_path, mode, on_site, built, corrupt=None):
-    debs = _wanted()
-    jobs = plan.jobs(CONFIG, INDEXES)
-    site = {"bookworm": _site(*[d for d in debs if d["file"] in on_site]), "trixie": None}
-    made = plan.make_plan(CONFIG, jobs, VERSIONS, "https://site", site, mode)
-    files = {f"https://site/bookworm/{name}": name.encode() for name in on_site}
-    if corrupt:
-        files[f"https://site/bookworm/{corrupt}"] = b"other bytes"
-    (tmp_path / "built" / "artifact").mkdir(parents=True)
-    for name in built:
-        (tmp_path / "built" / "artifact" / name).write_bytes(b"built " + name.encode())
-    result = plan.assemble(made, "bookworm", tmp_path / "built", tmp_path / "out", fetch=_fetcher(files))
-    return result, {p.name: p.read_bytes() for p in (tmp_path / "out").iterdir()}
-
-
-def test_assembling_takes_the_sites_copy_over_this_runs_rebuild(tmp_path):
-    """-common is rebuilt by every run; the bytes that were published are the ones published again."""
-    names = [deb["file"] for deb in _wanted()]
-    (reused, taken, left), out = _assembled(tmp_path, "full", on_site=names[:2], built=names)
-    assert reused == names[:2] and taken == names[2:] and left == []
-    assert out[names[0]] == names[0].encode()
-    assert out[names[2]] == b"built " + names[2].encode()
-    assert sorted(out) == sorted(names)
-
-
-def test_a_full_run_refuses_an_incomplete_suite(tmp_path):
-    """The deploy would drop the missing package from the archive."""
-    names = [deb["file"] for deb in _wanted()]
-    with pytest.raises(plan.PlanError, match=r"modules-6\.12\.120\+rpt-rpi-2712.*neither on the site nor among"):
-        _assembled(tmp_path, "full", on_site=names[:2], built=names[:-1])
-
-
-def test_a_sample_run_leaves_out_the_kernels_it_did_not_build(tmp_path):
-    names = [deb["file"] for deb in _wanted()]
-    not_sampled = [n for n in names if "6.12.19+rpt" in n]
-    built = [n for n in names if n not in not_sampled]
-    (reused, taken, left), out = _assembled(tmp_path, "sample", on_site=[], built=built)
-    assert (reused, taken, left) == ([], built, not_sampled)
-    assert sorted(out) == sorted(built)
-
-
-def test_a_sample_run_still_fails_when_something_it_should_have_built_is_missing(tmp_path):
-    names = [deb["file"] for deb in _wanted()]
-    with pytest.raises(plan.PlanError, match="utils"):
-        _assembled(tmp_path, "sample", on_site=[], built=[n for n in names if "utils" not in n])
-
-
-def test_a_site_file_that_is_not_what_its_index_says_is_refused(tmp_path):
-    names = [deb["file"] for deb in _wanted()]
-    with pytest.raises(plan.PlanError, match="does not match the site's own Packages"):
-        _assembled(tmp_path, "full", on_site=names, built=[], corrupt=names[1])
-
-
-def test_a_site_without_a_suite_yet_reads_as_nothing_published():
-    files = {"https://site/bookworm/Packages": b"Package: x\nVersion: 1\n"}
-    assert plan.read_site("https://site", ["bookworm", "trixie"], fetch=_fetcher(files)) == {
-        "bookworm": "Package: x\nVersion: 1\n",
-        "trixie": None,
-    }
-    assert plan.read_site(None, ["bookworm"], fetch=_fetcher({})) == {"bookworm": None}
-
-
-def test_the_plan_command_writes_the_plan_and_the_matrix_for_the_workflow(tmp_path, monkeypatch, capsys):
+@pytest.fixture
+def planned(tmp_path, monkeypatch):
+    """Run the command line on the test indexes: (GITHUB_OUTPUT as a dict, stdout)."""
     for (suite, arch), text in INDEXES.items():
         (tmp_path / f"Packages-{suite}-{arch}").write_text(text)
     kernels = tmp_path / "kernels.toml"
@@ -1183,25 +1153,71 @@ def test_the_plan_command_writes_the_plan_and_the_matrix_for_the_workflow(tmp_pa
     )
     output = tmp_path / "github-output"
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+
+    def run(versions, published, *args):
+        output.write_text("")
+        names = tmp_path / "published"
+        names.write_text("".join(f"{name}\n" for name in sorted(published)))
+        where = ["--kernels", str(kernels), "--index-dir", str(tmp_path), "--published", str(names)]
+        plan.main(["--versions", json.dumps(versions), *where, *args])
+        return dict(line.split("=", 1) for line in output.read_text().splitlines())
+
+    return run
+
+
+def test_the_command_writes_a_pull_requests_matrix_and_says_what_main_would_build(planned, capsys):
     versions = {"bookworm": "0.0.post7~deb12~pr79", "trixie": "0.0.post7~deb13~pr79"}
-    where = ["--kernels", str(kernels), "--index-dir", str(tmp_path), "--out", str(tmp_path / "plan.json")]
-    plan.main(["plan", "--versions", json.dumps(versions), "--event", "pull_request", "--no-site", *where])
-    out = dict(line.split("=", 1) for line in output.read_text().splitlines())
-    assert out["count"] == "5" and out["mode"] == "sample" and out["site"] == ""
-    assert json.loads(out["suites"]) == ["bookworm", "trixie"] and out["suites-list"] == "bookworm trixie"
+    common = f"{P}-common_0.0.post7.deb12_all.deb"
+    out = planned(versions, {common}, "--event", "pull_request")
+    assert out["count"] == "5" and out["mode"] == "sample"
+    assert json.loads(out["suites"]) == ["bookworm", "trixie"]
     assert len(json.loads(out["matrix"])["include"]) == 5
-    written = json.loads((tmp_path / "plan.json").read_text())
-    assert written["mode"] == "sample" and written["versions"] == versions
     text = capsys.readouterr().out
-    assert f"skip  {P}-modules-6.12.19+rpt-rpi-v8_0.0.post7~deb12~pr79_arm64.deb" in text
+    assert f"skip    {P}-modules-6.12.19+rpt-rpi-v8_0.0.post7~deb12~pr79_arm64.deb" in text
     assert "dry run: on the default branch, the publishing run of this driver version would" in text
-    assert f"build {P}-modules-6.12.19+rpt-rpi-v8_0.0.post7~deb12_arm64.deb" in text
-    assert "bookworm: 0 from the site, 10 built by this run, 0 left out" in text
+    assert f"build   {P}-modules-6.12.19+rpt-rpi-v8_0.0.post7~deb12_arm64.deb" in text
+    assert f"rebuild {P}-common_0.0.post7~deb12_all.deb" in text
+    assert (
+        "bookworm: 9 built and new to the releases, 1 built for the tests but already published, "
+        "0 already published and not built, 0 left out (a sample run)"
+    ) in text
 
 
-def test_the_plan_wants_a_version_for_exactly_the_suites_of_kernels_toml(tmp_path):
+def test_the_command_on_a_quiet_day_has_an_empty_matrix(planned, capsys):
+    out = planned(VERSIONS, _everything(), "--event", "schedule")
+    assert out["count"] == "0" and out["mode"] == "unpublished"
+    assert json.loads(out["matrix"]) == {"include": []}
+    text = capsys.readouterr().out
+    assert f"have    {P}-modules-6.12.19+rpt-rpi-v8_0.0.post7~deb12_arm64.deb" in text
+    assert "dry run" not in text  # this is the publishing run
+    assert (
+        "bookworm: 0 built and new to the releases, 5 built for the tests but already published, "
+        "5 already published and not built, 0 left out (a sample run)"
+    ) in text
+
+
+def test_the_command_with_the_full_input_builds_every_kernel(planned, capsys):
+    out = planned(VERSIONS, _everything(), "--event", "workflow_dispatch", "--full")
+    assert out["count"] == "8" and out["mode"] == "full"
+    assert "dry run" in capsys.readouterr().out
+
+
+def test_the_plan_wants_a_version_for_exactly_the_suites_of_kernels_toml(planned):
     with pytest.raises(SystemExit, match="trixie"):
-        plan.main(["plan", "--versions", '{"bookworm": "0.0.post7~deb12"}', "--event", "push", "--no-site"])
+        planned({"bookworm": "0.0.post7~deb12"}, set(), "--event", "push")
+
+
+def test_a_release_list_that_cannot_be_read_fails_the_plan(tmp_path, monkeypatch):
+    """Not 'nothing is published': that would build and try to publish everything again."""
+
+    def fail():
+        raise plan.release.ReleaseError("gh api repos/{owner}/{repo}/releases: HTTP 502")
+
+    monkeypatch.setattr(plan.release, "published", fail)
+    for (suite, arch), text in INDEXES.items():
+        (tmp_path / f"Packages-{suite}-{arch}").write_text(text)
+    with pytest.raises(SystemExit, match="HTTP 502"):
+        plan.main(["--versions", json.dumps(VERSIONS), "--event", "push", "--index-dir", str(tmp_path)])
 
 
 # -- the prebuilt modules package and the meta package (§2, §3.8) ------------------------------------------------
