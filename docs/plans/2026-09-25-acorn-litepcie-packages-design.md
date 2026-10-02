@@ -12,8 +12,9 @@ The work is in three parts, each planned and delivered on its own. **Part A is p
 - **Part A** (§3): the driver source, the CSR cross-check, the driver patches, and the `-common`, `-utils` and
   `-dkms` packages. Their CI artifacts are enough for the #29 test on pi-sw2-p48.
 - **Part B** (§4): the prebuilt `-modules-<kver>` packages for every chosen kernel, the meta package, the
-  x86 builds of `-utils` and of the DKMS test, and this repository's own apt archive with its daily run.
-- **Part C** (§5): fpgas-online/apt bundles that archive, so a host keeps one apt source.
+  x86 builds of `-utils` and of the DKMS test, per-suite builds, and the daily run.
+- **Part C** (§5): fpgas-online/apt collects the packages from this repository's releases, so a host keeps
+  one apt source.
 
 ## 1. Intent
 
@@ -26,9 +27,9 @@ What Tim asked for:
 - The sectioned design presented in conversation was approved on 2026-09-25 ("Approve, write spec").
 - "Prebuilt modules for all the rpi kernels on rpi5 hardware", and the "DKMS package - for arm & x86"
   (2026-10-02). §4.2 says which kernels that is.
-- The packages are published in this repository's own per-suite signed apt archive on GitHub Pages, through
-  the shared machinery of mithro/apt-repo-action, and fpgas-online/apt bundles that archive, so the Pis keep
-  one apt source (2026-10-02). §4.3 and §5.
+- "The litepcie modules packages should be added like the other debs which are part of the test-designs
+  repo." They are assets of this repository's releases, and fpgas-online/apt collects them from there, so
+  the Pis keep one apt source. §4.3 and §5.
 
 What this spec assumes (correct these if they are wrong):
 
@@ -52,9 +53,8 @@ What this spec assumes (correct these if they are wrong):
 | `fpgas-online-acorn-litepcie-modules-<kver>` | B | the kernel package's: arm64 for `rpi-v8` and `rpi-2712`; `Multi-Arch: foreign` | `litepcie.ko`, `liteuart.ko` under `/lib/modules/<kver>/updates/fpgas-online/` |
 | `fpgas-online-acorn-litepcie` | B | all | nothing: the meta package a host asks for |
 
-The first four are in this repository's apt archive (§4.3), built once per suite. The meta package is one
-file for every suite, published as an asset of the rolling `vX.Y` series release, where fpgas-online/apt
-collects it (§5).
+The first four are built once per suite (§3.8). The meta package is one file for every suite. All five are
+published as assets of this repository's releases, where fpgas-online/apt collects them (§4.3, §5).
 
 Relationships:
 
@@ -76,8 +76,8 @@ Relationships:
     which is what such a host wants. A host that already has a `-modules-<kver>` package satisfies the
     dependency through the virtual package, and gets no DKMS, compiler or headers. The netboot root installs
     its kernel's modules package first, then the meta package.
-  - *Why it exists*: fpgas-online/apt bundles from this archive what its own packages Depend on (§5), and
-    this package is the root of that.
+  - *Why it exists*: a host asks for one name, `fpgas-online-acorn-litepcie`, and gets the tools and the
+    driver in the form that suits it.
 - **`Multi-Arch: foreign`** on `-common` and on every `-modules-<kver>`. On the fleet the modules package is
   arm64 and the root is armhf. apt lets a package of one architecture satisfy a dependency of a package of
   another only when it is marked foreign: `-common` (Architecture: all, which apt counts as armhf there) for
@@ -291,12 +291,12 @@ are Python and nfpm only, and LiteX elaborates the SoC faster there.
   `liteuart.ko` as the workflow artifact `acorn-litepcie-modules-<kver>`, for a host that loads them with
   `insmod` without installing a package (§3.9).
 
-Two workflows, laid out as mithro/apt-repo-action's `docs/packaging.md` asks of every packaging repository:
-
-- `.github/workflows/deb.yml` (`Debian packages`) runs on pull requests, on pushes to main, daily and on
-  demand. Its jobs are `test`, `build-deb`, `publish-apt` and `release` (§4.3).
-- `.github/workflows/acorn-litepcie.yml` holds the builds. `deb.yml` calls it as its `build-deb` job. Started
-  by hand on any branch, it builds every kernel's modules and publishes nothing.
+One workflow, `.github/workflows/acorn-litepcie.yml`, builds on pull requests (no publishing), on pushes to
+main, daily, and on demand. On main it uploads to the build's own release, `build-<version>`
+(`packaging/release.py`), the one `collect-bitstreams.yml` publishes the repository's other debs to: every
+push to main has a release of its own, named by the repository's version at that commit. Only a file no
+release carries yet is uploaded (§4.3). It sits apart from `collect-bitstreams.yml` because its matrix, its
+runners (arm64) and its daily schedule are all different.
 
 The Raspberry Pi archive is trusted through the keyring `raspberrypi-archive-keyring` 2025.1+rpt1 ships
 (key `CF8A1AF502A2AA2D763BAE7E82B129927FA3303E`), kept in `packaging/acorn-litepcie/`. The copy of that key
@@ -348,12 +348,12 @@ repository's do. They are never dates.
   it: `0.0.post5~deb12` < `0.0.post5~deb13` < `0.0.post5`.
 - `~pr<P>` is on pull request builds only, so a preview sorts below the merged build of the same commit.
 
-**Every package in the archive carries its suite's suffix**, the `Architecture: all` ones too: the doc's
-rule for an nfpm build is "packaged once per suite, since `~deb<R>` makes each suite's version different"
-("The shared actions"), and its rule for a compiled one is "the build runs in the suite's own image"
-("Builds"). So `-utils` and `-modules-<kver>` are compiled in each suite's image, and `-common` and `-dkms`
-are the same files packaged once per suite. **The meta package has no suite suffix**: it is one file, not in
-the archive, at `X.Y.postN`.
+**Every package but the meta package carries its suite's suffix**, the `Architecture: all` ones too: the
+doc's rule for an nfpm build is "packaged once per suite, since `~deb<R>` makes each suite's version
+different" ("The shared actions"), and its rule for a compiled one is "the build runs in the suite's own
+image" ("Builds"). So `-utils` and `-modules-<kver>` are compiled in each suite's image, and `-common` and
+`-dkms` are the same files packaged once per suite. **The meta package has no suite suffix**: it is one file
+for every suite, at `X.Y.postN`. The suffix is also how fpgas-online/apt tells which suite a deb is for (§5).
 
 **DKMS knows the driver as `X.Y.postN`**, without the suffixes: `PACKAGE_VERSION` in `dkms.conf` and the
 `/usr/src/fpgas-online-acorn-litepcie-<X.Y.postN>/` directory are the same in every suite. Only the deb's
@@ -377,10 +377,10 @@ this repository's own. That action versions a checkout, and the driver packages 
 - `.github/workflows/acorn-litepcie.yml`.
 
 The commit is `git log -1 --first-parent --format=%H -- <inputs>`. Otherwise every merge to main would be a
-new version of every package, and would rebuild and republish all 42 modules (§4). `docs/packaging.md` asks
-that "every push to the default branch MUST produce a version greater than everything already published";
-here a push that changes none of the inputs produces the same version, and the published files are
-published again unchanged (§4.3).
+new version of every package, would rebuild all 42 modules (§4), and fpgas-online/apt would add them all to
+its pool per merge. `docs/packaging.md` asks that "every push to the default branch MUST produce a version
+greater than everything already published"; here a push that changes none of the inputs produces the same
+version, and publishes nothing, because every file of that version is already on a release (§4.3).
 
 `--first-parent` is what keeps versions from going backwards. Without it, `git log` can return a commit
 from a merged side branch, one that was written before an earlier main commit. That commit's `git describe`
@@ -409,7 +409,8 @@ CI, on every pull request:
 
 On hardware, on the test board of §1 (MAC `88:a2:9e:45:85:77`, DNA `0x0054b48664b04854`; today at
 pi-sw2-p48), running the #29 cle-215+ image from SRAM. It uses a pull request run's artifacts: the armhf
-`-utils` and `-common` debs from `debs-bookworm`, and the fleet-kernel `.ko` files from
+`-utils` and `-common` debs (artifacts `built-bookworm-armhf-utils` and `built-all`), and the fleet-kernel
+`.ko` files from
 `acorn-litepcie-modules-<kver>`, copied to the host's tmpfs. These are operator steps, run once:
 
 1. Stop anything using BAR0.
@@ -484,89 +485,85 @@ The build set is **the kernels a Raspberry Pi 5 can boot**:
   the live `Packages` indexes into the job matrix. It fails, rather than plan nothing, when a listed flavour
   has no kernel in its index, and when `fleet_kernel` is not one of the kernels built.
 
-A new RPi kernel is picked up by the **daily** scheduled run of `deb.yml`. A run builds only the modules
-packages the archive does not have yet at the current driver version (§4.3), so a quiet day builds none, and
-a new kernel costs one build per flavour.
+A new RPi kernel is picked up by the **daily** scheduled run. A run on main builds only the modules packages
+no release carries yet at the current driver version (§4.3), so a quiet day builds none, and a new kernel
+costs one build per flavour.
 
 The same kernel name can exist in both suites with different builds: `linux-headers-6.12.34+rpt-rpi-v8` is
 `1:6.12.34-1+rpt1~bookworm` in bookworm and `1:6.12.34-1+rpt1` in trixie, built with GCC 12 and GCC 14.
 Modules are therefore built per suite and never shared between suites. The two builds are the same package
-name at different versions (`~deb12`, `~deb13`), each in its own suite of the archive.
+name at different versions (`~deb12`, `~deb13`), and fpgas-online/apt gives each to its own suite (§5).
 
-### 4.3 The apt archive: publishing, retention and the kernel floor
+### 4.3 Publishing, retention and the kernel floor
 
-**The archive.** `-common`, `-dkms`, `-utils` and every `-modules-<kver>` are published as this
-repository's own apt archive on GitHub Pages: one signed flat repository per suite, as
-mithro/apt-repo-action's `docs/conventions.md` lays every fpgas-online archive out.
+**Release assets.** Every package is published as an asset of a GitHub release of this repository, like the
+repository's other debs (`packaging/debs/`, `packaging/acorn-pcie/`). Nothing here indexes or signs:
+fpgas-online/apt collects the assets into its signed archive (§5).
 
-    deb [signed-by=/etc/apt/keyrings/fpgas.online-test-designs.gpg] \
-        https://fpgas.online/fpgas.online-test-designs/<suite>/ ./
+- *Which release*: the `publish` job of `acorn-litepcie.yml` runs `packaging/release.py` on every deb the
+  run built. It uploads to `build-<version>`, the release of the commit that was built, named by the
+  repository's version there; `collect-bitstreams.yml` publishes to the same release, and whichever comes
+  first creates it. It runs on main only (a push, the daily run, or a run started by hand there), never for
+  a pull request.
+- *Asset names*: `<package>_<version>_<arch>.deb` as GitHub stores it, which turns the `~` of a version into
+  a dot: `fpgas-online-acorn-litepcie-modules-6.12.109+rpt-rpi-v8_0.0.post776~deb12_arm64.deb` is the asset
+  `fpgas-online-acorn-litepcie-modules-6.12.109+rpt-rpi-v8_0.0.post776.deb12_arm64.deb`. The deb's control
+  `Version` field keeps the `~`.
+- *Suites*: `bookworm` and `trixie`, the suites the Raspberry Pi archive has kernels for; a deb's suite is
+  the `~deb12` or `~deb13` of its version (§3.8).
+- *Architectures*: amd64, arm64 and armhf for `-utils`, the hosts an Acorn can be plugged into. The only
+  armhf hosts with PCIe are 64-bit Pis running a 32-bit userland, and they run Debian's ARMv7 build of the
+  tools.
 
-- *Suites*: `bookworm` and `trixie`, the suites the Raspberry Pi archive has kernels for. There is no
-  `raspbian-<codename>` suite: the only armhf hosts with PCIe are 64-bit Pis running a 32-bit userland, and
-  they run Debian's ARMv7 build of the tools.
-- *Architectures*: amd64, arm64 and armhf, the hosts an Acorn can be plugged into.
-- *Only these packages*: the repository's other debs (`packaging/debs/`, `packaging/acorn-pcie/`) and the
-  meta package are assets of the `vX.Y` series release, which fpgas-online/apt collects. They are not in
-  this archive.
-- *The declaration*: `.github/apt-packaging.toml` says all of this, with the reason for each difference from
-  the conventions' defaults. `apt-repo-action`'s `scripts/apt-compliance.py` checks the repository against it.
+**A published file is never replaced, and never published twice.** A rebuild's bytes differ (build times),
+and an apt repository that already pulled a (package, version) must not find other bytes under the same
+name. A deb is *published* when any release of the repository carries an asset of its stored name. The plan
+and the upload ask that one question the same way: `plan.py` imports `release.py`'s `published()` (the asset
+names of every release) and `stored_name()`.
 
-**Who publishes.** `deb.yml`'s `publish-apt` job is a call to
-`mithro/apt-repo-action/.github/workflows/publish-apt.yml@main`, which indexes, signs and deploys the
-`debs-<suite>` artifacts. Nothing in this repository indexes or signs. It runs on main only, never for a pull
-request. After it, the `release` job uploads the meta package to the series release if the release does not
-have that version yet (`publish.py`).
+1. `plan.py` lists each suite's wanted debs (`-common`, `-dkms`, `-utils` for the three architectures and a
+   `-modules-<kver>` for every kernel of §4.2: 27 debs for bookworm and 25 for trixie) and marks each one
+   published or not.
+2. The `modules` matrix is the modules packages the run's mode asks for (below). A published modules
+   package is not built again.
+3. `-common`, `-dkms`, `-utils` and the meta package are built and tested by every run, whatever is
+   published: they are cheap, the modules packages' install tests need them, and the daily DKMS test is
+   what notices a new kernel's headers breaking the build.
+4. `release.py` uploads the debs the run built whose names no release carries, and leaves the others out.
 
-**Every publish hands over the complete set.** A deploy replaces the whole site, and publish-apt drops a
-package the deploy does not hold. So each suite's `debs-<suite>` artifact holds `-common`, `-dkms`, `-utils`
-for the three architectures and a `-modules-<kver>` for every kernel of §4.2: 27 debs for bookworm and 25
-for trixie.
+Nothing is downloaded from a release and nothing is published again. A quiet day builds no module and
+uploads nothing. A new kernel builds and uploads one module per flavour, to the release of the commit main
+is at. A new driver version builds and uploads everything.
 
-**A published version never changes its bytes.** A rebuild's bytes differ (build times), and a host that
-already has the index must not find another file under the same name and version. So a run takes from the
-live site every deb the site already has at the wanted version, and builds only the rest:
+**Which modules a run builds.**
 
-1. `plan.py plan` lists each suite's wanted debs, reads the live site's `<suite>/Packages`, and marks each
-   deb `reuse` (the site has that package, version and architecture) or `build`. With no site, or no such
-   suite on it yet, everything is `build`.
-2. The `modules` matrix is the modules packages marked `build`. `-common`, `-dkms` and `-utils` are built
-   and tested by every run, whatever the site has.
-3. `plan.py assemble` makes each `debs-<suite>`: a `reuse` deb is downloaded from the site and must have the
-   size and SHA256 the site's `Packages` gives, and it is taken in preference to this run's rebuild of it; a
-   `build` deb comes from this run. Anything missing fails the job.
+| run | mode | modules built |
+|---|---|---|
+| a pull request | `sample` | the newest kernel of each (suite, flavour), and the fleet kernel, whatever is published. Its versions carry `~pr<P>`, and it publishes nothing |
+| main: a push, the daily run, a run started by hand | `unpublished` | every kernel no release has a modules package for at this driver version |
+| started by hand with the `full` input | `full` | every kernel, published or not. Only a run on main publishes, and then only what is not published yet |
 
-A quiet day therefore builds no module and publishes every file again unchanged. A new kernel builds one
-module per flavour. A new driver version builds everything.
+Every run prints the plan: each wanted deb as `build`, `rebuild` (built for the tests, already published),
+`have` (published, not built) or `skip` (left out of a sample). A run that is not the publishing run of its
+driver version (a pull request, a `full` run) also prints what that publishing run would build.
 
-**Sample and full runs.** A run is *full* when it can publish: on main, once the Pages site exists. Every
-other run is a *sample*: pull requests, and every run while there is no site. A sample builds the modules of
-the newest kernel of each (suite, flavour) and of the fleet kernel, its `debs-<suite>` artifacts are not
-complete, and it publishes nothing. `acorn-litepcie.yml` started by hand builds the full set on any branch,
-without publishing. Every run prints the plan, and a sample run also prints what the publishing run of the
-same driver version would reuse and build.
+A plan that cannot read the list of releases fails. It never reads as "nothing is published", which would
+build everything again.
 
-**Retention** is publish-apt's (`keep-history`): each suite keeps earlier versions of its packages next to
-the new ones, all indexed, while the site stays under 900 MB, so a host can go back a version. It keeps only
-versions lower than the one being published, and only of packages the publish still holds.
+**Retention.** A GitHub release holds at most 1000 assets. A build's release holds what that build
+published: the repository's other packages (about 20) and, when the driver's inputs changed, one driver set
+(53 debs), plus the modules of any kernel released while that commit was main's head. No release approaches
+the limit, nothing is pruned, and old versions stay on the releases that first carried them. Retention in
+the apt pool is fpgas-online/apt's (§5).
 
 **Raising the floor.** `min_kernel` in `packaging/acorn-litepcie/kernels.toml` is the floor.
 
-- *Raising it* is a reviewed pull request that edits that one value. The next publish no longer holds the
-  modules for kernels below it, so they leave the archive with that deploy.
+- *Raising it* is a reviewed pull request that edits that one value. `kernels.toml` is a version input, so
+  that is a new driver version, built for the kernels at or above the new floor only. The modules packages
+  of the kernels below it get no further versions; the ones already published stay on their releases.
 - *Guard*: `plan.py` fails if `fleet_kernel` (§3.6) is below `min_kernel`, or is not one of the kernels
   built, so the floor can never drop the kernel the fleet boots. It also fails when a listed flavour has no
   kernel in the Raspberry Pi archive's index: an empty index must not read as "no modules wanted".
-
-**What the repository needs once.** Two settings that only its owner can make, in this order:
-
-1. the archive's own signing key, as the repository secret `APT_GPG_PRIVATE_KEY` (`docs/conventions.md`,
-   "One signing setup");
-2. GitHub Pages, built from GitHub Actions, with HTTPS enforced.
-
-Until the Pages site exists, `plan.py` finds no site and every run on main is a sample run that publishes
-nothing. The first run on main after both exist finds the site without suites, builds all 42 modules, and
-publishes both suites and then the meta package.
 
 **Scheduled runs and inactivity.** GitHub disables scheduled workflows in a public repository after 60 days
 with no repository activity. Workflow runs do not count as activity; pushes do.
@@ -574,9 +571,9 @@ with no repository activity. Workflow runs do not count as activity; pushes do.
 - *What stops*: the daily run. When it stops, new RPi kernels stop getting modules, with no error anywhere.
   Pushes to main keep building, because that trigger is not affected.
 - *Mitigation*: a check outside this repository reads the workflow's state from the public API.
-  `GET /repos/fpgas-online/fpgas.online-test-designs/actions/workflows/deb.yml` returns
+  `GET /repos/fpgas-online/fpgas.online-test-designs/actions/workflows/acorn-litepcie.yml` returns
   `"state": "disabled_inactivity"` once it has been disabled, and the fix is
-  `gh workflow enable deb.yml -R fpgas-online/fpgas.online-test-designs`.
+  `gh workflow enable acorn-litepcie.yml -R fpgas-online/fpgas.online-test-designs`.
 - *Why the watcher sits elsewhere*: a workflow cannot report its own disabling.
 
 ### 4.4 Tests
@@ -604,30 +601,42 @@ with no repository activity. Workflow runs do not count as activity; pushes do.
   7. remove the meta and the modules package and check that `modinfo -k <kver> litepcie` no longer resolves
      (the postrm's `depmod`).
 - an install test of the meta package on a plain arm64 host of each suite, from a flat repository of the
-  whole assembled `debs-<suite>` and the meta package: `apt-get install fpgas-online-acorn-litepcie` must
+  debs the run built for that suite and the meta package: `apt-get install fpgas-online-acorn-litepcie` must
   install `-common`, `-utils`, `-dkms` and `dkms`, and no `-modules-<kver>` package, although the repository
-  offers them;
-- the plan and the assembly of each suite against the live site, which change nothing (§4.3);
-- unit tests (`tests/test_acorn_litepcie.py`) of the kernel selection, the wanted set of a suite, the reuse
-  plan, the assembly, each package's nfpm configuration and the versions.
+  offers the ones the run built. On a run that built no modules package (a quiet day on main) `-dkms` is the
+  only driver on offer, and the job's log says so;
+- the plan against the live Raspberry Pi archive and the live list of release assets, which changes nothing
+  (§4.3);
+- unit tests (`tests/test_acorn_litepcie.py`) of the kernel selection, the wanted set of a suite, what is
+  published and what each mode builds, each package's nfpm configuration and the versions.
 
 ## 5. Part C: fpgas-online/apt
 
-A host adds one apt source, fpgas-online/apt, and gets these packages from it. fpgas-online/apt does not
-rebuild or re-index this repository's debs by hand: it **bundles** this archive as a dependency repository
-(`docs/packaging.md`, "Bundling a dependency repository"), which copies the packages its own packages need
-into its suites, verified against this archive's signed indexes and signed again with its own key.
+A host adds one apt source, fpgas-online/apt, and gets these packages from it. fpgas-online/apt pulls the
+debs from this repository's releases, as it does the repository's other debs, and serves them from its own
+signed archive. What this repository gives it is fixed (§4.3):
 
-- *The root*: bundling follows only `Depends` and `Pre-Depends`. fpgas-online/apt collects the meta package
-  `fpgas-online-acorn-litepcie` from the series release like this repository's other debs, and that package's
-  Depends are what pulls `-common`, `-utils`, `-dkms` and, through the virtual
-  `fpgas-online-acorn-litepcie-module`, every provider of it: all the `-modules-<kver>` packages.
-- *Not both*: the meta package must not also be in this archive. A package that is both fpgas-online/apt's
-  own and a bundled repository's is refused.
-- *Suites*: this archive has `bookworm` and `trixie` only, so the dependency is declared for those two.
-- *Stale bundles*: a newer version here reaches fpgas-online/apt's users at its next publish, or sooner
-  through `refresh-bundled.yml`.
-- *The inactivity check* on this repository's `deb.yml` (§4.3).
+- every deb is an asset named `<package>_<version>_<arch>.deb` as GitHub stores it (`~` is a dot there), on
+  the release of the build that first published it;
+- the deb's control `Version` field carries `~deb12` or `~deb13` when the deb is for one suite, and no such
+  suffix when it is for every suite (the meta package).
+
+What these packages need of fpgas-online/apt:
+
+- *A prefix entry.* `tools/pull_debs.py` matches each `package_sources.toml` entry as an exact package name
+  (`<package>_`). One package per kernel needs a prefix entry (`"fpgas-online-acorn-litepcie-modules-*"`),
+  counted as offered when any matching asset exists. `-common`, `-dkms`, `-utils` and the meta package are
+  ordinary exact entries.
+- *Per-suite routing.* `publish.yml` gives every suite the whole pool. A deb whose `Version` carries
+  `~deb12` goes to bookworm only, one with `~deb13` to trixie only, and a deb without such a suffix goes to
+  every suite, as now.
+- *Architectures.* Architecture-specific packages in a flat repository are already accepted by
+  `pull_debs.py`'s asset-name pattern (`amd64|arm64|armhf`). The install test in §4.4 proves apt resolves
+  them on an armhf host with arm64 as a foreign architecture.
+- *Pool retention* for `fpgas-online-acorn-litepcie-*`: the newest two versions of each package stay in
+  `pool/main/`, and older ones are removed in the same commit that adds a new one. Removal only happens
+  there, because the pool is that repository's.
+- *The inactivity check* on this repository's `acorn-litepcie.yml` (§4.3).
 
 ## 6. Plan order
 
