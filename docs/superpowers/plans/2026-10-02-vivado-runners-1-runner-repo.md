@@ -30,6 +30,7 @@
 - Image names: `runner-base-<YYYY-MM-DD>.<n>.qcow2`, `vivado-<version>-<YYYY-MM-DD>.squashfs`; symlinks `runner-base-current`, `vivado-current`. Nothing deletes an image automatically.
 - No credential other than the JIT config ever enters a VM. The host never mounts or parses a disk a job VM has written to.
 - Nothing containing Vivado is ever uploaded anywhere (AMD's EULA forbids redistribution).
+- **Licences.** This plan supports only Vivado versions that need no licence file (the free Standard edition covers every current target). No licence file tied to a machine may ever be in the runner image, on the Vivado disk, in a seed, in this repository or in a log: a job can read everything in its VM. The Vivado disk build refuses a tree that holds one. The generic licences AMD ships inside the product (`HOSTID=ANY`) are fine. Licensed versions, which need a network device with a specific MAC address, are a later phase set out in the spec ("Vivado licences"); nothing here may make that harder, and each VM's network card keeps the fixed per-slot MAC from the line above.
 - One PR per task group (listed under "Pull requests"); CI green before the next; merge with `gh pr merge --merge`, never squash.
 - Every commit message ends with these two lines:
   ```
@@ -3586,6 +3587,7 @@ git commit -m "image: build script, provisioning and the one-job guest unit"
 **Interfaces:**
 - Produces: `uv run python image/build_vivado_disk.py --source /opt/Xilinx/2025.2 --images-dir DIR [--exclude REL ...]`. Writes `DIR/vivado-<version>-<date>.squashfs` whose root contains one directory, `<version>/`, so mounting it at `/opt/Xilinx` gives `/opt/Xilinx/2025.2/Vivado/settings64.sh`. Does not change `vivado-current`.
 - `command(source, dest, excludes) -> list[str]` and `output_name(source, date) -> str` for the tests.
+- `is_machine_tied(text: bytes) -> bool` and `machine_tied_licences(source) -> list[Path]`: a `.lic` file is tied to a machine when it has a `HOSTID=` other than `ANY`/`DEMO`, or a `SERVER`/`USE_SERVER` line. `main()` refuses to build when the source tree holds one, because the disk is attached, readable, to every job's VM. (Checked on the real `/opt/Xilinx/2025.2` when this plan was written: it holds two `.lic` files, both AMD's generic `HOSTID=ANY` ones, and the scan took about 8 seconds.)
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -3618,6 +3620,52 @@ def test_command_keeps_the_version_directory_and_owns_everything_as_root():
 def test_excludes_are_relative_to_the_squashfs_root():
     cmd = mod.command(pathlib.Path("/opt/Xilinx/2025.2"), pathlib.Path("/i/out.squashfs"), ["Vitis", "data/xsim"])
     assert cmd[-3:] == ["-e", "2025.2/Vitis", "2025.2/data/xsim"]
+
+
+GENERIC = b"INCREMENT ip_free xilinxd 2025.11 permanent uncounted ABCDEF012345 HOSTID=ANY ISSUER=x\n"
+NODE_LOCKED = (
+    b"INCREMENT synthesis xilinxd 2019.12 permanent uncounted ABCDEF012345 \\\n\tHOSTID=525400aabbcc ISSUER=x\n"
+)
+FLOATING = b"SERVER licence-host 525400aabbcc 2100\nUSE_SERVER\nINCREMENT synthesis xilinxd 2019.12 permanent 1 ABC\n"
+
+
+def test_generic_shipped_licences_are_not_machine_tied():
+    assert not mod.is_machine_tied(GENERIC)
+    assert not mod.is_machine_tied(GENERIC.lower().replace(b"hostid=any", b"HOSTID=any"))
+    assert not mod.is_machine_tied(b"# nothing here\n")
+
+
+def test_node_locked_and_server_licences_are_machine_tied():
+    assert mod.is_machine_tied(NODE_LOCKED)
+    assert mod.is_machine_tied(FLOATING)
+    assert mod.is_machine_tied(GENERIC + NODE_LOCKED)
+
+
+def test_only_machine_tied_licence_files_are_reported(tmp_path):
+    source = tmp_path / "2025.2"
+    (source / "data/ip/core_licenses").mkdir(parents=True)
+    (source / "data/ip/core_licenses/Xilinx.lic").write_bytes(GENERIC)
+    (source / "notes.txt").write_bytes(NODE_LOCKED)  # not a licence file name: never read
+    assert mod.machine_tied_licences(source) == []
+    (source / "Vivado").mkdir()
+    (source / "Vivado/Site.LIC").write_bytes(NODE_LOCKED)
+    assert mod.machine_tied_licences(source) == [source / "Vivado/Site.LIC"]
+
+
+def test_the_build_refuses_a_tree_with_a_machine_tied_licence(tmp_path, monkeypatch, capsys):
+    import pytest
+
+    source = tmp_path / "2025.2"
+    (source / "Vivado").mkdir(parents=True)
+    (source / "Vivado/settings64.sh").write_text("")
+    (source / "Vivado/node.lic").write_bytes(NODE_LOCKED)
+    images = tmp_path / "images"
+    images.mkdir()
+    monkeypatch.setattr(mod.sys, "argv", ["build_vivado_disk.py", "--source", str(source), "--images-dir", str(images)])
+    monkeypatch.setattr(mod.subprocess, "run", lambda *a, **k: pytest.fail("mksquashfs must not run"))
+    with pytest.raises(SystemExit, match="tied to a machine"):
+        mod.main()
+    assert list(images.iterdir()) == []
 ```
 
 Run: `uv run pytest tests/test_build_vivado_disk.py -v`
@@ -3637,13 +3685,37 @@ Expected: FAIL, file not found.
 The result stays on the runner hosts. Never upload it: AMD's licence allows
 installing Vivado, not redistributing it. It never touches vivado-current:
 select the new disk with `vivado-runners images activate vivado <name>`.
+
+The disk is attached, readable, to every job's VM. So the build refuses a
+source tree that holds a licence file tied to a machine (a node-locked or
+server licence): every job could read it. The generic licences AMD ships
+inside the product (HOSTID=ANY) are fine.
 """
 
 import argparse
 import datetime
 import pathlib
+import re
 import subprocess
 import sys
+
+HOSTID = re.compile(rb"HOSTID=([^\s\\\\]+)", re.IGNORECASE)
+SERVER = re.compile(rb"^\s*(SERVER|USE_SERVER)\b", re.IGNORECASE | re.MULTILINE)
+
+
+def is_machine_tied(text: bytes) -> bool:
+    """True for a FlexLM licence locked to a host ID or pointing at a licence server."""
+    if SERVER.search(text):
+        return True
+    return any(value.upper() not in (b"ANY", b"DEMO") for value in HOSTID.findall(text))
+
+
+def machine_tied_licences(source: pathlib.Path) -> list[pathlib.Path]:
+    found = []
+    for path in sorted(source.rglob("*")):
+        if path.suffix.lower() == ".lic" and path.is_file() and is_machine_tied(path.read_bytes()):
+            found.append(path)
+    return found
 
 
 def output_name(source: pathlib.Path, date: str) -> str:
@@ -3670,6 +3742,14 @@ def main() -> int:
 
     if not (args.source / "Vivado" / "settings64.sh").is_file():
         raise SystemExit(f"{args.source} is not a Vivado install: Vivado/settings64.sh is missing")
+    tied = machine_tied_licences(args.source)
+    if tied:
+        listed = "\n  ".join(str(path) for path in tied)
+        raise SystemExit(
+            "refusing to build: these licence files are tied to a machine, "
+            f"and every job VM could read them:\n  {listed}\n"
+            "Move them out of the Vivado tree. Licensed Vivado versions are not supported yet (see the spec)."
+        )
     dest = args.images_dir / output_name(args.source, datetime.date.today().isoformat())
     if dest.exists():
         raise SystemExit(f"{dest} already exists; images are never overwritten")

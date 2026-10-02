@@ -42,6 +42,7 @@ Not checked, because it needs the runners: anything in a real GitHub Actions run
 - Inside the runner VM: user `runner`, no `sudo`, no `apt`, no PyPI, no DNS; only GitHub hosts are reachable through the preset `HTTPS_PROXY`. Preinstalled: `uv`, CPython 3.12, `git`, `make`, `gcc-riscv64-unknown-elf`, a uv cache warmed from `uv.lock`. Vivado is read-only at `/opt/Xilinx/2025.2`; jobs run `source /opt/Xilinx/2025.2/Vivado/settings64.sh`.
 - Steps on those runners use neither `astral-sh/setup-uv` nor `sudo`. They use `uv sync --frozen --extra build` and `uv run --no-sync`.
 - A Vivado job fails unless the produced `.bit` header reports Vivado `2025.2`, using `bit_header()` from `designs/acorn-pcie/tools/publish_release.py`.
+- Vivado 2025.2 needs no licence file for these parts, and no workflow or script here sets `XILINXD_LICENSE_FILE` or `LM_LICENSE_FILE`, or reads, copies or uploads a `.lic` file. Versions that need a licence are a later phase (spec, "Vivado licences").
 - Nothing publishes from a runner. Releases are made on `ubuntu-latest` with `contents: write`.
 - The openXC7 jobs, their names and their artifacts do not change.
 - Vivado checks must not be made required status checks: a runner outage would then block every merge.

@@ -25,6 +25,7 @@ In this plan `<host>` is the inventory name of the host being deployed and `<nam
 - Nothing host-specific goes into code, package files, workflows or the check script. If a step seems to need a host's address or layout written down, it belongs in `deploy/inventory.yml` or is read from the host at run time.
 - Repositories: runner code and playbook in `fpgas-online/fpgas.online-vivado-runners`; the sandbox workflow in `fpgas-online/fpgas.online-test-designs`.
 - Names and addresses, from Plan 1: package `vivado-runners`; units `vivado-runners.service`, `vivado-runners-proxy.service`, `vivado-runners-firewall.service`, `vivado-runners-firewall.timer`; libvirt network `vivado-runners` on bridge `vrbr0`; host `192.168.76.1`, proxy port 3128, slot `i` at `192.168.76.<10+i>`; state in `/var/lib/vivado-runners`; config `/etc/vivado-runners/config.toml`; App key `/etc/vivado-runners/app.pem`; runner group `vivado`; labels `self-hosted`, `linux`, `x64`, `vivado-2025.2`.
+- Only Vivado versions that need no licence file are deployed by this plan. Never copy a licence file tied to a machine onto a runner host's Vivado disk or image. Licensed versions are a later phase (spec, "Vivado licences").
 - The GitHub App's private key is never committed, never printed, never copied into a VM, and never leaves Tim's machine and the runner host.
 - Vivado, the Vivado disk and the runner image are copied only between Tim's own machines (from the machine with the Vivado install to a runner host). Never to GitHub, a registry or any other host.
 - Over ssh to a runner host: one simple remote command per call; anything longer is a Python script copied to the host.
@@ -758,6 +759,7 @@ What each check proves (spec, "Threat model" items 1-5):
 | `vivado read-only` | the toolchain cannot be modified |
 | `seed unreadable` | the job cannot read the (spent) runner registration or the raw Vivado disk |
 | `no host secrets` | no App key, no ssh keys, no controller config in the VM |
+| `no licence tied to a machine` | no licence environment variable, no `~/.Xilinx`, and no `.lic` file under `/opt/Xilinx` or the home directory that is locked to a host ID or points at a licence server. Every job can read what is in its VM, so such a file would be exposed to all of them |
 | `markers` | a second job sees nothing the first one wrote |
 | `fresh runner` | the second job ran in a different VM |
 
@@ -784,6 +786,7 @@ import errno
 import os
 import pathlib
 import pwd
+import re
 import shutil
 import socket
 import sys
@@ -937,6 +940,32 @@ def check_no_host_secrets() -> None:
     report(not suspicious, "no host secrets in the environment", ", ".join(suspicious))
 
 
+def check_no_machine_tied_licence() -> None:
+    """Every job can read whatever is in this VM, so no licence tied to a machine may be here.
+    (The generic licences AMD ships inside Vivado, HOSTID=ANY, are fine.)"""
+    for name in ("XILINXD_LICENSE_FILE", "LM_LICENSE_FILE"):
+        report(name not in os.environ, f"{name} is not set")
+    report(not (pathlib.Path.home() / ".Xilinx").exists(), "no ~/.Xilinx")
+    hostid = re.compile(rb"HOSTID=([^\s\\\\]+)", re.IGNORECASE)
+    server = re.compile(rb"^\s*(SERVER|USE_SERVER)\b", re.IGNORECASE | re.MULTILINE)
+    tied, seen = [], 0
+    for top in ("/opt/Xilinx", str(pathlib.Path.home())):
+        for folder, _, files in os.walk(top):
+            for name in files:
+                if not name.lower().endswith(".lic"):
+                    continue
+                seen += 1
+                try:
+                    text = (pathlib.Path(folder) / name).read_bytes()
+                except OSError:
+                    continue
+                if server.search(text) or any(v.upper() not in (b"ANY", b"DEMO") for v in hostid.findall(text)):
+                    tied.append(os.path.join(folder, name))
+    report(
+        not tied, "no licence tied to a machine", ", ".join(tied) if tied else f"{seen} licence file(s), all generic"
+    )
+
+
 def check_markers(mode: str) -> None:
     if mode == "first":
         for marker in MARKERS:
@@ -977,6 +1006,7 @@ def main() -> int:
     check_vivado_read_only()
     check_disks()
     check_no_host_secrets()
+    check_no_machine_tied_licence()
     check_markers(mode)
 
     output = os.environ.get("GITHUB_OUTPUT")

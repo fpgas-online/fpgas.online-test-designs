@@ -244,7 +244,8 @@ guest requests.
 
 Licence: every current Vivado target is Artix-7 (xc7a35t / xc7a100t /
 xc7a200t), which the free Vivado ML Standard edition covers, so no licence
-server or file is needed. The Vivado disk and any image containing Vivado stay
+server or file is needed. Versions that do need one are a later phase: see
+"Vivado licences". The Vivado disk and any image containing Vivado stay
 on the runner hosts and are **never** published (ghcr, releases, public mirrors):
 AMD's EULA permits installation, not redistribution.
 
@@ -268,6 +269,92 @@ vivado-current -> vivado-2025.2-2026-09-25.squashfs
 * Old versions are removed only by hand, never automatically.
 * A second Vivado version is added as a separate file and a separate runner
   label (`vivado-2026.1`), not by replacing `vivado-current`'s target.
+
+## Vivado licences
+
+Some Vivado versions and device families need a licence file, and a
+node-locked licence is tied to one MAC address: Vivado runs only on a machine
+that has a network device with exactly that address.
+
+### Phase one: only versions that need no licence file
+
+The first deployment supports only licence-free Vivado (2025.2 Standard, which
+covers every current target). Nothing handles a licence file, and the design
+makes sure none gets in by accident, because **a job can read everything in its
+VM**:
+
+* The Vivado disk is attached, readable, to every job's VM. Its build refuses a
+  source tree holding a `.lic` file that is tied to a machine (a `HOSTID=` other
+  than `ANY`/`DEMO`, or a `SERVER`/`USE_SERVER` line). The generic licences AMD
+  ships inside the product are `HOSTID=ANY` and are fine. Checked on
+  2026-10-03: `/opt/Xilinx/2025.2` holds two `.lic` files, both generic.
+* The runner image build copies no licence, sets no `XILINXD_LICENSE_FILE` or
+  `LM_LICENSE_FILE`, and creates no `~/.Xilinx`.
+* The sandbox acceptance check fails if a VM has either variable set, a
+  `~/.Xilinx`, or a machine-tied `.lic` file under `/opt/Xilinx` or the home
+  directory.
+
+In phase one each VM has one network card, with the fixed per-slot MAC
+(`52:54:00:76:00:<slot>`) that ties its address and its proxy log lines to the
+slot. That MAC is not a licence identity.
+
+### Later phase: versions that need a licence file
+
+Not built in the first rollout. The design, so that phase one does not block it:
+
+* **A licence seat** is three things that travel together: the licence file,
+  the MAC address it is locked to, and the runner label of the Vivado version
+  it unlocks. A VM's MAC is ours to choose, so we pick the MAC and request the
+  licence for it. A seat is therefore not tied to any physical machine and can
+  be assigned to any runner host, in the deployment inventory.
+* **The VM gets a network device with exactly that MAC.** It is a second
+  virtio device whose only job is to carry the address: link down, not on the
+  runner bridge. The first device keeps its per-slot MAC, so addressing, the
+  firewall and the proxy log are unchanged, and two VMs never put the same MAC
+  on one network.
+* **A seat is in at most one running VM.** It is bound to one slot on one host.
+  The controller refuses a configuration with the same MAC twice, and
+  deployment refuses a seat assigned to two hosts. That is also what a
+  node-locked licence permits: one machine.
+* **The licence file lives on the host only** (`/etc/vivado-runners/licences/`,
+  readable by the controller alone). It is never in a repository, the
+  inventory, the runner image, the shared Vivado disk or a log. A licensed
+  slot's VM gets it on its own read-only disk; other slots' VMs do not.
+* **Jobs choose a licensed version by label**, like any other runner.
+
+To be verified when this is built, with a real licensed version:
+
+* that the version's licence check finds the MAC on a second device that is
+  link-down and has a modern interface name. Older FlexLM releases looked only
+  at `eth0`-style names. If it does not, the licence MAC goes on the first
+  device and the slot's address mapping follows the seat;
+* the exact list of what needs a licence (which versions, parts and IP cores).
+* that the runner's job-started hook can register masked values (the log
+  masking below depends on it).
+
+**What cannot be prevented, and what follows from it.** Vivado runs as the
+job, so the job must be able to read a node-locked licence file. A job that
+*wants* to leak it can print it to the (public) log or put it in an artifact,
+and the network sandbox does not stop that, because GitHub is the one place a
+VM may talk to. A leaked node-locked licence is usable by anyone who sets
+their MAC to match. So for licensed slots:
+
+* **Who may run code there is the real barrier**, not the sandbox. Licensed
+  slots are a separate runner group and label, used only by workflows on
+  trusted refs. This is the one place the design does not hold against
+  "anyone".
+* **Accidental leaks are engineered against:** the file is outside the
+  workspace and home directory, so artifact globs and `tar` of a build tree do
+  not pick it up; a runner job-started hook registers the licence's key strings
+  as masked values, so a stray `cat` shows `***` in the log; the artifact
+  staging script refuses a file that looks like a licence; and the phase-one
+  guards above still apply to every unlicensed slot.
+* **The alternative that removes the exposure** is a floating licence: a
+  licence server on the host side holds the file, and VMs only check a licence
+  out over the network, so no job ever sees the file. It needs a floating
+  licence (a different, dearer product), a firewall opening from job VMs to the
+  server's ports, and the server (a closed-source daemon fed by hostile VMs) in
+  a VM of its own. Which of the two to build is decision D-4.
 
 ## Controller
 
@@ -421,6 +508,7 @@ tree on buddy.
   * a marker written by run A is absent in run B (two sequential jobs)
   * no GitHub App key, no SSH keys and no `ACTIONS_*` token beyond the job's
     own are readable in the VM
+  * no licence environment variable and no licence file tied to a machine
 * End to end: Vivado build of the Acorn UART design on the runner; the `.bit`
   header reports Vivado 2025.2 and the artifact uploads.
 * The squid allowlist's behaviour is also tested in the runner repo's CI,
@@ -438,10 +526,13 @@ Each phase is a PR with CI green before the next starts.
 | 3 | test-designs: the `patch_yosys_template()` fix, then one design end to end, then the whole matrix | Full Vivado matrix green |
 | 4 | Raise the first host to the slot count it can carry; add further hosts by the same procedure if D-3 says so | Matrix runs in parallel; host load stays within limits |
 | 5 | Release workflow replaces the manual publish | A `vivado-bitstreams-*` release made by CI with matching SHA-256s |
+| later | Vivado versions that need a licence file ("Vivado licences"); needs its own plan and decision D-4 | A licensed version builds on a licensed slot; the licence is absent from every other VM |
 
 ## Out of scope
 
 * Toolchains other than Vivado on these runners
+* Vivado versions that need a licence file, in the first rollout (designed in
+  "Vivado licences", built later)
 * Vivado jobs for fork pull requests (the sandbox is designed for it; the
   policy stays off)
 * Autoscaling beyond fixed slots
@@ -456,6 +547,9 @@ Each phase is a PR with CI green before the next starts.
   available and is already swapping, so even a 16 GiB slot needs its other VMs
   trimmed first; big-storage alone may be enough. Adding any host is the same
   procedure (Plan 2, Task 9).
+* **D-4** (not needed until licensed Vivado versions are built) Node-locked
+  licence files in trusted-only licensed slots, or a floating licence server
+  so that no job ever sees the file.
 * **CI-1 to CI-6** are decisions about the test-designs workflows (who
   publishes the first CI-made release, the Acorn PCIe release order, pull
   request #14, the Arty A7-100T, the full matrix on every push, failing on
