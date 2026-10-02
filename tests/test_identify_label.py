@@ -496,14 +496,8 @@ def test_identify_cannot_be_given_with_update_or_test(monkeypatch, capsys):
 
 
 def _outer(tmp_path):
-    """The outer run's document: the golden fixture once it is in tests/data, else one like it."""
-    if GOLDEN.exists():
-        return GOLDEN
-    path = tmp_path / "identity-123.json"
-    doc = identity.document([{"board": "acorn", "kind": "acorn", "dna": "0x0054b48664b04854"}],
-                            tool="fpgas-online-verify 0.0.post1", read_at="2026-10-02T00:00:00+00:00")  # fmt: skip
-    path.write_text(identify.dumps(doc))
-    return path
+    """The outer run's document: the golden fixture."""
+    return GOLDEN
 
 
 @pytest.fixture
@@ -593,8 +587,6 @@ def test_an_empty_variable_is_not_nested(tmp_path, monkeypatch):
 
 
 def test_the_golden_document_is_one_this_reader_takes():
-    if not GOLDEN.exists():
-        pytest.skip("tests/data/identity-v1-acorn-p48.json is not in this branch yet")
     assert identify.load_outer(GOLDEN) == GOLDEN.read_text()
     (board,) = json.loads(GOLDEN.read_text())["boards"]
     assert board["dna"] == "0x0054b48664b04854" and board["idcode"] == "0x13636093"
