@@ -397,12 +397,13 @@ CI, on every pull request:
 - builds of `-common`, `-dkms` and `-utils` (armhf, arm64, amd64) for each suite, each `-utils` with an
   install test in its suite's image, and the fleet-kernel module artifact with its vermagic check;
 - a DKMS test in the shapes DKMS is for (§2), single-architecture containers of each suite: arm64 with the
-  headers for the suite's newest v8 kernel from the Raspberry Pi archive, and amd64 with Debian's own
-  `linux-headers-amd64`. Each installs the headers and the `-dkms` deb, checks that its postinst alone built
-  and installed the modules for `<kver>` (no `dkms install` by hand, which would hide a postinst that builds
-  nothing), then that `modinfo -k <kver> litepcie liteuart` resolves, and that purging the package removes
-  them. The fleet's shape (armhf root, arm64 kernel) is not tested with DKMS, because it is not supported
-  there. Part B's install test (§4.4) covers it with prebuilt modules.
+  suite's newest v8 kernel from the Raspberry Pi archive, and amd64 with Debian's own (`linux-image-amd64`,
+  `linux-headers-amd64`). Each installs the kernel, its headers and the `-dkms` deb, checks that its postinst
+  alone built and installed the modules for `<kver>` (no `dkms install` by hand, which would hide a postinst
+  that builds nothing), then that `modinfo -k <kver> litepcie liteuart` resolves, and that purging the
+  package removes them. The kernel itself is installed because DKMS runs `depmod` only for a kernel whose own
+  modules are there, as on a host that boots it. The fleet's shape (armhf root, arm64 kernel) is not tested
+  with DKMS, because it is not supported there. Part B's install test (§4.4) covers it with prebuilt modules.
 
 On hardware, on the test board of §1 (MAC `88:a2:9e:45:85:77`, DNA `0x0054b48664b04854`; today at
 pi-sw2-p48), running the #29 cle-215+ image from SRAM. It uses a pull request run's artifacts: the armhf

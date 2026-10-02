@@ -702,7 +702,14 @@ def test_the_dkms_test_finds_debians_own_amd64_kernel():
     names = ["linux-headers-amd64", "linux-headers-6.1.0-40-common", "linux-headers-6.1.0-40-amd64"]
     assert ct.newest_kernel(names, "amd64") == "6.1.0-40-amd64"
     assert ct.vermagic_ok("6.1.0-40-amd64 SMP preempt mod_unload modversions ", "6.1.0-40-amd64")
-    assert ct.DKMS_KERNELS["amd64"] == ("linux-headers-amd64", "amd64", False)
+    assert ct.DKMS_KERNELS["amd64"] == (("linux-image-amd64", "linux-headers-amd64"), "amd64", False)
+
+
+def test_the_dkms_test_installs_the_kernel_with_its_headers():
+    """DKMS runs depmod only where the kernel's own modules are, and the Raspberry Pi 6.18 headers do not pull
+    their image in: without it `modinfo -k` found nothing DKMS had installed (seen in CI on trixie)."""
+    for image, headers in (kernel for kernel, _flavour, _rpi in ct.DKMS_KERNELS.values()):
+        assert image.startswith("linux-image-") and headers == image.replace("-image-", "-headers-")
 
 
 def test_the_container_and_the_packager_agree_on_names():

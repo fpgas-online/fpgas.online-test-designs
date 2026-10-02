@@ -20,8 +20,9 @@ repository.
                           package, which must take those modules and not DKMS
     meta-install-test     on a host with nothing installed: install the meta package through apt from a
                           flat repository of the given debs; it must choose DKMS, not a modules package
-    dkms-test             install kernel headers (the newest rpi-v8 on arm64, Debian's on amd64) and the
-                          -common and -dkms debs, have DKMS build the modules, and check modinfo finds them
+    dkms-test             install a kernel and its headers (the newest rpi-v8 on arm64, Debian's on amd64)
+                          and the -common and -dkms debs, have DKMS build the modules, and check modinfo
+                          finds them
 
     python3 packaging/acorn-litepcie/container.py run --arch armhf -- \
         utils --arch armhf --driver dist/driver --out dist/utils-armhf
@@ -57,8 +58,13 @@ TOOLS = ("litepcie_util", "litepcie_test")
 MODULES = ("litepcie", "liteuart")
 BLACKLIST = "/etc/modprobe.d/fpgas-online-acorn-litepcie.conf"
 FLAT_REPO = "/srv/fpgas-online-acorn-litepcie"
-# The DKMS test's kernel per architecture: (headers meta package, flavour, from the Raspberry Pi archive?).
-DKMS_KERNELS = {"arm64": ("linux-headers-rpi-v8", "rpi-v8", True), "amd64": ("linux-headers-amd64", "amd64", False)}
+# The DKMS test's kernel per architecture: (the image's and the headers' meta packages, flavour, from the
+# Raspberry Pi archive?). The image is installed as on a host that boots it: DKMS runs depmod only for a
+# kernel whose own modules are installed, and not every headers package depends on its image.
+DKMS_KERNELS = {
+    "arm64": (("linux-image-rpi-v8", "linux-headers-rpi-v8"), "rpi-v8", True),
+    "amd64": (("linux-image-amd64", "linux-headers-amd64"), "amd64", False),
+}
 
 
 class ContainerError(Exception):
@@ -335,12 +341,12 @@ def cmd_meta_install_test(args):
 
 
 def cmd_dkms_test(args):
-    meta, flavour, rpi = DKMS_KERNELS[args.arch]
+    kernel, flavour, rpi = DKMS_KERNELS[args.arch]
     expect_arch(args.arch)
     expect_suite(args.suite)
     if rpi:
         add_rpi_archive(args.suite)
-    apt_install("dkms", meta)
+    apt_install("dkms", *kernel)
     installed = out("dpkg-query", "-W", "-f", "${Package}\\n", "linux-headers-*").split()
     kver = newest_kernel(installed, flavour)
     apt_install(*(f"./{d}" for d in args.debs))
