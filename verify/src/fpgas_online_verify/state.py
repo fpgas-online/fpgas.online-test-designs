@@ -9,7 +9,9 @@ design into SRAM, which every verify does, and upgrading packages change none of
 A fact the record does not have is a change ("not recorded before"): it may be one that could not be read
 last time, on a board that has since been swapped. The one exception is a fact a newer version of the
 record introduced (NEW_FACTS): on a record of an older version it is added quietly, so an upgrade that reads
-more does not make every stateful host report "changed" once.
+more does not make every stateful host report "changed" once. Likewise a fact a newer version reads more of
+(WIDENED: the IDCODE, once read without its version): on an older record, a recorded value that the new one
+only adds to is replaced quietly.
 
 A netboot root keeps /var/lib in tmpfs, so there every boot is a first run.
 """
@@ -18,9 +20,21 @@ import json
 import pathlib
 
 STATE = pathlib.Path("/var/lib/fpgas-online/verify-state.json")
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 # The facts of a board's state that each version of the record introduced: {version: (key, ...)}.
-NEW_FACTS = {2: ("dna",)}  # 2: the Acorn's device DNA
+NEW_FACTS = {2: ("dna",), 3: ("idcode",)}  # 2: the Acorn's device DNA; 3: the Arty's IDCODE
+
+
+def _idcode_widened(old, new):
+    """The recorded IDCODE is the new one without its version (openFPGALoader's --detect masked it)."""
+    try:
+        return int(old, 16) == int(new, 16) & 0x0FFFFFFF
+    except (TypeError, ValueError):
+        return False
+
+
+# The facts each version of the record reads more of: {version: {key: old value is the new one, less}}.
+WIDENED = {3: {"idcode": _idcode_widened}}
 
 
 def load_record(path=STATE):
@@ -43,6 +57,23 @@ def load(path=STATE):
 def quiet_facts(version):
     """The board-level keys a record of `version` may lack without that being a change."""
     return {key for v, keys in NEW_FACTS.items() if (version or 1) < v for key in keys}
+
+
+def widened(recorded, current, version):
+    """The recorded boards with each fact that a newer version reads more of (WIDENED) replaced by the current
+    value, where the recorded one is that value, less; the record itself when there is nothing to replace."""
+    rules = {key: same for v, keys in WIDENED.items() if (version or 1) < v for key, same in keys.items()}
+    if not rules or not isinstance(recorded, dict) or "unreadable" in recorded:
+        return recorded
+    out = dict(recorded)
+    for board, facts in recorded.items():
+        now = current.get(board)
+        if not (isinstance(facts, dict) and isinstance(now, dict)):
+            continue
+        for key, same in rules.items():
+            if key in facts and key in now and facts[key] != now[key] and same(facts[key], now[key]):
+                out[board] = {**out[board], key: now[key]}
+    return out
 
 
 def save(boards, when, path=STATE):
