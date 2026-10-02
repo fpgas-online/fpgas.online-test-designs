@@ -10,14 +10,15 @@ identification (a PMOD HAT) and Ethernet (a USB Ethernet adapter).
     sudo fpgas-arty-debug program uart            # load a test's design and leave it running
     sudo fpgas-arty-debug test ddr                # load it and run its test, output as it comes
     sudo fpgas-arty-debug test pin-id -- --hat-port JA    # after --: arguments for the test script
-    sudo fpgas-acorn-debug identify               # the Acorn's running build and flash identity
+    sudo fpgas-acorn-debug identify               # who the Acorn is: fpgas-acorn-verify --identify
 """
 
+import contextlib
 import json
 import subprocess
 import sys
 
-from . import bitstreams
+from . import bitstreams, identify, runner
 from .core import Problem, hold_lock, pci_devices, usb_devices
 from .testbench import TestBoard
 
@@ -32,8 +33,15 @@ def _live(argv):
         return 127
 
 
+def _find(board, host):
+    """board.find, under the board's lock when finding it drives its pins (the NeTV2's JTAG scan), waiting for it
+    as the boot check does (runner.probing). Not for use while the lock is already held (program, test)."""
+    with runner.probing(board) if board.probes else contextlib.nullcontext():
+        return board.find(host, usb_devices(), pci_devices())
+
+
 def detect(board, host, args):
-    found = board.find(host, usb_devices(), pci_devices())
+    found = _find(board, host)
     print(json.dumps({"board": board.name, "host": host, "found": found}, indent=2, default=str))
     return 0 if found else 1
 
@@ -43,7 +51,7 @@ def _variant(board, host, args):
         return args.variant
     if len(board.variants) == 1:
         return next(iter(board.variants))
-    found = board.find(host, usb_devices(), pci_devices())
+    found = board.find(host, usb_devices(), pci_devices())  # only from program and test: the lock is held
     if not found:
         raise Problem("missing", f"no {board.title} found, so no variant to choose: pass --variant")
     return found[0]["variant"]
@@ -110,12 +118,9 @@ def _program(board, host, args, bitstream, then_test):
 
 
 def acorn_identify(board, host, args):
-    from .boards.acorn import check
-
-    with hold_lock(board.lock, board.title):
-        report = check.identify(check.scan_pci(), args.images or check.IMAGES)
-    print(json.dumps(report, indent=2))
-    return 0 if report["result"] == "read" else 1
+    """The same document as fpgas-acorn-verify --identify."""
+    options = {"board": board.name, **({"images": args.images} if args.images else {})}
+    return identify.run(options, f"fpgas-{board.slug}-debug", {board.name: board})
 
 
 def commands(board):
@@ -129,7 +134,7 @@ def commands(board):
             "test": (lambda b, h, a: program(b, h, a, then_test=True), "load TEST's design and run its test", True),
         })  # fmt: skip
     if board.name == "acorn":
-        out["identify"] = (acorn_identify, "show the running build and the flash's ID", False)
+        out["identify"] = (acorn_identify, "print who the board is (as fpgas-acorn-verify --identify)", False)
     return out
 
 

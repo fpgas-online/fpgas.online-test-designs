@@ -18,6 +18,7 @@ class Fomu(TestBoard):
     doc = "fomu-evt.md"
     usb = (("1209", "5bf0"),)
     variants: ClassVar[dict] = {"evt": "evt"}
+    label_fields = ("serial",)
     port = "/dev/serial0"
     flash_note = "not read: every verify rewrites the user image by DFU"
     tests: ClassVar[dict] = {

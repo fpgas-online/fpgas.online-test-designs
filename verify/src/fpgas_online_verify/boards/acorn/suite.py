@@ -42,6 +42,9 @@ from . import bist, check, links
 from . import setup as setups
 
 TESTS = ("pcie-link", "pcie-bar0", "jtag", "flash", "ddr", "p2-uart", "p2-serial", "scratch", "p2-gpio")
+# The tests fpgas-verify --identify runs: they only read (BAR0's identifier, DNA, XADC and the flash's identity;
+# IDCODE and DNA over P1 JTAG).
+IDENTIFY_TESTS = ("pcie-bar0", "jtag")
 NEEDS_BAR0 = ("pcie-bar0", "flash", "ddr", "p2-serial", "scratch", "p2-gpio")
 CONSOLE_TAIL = 8  # BIOS console lines kept in the ddr test's output
 GOLDEN = "running the golden image: the operational slot did not boot"
@@ -165,6 +168,8 @@ class _Suite:
         try:
             stack.enter_context(check.driver_released(self.found, self.driver, self.root))
             bus = stack.enter_context(self.options.get("open_bar", check.open_bar0)(self.found["bdf"]))
+            if self.options.get("identify_only"):  # --identify: only the flash's ID reads write anything
+                bus = check.IdentifyBus(bus)
         except Problem as p:
             self.fault(p)
             self.bar0_problem = p

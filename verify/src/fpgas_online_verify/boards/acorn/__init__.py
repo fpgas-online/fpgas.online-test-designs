@@ -24,12 +24,20 @@ class Acorn(Board):
     doc = "acorn.md"
     lock = str(check.LOCK)  # shared with fpgas-acorn-flash (spi_flash.py)
     tests = suite.TESTS  # each can be run on its own with --test
+    label_fields = ("dna", "idcode", "flash", "flash_jedec", "flash_uid", "identifier")
 
     def spot(self, host, usb, pci):
         return [d for d in map(check.describe, pci) if d]
 
     def weak(self, found):
         return found.get("kind") not in ("fpgas-online", "sqrl-factory")  # the Xilinx sample runs on a NeTV2 too
+
+    def identify(self, host, found, options):
+        """Only the reads: pcie-bar0 (the running build, the flash's identity and the DNA over BAR0) and jtag
+        (IDCODE and DNA over P1). Neither writes the flash or reconfigures the FPGA; over BAR0 only the SPI
+        master and the flash's chip select are written (check.IdentifyBus)."""
+        options = {**options, "tests": list(suite.IDENTIFY_TESTS), "event": None, "identify_only": True}
+        return suite.check_board(found, options)["identity"]
 
     def check(self, host, found, options):
         return suite.check_board(found, options)

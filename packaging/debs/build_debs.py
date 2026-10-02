@@ -52,6 +52,8 @@ BuildError = acorn.BuildError
 DIST = "/usr/lib/python3/dist-packages/fpgas_online_verify"
 MODE_DIR = "/usr/share/fpgas-online/verify/mode.d"
 MODE = "fpgas-online-verify-mode"  # virtual: every mode package Provides and Conflicts it, so there is one
+TMPFILES = "/usr/lib/tmpfiles.d"
+RUN_DIR = "/run/fpgas-online"
 EXE = {"file_info": {"mode": 0o755}}
 DATA = {"file_info": {"mode": 0o644}}
 OPENFPGALOADER = "openfpgaloader-fpgasonline | openfpgaloader-fpgasonline-git | openfpgaloader"
@@ -67,11 +69,12 @@ TOOLS_DEPENDS = {
     "fomu": ["python3-serial", OPENFPGALOADER],
     "tt": ["python3-serial", "python3-libgpiod"],
 }
-# mpremote: in trixie, but only bookworm-backports has it for bookworm. pinctrl (releases the Acorn's JTAG pins
-# after the probe; puts back the UART/I2C/SPI functions the PMOD HAT scan takes): Raspberry Pi OS's
-# raspi-utils-core, not in Debian, so not a Depends.
+# mpremote: in trixie, but only bookworm-backports has it for bookworm. pinctrl (releases the Acorn's and the
+# NeTV2's JTAG pins after their scans; puts back the UART/I2C/SPI functions the PMOD HAT scan takes): Raspberry
+# Pi OS's raspi-utils-core, not in Debian, so not a Depends.
 PINCTRL = "raspi-utils-core"
-TOOLS_RECOMMENDS = {"tt": ["micropython-mpremote", PINCTRL], "acorn": [PINCTRL], "arty": [PINCTRL]}
+TOOLS_RECOMMENDS = {"tt": ["micropython-mpremote", PINCTRL], "acorn": [PINCTRL], "arty": [PINCTRL],
+                    "netv2": [PINCTRL]}  # fmt: skip
 # What fpgas-<b>-debug needs on top: the Acorn's conversion from SQRL's factory image loads a .bit over JTAG,
 # and fpgas-acorn-flash --uart talks UARTBone; the PMOD tests read GPIOs; the Ethernet test configures a link.
 DEBUG_DEPENDS = {
@@ -134,6 +137,24 @@ def wrapper(staging, command, call):
 BOARD_MAIN = ("from fpgas_online_verify.cli import board_main", "board_main")
 
 
+def tmpfiles(staging, package, lines):
+    """/usr/lib/tmpfiles.d/<package>.conf: the run directory and lock files, created root-owned at boot, so no
+    other user can create a lock file first (in /run/lock, fs.protected_regular would then stop root opening it
+    with O_CREAT)."""
+    path = pathlib.Path(staging) / f"{package}.tmpfiles.conf"
+    path.write_text(f"# {package}: created at boot, root-owned, before anyone else can create them.\n"
+                    + "".join(f"{line}\n" for line in lines))  # fmt: skip
+    return {"src": str(path), "dst": f"{TMPFILES}/{package}.conf", **DATA}
+
+
+def board_locks(inside):
+    """The installed boards' lock files in RUN_DIR (`inside`), or elsewhere (not `inside`)."""
+    return sorted(b.lock for b in BOARDS.values() if b.lock.startswith(f"{RUN_DIR}/") == inside)
+
+
+TMPFILES_POSTINST = {"postinstall": str(HERE / "tmpfiles.postinst")}
+
+
 # -- the shared core, and the multi-board packages ----------------------------------------------------------
 
 
@@ -156,7 +177,10 @@ def verify_nfpm(version, staging):
             wrapper(staging, "fpgas-verify", ("from fpgas_online_verify.cli import verify_main", "verify_main")),
             {"src": str(HERE / "fpgas-verify.service"), "dst": "/usr/lib/systemd/system/fpgas-verify.service", **DATA},
             {"dst": MODE_DIR, "type": "dir", "file_info": {"mode": 0o755}},
+            tmpfiles(staging, "fpgas-online-verify", [f"d {RUN_DIR} 0755 root root -",
+                                                      *(f"f {lock} 0644 root root -" for lock in board_locks(True))]),
         ],
+        "scripts": TMPFILES_POSTINST,  # creates the lock files now; the boot check is turned on elsewhere
     }  # fmt: skip
 
 
@@ -204,6 +228,9 @@ def tools_nfpm(board, version, bitstreams, staging):
     contents = [_py(src, rel) for src, rel in board_files(board)]
     contents += [_py(src, rel) for src, rel in BOARD_DATA.get(board.name, [])]
     contents.append(wrapper(staging, f"fpgas-{board.slug}-verify", BOARD_MAIN))
+    lock_elsewhere = not board.lock.startswith(f"{RUN_DIR}/")  # the Acorn's, shared with fpgas-acorn-flash
+    if lock_elsewhere:
+        contents.append(tmpfiles(staging, board.package, [f"f {board.lock} 0644 root root -"]))
     if board.name == "acorn":
         contents.append(wrapper(staging, "fpgas-acorn-flash",
                                 ("from fpgas_online_verify.boards.acorn.spi_flash import main", "main")))  # fmt: skip
@@ -224,6 +251,7 @@ def tools_nfpm(board, version, bitstreams, staging):
         **({"recommends": TOOLS_RECOMMENDS[board.name]} if board.name in TOOLS_RECOMMENDS else {}),
         "suggests": [f"fpgas-online-{board.slug}-debug"],
         "contents": contents,
+        **({"scripts": TMPFILES_POSTINST} if lock_elsewhere else {}),
     }  # fmt: skip
 
 
