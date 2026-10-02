@@ -203,8 +203,12 @@ class TestBoard(Board):
             if rc != 0:  # whatever it printed, a scan that failed is not trusted
                 scan_faults.append(f"{argv[0]} exited {rc} reading the IDCODE")
             if not codes:
-                why = "no device on the JTAG chain" if idcode.empty_chain(text) else idcode.NO_RAW_SCAN
-                reason = "; ".join([why, *scan_faults])
+                if idcode.empty_chain(text):
+                    reason = "; ".join(["no device on the JTAG chain", *scan_faults])
+                elif rc != 0:
+                    reason = idcode.scan_failed(argv[0], rc, text)
+                else:
+                    reason = idcode.NO_RAW_SCAN
                 return {"result": "fail", "reason": reason, "output": output}
         entry = {**idcode.decode(codes[0]), **({"output": output} if output else {})}
         faults = idcode.faults(codes[0])

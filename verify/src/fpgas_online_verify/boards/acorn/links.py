@@ -111,16 +111,20 @@ def jtag(setup, variant, run, bar0_dna=None, gpiochip=None):
             seen.update(idcode.decode(found[0]))
         faults += [("fail", f"P1 JTAG: {f}") for c in found for f in idcode.faults(c)]
         chain_ok = False
-        if not found:
-            empty = idcode.empty_chain(out)
-            faults.append(("fail", "no device on the P1 JTAG chain" if empty else f"P1 JTAG: {idcode.NO_RAW_SCAN}"))
+        scanned = bool(found) or idcode.empty_chain(out)
+        if not scanned and rc != 0:  # the exit code is in this reason, so not said again below
+            faults.append(("fail", f"P1 JTAG: {idcode.scan_failed('openFPGALoader --detect', rc, out)}"))
+        elif not scanned:
+            faults.append(("fail", f"P1 JTAG: {idcode.NO_RAW_SCAN}"))
+        elif not found:
+            faults.append(("fail", "no device on the P1 JTAG chain"))
         elif len(found) != 1 or not idcode.same_part(found[0], want):
             has = seen["idcode"] + (f" ({seen['idcode_device']})" if len(found) == 1 else "")
             faults.append(("fail", f"P1 JTAG chain has {has}, expected one {idcode.device(want)} "
                                    f"(IDCODE {want:#010x}, any version) for {variant}"))  # fmt: skip
         else:
             chain_ok = True
-        if rc != 0:  # whatever it printed, a scan that failed is not trusted
+        if rc != 0 and scanned:  # whatever it printed, a scan that failed is not trusted
             faults.append(("fail", f"openFPGALoader --detect exited {rc} on the P1 JTAG chain"))
         elif chain_ok:
             rc, out = run([*base, "--read-dna"], JTAG_TIMEOUT)

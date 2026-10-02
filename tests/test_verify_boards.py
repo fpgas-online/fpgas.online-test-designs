@@ -252,6 +252,20 @@ def test_an_arty_scan_without_the_raw_idcodes_says_so_not_that_the_chain_is_empt
     assert _check(ARTY, tmp_path, ARTY_FOUND, run)["jtag"]["reason"] == "no device on the JTAG chain"
 
 
+def test_an_arty_scan_that_fails_before_scanning_says_the_tool_failed_and_why(tmp_path):
+    text = "write to ftdi failed\nunable to open ftdi device: -3 (device not found)\n\n"
+    run = Runner([("--detect", (1, text))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    assert report["result"] == "fail" and report["jtag"]["reason"] == (
+        "openFPGALoader failed (exit 1) before scanning the JTAG chain: "
+        "unable to open ftdi device: -3 (device not found)"
+    )
+    assert report["jtag"]["output"] == ["write to ftdi failed", "unable to open ftdi device: -3 (device not found)"]
+    run = Runner([("--detect", (1, ""))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    reason = _check(ARTY, tmp_path, ARTY_FOUND, run)["jtag"]["reason"]
+    assert reason == "openFPGALoader failed (exit 1) before scanning the JTAG chain: no output"
+
+
 def test_an_arty_scan_that_exits_non_zero_fails_even_with_the_right_idcode(tmp_path):
     run = Runner([("--detect", (2, ARTY_SCAN))], flash=b"\0" * ARTY.flash_region["a7-35"])
     report = _check(ARTY, tmp_path, ARTY_FOUND, run)
