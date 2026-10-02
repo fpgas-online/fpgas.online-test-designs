@@ -42,6 +42,7 @@ class NeTV2(TestBoard):
     probes = True
     variants: ClassVar[dict] = {"a7-35": "a7-35t", "a7-100": "a7-100t"}
     idcodes: ClassVar[dict] = {variant: code for code, variant in PARTS.items()}
+    label_fields = ("idcode", "dna", "flash_jedec", "flash_uid")
     port = "/dev/ttyAMA0"
     flash_region: ClassVar[dict] = {
         "a7-35": 0x220000,
