@@ -516,6 +516,8 @@ Every board with JTAG has its FPGA's whole 32-bit IDCODE read and decoded
   `fpgas-acorn-flash`), and on the Acorn the JTAG pins are put back as they were found.
 * The part is compared without the version, so another silicon revision of the right part passes. A part
   that is not the variant's fails the board, and so does an IDCODE with bit 0 clear.
+* A JTAG chain of more than one device fails the board, with every IDCODE on it in the reason. That holds for
+  the NeTV2 too: finding it picks its part out of the chain, but the check counts every device the scan saw.
 * A scan whose tool exits with an error fails, even when it printed the right IDCODE; the reason gives the
   exit code. The IDCODE it printed is still decoded in the report.
 
@@ -594,6 +596,7 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 | `fail`: `the test exited 1` | the test failed; its last lines are in the summary. `fpgas-<board>-debug test <test>` shows all of it |
 | `fail`: `N/18 pins match expected wiring` | the Pmod HAT cabling differs from the board's expected map |
 | `fail`: `… is an XC7A100T, not the a7-35's XC7A35T …` / `P1 JTAG chain has … expected one …` | the JTAG IDCODE is not the variant's part: the wrong board, or the wrong `--variant` |
+| `fail`: `the JTAG chain has N devices (…), not one` | more than the board's FPGA answers on its JTAG chain (an Arty or a NeTV2): another device wired into it, or a fault on the cable |
 | `fail`: `unconverted: …` | an Acorn on SQRL's factory image (or the XDMA sample): convert it ([acorn-pcie-programming.md](hardware/acorn-pcie-programming.md)) |
 | `fail`: `… is not a design we built` | a Xilinx PCIe design the Acorn check does not know; its flash is not read |
 | `fail`: `… has no test design for this board yet` | a Xilinx PCIe board that is not an Acorn (a PCIe Screamer, a PicoEVB) |

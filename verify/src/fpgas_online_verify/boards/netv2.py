@@ -94,14 +94,17 @@ class NeTV2(TestBoard):
             return []  # no GPIO header to scan
         argv = self.idcode_argv(host)
         rc, text = runner(argv, 60)
-        variant, code = part_of(idcode.parse(text))
+        codes = idcode.parse(text)
+        variant, code = part_of(codes)
         if code is None:
             return []
         if variant is None:
             raise Problem("error", f"the JTAG chain answers with IDCODE {code:#010x}, which is no NeTV2 part")
-        # The JTAG check (TestBoard.jtag) uses this scan, and fails it if the tool exited non-zero.
+        # The JTAG check (TestBoard.jtag) uses this scan: it fails it if the tool exited non-zero, and, with
+        # every IDCODE on the chain kept, if the chain has more than the one device, as for the other boards.
         scan = {"tool": argv[0], "exit": rc, "output": idcode.scan_lines(text) if rc == 0 else tail(text, 6)}
-        return [{"variant": variant, "idcode": f"{code:#010x}", "idcode_scan": scan}]
+        return [{"variant": variant, "idcode": f"{code:#010x}", "idcodes": [f"{c:#010x}" for c in codes],
+                 "idcode_scan": scan}]  # fmt: skip
 
     def program_argv(self, bitstream, host, test):
         if is_pi5(host["model"]):

@@ -153,7 +153,7 @@ def test_the_netv2_is_scanned_with_openocd_on_a_pi3_and_rp1pio_on_a_pi5():
     run = Runner([("--detect", (0, _scan(0x1362D093)))])
     scan = {"tool": "openFPGALoader", "exit": 0, "output": ["- 0 -> 0x1362d093", "- 1 -> 0xffffffff"]}
     assert NETV2.probe(_host(NETV2, PI5, None), runner=run) == [
-        {"variant": "a7-35", "idcode": "0x1362d093", "idcode_scan": scan}
+        {"variant": "a7-35", "idcode": "0x1362d093", "idcodes": ["0x1362d093"], "idcode_scan": scan}
     ]
     assert run.calls[-1] == ["openFPGALoader", "-c", "rp1pio", "--pins", "27:22:4:17", "--detect",
                              "--verbose-level", "2"]  # fmt: skip
@@ -305,6 +305,34 @@ def test_a_netv2_whose_finding_scan_exits_non_zero_fails_even_with_the_right_idc
         else:
             assert report["result"] == "fail" and report["jtag"]["result"] == "fail"
             assert report["jtag"]["reason"] == f"{tool} exited 2 reading the IDCODE"
+
+
+def _openocd_chain(*codes):
+    return "\n".join(f"Info : JTAG tap: xc7.tap{i} tap/device found: {c:#010x}" for i, c in enumerate(codes))
+
+
+@pytest.mark.parametrize(
+    ("model", "needle", "chain", "tool"),
+    [(PI3, "init; exit", _openocd_chain, "openocd"), (PI5, "--detect", _scan, "openFPGALoader")],
+    ids=["openocd-pi3", "rp1pio-pi5"],
+)
+def test_a_netv2_on_a_jtag_chain_of_two_devices_fails_as_the_other_boards_do(tmp_path, model, needle, chain, tool):
+    """Finding the board takes the NeTV2 part from the chain; the JTAG check still counts every device on it."""
+    host = _host(NETV2, model, None if model == PI5 else 0x3F000000)
+    for codes, want in [((0x13631093, 0x0362D093), "a7-100"), ((0x0362D093, 0x13631093), "a7-35")]:
+        (found,) = NETV2.probe(host, runner=Runner([(needle, (0, chain(*codes)))]))
+        assert found["variant"] == want and found["idcodes"] == [f"{c:#010x}" for c in codes]
+        run = Runner(flash=b"\0" * NETV2.flash_region[want])
+        report = NETV2.check(host, found, {"images": _install(tmp_path, NETV2)}, runner=run)
+        listed = ", ".join(f"{c:#010x}" for c in codes)
+        assert report["result"] == "fail" and report["jtag"]["result"] == "fail", report
+        assert report["jtag"]["reason"] == f"the JTAG chain has 2 devices ({listed}), not one"
+        assert report["jtag"]["idcode"] == listed
+    (found,) = NETV2.probe(host, runner=Runner([(needle, (0, chain(0x13631093)))]))
+    run = Runner(flash=b"\0" * NETV2.flash_region["a7-100"])
+    report = NETV2.check(host, found, {"images": _install(tmp_path, NETV2)}, runner=run)
+    assert report["result"] == "pass" and report["jtag"]["result"] == "pass", report
+    assert (report["jtag"]["idcode"], found["idcode_scan"]["tool"]) == ("0x13631093", tool)
 
 
 def test_a_netv2_configured_as_the_other_variant_fails_on_its_idcode(tmp_path):
