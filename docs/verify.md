@@ -207,7 +207,7 @@ exit 1
 $ fpgas-verify --help
 usage: fpgas-verify [options]
 
-Check this host's FPGA board with the fpgas.online test designs.
+Check this host's FPGA board and its wiring to this Pi.
 Prints a summary to stderr and writes a JSON report.
 
 options:
