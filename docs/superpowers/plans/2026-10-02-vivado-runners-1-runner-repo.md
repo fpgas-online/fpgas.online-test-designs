@@ -36,7 +36,7 @@
   Claude-Session: https://claude.ai/code/session_01LmomwnyBcsZWKXnx2Thc2Y
   ```
 
-## Differences from the spec (apply to the spec in Task 1)
+## Differences from the first draft of the spec (the spec was revised to match on 2026-10-03)
 
 1. **No `_diag` copy.** The spec has the controller loop-mount the scratch disk to read the runner's diagnostic log. That makes the host parse a filesystem a hostile job controls. The controller logs the runner name instead; GitHub's jobs API reports the same name as `runner_name`, which ties a log line to a run.
 2. **Threads, not asyncio.** Every hypervisor call is a blocking subprocess, so each slot is a thread.
@@ -236,16 +236,16 @@ jobs:
         run: uv run pytest -v
 ```
 
-- [ ] **Step 7: Copy the spec and plans, and apply the six spec differences**
+- [ ] **Step 7: Copy the spec and plans, and check the spec already carries the six differences**
 
-Copy the spec and the three plan files from test-designs branch `docs/vivado-runners-spec` into `docs/superpowers/specs/` and `docs/superpowers/plans/`. In the spec:
+Copy the spec and the three plan files from test-designs branch `docs/vivado-runners-spec` into `docs/superpowers/specs/` and `docs/superpowers/plans/`. The spec was revised on 2026-10-03 to include the differences listed above; confirm each of these is true of the copy, and fix any that is not:
 
-- "Slot loop" step 6: delete the sentence about copying `_diag`; under "Observability" replace "GitHub run/job id (from `_diag`)" with "runner name (GitHub's jobs API reports it as `runner_name`)".
-- "Slot loop" intro: "One asyncio task per slot" becomes "One thread per slot".
-- "Golden runner image": replace the `--disableupdate` bullet with: "`actions/runner` at a pinned version, started with `--jitconfig`. GitHub stops sending jobs to runners more than 30 days behind the latest release, so the image is rebuilt at least monthly."
-- "Rollout" Phase 1 exit check becomes "Unit tests green; package builds"; Phase 2 work gains "first image build and first boot".
-- "Repositories and ownership": "through the secretless `debs` Release model used by nfsroot-watchdog" becomes "as a signed apt repository on GitHub Pages via `mithro/apt-repo-action`, as nfsroot-watchdog does".
-- D-2 becomes "Decided 2026-10-02: `fpgas-online/fpgas.online-vivado-runners`."
+- "Slot loop" step 6 does not copy `_diag`, and "Observability" ties a log line to a run by the runner name.
+- "Slot loop" says one thread per slot.
+- "Golden runner image" has no `--disableupdate`; it says the image is rebuilt at least monthly.
+- "Rollout" Phase 1's exit check does not mention booting an image; Phase 2's work includes the first image build and first boot.
+- "Repositories and ownership" says the package is published with `mithro/apt-repo-action`.
+- D-2 reads "Decided 2026-10-02".
 
 - [ ] **Step 8: Write the README**
 
@@ -2838,7 +2838,7 @@ Expected: `host-config` job green. This proves the configuration parses and the 
 - Produces:
   - `image/build_image.py` CLI: `uv run python image/build_image.py --images-dir DIR --lock UV_LOCK --pyproject PYPROJECT [--work-dir DIR] [--network default]`. Writes `DIR/runner-base-<date>.<n>.qcow2` and prints its name. Does **not** change `runner-base-current`.
   - In the guest: `/etc/vivado-runner-image.json` with keys `built`, `runner_version`, `uv_version`, `python_version`, `lock_sha256`, `debian_image_sha512`.
-  - Guest contract (Plan 3's workflows rely on it): user `runner` (no sudo), `uv` on `PATH`, CPython from `versions.toml`, `/opt/Xilinx` mounted read-only, work directory on the scratch disk, `HTTPS_PROXY`/`https_proxy` set, `UV_PYTHON_DOWNLOADS=never`, `UV_LINK_MODE=copy`.
+  - Guest contract (Plan 3's workflows rely on it): user `runner` (no sudo), `uv` on `PATH`, CPython from `versions.toml`, `/opt/Xilinx` mounted read-only, work directory on the scratch disk, `HTTPS_PROXY`/`https_proxy` set, `UV_PYTHON` set to that CPython version, `UV_PYTHON_DOWNLOADS=never`, `UV_LINK_MODE=copy`.
 
 How the build works: the Debian 13 `generic` cloud image (full kernel, so squashfs is available) is copied, grown to 20 GiB and booted once on libvirt's `default` NAT network with a cloud-init seed ISO. cloud-init runs `provision.py`, which installs everything and powers the VM off. The host reads the manifest out of the stopped image with `virt-cat` to confirm provisioning finished, then writes a compressed copy under its version name. This build VM is trusted (it runs our script, no job), so reading its disk is fine.
 
@@ -2879,6 +2879,7 @@ Disks are found by the serial the controller gives them:
   vr-seed     ISO with `jitconfig` (single-use runner registration) and `proxy`
 """
 
+import json
 import pathlib
 import subprocess
 import sys
@@ -2897,7 +2898,9 @@ def sh(*cmd: str) -> None:
 
 
 def main() -> int:
-    print(pathlib.Path("/etc/vivado-runner-image.json").read_text(), flush=True)
+    manifest_text = pathlib.Path("/etc/vivado-runner-image.json").read_text()
+    print(manifest_text, flush=True)
+    manifest = json.loads(manifest_text)
 
     sh("mount", "-t", "squashfs", "-o", "ro,nodev,nosuid", disk("vr-vivado"), "/opt/Xilinx")
 
@@ -2923,6 +2926,8 @@ def main() -> int:
         "HTTPS_PROXY": proxy,
         "HTTP_PROXY": proxy,
         "UV_LINK_MODE": "copy",
+        # The uv cache holds wheels for exactly this Python; never pick or fetch another.
+        "UV_PYTHON": manifest["python_version"],
         "UV_PYTHON_DOWNLOADS": "never",
     }
     result = subprocess.run(
@@ -3620,7 +3625,7 @@ runner_group = "vivado"
 [slots]
 count = 4
 vcpus = 8
-memory_gib = 24
+memory_gib = 16
 scratch_gib = 60
 wall_limit_minutes = 120
 labels = ["self-hosted", "linux", "x64", "vivado-2025.2"]
@@ -4032,7 +4037,9 @@ grep -E "Maximum resident set size|Elapsed \(wall clock\)" tmp/time-acorn-pcie.t
 
 `acorn-pcie` on `cle-215+` (xc7a200t) is the largest design in the repo. `Maximum resident set size` is the largest single process (Vivado itself), in kB. Record both numbers and the machine (12 threads, 31 GiB) in `docs/measurements.md`.
 
-Decision rule for the slot size: `memory_gib` = peak RSS in GiB, plus 4 GiB for the guest OS and page cache, rounded up to a multiple of 4, and never under 16. Write the result into `debian/config.toml.example` and into the spec's config block.
+What to expect: when Plan 3 was written (2026-10-02, same machine) this build took 8 min 25 s and peaked at 3.3 GB. A result several times larger means something differs (thread count, a different design revision): find out what before recording it.
+
+Decision rule for the slot size: `memory_gib` = peak RSS in GiB, plus 4 GiB for the guest OS and page cache, rounded up to a multiple of 4, and never under 16. With a 3.3 GB peak that is 16. Write the result into `debian/config.toml.example`, `deploy/inventory.yml` (once Plan 2 has created it) and the spec's config block.
 
 - [ ] **Step 3: Measure the Vivado disk**
 
@@ -4049,13 +4056,13 @@ Record both sizes. To learn whether the slim disk still builds a bitstream witho
 ```bash
 mkdir -p tmp/mnt
 squashfuse tmp/vivado-disk-slim/vivado-2025.2-*.squashfs tmp/mnt
-bash -c 'source tmp/mnt/2025.2/Vivado/settings64.sh && uv run python designs/uart/gateware/uart_soc_acorn.py --variant cle-215+ --toolchain vivado --build'
+bash -c 'source tmp/mnt/2025.2/Vivado/settings64.sh && uv run python designs/pmod-pin-id/gateware/pmod_pin_id_acorn.py --variant cle-215+ --toolchain vivado --build'
 fusermount -u tmp/mnt
 ```
 
-(`squashfuse` is an unprivileged FUSE mount; if it is not installed, ask Tim to install it or to run `sudo mount -o ro,loop` for you. Run the build from the test-designs worktree with absolute paths to the mount.)
+(The PMOD pin-ID design is used because it builds with Vivado on `main` as it is; the SoC designs need Plan 3's first fix. `squashfuse` is an unprivileged FUSE mount; if it is not installed, ask Tim to install it or to run `sudo mount -o ro,loop` for you. Run the build from the test-designs worktree with absolute paths to the mount.)
 
-Decision rule: if the UART build produces a `.bit` from the slim disk, the exclusions `Vitis`, `data/xsim`, `data/simmodels` become the documented default in the README's "Building the Vivado disk" section; otherwise the full disk is the default and the README says which exclusion broke the build. Delete both squashfs files from `tmp/` when done: they contain Vivado and must not be left where they could be committed or uploaded.
+Decision rule: if that build produces `designs/pmod-pin-id/build/acorn/top.bit` from the slim disk, the exclusions `Vitis`, `data/xsim`, `data/simmodels` become the documented default in the README's "Building the Vivado disk" section; otherwise the full disk is the default and the README says which exclusion broke the build. Delete both squashfs files from `tmp/` when done: they contain Vivado and must not be left where they could be committed or uploaded.
 
 - [ ] **Step 4: Find out what `uv sync` needs when PyPI is blocked**
 
@@ -4108,7 +4115,7 @@ Slot memory: <peak> + 4 GiB, rounded up to a multiple of 4 = **<value> GiB**.
 
 ## Vivado disk size
 
-| Contents | Size (GiB) | UART bitstream builds |
+| Contents | Size (GiB) | A bitstream builds from it |
 |---|---|---|
 | Full `/opt/Xilinx/2025.2` | <value> | not tested |
 | Without `Vitis`, `data/xsim`, `data/simmodels` | <value> | <yes/no> |
