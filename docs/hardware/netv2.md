@@ -165,7 +165,9 @@ These auxiliary pins on the PCIe connector provide a second serial channel. They
 
 ## DDR3 SDRAM
 
-- Capacity: 512 MB (32-bit wide bus, 4 byte lanes)
+- Capacity: 512 MiB (32-bit wide bus, 4 byte lanes): two 2 Gbit, 16-bit chips. LiteDRAM module
+  `K4B2G1646F` (14 row address bits, as the board routes A[13:0]); a 4 Gbit module such as
+  `MT41K256M16` builds a 1 GiB SoC whose top half is the bottom half again
 - I/O Standard: SSTL15_R (1.5V)
 
 | Signal        | FPGA Pins                                      |
