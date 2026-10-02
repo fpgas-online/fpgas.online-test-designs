@@ -68,6 +68,10 @@ jobs:
 
   build-deb:
     needs: test
+    # A called workflow gets at most what its caller's job has: its plan job reads where the Pages site is.
+    permissions:
+      contents: read
+      pages: read
     uses: ./.github/workflows/acorn-litepcie.yml
 
   # Only a full build is published: a deploy replaces the whole site, so it must hold every package. A build

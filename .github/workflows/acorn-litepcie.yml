@@ -60,6 +60,11 @@ jobs:
   plan:
     name: "Versions and plan"
     runs-on: ubuntu-latest
+    # pages: read is for asking GitHub where this repository's Pages site is. Without a site the answer is
+    # 404, and so it is without the permission to ask: the plan would take a published archive for none.
+    permissions:
+      contents: read
+      pages: read
     outputs:
       versions: ${{ steps.plan.outputs.versions }}
       meta-version: ${{ steps.sid.outputs.version }}
