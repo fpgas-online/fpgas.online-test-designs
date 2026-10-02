@@ -298,8 +298,8 @@ class AcornPCIeSoC(SoCCore):
             # The far end of LitePCIe's DMA streams. With the DMA's loopback enabled the streams turn round
             # inside LitePCIe and never get here, so `litepcie_util dma_test` still works as it always has.
             self.pcie_dram = PCIeDRAMBridge(
-                self.sdram.crossbar.get_port(mode="write", data_width=64),
-                self.sdram.crossbar.get_port(mode="read", data_width=64),
+                self.sdram.crossbar.get_port(mode="write"),
+                self.sdram.crossbar.get_port(mode="read"),
             )
             self.comb += [
                 self.pcie_dma0.source.connect(self.pcie_dram.sink),

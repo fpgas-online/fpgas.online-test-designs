@@ -24,6 +24,15 @@ def _dut():
     return PCIeDRAMBridge(LiteDRAMNativePort("write", AW, DW), LiteDRAMNativePort("read", AW, DW))
 
 
+NATIVE_DW = 128  # the Acorn's controller: 16 DQ x 2 edges x 4 phases
+
+
+def _converted():
+    """The bridge as the SoC builds it: on the controller's own ports, with LiteDRAM's width converter (two of
+    the bridge's words to each of the controller's) inside it."""
+    return PCIeDRAMBridge(LiteDRAMNativePort("write", AW - 1, NATIVE_DW), LiteDRAMNativePort("read", AW - 1, NATIVE_DW))
+
+
 class Bench:
     def __init__(self, dut, seed, stall=0.4):
         self.dut, self.rand, self.stall = dut, random.Random(seed), stall
@@ -47,8 +56,7 @@ class Bench:
                     self.read_order.append(addr)
             if wdata_ready and (yield port.wdata.valid):
                 addr = writes.pop(0)
-                assert (yield port.wdata.we) == 0xFF
-                self.mem[addr] = yield port.wdata.data
+                self.mem[addr] = self._merge(port, addr, (yield port.wdata.data), (yield port.wdata.we))
                 self.write_order.append(addr)
             if rdata_valid and (yield port.rdata.ready):
                 reads.pop(0)
@@ -60,6 +68,23 @@ class Bench:
             if rdata_valid:
                 yield port.rdata.data.eq(self.mem.get(reads[0], 0xDEAD_0000_0000_0000 | reads[0]))
             yield
+
+    def _merge(self, port, addr, data, we):
+        """A write as the DRAM does it: only the bytes `we` selects change."""
+        if port.data_width == DW:
+            assert we == 0xFF
+            return data
+        mask = sum(0xFF << (8 * i) for i in range(port.data_width // 8) if we >> i & 1)
+        return (self.mem.get(addr, 0) & ~mask) | (data & mask)
+
+    def words(self):
+        """The DRAM as the bridge's 64-bit words: {word address: value}, for every word of a written cell."""
+        ratio = self.dut.write_port.data_width // DW
+        if ratio == 1:
+            return dict(self.mem)
+        return {
+            addr * ratio + i: (cell >> (DW * i)) & (2**DW - 1) for addr, cell in self.mem.items() for i in range(ratio)
+        }
 
     def host_push(self, words):
         """The host's DMA reader: words arriving from Pi memory."""
@@ -211,3 +236,59 @@ def test_count_reports_progress():
 
     bench.run(main(), push=_words(12))
     assert seen["count"] == 12
+
+
+# -- behind the width converter, as on the board -------------------------------------------------------------
+#
+# The converter regroups the bridge's words two to a controller word, and commits a controller word only when
+# both halves have been asked for, when the next command is for another word, or when a command says it is the
+# last. A transfer whose final word fills only half a controller word must therefore say so.
+
+FILL = 0x5555_5555_5555_5555  # what the DRAM holds before a test writes it
+ODD = [(0, 1), (1, 1), (0, 3), (1, 2), (1, 3), (6, 5), (7, 9)]  # (base, length): a half controller word at an end
+
+
+def _filled(bench, cells=16):
+    bench.mem = {addr: FILL | (FILL << DW) for addr in range(cells)}
+
+
+@pytest.mark.parametrize("base,length", ODD)
+def test_behind_the_converter_a_write_that_ends_in_half_a_controller_word_reaches_the_dram(base, length):
+    bench, words = Bench(_converted(), seed=base * 16 + length), _words(length + 4)
+    _filled(bench)
+    seen = {}
+
+    def main():
+        yield from bench.transfer(MODE_TO_DRAM, base=base, length=length)
+        seen["at_done"] = bench.words()
+
+    bench.run(main(), push=words)
+    want = {addr: FILL for addr in range(32)} | {base + i: w for i, w in enumerate(words[:length])}
+    assert bench.words() == want  # the block, and the words either side of it untouched
+    assert seen["at_done"] == want  # done means the whole block is in the DRAM, its last half word included
+    assert bench.unsent == words[length:]
+
+
+@pytest.mark.parametrize("base,length", ODD)
+def test_behind_the_converter_a_read_that_ends_in_half_a_controller_word_finishes(base, length):
+    bench, held = Bench(_converted(), seed=base * 16 + length), _words(32, seed=3)
+    bench.mem = {addr: held[2 * addr] | (held[2 * addr + 1] << DW) for addr in range(16)}
+    bench.run(bench.transfer(MODE_FROM_DRAM, base=base, length=length))
+    assert bench.pulled == held[base : base + length]
+
+
+def test_behind_the_converter_odd_blocks_follow_each_other():
+    """Each transfer leaves the converters ready for the next: nothing held over, nothing owed."""
+    bench, words = Bench(_converted(), seed=21), _words(9)
+    _filled(bench)
+
+    def main():
+        yield from bench.transfer(MODE_TO_DRAM, base=3, length=5)
+        yield from bench.transfer(MODE_FROM_DRAM, base=3, length=5)
+        yield from bench.transfer(MODE_TO_DRAM, base=20, length=1)
+        yield from bench.transfer(MODE_FROM_DRAM, base=20, length=1)
+        yield from bench.transfer(MODE_TO_DRAM, base=9, length=3)
+        yield from bench.transfer(MODE_FROM_DRAM, base=8, length=5)
+
+    bench.run(main(), push=words)
+    assert bench.pulled == words[0:5] + words[5:6] + [FILL, *words[6:9], FILL]
