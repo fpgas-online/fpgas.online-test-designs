@@ -573,7 +573,8 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 * The Arty's and NeTV2's flash is fingerprinted (a sha256 of its boot image region) and compared only with the
   last run's, not checked against a golden full test design.
 * Only the Acorn's flash can be written with its golden images (`fpgas-acorn-flash write`).
-* `fpga-board-identified` is sent only for an Acorn.
+* The Arty's and NeTV2's device DNA and flash IDs are not read, nor the flash IDs of the TT and Fomu; their
+  [identity](identity.md) has only what finding the board and its IDCODE give.
 * Nothing is compared with the site's records.
 * No rpi-hwid labels are made. `fpgas-acorn-debug identify` reads the Acorn's identity and flash IDs for them.
 
@@ -613,7 +614,7 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
   | `result`, `reason` | the result, and why, when no board was checked |
   | `checked_at` | when (UTC, ISO 8601) |
   | `mode`, `configured_by`, `chosen_by` | `auto` or the board, the file (or "command line") that said so, and how the boards were found |
-  | `boards[]` | per board: `board`, `variant`, `found`, `result`, `reason` (every fault), `bitstreams`, `tests[]` (`test`, `result`, `reason`, `output`, and what the test read or measured), `state`. The Arty's and NeTV2's also have `jtag`: `result`, `reason`, and the [IDCODE's fields](#the-jtag-idcode). The Acorn's also has `setup`, `identity`, `running`, `flash`, `not_run`, and `driver` when one was unbound |
+  | `boards[]` | per board: `board`, `variant`, `found`, `result`, `reason` (every fault), `bitstreams`, `tests[]` (`test`, `result`, `reason`, `output`, and what the test read or measured), `identity` ([who the board is](identity.md)), `state`. The Arty's and NeTV2's also have `jtag`: `result`, `reason`, and the [IDCODE's fields](#the-jtag-idcode). The Acorn's also has `setup`, `running`, `flash`, `not_run`, and `driver` when one was unbound |
   | `state` | `file`, and `recorded` (`first run` or `--update`) or `changes` |
 
   ```bash
@@ -624,6 +625,8 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 * Loading a test design and upgrading the packages are not changes. A flash that could not be read is not compared.
 * An IDCODE recorded without its version (a record with `schema_version` below 3) takes the whole one
   quietly. On a newer record, another version is a change: it is another chip.
+* A device DNA recorded without its leading zeros (a record with `schema_version` below 4) takes the 16-digit
+  spelling quietly. Another DNA is a change.
 * A `--test` run neither records nor compares the state.
 
 ---
@@ -652,7 +655,7 @@ The check tells the site what it is doing as it goes. `fleet-event` (from
 | `fpga-verifying` | the check starts | `started_at` |
 | `fpga-board-found` | for each board found | `board`, `variant`, `where` (PCI slot, USB path or JTAG IDCODE) |
 | `fpga-no-board` | no board was found | `reason` |
-| `fpga-board-identified` | an Acorn, once PCIe and JTAG have said who it is | `board`, `bdf`, `pci_ids`, `subsystem`, `variant`, `identifier`, `build`, `dna`, `idcode`, `flash_part`, `flash_jedec`, `flash_unique_id` |
+| `fpga-board-identified` | once for each board found: an Acorn once PCIe and JTAG have said who it is, any other board before its tests | `schema` (`fpga-identity/1`) and the board's [identity](identity.md) |
 | `fpga-test-started` | each test starts | `board`, `test` |
 | `fpga-test-finished` | each test ends | `board`, `test`, `result`, `reason` |
 | `fpga-verified` | the check is done | the report, flattened: `result`, `mode`, `reason`; per board `board0` (`netv2 a7-35 fail`), `board0_reason`, `board0_tests` (`uart=pass ddr=fail spiflash=pass`), `board0_bitstreams`, `board0_state_*`, `board0_identity_*` |
