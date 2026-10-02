@@ -32,6 +32,7 @@ Stdlib only: the Pi hosts boot a tmpfs root with no LiteX.
 
 import fcntl
 import os
+import random
 import struct
 import time
 
@@ -50,6 +51,9 @@ BUFFER_WORDS = DMA_BUFFER_SIZE // WORD
 # half of it is waiting. A block is moved in chunks that stay well inside both.
 TO_DRAM_CHUNK_BUFFERS = 64
 FROM_DRAM_CHUNK_BUFFERS = 2 * DMA_BUFFER_PER_IRQ  # with the padding: 65 buffers in the ring
+
+BIG_BYTES = 32 << 20  # the timed block of the boot check: about a second on a Pi 5
+SEED = 29
 
 MODE_TO_DRAM, MODE_FROM_DRAM = 1, 2  # pcie_dram_bridge.py
 DFII_CONTROL_SEL = 1  # sdram_dfii_control bit 0: the controller, not the BIOS, drives the DRAM
@@ -82,15 +86,17 @@ class DMAError(Exception):
     """A transfer that did not do what was asked: the message says what was seen."""
 
 
+INSTALL = (
+    f"install {MODULE_PACKAGE}: the prebuilt fpgas-online-acorn-litepcie-modules-<kernel> package for this "
+    "kernel (`uname -r`), or fpgas-online-acorn-litepcie-dkms"
+)
+
+
 def module_missing(device=DEVICE, exists=os.path.exists):
     """Why the DMA cannot be used on this host, or None: litepcie.ko gives /dev/litepcie0 when it is bound."""
     if exists(device):
         return None
-    return (
-        f"{device} is not there: litepcie.ko is not loaded. Install {MODULE_PACKAGE} "
-        "(a prebuilt fpgas-online-acorn-litepcie-modules-<kernel> package, or fpgas-online-acorn-litepcie-dkms) "
-        "and run `modprobe litepcie`"
-    )
+    return f"{device} is not there: litepcie.ko is not loaded. To have it, {INSTALL}, then `modprobe litepcie`"
 
 
 def chunks(nwords, chunk_buffers):
@@ -127,6 +133,8 @@ class Bridge:
 
     def reg_write(self, addr, value):
         self._ioctl(self.fd, IOCTL_REG, bytearray(REG.pack(addr, value, 1)))
+
+    read, write = reg_read, reg_write  # a bus, as check.py's readers take one
 
     def __getitem__(self, name):
         return self.reg_read(self.csrs.addr(name))
@@ -259,3 +267,108 @@ class Bridge:
             self._wait_done(0, f"0 words from DRAM word {base:#x}", timeout_s)
         pieces = chunks(nwords, FROM_DRAM_CHUNK_BUFFERS)
         return b"".join(self._from_dram_chunk(base + at, n, timeout_s) for at, n in pieces)
+
+
+# -- the check ---------------------------------------------------------------------------------------------
+
+
+def first_difference(got, want):
+    """Where two blocks differ, as a sentence; None if they are the same."""
+    if len(got) != len(want):
+        return f"{len(got)} bytes came back, not {len(want)}"
+    for i in range(0, len(want), WORD):
+        if got[i : i + WORD] != want[i : i + WORD]:
+            return f"word {i // WORD} is {got[i : i + WORD].hex()}, not {want[i : i + WORD].hex()}"
+    return None
+
+
+def exercise(bridge, dram_words, big_bytes=BIG_BYTES, seed=SEED, clock=time.monotonic):
+    """Blocks written to the DRAM and read back, every byte compared. Returns (measurements, faults).
+
+      * short blocks whose ends fall part-way through a DMA buffer and part-way through a controller word, at
+        the bottom, in the middle and at the very top of the DRAM;
+      * a block in which every word holds its own address, read back from part-way in: a bridge that ignored
+        the base passes a round trip and fails this;
+      * `big_bytes` in one block, timed in each direction.
+
+    A transfer that does not finish ends the check there: the bridge is then mid-transfer and takes no other.
+    """
+    rng = random.Random(seed)
+    b = BUFFER_WORDS
+    out, faults = {"bytes": big_bytes}, []
+
+    def round_trip(base, nwords):
+        data = rng.randbytes(nwords * WORD)
+        bridge.to_dram(base, data)
+        diff = first_difference(bridge.from_dram(base, nwords), data)
+        if diff:
+            faults.append(f"{nwords} words written to DRAM word {base:#x} read back wrong: {diff}")
+
+    try:
+        for nwords, base in ((1, 1), (b + 1, dram_words // 2 + 1), (2 * b + 3, max(0, dram_words - (2 * b + 3)))):
+            round_trip(base, nwords)
+        base = dram_words // 4 + 7
+        bridge.to_dram(base, b"".join(struct.pack("<Q", w) for w in range(base, base + 2 * b)))
+        for offset, n in ((5, 3), (b - 1, 2)):
+            want = b"".join(struct.pack("<Q", w) for w in range(base + offset, base + offset + n))
+            diff = first_difference(bridge.from_dram(base + offset, n), want)
+            if diff:
+                faults.append(f"{n} words read from DRAM word {base + offset:#x} are not the words there: {diff}")
+        data = rng.randbytes(big_bytes - big_bytes % WORD)
+        base = dram_words // 2
+        t0 = clock()
+        bridge.to_dram(base, data)
+        t1 = clock()
+        back = bridge.from_dram(base, len(data) // WORD)
+        t2 = clock()
+        diff = first_difference(back, data)
+        if diff:
+            faults.append(f"{len(data)} bytes written to DRAM word {base:#x} read back wrong: {diff}")
+        out["to_dram_MBps"] = round(len(data) / (t1 - t0) / 1e6, 1) if t1 > t0 else 0.0
+        out["from_dram_MBps"] = round(len(data) / (t2 - t1) / 1e6, 1) if t2 > t1 else 0.0
+    except DMAError as e:
+        faults.append(str(e))
+    return out, faults
+
+
+# -- the driver --------------------------------------------------------------------------------------------
+
+MODULES = ("litepcie", "liteuart")  # in the order they are removed
+
+
+def loaded_modules(run):
+    """Which of the driver's modules the kernel has loaded."""
+    rc, out = run(["lsmod"], 10)
+    names = {line.split()[0] for line in out.splitlines()[1:] if line.split()} if rc == 0 else set()
+    return [m for m in MODULES if m in names]
+
+
+def load_driver(run, device=DEVICE, exists=os.path.exists, sleep=time.sleep, wait_s=5.0):
+    """Have litepcie.ko bound and its device there. Returns (note, why_not): `note` says what was done, for
+    unload_driver(); `why_not` is why the DMA cannot be used here, naming the package to install."""
+    before = loaded_modules(run)
+    if exists(device):
+        return {"driver": "was loaded", "loaded": []}, None
+    rc, out = run(["modprobe", "litepcie"], 30)
+    note = {"driver": "loaded for the test", "loaded": [m for m in loaded_modules(run) if m not in before]}
+    if rc != 0:
+        said = " ".join(out.split())[:200]
+        return note, f"litepcie.ko could not be loaded ({said}). To have it, {INSTALL}"
+    waited = 0.0
+    while not exists(device) and waited < wait_s:  # udev makes the node
+        sleep(0.05)
+        waited += 0.05
+    if not exists(device):
+        return note, f"litepcie.ko loaded but {device} did not appear within {wait_s} s: it did not bind to the board"
+    note["loaded"] = [m for m in loaded_modules(run) if m not in before]
+    return note, None
+
+
+def unload_driver(run, note):
+    """Remove the modules load_driver() loaded, so the host is left as it was found. Returns the faults."""
+    faults = []
+    for module in note.get("loaded", []):
+        rc, out = run(["rmmod", module], 30)
+        if rc != 0:
+            faults.append(f"{module}.ko, loaded for the DMA test, could not be removed: {out.strip()[:200]}")
+    return faults

@@ -49,15 +49,6 @@ def log(name, ok, detail=""):
     return ok
 
 
-def first_difference(got, want):
-    if len(got) != len(want):
-        return f"{len(got)} bytes, not {len(want)}"
-    for i in range(0, len(want), dma.WORD):
-        if got[i : i + dma.WORD] != want[i : i + dma.WORD]:
-            return f"word {i // dma.WORD}: {got[i : i + dma.WORD].hex()} not {want[i : i + dma.WORD].hex()}"
-    return None
-
-
 def identifier(bridge, csrs):
     base = csrs.bases["identifier_mem"]
     out = bytearray()
@@ -89,7 +80,7 @@ def round_trip(bridge, rng, base, nwords):
         back = bridge.from_dram(base, nwords)
     except dma.DMAError as e:
         return log(f"round trip of {nwords} words at {base:#x}", False, str(e))
-    return log(f"round trip of {nwords} words at {base:#x}", back == data, first_difference(back, data) or "")
+    return log(f"round trip of {nwords} words at {base:#x}", back == data, dma.first_difference(back, data) or "")
 
 
 def addressing(bridge, base, nwords):
@@ -100,7 +91,7 @@ def addressing(bridge, base, nwords):
     for offset, n in ((0, 1), (1, 1), (5, 3), (1023, 2), (1024, 1024), (nwords - 1, 1), (3000, nwords - 3000)):
         got = bridge.from_dram(base + offset, n)
         want = block(base + offset, n)
-        log(f"addressing: {n} words from {base + offset:#x}", got == want, first_difference(got, want) or "")
+        log(f"addressing: {n} words from {base + offset:#x}", got == want, dma.first_difference(got, want) or "")
 
 
 def neighbours(bridge, rng, base, nwords):
@@ -128,7 +119,7 @@ def big(bridge, rng, base, mib):
     out = {"MiB": mib, "to_dram_MBps": round(len(data) / (t1 - t0) / 1e6, 1),
            "from_dram_MBps": round(len(data) / (t2 - t1) / 1e6, 1)}  # fmt: skip
     rates = f"to DRAM {out['to_dram_MBps']} MB/s, from DRAM {out['from_dram_MBps']} MB/s"
-    log(f"big block of {mib} MiB at {base:#x}", back == data, first_difference(back, data) or rates)
+    log(f"big block of {mib} MiB at {base:#x}", back == data, dma.first_difference(back, data) or rates)
     return out
 
 
