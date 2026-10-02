@@ -55,6 +55,29 @@ def test_an_idcode_that_could_not_be_read_is_an_error_and_one_never_tried_is_abs
     assert identity.idcode_fields({}) == {}
 
 
+NETV2_FOUND = {"variant": "a7-100", "idcode": "0x13631093", "idcodes": ["0x13631093"],
+               "idcode_scan": {"tool": "openFPGALoader", "exit": 0, "output": []}}  # fmt: skip
+
+
+def test_the_idcode_read_when_the_board_was_found_is_in_its_base():
+    out = identity.base("netv2", "netv2", NETV2_FOUND)
+    assert out == {"board": "netv2", "kind": "netv2", "variant": "a7-100", **idcode.decode(0x13631093)}
+    # a found with only the IDCODE, as before the whole chain was kept
+    assert identity.base("netv2", "netv2", {"variant": "a7-100", "idcode": "0x13631093"}) == out
+
+
+def test_a_chain_of_more_than_one_device_found_is_an_idcode_error_in_the_base():
+    found = {**NETV2_FOUND, "idcodes": ["0x13631093", "0x0362d093"]}
+    out = identity.base("netv2", "netv2", found)
+    assert "idcode" not in out
+    assert out["idcode_error"] == "the JTAG chain has more than one device (0x13631093, 0x0362d093)"
+
+
+def test_a_board_found_without_an_idcode_has_none_in_its_base():
+    out = identity.base("acorn", "acorn", {"kind": "fpgas-online", "bdf": "0000:01:00.0", "variant": "cle-215+"})
+    assert out == {"board": "acorn", "kind": "acorn", "variant": "cle-215+", "bdf": "0000:01:00.0"}
+
+
 def test_the_flash_keeps_every_rdid_byte_and_register():
     out = identity.flash_fields(P48_FLASH, "pcie")
     assert out == {

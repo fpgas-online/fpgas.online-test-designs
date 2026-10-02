@@ -21,6 +21,8 @@ import datetime
 import importlib.metadata
 import json
 
+from fpgas_online_verify import idcode
+
 SCHEMA = "fpga-identity/1"  # the event's schema detail
 DOCUMENT_SCHEMA = "fpgas-verify/identity"
 IDENTITY_VERSION = 1
@@ -81,7 +83,8 @@ def kind(board_name, found):
 
 
 def base(board_key, board_name, found, variant=None):
-    """What every board's dict starts with: board (the state key), kind, variant, and how it was found."""
+    """What every board's dict starts with: board (the state key), kind, variant, and how it was found,
+    including the IDCODE when finding the board read it (the NeTV2's scan)."""
     out = {"board": board_key, "kind": kind(board_name, found)}
     variant = variant or found.get("variant")
     if variant:
@@ -89,6 +92,10 @@ def base(board_key, board_name, found, variant=None):
     for key in ("serial", "usb", "bdf"):
         if found.get(key):
             out[key] = found[key]
+    if found.get("idcode"):
+        codes = found.get("idcodes") or [found["idcode"]]
+        entry = idcode.decode(int(codes[0], 16)) if len(codes) == 1 else {"idcode": ", ".join(codes)}
+        out.update(idcode_fields(entry))
     return out
 
 
