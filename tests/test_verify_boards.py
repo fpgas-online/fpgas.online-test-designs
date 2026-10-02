@@ -151,9 +151,10 @@ def test_idcodes_are_read_whole_from_openocd_and_openfpgaloader():
 
 def test_the_netv2_is_scanned_with_openocd_on_a_pi3_and_rp1pio_on_a_pi5():
     run = Runner([("--detect", (0, _scan(0x1362D093)))])
-    assert NETV2.probe(_host(NETV2, PI5, None), runner=run) == [{
-        "variant": "a7-35", "idcode": "0x1362d093",
-        "idcode_scan": {"tool": "openFPGALoader", "exit": 0, "output": ["- 0 -> 0x1362d093", "- 1 -> 0xffffffff"]}}]  # fmt: skip
+    scan = {"tool": "openFPGALoader", "exit": 0, "output": ["- 0 -> 0x1362d093", "- 1 -> 0xffffffff"]}
+    assert NETV2.probe(_host(NETV2, PI5, None), runner=run) == [
+        {"variant": "a7-35", "idcode": "0x1362d093", "idcode_scan": scan}
+    ]
     assert run.calls[-1] == ["openFPGALoader", "-c", "rp1pio", "--pins", "27:22:4:17", "--detect",
                              "--verbose-level", "2"]  # fmt: skip
     run = Runner([("init; exit", (1, "tap/device found: 0x03631093"))])
