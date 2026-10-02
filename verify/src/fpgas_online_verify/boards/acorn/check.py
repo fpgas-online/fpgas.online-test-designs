@@ -37,7 +37,6 @@ import pathlib
 from ...core import Problem, pci_devices
 from . import spi_flash
 
-SCHEMA_VERSION = 1
 SYSFS_PCI = pathlib.Path("/sys/bus/pci/devices")
 IMAGES = pathlib.Path("/usr/share/fpgas-online/acorn-pcie/images")
 LOCK = pathlib.Path(spi_flash.LOCK)  # one user of the SoC at a time: this, or an operator's spi_flash.py
@@ -85,9 +84,6 @@ OTHER_BOARDS = {
     "xilinx-xdma": "Xilinx XDMA design (likely PicoEVB)",
 }
 NO_TEST_DESIGN = "fpgas.online has no test design for this board yet"
-
-# Worst last. "none": no Acorn at all; "read": identify() read what it was asked to.
-SEVERITY = ("none", "read", "pass", "fail", "error")
 
 XADC_TEMPERATURE = ("temperature_c", "xadc_temperature")
 XADC_VOLTAGES = (("vccint_v", "xadc_vccint"), ("vccaux_v", "xadc_vccaux"), ("vccbram_v", "xadc_vccbram"))
@@ -428,7 +424,7 @@ def flash_identity(flash):
     S25FL-S's unique id with the same OTPR (0x4B, 3 address + 1 dummy, 16 bytes from 0) that identify() sends;
     on pi-sw2-p48 the two gave the same 128 bits in the same order.
 
-    part, jedec and unique_id are what the recorded state and fpgas-acorn-debug identify have always had;
+    part, jedec and unique_id are what the recorded state has always had;
     identity.flash_fields() turns the whole read into the identity's flash fields."""
     ident = flash.identify()
     return {
@@ -465,47 +461,3 @@ def flash_slots(bus, images, files, layout):
             entry["first_difference"] = f"{addr + diff:#x}"
         slots.append(entry)
     return slots
-
-
-# -- the live identity read, for rpi-hwid's labels -----------------------------------------------------
-
-
-def _identify_board(dev, images, release, open_bar, root):
-    reason = not_ours(dev)
-    if reason:
-        raise Problem("fail", reason)
-    manifest, files = release
-    builds, _ = expectations(manifest, files, dev["variant"])
-    note = {}
-    with driver_released(dev, note, root), open_bar(dev["bdf"]) as bus:
-        out, _, _ = gate(bus, images, files, builds, manifest.get("tag"))
-        out["flash"] = flash_identity(spi_flash.Flash(bus))
-    if "rebind_error" in note:
-        raise Problem("error", note["rebind_error"], **out)
-    return {**out, "result": "read"}
-
-
-def identify(devices, images=IMAGES, open_bar=open_bar0, root=SYSFS_PCI):
-    """Each board's flash row, read live and nothing more: no slot is read. For rpi-hwid's labels.
-
-    The same gates as the full check apply before anything is sent to the flash. "read" for a board
-    whose flash identified itself; otherwise the board's result and reason say why not."""
-    try:
-        release = load_release(images) if any(d["kind"] == "fpgas-online" for d in devices) else None
-    except Problem as p:
-        release, failure = None, p
-    else:
-        failure = None
-    boards = []
-    for dev in devices:
-        board = dict(dev)
-        try:
-            if failure and dev["kind"] == "fpgas-online":
-                raise failure
-            board.update(_identify_board(dev, images, release, open_bar, root))
-        except Problem as p:
-            board.update(p.seen, result=p.result, reason=p.reason)
-        boards.append(board)
-    worst = max((b["result"] for b in boards if b["result"] != "read"), key=SEVERITY.index, default=None)
-    result = worst or ("read" if boards else "none")
-    return {"schema_version": SCHEMA_VERSION, "result": result, "boards": boards}

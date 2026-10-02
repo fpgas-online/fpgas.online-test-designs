@@ -500,56 +500,6 @@ def test_memory_decoding_that_was_already_on_is_left_on(tmp_path):
     assert int.from_bytes((dev / "config").read_bytes()[4:6], "little") == 0x0006
 
 
-# -- the live identity read, for rpi-hwid's labels ----------------------------------------------------
-
-
-def _identify(rig):
-    return av.identify(av.scan_pci(rig.root), rig.images, open_bar=rig.bar, root=rig.root)
-
-
-def test_identify_reads_the_flash_row_and_not_the_slots(tmp_path, images):
-    rig = Rig(tmp_path, images)
-    report = _identify(rig)
-    (board,) = report["boards"]
-    assert report["result"] == board["result"] == "read"
-    assert board["flash"]["part"] == "S25FL256S"
-    assert board["flash"]["jedec"] == "0x010219"
-    assert len(board["flash"]["unique_id"]) == 32
-    assert sf.READ4 not in rig.soc.flash.opcodes  # identity only: no page of either slot is read
-
-
-def test_identify_gives_the_same_row_as_the_full_check(tmp_path, images):
-    full = Rig(tmp_path / "a", images).check()["flash"]
-    quick = _identify(Rig(tmp_path / "b", images))["boards"][0]["flash"]
-    assert {k: full[k] for k in ("part", "jedec", "unique_id")} == {k: quick[k] for k in ("part", "jedec", "unique_id")}
-
-
-def test_identify_will_not_touch_the_flash_of_a_build_it_does_not_know(tmp_path, images):
-    rig = Rig(tmp_path, images, identifier="fpgas-online Acorn PCIe SoC cle-215+ 2026-10-01 09:00:00")
-    report = _identify(rig)
-    assert report["result"] == "fail"
-    assert report["boards"][0]["running"]["build"] is None
-    assert not rig.soc.flash_touched
-
-
-def test_identify_never_opens_the_bar_of_a_factory_board(tmp_path, images):
-    root = fk.pci(tmp_path / "devices", ids=fk.FACTORY)
-    report = av.identify(av.scan_pci(root), images, open_bar=fk.refuse, root=root)
-    assert report["result"] == "fail"
-    assert report["boards"][0]["reason"] == "unconverted: runs SQRL's factory image, not the fpgas.online design"
-
-
-def test_identify_unbinds_a_bound_driver_and_binds_it_again(tmp_path, images):
-    rig = Rig(tmp_path, images, driver="litepcie")
-    assert _identify(rig)["result"] == "read"
-    assert (tmp_path / "sys" / "drivers" / "litepcie" / "bind").read_text() == "0001:01:00.0"
-
-
-def test_identify_on_a_pi_with_no_fpga_is_none(tmp_path, images):
-    root = fk.pci(tmp_path / "devices", ids=fk.RP1)
-    assert av.identify(av.scan_pci(root), images)["result"] == "none"
-
-
 def test_the_check_and_spi_flash_share_one_lock(tmp_path):
     import fcntl
 
