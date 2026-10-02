@@ -89,6 +89,37 @@ def test_the_event_form_is_flat_strings_with_its_schema():
                                        "idcode_version": "1", "dna": "0x01", "schema": "fpga-identity/1"}  # fmt: skip
 
 
+@pytest.mark.parametrize(
+    ("value", "text"),
+    [
+        ("0x13636093", "0x13636093"),
+        (None, "-"),  # read, and there is none
+        (True, "true"),
+        (False, "false"),
+        (0, "0"),
+        (33554432, "33554432"),
+        (["b", "a"], '["b","a"]'),  # a list keeps its order
+        (("x", 1), '["x",1]'),
+        ({"z": 1, "a": [True, None]}, '{"a":[true,null],"z":1}'),  # compact, keys sorted
+        ([], "[]"),
+    ],
+)
+def test_each_type_has_one_event_form(value, text):
+    assert identity.details({"field": value}) == {"field": text, "schema": "fpga-identity/1"}
+
+
+def test_a_field_not_read_is_left_out_of_the_event_and_never_spelled_none():
+    out = identity.details({"board": "arty", "kind": "arty"})
+    assert out == {"board": "arty", "kind": "arty", "schema": "fpga-identity/1"}
+    assert "None" not in identity.details({"dna": None}).values()
+
+
+@pytest.mark.parametrize("value", [1.5, b"\x00", object()])
+def test_a_value_of_any_other_type_is_a_bug_not_a_repr(value):
+    with pytest.raises(TypeError):
+        identity.details({"field": value})
+
+
 def test_the_document_is_versioned_and_holds_every_board():
     doc = identity.document([{"board": "arty", "kind": "arty"}], tool="fpgas-online-verify 0.0", read_at="now")
     assert doc == {"schema": "fpgas-verify/identity", "identity_version": 1, "tool": "fpgas-online-verify 0.0",

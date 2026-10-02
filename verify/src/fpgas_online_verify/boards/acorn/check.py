@@ -258,6 +258,19 @@ def read_identifier(bus):
     return out.decode("ascii", "replace")
 
 
+SOC_IDENTIFIER_PREFIX = "fpgas-online "  # our SoC's identifier: "fpgas-online Acorn PCIe SoC cle-215+ <date>"
+
+
+def soc_model(kind, identifier):
+    """The card our SoC says it was built for (rpi-hwid's soc_model), from its identifier string: the variant
+    the identifier names, when the running design is ours (`kind` fpgas-online) and its identifier is our
+    SoC's. None for anything else (SQRL's factory image, a design we do not know, no identifier)."""
+    if kind != "fpgas-online" or not identifier or not identifier.startswith(SOC_IDENTIFIER_PREFIX):
+        return None
+    words = identifier.casefold().split()
+    return next((v for v in OUR_SUBSYSTEMS.values() if v in words), None)
+
+
 # -- the release ---------------------------------------------------------------------------------------
 
 
@@ -413,6 +426,30 @@ def scratch_faults(read, write, csrs, where):
     finally:
         write(addr, old)
     return faults
+
+
+# -- --identify's bus ----------------------------------------------------------------------------------
+
+# The only CSRs --identify writes: the SPI master's MOSI and control registers and the flash's chip select, which
+# the flash's RDID and OTPR reads need. Nothing else of the SoC is written; ctrl_reset in particular never is
+# (a SoC reset after DMA has wedged a Pi 5's PCIe root complex).
+IDENTIFY_WRITES = frozenset({spi_flash.SPI_MOSI_HI, spi_flash.SPI_MOSI_LO, spi_flash.SPI_CONTROL, spi_flash.FLASH_CS_N})
+
+
+class IdentifyBus:
+    """BAR0 for --identify: every read, and writes only to IDENTIFY_WRITES; any other write is refused."""
+
+    def __init__(self, bus):
+        self._bus = bus
+
+    def read(self, addr):
+        return self._bus.read(addr)
+
+    def write(self, addr, value):
+        if addr not in IDENTIFY_WRITES:
+            raise Problem("error", f"--identify refused to write CSR {addr:#x}: it writes only the SPI master "
+                                   "and the flash's chip select")  # fmt: skip
+        self._bus.write(addr, value)
 
 
 # -- the flash -----------------------------------------------------------------------------------------

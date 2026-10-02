@@ -219,6 +219,20 @@ def test_with_auto_a_board_with_none_of_the_tests_is_not_checked_and_not_passed(
     assert report["result"] == "pass"  # arty's ddr ran and passed
 
 
+def test_with_auto_a_board_not_checked_is_still_identified_once(opts):
+    events = []
+    arty = WithTests("arty", ["uart", "ddr"], seen=[{"variant": "a7-35", "usb": "1-1"}])
+    fomu = WithTests("fomu", ["uart"], seen=[{"variant": "evt", "usb": "1-2", "serial": "S"}])
+    report = runner.verify({**opts, "tests": ["ddr"], "event": lambda s, d: events.append((s, d))},
+                           _boards(arty, fomu), usb=[], pci=[], mode=("auto", "test"))  # fmt: skip
+    assert report["not_checked"] == ["fomu"]
+    found = [d["board"] for s, d in events if s == "fpga-board-found"]
+    identified = [d for s, d in events if s == "fpga-board-identified"]
+    assert sorted(d["board"] for d in identified) == sorted(found) == ["arty", "fomu"]
+    assert {"board": "fomu", "kind": "fomu", "variant": "evt", "serial": "S", "usb": "1-2",
+            "schema": "fpga-identity/1"} in identified  # fmt: skip
+
+
 def test_with_auto_a_test_no_board_found_has_is_an_error(opts):
     tt = WithTests("tt", ["uart"], seen=[{"variant": "tt-fpga", "serial": "T"}])
     report = runner.verify({**opts, "tests": ["ddr"]}, _boards(tt), usb=[], pci=[], mode=("auto", "test"))
@@ -483,6 +497,31 @@ def test_every_board_found_is_identified_once_even_when_its_check_stops_early(op
                                                "usb": "1-2"}  # fmt: skip
 
 
+class IdentifiesThenStops(Fake):
+    """A board whose check says who the board is (with what it read: the IDCODE), then raises `result`."""
+
+    def check(self, host, found, options):
+        who = {**identity.base(options["board_key"], self.name, found), "idcode": "0x13631093", "idcode_version": 1}
+        identity.keep(options, who)
+        options["event"]("fpga-board-identified", identity.details(who))
+        raise self.result
+
+
+@pytest.mark.parametrize("raised", [KeyError("x"), Problem("error", "the services would not stop")])
+def test_a_board_that_stops_after_identifying_itself_keeps_its_identity(opts, raised):
+    events = []
+    netv2 = IdentifiesThenStops("netv2", seen=[{"variant": "a7-100", "usb": "1-1"}], result=raised)
+    report = runner.verify({**opts, "event": lambda s, d: events.append((s, d))}, _boards(netv2), usb=[], pci=[],
+                           mode=("auto", "test"))  # fmt: skip
+    (board,) = report["boards"]
+    assert board["result"] == "error"
+    assert board["identity"] == {"board": "netv2", "kind": "netv2", "variant": "a7-100", "usb": "1-1",
+                                 "idcode": "0x13631093", "idcode_version": 1}  # fmt: skip
+    assert [s for s, _ in events].count("fpga-board-identified") == 1
+    flat = runner.details(report)
+    assert flat["board0_identity_idcode"] == "0x13631093" and flat["board0_identity_idcode_version"] == "1"
+
+
 def test_a_board_that_identifies_itself_is_not_identified_again(opts):
     events = []
     runner.verify({**opts, "event": lambda s, d: events.append((s, d))},
@@ -686,6 +725,40 @@ def test_another_dna_is_still_a_change_and_a_respelling_is_one_on_a_new_record(o
     now = Seen("acorn", {"bdf": "0001:01:00.0", "dna": "0x0054b48664b04854"})
     assert runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))["result"] == "changed"
     _record(opts, {"acorn": {"bdf": "0001:01:00.0", "dna": "0x54b48664b04854"}}, 4)
+    assert runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))["result"] == "changed"
+
+
+S25FS = {"part": "S25FS256S", "jedec": "0x010219", "unique_id": "ab" * 16, "slots": {"operational": "1"}}
+
+
+def test_a_flash_part_renamed_with_the_same_ids_is_recorded_quietly(opts):
+    """Before schema 4 an S25FS256S was called an S25FL256S (bytes 1-3 only): a naming correction."""
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "flash": {**S25FS, "part": "S25FL256S"}}}, 3)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "flash": S25FS})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and report["state"]["added"]
+    boards, version = state.load_record(opts["state"])
+    assert boards["acorn"]["flash"] == S25FS and version == 4
+
+
+@pytest.mark.parametrize(
+    "recorded",
+    [
+        {**S25FS, "part": "S25FL256S", "unique_id": "cd" * 16},  # another flash of the same kind
+        {**S25FS, "part": "S25FL512S", "jedec": "0x010220"},  # another kind of flash
+        {**S25FS, "part": "S25FL256S", "slots": {"operational": "0"}},  # renamed, and rewritten
+    ],
+)
+def test_a_flash_that_really_changed_is_still_a_change_through_a_rename(opts, recorded):
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "flash": recorded}}, 3)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "flash": S25FS})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "changed"
+
+
+def test_a_flash_part_renamed_on_a_new_record_is_a_change(opts):
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "flash": {**S25FS, "part": "S25FL256S"}}}, 4)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "flash": S25FS})
     assert runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))["result"] == "changed"
 
 

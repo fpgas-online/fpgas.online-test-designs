@@ -60,6 +60,8 @@ class Runner:
                 return answer
         if "--detect" in argv:  # the Arty's JTAG scan
             return 0, ARTY_SCAN
+        if argv[:2] == ["pinctrl", "get"]:  # every pin an input, pulled down
+            return 0, "".join(f"{g}: ip    pd | lo // GPIO{g} = input\n" for g in argv[2].split(","))
         return 0, "ok"
 
 
@@ -152,11 +154,11 @@ def test_idcodes_are_read_whole_from_openocd_and_openfpgaloader():
 def test_the_netv2_is_scanned_with_openocd_on_a_pi3_and_rp1pio_on_a_pi5():
     run = Runner([("--detect", (0, _scan(0x1362D093)))])
     assert NETV2.probe(_host(NETV2, PI5, None), runner=run) == [{"variant": "a7-35", "idcode": "0x1362d093"}]
-    assert run.calls[-1] == ["openFPGALoader", "-c", "rp1pio", "--pins", "27:22:4:17", "--detect",
+    assert run.calls[1] == ["openFPGALoader", "-c", "rp1pio", "--pins", "27:22:4:17", "--detect",
                              "--verbose-level", "2"]  # fmt: skip
     run = Runner([("init; exit", (1, "tap/device found: 0x03631093"))])
     assert NETV2.probe(_host(NETV2), runner=run)[0]["variant"] == "a7-100"
-    argv = run.calls[-1]
+    argv = run.calls[1]  # between reading the pins and putting them back
     assert argv[0] == "openocd" and "bcm2835gpio peripheral_base 0x3f000000" in argv[2]
     assert "bcm2835gpio jtag_nums 4 17 27 22" in argv[2]  # TCK TMS TDI TDO
 
@@ -165,6 +167,37 @@ def test_the_netv2_is_not_scanned_off_a_pi_and_an_empty_chain_is_no_board():
     run = Runner()
     assert NETV2.probe(_host(NETV2, model=""), runner=run) == [] and run.calls == []
     assert NETV2.probe(_host(NETV2), runner=Runner([("init", (1, "all zeroes"))])) == []
+
+
+NETV2_PINS = "4: op dh pn | hi // GPIO4 = output\n17: ip pu | hi // GPIO17 = input\n" \
+             "27: a3 pn | lo // GPIO27 = SPI\n22: ip pd | lo // GPIO22 = input\n"  # fmt: skip
+
+
+def test_the_netv2_scan_puts_its_jtag_pins_back_as_they_were():
+    run = Runner([("pinctrl get", (0, NETV2_PINS)), ("init; exit", (0, "tap/device found: 0x03631093"))])
+    assert NETV2.probe(_host(NETV2), runner=run)[0]["variant"] == "a7-100"
+    assert run.calls[0] == ["pinctrl", "get", "4,17,27,22"]
+    assert run.calls[1][0] == "openocd"
+    # an output goes back as an input (openocd leaves its outputs driven); the rest exactly as they were
+    assert run.calls[2:] == [["pinctrl", "set", "4", "ip", "pn"], ["pinctrl", "set", "17", "ip", "pu"],
+                             ["pinctrl", "set", "22", "ip", "pd"], ["pinctrl", "set", "27", "a3", "pn"]]  # fmt: skip
+
+
+def test_the_netv2_pins_go_back_even_when_the_scan_fails():
+    run = Runner([("pinctrl get", (0, NETV2_PINS)), ("init; exit", core.Problem("fail", "openocd hung"))])
+    with pytest.raises(core.Problem, match="openocd hung"):
+        NETV2.probe(_host(NETV2), runner=run)
+    assert [c[:3] for c in run.calls[2:]] == [["pinctrl", "set", g] for g in ("4", "17", "22", "27")]
+
+
+def test_the_netv2_is_not_scanned_when_its_pins_cannot_be_put_back():
+    run = Runner([("pinctrl get", core.Problem("error", "pinctrl is not installed"))])
+    with pytest.raises(core.Problem, match=r"not scanned.*pinctrl is not installed"):
+        NETV2.probe(_host(NETV2), runner=run)
+    assert run.calls == [["pinctrl", "get", "4,17,27,22"]]  # no openocd, nothing driven
+    run = Runner([("pinctrl set", (1, "no such pin")), ("init; exit", (0, "tap/device found: 0x03631093"))])
+    with pytest.raises(core.Problem, match="could not put GPIO4 back"):
+        NETV2.probe(_host(NETV2), runner=run)
 
 
 def test_an_unknown_part_on_the_chain_is_an_error():
@@ -426,10 +459,11 @@ def test_a_test_board_says_when_each_test_starts_and_how_it_ended(tmp_path):
 
 
 def test_an_arty_says_who_it_is_before_its_tests_with_its_whole_idcode(tmp_path):
-    events = []
+    events, kept = [], []
     report = _check(ARTY, tmp_path, ARTY_FOUND, Runner(), board_key="arty",
-                    event=lambda stage, d: events.append((stage, d)))  # fmt: skip
+                    event=lambda stage, d: events.append((stage, d)), **{identity.KEEP: kept.append})  # fmt: skip
     assert events[0][0] == "fpga-board-identified" and events[1][0] == "fpga-test-started"
+    assert kept == [report["identity"]]  # handed to the runner, so a crash after this keeps it
     assert report["identity"] == {
         "board": "arty", "kind": "arty", "variant": "a7-35", "serial": "210319B", "usb": "1-1",
         "idcode": "0x0362d093", "idcode_version": 0, "idcode_part_number": "0x362d", "idcode_manufacturer_id": "0x049",

@@ -44,7 +44,11 @@ def _now():
 
 
 def find(boards, mode, options, usb, pci):
-    """[(board, host, found)] to check, and how they were chosen. A board that is not there is a Problem."""
+    """[(board, host, found)] to check, and how they were chosen. A board that is not there is a Problem.
+
+    options["before_probe"], when given, is called with each board before anything drives its pins to look
+    for it (a `probes` board's find or probe): --identify takes the board's lock there."""
+    before_probe = options.get("before_probe") or (lambda board: None)
     if mode != config.AUTO:
         board = boards.get(mode) or next((b for b in boards.values() if b.slug == mode), None)
         if board is None:
@@ -52,6 +56,8 @@ def find(boards, mode, options, usb, pci):
             raise Problem("error", f"this host is set up for {mode!r}, but no such board module is installed "
                                    f"(fpgas-online-{mode}-tools?); installed: {have}")  # fmt: skip
         host = board.facts(options.get("port"))
+        if board.probes:
+            before_probe(board)
         found = board.find(host, usb, pci)
         if not found:
             raise Problem(
@@ -70,7 +76,11 @@ def find(boards, mode, options, usb, pci):
         how = "auto: USB/PCI IDs, probing disabled"
     else:
         try:
-            probed = [(b, hosts[n], f) for n, b in boards.items() if b.probes for f in b.probe(hosts[n])]
+            probed = []
+            for n, b in boards.items():
+                if b.probes:
+                    before_probe(b)
+                    probed += [(b, hosts[n], f) for f in b.probe(hosts[n])]
         except Problem as p:
             if not spotted:
                 raise
@@ -173,7 +183,7 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
     for (_, _, found), key in zip(targets, keys):
         event("fpga-board-found", {"board": key, "variant": found.get("variant"), "where": _where(found)})
     for (board, host, found), key in zip(targets, keys):
-        identified = []
+        identified, kept = [], []  # the identified event sent; the identity the check built (identity.keep())
 
         def board_event(stage, d, key=key, identified=identified):
             if stage == "fpga-board-identified":
@@ -184,8 +194,10 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
             board_options, skipped = _for_board(board, options, report["mode"])
             if board_options is None:  # none of the named tests: not checked, and no "pass" for it
                 not_checked.append(board.name)
+                # still found, so still identified (once), from what finding it showed
+                board_event("fpga-board-identified", identity.details(identity.base(key, board.name, found)))
                 continue
-            board_options = {**board_options, "event": board_event, "board_key": key}
+            board_options = {**board_options, "event": board_event, "board_key": key, identity.KEEP: kept.append}
             with hold_lock(board.lock, board.title):
                 reports.append(board.check(host, found, board_options))
         except Problem as p:
@@ -195,6 +207,8 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
             reports.append({"board": board.name, "found": found, "result": "error",
                             "reason": f"the check crashed: {type(e).__name__}: {e}"})  # fmt: skip
             skipped = []
+        if kept:  # a check that stopped after saying who the board is keeps it in its error report
+            reports[-1].setdefault("identity", kept[-1])
         if not identified:  # the check stopped before saying who the board is: say what finding it showed
             reports[-1].setdefault("identity", identity.base(key, board.name, found))
             board_event("fpga-board-identified", identity.details(reports[-1]["identity"]))

@@ -12,6 +12,7 @@
 """
 
 import ast
+import functools
 import json
 import os
 import pathlib
@@ -21,6 +22,7 @@ import sys
 import pytest
 from fpgas_online_verify import cli, debug, identify, identity, label
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
+from fpgas_online_verify.core import Problem
 
 from tests import acorn_fakes as fk
 from tests.test_acorn_verify import Rig
@@ -51,21 +53,24 @@ class Identified(Fake):
 
 
 class Locks:
-    """Stands in for core.hold_lock: records each lock taken, and what is read while it is held."""
+    """Stands in for core.hold_lock: records each lock taken (and in `log`, when it was), and which are held."""
 
-    def __init__(self):
-        self.taken, self.held = [], None
+    def __init__(self, log=None):
+        self.taken, self.held, self.log = [], [], log if log is not None else []
 
-    def __call__(self, path, what):
+    def __call__(self, path, what, timeout=None):
         outer = self
+        assert timeout == identify.LOCK_WAIT  # --identify never waits without a bound
 
         class _Held:
             def __enter__(self):
                 outer.taken.append(path)
-                outer.held = path
+                outer.held.append(path)
+                outer.log.append(["lock", path])
 
             def __exit__(self, *a):
-                outer.held = None
+                outer.held.remove(path)
+                outer.log.append(["unlock", path])
                 return False
 
         return _Held()
@@ -103,7 +108,7 @@ def test_the_document_is_identity_document_with_every_board(tmp_path, locks):
 def test_each_board_is_read_under_its_own_lock(tmp_path, locks):
     class Seen(Identified):
         def identify(self, host, found, options):
-            assert locks.held == self.lock
+            assert locks.held == [self.lock]
             return super().identify(host, found, options)
 
     a = Seen("arty", seen=[{"variant": "a7-35", "serial": "A"}])
@@ -111,6 +116,147 @@ def test_each_board_is_read_under_its_own_lock(tmp_path, locks):
     doc, _ = _read_auto({"arty": a, "fomu": f}, tmp_path)
     assert [b["board"] for b in doc["boards"]] == ["arty", "fomu"]
     assert locks.taken == [a.lock, f.lock]
+
+
+class LockedAt(Identified):
+    """An Identified board whose lock is a file of the test's."""
+
+    def __init__(self, name, lock, **kw):
+        super().__init__(name, **kw)
+        self._lock = str(lock)
+
+    @property
+    def lock(self):
+        return self._lock
+
+
+@pytest.fixture
+def held_lock(tmp_path):
+    """A lock file someone else holds (flock is per open file, so this process's own open of it waits too)."""
+    import fcntl
+
+    path = tmp_path / "board.lock"
+    with open(path, "w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        yield path
+
+
+def test_a_board_whose_lock_is_held_is_busy_within_the_bound(tmp_path, held_lock, monkeypatch):
+    import time
+
+    monkeypatch.delenv(identify.ENV, raising=False)
+    arty = LockedAt("arty", held_lock, seen=[{"variant": "a7-35", "serial": "A"}], read={"idcode": "0x0362d093"},
+                    label_fields=("idcode", "dna"))  # fmt: skip
+    started = time.monotonic()
+    doc, gaps = _read({"arty": arty}, tmp_path, lock_wait=0.5)
+    assert 0.5 <= time.monotonic() - started < 5
+    assert arty.identified == []  # nothing of the board ran
+    assert doc["boards"] == [{"board": "arty", "kind": "arty", "variant": "a7-35", "serial": "A"}]
+    assert gaps == ["arty: idcode: board busy", "arty: dna: board busy"]
+
+
+def test_identify_waits_30_s_at_most_and_the_boot_check_without_a_bound():
+    import inspect
+
+    from fpgas_online_verify import core, runner
+
+    assert identify.LOCK_WAIT == 30
+    assert inspect.signature(core.hold_lock).parameters["timeout"].default is None
+    # the boot check waits for its board however long it takes
+    assert "hold_lock(board.lock, board.title):" in inspect.getsource(runner)
+
+
+def test_a_bounded_lock_gives_up_with_busy_and_an_unbounded_one_waits(tmp_path, held_lock):
+    import fcntl
+    import threading
+
+    from fpgas_online_verify import core
+
+    ticks = iter(range(100))
+    with pytest.raises(core.Busy, match="board busy"), \
+            core.hold_lock(held_lock, "board", timeout=3, clock=lambda: next(ticks), sleep=lambda s: None):  # fmt: skip
+        pass
+    free = tmp_path / "free.lock"
+    with core.hold_lock(free, "board", timeout=3):  # free: taken at once
+        pass
+    other = open(free, "w")  # noqa: SIM115
+    fcntl.flock(other, fcntl.LOCK_EX)
+    threading.Timer(0.3, other.close).start()
+    with core.hold_lock(free, "board"):  # no bound: it waits until the other user lets go
+        pass
+
+
+class Probed(Identified):
+    """A board found only by driving its pins (as the NeTV2's JTAG scan): its probe checks its lock is held."""
+
+    def __init__(self, name, locks, **kw):
+        super().__init__(name, probes=True, **kw)
+        self.locks = locks
+
+    def probe(self, host):
+        assert self.lock in self.locks.held, "a board's pins were driven before its lock was held"
+        return super().probe(host)
+
+    def identify(self, host, found, options):
+        assert self.lock in self.locks.held
+        return super().identify(host, found, options)
+
+
+def test_a_board_found_by_driving_its_pins_is_looked_for_under_its_lock(tmp_path, locks):
+    netv2 = Probed("netv2", locks, probed=[{"variant": "a7-35", "idcode": "0x0362d093"}])
+    doc, _ = _read({"netv2": netv2}, tmp_path)  # configured
+    assert netv2.probe_calls == 1 and [b["board"] for b in doc["boards"]] == ["netv2"]
+    assert locks.taken == [netv2.lock]  # taken once, before the scan, and kept for the read
+    locks.taken.clear()
+    netv2 = Probed("netv2", locks, probed=[{"variant": "a7-35", "idcode": "0x0362d093"}])
+    doc, _ = _read_auto({"arty": Identified("arty"), "netv2": netv2}, tmp_path)  # auto: nothing seen, so probed
+    assert netv2.probe_calls == 1 and [b["board"] for b in doc["boards"]] == ["netv2"]
+    assert locks.taken == [netv2.lock] and locks.held == []
+
+
+def test_a_busy_board_found_by_driving_its_pins_is_never_driven(tmp_path, held_lock, monkeypatch):
+    monkeypatch.delenv(identify.ENV, raising=False)
+
+    class Busy(LockedAt):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, probes=True, **kw)
+
+    netv2 = Busy("netv2", held_lock, probed=[{"variant": "a7-35"}], label_fields=("idcode",))
+    doc, gaps = _read({"netv2": netv2}, tmp_path, lock_wait=0.2)
+    assert netv2.probe_calls == 0 and netv2.identified == []
+    assert doc["boards"] == [{"board": "netv2", "kind": "netv2"}] and gaps == ["netv2: idcode: board busy"]
+    netv2 = Busy("netv2", held_lock, probed=[{"variant": "a7-35"}], label_fields=("idcode",))
+    doc, gaps = identify.read({"mode_dir": _auto_dir(tmp_path), "admin_dir": tmp_path / "admin", "lock_wait": 0.2,
+                               "boot_report": tmp_path / "v.json"}, {"netv2": netv2}, usb=[], pci=[])  # fmt: skip
+    assert netv2.probe_calls == 0 and doc["boards"] == [] and gaps == ["netv2: not looked for: board busy"]
+
+
+def test_the_netv2_is_scanned_under_its_lock_and_its_pins_put_back_before_it_is_let_go(tmp_path, monkeypatch):
+    log = []
+    monkeypatch.setattr(identify, "hold_lock", Locks(log))
+    monkeypatch.delenv(identify.ENV, raising=False)
+    run = Runner([("pinctrl get", (0, "4: op dh pn | hi\n17: ip pu | hi\n27: ip pd | lo\n22: ip pd | lo\n")),
+                  ("init; exit", (0, "tap/device found: 0x03631093"))])  # fmt: skip
+
+    def logged(argv, timeout, **kw):
+        log.append([str(a) for a in argv][:3])
+        return run(argv, timeout, **kw)
+
+    monkeypatch.setattr(NETV2, "probe", functools.partial(type(NETV2).probe, NETV2, runner=logged))
+    monkeypatch.setattr(NETV2, "facts", lambda port=None: _host(NETV2))
+    doc, _ = _read({"netv2": NETV2}, tmp_path)
+    assert doc["boards"][0]["idcode"] == "0x03631093"
+    assert log == [["lock", NETV2.lock], ["pinctrl", "get", "4,17,27,22"], ["openocd", "-c", log[2][2]],
+                   ["pinctrl", "set", "4"], ["pinctrl", "set", "17"], ["pinctrl", "set", "22"],
+                   ["pinctrl", "set", "27"], ["unlock", NETV2.lock]]  # fmt: skip
+    assert run.calls[2] == ["pinctrl", "set", "4", "ip", "pn"]  # left driven by openocd: back to an input
+
+
+def _auto_dir(tmp_path):
+    mode = tmp_path / "mode"
+    mode.mkdir(exist_ok=True)
+    (mode / "auto.ini").write_text("[verify]\nfpga-board = auto\n")
+    return mode
 
 
 def _read_auto(boards, tmp_path):
@@ -139,8 +285,14 @@ def test_run_prints_one_document_and_exits_0_only_when_every_field_was_read(tmp_
     assert identify.run(options, boards={"arty": part}) == 1
     out = capsys.readouterr()
     assert json.loads(out.out)["boards"][0]["idcode_error"] == "no chain"  # printed all the same
-    assert "arty: not read: idcode" in out.err and "arty: not read: dna" in out.err
-    assert "arty: not read: idcode_error" in out.err
+    # each field with why: a read that failed says its own error
+    assert out.err.splitlines() == ["fpgas-verify --identify: arty: idcode: no chain",
+                                    "fpgas-verify --identify: arty: dna: not read"]  # fmt: skip
+    flash = Identified("arty", seen=[{"variant": "a7-35", "serial": "A"}], read={"flash_error": "no bridge"},
+                       label_fields=("dna",))  # fmt: skip
+    assert identify.run(options, boards={"arty": flash}) == 1
+    assert capsys.readouterr().err.splitlines() == ["fpgas-verify --identify: arty: dna: not read",
+                                                    "fpgas-verify --identify: arty: flash: no bridge"]  # fmt: skip
 
 
 def test_a_board_whose_read_crashes_is_not_whole_and_the_others_are_still_read(tmp_path, locks):
@@ -152,7 +304,9 @@ def test_a_board_whose_read_crashes_is_not_whole_and_the_others_are_still_read(t
     f = Identified("fomu", seen=[{"variant": "evt", "serial": "F"}])
     doc, gaps = _read_auto({"arty": a, "fomu": f}, tmp_path)
     assert [b["board"] for b in doc["boards"]] == ["arty", "fomu"]
-    assert gaps == ["arty: the read crashed: RuntimeError: bug"]
+    assert gaps == ["arty: read: the read crashed: RuntimeError: bug"]
+    a = Broken("arty", seen=[{"variant": "a7-35", "serial": "A"}], label_fields=("idcode",))
+    assert _read({"arty": a}, tmp_path)[1] == ["arty: idcode: the read crashed: RuntimeError: bug"]
 
 
 # -- the boot report -----------------------------------------------------------------------------------------
@@ -182,6 +336,32 @@ def test_another_boards_boot_report_is_never_used(tmp_path, locks):
     arty = Identified("arty", seen=[ARTY_FOUND], report_fields=("flash",))
     (board,) = _read({"arty": arty}, tmp_path)[0]["boards"]
     assert "flash_jedec" not in board and "from_report" not in board
+
+
+def test_a_board_known_only_by_its_idcode_takes_nothing_from_the_boot_report(tmp_path, locks):
+    netv2_boot = {"board": "netv2", "kind": "netv2", "idcode": "0x0362d093", "flash_jedec": "0xc22018"}
+    _boot_report(tmp_path, netv2_boot)
+    netv2 = Identified("netv2", seen=[{"variant": "a7-35", "idcode": "0x0362d093"}], read={"idcode": "0x0362d093"},
+                       label_fields=("idcode", "flash_jedec"), report_fields=("flash",))  # fmt: skip
+    doc, gaps = _read({"netv2": netv2}, tmp_path)
+    (board,) = doc["boards"]
+    assert board["kind"] == "netv2" and board["idcode"] == "0x0362d093"  # the same part, maybe not the same board
+    assert "flash_jedec" not in board and "from_report" not in board
+    assert gaps == ["netv2: flash_jedec: no board-unique match in the boot report"]
+
+
+def test_the_arty_matches_by_usb_serial_and_the_acorn_by_pci_slot(tmp_path, locks):
+    _boot_report(tmp_path, {**ARTY_BOOT, "idcode": "0x0362d093"},
+                 {"board": "acorn", "kind": "acorn", "bdf": "0001:01:00.0", "flash_uid": "aa"})  # fmt: skip
+    arty = Identified("arty", seen=[ARTY_FOUND], report_fields=("flash",), label_fields=("flash_uid",))
+    assert _read({"arty": arty}, tmp_path)[0]["boards"][0]["flash_uid"] == "0123456789abcdef"
+    acorn = Identified("acorn", seen=[{"variant": "cle-215+", "kind": "fpgas-online", "bdf": "0001:01:00.0"}],
+                       report_fields=("flash",))  # fmt: skip
+    (board,) = _read({"acorn": acorn}, tmp_path)[0]["boards"]
+    assert board["from_report"] == ["flash_uid"]
+    other = Identified("arty", seen=[{**ARTY_FOUND, "serial": "OTHER"}], report_fields=("flash",),
+                       label_fields=("flash_uid",))  # fmt: skip
+    assert _read({"arty": other}, tmp_path)[1] == ["arty: flash_uid: this board is not in the boot report"]
 
 
 def test_a_live_read_is_never_replaced_by_the_report(tmp_path, locks):
@@ -242,6 +422,39 @@ def test_the_acorn_reads_the_same_identity_as_its_check_without_reading_a_slot_o
     assert not [f for f in ACORN.label_fields if f not in live]
 
 
+def test_the_acorn_writes_only_the_spi_master_and_chip_select_over_bar0(tmp_path, images):
+    from fpgas_online_verify.boards.acorn import check
+
+    rig = Rig(tmp_path, images)
+    written, write = [], rig.soc.write
+    rig.soc.write = lambda addr, value: written.append(addr) or write(addr, value)
+    live = ACORN.identify({}, rig.found(), rig.options(board_key="acorn"))
+    assert live["flash_jedec"] == "0x010219" and written  # the flash's RDID and OTPR were sent
+    assert set(written) <= check.IDENTIFY_WRITES
+    assert fk.REGS["ctrl_scratch"] - 4 not in written  # ctrl_reset, the CSR before ctrl_scratch
+
+
+def test_identify_refuses_any_other_write_ctrl_reset_above_all():
+    from fpgas_online_verify.boards.acorn import check
+
+    written = []
+
+    class Bus:
+        def read(self, addr):
+            return 0
+
+        def write(self, addr, value):
+            written.append(addr)
+
+    bus = check.IdentifyBus(Bus())
+    ctrl_reset = fk.REGS["ctrl_scratch"] - 4
+    for addr in (ctrl_reset, fk.REGS["ctrl_scratch"], fk.REGS["p2_gpio_oe"]):
+        with pytest.raises(Problem, match="refused to write CSR"):
+            bus.write(addr, 1)
+    bus.write(sf.FLASH_CS_N, 1)
+    assert written == [sf.FLASH_CS_N]
+
+
 def test_the_acorn_never_touches_the_flash_of_a_build_it_does_not_know(tmp_path, images):
     rig = Rig(tmp_path, images, identifier="fpgas-online Acorn PCIe SoC cle-215+ 2026-10-01 09:00:00")
     live = ACORN.identify({}, rig.found(), rig.options(board_key="acorn"))
@@ -289,14 +502,8 @@ def test_identify_cannot_be_given_with_update_or_test(monkeypatch, capsys):
 
 
 def _outer(tmp_path):
-    """The outer run's document: the golden fixture once it is in tests/data, else one like it."""
-    if GOLDEN.exists():
-        return GOLDEN
-    path = tmp_path / "identity-123.json"
-    doc = identity.document([{"board": "acorn", "kind": "acorn", "dna": "0x0054b48664b04854"}],
-                            tool="fpgas-online-verify 0.0.post1", read_at="2026-10-02T00:00:00+00:00")  # fmt: skip
-    path.write_text(identify.dumps(doc))
-    return path
+    """The outer run's document: the golden fixture."""
+    return GOLDEN
 
 
 @pytest.fixture
@@ -375,14 +582,19 @@ def test_nested_a_missing_or_bad_document_is_an_error_and_never_the_hardware(
     assert out.out == "" and why in out.err
 
 
-def test_nested_an_empty_variable_is_still_nested(tmp_path, monkeypatch, untouchable, capsys):
+def test_an_empty_variable_is_not_nested(tmp_path, monkeypatch):
     monkeypatch.setenv(identify.ENV, "")
-    assert cli.verify_main(["--identify"]) == 1 and capsys.readouterr().out == ""
+    assert identify.outer_path() is None
+    ran = []
+    monkeypatch.setattr(identify, "run", lambda options, prog="fpgas-verify", boards=None: ran.append(prog) or 0)
+    monkeypatch.setattr(cli.runner, "run", lambda options, prog="fpgas-verify": ran.append("check") or 0)
+    assert cli.verify_main(["--identify"]) == 0
+    assert cli.verify_main([]) == 0  # the boot unit's plain fpgas-verify runs the check, not exit 2
+    assert cli.board_main(["--identify"], "fpgas-acorn-verify") == 0
+    assert ran == ["fpgas-verify", "check", "fpgas-acorn-verify"]
 
 
 def test_the_golden_document_is_one_this_reader_takes():
-    if not GOLDEN.exists():
-        pytest.skip("tests/data/identity-v1-acorn-p48.json is not in this branch yet")
     assert identify.load_outer(GOLDEN) == GOLDEN.read_text()
     (board,) = json.loads(GOLDEN.read_text())["boards"]
     assert board["dna"] == "0x0054b48664b04854" and board["idcode"] == "0x13636093"
@@ -404,7 +616,7 @@ def labelling(tmp_path, monkeypatch, locks):
     monkeypatch.setattr(label.shutil, "which", lambda tool: f"/usr/bin/{tool}" if tool == "rpi-hwid" else None)
 
     def read(options, boards=None):
-        with locks("/run/lock/fpgas-acorn.lock", "Sqrl Acorn"):
+        with locks("/run/lock/fpgas-acorn.lock", "Sqrl Acorn", timeout=identify.LOCK_WAIT):
             return DOC, []
 
     monkeypatch.setattr(identify, "read", read)
@@ -419,7 +631,7 @@ class RpiHwid:
 
     def __call__(self, argv, env, check):
         path = pathlib.Path(env[identify.ENV])
-        self.seen = {"argv": argv, "path": path, "text": path.read_text(), "held": self.locks.held}
+        self.seen = {"argv": argv, "path": path, "text": path.read_text(), "held": list(self.locks.held)}
         if self.raises:
             raise self.raises
         return subprocess.CompletedProcess(argv, self.rc)
@@ -432,7 +644,7 @@ def test_label_hands_rpi_hwid_the_identity_with_every_lock_released_and_deletes_
     assert seen["argv"] == ["/usr/bin/rpi-hwid", "labels", "--this-host", "--out", "labels.pdf", "--list"]
     assert seen["path"] == labelling["identity_dir"] / f"identity-{os.getpid()}.json"
     assert seen["text"] == identify.dumps(DOC)
-    assert locks.taken == ["/run/lock/fpgas-acorn.lock"] and seen["held"] is None  # read under it, then let go
+    assert locks.taken == ["/run/lock/fpgas-acorn.lock"] and seen["held"] == []  # read under it, then let go
     assert not seen["path"].exists()
 
 

@@ -68,6 +68,7 @@ def test_each_board_tools_package_has_its_module_and_only_its_own_tooling(tmp_pa
     assert "/usr/bin/fpgas-acorn-flash" in _dst(acorn)
     netv2 = bd.tools_nfpm(B["netv2"], V, V, tmp_path)
     assert "openocd" in netv2["depends"]
+    assert netv2["recommends"] == [bd.PINCTRL]  # the JTAG scan's pins are put back with pinctrl
     tt = bd.tools_nfpm(B["tt"], V, V, tmp_path)
     assert tt["name"] == "fpgas-online-tt-fpga-tools" and tt["recommends"] == ["micropython-mpremote", bd.PINCTRL]
     assert arty["recommends"] == [bd.PINCTRL]  # the PMOD HAT scan puts back the pins' UART/I2C/SPI functions

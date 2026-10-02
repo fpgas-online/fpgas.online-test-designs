@@ -110,21 +110,41 @@ the check, publishes anything or records any state.
 
 * The document and every field in it are described in [identity.md](identity.md). It is printed with sorted
   keys and an indent of 1.
-* It reads only what disturbs nothing, each board under its own lock:
+* What it reads live:
 
   | Board | Read live |
   |---|---|
   | Acorn | the running build, device DNA and flash identity over BAR0 (the check's `pcie-bar0`), and the IDCODE and DNA over P1 JTAG (`jtag`) |
-  | Arty, NeTV2 | the JTAG IDCODE |
+  | Arty | the JTAG IDCODE |
+  | NeTV2 | the JTAG IDCODE, from the scan that finds it |
   | Fomu, TT FPGA | how the board was found (its USB serial) |
 
-* Nothing is loaded and nothing is written. A field that needs a design loaded (the Arty's and NeTV2's
-  flash, read through openFPGALoader's SPI-over-JTAG bridge) comes from the boot report,
-  `/run/fpgas-online/verify.json`, when the board there has the same USB serial, PCI slot or IDCODE. Those
-  fields are listed in the board's `from_report`.
+* Nothing is loaded into a board and no flash is written. Some reads do change state on the way, and each
+  is put back:
+  * Acorn, BAR0: memory decoding is switched on in the board's PCI COMMAND register for the read and
+    switched off again if it was off. If a kernel driver (litepcie) is bound to the board, it is unbound for
+    the read and bound again afterwards. To read the flash's IDs (RDID and OTPR), the SoC's SPI master
+    registers and the flash's chip select are written. No other CSR of the SoC is written; `--identify`
+    refuses any other write, so the SoC is never reset through `ctrl_reset`.
+  * Acorn, P1 JTAG, and NeTV2: openFPGALoader (or openocd) drives the Pi's JTAG GPIOs. Their state is read
+    with `pinctrl` first and put back afterwards; a pin that was an output goes back as an input. Without
+    `pinctrl` the scan is not run.
+* Each board is read under its lock, as a check is. `--identify` waits at most 30 s for it; a board still in
+  use then has its fields missing, for the reason `board busy`. A NeTV2 is also looked for under its lock,
+  since finding it drives its JTAG pins.
+* A field that needs a design loaded (the Arty's and NeTV2's flash, read through openFPGALoader's
+  SPI-over-JTAG bridge) comes from the boot report, `/run/fpgas-online/verify.json`, when the board there is
+  this one by a key no other board has: the Arty's USB serial, the Acorn's PCI slot, or the device DNA. Those
+  fields are listed in the board's `from_report`. An IDCODE names a part, not a board, so a board known only
+  by its IDCODE (every NeTV2, for now) gets nothing from the report: the fields stay missing, for the reason
+  `no board-unique match in the boot report`.
 * The exit status is 0 when every board's identity is whole (no field missing, no `<field>_error`), 1
-  otherwise. What is missing is printed on stderr. The document is printed either way; readers use it and
-  ignore the exit status.
+  otherwise. Each missing field is printed on stderr with why. The document is printed either way; readers
+  use it and ignore the exit status.
+* For an Arty or a NeTV2, `--identify` always exits 1 for now: their labels need the device DNA and the
+  flash's unique ID (`dna`, `flash_uid`), and neither the boot check nor `--identify` reads them yet (see
+  [Not done yet](#not-done-yet)). Their IDCODE, and any flash fields the boot report has for an Arty, are still in
+  the document.
 
 `--label`:
 
@@ -139,11 +159,11 @@ where rpi-hwid writes them.
 
 Nesting: rpi-hwid gets the board's identity by running `fpgas-verify --identify`. So that the inner run never
 waits on a lock the outer run holds, reads a board twice or starts rpi-hwid again, a run with
-`FPGAS_VERIFY_IDENTITY` set:
+`FPGAS_VERIFY_IDENTITY` set (an empty value counts as not set):
 
 | Mode | Does |
 |---|---|
-| `--identify` (and `fpgas-acorn-debug identify`) | checks that the file is an identity document with `identity_version` 1 and prints it unchanged. It takes no lock and runs no board code |
+| `--identify` (and `fpgas-acorn-debug identify`) | checks that the file is an identity document with `identity_version` 1 and prints it unchanged, byte for byte. It takes no lock and runs no board code |
 | a missing or bad file | an error (exit 1). It never falls back to reading the hardware |
 | any other mode, `--label` included | refuses (exit 2) |
 
@@ -711,6 +731,9 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
   Later runs compare the whole IDCODE as usual.
 * A device DNA recorded without its leading zeros (a record with `schema_version` below 4) takes the 16-digit
   spelling quietly. Another DNA is a change.
+* On a record with `schema_version` below 4, a flash part name that changed while its JEDEC ID and unique ID
+  did not is a corrected name, taken quietly: the part is now named from RDID byte 6, so an S25FS256S is no
+  longer called an S25FL256S. A different JEDEC ID or unique ID is still a change, and so is a rewritten flash.
 * A `--test` run neither records nor compares the state.
 
 ---
@@ -739,7 +762,7 @@ The check tells the site what it is doing as it goes. `fleet-event` (from
 | `fpga-verifying` | the check starts | `started_at` |
 | `fpga-board-found` | for each board found | `board`, `variant`, `where` (PCI slot, USB path or JTAG IDCODE) |
 | `fpga-no-board` | no board was found | `reason` |
-| `fpga-board-identified` | once for each board found: an Acorn once PCIe and JTAG have said who it is, any other board before its tests | `schema` (`fpga-identity/1`) and the board's [identity](identity.md) |
+| `fpga-board-identified` | exactly once for each board found: an Acorn once PCIe and JTAG have said who it is, any other board before its tests; a board whose check stops first, or that is not checked (`--test` naming none of its tests), from what finding it showed | `schema` (`fpga-identity/1`) and the board's [identity](identity.md) |
 | `fpga-test-started` | each test starts | `board`, `test` |
 | `fpga-test-finished` | each test ends | `board`, `test`, `result`, `reason` |
 | `fpga-verified` | the check is done | the report, flattened: `result`, `mode`, `reason`; per board `board0` (`netv2 a7-35 fail`), `board0_reason`, `board0_tests` (`uart=pass ddr=fail spiflash=pass`), `board0_bitstreams`, `board0_state_*`, `board0_identity_*` |
@@ -764,7 +787,7 @@ fpga-test-started {"board": "acorn", "test": "pcie-bar0"}
 fpga-test-finished {"board": "acorn", "test": "pcie-bar0", "result": "pass", "reason": ""}
 fpga-test-started {"board": "acorn", "test": "jtag"}
 fpga-test-finished {"board": "acorn", "test": "jtag", "result": "pass", "reason": ""}
-fpga-board-identified {"board": "acorn", "bdf": "0001:01:00.0", "pci_ids": "10ee:7021", "subsystem": "1e24:021f", "variant": "cle-215+", "identifier": "fpgas-online Acorn PCIe SoC cle-215+ 2026-09-21 14:23:32", "build": "operational", "dna": "0x54b48664b04854", "idcode": "0x13636093", "flash_part": "S25FL256S", "flash_jedec": "0x010219", "flash_unique_id": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf"}
+fpga-board-identified {"board": "acorn", "kind": "acorn", "variant": "cle-215+", "bdf": "0001:01:00.0", "soc_model": "cle-215+", "identifier": "fpgas-online Acorn PCIe SoC cle-215+ 2026-09-21 14:23:32", "build": "operational", "dna": "0x0054b48664b04854", "idcode": "0x13636093", "idcode_version": "1", "idcode_part_number": "0x3636", "idcode_manufacturer_id": "0x049", "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A200T", "flash_jedec": "0x010219", "flash_extended_id": "0x4d0180", "flash": "S25FL256S", "flash_size_bytes": "33554432", "flash_status": "0x00", "flash_config": "0x02", "flash_quad": "true", "flash_uid": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf", "flash_uid_bits": "128", "flash_uid_state": "read", "flash_uid_opcode": "0x4b", "flash_source": "pcie", "schema": "fpga-identity/1"}
 ```
 
 They come between `fpga-verifying` and `fpga-verified`.

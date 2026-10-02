@@ -203,14 +203,17 @@ def test_identify_works_straight_after_configuration(bus):
 @pytest.mark.parametrize(
     ("rdid", "part"),
     [
-        ("0102194d0180", "S25FL256S"),
-        ("0102194d0181", "S25FS256S"),  # the same three bytes as an S25FL256S: only bytes 4-6 tell them apart
-        ("0102194d0080", "S25FL256S"),  # bytes 4-6 not known: the family's name, from bytes 1-3
+        ("0102194d0180", "S25FL256S"),  # byte 5: 4 KB parameter sectors; byte 6: FL-S
+        ("0102194d0080", "S25FL256S"),  # byte 5: uniform 256 KB sectors; the same part
+        ("0102194d0181", "S25FS256S"),  # the same three bytes as an S25FL256S: byte 6 tells them apart
+        ("0102194d0081", "S25FS256S"),
+        ("0102194d0182", "S25Fx256S"),  # a family ID not known: the family's name, from bytes 1-3
+        ("010219", "S25Fx256S"),  # only three bytes
         ("010220", "S25FL512S"),
         ("ef4018000000", "unknown"),
     ],
 )
-def test_the_part_is_named_from_all_six_rdid_bytes(rdid, part):
+def test_the_part_is_named_from_the_family_id_in_rdid_byte_6(rdid, part):
     assert sf.part(bytes.fromhex(rdid)) == part
 
 

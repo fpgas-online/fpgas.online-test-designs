@@ -2,7 +2,6 @@
 board from the name they are run by (the deb's /usr/bin wrappers and pip's console scripts both call them)."""
 
 import argparse
-import os
 import pathlib
 import re
 import sys
@@ -108,7 +107,7 @@ def _options(args, board=None):
 def verify_main(argv=None):
     """fpgas-verify: the configured board(s)."""
     argv = sys.argv[1:] if argv is None else argv
-    if identify.ENV in os.environ:  # inside fpgas-verify --label: before any lock or board code
+    if identify.outer_path():  # inside fpgas-verify --label: before any lock or board code
         return identify.nested("fpgas-verify", "--identify" in argv)
     args = _verify_parser("fpgas-verify").parse_args(argv)
     if args.identify:
@@ -135,7 +134,7 @@ def board_main(argv=None, prog=None):
     """fpgas-<board>-verify or fpgas-<board>-debug, the board and which of the two from the command's name."""
     prog = prog or pathlib.Path(sys.argv[0]).name
     m = re.fullmatch(r"fpgas-(.+)-(verify|debug)", prog)
-    if m and identify.ENV in os.environ:  # inside fpgas-verify --label: before any lock or board code
+    if m and identify.outer_path():  # inside fpgas-verify --label: before any lock or board code
         argv = sys.argv[1:] if argv is None else argv
         asked = "--identify" in argv if m.group(2) == "verify" else (m.group(1) == "acorn" and "identify" in argv)
         return identify.nested(prog, asked)

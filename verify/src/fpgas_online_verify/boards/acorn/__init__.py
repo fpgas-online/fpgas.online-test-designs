@@ -34,8 +34,9 @@ class Acorn(Board):
 
     def identify(self, host, found, options):
         """Only the reads: pcie-bar0 (the running build, the flash's identity and the DNA over BAR0) and jtag
-        (IDCODE and DNA over P1). Neither writes the flash or reconfigures the FPGA."""
-        options = {**options, "tests": list(suite.IDENTIFY_TESTS), "event": None}  # nothing is sent
+        (IDCODE and DNA over P1). Neither writes the flash or reconfigures the FPGA; over BAR0 only the SPI
+        master and the flash's chip select are written (check.IdentifyBus)."""
+        options = {**options, "tests": list(suite.IDENTIFY_TESTS), "event": None, "identify_only": True}
         return suite.check_board(found, options)["identity"]
 
     def check(self, host, found, options):
