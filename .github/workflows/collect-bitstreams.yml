@@ -32,7 +32,7 @@ env:
     tests/test_acorn_verify.py tests/test_acorn_links.py tests/test_acorn_setup.py tests/test_acorn_packaging.py
     tests/test_spi_flash.py tests/test_uartbone_link.py tests/test_acorn_pcie_publish_release.py tests/test_pcie_match_mps.py
     tests/test_acorn_bist.py tests/test_acorn_selftest.py tests/test_jtag_idcode.py tests/test_identity.py
-    tests/test_identify_label.py
+    tests/test_identify_label.py tests/test_bios_console.py tests/test_ddr_host.py
   VERIFY_PY: >-
     verify/src packaging/debs/build_debs.py packaging/acorn-pcie/build_debs.py tests/conftest.py
     tests/test_verify_runner.py tests/test_verify_boards.py tests/test_debs_packaging.py
@@ -41,6 +41,8 @@ env:
     designs/acorn-pcie/host/pcie_match_mps.py tests/test_pcie_match_mps.py
     designs/acorn-pcie/host/selftest.py tests/test_acorn_bist.py tests/test_acorn_selftest.py tests/test_jtag_idcode.py
     tests/test_identity.py tests/test_identify_label.py
+    designs/_host/bios_console.py designs/ddr-memory/host/test_ddr.py
+    tests/bios_fakes.py tests/test_bios_console.py tests/test_ddr_host.py
 
 jobs:
   collect:
