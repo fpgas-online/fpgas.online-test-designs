@@ -949,3 +949,7 @@ def test_common_satisfies_a_modules_package_of_a_foreign_architecture():
     """The fleet's root is armhf and its modules package arm64: apt lets an arm64 package's dependency be met
     by an Architecture: all package only when that one is Multi-Arch: foreign."""
     assert bd.common_nfpm(VERSION)["deb"]["fields"] == {"Multi-Arch": "foreign"}
+
+
+def test_the_utils_are_built_for_the_pi_architectures_and_x86():
+    assert set(bd.ARCHES) == {"armhf", "arm64", "amd64"}

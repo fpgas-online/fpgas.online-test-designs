@@ -7,7 +7,7 @@ Design: docs/plans/2026-09-25-acorn-litepcie-packages-design.md (§2, §3, §4).
     litepcie.ko at boot. Loading it is always an operator's decision.
   * fpgas-online-acorn-litepcie-dkms (all): the patched kernel sources and a dkms.conf, for single-architecture
     SD-booted hosts. The netbooted fleet (armhf root, arm64 kernel) cannot use DKMS; it gets prebuilt modules.
-  * fpgas-online-acorn-litepcie-utils (armhf, arm64): litepcie_util and litepcie_test, compiled in
+  * fpgas-online-acorn-litepcie-utils (armhf, arm64, amd64): litepcie_util and litepcie_test, compiled in
     debian:bookworm by container.py.
   * fpgas-online-acorn-litepcie-modules-<kver> (the kernel's architecture): litepcie.ko and liteuart.ko
     built by container.py against one Raspberry Pi kernel's headers, for the hosts DKMS cannot serve.
@@ -39,7 +39,7 @@ MODULE = f"{NAME}-module"  # virtual: Provided by -dkms and every -modules-<kver
 PREBUILT = f"{NAME}-prebuilt"  # virtual: Provided by every -modules-<kver>
 TOOLS = ("litepcie_util", "litepcie_test")
 MODULES = ("litepcie", "liteuart")
-ARCHES = ("armhf", "arm64")  # -utils
+ARCHES = ("armhf", "arm64", "amd64")  # -utils
 KERNEL_ARCHES = ("arm64", "armhf")  # -modules-<kver>: the Raspberry Pi archive's
 # A suite's Debian release number, for the `~deb<R>` suffix of a suite-specific build (§3.8).
 SUITE_RELEASE = {"bookworm": 12, "trixie": 13, "forky": 14}
