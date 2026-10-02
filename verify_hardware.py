@@ -350,6 +350,11 @@ DESIGNS = {
     },
 }
 
+# Uploaded beside every test script: the test scripts that talk to a LiteX BIOS import it.
+COMMON_UPLOADS = [
+    ("designs/_host/bios_console.py", "~/bios_console.py"),
+]
+
 # Extra files that certain boards need uploaded
 EXTRA_UPLOADS = {
     "acorn": [
@@ -618,7 +623,7 @@ def run_single_test(test, skip_upload=False):
             return False
 
         # Upload extra files if needed
-        for local_rel, remote in EXTRA_UPLOADS.get(test["board"], []):
+        for local_rel, remote in COMMON_UPLOADS + EXTRA_UPLOADS.get(test["board"], []):
             local_path = os.path.join(REPO_DIR, local_rel)
             if os.path.exists(local_path):
                 ssh_upload(test["host"], local_path, remote)
@@ -666,6 +671,8 @@ def run_single_test(test, skip_upload=False):
                 ssh_upload(test["host"], bitstream_path, test["remote_bitstream"])
                 script_path = os.path.join(REPO_DIR, test["test_script"])
                 ssh_upload(test["host"], script_path, test["remote_script"])
+                for local_rel, remote in COMMON_UPLOADS:
+                    ssh_upload(test["host"], os.path.join(REPO_DIR, local_rel), remote)
                 # Re-run pre_test (e.g. stop serial-getty, lost on reboot)
                 if test.get("pre_test"):
                     ssh_run(test["host"], test["pre_test"], timeout=30)
