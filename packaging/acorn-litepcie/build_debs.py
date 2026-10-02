@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the Acorn LitePCIe driver debs: -common, -dkms, -utils and -modules-<kver>.
+"""Build the Acorn LitePCIe driver debs: -common, -dkms, -utils, -modules-<kver> and the meta package.
 
 Design: docs/plans/2026-09-25-acorn-litepcie-packages-design.md (§2, §3, §4).
 
@@ -11,6 +11,8 @@ Design: docs/plans/2026-09-25-acorn-litepcie-packages-design.md (§2, §3, §4).
     suite's Debian image by container.py.
   * fpgas-online-acorn-litepcie-modules-<kver> (the kernel's architecture): litepcie.ko and liteuart.ko
     built by container.py against one Raspberry Pi kernel's headers, for the hosts DKMS cannot serve.
+  * fpgas-online-acorn-litepcie (all): depends on the others, a driver by DKMS unless prebuilt modules are
+    already installed.
 
 Takes the tree prepare_driver.py writes (patched, with litepcie's LICENSE).
 
@@ -36,7 +38,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 KERNELS = HERE / "kernels.toml"
 NAME = "fpgas-online-acorn-litepcie"
-COMMON, DKMS, UTILS = f"{NAME}-common", f"{NAME}-dkms", f"{NAME}-utils"
+META, COMMON, DKMS, UTILS = NAME, f"{NAME}-common", f"{NAME}-dkms", f"{NAME}-utils"
 MODULE = f"{NAME}-module"  # virtual: Provided by -dkms and every -modules-<kver>
 PREBUILT = f"{NAME}-prebuilt"  # virtual: Provided by every -modules-<kver>
 TOOLS = ("litepcie_util", "litepcie_test")
@@ -306,6 +308,10 @@ def modules_nfpm(version, suite, kver, arch, module_dir, tree, stage):
         ),
         "depends": [COMMON, f"linux-image-{kver}"],
         "provides": [MODULE, PREBUILT],
+        # On the fleet this package is arm64 and the root armhf. Foreign, its Provides satisfy the meta
+        # package's (an armhf-root package's) dependency on a driver; without it they would only count for
+        # arm64 packages.
+        "deb": {"fields": {"Multi-Arch": "foreign"}},
         "contents": [
             *(
                 {
@@ -355,6 +361,29 @@ def utils_nfpm(version, suite, arch, bin_dir, tree):
     }
 
 
+def meta_nfpm(version, stage):
+    """The package a host asks for. `-dkms` is the first alternative on purpose: apt picks it on an ordinary
+    host, while a host that already has a -modules-<kver> package (which provides -module) keeps that and
+    gets no DKMS, compiler or headers."""
+    stage = pathlib.Path(stage)
+    stage.mkdir(parents=True, exist_ok=True)
+    notice = stage / "copyright"
+    notice.write_text((HERE / "copyright.common").read_text().replace(COMMON, META, 1))
+    return {
+        **_base(
+            META,
+            "all",
+            version,
+            "Apache-2.0",
+            "fpgas.online Acorn LitePCIe driver and tools",
+            "Installs the LitePCIe driver for the fpgas.online Acorn PCIe SoC and its tools: the modules\n"
+            "prebuilt for this host's kernel when their package is already installed, built by DKMS otherwise.",
+        ),
+        "depends": [COMMON, UTILS, f"{DKMS} | {MODULE}"],
+        "contents": [{"src": str(notice), "dst": f"/usr/share/doc/{META}/copyright", "file_info": {"mode": 0o644}}],
+    }
+
+
 def run_nfpm(config, out_dir, nfpm="nfpm"):
     out_dir = pathlib.Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -374,7 +403,7 @@ def main(argv=None):
     parser.add_argument("--version-tree", type=pathlib.Path, help="check the driver commit out there and stop")
     parser.add_argument("--out", type=pathlib.Path, help="where the .deb files go")
     parser.add_argument("--driver", type=pathlib.Path, help="the tree prepare_driver.py wrote")
-    parser.add_argument("--only", choices=("common", "dkms", "utils", "modules"), action="append")
+    parser.add_argument("--only", choices=("common", "dkms", "utils", "modules", "meta"), action="append")
     parser.add_argument("--version", help="the deb's version, from the shared deb-version action")
     parser.add_argument("--versions", help='-common, -dkms: {"<suite>": "<version>"} as JSON, one deb each')
     parser.add_argument("--suite", help="-utils, -modules: the suite they were built in")
@@ -396,8 +425,8 @@ def main(argv=None):
         versions = list(json.loads(args.versions).values()) if args.versions else [args.version]
         if len(versions) > 1 and set(args.only) - {"common", "dkms"}:
             raise BuildError("--versions is for -common and -dkms, which are the same in every suite")
-        if set(args.only) - {"common"} and not args.driver:
-            raise BuildError("--driver is required for everything but -common")
+        if set(args.only) - {"common", "meta"} and not args.driver:
+            raise BuildError("--driver is required for everything but -common and the meta package")
         args.out.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=args.out, prefix=".stage-") as tmp:
             for n, version in enumerate(versions):
@@ -406,6 +435,8 @@ def main(argv=None):
                     stage = pathlib.Path(tmp) / f"{n}-{which}"
                     if which == "common":
                         config = common_nfpm(version)
+                    elif which == "meta":
+                        config = meta_nfpm(version, stage)
                     elif which == "dkms":
                         config = dkms_nfpm(version, args.driver, stage)
                     elif which == "modules":

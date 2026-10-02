@@ -1238,7 +1238,7 @@ def test_the_plan_wants_a_version_for_exactly_the_suites_of_kernels_toml(tmp_pat
         plan.main(["plan", "--versions", '{"bookworm": "0.0.post7~deb12"}', "--event", "push", "--no-site"])
 
 
-# -- the prebuilt modules package (§2, §3.8) ---------------------------------------------------------------------
+# -- the prebuilt modules package and the meta package (§2, §3.8) ------------------------------------------------
 
 KVER = "6.12.109+rpt-rpi-v8"
 DEB12 = "0.0.post7~deb12"
@@ -1316,10 +1316,12 @@ def test_the_modules_package_ships_the_litepcie_notice(tree, built, tmp_path):
     assert "GPL-2" in notice  # liteuart.ko
 
 
-def test_common_satisfies_a_modules_package_of_a_foreign_architecture():
-    """The fleet's root is armhf and its modules package arm64: apt lets an arm64 package's dependency be met
-    by an Architecture: all package only when that one is Multi-Arch: foreign."""
+def test_an_arm64_modules_package_counts_on_an_armhf_root(tree, built, tmp_path):
+    """The fleet's root is armhf and its modules package arm64. apt lets an Architecture: all package (-common)
+    satisfy an arm64 package's dependency, and an arm64 package's Provides (-module) satisfy an armhf-root
+    package's (the meta package's), only when the one depended on is Multi-Arch: foreign."""
     assert bd.common_nfpm(DEB12)["deb"]["fields"] == {"Multi-Arch": "foreign"}
+    assert _modules(tree, built, tmp_path)["deb"]["fields"] == {"Multi-Arch": "foreign"}
 
 
 def test_the_utils_are_built_for_the_pi_architectures_and_x86():
@@ -1354,6 +1356,24 @@ def test_dkms_knows_the_driver_by_its_own_version_in_every_suite(tree, tmp_path)
         assert (src / "dkms.conf").read_text() == DKMS_CONF
         postinst = pathlib.Path(config["scripts"]["postinstall"]).read_text()
         assert "/usr/lib/dkms/common.postinst fpgas-online-acorn-litepcie 0.0.post7 " in postinst
+
+
+def test_the_meta_package_takes_dkms_unless_prebuilt_modules_are_already_installed(tmp_path):
+    """apt installs the first alternative it can: -dkms on an ordinary host. A host that already has a
+    -modules-<kver> package satisfies the second, and gets no DKMS, compiler or headers."""
+    config = bd.meta_nfpm("0.0.post7", tmp_path / "stage")
+    assert config["name"] == "fpgas-online-acorn-litepcie"
+    assert config["arch"] == "all"
+    assert config["version"] == "0.0.post7"
+    assert config["depends"] == [
+        "fpgas-online-acorn-litepcie-common",
+        "fpgas-online-acorn-litepcie-utils",
+        "fpgas-online-acorn-litepcie-dkms | fpgas-online-acorn-litepcie-module",
+    ]
+    (notice,) = config["contents"]
+    assert notice["dst"] == "/usr/share/doc/fpgas-online-acorn-litepcie/copyright"
+    text = pathlib.Path(notice["src"]).read_text()
+    assert text.startswith("fpgas-online-acorn-litepcie\n") and "Apache-2.0" in text
 
 
 def test_tools_built_in_another_suite_are_refused(tree, bins):
