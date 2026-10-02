@@ -282,6 +282,23 @@ def test_an_s25fs256s_is_named_by_its_extended_id(tmp_path, images, monkeypatch)
     assert (ident["flash"], ident["flash_jedec"], ident["flash_extended_id"]) == ("S25FS256S", "0x010219", "0x4d0181")
 
 
+FIXTURE = pathlib.Path(__file__).parent / "data" / "identity-v1-acorn-p48.json"
+P48_FLASH_UID = "edcbeececb2b2a88b04f914d2e46af90"  # pi-sw2-p48's S25FL256S, read over BAR0 and by openFPGALoader
+
+
+def p48_document(tmp_path, images):
+    """The golden fixture: the Acorn fakes' identity (pi-sw2-p48's DNA, IDCODE and RDID), with p48's flash
+    unique ID, as fpgas-verify --identify prints it."""
+    board = {**Rig(tmp_path / "p48", images).check()["identity"], "flash_uid": P48_FLASH_UID}
+    doc = identity.document([board], tool="fpgas-online-verify 0.0.post808", read_at="2026-10-02T00:00:00+00:00")
+    return json.dumps(doc, indent=1, sort_keys=True) + "\n"
+
+
+def test_the_golden_fixture_is_what_the_check_reads_from_p48(tmp_path, images):
+    """tests/data/identity-v1-acorn-p48.json; rpi-hwid keeps a byte-identical copy and tests its parser on it."""
+    assert FIXTURE.read_text() == p48_document(tmp_path, images)
+
+
 # -- faults: each fails the board, and the check goes on -------------------------------------------------
 
 
