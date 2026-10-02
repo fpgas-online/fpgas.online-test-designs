@@ -721,6 +721,16 @@ def test_every_architecture_has_its_docker_platform():
     assert ct.PLATFORMS == {"arm64": "linux/arm64", "armhf": "linux/arm/v7", "amd64": "linux/amd64"}
 
 
+def test_a_runner_that_cannot_run_armhf_gets_qemu_for_it():
+    """AArch32 is optional on arm64: one GitHub arm64 runner in a 42-kernel run answered `exec format error`."""
+    probe = ct.probe_argv("linux/arm/v7", "trixie", docker=("sudo", "docker"))
+    assert probe[:2] == ["sudo", "docker"] and probe[-2:] == ["debian:trixie", "true"]
+    assert probe[probe.index("--platform") + 1] == "linux/arm/v7"
+    binfmt = ct.binfmt_argv("linux/arm/v7")
+    assert binfmt == ["docker", "run", "--privileged", "--rm", "tonistiigi/binfmt", "--install", "arm"]
+    assert set(ct.QEMU) == set(ct.PLATFORMS.values())
+
+
 def test_a_module_is_built_in_its_suites_own_image():
     """The same kernel name is built with GCC 12 in bookworm and GCC 14 in trixie (§4.2)."""
     assert ct.docker_argv("linux/arm64", ["module"])[-4] == "debian:bookworm"

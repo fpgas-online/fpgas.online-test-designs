@@ -46,6 +46,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 IN_CONTAINER = "packaging/acorn-litepcie/container.py"
 PLATFORMS = {"arm64": "linux/arm64", "armhf": "linux/arm/v7", "amd64": "linux/amd64"}
+QEMU = {"linux/arm64": "arm64", "linux/arm/v7": "arm", "linux/amd64": "amd64"}  # tonistiigi/binfmt's names
 SUITES = ("bookworm", "trixie")  # the Debian images
 RPI_ARCHIVE = "https://archive.raspberrypi.com/debian"
 # The archive's signing key, CF8A1AF502A2AA2D763BAE7E82B129927FA3303E, as raspberrypi-archive-keyring
@@ -134,6 +135,16 @@ def docker_argv(platform, args, docker=("docker",), suite="bookworm"):
         "-e", "DEBIAN_FRONTEND=noninteractive", "-v", f"{REPO}:/w", "-w", "/w", f"debian:{suite}",
         "sh", "-ec", boot,
     ]  # fmt: skip
+
+
+def probe_argv(platform, suite, docker=("docker",)):
+    """Run `true` in the image a build for `platform` uses: does this host execute that architecture?"""
+    return [*docker, "run", "--rm", "--pull=always", "--platform", platform, f"debian:{suite}", "true"]
+
+
+def binfmt_argv(platform, docker=("docker",)):
+    """Register QEMU user emulation for `platform` with the kernel, as mithro/apt-repo-action's build-deb does."""
+    return [*docker, "run", "--privileged", "--rm", "tonistiigi/binfmt", "--install", QEMU[platform]]
 
 
 # -- in the container ----------------------------------------------------------------------------------------
@@ -404,8 +415,26 @@ def cmd_dkms_test(args):
 # -- on the host ---------------------------------------------------------------------------------------------
 
 
+def ensure_runnable(platform, suite, docker):
+    """Make sure this host can run `platform` containers, by QEMU if not by itself.
+
+    AArch32 is optional on a 64-bit ARM CPU: most of GitHub's arm64 runners run armhf containers natively,
+    and some answer `exec format error`. So it is tried, and only a host that cannot gets QEMU."""
+    probe = probe_argv(platform, suite, docker)
+    if subprocess.run(probe, check=False).returncode == 0:
+        return
+    print(f"this host does not run {platform} containers by itself: registering QEMU for them", flush=True)
+    subprocess.run(binfmt_argv(platform, docker), check=True)
+    subprocess.run(probe, check=True)
+
+
 def cmd_run(args):
     inner = args.inner[1:] if args.inner[:1] == ["--"] else args.inner
+    try:
+        ensure_runnable(PLATFORMS[args.arch], args.suite, tuple(shlex.split(args.docker)))
+    except subprocess.CalledProcessError as e:
+        print(f"error: this host cannot run {args.arch} containers, even with QEMU: {e}", file=sys.stderr)
+        return 1
     argv = docker_argv(PLATFORMS[args.arch], inner, docker=tuple(shlex.split(args.docker)), suite=args.suite)
     print("+", shlex.join(argv), flush=True)
     return subprocess.run(argv, check=False).returncode
