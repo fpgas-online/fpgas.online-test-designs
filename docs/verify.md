@@ -322,7 +322,7 @@ options:
   --no-publish   do not send the result to the fleet
 
 tests in the boot check:
-  pcie-link pcie-bar0 jtag flash ddr p2-uart p2-serial scratch p2-gpio
+  pcie-link pcie-bar0 jtag flash ddr p2-uart p2-serial scratch p2-gpio dma
 
 the result is pass (exit 0) or a fail named for its worst cause (exit 1):
   pass          every test passed, and the board and flash are as recorded
@@ -475,6 +475,7 @@ From a checkout, the check reads them from the repository.
 | `p2-serial` | BAR0 and the Pi's GPIO | J2/K2, borrowed from the UART by the `p2_serial` switch, carry 0 and 1 both ways; the switch goes back to serial by itself; the UARTBone then answers with BAR0's identifier |
 | `scratch` | BAR0 and P2 | the `ctrl` scratch register holds two patterns written over each bridge; its value is put back |
 | `p2-gpio` | BAR0 and the Pi's GPIO | Pi 5 setup only: J5/H5 carry 0 and 1 both ways, FPGA to Pi and Pi to FPGA |
+| `dma` | `litepcie.ko` | blocks written from the Pi's RAM to the DRAM and read back over DMA come back byte for byte |
 
 * `ddr` in detail ([`bist.py`](../verify/src/fpgas_online_verify/boards/acorn/bist.py), the same code
   [`selftest.py`](../designs/acorn-pcie/host/selftest.py) runs):
@@ -487,8 +488,23 @@ From a checkout, the check reads them from the repository.
      different data in each; the second pass swaps them. A dead top address bit, or half the expected DRAM,
      fails.
   3. Measurements: `bytes`, `passes`, `errors`, `write_MBps`, `read_MBps`, `seconds`.
-* The golden image has no DRAM, no P2 switch and no spare GPIO: on it `ddr`, `p2-serial` and `p2-gpio` are
-  in `not_run`, and the board fails for running golden.
+* `dma` in detail ([`dma.py`](../verify/src/fpgas_online_verify/boards/acorn/dma.py), the same code
+  [`dma_selftest.py`](../designs/acorn-pcie/host/dma_selftest.py) runs):
+  1. It is the one test that goes through the kernel driver, so it runs last, after the driver is bound
+     again. Where `litepcie.ko` was not loaded, the test loads it (`modprobe litepcie`) and removes it again
+     afterwards (`rmmod litepcie`, `rmmod liteuart`); where it was loaded, it is used and left loaded.
+  2. The driver's device must run the build BAR0 showed, and the DRAM must be the controller's.
+  3. Short blocks whose ends fall part-way through a DMA buffer and part-way through a controller word, at
+     the bottom, in the middle and at the top of the DRAM; a block of its own addresses, read back from
+     part-way in; then 32 MiB in one block, timed in each direction.
+  4. Measurements: `bytes`, `to_dram_MBps`, `from_dram_MBps`, and `driver` (`loaded for the test` or
+     `was loaded`).
+  5. It is in `not_run`, and the board still passes, when the host has no `litepcie.ko` for its kernel (the
+     reason names the package: a prebuilt `fpgas-online-acorn-litepcie-modules-<kernel>`, or
+     `fpgas-online-acorn-litepcie-dkms`), and when the running build has no bridge (a release built before
+     [#29](https://github.com/fpgas-online/fpgas.online-test-designs/pull/29)).
+* The golden image has no DRAM, no P2 switch and no spare GPIO: on it `ddr`, `p2-serial`, `p2-gpio` and
+  `dma` are in `not_run`, and the board fails for running golden.
 * A test that cannot run because of an earlier fault is in the report's `not_run`, with why.
 * A run in which none of the tests asked for ran (`--test p2-gpio` on a Compute Blade, say) fails.
 * A kernel driver bound to the board (`litepcie.ko`) is unbound while a test that uses BAR0 runs, and bound

@@ -39,6 +39,7 @@ the others:
 | `p2-serial` | both setups: J2 and K2 borrowed with `p2_serial` and tested both ways, the switch's own timeout, and the UARTBone answering again |
 | `scratch` | the `ctrl` scratch register written and read back over BAR0 and over P2 |
 | `p2-gpio` | Pi 5 setup only: J5 and H5 driven from the FPGA and read on GPIO3/GPIO4, then driven from the Pi and read on the FPGA |
+| `dma` | through `litepcie.ko`: blocks moved from the Pi's RAM to the DRAM and back over DMA, byte for byte. Not run, and no fault, on a host with no `litepcie.ko` for its kernel or a build without the bridge |
 
 | Setup | JTAG `--pins` | openFPGALoader cable | J2 / K2 | J5 / H5 |
 |---|---|---|---|
