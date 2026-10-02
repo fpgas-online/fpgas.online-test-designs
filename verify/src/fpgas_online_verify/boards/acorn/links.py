@@ -2,7 +2,8 @@
 
 The pins, the cable and the GPIO chip come from the host's setup (setup.py, from wiring.toml).
 
-  jtag     `openFPGALoader --detect` over the P1 cable must find one device with the variant's IDCODE, and
+  jtag     `openFPGALoader --detect` over the P1 cable must find one device, the variant's part (any silicon
+           version: the whole IDCODE is read from openFPGALoader's raw scan and decoded, idcode.py), and
            `openFPGALoader --read-dna` must read the device DNA the SoC reports over BAR0. An IDCODE read
            needs only TCK, TMS and TDO (the IDCODE is in the data register after reset); the DNA read
            shifts the FUSE_DNA instruction in through TDI, so it proves the fourth wire. Neither reconfigures
@@ -29,13 +30,13 @@ import contextlib
 import os
 import re
 
+from ... import idcode
 from ...core import Problem
 from . import bist, check, uartbone_link
 
 JTAG_TIMEOUT = 60
-# The IDCODE of each variant's FPGA, the revision nibble masked off (check.py's variants).
-IDCODES = {"cle-215+": 0x3636093, "cle-215": 0x3636093, "cle-101": 0x3631093}
-IDCODE_RE = re.compile(r"idcode\s+(0x[0-9a-fA-F]+)")
+# The IDCODE of each variant's FPGA at version 0 (check.py's variants); compared without the version.
+IDCODES = {"cle-215+": 0x03636093, "cle-215": 0x03636093, "cle-101": 0x03631093}
 DNA_RE = re.compile(r"\bdna\"?\s*[:=]\s*\"?(0x[0-9a-fA-F]+)", re.IGNORECASE)
 # openFPGALoader's libgpiod cable opens /dev/gpiochip0. The header's chip is found by its device-tree
 # compatible (wiring.toml), not by number: a Pi 5 can have gpiochip11-15, 15 the RP1.
@@ -98,36 +99,64 @@ def jtag(setup, variant, run, bar0_dna=None, gpiochip=None):
         # openFPGALoader leaves the pins driven; with no way to put them back (on a Blade GPIO14 is also the
         # UART's TX) the probe is not run at all
         reason = f"P1 JTAG not probed: the JTAG pins' state could not be read, so it could not be put back: {p.reason}"
-        return _entry("jtag", [("error", reason)])
+        return _entry("jtag", [("error", reason)], dna_error=f"not read over P1 JTAG: {reason}")
+    # why the device DNA was not read, if it is not: apart from the IDCODE's faults (identity's dna_error)
+    dna_error = "not read over P1 JTAG: --read-dna runs only once --detect has found the one FPGA expected"
     try:
         (gpiochip or header_gpiochip)(setup.gpiochip)
-        rc, out = run([*base, "--detect"], JTAG_TIMEOUT)
-        output += out.strip().splitlines()[-6:]
-        found = [int(x, 16) & 0x0FFFFFFF for x in IDCODE_RE.findall(out)]
+        rc, out = run([*base, "--detect", *idcode.OPENFPGALOADER_RAW_ARGS], JTAG_TIMEOUT)
+        found = idcode.parse(out)
+        output += (found and rc == 0 and idcode.scan_lines(out)) or out.strip().splitlines()[-6:]
         if found:
-            seen["idcode"] = ", ".join(f"{i:#09x}" for i in found)
-        if rc != 0 or not found:
+            seen["idcode"] = ", ".join(f"{i:#010x}" for i in found)
+        if len(found) == 1:
+            seen.update(idcode.decode(found[0]))
+        faults += [("fail", f"P1 JTAG: {f}") for c in found for f in idcode.faults(c)]
+        chain_ok = False
+        scanned = bool(found) or idcode.empty_chain(out)
+        if not scanned and rc != 0:  # the exit code is in this reason, so not said again below
+            faults.append(("fail", f"P1 JTAG: {idcode.scan_failed('openFPGALoader --detect', rc, out)}"))
+        elif not scanned:
+            faults.append(("fail", f"P1 JTAG: {idcode.NO_RAW_SCAN}"))
+        elif not found:
             faults.append(("fail", "no device on the P1 JTAG chain"))
-        elif found != [want]:
-            faults.append(("fail", f"P1 JTAG chain has {seen['idcode']}, expected {want:#09x} for {variant}"))
+        elif len(found) != 1 or not idcode.same_part(found[0], want):
+            has = seen["idcode"] + (f" ({seen['idcode_device']})" if len(found) == 1 else "")
+            faults.append(("fail", f"P1 JTAG chain has {has}, expected one {idcode.device(want)} "
+                                   f"(IDCODE {want:#010x}, any version) for {variant}"))  # fmt: skip
         else:
+            chain_ok = True
+        if rc != 0 and scanned:  # whatever it printed, a scan that failed is not trusted
+            faults.append(("fail", f"openFPGALoader --detect exited {rc} on the P1 JTAG chain"))
+            if chain_ok:  # it found the one FPGA expected, so that is not why the DNA was not read
+                dna_error = f"not read over P1 JTAG: openFPGALoader --detect exited {rc}, so --read-dna was not run"
+        elif chain_ok:
             rc, out = run([*base, "--read-dna"], JTAG_TIMEOUT)
             output += out.strip().splitlines()[-4:]
             m = DNA_RE.search(out)
             if rc != 0 or not m:
                 faults.append(("fail", "openFPGALoader --read-dna read no device DNA over P1 JTAG"))
+                dna_error = f"openFPGALoader --read-dna read no device DNA over P1 JTAG (exit status {rc})"
             else:
                 dna = int(m.group(1), 16)
-                seen["dna"] = f"{dna:#x}"
-                if bar0_dna is not None and dna != bar0_dna:
+                stuck = check.dna_faults(dna, "P1 JTAG")
+                if stuck:  # a DNA port not being read, so not the board's DNA (identity uses dna_error instead)
+                    faults += [("fail", f) for f in stuck]
+                    dna_error = "; ".join(stuck)
+                else:
+                    seen["dna"] = f"{dna:#x}"
+                if bar0_dna is not None and dna != bar0_dna:  # a good BAR0 DNA, so this may be TDI: both listed
                     faults.append(("fail", f"device DNA over JTAG {dna:#x} is not the one over BAR0 {bar0_dna:#x}: "
                                            "TDI (or the DNA readout) is wrong"))  # fmt: skip
     except (Problem, OSError) as e:
         # A missing tool or a wrong gpiochip is the check not running ("error"); a hung probe is a fail.
         result = e.result if isinstance(e, Problem) else "error"
         faults.append((result, f"P1 JTAG could not be probed: {e}"))
+        dna_error = f"not read over P1 JTAG: P1 JTAG could not be probed: {e}"
     finally:
         faults += [("error", f) for f in restore_pins(run, saved)]
+    if "dna" not in seen:
+        seen["dna_error"] = dna_error
     return _entry("jtag", faults, output, **seen)
 
 

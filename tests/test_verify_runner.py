@@ -12,7 +12,7 @@ import json
 import subprocess
 
 import pytest
-from fpgas_online_verify import config, core, runner, state
+from fpgas_online_verify import config, core, identity, runner, state
 from fpgas_online_verify.board import Board, installed
 from fpgas_online_verify.core import Problem
 
@@ -136,6 +136,66 @@ def test_auto_still_probes_when_every_claim_is_weak_and_keeps_the_claim(opts):
     assert report["chosen_by"] == "auto: USB/PCI IDs, and probing found nothing more"
 
 
+class HeldLocks:
+    """Stands in for core.hold_lock: which locks are held, and that each is waited for without a bound."""
+
+    def __init__(self):
+        self.held, self.taken = [], []
+
+    def __call__(self, path, what, timeout=None):
+        assert timeout is None  # the boot check and the debug tool wait for a board however long it takes
+        outer = self
+
+        class _Held:
+            def __enter__(self):
+                outer.held.append(path)
+                outer.taken.append(path)
+
+            def __exit__(self, *a):
+                outer.held.remove(path)
+                return False
+
+        return _Held()
+
+
+class LockedProbe(Fake):
+    """A Fake whose pins are driven to find it: it records whether its lock was held each time."""
+
+    def __init__(self, name, locks, **kw):
+        super().__init__(name, probes=True, **kw)
+        self.locks, self.under_lock = locks, []
+
+    def probe(self, host):
+        self.under_lock.append(self.lock in self.locks.held)
+        return super().probe(host)
+
+
+def test_the_boot_check_drives_a_boards_pins_only_under_its_lock(opts, monkeypatch):
+    locks = HeldLocks()
+    monkeypatch.setattr(runner, "hold_lock", locks)
+    netv2 = LockedProbe("netv2", locks, probed=[{"variant": "a7-35", "idcode": "0x0362d093"}])
+    report = runner.verify({**opts, "board": "netv2"}, _boards(netv2), usb=[], pci=[])  # configured
+    assert report["result"] == "pass" and netv2.probe_calls == 1 and netv2.under_lock == [True]
+    assert locks.taken == [netv2.lock, netv2.lock] and locks.held == []  # the scan, then the check
+    netv2 = LockedProbe("netv2", locks, probed=[{"variant": "a7-35", "idcode": "0x0362d093"}])
+    weak = Fake("acorn", seen=[{"kind": "litex-other"}], weak=True)
+    runner.verify(opts, _boards(weak, netv2), usb=[], pci=[], mode=("auto", "test"))  # auto, beside a weak claim
+    assert netv2.probe_calls == 1 and netv2.under_lock == [True] and locks.held == []
+
+
+def test_the_debug_tool_drives_a_boards_pins_only_under_its_lock(monkeypatch, capsys):
+    from fpgas_online_verify import debug
+
+    locks = HeldLocks()
+    monkeypatch.setattr(runner, "hold_lock", locks)
+    monkeypatch.setattr(debug, "usb_devices", lambda: [])
+    monkeypatch.setattr(debug, "pci_devices", lambda: [])
+    netv2 = LockedProbe("netv2", locks, probed=[{"variant": "a7-35", "idcode": "0x0362d093"}])
+    assert debug.detect(netv2, netv2.facts(), None) == 0
+    assert netv2.probe_calls == 1 and netv2.under_lock == [True] and locks.held == []
+    assert '"idcode": "0x0362d093"' in capsys.readouterr().out
+
+
 def test_a_probe_that_fails_beside_a_weak_claim_keeps_the_claim_and_says_why(opts):
     class Broken(Fake):
         def probe(self, host):
@@ -145,6 +205,34 @@ def test_a_probe_that_fails_beside_a_weak_claim_keeps_the_claim_and_says_why(opt
     report = runner.verify(opts, _boards(acorn, Broken("netv2", probes=True)), usb=[], pci=[], mode=("auto", "test"))
     assert [b["board"] for b in report["boards"]] == ["acorn"] and report["result"] == "fail"
     assert "probing as well failed: the JTAG chain answers" in report["chosen_by"]
+
+
+class _LockedFake(Fake):
+    def __init__(self, name, lock, **kw):
+        super().__init__(name, **kw)
+        self._lock = str(lock)
+
+    @property
+    def lock(self):
+        return self._lock
+
+
+def test_a_lock_that_cannot_be_opened_beside_a_weak_claim_is_said_in_chosen_by(tmp_path):
+    # The boot check's probing takes the NeTV2's lock with core.hold_lock: one that cannot be opened (here a
+    # dangling symlink) is never followed, the NeTV2 is never driven, and the failure is said, not lost.
+    lock = tmp_path / "netv2.lock"
+    lock.symlink_to(tmp_path / "nowhere")
+    opts = {"state": tmp_path / "state.json", "no_publish": True}
+    acorn = _LockedFake("acorn", tmp_path / "acorn.lock", seen=[{"kind": "litex-other"}], weak=True, result="fail")
+    netv2 = _LockedFake("netv2", lock, probes=True, probed=[{"variant": "a7-35"}])
+    report = runner.verify(opts, _boards(acorn, netv2), usb=[], pci=[], mode=("auto", "test"))
+    assert netv2.probe_calls == 0 and [b["board"] for b in report["boards"]] == ["acorn"]
+    assert report["result"] == "fail" and "probing as well failed: the lock file" in report["chosen_by"]
+    assert str(lock) in report["chosen_by"] and "symlink" in report["chosen_by"]
+    # configured for the NeTV2: the check is an error naming the lock
+    netv2 = _LockedFake("netv2", lock, probes=True, probed=[{"variant": "a7-35"}])
+    report = runner.verify(opts, _boards(netv2), usb=[], pci=[], mode=("netv2", "test"))
+    assert netv2.probe_calls == 0 and report["result"] == "error" and str(lock) in report["reason"]
 
 
 def test_auto_finding_nothing_is_missing(opts):
@@ -217,6 +305,20 @@ def test_with_auto_a_board_with_none_of_the_tests_is_not_checked_and_not_passed(
     assert tt.options is None and tt.checked == []
     assert [b["board"] for b in report["boards"]] == ["arty"] and report["not_checked"] == ["tt"]
     assert report["result"] == "pass"  # arty's ddr ran and passed
+
+
+def test_with_auto_a_board_not_checked_is_still_identified_once(opts):
+    events = []
+    arty = WithTests("arty", ["uart", "ddr"], seen=[{"variant": "a7-35", "usb": "1-1"}])
+    fomu = WithTests("fomu", ["uart"], seen=[{"variant": "evt", "usb": "1-2", "serial": "S"}])
+    report = runner.verify({**opts, "tests": ["ddr"], "event": lambda s, d: events.append((s, d))},
+                           _boards(arty, fomu), usb=[], pci=[], mode=("auto", "test"))  # fmt: skip
+    assert report["not_checked"] == ["fomu"]
+    found = [d["board"] for s, d in events if s == "fpga-board-found"]
+    identified = [d for s, d in events if s == "fpga-board-identified"]
+    assert sorted(d["board"] for d in identified) == sorted(found) == ["arty", "fomu"]
+    assert {"board": "fomu", "kind": "fomu", "variant": "evt", "serial": "S", "usb": "1-2",
+            "schema": "fpga-identity/1"} in identified  # fmt: skip
 
 
 def test_with_auto_a_test_no_board_found_has_is_an_error(opts):
@@ -427,9 +529,12 @@ def test_every_board_module_is_found():
 
 
 class Busy(Fake):
-    """A board whose check runs two tests and says so through options["event"], as the board modules do."""
+    """A board whose check says who the board is and runs two tests, through options["event"], as the board
+    modules do."""
 
     def check(self, host, found, options):
+        who = identity.base(options["board_key"], self.name, found)
+        options["event"]("fpga-board-identified", identity.details(who))
         for test, result in (("uart", "pass"), ("ddr", self.result)):
             options["event"]("fpga-test-started", {"test": test})
             options["event"]("fpga-test-finished", {"test": test, "result": result, "reason": ""})
@@ -443,11 +548,179 @@ def test_the_site_hears_each_board_found_and_each_test_with_its_board(opts):
                   mode=("auto", "test"))  # fmt: skip
     assert events[0] == ("fpga-board-found", {"board": "arty", "variant": "a7-35", "where": "1-1"})
     assert events[1:] == [
+        (
+            "fpga-board-identified",
+            {"board": "arty", "kind": "arty", "variant": "a7-35", "usb": "1-1", "schema": "fpga-identity/1"},
+        ),
         ("fpga-test-started", {"board": "arty", "test": "uart"}),
         ("fpga-test-finished", {"board": "arty", "test": "uart", "result": "pass", "reason": ""}),
         ("fpga-test-started", {"board": "arty", "test": "ddr"}),
         ("fpga-test-finished", {"board": "arty", "test": "ddr", "result": "fail", "reason": ""}),
     ]
+
+
+class Stops(Fake):
+    """A board whose check raises `result`."""
+
+    def check(self, host, found, options):
+        raise self.result
+
+
+@pytest.mark.parametrize(
+    "board",
+    [
+        Fake("fomu", seen=[{"variant": "evt", "usb": "1-2", "serial": "S"}]),  # says nothing itself
+        Stops("fomu", seen=[{"variant": "evt", "usb": "1-2", "serial": "S"}], result=Problem("error", "no tool")),
+        Stops("fomu", seen=[{"variant": "evt", "usb": "1-2", "serial": "S"}], result=KeyError("x")),
+    ],
+)
+def test_every_board_found_is_identified_once_even_when_its_check_stops_early(opts, board):
+    events = []
+    report = runner.verify({**opts, "event": lambda s, d: events.append((s, d))}, _boards(board), usb=[], pci=[],
+                           mode=("auto", "test"))  # fmt: skip
+    identified = [d for s, d in events if s == "fpga-board-identified"]
+    assert identified == [{"board": "fomu", "kind": "fomu", "variant": "evt", "serial": "S", "usb": "1-2",
+                           "schema": "fpga-identity/1"}]  # fmt: skip
+    assert report["boards"][0]["identity"] == {"board": "fomu", "kind": "fomu", "variant": "evt", "serial": "S",
+                                               "usb": "1-2"}  # fmt: skip
+
+
+class IdentifiesThenStops(Fake):
+    """A board whose check says who the board is (with what it read: the IDCODE), then raises `result`."""
+
+    def check(self, host, found, options):
+        who = {**identity.base(options["board_key"], self.name, found), "idcode": "0x13631093", "idcode_version": 1}
+        identity.keep(options, who)
+        options["event"]("fpga-board-identified", identity.details(who))
+        raise self.result
+
+
+@pytest.mark.parametrize("raised", [KeyError("x"), Problem("error", "the services would not stop")])
+def test_a_board_that_stops_after_identifying_itself_keeps_its_identity(opts, raised):
+    events = []
+    netv2 = IdentifiesThenStops("netv2", seen=[{"variant": "a7-100", "usb": "1-1"}], result=raised)
+    report = runner.verify({**opts, "event": lambda s, d: events.append((s, d))}, _boards(netv2), usb=[], pci=[],
+                           mode=("auto", "test"))  # fmt: skip
+    (board,) = report["boards"]
+    assert board["result"] == "error"
+    assert board["identity"] == {"board": "netv2", "kind": "netv2", "variant": "a7-100", "usb": "1-1",
+                                 "idcode": "0x13631093", "idcode_version": 1}  # fmt: skip
+    assert [s for s, _ in events].count("fpga-board-identified") == 1
+    flat = runner.details(report)
+    assert flat["board0_identity_idcode"] == "0x13631093" and flat["board0_identity_idcode_version"] == "1"
+
+
+class KeepsABadValue(Fake):
+    """A board whose check keeps an identity holding a value no event can carry, then crashes sending it."""
+
+    def check(self, host, found, options):
+        who = {**identity.base(options["board_key"], self.name, found), "idcode": "0x13631093", "volts": 1.5}
+        identity.keep(options, who)
+        options["event"]("fpga-board-identified", identity.details(who))
+        return super().check(host, found, options)
+
+
+class ReportsABadValue(Fake):
+    """A board whose check passes, with a value no event can carry in the identity it reports."""
+
+    def check(self, host, found, options):
+        return {**super().check(host, found, options), "identity": {"board": options["board_key"], "x": b"\0"}}
+
+
+class ReportsABadName(Fake):
+    """A board whose check passes, with a field name that is not a string in the identity it reports."""
+
+    def check(self, host, found, options):
+        return {**super().check(host, found, options), "identity": {"board": options["board_key"], 5: "x"}}
+
+
+class ReportsANonDict(Fake):
+    """A board whose check passes, reporting an identity that is not a dict."""
+
+    def check(self, host, found, options):
+        return {**super().check(host, found, options), "identity": ["netv2"]}
+
+
+def test_an_identity_field_name_that_cannot_be_sent_is_an_error_on_that_board_only(opts):
+    netv2 = ReportsABadName("netv2", seen=[{"variant": "a7-100", "usb": "1-1"}])
+    arty = Fake("arty", seen=[{"variant": "a7-35", "usb": "1-2"}])
+    report = runner.verify(opts, _boards(netv2, arty), usb=[], pci=[], mode=("auto", "test"))
+    first, second = report["boards"]
+    assert first["result"] == "error" and second["result"] == "pass"
+    assert "the identity field 5 cannot be sent: an identity's field names must be strings" in first["reason"]
+    assert 5 not in first["identity"]
+    flat = runner.details(report)
+    assert "board0_identity_5" not in flat and "board0_identity_error" not in flat
+
+
+def test_an_identity_that_is_not_a_dict_is_replaced_by_what_finding_the_board_showed(opts):
+    events = []
+    netv2 = ReportsANonDict("netv2", seen=[{"variant": "a7-100", "usb": "1-1"}])
+    arty = Fake("arty", seen=[{"variant": "a7-35", "usb": "1-2"}])
+    report = runner.verify({**opts, "event": lambda s, d: events.append((s, d))}, _boards(netv2, arty), usb=[],
+                           pci=[], mode=("auto", "test"))  # fmt: skip
+    first, second = report["boards"]
+    assert first["result"] == "error" and second["result"] == "pass"
+    assert "the identity cannot be sent: an identity must be a dict, not ['netv2']" in first["reason"]
+    assert first["identity"] == identity.base("netv2", "netv2", {"variant": "a7-100", "usb": "1-1"})
+    identified = [d for s, d in events if s == "fpga-board-identified" and d["board"] == "netv2"]
+    assert identified == [{**first["identity"], "schema": identity.SCHEMA}]
+    assert runner.details(report)["result"] == "error"
+
+
+@pytest.mark.parametrize(("ident", "why"), [
+    (["arty"], "an identity must be a dict, not ['arty']"),
+    ("arty", "an identity must be a dict, not 'arty'"),
+    ({"board": "arty", 5: "x"}, "identity field 5: an identity's field names must be strings, not 5"),
+])  # fmt: skip
+def test_the_verified_event_says_why_a_non_dict_identity_or_a_bad_field_name_is_not_there(opts, ident, why):
+    report = {"result": "pass", "boards": [{"board": "arty", "result": "pass", "identity": ident}]}
+    out = runner.details(report)
+    assert out["board0_identity_error"] == why
+    assert not [k for k in out if k.startswith("board0_identity_") and k != "board0_identity_error"]
+
+
+@pytest.mark.parametrize("bad", [KeepsABadValue, ReportsABadValue])
+def test_an_identity_value_that_cannot_be_sent_is_an_error_on_that_board_only(opts, bad):
+    events = []
+    netv2 = bad("netv2", seen=[{"variant": "a7-100", "usb": "1-1"}])
+    arty = Fake("arty", seen=[{"variant": "a7-35", "usb": "1-2"}])
+    report = runner.verify({**opts, "event": lambda s, d: events.append((s, d))}, _boards(netv2, arty), usb=[],
+                           pci=[], mode=("auto", "test"))  # fmt: skip
+    first, second = report["boards"]
+    field = "volts" if bad is KeepsABadValue else "x"
+    assert first["result"] == "error" and f"the identity field {field} cannot be sent" in first["reason"]
+    assert field not in first["identity"] and second["result"] == "pass" and arty.checked
+    flat = runner.details(report)  # fpga-verified is still sent
+    assert flat["result"] == "error" and f"board0_identity_{field}" not in flat
+    if bad is KeepsABadValue:  # the identified event its check could not send is sent without the field
+        identified = [d for s, d in events if s == "fpga-board-identified" and d["board"] == "netv2"]
+        assert identified == [{"board": "netv2", "kind": "netv2", "variant": "a7-100", "usb": "1-1",
+                               "idcode": "0x13631093", "schema": "fpga-identity/1"}]  # fmt: skip
+
+
+def test_the_verified_event_says_why_an_identity_it_cannot_carry_is_not_there(opts):
+    report = {"result": "pass", "boards": [{"board": "arty", "result": "pass", "identity": {"volts": 1.5}}]}
+    out = runner.details(report)
+    assert out["board0_identity_error"].startswith("identity field volts: ")
+    assert "board0_identity_volts" not in out
+
+
+def test_a_board_that_identifies_itself_is_not_identified_again(opts):
+    events = []
+    runner.verify({**opts, "event": lambda s, d: events.append((s, d))},
+                  _boards(Busy("arty", seen=[{"variant": "a7-35", "usb": "1-1"}])), usb=[], pci=[],
+                  mode=("auto", "test"))  # fmt: skip
+    assert [s for s, _ in events].count("fpga-board-identified") == 1
+
+
+def test_the_identity_in_the_verified_event_is_flat_strings(opts):
+    who = {"board": "acorn", "flash_quad": True, "idcode_version": 1}
+    board = {"board": "acorn", "result": "pass", "identity": who}
+    report = {"result": "pass", "boards": [board]}
+    out = runner.details(report)
+    assert out["board0_identity_flash_quad"] == "true" and out["board0_identity_idcode_version"] == "1"
+    assert "board0_identity_schema" not in out
 
 
 def test_two_boards_of_a_kind_are_told_apart_in_the_events(opts):
@@ -477,8 +750,9 @@ def test_the_events_go_out_in_order_and_a_dead_broker_stops_the_progress_ones(op
     monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append((stage, details)) or True)
     out = tmp_path / "r.json"
     runner.run({**opts, "board": "arty", "report": str(out), "no_publish": False})
-    assert [s for s, _ in sent] == ["fpga-verifying", "fpga-board-found", "fpga-test-started", "fpga-test-finished",
-                                    "fpga-test-started", "fpga-test-finished", "fpga-verified"]  # fmt: skip
+    assert [s for s, _ in sent] == ["fpga-verifying", "fpga-board-found", "fpga-board-identified",
+                                    "fpga-test-started", "fpga-test-finished", "fpga-test-started",
+                                    "fpga-test-finished", "fpga-verified"]  # fmt: skip
     assert all(isinstance(v, str) for _, d in sent for v in d.values())
     assert sent[1][1] == {"board": "arty", "variant": "a7-35", "where": "-"}
     sent.clear()
@@ -592,9 +866,218 @@ def test_on_a_record_from_before_dna_only_dna_is_added_quietly(opts):
     assert report["result"] == "changed"  # the flash is not one of the version's new facts
 
 
+def test_an_idcode_recorded_without_its_version_gets_its_version_quietly(opts):
+    """Before schema 3 a NeTV2 on a Pi 5 recorded openFPGALoader's masked IDCODE; now the whole one is read."""
+    _record(opts, {"netv2": {"variant": "a7-35", "idcode": "0x0362d093"}}, 2)
+    now = Seen("netv2", {"variant": "a7-35", "idcode": "0x1362d093"})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and report["state"]["added"]
+    boards, version = state.load_record(opts["state"])
+    assert boards["netv2"]["idcode"] == "0x1362d093" and version == state.SCHEMA_VERSION
+
+
+def test_an_idcode_of_another_part_or_version_is_still_a_change(opts):
+    _record(opts, {"netv2": {"variant": "a7-35", "idcode": "0x03631093"}}, 2)  # another part, old record
+    now = Seen("netv2", {"variant": "a7-35", "idcode": "0x1362d093"})
+    assert runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))["result"] == "changed"
+    _record(opts, {"netv2": {"variant": "a7-35", "idcode": "0x0362d093"}}, 3)  # a whole IDCODE: another chip
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["state"]["changes"] == ["netv2.idcode: was '0x0362d093', now '0x1362d093'"]
+
+
+def test_an_arty_idcode_on_a_record_from_before_it_is_added_quietly(opts):
+    _record(opts, {"arty": {"variant": "a7-35", "serial": "A"}}, 2)
+    now = Seen("arty", {"variant": "a7-35", "serial": "A", "idcode": "0x0362d093"})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and report["state"]["added"]
+
+
+def test_a_dna_recorded_without_its_leading_zeros_is_respelled_quietly(opts):
+    """Before schema 4 the Acorn's DNA was recorded as f"{dna:#x}"; identity.py writes all 16 digits."""
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "dna": "0x54b48664b04854"}}, 3)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "dna": "0x0054b48664b04854"})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and report["state"]["added"]
+    boards, version = state.load_record(opts["state"])
+    assert boards["acorn"]["dna"] == "0x0054b48664b04854" and version == 4
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and "added" not in report["state"]
+
+
+def test_another_dna_is_still_a_change_and_a_respelling_is_one_on_a_new_record(opts):
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "dna": "0x54b48664b04855"}}, 3)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "dna": "0x0054b48664b04854"})
+    assert runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))["result"] == "changed"
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "dna": "0x54b48664b04854"}}, 4)
+    assert runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))["result"] == "changed"
+
+
+S25FS = {"part": "S25FS256S", "jedec": "0x010219", "unique_id": "ab" * 16, "slots": {"operational": "1"}}
+
+
+def test_a_flash_part_renamed_with_the_same_ids_is_recorded_quietly(opts):
+    """Before schema 4 an S25FS256S was called an S25FL256S (bytes 1-3 only): a naming correction."""
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "flash": {**S25FS, "part": "S25FL256S"}}}, 3)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "flash": S25FS})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and report["state"]["added"]
+    boards, version = state.load_record(opts["state"])
+    assert boards["acorn"]["flash"] == S25FS and version == 4
+
+
+@pytest.mark.parametrize(
+    "recorded",
+    [
+        {**S25FS, "part": "S25FL256S", "unique_id": "cd" * 16},  # another flash of the same kind
+        {**S25FS, "part": "S25FL512S", "jedec": "0x010220"},  # another kind of flash
+        {**S25FS, "part": "S25FL256S", "slots": {"operational": "0"}},  # renamed, and rewritten
+    ],
+)
+def test_a_flash_that_really_changed_is_still_a_change_through_a_rename(opts, recorded):
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "flash": recorded}}, 3)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "flash": S25FS})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "changed"
+
+
+def test_a_flash_part_renamed_on_a_new_record_is_a_change(opts):
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "flash": {**S25FS, "part": "S25FL256S"}}}, 4)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "flash": S25FS})
+    assert runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))["result"] == "changed"
+
+
+def test_an_acorns_7_digit_idcode_takes_its_whole_one_quietly(opts):
+    """Before schema 3 the Acorn recorded `f"{idcode & 0x0FFFFFFF:#x}"`: 0x3636093, seven hex digits."""
+    acorn = {"bdf": "0001:01:00.0", "variant": "cle-215+", "dna": "0x1"}
+    _record(opts, {"acorn": {**acorn, "idcode": "0x3636093"}}, 2)
+    now = Seen("acorn", {**acorn, "idcode": "0x13636093"})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and report["state"]["added"] and "changes" not in report["state"]
+    boards, version = state.load_record(opts["state"])
+    assert boards["acorn"]["idcode"] == "0x13636093" and version == state.SCHEMA_VERSION
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))  # and stays so
+    assert report["result"] == "pass" and "added" not in report["state"]
+
+
+def test_an_idcode_on_a_schema_1_record_is_widened_too(opts):
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "idcode": "0x3636093"}}, 1)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "idcode": "0x13636093", "dna": "0x1"})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and report["state"]["added"]  # the DNA (schema 2) is added quietly too
+    boards, _ = state.load_record(opts["state"])
+    assert (boards["acorn"]["idcode"], boards["acorn"]["dna"]) == ("0x13636093", "0x1")
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "idcode": "0x3631093"}}, 1)  # another part
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["state"]["changes"] == ["acorn.idcode: was '0x3631093', now '0x13636093'"]
+
+
 def test_a_run_that_errs_adds_nothing_to_the_record(opts):
     _record(opts, {"acorn": {"bdf": "0001:01:00.0"}}, 1)
     now = Seen("acorn", {"bdf": "0001:01:00.0", "dna": "0x1"}, result="error")
     report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
     assert "added" not in report["state"]
     assert "dna" not in state.load(opts["state"])["acorn"]
+
+
+# -- lock files ------------------------------------------------------------------------------------------------
+
+
+class Opens:
+    """Wraps os.open: records each (path, flags), and can refuse with EACCES as fs.protected_regular does."""
+
+    def __init__(self, monkeypatch, module, refuse=False):
+        self.calls, self.refuse, self.real = [], refuse, module.os.open
+        monkeypatch.setattr(module.os, "open", self)
+
+    def __call__(self, path, flags, mode=0o777):
+        self.calls.append((str(path), flags))
+        if self.refuse:
+            raise PermissionError(13, "Permission denied", str(path))
+        return self.real(path, flags, mode)
+
+
+def test_an_existing_lock_file_is_opened_without_o_creat(tmp_path, monkeypatch):
+    import os
+
+    lock = tmp_path / "board.lock"
+    lock.write_text("")
+    opens = Opens(monkeypatch, core)
+    _hold(lock)
+    assert opens.calls and all(not flags & os.O_CREAT for _, flags in opens.calls)
+    assert all(not flags & (os.O_WRONLY | os.O_RDWR | os.O_TRUNC) for _, flags in opens.calls)
+
+
+def test_a_missing_lock_file_is_created_0644_with_o_excl(tmp_path, monkeypatch):
+    import os
+
+    old = os.umask(0o022)
+    try:
+        lock = tmp_path / "run" / "board.lock"
+        opens = Opens(monkeypatch, core)
+        _hold(lock)
+    finally:
+        os.umask(old)
+    assert (lock.stat().st_mode & 0o777) == 0o644
+    created = [flags for _, flags in opens.calls if flags & os.O_CREAT]
+    assert created and all(flags & os.O_EXCL for flags in created)
+
+
+def test_a_lock_file_that_cannot_be_opened_is_a_clear_error(tmp_path, monkeypatch):
+    lock = tmp_path / "board.lock"
+    lock.write_text("")
+    Opens(monkeypatch, core, refuse=True)
+    with pytest.raises(Problem) as refused:
+        _hold(lock)
+    assert str(lock) in str(refused.value) and "owned by" in str(refused.value)
+
+
+def _hold(lock):
+    with core.hold_lock(lock, "board"):
+        pass
+
+
+def test_a_normal_lock_file_is_opened(tmp_path):
+    lock = tmp_path / "board.lock"
+    lock.write_text("")
+    _hold(lock)
+    assert lock.is_file() and not lock.is_symlink()
+
+
+@pytest.mark.parametrize("target", ["dangling", "real"])
+def test_a_lock_file_that_is_a_symlink_is_refused_and_named(tmp_path, target):
+    # A dangling link made the plain open fail with ENOENT and the O_EXCL create with EEXIST, for ever, at 100%
+    # CPU, before the bounded wait. A link, dangling or to a real file, is never followed: a clear error.
+    real = tmp_path / "elsewhere"
+    if target == "real":
+        real.write_text("keep")
+    lock = tmp_path / "board.lock"
+    lock.symlink_to(real)
+    with pytest.raises(Problem) as refused:
+        _hold(lock)
+    assert str(lock) in refused.value.reason and "symlink" in refused.value.reason
+    assert lock.is_symlink() and (real.read_text() == "keep" if target == "real" else not real.exists())
+
+
+def test_a_lock_file_that_keeps_vanishing_is_an_error_not_a_spin(tmp_path, monkeypatch):
+    import os
+
+    lock = tmp_path / "board.lock"
+    calls = []
+
+    def racing(path, flags, mode=0o777):  # gone for the plain open, there for the create: every time
+        calls.append(flags)
+        raise FileExistsError(17, "File exists") if flags & os.O_CREAT else FileNotFoundError(2, "No such file")
+
+    monkeypatch.setattr(core.os, "open", racing)
+    with pytest.raises(Problem, match="gone, then there") as refused:
+        _hold(lock)
+    assert str(lock) in refused.value.reason and len(calls) == 2 * core.LOCK_OPEN_TRIES
+    assert all(flags & os.O_NOFOLLOW for flags in calls)
+
+
+def test_hold_lock_flock_works_on_the_read_only_descriptor(tmp_path):
+    import fcntl
+
+    lock = tmp_path / "board.lock"
+    with core.hold_lock(lock, "board"), open(lock) as other, pytest.raises(BlockingIOError):
+        fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)

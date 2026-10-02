@@ -37,7 +37,6 @@ import pathlib
 from ...core import Problem, pci_devices
 from . import spi_flash
 
-SCHEMA_VERSION = 1
 SYSFS_PCI = pathlib.Path("/sys/bus/pci/devices")
 IMAGES = pathlib.Path("/usr/share/fpgas-online/acorn-pcie/images")
 LOCK = pathlib.Path(spi_flash.LOCK)  # one user of the SoC at a time: this, or an operator's spi_flash.py
@@ -85,9 +84,6 @@ OTHER_BOARDS = {
     "xilinx-xdma": "Xilinx XDMA design (likely PicoEVB)",
 }
 NO_TEST_DESIGN = "fpgas.online has no test design for this board yet"
-
-# Worst last. "none": no Acorn at all; "read": identify() read what it was asked to.
-SEVERITY = ("none", "read", "pass", "fail", "error")
 
 XADC_TEMPERATURE = ("temperature_c", "xadc_temperature")
 XADC_VOLTAGES = (("vccint_v", "xadc_vccint"), ("vccaux_v", "xadc_vccaux"), ("vccbram_v", "xadc_vccbram"))
@@ -262,6 +258,19 @@ def read_identifier(bus):
     return out.decode("ascii", "replace")
 
 
+SOC_IDENTIFIER_PREFIX = "fpgas-online "  # our SoC's identifier: "fpgas-online Acorn PCIe SoC cle-215+ <date>"
+
+
+def soc_model(kind, identifier):
+    """The card our SoC says it was built for (rpi-hwid's soc_model), from its identifier string: the variant
+    the identifier names, when the running design is ours (`kind` fpgas-online) and its identifier is our
+    SoC's. None for anything else (SQRL's factory image, a design we do not know, no identifier)."""
+    if kind != "fpgas-online" or not identifier or not identifier.startswith(SOC_IDENTIFIER_PREFIX):
+        return None
+    words = identifier.casefold().split()
+    return next((v for v in OUR_SUBSYSTEMS.values() if v in words), None)
+
+
 # -- the release ---------------------------------------------------------------------------------------
 
 
@@ -419,19 +428,52 @@ def scratch_faults(read, write, csrs, where):
     return faults
 
 
+# -- --identify's bus ----------------------------------------------------------------------------------
+
+# The only CSRs --identify writes: the SPI master's MOSI and control registers and the flash's chip select, which
+# the flash's RDID and OTPR reads need. Nothing else of the SoC is written; ctrl_reset in particular never is
+# (a SoC reset after DMA has wedged a Pi 5's PCIe root complex).
+IDENTIFY_WRITES = frozenset({spi_flash.SPI_MOSI_HI, spi_flash.SPI_MOSI_LO, spi_flash.SPI_CONTROL, spi_flash.FLASH_CS_N})
+
+
+class IdentifyBus:
+    """BAR0 for --identify: every read, and writes only to IDENTIFY_WRITES; any other write is refused."""
+
+    def __init__(self, bus):
+        self._bus = bus
+
+    def read(self, addr):
+        return self._bus.read(addr)
+
+    def write(self, addr, value):
+        if addr not in IDENTIFY_WRITES:
+            raise Problem("error", f"--identify refused to write CSR {addr:#x}: it writes only the SPI master "
+                                   "and the flash's chip select")  # fmt: skip
+        self._bus.write(addr, value)
+
+
 # -- the flash -----------------------------------------------------------------------------------------
 
 
 def flash_identity(flash):
-    """The flash row of an rpi-hwid label. openFPGALoader reads an S25FL-S's unique id with the same OTPR
-    (0x4B, 3 address + 1 dummy, 16 bytes from 0) that spi_flash.identify() sends; on pi-sw2-p48 the two gave
-    the same 128 bits in the same order."""
+    """Everything the flash said about itself (spi_flash.Flash.identify()): all six RDID bytes, the part, its
+    size, the status and configuration registers, and the factory unique ID. openFPGALoader reads an
+    S25FL-S's unique id with the same OTPR (0x4B, 3 address + 1 dummy, 16 bytes from 0) that identify() sends;
+    on pi-sw2-p48 the two gave the same 128 bits in the same order.
+
+    part, jedec and unique_id are what the recorded state has always had;
+    identity.flash_fields() turns the whole read into the identity's flash fields."""
     ident = flash.identify()
     return {
         "part": ident["part"],
         "jedec": "0x" + ident["rdid"][:6],
         "unique_id": ident["unique_id"],
         "size_bytes": ident["size_bytes"],
+        "rdid": ident["rdid"],
+        "status": ident["status"],
+        "config": ident["config"],
+        "quad_enabled": ident["quad_enabled"],
+        "unique_id_opcode": ident["unique_id_opcode"],
     }
 
 
@@ -456,47 +498,3 @@ def flash_slots(bus, images, files, layout):
             entry["first_difference"] = f"{addr + diff:#x}"
         slots.append(entry)
     return slots
-
-
-# -- the live identity read, for rpi-hwid's labels -----------------------------------------------------
-
-
-def _identify_board(dev, images, release, open_bar, root):
-    reason = not_ours(dev)
-    if reason:
-        raise Problem("fail", reason)
-    manifest, files = release
-    builds, _ = expectations(manifest, files, dev["variant"])
-    note = {}
-    with driver_released(dev, note, root), open_bar(dev["bdf"]) as bus:
-        out, _, _ = gate(bus, images, files, builds, manifest.get("tag"))
-        out["flash"] = flash_identity(spi_flash.Flash(bus))
-    if "rebind_error" in note:
-        raise Problem("error", note["rebind_error"], **out)
-    return {**out, "result": "read"}
-
-
-def identify(devices, images=IMAGES, open_bar=open_bar0, root=SYSFS_PCI):
-    """Each board's flash row, read live and nothing more: no slot is read. For rpi-hwid's labels.
-
-    The same gates as the full check apply before anything is sent to the flash. "read" for a board
-    whose flash identified itself; otherwise the board's result and reason say why not."""
-    try:
-        release = load_release(images) if any(d["kind"] == "fpgas-online" for d in devices) else None
-    except Problem as p:
-        release, failure = None, p
-    else:
-        failure = None
-    boards = []
-    for dev in devices:
-        board = dict(dev)
-        try:
-            if failure and dev["kind"] == "fpgas-online":
-                raise failure
-            board.update(_identify_board(dev, images, release, open_bar, root))
-        except Problem as p:
-            board.update(p.seen, result=p.result, reason=p.reason)
-        boards.append(board)
-    worst = max((b["result"] for b in boards if b["result"] != "read"), key=SEVERITY.index, default=None)
-    result = worst or ("read" if boards else "none")
-    return {"schema_version": SCHEMA_VERSION, "result": result, "boards": boards}
