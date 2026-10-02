@@ -372,10 +372,37 @@ def driver_bound_reason(driver):
     return f"{what} is bound: not checked"
 
 
+class LockError(Exception):
+    """The lock file cannot be opened (another user's file, say)."""
+
+
+def open_lock(path):
+    """A read-only descriptor of the lock file `path`: opened without O_CREAT when it is there (in the sticky
+    /run/lock, fs.protected_regular refuses even root an O_CREAT open of another user's file), created 0644
+    only when it is not. The verify core's core.open_lock does the same; this file stays stdlib-only."""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    while True:
+        try:
+            try:
+                return os.open(path, os.O_RDONLY | os.O_CLOEXEC)
+            except FileNotFoundError:
+                pass
+            try:
+                return os.open(path, os.O_RDONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o644)
+            except FileExistsError:
+                continue  # created in between: open that one
+        except PermissionError as e:
+            try:
+                owner = f"uid {os.stat(path).st_uid}"
+            except OSError:
+                owner = "unknown"
+            raise LockError(f"cannot open the lock file {path} (owned by {owner}): {e.strerror}; it should be "
+                            "root's: remove it, or reboot") from None  # fmt: skip
+
+
 def hold_lock(path=LOCK):
     """Take the SoC lock, waiting for whoever has it; the returned file holds it until closed."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    held = open(path, "w")  # noqa: SIM115 -- the open file is the lock, kept by the caller
+    held = os.fdopen(open_lock(path), "r")
     fcntl.flock(held, fcntl.LOCK_EX)
     return held
 
@@ -423,7 +450,12 @@ examples:
     write.add_argument("--i-know-this-writes-golden", action="store_true", help="allow writing the golden slot")
     args = parser.parse_args(argv)
 
-    lock = hold_lock(LOCK)  # noqa: F841 -- held until main returns
+    try:
+        lock = hold_lock(LOCK)  # noqa: F841 -- held until main returns
+    except LockError as e:
+        print(f"error: {e}")
+        print("RESULT: FAIL")
+        return 1
     driver = ("litepcie" if litepcie_bound_anywhere() else None) if args.uart else bound_driver(args.bdf)
     if driver:
         print(f"error: {driver_bound_reason(driver)}")

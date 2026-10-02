@@ -91,6 +91,10 @@ sudo fpgas-acorn-debug identify            # the same as fpgas-acorn-verify --id
   unless `--report` says otherwise.
 * Only one command uses a board at a time. A second one prints
   `waiting for another user of the <board> to finish...` and waits.
+* The locks are files: `/run/fpgas-online/<board>.lock`, and the Acorn's `/run/lock/fpgas-acorn.lock` (shared
+  with `fpgas-acorn-flash`). The packages' `/usr/lib/tmpfiles.d/fpgas-online-*.conf` create them at boot,
+  root-owned and 0644, so no other user can create one first. A lock file that cannot be opened is an error
+  naming the file and its owner: remove it, or reboot.
 * Which board a host checks is `[verify] fpga-board = <board>` or `auto`, in `*.ini` files: the board's
   package puts one in `/usr/share/fpgas-online/verify/mode.d/`; one in `/etc/fpgas-verify/` overrides it.
 * Options for the boot run go in `FPGAS_VERIFY_ARGS` in `/etc/default/fpgas-verify`.
