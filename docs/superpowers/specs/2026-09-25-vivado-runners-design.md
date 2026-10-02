@@ -1,7 +1,8 @@
 # Sandboxed self-hosted Vivado runners — design
 
 Date: 2026-09-25
-Status: design approved in conversation, awaiting written-spec review
+Status: design approved in conversation. Revised 2026-10-03 with what writing the
+implementation plans found (see "Implementation plans" at the end).
 
 ## Goal
 
@@ -170,15 +171,22 @@ rebuild (the image's lock hash is shown in the job log to make this obvious).
 `runner-base-<YYYY-MM-DD>.<n>.qcow2`, built by an admin with a script in the
 runner repository, from the Debian 13 generic cloud image. It contains:
 
-* `actions/runner` at a pinned version, started once with `--jitconfig` and
-  `--disableupdate`. The runner is upgraded by rebuilding the image.
+* `actions/runner` at a pinned version, started once with `--jitconfig`.
+  GitHub stops sending jobs to a runner more than 30 days behind the latest
+  release, so the image is rebuilt at least monthly; a weekly check opens an
+  issue when a newer release exists. (`--disableupdate` is a `config.sh` flag
+  and a JIT runner never runs `config.sh`; Plan 2 records what a JIT config
+  says about self-update.)
 * `uv`, CPython 3.12, `git`, `make`, `gcc-riscv64-unknown-elf`, and the X11 /
   ncurses / libtinfo libraries Vivado requires
 * the pre-warmed uv cache
-* a boot unit that mounts the seed ISO, the Vivado disk (`ro`) at `/opt/Xilinx`
+* a boot unit that mounts the seed (an ISO 9660 image on a read-only virtio
+  disk, found by its serial), the Vivado disk (`ro`) at `/opt/Xilinx`
   and the scratch disk at the runner work directory; runs the runner; powers
   off when it exits, successfully or not
-* no SSH server, no user with a password, no credentials
+* no SSH server, no `sudo`, no user with a password, no credentials
+* `UV_PYTHON` set to the Python the cache was built for, and
+  `UV_PYTHON_DOWNLOADS=never`
 
 Image builds need ordinary internet access (apt, PyPI), so they run on a
 separate build network, never on `vrbr0` and never from a job.
@@ -239,18 +247,23 @@ runner_group = "vivado"
 [slots]
 count = 4             # big-storage; buddy 0 or 1 (D-3)
 vcpus = 8
-memory_gib = 24
+memory_gib = 16
 numa_nodes = [0, 0, 1, 1]   # big-storage only
 scratch_gib = 60
 wall_limit_minutes = 120
 labels = ["self-hosted", "linux", "x64", "vivado-2025.2"]
 ```
 
-The numbers are starting values. Phase 0 replaces them with measured ones.
+Measured on desktop.buddy on 2026-10-02 (12 threads, Vivado 2025.2): the
+largest design (Acorn PCIe SoC, xc7a200t) peaks at 3.3 GB and takes 8.5
+minutes; a UART SoC 2.8 GB and 3.5 minutes. Slot memory is the peak plus 4 GiB
+for the guest, rounded up to a multiple of 4 and never under 16: **16 GiB**.
+The earlier 24 GiB was a guess. Plan 1 re-measures with `/usr/bin/time -v`.
 
 ### Slot loop
 
-One asyncio task per slot; state under `/var/lib/vivado-runners/slot-N/`.
+One thread per slot (every hypervisor call is a blocking subprocess); state
+under `/var/lib/vivado-runners/slot-N/`.
 
 1. Resolve `runner-base-current` and `vivado-current`.
 2. Create a qcow2 overlay on the base image and a fresh sparse scratch disk.
@@ -259,9 +272,12 @@ One asyncio task per slot; state under `/var/lib/vivado-runners/slot-N/`.
 4. `virsh create` a **transient** domain named `vr-<host>-<N>` (vCPU/RAM caps,
    `vrbr0` NIC, the four disks, no graphics, no host devices).
 5. Wait for the domain to shut off, or destroy it once the wall limit passes.
-6. Copy the runner's `_diag` log off the scratch disk (read-only loop mount),
-   then delete overlay, scratch disk and seed ISO. If the runner never
-   registered, delete it from GitHub. Go to 1.
+6. Delete overlay, scratch disk and seed ISO. If GitHub still lists the
+   runner, it never ran a job: delete it. Go to 1.
+
+The host never mounts or parses a disk a job VM has written to. (An earlier
+draft copied the runner's `_diag` log off the scratch disk; that would have
+the host read a filesystem a hostile job controls.)
 
 With fixed slots and no inbound webhook, an idle slot is a booted VM waiting in
 the runner's long poll. GitHub queues jobs until a slot takes one.
@@ -270,24 +286,25 @@ the runner's long poll. GitHub queues jobs until a slot takes one.
 
 | Failure | Handling |
 |---|---|
-| Controller (re)start | Destroy every `vr-<host>-*` domain, delete slot files, deregister offline runners named `<host>-*` |
+| Controller (re)start | Destroy every `vr-<host>-*` domain, delete slot files, deregister every runner named `<host>-slot*` (its VM is gone, whatever GitHub's status says) |
 | JIT request fails | Exponential backoff to 10 min; logged; slot stays empty |
-| VM does not boot, or runner does not register within 5 min | Tear down and retry; after 3 consecutive failures the slot stops and logs an alert |
+| VM does not boot, runner does not register within 5 min, or the VM powers off without having run a job | Tear down and retry; after 3 consecutive failures the slot stops and logs an alert |
 | Job hangs | Workflow `timeout-minutes` first; controller wall limit as backstop |
 | Host free disk below threshold | No new slot is started until space returns |
 
 ### Observability
 
-* Journal, one structured line per job: slot, runner name, GitHub run/job id
-  (from `_diag`), image versions, duration, exit reason.
+* Journal, one structured line per job: slot, runner name, image versions,
+  duration, exit reason. GitHub's jobs API reports the same runner name as
+  `runner_name`, which ties a line to a workflow run.
 * Proxy refusals logged with the source slot.
 * `vivado-runners status` prints each slot's state, runner, image versions and
   age.
 
 ## test-designs changes
 
-Each `build-*.yml` gains Vivado jobs for its Xilinx design × board pairs, next
-to the openXC7 jobs:
+One new workflow, `Build: Vivado` (`build-vivado.yml`), runs one job per
+design × board × variant from a Python matrix. Each job is:
 
 ```yaml
 runs-on: [self-hosted, vivado-2025.2]
@@ -299,11 +316,26 @@ permissions:
 timeout-minutes: 90
 ```
 
-Vivado job names start with `Vivado:` (for example `Vivado: Arty A7-35T`).
-`collect-bitstreams.yml` selects the jobs it waits for with
-`^(Arty|NeTV2…|Fomu|TT FPGA|netv2)`, so this prefix keeps the openXC7 bundle
-independent of runner availability. A runner outage then delays only the
-Vivado jobs.
+It is a separate workflow, not jobs inside each `build-*.yml`, because
+`collect-bitstreams.yml` waits for every other workflow run of the commit to
+finish, and takes artifacts only from finished runs. A Vivado job inside
+`build-uart-test.yml` would hold that run open while it waits for a runner, so
+a runner outage would stall the openXC7 bundle. The separate workflow is left
+out of the bundle by name. Vivado job names also start with `Vivado:`, which
+the bundle's job-name pattern (`^(Arty|NeTV2…|Fomu|TT FPGA|netv2)`) cannot
+match. A runner outage then delays only the Vivado jobs. Vivado checks must
+not become required status checks, for the same reason.
+
+The matrix is 39 jobs: `uart`, `spi-flash-id`, `ddr-memory`, `pmod-loopback`
+and `pmod-pin-id` on Arty A7-35, NeTV2 A7-35/A7-100 and the three Acorn
+variants; `ethernet-test` on Arty and NeTV2; and the Acorn PCIe SoC in three
+variants, plain and golden. Two things found while planning:
+
+* On `main` no LiteX SoC design builds with `--toolchain vivado`:
+  `patch_yosys_template()` asserts on the Vivado toolchain. Plan 3 starts with
+  that one-function fix.
+* `pcie-enumeration` is not in the matrix: under Vivado it defines `pcie_s7`
+  twice. The fix exists only on the unmerged pull request #14.
 
 The `if:` keeps fork PRs off the runners in addition to the runner group
 restriction and the organisation's fork-approval policy.
@@ -314,22 +346,26 @@ A new `release-vivado-bitstreams.yml` (on tag / `workflow_dispatch`) runs on
 `ubuntu-latest`. It downloads the Vivado jobs' artifacts, runs
 `designs/acorn-pcie/tools/publish_release.py`, and holds `contents: write`.
 The all-designs release (`vivado-bitstreams-v0.0-496-gf162f60`, 2026-04-17) was
-made by hand and no script for it is in the repo; Phase 5 adds one beside
-`publish_release.py`, with the same manifest and SHA256SUMS format. The runners never hold a
-token that can write. This replaces today's manual publish from a build tree on
-buddy.
+made by `scripts/publish_vivado_bitstreams.py`, which exists only on the
+unmerged pull request #14 and also does the building. Phase 5 adds a smaller
+script that only assembles a release from CI artifacts, keeping that release's
+file names, `manifest.json` schema and `SHA256SUMS` format. The runners never
+hold a token that can write. This replaces today's manual publish from a build
+tree on buddy.
 
 ## Repositories and ownership
 
 * **`fpgas-online/fpgas.online-vivado-runners`** (new, Apache-2.0, standard
   repo defaults): controller, tests, image build scripts, proxy and nftables
   configuration, Ansible playbook for both hosts. The controller ships as a deb
-  through the secretless `debs` Release model used by nfsroot-watchdog.
-  The spec moves here once the repo exists.
+  in a signed apt repository on GitHub Pages, built and published with
+  `mithro/apt-repo-action` as nfsroot-watchdog is. The spec and plans move
+  here once the repo exists.
 * **fpgas.online-test-designs**: the Vivado jobs and the release workflow.
 * **Organisation settings (Tim):** create the GitHub App and install it on the
-  org; create runner group `vivado` restricted to test-designs; keep fork
-  workflow approval on.
+  org; create runner group `vivado` restricted to test-designs (with "allow
+  public repositories" on, since the repository is public); require approval
+  for fork workflows from all external contributors.
 
 ## Testing
 
@@ -340,13 +376,17 @@ buddy.
   each check a failing step if the promise is broken:
   * DNS resolution fails; `1.1.1.1:443`, a LAN address, a fleet VLAN address
     and the host's non-bridge address are unreachable
-  * the proxy refuses a non-allowlisted host and an IP literal
+  * the proxy refuses a non-allowlisted host, an IP literal, and a port other
+    than 443; there is no default route and no IPv6 address
+  * the job is not root, has no `sudo`, and cannot read the seed disk
   * `/opt/Xilinx` is read-only
   * a marker written by run A is absent in run B (two sequential jobs)
   * no GitHub App key, no SSH keys and no `ACTIONS_*` token beyond the job's
     own are readable in the VM
 * End to end: Vivado build of the Acorn UART design on the runner; the `.bit`
   header reports Vivado 2025.2 and the artifact uploads.
+* The squid allowlist's behaviour is also tested in the runner repo's CI,
+  against real destinations, without a VM.
 
 ## Rollout
 
@@ -354,10 +394,10 @@ Each phase is a PR with CI green before the next starts.
 
 | Phase | Work | Exit check |
 |---|---|---|
-| 0 | Host inventory is done (above). Measure Vivado peak RAM for the largest design; build the trimmed squashfs and record its size; record GitHub's blob hostnames from a proxied run | Numbers and hostnames written into this spec |
-| 1 | Create the runner repo; controller + unit tests; image build; proxy + nftables | Unit tests green; image boots under the controller locally |
-| 2 | Deploy to big-storage, 1 slot, runner group live | Sandbox acceptance workflow passes; one Vivado bitstream built |
-| 3 | test-designs Vivado matrix | Full Vivado matrix green on big-storage |
+| 0 | Host inventory is done (above). Measure Vivado peak RAM for the largest design; build the squashfs and record its size; find out what `uv sync` needs with PyPI blocked | Numbers written into `docs/measurements.md` |
+| 1 | Create the runner repo; controller + unit tests; image build scripts; proxy + nftables; package | Unit tests green; proxy allowlist test green; package builds and installs |
+| 2 | Deploy to big-storage, 1 slot, runner group live; first image build and first boot (desktop.buddy has no libvirt); record GitHub's blob hostnames from the proxy log | Sandbox acceptance workflow passes |
+| 3 | test-designs: the `patch_yosys_template()` fix, then one design end to end, then the whole matrix | Full Vivado matrix green on big-storage |
 | 4 | Raise big-storage to its measured slot count; buddy joins with one slot only if D-3 frees the RAM | Matrix runs in parallel; host load stays within limits |
 | 5 | Release workflow replaces the manual publish | A `vivado-bitstreams-*` release made by CI with matching SHA-256s |
 
@@ -372,8 +412,23 @@ Each phase is a PR with CI green before the next starts.
 ## Open decisions
 
 * **D-1** What to do if `*.blob.core.windows.net` cannot be narrowed.
-* **D-2** Name of the runner repository (proposed
-  `fpgas-online/fpgas.online-vivado-runners`).
+* **D-2** Decided 2026-10-02: the runner repository is
+  `fpgas-online/fpgas.online-vivado-runners`.
 * **D-3** Whether buddy takes a slot at all. It has ~15 GiB available and is
-  already swapping, so a 24 GiB slot needs its other VMs trimmed first.
-  big-storage alone (4 slots) may be enough.
+  already swapping, so even a 16 GiB slot needs its other VMs trimmed first.
+  big-storage alone (4 slots, room for 8) may be enough.
+* **CI-1 to CI-6** are decisions about the test-designs workflows (who
+  publishes the first CI-made release, the Acorn PCIe release order, pull
+  request #14, the Arty A7-100T, the full matrix on every push, failing on
+  missed Vivado timing). They are set out at the end of Plan 3.
+
+## Implementation plans
+
+In `docs/superpowers/plans/`:
+
+1. `2026-10-02-vivado-runners-1-runner-repo.md`: the runner repository
+   (rollout Phases 0 and 1).
+2. `2026-10-02-vivado-runners-2-deployment.md`: deployment to big-storage and
+   the sandbox proof (Phases 2 and 4).
+3. `2026-10-02-vivado-runners-3-test-designs-ci.md`: the Vivado workflow and
+   releases in test-designs (Phases 3 and 5).
