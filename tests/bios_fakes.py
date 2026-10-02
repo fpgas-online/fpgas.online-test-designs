@@ -51,6 +51,10 @@ class FakeBios:
             self.rx += PROMPT
         return len(data)
 
+    @property
+    def in_waiting(self):
+        return min(len(self.rx), self.chunk or len(self.rx))
+
     def read(self, size=1):
         if not self.rx:
             self.now += self.timeout or 0.0

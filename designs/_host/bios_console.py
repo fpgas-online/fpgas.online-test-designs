@@ -66,7 +66,9 @@ class BiosConsole:
         deadline = self.clock() + timeout
         data = b""
         while self.clock() < deadline:
-            chunk = self.ser.read(4096)
+            # One byte, or all that is already waiting: a read for more would sit out its whole timeout
+            # after a short reply.
+            chunk = self.ser.read(max(1, getattr(self.ser, "in_waiting", 0)))
             if not chunk:
                 continue
             data += chunk
