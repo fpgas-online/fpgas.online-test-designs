@@ -19,7 +19,7 @@ sudo apt install fpgas-online-arty
 | `fpgas-online-arty-bitstreams` | the Arty A7-35T test bitstreams built by the same commit's CI, in `/usr/share/fpgas-online/arty/bitstreams/` |
 | `fpgas-online-verify` | `fpgas-verify`, the unit, and the host test scripts |
 
-At boot the check finds the Arty by its FT2232H on USB (`0403:6010`). It then loads the UART, DDR, SPI flash, Ethernet and PMOD pin identification test designs into SRAM with openFPGALoader, one at a time, and runs each one's host test. The Ethernet test pings the design through the Pi's USB Ethernet adapter cabled to the Arty's RJ45; it never touches an interface the Pi uses itself. The pin identification scan checks the PMOD HAT cabling against the expected map (HAT JA/JB/JC → Arty JA/JB/JC, [PMOD Cable Routing](arty-a7-pin-mapping.md#pmod-cable-routing-hat--arty)). A failure in either fails the board, like any other test. Last, it reads back the flash's boot image region (the first 2.1 MiB) through openFPGALoader's SPI-over-JTAG bridge. The FTDI serial number, the flash's JEDEC ID and that region's sha256 are what `changed` compares. The Arty is left running the SPI-over-JTAG bridge, and comes back to its flash image at the next power cycle. Only the PMOD loopback test is left to `fpgas-arty-debug`.
+At boot the check finds the Arty by its FT2232H on USB (`0403:6010`). It reads the FPGA's whole JTAG IDCODE over that FT2232H, which must be an XC7A35T in any silicon version ([verify.md: the IDCODE](../verify.md#the-jtag-idcode)). It then loads the UART, DDR, SPI flash, Ethernet and PMOD pin identification test designs into SRAM with openFPGALoader, one at a time, and runs each one's host test. The Ethernet test pings the design through the Pi's USB Ethernet adapter cabled to the Arty's RJ45; it never touches an interface the Pi uses itself. The pin identification scan checks the PMOD HAT cabling against the expected map (HAT JA/JB/JC → Arty JA/JB/JC, [PMOD Cable Routing](arty-a7-pin-mapping.md#pmod-cable-routing-hat--arty)). A failure in either fails the board, like any other test. Last, it reads back the flash's boot image region (the first 2.1 MiB) through openFPGALoader's SPI-over-JTAG bridge. The FTDI serial number, the IDCODE, the flash's JEDEC ID and that region's sha256 are what `changed` compares. The Arty is left running the SPI-over-JTAG bridge, and comes back to its flash image at the next power cycle. Only the PMOD loopback test is left to `fpgas-arty-debug`.
 
 For the fpgas.online openFPGALoader build, add the [fpgas.online-fpga-tools repository](https://github.com/fpgas-online/fpgas.online-fpga-tools#debian-packages-bookworm-trixie-sid-arm64-armhf) **before** installing; otherwise apt installs Debian's `openfpgaloader`, which also works for the Arty.
 
@@ -221,12 +221,13 @@ on the welland pool image does not ship them, so fetch them from
 by hand.
 
 **What the welland pool has.** Read through each board's own FT2232: every
-Welland Arty is an XC7A35T (idcode `0x362d093`) with a Spansion part at JEDEC
+Welland Arty is an XC7A35T (`--detect` prints `idcode 0x362d093`, the IDCODE without its version) with a Spansion part at JEDEC
 `0x012018`, so none has the Micron flash. The other three signals worth reading at the same time, since
 neither the serial nor the model badge gives them:
 
 ```bash
 sudo openFPGALoader -c digilent --detect        # idcode -> 35T or 100T
+sudo openFPGALoader -c digilent --detect --verbose-level 2  # "- 0 -> 0x...": the whole IDCODE
 sudo openFPGALoader -c digilent --read-dna      # the die's Device DNA
 ```
 
