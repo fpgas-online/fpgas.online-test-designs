@@ -55,8 +55,9 @@ def test_a_flash_read_on_a_port_opened_after_the_design_started_passes():
     assert found["manufacturer"] == "Winbond"
     assert found["capacity_bytes"] == 16 * 1024 * 1024
     assert found["commands"] == ["read", "read"]
-    # The flash was asked again for the attach and for each reading: nothing printed at start was used.
-    assert fake.machine.flash.selects == selects + 3
+    # The flash was asked again for each of the attach's two newlines and for each reading: nothing printed at
+    # start was used.
+    assert fake.machine.flash.selects == selects + 4
 
 
 def test_the_fomu_s_known_flash_passes_and_has_no_capacity_claimed():
@@ -103,7 +104,7 @@ def test_two_readings_that_differ_fail():
 
     def flaky_write(data):
         asked.append(data)
-        if len(asked) == 3:  # the attach, the first reading, then this one
+        if len(asked) == 4:  # the attach's two newlines, the first reading, then this one
             fake.machine.flash.jedec = bytes((0xEF, 0x40, 0x10))
         return write(data)
 

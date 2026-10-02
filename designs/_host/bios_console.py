@@ -124,7 +124,10 @@ class BiosConsole:
     def attach(self, timeout=ATTACH_TIMEOUT_S):
         """Get the BIOS to its prompt: discard what was waiting, then send newlines until a prompt answers.
 
-        A design that only echoes does not pass: the prompt has to come back, not the newline."""
+        A design that only echoes does not pass: the prompt has to come back, not the newline. Nor does old
+        output that ends with a prompt and arrives after the drain (the TT FPGA's bridge hands over what the
+        design printed at start once the port is open): a prompt only counts once a second newline, sent
+        with nothing left waiting, brings another."""
         self.stale = self._drain()
         deadline = self.clock() + timeout
         seen = ""
@@ -132,8 +135,13 @@ class BiosConsole:
             self.ser.write(b"\n")
             text, found = self._until_prompt(ATTACH_STEP_S)
             seen += text
+            if not found:
+                continue
+            self._drain()  # the prompts of earlier newlines, if the BIOS was still booting
+            self.ser.write(b"\n")
+            text, found = self._until_prompt(ATTACH_STEP_S)
+            seen += text
             if found:
-                self._drain()  # the prompts of earlier newlines, if the BIOS was still booting
                 return
         raise NoPrompt(f"no BIOS prompt within {timeout:.0f} s", seen)
 

@@ -27,7 +27,7 @@ def test_strip_ansi_takes_the_colour_out_of_the_prompt():
 def test_attach_finds_the_coloured_prompt():
     fake = FakeBios(REPLIES)
     console(fake).attach()
-    assert fake.commands == [""]
+    assert fake.commands == ["", ""]  # the second newline confirms the prompt answers
 
 
 def test_attach_discards_boot_output_that_was_waiting_in_the_port():
@@ -42,7 +42,7 @@ def test_attach_discards_boot_output_that_was_waiting_in_the_port():
 def test_attach_waits_for_a_bios_that_is_still_booting():
     fake = FakeBios(REPLIES, deaf_newlines=3)
     console(fake).attach(timeout=30)
-    assert fake.commands == [""]
+    assert fake.commands == ["", ""]
 
 
 def test_attach_gives_up_when_nothing_answers():
@@ -63,6 +63,29 @@ def test_attach_does_not_take_an_echo_for_a_prompt():
     fake = Echo()
     with pytest.raises(bios_console.NoPrompt):
         console(fake).attach(timeout=5)
+
+
+def test_old_output_that_arrives_after_the_drain_is_not_taken_for_an_answer():
+    # An echo-only design behind the TT FPGA's bridge: what it printed at start, ending with a prompt, is
+    # handed over only after the port is open, so it arrives with the echo of the first newline.
+    class LateEcho(FakeBios):
+        held = lines("LiteX custom firmware", "fpgas-online UART Test SoC -- TT FPGA") + b"litex> "
+
+        def write(self, data):
+            self.rx += self.held + bytes(data)
+            self.held = b""
+            return len(data)
+
+    fake = LateEcho()
+    with pytest.raises(bios_console.NoPrompt):
+        console(fake).attach(timeout=10)
+
+
+def test_attach_ends_with_nothing_left_in_the_port():
+    fake = FakeBios(REPLIES, deaf_newlines=1)
+    console(fake).attach(timeout=30)
+    assert fake.rx == b""
+    assert fake.commands == ["", ""]
 
 
 def test_command_returns_the_reply_without_echo_or_prompt():

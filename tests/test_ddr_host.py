@@ -25,7 +25,7 @@ def test_a_working_netv2_passes_on_a_run_it_asked_for():
     fake = FakeBios(ddr_replies("netv2"))
     found = run(fake)
     assert found["result"] == "pass"
-    assert fake.commands == ["", "ident", "mem_list", "sdram_init", "sdram_test"]
+    assert fake.commands == ["", "", "ident", "mem_list", "sdram_init", "sdram_test"]
     assert found["ident"] == "fpgas-online DDR Test SoC -- NeTV2 2026-10-01 11:00:01"
     assert found["leveling"] == {"m0": "b01 14+-14", "m1": "b01 14+-14", "m2": "b01 14+-14", "m3": "b01 14+-14"}
     assert found["bytes_tested"] == 32 * 1024 * 1024
