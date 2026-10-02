@@ -26,6 +26,7 @@ ATTACH_STEP_S = 2.0  # how long a newline is given to bring a prompt before the 
 ATTACH_TIMEOUT_S = 30.0  # the BIOS waits a few seconds for a serial boot before its first prompt
 COMMAND_TIMEOUT_S = 10.0
 DRAIN_S = 5.0  # a port that never goes quiet (noise, a design printing without end) is drained this long
+ECHO_TIMEOUT_S = 1.0  # how long one typed byte is given to come back
 
 
 class NoPrompt(Exception):
@@ -43,6 +44,44 @@ def strip_ansi(text):
 def print_result_json(fields):
     """The script's result as one machine-readable line, for fpgas-verify: RESULT_JSON {...}"""
     print("RESULT_JSON " + json.dumps(fields, sort_keys=True), flush=True)
+
+
+def open_port(port, baud):
+    import serial
+
+    return serial.Serial(port, baud, timeout=1)
+
+
+def run_script(test, title, board, port, baud, run):
+    """A host test script's main: open the port, run(BiosConsole) -> the result's fields, report, exit code.
+
+    Whatever happens to the port, the output ends with RESULT: PASS or FAIL and the RESULT_JSON line."""
+    print(f"Opening {port} at {baud} baud...")
+    print(f"Board: {board}")
+    print()
+    found = {"test": test, "board": board, "result": "fail"}
+    try:
+        ser = open_port(port, baud)
+    except (OSError, ImportError) as e:  # no such port, port in use, no pyserial
+        found["reason"] = f"cannot open {port}: {e}"
+        print(f"FAIL: {found['reason']}")
+    else:
+        try:
+            found = run(BiosConsole(ser, clock=time.monotonic))
+        except OSError as e:  # the port went away (pyserial's SerialException is one)
+            found["reason"] = f"the UART failed: {e}"
+            print(f"FAIL: {found['reason']}")
+        finally:
+            close = getattr(ser, "close", None)
+            if close:
+                close()
+    print()
+    if found["result"] == "pass":
+        print(f"RESULT: PASS — {title} completed successfully")
+    else:
+        print(f"RESULT: FAIL — {title} had failures")
+    print_result_json(found)
+    return 0 if found["result"] == "pass" else 1
 
 
 class BiosConsole:
@@ -76,7 +115,9 @@ class BiosConsole:
                 continue
             data += chunk
             tail = strip_ansi(data[-64:].decode("utf-8", errors="replace"))
-            if tail.rstrip(" ").endswith(PROMPT):
+            # With the space that ends it ("litex> "): the space can arrive after the read that brought the
+            # ">", and one left in the port is read as the echo of the next byte typed.
+            if tail.endswith(PROMPT + " "):
                 return strip_ansi(data.decode("utf-8", errors="replace")), True
         return strip_ansi(data.decode("utf-8", errors="replace")), False
 
@@ -113,6 +154,23 @@ class BiosConsole:
         if reply and reply[0] == command:
             del reply[0]
         return reply
+
+    def echo(self, data, timeout=ECHO_TIMEOUT_S):
+        """Type `data` a byte at a time, without ending the line, and read each byte's echo.
+
+        Returns (sent, got) for every byte that did not come back as itself; `got` is None when nothing came
+        back in `timeout` seconds. End the line with command("") afterwards."""
+        self.ser.timeout = READ_S
+        wrong = []
+        for byte in bytes(data):
+            self.ser.write(bytes([byte]))
+            deadline = self.clock() + timeout
+            got = b""
+            while not got and self.clock() < deadline:
+                got = self.ser.read(1)
+            if got != bytes([byte]):
+                wrong.append((byte, got[0] if got else None))
+        return wrong
 
     def ident(self):
         """The SoC's identifier (SoCCore's ident plus the build time), or None if the BIOS has none."""

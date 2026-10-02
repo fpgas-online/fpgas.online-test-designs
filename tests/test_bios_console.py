@@ -127,6 +127,33 @@ def test_result_json_is_one_parseable_line(capsys):
     assert json.loads(payload) == {"test": "ddr", "result": "pass", "errors": 0}
 
 
+def test_echo_gives_the_bytes_that_did_not_come_back_as_themselves():
+    class Flip(FakeBios):
+        def write(self, data):
+            n = FakeBios.write(self, data)
+            if bytes(data) == b"b":
+                self.rx[-1:] = b"B"
+            if bytes(data) == b"c":
+                del self.rx[-1:]
+            return n
+
+    fake = Flip(REPLIES)
+    bios = console(fake)
+    bios.attach()
+    assert bios.echo(b"abcd") == [(ord("b"), ord("B")), (ord("c"), None)]
+
+
+def test_the_prompt_is_over_only_with_the_space_that_ends_it():
+    # "litex> " ends with a space, which can arrive after the read that brought the ">". Left in the port,
+    # it would be read as the echo of the next byte typed (seen on a NeTV2: every echo one byte late).
+    fake = FakeBios(REPLIES, chunk=1)
+    bios = console(fake)
+    bios.attach()
+    bios.command("mem_list")
+    assert fake.rx == b""
+    assert bios.echo(b"ab") == []
+
+
 def test_a_prompt_that_arrives_a_byte_at_a_time_is_still_found():
     # A read can end inside the prompt's colour codes; the reply must come out the same.
     fake = FakeBios(REPLIES, chunk=1)
