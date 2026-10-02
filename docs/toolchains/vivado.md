@@ -177,49 +177,47 @@ openFPGALoader -b arty \
     designs/uart/build/arty-a7-100-vivado-vivado/gateware/digilent_arty.bit
 ```
 
+### What differs between the flows
+
+- **System clock.** Five SoCs run slower when built with `--toolchain openxc7` than with Vivado
+  (`SYS_CLK_FREQ` in each script), because nextpnr-xilinx does not reach 100 MHz on them: `uart` and
+  `ddr-memory` on the Arty, and `uart` and `spi-flash-id` on the Acorn, at 75 MHz; `ddr-memory` on the Acorn
+  at 80 MHz. Vivado builds of all five run at 100 MHz. `--sys-clk-freq` overrides either.
+- **Timing.** The `yosys-nextpnr` builds fail if a clock misses timing (`require_timing()` in
+  `designs/_shared/platform_fixups.py`, which also retries nextpnr with other seeds). That helper does nothing
+  under Vivado, which derives the PLL clocks itself: read Vivado's timing summary in
+  `<build>/gateware/<platform>_timing.rpt`.
+- **Pins.** `pcie-enumeration` checks every Vivado build's placed pins against its XDC
+  (`designs/_shared/pin_check.py`) and fails the build on a mismatch.
+- **PCIe core.** `vivado-vivado` uses Xilinx's `pcie_7x` IP; the two Yosys flows use the open-source
+  `pcie_7x` sources, which identify as `10ee:7011` where the IP build is `10ee:7021`.
+
+### Designs outside the three flows
+
+`designs/acorn-pcie` (the Acorn's full test design) is not part of this scheme: it has no Makefile, it builds
+with Vivado only, and it writes to `designs/acorn-pcie/build/acorn-<variant>[-golden]/`, which
+`designs/acorn-pcie/tools/publish_release.py` reads. `scripts/publish_vivado_bitstreams.py` skips it.
+
 ## Known limitations
 
-### `yosys-vivado` hybrid flow is broken for SoCs with VexRiscv
+### The `yosys-vivado` flow needs the EDIF fixer
 
-The Yosys → Vivado hybrid flow builds successfully for designs without
-a CPU (e.g. `pmod-loopback`). For any design that instantiates a
-VexRiscv CPU (i.e. every `*_soc_*.py` that inherits from `SoCCore`
-with the default CPU), Vivado's `link_design` rejects the EDIF with:
+Yosys writes an EDIF that Vivado does not accept as it is. `designs/_shared/build_helpers.py` adds a step to
+the generated build script, between Yosys and Vivado, that runs
+[`scripts/fix_yosys_edif_libref.py`](../../scripts/fix_yosys_edif_libref.py) on it. The fixer:
 
-```
-CRITICAL WARNING: [Project 1-486] Could not resolve non-primitive
-    black box cell 'VexRiscv' instantiated as 'VexRiscv' [...]
-ERROR: [DRC INBB-3] Black Box Instances: Cell 'VexRiscv' of type
-    'VexRiscv' has undefined contents and is considered a black box.
-    The contents of this cell must be defined for opt_design to
-    complete successfully.
-```
+- points instances of user modules (VexRiscv and its caches) at their definitions rather than at the
+  black-box stubs Yosys also writes, which Vivado otherwise rejects with `[DRC INBB-3]` (issue #6);
+- removes the single-ended buffers Yosys puts on unused differential pins (`[DRC IOSTDTYPE-1]` on the
+  Acorn's `clk200_p`/`clk200_n`);
+- drops `dont_touch` from GT reference clock port nets (`[Opt 31-38]`);
+- writes binary primitive attributes as sized strings, which Vivado otherwise drops with `[Netlist 29-72]`.
 
-Yosys **does** produce an EDIF that contains the VexRiscv cell
-definition (grep the `.edif` for `(cell VexRiscv` — it's there).
-Vivado's `read_edif` parser treats it as a stub anyway. This is an
-interoperability bug between Yosys's `write_edif -pvector bra -attrprop`
-output and Vivado's EDIF reader; it is not something this plan can
-fix without patching LiteX's `_build_yosys_project` or the
-upstream Yosys EDIF writer.
+A gateware script that does not import `designs._shared.build_helpers` does not get the fixer.
 
-For now:
-
-- `yosys-vivado` is verified to work for
-  `pmod-loopback/gpio_loopback_{arty,netv2}` (pure combinational
-  loopback, no CPU).
-- `pmod-loopback/gpio_loopback_acorn` hybrid build fails for a
-  different reason — an IOStandard mismatch on the unused `clk200_p`
-  pin in the Acorn platform. Acorn-specific, unrelated to the VexRiscv
-  EDIF issue.
-- `yosys-vivado` is expected-fail for every other Xilinx design in the
-  repo matrix (uart, ethernet, ddr, spi-flash, pcie) — every one of
-  them instantiates a VexRiscv soft-CPU and hits the EDIF interop bug.
-
-This limitation is the reason the `build-all-xilinx-yosys-vivado`
-target should be considered best-effort: it currently only produces
-bitstreams for pmod-loopback Arty and NeTV2 (2 of the 18 Xilinx
-design/variant targets in the matrix).
+The last full run of both Vivado flows was on 2026-09-23 with Vivado 2025.2, before this branch was rebased
+onto `main`: all 88 builds (44 design/board/variant combinations in `vivado-vivado` and `yosys-vivado`)
+produced bitstreams and met timing. They have not been rerun since the rebase.
 
 ### `make install-litex` is incomplete for CPU-based SoCs
 

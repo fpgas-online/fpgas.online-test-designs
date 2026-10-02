@@ -21,7 +21,7 @@ GitHub Releases by
   ```sh
   gh auth login
   ```
-- A clean `git status` on the `vivado-xilinx-flows` branch. A dirty
+- A clean `git status`. A dirty
   tree is rejected by default; see [Dirty builds](#dirty-builds) if
   you really want to publish one.
 - Repo setup complete:
@@ -38,7 +38,7 @@ GitHub Releases by
 make publish-vivado-bitstreams ARGS="--dry-run"
 
 # Real publish: creates a GitHub Release with tag
-# vivado-bitstreams-<git describe --tags --always --dirty>.
+# vivado-bitstreams-<git describe --tags --match 'v[0-9]*' --always --dirty>.
 make publish-vivado-bitstreams
 ```
 
@@ -63,7 +63,8 @@ Restrict to one flow with e.g. `--flows vivado-vivado`.
 ## Release tag convention
 
 The release tag is
-`vivado-bitstreams-<git describe --tags --always --dirty>`:
+`vivado-bitstreams-<git describe --tags --match 'v[0-9]*' --always --dirty>`
+(only the `vX.Y` tags count, not the other release tags in this repository):
 
 - Clean tree on a tagged commit: `vivado-bitstreams-v0.1`
 - Clean tree between tags: `vivado-bitstreams-v0.0-490-g99f0785`
@@ -78,8 +79,9 @@ Every release contains:
 
 - `*.bit` / `*.bin` / `*.mcs` / `*.svf` bitstream files, each renamed
   to the canonical form
-  `<design>_<board>-<variant>_<flow>.<ext>`, e.g.
-  `uart_arty-a7-35_vivado-vivado.bit`.
+  `<design>_<board>-<variant>_<flow>_<name>.<ext>`, e.g.
+  `uart_arty-a7-35_vivado-vivado_digilent_arty.bit`. `<name>` is the file's name in the build
+  directory: an Acorn build has three (`sqrl_acorn`, `sqrl_acorn_fallback`, `sqrl_acorn_operational`).
 - `manifest.json` — schema-versioned JSON listing every artifact with
   its design/board/variant/flow, size, and SHA-256. Also records the
   git state and Vivado version used to build.
