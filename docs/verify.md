@@ -478,9 +478,11 @@ From a checkout, the check reads them from the repository.
 
 * `ddr` in detail ([`bist.py`](../verify/src/fpgas_online_verify/boards/acorn/bist.py), the same code
   [`selftest.py`](../designs/acorn-pcie/host/selftest.py) runs):
-  1. The BIOS console is read until it has been quiet for 2 s. The BIOS stops while its console is full and
-     unread ([#47](https://github.com/fpgas-online/fpgas.online-test-designs/pull/47)), so reading it lets it
-     finish setting up the DRAM. Its memtest line, when still there, is reported as `bios_memtest`.
+  1. The BIOS console is read until it has been quiet for 2 s. In the installed release
+     (`vivado-bitstreams-acorn-pcie-20261001-ge568a408e7bd`, built from e568a40, which does not have
+     [#47](https://github.com/fpgas-online/fpgas.online-test-designs/pull/47)) the BIOS stops while its
+     console is full and unread, so reading it lets it finish setting up the DRAM. A build with #47 never
+     waits for a reader. The BIOS's memtest line, when still there, is reported as `bios_memtest`.
   2. Two passes over the whole DRAM, in a low and a high half, each written before either is checked, with
      different data in each; the second pass swaps them. A dead top address bit, or half the expected DRAM,
      fails.
