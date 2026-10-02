@@ -4,6 +4,8 @@ rpi-hwid is never imported unless it is installed: fpgas-verify does not depend 
 """
 
 import dataclasses
+import json
+import pathlib
 
 import pytest
 from fpgas_online_verify import idcode, identity
@@ -97,6 +99,37 @@ def test_the_document_is_versioned_and_holds_every_board():
 def test_every_key_a_board_can_have_is_known():
     assert all(identity.known(k) for k in ("dna", "dna_error", "flash_error", "idcode_error", "board", "usb"))
     assert not identity.known("flash_part") and not identity.known("flash_unique_id")
+
+
+FIXTURE = pathlib.Path(__file__).parent / "data" / "identity-v1-acorn-p48.json"
+# The golden fixture's board: every key, with its JSON type. A change here is a change to identity version 1.
+FIXTURE_BOARD_TYPES = {
+    "bdf": str, "board": str, "build": str, "dna": str, "flash": str, "flash_config": str, "flash_extended_id": str,
+    "flash_jedec": str, "flash_quad": bool, "flash_size_bytes": int, "flash_source": str, "flash_status": str,
+    "flash_uid": str, "flash_uid_bits": int, "flash_uid_opcode": str, "flash_uid_state": str, "idcode": str,
+    "idcode_device": str, "idcode_manufacturer": str, "idcode_manufacturer_id": str, "idcode_part_number": str,
+    "idcode_version": int, "identifier": str, "kind": str, "soc_model": str, "variant": str,
+}  # fmt: skip
+
+
+def test_the_golden_fixture_has_exactly_its_keys_types_and_version():
+    doc = json.loads(FIXTURE.read_text())
+    assert set(doc) == {"schema", "identity_version", "tool", "read_at", "source", "boards"}
+    assert (doc["schema"], doc["identity_version"], doc["source"]) == ("fpgas-verify/identity", 1, "live")
+    (board,) = doc["boards"]
+    assert {k: type(v) for k, v in board.items()} == FIXTURE_BOARD_TYPES
+    assert all(identity.known(k) for k in board)
+    assert (board["dna"], board["idcode"], board["flash_jedec"], board["flash_extended_id"]) == (
+        "0x0054b48664b04854", "0x13636093", "0x010219", "0x4d0180")  # fmt: skip
+    assert (board["flash"], board["flash_uid"], board["flash_size_bytes"], board["kind"], board["variant"]) == (
+        "S25FL256S", "edcbeececb2b2a88b04f914d2e46af90", 33554432, "acorn", "cle-215+")  # fmt: skip
+
+
+def test_rpi_hwid_takes_the_golden_fixture_as_an_fpgaboard_when_it_is_installed():
+    model = pytest.importorskip("rpi_hwid.model")
+    (board,) = json.loads(FIXTURE.read_text())["boards"]
+    fpga = model.FpgaBoard(**{k: v for k, v in board.items() if k in identity.FPGABOARD_FIELDS})
+    assert fpga.kind == "acorn" and fpga.dna == "0x0054b48664b04854" and fpga.flash_uid_bits == 128
 
 
 def test_rpi_hwid_takes_the_dict_as_an_fpgaboard_when_it_is_installed():
