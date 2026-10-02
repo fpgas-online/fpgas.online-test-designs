@@ -4,12 +4,15 @@ Stdlib only: the Pi hosts boot a tmpfs root with no LiteX.
 """
 
 import contextlib
+import errno
 import fcntl
+import os
 import pathlib
 import re
 import struct
 import subprocess
 import sys
+import time
 
 # Worst last: a run's result is the worst of its boards', a board's the worst of its checks'. Only "pass" means
 # the board is ready for users; every other result is a fail of the check, named for what failed.
@@ -146,21 +149,133 @@ def pci_devices(root=SYSFS_PCI):
     return found
 
 
+# -- the Pi's pins -------------------------------------------------------------------------------------------
+
+# pinctrl get: "14: a4    pn | hi // GPIO14 = TXD0", "8: op dl pd | lo // GPIO8 = output"
+PIN_RE = re.compile(r"^\s*(\d+):\s+(\w+)(?:\s+d[hl])?\s+(p[udn])\s*\|\s*(\w+|--)", re.MULTILINE)
+
+
+def pin_states(run, gpios):
+    """{gpio: (function, pull, level)} from pinctrl."""
+    rc, out = run(["pinctrl", "get", ",".join(str(g) for g in gpios)], 10)
+    found = {int(m[0]): (m[1], m[2], m[3]) for m in PIN_RE.findall(out)}
+    if rc != 0 or set(found) != set(gpios):
+        raise Problem("error", f"pinctrl get {','.join(map(str, gpios))} gave {out.strip()[:200]!r}")
+    return found
+
+
+def restore_pins(run, saved, exact=True):
+    """Put each pin back as it was found. `exact`: an output goes back to an output at the level it had;
+    otherwise to an input. Returns the faults."""
+    faults = []
+    for gpio, (func, pull, level) in sorted(saved.items()):
+        args = [func, pull]
+        if func == "op":
+            args = [func, pull, "dh" if level == "hi" else "dl"] if exact else ["ip", pull]
+        try:
+            rc, out = run(["pinctrl", "set", str(gpio), *args], 10)
+        except Problem as p:
+            rc, out = 1, p.reason
+        if rc != 0:
+            faults.append(f"could not put GPIO{gpio} back to {' '.join(args)}: {out.strip()[:200]}")
+    return faults
+
+
 # -- one user of a board at a time ----------------------------------------------------------------------------
 
 
-@contextlib.contextmanager
-def hold_lock(path, what):
-    """Hold `path` locked, waiting (and saying so) while someone else has it."""
+BUSY = "board busy"  # why a bounded wait for a board's lock gave up
+
+
+class Busy(Problem):
+    """Someone else held the board's lock for longer than the caller would wait."""
+
+    def __init__(self, what, timeout):
+        super().__init__("error", BUSY)
+        self.what, self.timeout = what, timeout
+
+
+def _owner(path):
+    """Who owns `path`, as a user name if there is one."""
+    import pwd  # stdlib, Unix only
+
+    try:
+        uid = os.stat(path).st_uid
+    except OSError:
+        return "unknown"
+    try:
+        return pwd.getpwuid(uid).pw_name
+    except KeyError:
+        return f"uid {uid}"
+
+
+LOCK_OPEN_TRIES = 3  # a lock file that vanishes and reappears more often than this is an error, not a spin
+
+
+def open_lock(path):
+    """A read-only file descriptor of the lock file `path`, for flock. A lock file that is there is opened
+    without O_CREAT: in a sticky, world-writable directory (/run/lock) the kernel's fs.protected_regular refuses
+    even root an O_CREAT open of a file another user owns, which would stop the check until a reboot. Only a
+    missing one is created (0644). The package's tmpfiles.d entry creates them root-owned at boot. A lock
+    that cannot be opened is a Problem naming the file and its owner.
+
+    A symlink is never followed (O_NOFOLLOW), and is a Problem naming it: a dangling one would make the open
+    fail with ENOENT and the create with EEXIST for ever. The open is tried LOCK_OPEN_TRIES times at most."""
     path = pathlib.Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w") as f:
+    nofollow = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+    for _ in range(LOCK_OPEN_TRIES):
+        try:
+            if path.is_symlink():  # lstat: a link, dangling or not, is refused before anything opens it
+                raise OSError(errno.ELOOP, "is a symlink")
+            try:
+                return os.open(path, nofollow)
+            except FileNotFoundError:
+                pass
+            try:
+                return os.open(path, nofollow | os.O_CREAT | os.O_EXCL, 0o644)
+            except FileExistsError:
+                continue  # someone created it in between: open theirs
+        except PermissionError as e:
+            raise Problem("error", f"cannot open the lock file {path} (owned by {_owner(path)}): {e.strerror}; "
+                                   "it should be root's: remove it, or reboot") from None  # fmt: skip
+        except OSError as e:
+            if e.errno != errno.ELOOP:
+                raise
+            raise Problem("error", f"the lock file {path} is a symlink, which is never followed: remove it, "
+                                   "or reboot") from None  # fmt: skip
+    raise Problem("error", f"cannot open the lock file {path}: it was gone, then there, {LOCK_OPEN_TRIES} times "
+                           "over") from None  # fmt: skip
+
+
+@contextlib.contextmanager
+def hold_lock(path, what, timeout=None, poll=0.2, clock=time.monotonic, sleep=time.sleep):
+    """Hold `path` locked, waiting (and saying so) while someone else has it. With `timeout` (seconds), give up
+    after that long and raise Busy; without it (the boot check, fpgas-<board>-debug), wait as long as it takes."""
+    with os.fdopen(open_lock(path), "r") as f:
         try:
             fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            print(f"waiting for another user of the {what} to finish...", file=sys.stderr)
-            fcntl.flock(f, fcntl.LOCK_EX)
+            limit = "" if timeout is None else f" (at most {timeout:g} s)"
+            print(f"waiting for another user of the {what} to finish{limit}...", file=sys.stderr)
+            if timeout is None:
+                fcntl.flock(f, fcntl.LOCK_EX)
+            else:
+                _wait_for_lock(f, what, timeout, poll, clock, sleep)
         yield
+
+
+def _wait_for_lock(f, what, timeout, poll, clock, sleep):
+    deadline = clock() + timeout
+    while True:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return
+        except BlockingIOError:
+            left = deadline - clock()
+            if left <= 0:
+                raise Busy(what, timeout) from None
+            sleep(min(poll, left))
 
 
 # -- fleet-events -------------------------------------------------------------------------------------------

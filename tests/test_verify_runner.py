@@ -136,6 +136,66 @@ def test_auto_still_probes_when_every_claim_is_weak_and_keeps_the_claim(opts):
     assert report["chosen_by"] == "auto: USB/PCI IDs, and probing found nothing more"
 
 
+class HeldLocks:
+    """Stands in for core.hold_lock: which locks are held, and that each is waited for without a bound."""
+
+    def __init__(self):
+        self.held, self.taken = [], []
+
+    def __call__(self, path, what, timeout=None):
+        assert timeout is None  # the boot check and the debug tool wait for a board however long it takes
+        outer = self
+
+        class _Held:
+            def __enter__(self):
+                outer.held.append(path)
+                outer.taken.append(path)
+
+            def __exit__(self, *a):
+                outer.held.remove(path)
+                return False
+
+        return _Held()
+
+
+class LockedProbe(Fake):
+    """A Fake whose pins are driven to find it: it records whether its lock was held each time."""
+
+    def __init__(self, name, locks, **kw):
+        super().__init__(name, probes=True, **kw)
+        self.locks, self.under_lock = locks, []
+
+    def probe(self, host):
+        self.under_lock.append(self.lock in self.locks.held)
+        return super().probe(host)
+
+
+def test_the_boot_check_drives_a_boards_pins_only_under_its_lock(opts, monkeypatch):
+    locks = HeldLocks()
+    monkeypatch.setattr(runner, "hold_lock", locks)
+    netv2 = LockedProbe("netv2", locks, probed=[{"variant": "a7-35", "idcode": "0x0362d093"}])
+    report = runner.verify({**opts, "board": "netv2"}, _boards(netv2), usb=[], pci=[])  # configured
+    assert report["result"] == "pass" and netv2.probe_calls == 1 and netv2.under_lock == [True]
+    assert locks.taken == [netv2.lock, netv2.lock] and locks.held == []  # the scan, then the check
+    netv2 = LockedProbe("netv2", locks, probed=[{"variant": "a7-35", "idcode": "0x0362d093"}])
+    weak = Fake("acorn", seen=[{"kind": "litex-other"}], weak=True)
+    runner.verify(opts, _boards(weak, netv2), usb=[], pci=[], mode=("auto", "test"))  # auto, beside a weak claim
+    assert netv2.probe_calls == 1 and netv2.under_lock == [True] and locks.held == []
+
+
+def test_the_debug_tool_drives_a_boards_pins_only_under_its_lock(monkeypatch, capsys):
+    from fpgas_online_verify import debug
+
+    locks = HeldLocks()
+    monkeypatch.setattr(runner, "hold_lock", locks)
+    monkeypatch.setattr(debug, "usb_devices", lambda: [])
+    monkeypatch.setattr(debug, "pci_devices", lambda: [])
+    netv2 = LockedProbe("netv2", locks, probed=[{"variant": "a7-35", "idcode": "0x0362d093"}])
+    assert debug.detect(netv2, netv2.facts(), None) == 0
+    assert netv2.probe_calls == 1 and netv2.under_lock == [True] and locks.held == []
+    assert '"idcode": "0x0362d093"' in capsys.readouterr().out
+
+
 def test_a_probe_that_fails_beside_a_weak_claim_keeps_the_claim_and_says_why(opts):
     class Broken(Fake):
         def probe(self, host):
@@ -145,6 +205,34 @@ def test_a_probe_that_fails_beside_a_weak_claim_keeps_the_claim_and_says_why(opt
     report = runner.verify(opts, _boards(acorn, Broken("netv2", probes=True)), usb=[], pci=[], mode=("auto", "test"))
     assert [b["board"] for b in report["boards"]] == ["acorn"] and report["result"] == "fail"
     assert "probing as well failed: the JTAG chain answers" in report["chosen_by"]
+
+
+class _LockedFake(Fake):
+    def __init__(self, name, lock, **kw):
+        super().__init__(name, **kw)
+        self._lock = str(lock)
+
+    @property
+    def lock(self):
+        return self._lock
+
+
+def test_a_lock_that_cannot_be_opened_beside_a_weak_claim_is_said_in_chosen_by(tmp_path):
+    # The boot check's probing takes the NeTV2's lock with core.hold_lock: one that cannot be opened (here a
+    # dangling symlink) is never followed, the NeTV2 is never driven, and the failure is said, not lost.
+    lock = tmp_path / "netv2.lock"
+    lock.symlink_to(tmp_path / "nowhere")
+    opts = {"state": tmp_path / "state.json", "no_publish": True}
+    acorn = _LockedFake("acorn", tmp_path / "acorn.lock", seen=[{"kind": "litex-other"}], weak=True, result="fail")
+    netv2 = _LockedFake("netv2", lock, probes=True, probed=[{"variant": "a7-35"}])
+    report = runner.verify(opts, _boards(acorn, netv2), usb=[], pci=[], mode=("auto", "test"))
+    assert netv2.probe_calls == 0 and [b["board"] for b in report["boards"]] == ["acorn"]
+    assert report["result"] == "fail" and "probing as well failed: the lock file" in report["chosen_by"]
+    assert str(lock) in report["chosen_by"] and "symlink" in report["chosen_by"]
+    # configured for the NeTV2: the check is an error naming the lock
+    netv2 = _LockedFake("netv2", lock, probes=True, probed=[{"variant": "a7-35"}])
+    report = runner.verify(opts, _boards(netv2), usb=[], pci=[], mode=("netv2", "test"))
+    assert netv2.probe_calls == 0 and report["result"] == "error" and str(lock) in report["reason"]
 
 
 def test_auto_finding_nothing_is_missing(opts):
@@ -889,3 +977,107 @@ def test_a_run_that_errs_adds_nothing_to_the_record(opts):
     report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
     assert "added" not in report["state"]
     assert "dna" not in state.load(opts["state"])["acorn"]
+
+
+# -- lock files ------------------------------------------------------------------------------------------------
+
+
+class Opens:
+    """Wraps os.open: records each (path, flags), and can refuse with EACCES as fs.protected_regular does."""
+
+    def __init__(self, monkeypatch, module, refuse=False):
+        self.calls, self.refuse, self.real = [], refuse, module.os.open
+        monkeypatch.setattr(module.os, "open", self)
+
+    def __call__(self, path, flags, mode=0o777):
+        self.calls.append((str(path), flags))
+        if self.refuse:
+            raise PermissionError(13, "Permission denied", str(path))
+        return self.real(path, flags, mode)
+
+
+def test_an_existing_lock_file_is_opened_without_o_creat(tmp_path, monkeypatch):
+    import os
+
+    lock = tmp_path / "board.lock"
+    lock.write_text("")
+    opens = Opens(monkeypatch, core)
+    _hold(lock)
+    assert opens.calls and all(not flags & os.O_CREAT for _, flags in opens.calls)
+    assert all(not flags & (os.O_WRONLY | os.O_RDWR | os.O_TRUNC) for _, flags in opens.calls)
+
+
+def test_a_missing_lock_file_is_created_0644_with_o_excl(tmp_path, monkeypatch):
+    import os
+
+    old = os.umask(0o022)
+    try:
+        lock = tmp_path / "run" / "board.lock"
+        opens = Opens(monkeypatch, core)
+        _hold(lock)
+    finally:
+        os.umask(old)
+    assert (lock.stat().st_mode & 0o777) == 0o644
+    created = [flags for _, flags in opens.calls if flags & os.O_CREAT]
+    assert created and all(flags & os.O_EXCL for flags in created)
+
+
+def test_a_lock_file_that_cannot_be_opened_is_a_clear_error(tmp_path, monkeypatch):
+    lock = tmp_path / "board.lock"
+    lock.write_text("")
+    Opens(monkeypatch, core, refuse=True)
+    with pytest.raises(Problem) as refused:
+        _hold(lock)
+    assert str(lock) in str(refused.value) and "owned by" in str(refused.value)
+
+
+def _hold(lock):
+    with core.hold_lock(lock, "board"):
+        pass
+
+
+def test_a_normal_lock_file_is_opened(tmp_path):
+    lock = tmp_path / "board.lock"
+    lock.write_text("")
+    _hold(lock)
+    assert lock.is_file() and not lock.is_symlink()
+
+
+@pytest.mark.parametrize("target", ["dangling", "real"])
+def test_a_lock_file_that_is_a_symlink_is_refused_and_named(tmp_path, target):
+    # A dangling link made the plain open fail with ENOENT and the O_EXCL create with EEXIST, for ever, at 100%
+    # CPU, before the bounded wait. A link, dangling or to a real file, is never followed: a clear error.
+    real = tmp_path / "elsewhere"
+    if target == "real":
+        real.write_text("keep")
+    lock = tmp_path / "board.lock"
+    lock.symlink_to(real)
+    with pytest.raises(Problem) as refused:
+        _hold(lock)
+    assert str(lock) in refused.value.reason and "symlink" in refused.value.reason
+    assert lock.is_symlink() and (real.read_text() == "keep" if target == "real" else not real.exists())
+
+
+def test_a_lock_file_that_keeps_vanishing_is_an_error_not_a_spin(tmp_path, monkeypatch):
+    import os
+
+    lock = tmp_path / "board.lock"
+    calls = []
+
+    def racing(path, flags, mode=0o777):  # gone for the plain open, there for the create: every time
+        calls.append(flags)
+        raise FileExistsError(17, "File exists") if flags & os.O_CREAT else FileNotFoundError(2, "No such file")
+
+    monkeypatch.setattr(core.os, "open", racing)
+    with pytest.raises(Problem, match="gone, then there") as refused:
+        _hold(lock)
+    assert str(lock) in refused.value.reason and len(calls) == 2 * core.LOCK_OPEN_TRIES
+    assert all(flags & os.O_NOFOLLOW for flags in calls)
+
+
+def test_hold_lock_flock_works_on_the_read_only_descriptor(tmp_path):
+    import fcntl
+
+    lock = tmp_path / "board.lock"
+    with core.hold_lock(lock, "board"), open(lock) as other, pytest.raises(BlockingIOError):
+        fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)

@@ -259,6 +259,18 @@ class TestBoard(Board):
         identity.keep(options, out)
         (options.get("event") or (lambda stage, details: None))("fpga-board-identified", identity.details(out))
 
+    # The flash is read back with a design loaded (openFPGALoader's SPI-over-JTAG bridge): --identify takes it
+    # from the boot report.
+    report_fields = ("flash",)
+
+    def identify(self, host, found, options, runner=run):
+        """How the board was found, and its IDCODE over JTAG on a board with JTAG: nothing is loaded."""
+        variant = options.get("variant") or found["variant"]
+        out = identity.base(options.get("board_key", self.name), self.name, found, variant)
+        if self.idcodes and variant in self.idcodes:
+            out.update(identity.idcode_fields(self.jtag(host, found, variant, runner)))
+        return out
+
     def check(self, host, found, options, runner=run):
         variant = options.get("variant") or found["variant"]
         report = {"board": self.name, "variant": variant, "found": found, "tests": []}

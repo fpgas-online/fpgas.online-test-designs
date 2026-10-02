@@ -22,6 +22,7 @@ class TTFPGA(TestBoard):
     doc = "tt-fpga.md"
     usb = (("2e8a", None),)  # any Raspberry Pi USB product: the RP2350 running MicroPython
     variants: ClassVar[dict] = {"tt-fpga": "tt-fpga"}
+    label_fields = ("serial",)
     port = "/dev/ttyACM0"
     services = ("fpgas-tt.service",)  # the TT site's bridge keeps the RP2350's port open while it runs
     flash_note = "not read: every verify rewrites the bitstream on the RP2350"

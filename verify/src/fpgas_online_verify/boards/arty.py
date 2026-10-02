@@ -18,6 +18,7 @@ class Arty(TestBoard):
     usb = (("0403", "6010"),)
     variants: ClassVar[dict] = {"a7-35": "a7-35t"}
     idcodes: ClassVar[dict] = {"a7-35": 0x0362D093}  # XC7A35T
+    label_fields = ("idcode", "dna", "flash_jedec", "flash_uid")
     port = "/dev/ttyUSB1"
     flash_region: ClassVar[dict] = {"a7-35": 0x220000}  # an XC7A35T .bit is 2,192,123 bytes
     tests: ClassVar[dict] = {
