@@ -704,6 +704,8 @@ def test_a_string_define_python_cannot_read_is_kept_as_text_not_a_crash():
 # -- publishing (§3.6) -----------------------------------------------------------------------------------------
 
 pub = _load("publish")
+P = "fpgas-online-acorn-litepcie"
+X = f"{P}-common_0.0.post1_all.deb"
 
 
 @pytest.mark.parametrize(("version", "series"), [("0.0.post42", "v0.0"), ("0.1", "v0.1"), ("1.12.post3", "v1.12")])
@@ -714,8 +716,9 @@ def test_the_series_release_is_the_versions_own(version, series):
 
 def test_only_files_the_release_lacks_are_uploaded(tmp_path):
     """A published version never changes under an apt repository that already pulled it."""
-    debs = [tmp_path / n for n in ("a_0.0.post1_all.deb", "b_0.0.post1_all.deb")]
-    assert pub.to_upload(debs, {"a_0.0.post1_all.deb", "fpgas-online-acorn-tools_0.0.post9_all.deb"}) == [debs[1]]
+    debs = [tmp_path / n for n in (f"{P}-common_0.0.post1_all.deb", f"{P}-dkms_0.0.post1_all.deb")]
+    published = {f"{P}-common_0.0.post1_all.deb", "fpgas-online-acorn-tools_0.0.post9_all.deb"}
+    assert pub.to_upload(debs, published) == [debs[1]]
 
 
 class FakeGh:
@@ -733,31 +736,45 @@ class FakeGh:
             return ""
         if args[:2] == ("release", "upload"):
             name = pathlib.Path(args[3]).name
+            assert pathlib.Path(args[3]).is_file()
+            name = self.stored(name)
             if name in self.race:  # another run got there first
                 self.assets.add(name)
                 raise pub.GhError(f"asset {name} already exists")
             self.assets.add(name)
             return ""
+        if args[:2] == ("release", "delete-asset"):
+            assert args[4:] == ("--yes",)
+            self.assets.remove(args[3])
+            return ""
         raise AssertionError(args)
+
+    @staticmethod
+    def stored(name):
+        """What GitHub does to an uploaded file's name."""
+        return name.replace("~", ".")
+
+    def did(self, verb):
+        return [c[3] if verb == "delete-asset" else pathlib.Path(c[3]).name for c in self.calls if c[1] == verb]
 
 
 def test_publish_creates_the_series_release_when_missing_and_uploads(tmp_path):
-    deb = tmp_path / "x_0.0.post1_all.deb"
+    deb = tmp_path / X
     deb.write_bytes(b"x")
     gh = FakeGh([], exists=False)
     pub.publish([deb], "0.0.post1", gh=gh)
     assert gh.calls[1][:2] == ("release", "create") and gh.calls[1][2] == "v0.0"
-    assert "x_0.0.post1_all.deb" in gh.assets
+    assert X in gh.assets
 
 
 def test_an_upload_another_run_made_meanwhile_is_not_a_failure(tmp_path):
-    deb = tmp_path / "x_0.0.post1_all.deb"
+    deb = tmp_path / X
     deb.write_bytes(b"x")
-    pub.publish([deb], "0.0.post1", gh=FakeGh([], race={"x_0.0.post1_all.deb"}))
+    pub.publish([deb], "0.0.post1", gh=FakeGh([], race={X}))
 
 
 def test_an_upload_that_really_failed_is_a_failure(tmp_path):
-    deb = tmp_path / "x_0.0.post1_all.deb"
+    deb = tmp_path / X
     deb.write_bytes(b"x")
 
     class Broken(FakeGh):
@@ -772,7 +789,7 @@ def test_an_upload_that_really_failed_is_a_failure(tmp_path):
 
 def test_a_release_view_that_fails_for_another_reason_is_reported_as_itself(tmp_path):
     """Only a missing release is created; an auth or network failure must not turn into a bogus create."""
-    deb = tmp_path / "x_0.0.post1_all.deb"
+    deb = tmp_path / X
     deb.write_bytes(b"x")
 
     class Offline(FakeGh):
@@ -785,6 +802,178 @@ def test_a_release_view_that_fails_for_another_reason_is_reported_as_itself(tmp_
     with pytest.raises(pub.GhError, match="401"):
         pub.publish([deb], "0.0.post1", gh=gh)
     assert not [c for c in gh.calls if c[:2] == ("release", "create")]
+
+
+# -- the release's asset names, the asset budget and retention (§4.3) --------------------------------------------
+
+M = f"{P}-modules-6.12.109+rpt-rpi-v8"
+
+
+def test_github_stores_a_tilde_as_a_dot_and_keeps_the_plus():
+    """GitHub "renames asset filenames that have special characters": seen on this organisation's releases."""
+    assert pub.release_name(f"{M}_0.0.post7~deb12_arm64.deb") == f"{M}_0.0.post7.deb12_arm64.deb"
+    assert pub.release_name(f"{P}-utils_0.0.post7_armhf.deb") == f"{P}-utils_0.0.post7_armhf.deb"
+
+
+@pytest.mark.parametrize(
+    ("name", "parsed"),
+    [
+        (f"{P}-common_0.0.post7_all.deb", (f"{P}-common", "0.0.post7")),
+        (f"{M}_0.0.post7.deb12_arm64.deb", (M, "0.0.post7")),
+        (f"{M}_0.0.post7~deb13_arm64.deb", (M, "0.0.post7")),
+        (f"{P}-utils_0.1_amd64.deb", (f"{P}-utils", "0.1")),
+        ("fpgas-online-acorn-tools_0.0.post7_all.deb", None),
+        (f"{P}-common_20260921+gf3355dccf443_all.deb", None),
+        (f"{P}-common_0.0.post7_all.deb.sha256", None),
+    ],
+)
+def test_an_asset_name_gives_the_package_and_the_driver_version(name, parsed):
+    assert pub.parse_asset(name) == parsed
+
+
+def _set(version, kvers=("6.12.109+rpt-rpi-v8",), suite="deb12"):
+    """The assets of one driver version."""
+    names = {f"{P}-common_{version}_all.deb", f"{P}-dkms_{version}_all.deb"}
+    names |= {f"{P}-utils_{version}_{arch}.deb" for arch in ("armhf", "arm64", "amd64")}
+    return names | {f"{P}-modules-{kver}_{version}.{suite}_arm64.deb" for kver in kvers}
+
+
+OTHERS = {
+    "fpgas-online-acorn-tools_0.0.post3_all.deb",
+    "fpgas-online-acorn-bitstreams_20260921+gf3355dccf443_all.deb",
+    "fpgas-online-acorn_0.0.post3_all.deb",
+}
+
+
+def test_pruning_keeps_the_current_driver_version_and_the_one_before_it():
+    assets = _set("0.0.post3") | _set("0.0.post5") | _set("0.0.post9") | _set("0.0.post10") | OTHERS
+    assert set(pub.plan_prune(assets, "0.0.post10", "6.12")) == _set("0.0.post3") | _set("0.0.post5")
+
+
+def test_pruning_never_touches_another_packages_assets():
+    assets = _set("0.0.post9") | _set("0.0.post10") | _set("0.0.post11") | OTHERS
+    assert not set(pub.plan_prune(assets, "0.0.post11", "6.12")) & OTHERS
+
+
+def test_the_one_before_is_the_newest_older_version_on_the_release_not_the_previous_number():
+    """Driver versions skip numbers: most merges change no driver input."""
+    assets = _set("0.0.post621") | _set("0.0.post776") | _set("0.0.post800")
+    assert set(pub.plan_prune(assets, "0.0.post800", "6.12")) == _set("0.0.post621")
+
+
+def test_versions_are_ordered_as_numbers_and_across_series():
+    assets = _set("0.0.post99") | _set("0.0.post100") | _set("0.1")
+    assert set(pub.plan_prune(assets, "0.1", "6.12")) == _set("0.0.post99")
+    assert pub.plan_prune(_set("0.0.post9") | _set("0.0.post10"), "0.0.post10", "6.12") == []
+
+
+def test_a_run_of_an_older_commit_never_prunes_what_a_newer_one_published():
+    assets = _set("0.0.post8") | _set("0.0.post9") | _set("0.0.post10") | _set("0.0.post11")
+    assert set(pub.plan_prune(assets, "0.0.post10", "6.12")) == _set("0.0.post8")
+
+
+def test_with_only_the_current_version_nothing_is_pruned():
+    assert pub.plan_prune(_set("0.0.post10") | OTHERS, "0.0.post10", "6.12") == []
+
+
+def test_modules_for_a_kernel_below_the_floor_are_pruned_whatever_their_version():
+    kept = _set("0.0.post10", kvers=("6.12.109+rpt-rpi-v8", "6.18.50+rpt-rpi-2712"))
+    below = {f"{P}-modules-6.6.74+rpt-rpi-v8_0.0.post10.deb12_arm64.deb",
+             f"{P}-modules-6.1.0-rpi8-rpi-v8_0.0.post10.deb12_arm64.deb"}  # fmt: skip
+    assert set(pub.plan_prune(kept | below, "0.0.post10", "6.12")) == below
+    raised = {f"{P}-modules-6.12.109+rpt-rpi-v8_0.0.post10.deb12_arm64.deb"}
+    assert set(pub.plan_prune(kept, "0.0.post10", "6.13")) == raised
+
+
+def test_an_upload_that_would_take_the_release_past_900_assets_is_refused():
+    """A release holds 1000 assets and the series release is shared with the other packages' workflows."""
+    pub.check_room(858, 42)
+    with pytest.raises(pub.PublishError, match=r"859 assets.*42.*900"):
+        pub.check_room(859, 42)
+    pub.check_room(950, 0)  # nothing to upload: nothing to refuse
+
+
+def _debs(tmp_path, names):
+    paths = []
+    for name in sorted(names):
+        (tmp_path / name).write_bytes(b"deb")
+        paths.append(tmp_path / name)
+    return paths
+
+
+def test_a_modules_deb_is_uploaded_under_the_name_github_stores(tmp_path):
+    """Uploaded as `...~deb12_arm64.deb`, GitHub would rename it; the upload names it so nothing is implicit."""
+    deb = tmp_path / f"{M}_0.0.post10~deb12_arm64.deb"
+    deb.write_bytes(b"deb")
+    gh = FakeGh(OTHERS)
+    pub.publish([deb], "0.0.post10", gh=gh, min_kernel="6.12")
+    assert gh.did("upload") == [f"{M}_0.0.post10.deb12_arm64.deb"]
+    assert f"{M}_0.0.post10.deb12_arm64.deb" in gh.assets
+
+
+def test_publish_uploads_what_is_missing_then_prunes(tmp_path):
+    new = {n.replace(".deb12", "~deb12") for n in _set("0.0.post10")}
+    gh = FakeGh(_set("0.0.post3") | _set("0.0.post9") | OTHERS | {f"{P}-common_0.0.post10_all.deb"})
+    pub.publish(_debs(tmp_path, new), "0.0.post10", gh=gh, min_kernel="6.12")
+    assert gh.assets == _set("0.0.post9") | _set("0.0.post10") | OTHERS
+    assert set(gh.did("upload")) == _set("0.0.post10") - {f"{P}-common_0.0.post10_all.deb"}
+    assert set(gh.did("delete-asset")) == _set("0.0.post3")
+    verbs = [c[1] for c in gh.calls]
+    assert verbs.index("delete-asset") > max(i for i, v in enumerate(verbs) if v == "upload")
+
+
+def test_a_dry_run_changes_nothing_and_says_what_it_would_do(tmp_path, capsys):
+    new = {n.replace(".deb12", "~deb12") for n in _set("0.0.post10")}
+    before = _set("0.0.post3") | _set("0.0.post9") | OTHERS
+    gh = FakeGh(before)
+    pub.publish(_debs(tmp_path, new), "0.0.post10", gh=gh, min_kernel="6.12", dry_run=True)
+    assert gh.assets == before
+    assert {c[1] for c in gh.calls} == {"view"}
+    out = capsys.readouterr().out
+    assert f"would upload {M}_0.0.post10.deb12_arm64.deb" in out
+    assert f"would prune {P}-dkms_0.0.post3_all.deb" in out
+    assert f"would prune {P}-dkms_0.0.post9_all.deb" not in out
+    assert "v0.0: 15 assets now, 6 to upload, 6 to prune, 15 afterwards (the limit is 900)" in out
+
+
+def test_a_dry_run_does_not_create_a_missing_release(tmp_path, capsys):
+    gh = FakeGh([], exists=False)
+    pub.publish(_debs(tmp_path, {X}), "0.0.post1", gh=gh, dry_run=True)
+    assert {c[1] for c in gh.calls} == {"view"}
+    assert "would create the release v0.0" in capsys.readouterr().out
+
+
+def test_the_budget_is_checked_before_anything_is_uploaded(tmp_path):
+    gh = FakeGh({f"other_{i}_all.deb" for i in range(900)})
+    with pytest.raises(pub.PublishError, match="900"):
+        pub.publish(_debs(tmp_path, {X}), "0.0.post1", gh=gh)
+    assert not gh.did("upload")
+
+
+def test_a_deb_of_another_driver_version_is_refused(tmp_path):
+    """A stale artifact must not be published as part of this version's set."""
+    gh = FakeGh(OTHERS)
+    with pytest.raises(pub.PublishError, match=r"0\.0\.post1"):
+        pub.publish(_debs(tmp_path, {X}), "0.0.post2", gh=gh)
+    with pytest.raises(pub.PublishError, match="not a"):
+        pub.publish(_debs(tmp_path, {"fpgas-online-acorn-tools_0.0.post2_all.deb"}), "0.0.post2", gh=gh)
+    assert not gh.did("upload")
+
+
+def test_an_upload_the_release_does_not_list_afterwards_is_a_failure(tmp_path):
+    """If GitHub stored the file under another name, the next run would build and upload it again, for ever."""
+
+    class Renaming(FakeGh):
+        @staticmethod
+        def stored(name):
+            return name.replace(".deb12", "-deb12")
+
+    deb = tmp_path / f"{M}_0.0.post10~deb12_arm64.deb"
+    deb.write_bytes(b"deb")
+    gh = Renaming(OTHERS)
+    with pytest.raises(pub.PublishError, match="does not list"):
+        pub.publish([deb], "0.0.post10", gh=gh, min_kernel="6.12")
+    assert not gh.did("delete-asset")
 
 
 def test_a_transient_download_failure_is_retried(tmp_path, monkeypatch):
