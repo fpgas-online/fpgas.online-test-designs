@@ -156,6 +156,32 @@ def test_a_board_whose_lock_is_held_is_busy_within_the_bound(tmp_path, held_lock
     assert gaps == ["arty: idcode: board busy", "arty: dna: board busy"]
 
 
+def test_a_sigterm_during_the_read_exits_143_with_everything_put_back(tmp_path, locks):
+    import os
+    import signal
+
+    before = signal.getsignal(signal.SIGTERM)
+    put_back = []
+
+    class Killed(Identified):
+        def identify(self, host, found, options):
+            try:
+                os.kill(os.getpid(), signal.SIGTERM)  # rpi-hwid gave up on a slow --identify
+                raise AssertionError("SIGTERM did not stop the read")
+            finally:
+                os.kill(os.getpid(), signal.SIGTERM)  # a second one does not cut the putting back short
+                put_back.append(locks.held == [self.lock])  # pins, PCI COMMAND: still under the lock
+
+    arty = Killed("arty", seen=[{"variant": "a7-35", "serial": "A"}])
+    with pytest.raises(SystemExit) as stopped:
+        _read({"arty": arty}, tmp_path)
+    assert stopped.value.code == 128 + signal.SIGTERM
+    assert put_back == [True] and locks.held == []  # the board's finally ran, then its lock was let go
+    assert signal.getsignal(signal.SIGTERM) == before
+    _read({"arty": Identified("arty", seen=[{"variant": "a7-35", "serial": "A"}])}, tmp_path)
+    assert signal.getsignal(signal.SIGTERM) == before
+
+
 def test_identify_waits_30_s_at_most_and_the_boot_check_without_a_bound():
     import inspect
 
