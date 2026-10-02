@@ -143,6 +143,31 @@ def test_a_board_on_factory_or_vendor_firmware_fails_as_unconverted_and_its_bar_
     assert not rig.uart.opened_at  # no UARTBone traffic to a design we did not build
 
 
+@pytest.mark.parametrize(
+    ("kind", "identifier", "model"),
+    [
+        ("fpgas-online", fk.OP_IDENT_ON_CHIP, "cle-215+"),
+        ("fpgas-online", "fpgas-online Acorn PCIe SoC cle-101 2026-09-21 14:23:32", "cle-101"),
+        ("fpgas-online", fk.GOLDEN_IDENT_ON_CHIP, "cle-215+"),
+        ("fpgas-online", "fpgas-online Acorn PCIe SoC 2026-09-21 14:23:32", None),  # names no variant
+        ("fpgas-online", "LiteX SoC on Acorn CLE-215+ 2026-09-21", None),  # not our SoC's identifier
+        ("fpgas-online", None, None),  # BAR0 not read
+        ("sqrl-factory", fk.OP_IDENT_ON_CHIP, None),  # not our design, whatever it says
+        ("litex-other", fk.OP_IDENT_ON_CHIP, None),
+    ],
+)
+def test_the_soc_model_is_what_our_socs_identifier_names(kind, identifier, model):
+    assert av.soc_model(kind, identifier) == model
+
+
+def test_the_soc_model_comes_from_the_identifier_and_not_the_pci_ids(tmp_path, images):
+    ident = Rig(tmp_path, images).check()["identity"]
+    assert ident["soc_model"] == "cle-215+" and ident["identifier"] == fk.OP_IDENT_ON_CHIP
+    rig = Rig(tmp_path / "factory", images, ids=fk.FACTORY)  # the variant is known, from SQRL's IDs
+    ident = suite.check_board(rig.found(), rig.options(open_bar=fk.refuse))["identity"]
+    assert ident["variant"] == "cle-215+" and "soc_model" not in ident and "identifier" not in ident
+
+
 def test_a_board_on_sqrl_factory_image_still_has_its_link_and_jtag_checked(tmp_path, images):
     """Its variant is known from the factory IDs, so its P1 JTAG and PCIe link are tested; nothing on BAR0."""
     rig = Rig(tmp_path, images, ids=fk.FACTORY)

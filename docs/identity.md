@@ -38,7 +38,7 @@ rpi-hwid's `FpgaBoard` fields:
 | `flash_uid_state` | string | `read`, or `blank` when every byte is `00` or `ff` | as `flash_uid` |
 | `flash_error` | string | why the flash could not be read | the flash was read, or reading it was not tried |
 | `flash_source` | string | how the flash was read: `pcie` through the Acorn's own SoC | the flash was not read |
-| `soc_model` | string | the Acorn variant its SoC was built for: `cle-215+`, `cle-101` | not an Acorn, or the variant is not known |
+| `soc_model` | string | the card the Acorn's SoC says it was built for, from the variant its identifier string names: `cle-215+`, `cle-101` (as rpi-hwid reads it) | not an Acorn running our SoC (SQRL's factory image, a design we do not know), BAR0 could not be read, or the identifier names no variant |
 
 fpgas-verify's own fields:
 

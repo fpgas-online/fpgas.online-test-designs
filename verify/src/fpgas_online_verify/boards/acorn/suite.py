@@ -289,9 +289,10 @@ class _Suite:
         """Who the board is (identity.py), from what PCIe, BAR0 and JTAG read."""
         f, r = self.found, self.report
         out = identity.base(self.options.get("board_key", "acorn"), "acorn", f)
-        if f["variant"]:
-            out["soc_model"] = f["variant"]
         running = r.get("running") or {}
+        soc_model = check.soc_model(f["kind"], running.get("identifier"))
+        if soc_model:
+            out["soc_model"] = soc_model
         if running.get("identifier"):
             out["identifier"] = running["identifier"]
         if running.get("build"):
