@@ -637,6 +637,9 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
   Later runs compare the whole IDCODE as usual.
 * A device DNA recorded without its leading zeros (a record with `schema_version` below 4) takes the 16-digit
   spelling quietly. Another DNA is a change.
+* On a record with `schema_version` below 4, a flash part name that changed while its JEDEC ID and unique ID
+  did not is a corrected name, taken quietly: the part is now named from RDID byte 6, so an S25FS256S is no
+  longer called an S25FL256S. A different JEDEC ID or unique ID is still a change, and so is a rewritten flash.
 * A `--test` run neither records nor compares the state.
 
 ---

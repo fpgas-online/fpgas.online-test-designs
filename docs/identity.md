@@ -30,7 +30,7 @@ rpi-hwid's `FpgaBoard` fields:
 | `serial` | string | the USB serial number (Arty: its FT2232H; TT: its RP2350; Fomu: its bootloader) | the board is not found on USB |
 | `dna` | string | the Xilinx device DNA, 16 hex digits: `0x0054b48664b04854` | not read: only the Acorn reads it, over BAR0, or over JTAG when BAR0 cannot be used |
 | `idcode` | string | the whole 32-bit JTAG IDCODE, 8 hex digits: `0x13636093` | the board has no JTAG link to the Pi (TT, Fomu), or the JTAG test was not run |
-| `flash` | string | the flash part, named from all six RDID bytes: `S25FL256S`, `S25FS256S`; from the first three only when the other three are not known | the flash was not read, or its part is not known |
+| `flash` | string | the flash part: `S25FL256S`, `S25FS256S`, told apart by RDID byte 6 (the family ID); the family's name, `S25Fx256S`, when byte 6 is not known | the flash was not read, or its part is not known |
 | `flash_jedec` | string | RDID bytes 1-3, 6 hex digits: `0x010219` | the flash was not read |
 | `flash_extended_id` | string | RDID bytes 4-6, 6 hex digits: `0x4d0180` | the flash was not read |
 | `flash_uid` | string | the flash's factory unique ID, plain hex | the flash was not read |

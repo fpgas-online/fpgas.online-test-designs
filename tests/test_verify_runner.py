@@ -703,6 +703,40 @@ def test_another_dna_is_still_a_change_and_a_respelling_is_one_on_a_new_record(o
     assert runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))["result"] == "changed"
 
 
+S25FS = {"part": "S25FS256S", "jedec": "0x010219", "unique_id": "ab" * 16, "slots": {"operational": "1"}}
+
+
+def test_a_flash_part_renamed_with_the_same_ids_is_recorded_quietly(opts):
+    """Before schema 4 an S25FS256S was called an S25FL256S (bytes 1-3 only): a naming correction."""
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "flash": {**S25FS, "part": "S25FL256S"}}}, 3)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "flash": S25FS})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and report["state"]["added"]
+    boards, version = state.load_record(opts["state"])
+    assert boards["acorn"]["flash"] == S25FS and version == 4
+
+
+@pytest.mark.parametrize(
+    "recorded",
+    [
+        {**S25FS, "part": "S25FL256S", "unique_id": "cd" * 16},  # another flash of the same kind
+        {**S25FS, "part": "S25FL512S", "jedec": "0x010220"},  # another kind of flash
+        {**S25FS, "part": "S25FL256S", "slots": {"operational": "0"}},  # renamed, and rewritten
+    ],
+)
+def test_a_flash_that_really_changed_is_still_a_change_through_a_rename(opts, recorded):
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "flash": recorded}}, 3)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "flash": S25FS})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "changed"
+
+
+def test_a_flash_part_renamed_on_a_new_record_is_a_change(opts):
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "flash": {**S25FS, "part": "S25FL256S"}}}, 4)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "flash": S25FS})
+    assert runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))["result"] == "changed"
+
+
 def test_an_acorns_7_digit_idcode_takes_its_whole_one_quietly(opts):
     """Before schema 3 the Acorn recorded `f"{idcode & 0x0FFFFFFF:#x}"`: 0x3636093, seven hex digits."""
     acorn = {"bdf": "0001:01:00.0", "variant": "cle-215+", "dna": "0x1"}
