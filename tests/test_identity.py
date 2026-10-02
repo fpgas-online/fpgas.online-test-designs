@@ -169,6 +169,20 @@ def test_the_fields_refused_are_named_with_why():
     assert identity.refused({"board": "arty", "idcode_version": 1}) == {}
 
 
+def test_a_field_name_that_is_not_a_string_is_refused_like_a_nested_one():
+    with pytest.raises(TypeError, match="identity field 5: an identity's field names must be strings, not 5"):
+        identity.details({"board": "arty", 5: "x"})
+    assert identity.refused({"board": "arty", 5: "x"}) == {5: "an identity's field names must be strings, not 5"}
+
+
+@pytest.mark.parametrize("board", ["arty", ["board", "arty"], None])
+def test_an_identity_that_is_not_a_dict_is_refused(board):
+    with pytest.raises(TypeError, match="an identity must be a dict, not "):
+        identity.details(board)
+    with pytest.raises(TypeError, match="an identity must be a dict, not "):
+        identity.refused(board)
+
+
 def test_the_document_is_versioned_and_holds_every_board():
     doc = identity.document([{"board": "arty", "kind": "arty"}], tool="fpgas-online-verify 0.0", read_at="now")
     assert doc == {"schema": "fpgas-verify/identity", "identity_version": 1, "tool": "fpgas-online-verify 0.0",

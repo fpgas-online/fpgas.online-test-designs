@@ -218,8 +218,14 @@ class _Suite:
         return {**entry, "result": "fail", "reason": "; ".join(faults)} if faults else {**entry, "result": "pass"}
 
     def jtag(self):
-        return links.jtag(self.setup, self.found["variant"], self.run, self.bar0.get("dna"),
+        return links.jtag(self.setup, self.found["variant"], self.run, self._good_bar0_dna(),
                           self.options.get("gpiochip"))  # fmt: skip
+
+    def _good_bar0_dna(self):
+        """BAR0's DNA, for the other paths to be compared with, unless it is stuck (check.dna_faults): that is
+        pcie-bar0's own fault, not the JTAG's or the P2 UART's, so it is not compared at all."""
+        dna = self.bar0.get("dna")
+        return None if dna is None or check.dna_faults(dna, "BAR0") else dna
 
     def flash(self):
         manifest, files, _, layout = self.release
@@ -233,7 +239,7 @@ class _Suite:
         return {**entry, "result": "fail", "reason": f"flash does not hold release {manifest.get('tag')}: {where}"}
 
     def p2_uart(self):
-        bar0 = {"identifier": self.bar0.get("identifier"), "dna": self.bar0.get("dna")}
+        bar0 = {"identifier": self.bar0.get("identifier"), "dna": self._good_bar0_dna()}
         return links.p2_uart(self.setup, self.uart_builds, self.figures, bar0, self.options.get("uart_opener"),
                              self.options.get("settle"))  # fmt: skip
 

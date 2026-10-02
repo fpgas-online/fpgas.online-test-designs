@@ -340,6 +340,35 @@ def test_a_stuck_bar0_dna_is_no_dna_and_a_good_jtag_one_is_used(tmp_path, images
     assert report["identity"]["dna"] == "0x0054b48664b04854" and "dna_error" not in report["identity"]
 
 
+@pytest.mark.parametrize("stuck", [0, (1 << 57) - 1])
+def test_a_stuck_bar0_dna_is_not_compared_with_a_good_jtag_one(tmp_path, images, stuck):
+    """A stuck BAR0 DNA is pcie-bar0's fault, not a wrong TDI: jtag passes on its own good DNA."""
+    report = Rig(tmp_path, images, dna=stuck).check()
+    tests = {t["test"]: t for t in report["tests"]}
+    assert tests["pcie-bar0"]["result"] == "fail"
+    assert tests["pcie-bar0"]["reason"] == f"device DNA over BAR0 reads {stuck:#x}: the DNA port is not being read"
+    assert tests["jtag"]["result"] == "pass" and tests["jtag"]["dna"] == "0x54b48664b04854"
+    assert "is not the one over BAR0" not in report["reason"]
+
+
+def test_a_good_jtag_dna_that_differs_from_a_good_bar0_one_still_fails(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    rig.pi.jtag_dna = 0x1234
+    jtag = {t["test"]: t for t in rig.check()["tests"]}["jtag"]
+    assert jtag["result"] == "fail"
+    assert jtag["reason"] == ("device DNA over JTAG 0x1234 is not the one over BAR0 0x54b48664b04854: "
+                              "TDI (or the DNA readout) is wrong")  # fmt: skip
+
+
+def test_a_stuck_bar0_dna_is_not_compared_with_a_good_p2_uart_one(tmp_path, images, monkeypatch):
+    """A stuck BAR0 DNA (here, BAR0's DNA read alone stuck) is not blamed on the P2 UART."""
+    real = av.read_dna
+    monkeypatch.setattr(av, "read_dna", lambda read, csrs: 0 if read.__name__ == "read" else real(read, csrs))
+    tests = {t["test"]: t for t in Rig(tmp_path, images).check()["tests"]}
+    assert tests["pcie-bar0"]["reason"] == "device DNA over BAR0 reads 0x0: the DNA port is not being read"
+    assert tests["p2-uart"]["result"] == "pass" and tests["jtag"]["result"] == "pass"
+
+
 def test_a_stuck_bar0_dna_with_no_jtag_read_is_a_dna_error(tmp_path, images):
     ident = Rig(tmp_path, images, dna=0).check(tests=["pcie-bar0"])["identity"]
     assert "dna" not in ident

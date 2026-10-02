@@ -539,6 +539,59 @@ class ReportsABadValue(Fake):
         return {**super().check(host, found, options), "identity": {"board": options["board_key"], "x": b"\0"}}
 
 
+class ReportsABadName(Fake):
+    """A board whose check passes, with a field name that is not a string in the identity it reports."""
+
+    def check(self, host, found, options):
+        return {**super().check(host, found, options), "identity": {"board": options["board_key"], 5: "x"}}
+
+
+class ReportsANonDict(Fake):
+    """A board whose check passes, reporting an identity that is not a dict."""
+
+    def check(self, host, found, options):
+        return {**super().check(host, found, options), "identity": ["netv2"]}
+
+
+def test_an_identity_field_name_that_cannot_be_sent_is_an_error_on_that_board_only(opts):
+    netv2 = ReportsABadName("netv2", seen=[{"variant": "a7-100", "usb": "1-1"}])
+    arty = Fake("arty", seen=[{"variant": "a7-35", "usb": "1-2"}])
+    report = runner.verify(opts, _boards(netv2, arty), usb=[], pci=[], mode=("auto", "test"))
+    first, second = report["boards"]
+    assert first["result"] == "error" and second["result"] == "pass"
+    assert "the identity field 5 cannot be sent: an identity's field names must be strings" in first["reason"]
+    assert 5 not in first["identity"]
+    flat = runner.details(report)
+    assert "board0_identity_5" not in flat and "board0_identity_error" not in flat
+
+
+def test_an_identity_that_is_not_a_dict_is_replaced_by_what_finding_the_board_showed(opts):
+    events = []
+    netv2 = ReportsANonDict("netv2", seen=[{"variant": "a7-100", "usb": "1-1"}])
+    arty = Fake("arty", seen=[{"variant": "a7-35", "usb": "1-2"}])
+    report = runner.verify({**opts, "event": lambda s, d: events.append((s, d))}, _boards(netv2, arty), usb=[],
+                           pci=[], mode=("auto", "test"))  # fmt: skip
+    first, second = report["boards"]
+    assert first["result"] == "error" and second["result"] == "pass"
+    assert "the identity cannot be sent: an identity must be a dict, not ['netv2']" in first["reason"]
+    assert first["identity"] == identity.base("netv2", "netv2", {"variant": "a7-100", "usb": "1-1"})
+    identified = [d for s, d in events if s == "fpga-board-identified" and d["board"] == "netv2"]
+    assert identified == [{**first["identity"], "schema": identity.SCHEMA}]
+    assert runner.details(report)["result"] == "error"
+
+
+@pytest.mark.parametrize(("ident", "why"), [
+    (["arty"], "an identity must be a dict, not ['arty']"),
+    ("arty", "an identity must be a dict, not 'arty'"),
+    ({"board": "arty", 5: "x"}, "identity field 5: an identity's field names must be strings, not 5"),
+])  # fmt: skip
+def test_the_verified_event_says_why_a_non_dict_identity_or_a_bad_field_name_is_not_there(opts, ident, why):
+    report = {"result": "pass", "boards": [{"board": "arty", "result": "pass", "identity": ident}]}
+    out = runner.details(report)
+    assert out["board0_identity_error"] == why
+    assert not [k for k in out if k.startswith("board0_identity_") and k != "board0_identity_error"]
+
+
 @pytest.mark.parametrize("bad", [KeepsABadValue, ReportsABadValue])
 def test_an_identity_value_that_cannot_be_sent_is_an_error_on_that_board_only(opts, bad):
     events = []

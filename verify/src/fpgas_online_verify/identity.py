@@ -185,14 +185,28 @@ def detail(value):
     return json.dumps(value, separators=(",", ":"), sort_keys=True)
 
 
+def _field(key, value):
+    """One field as an event detail: TypeError for a field name that is not a string (as for a nested dict's
+    keys, _check) or a value detail() refuses."""
+    if not isinstance(key, str):
+        raise TypeError(f"an identity's field names must be strings, not {key!r}")
+    return detail(value)
+
+
+def _fields(board):
+    if not isinstance(board, dict):
+        raise TypeError(f"an identity must be a dict, not {board!r}")
+    return board.items()
+
+
 def details(board):
     """The fpga-board-identified event's details: the dict as flat strings, and its schema. A field not read
-    is not in the dict, so not in the details either. A value detail() refuses raises TypeError naming its
-    field."""
+    is not in the dict, so not in the details either. A field name that is not a string, or a value detail()
+    refuses, raises TypeError naming its field; an identity that is not a dict raises TypeError too."""
     out = {}
-    for key, value in board.items():
+    for key, value in _fields(board):
         try:
-            out[key] = detail(value)
+            out[key] = _field(key, value)
         except TypeError as e:
             raise TypeError(f"identity field {key}: {e}") from None
     out["schema"] = SCHEMA
@@ -200,11 +214,12 @@ def details(board):
 
 
 def refused(board):
-    """The fields whose values details() refuses, each with why, so a caller can leave them out and say so."""
+    """The fields (names or values) details() refuses, each with why, so a caller can leave them out and say
+    so. An identity that is not a dict has no fields to leave out: TypeError."""
     out = {}
-    for key, value in board.items():
+    for key, value in _fields(board):
         try:
-            detail(value)
+            _field(key, value)
         except TypeError as e:
             out[key] = str(e)
     return out

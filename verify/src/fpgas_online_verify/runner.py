@@ -202,7 +202,7 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
         if not identified:  # the check stopped before saying who the board is: say what finding it showed
             reports[-1].setdefault("identity", identity.base(key, board.name, found))
         if "identity" in reports[-1]:
-            _sendable_identity(reports[-1])
+            _sendable_identity(reports[-1], identity.base(key, board.name, found))
         if not identified:
             board_event("fpga-board-identified", identity.details(reports[-1]["identity"]))
         if skipped:
@@ -227,14 +227,19 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
     return report
 
 
-def _sendable_identity(report):
-    """Leave out of a board's identity any field whose value cannot be sent (a bug in the board's module), and
-    make each one an error on that board, so the other boards are still checked and fpga-verified is sent."""
-    bad = identity.refused(report["identity"])
-    if not bad:
-        return
-    report["identity"] = {k: v for k, v in report["identity"].items() if k not in bad}
-    reasons = [f"the identity field {k} cannot be sent: {why}" for k, why in bad.items()]
+def _sendable_identity(report, base):
+    """Leave out of a board's identity any field whose name or value cannot be sent (a bug in the board's
+    module), and make each one an error on that board, so the other boards are still checked and fpga-verified
+    is sent. An identity that is not a dict is replaced by `base` (what finding the board showed)."""
+    try:
+        bad = identity.refused(report["identity"])
+    except TypeError as e:
+        report["identity"], reasons = base, [f"the identity cannot be sent: {e}"]
+    else:
+        if not bad:
+            return
+        report["identity"] = {k: v for k, v in report["identity"].items() if k not in bad}
+        reasons = [f"the identity field {k} cannot be sent: {why}" for k, why in bad.items()]
     report["result"] = worst([report.get("result", "error"), "error"])
     report["reason"] = "; ".join([report["reason"], *reasons] if report.get("reason") else reasons)
 
