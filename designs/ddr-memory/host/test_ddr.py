@@ -2,9 +2,19 @@
 """
 Host-side DDR memory test script.
 
-Captures UART output from the LiteX BIOS boot sequence and parses for:
-  1. DRAM calibration results (read/write leveling)
-  2. Memtest verdict ("Memtest OK" or "Memtest KO")
+Attaches to the LiteX BIOS of the DDR test design over the UART and asks it to test the memory now:
+
+  1. `ident`       the design answering is the DDR test design for this board
+  2. `mem_list`    where the DRAM is and how much the design has
+  3. `sdram_init`  initialisation and read leveling again (a window on every byte lane), the BIOS's
+                   2 MiB memtest, and its write and read speed
+  4. `sdram_test`  a memtest over 1/32 of the DRAM
+
+The verdict is these runs', not the one the BIOS made while it booted: that output is gone before the
+Pi's own UART is opened (the NeTV2), and is an old log on an FTDI UART (the Arty). See
+designs/_host/bios_console.py.
+
+The last line of output is the result for fpgas-verify: RESULT_JSON {"test": "ddr", "result": ...}.
 
 Usage:
     uv run python designs/ddr-memory/host/test_ddr.py --port /dev/ttyUSB1
@@ -12,24 +22,99 @@ Usage:
 """
 
 import argparse
+import os
 import re
 import sys
 import time
 
-import serial
+# In the repository the helper is in designs/_host; installed, it is beside this script.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "_host"))
+
+import bios_console
 
 # --------------------------------------------------------------------------- #
 # Constants
 # --------------------------------------------------------------------------- #
 
 BAUD_RATE = 115200
-BOOT_TIMEOUT_S = 60  # DDR calibration can take a while
+ATTACH_TIMEOUT_S = 60  # the BIOS waits for a serial boot before its first prompt
 
-# Expected DRAM sizes per board (bytes).
-EXPECTED_DRAM_SIZE = {
-    "arty": 256 * 1024 * 1024,  # 256 MB
-    "netv2": 512 * 1024 * 1024,  # 512 MB
+# What `ident` must contain: the design, and the board it was built for.
+DESIGN_IDENT = "DDR Test SoC"
+BOARD_IDENT = {
+    "arty": "Arty A7",
+    "netv2": "NeTV2",
 }
+
+# How long each command is given. sdram_test prints a progress line per 128 KiB: at 115200 baud that
+# printing, not the memory, is most of its time (12.5 s for the NeTV2's 32 MiB).
+COMMAND_TIMEOUT_S = {"ident": 10, "mem_list": 10, "sdram_init": 120, "sdram_test": 300}
+
+UNITS = {"B": 1, "KiB": 1024, "MiB": 1024**2, "GiB": 1024**3}
+SIZE_RE = re.compile(r"([0-9.]+)(B|KiB|MiB|GiB)")
+MEMTEST_RE = re.compile(r"Memtest at (0x[0-9a-fA-F]+) \(([0-9.]+(?:B|KiB|MiB|GiB))\)")
+ERRORS_RE = re.compile(r"(bus|addr|data) errors:\s*(\d+)/(\d+)")
+BEST_RE = re.compile(r"best: (m\d+), (b\d+) delays: (\S+)")
+SPEED_RE = re.compile(r"(Write|Read) speed: ([0-9.]+)MiB/s")
+MAIN_RAM_RE = re.compile(r"MAIN_RAM\s+(0x[0-9a-fA-F]+)\s+(0x[0-9a-fA-F]+)")
+
+
+# --------------------------------------------------------------------------- #
+# Reading the BIOS's replies
+# --------------------------------------------------------------------------- #
+
+
+def parse_size(text):
+    """Bytes of a size as the BIOS prints it: "2.0MiB", "128.0KiB", "0B"."""
+    m = SIZE_RE.fullmatch(text)
+    return int(float(m.group(1)) * UNITS[m.group(2)])
+
+
+def parse_leveling(reply):
+    """{"m0": "b01 14+-14", ...}: each byte lane's best bitslip and delay window, None where none was found."""
+    found = {}
+    for line in reply:
+        m = BEST_RE.search(line)
+        if m:
+            found[m.group(1)] = None if m.group(3) == "-" else f"{m.group(2)} {m.group(3)}"
+    return found
+
+
+def parse_memtest(reply):
+    """{"verdict": "OK" | "KO" | None, "bytes": tested, "errors": {"bus": (bad, of), ...}} of one memtest."""
+    found = {"verdict": None, "bytes": 0, "errors": {}}
+    for line in reply:
+        m = MEMTEST_RE.search(line)
+        if m:
+            found["bytes"] = parse_size(m.group(2))
+        m = ERRORS_RE.search(line)
+        if m:
+            found["errors"][m.group(1)] = (int(m.group(2)), int(m.group(3)))
+        if "Memtest OK" in line:
+            found["verdict"] = "OK"
+        elif "Memtest KO" in line:
+            found["verdict"] = "KO"
+    return found
+
+
+def parse_speed(reply):
+    """{"write_mib_per_s": ..., "read_mib_per_s": ...}, with what the BIOS measured."""
+    found = {}
+    for line in reply:
+        m = SPEED_RE.search(line)
+        if m:
+            found[f"{m.group(1).lower()}_mib_per_s"] = float(m.group(2))
+    return found
+
+
+def memtest_fault(command, memtest):
+    """Why this memtest is a failure, or None."""
+    if memtest["verdict"] == "OK":
+        return None
+    if memtest["verdict"] is None:
+        return f"{command}: no memtest verdict"
+    counts = ", ".join(f"{kind} errors {bad}/{of}" for kind, (bad, of) in memtest["errors"].items())
+    return f"{command}: Memtest KO ({counts})"
 
 
 # --------------------------------------------------------------------------- #
@@ -37,67 +122,72 @@ EXPECTED_DRAM_SIZE = {
 # --------------------------------------------------------------------------- #
 
 
-def run_ddr_test(ser, board, timeout=BOOT_TIMEOUT_S):
-    """Capture boot output and parse DDR test results.
+def run_ddr_test(bios, board, attach_timeout=ATTACH_TIMEOUT_S):
+    """Run the test on an open BIOS console. Returns the result's fields ("result", "reason", ...)."""
+    found = {"test": "ddr", "board": board, "commands": []}
 
-    Returns (overall_pass, captured_lines).
-    """
-    lines = []
-    deadline = time.monotonic() + timeout
+    def ask(command):
+        found["commands"].append(command)
+        return bios.command(command, COMMAND_TIMEOUT_S[command])
 
-    calibration_ok = False
-    memtest_ok = None  # None = not seen, True = OK, False = KO
-    memtest_line = ""
+    def failed(reason):
+        print(f"FAIL: {reason}")
+        return {**found, "result": "fail", "reason": reason}
 
-    while time.monotonic() < deadline:
-        raw = ser.readline()
-        if not raw:
-            continue
-        line = raw.decode("utf-8", errors="replace").strip()
-        lines.append(line)
+    try:
+        bios.attach(attach_timeout)
+    except bios_console.NoPrompt as e:
+        return failed(f"{e}: nothing on the UART answers as a LiteX BIOS")
+    print("PASS: the BIOS answers at its prompt")
 
-        # Track calibration progress.
-        if "Switching SDRAM to software control" in line:
-            calibration_ok = True
+    faults = []
+    memtests = []
+    try:
+        found["ident"] = ident = bios.ident()
+        found["commands"].append("ident")
+        if not ident or DESIGN_IDENT not in ident or BOARD_IDENT[board] not in ident:
+            return failed(f"the design on the UART is {ident!r}, not the {DESIGN_IDENT} for the {BOARD_IDENT[board]}")
+        print(f"PASS: {ident}")
 
-        # Detect memtest result.
-        if "Memtest OK" in line:
-            memtest_ok = True
-            memtest_line = line
-            break
-        elif "Memtest KO" in line:
-            memtest_ok = False
-            memtest_line = line
-            break
+        m = MAIN_RAM_RE.search("\n".join(ask("mem_list")))
+        if m:
+            found["main_ram_base"], found["main_ram_bytes"] = int(m.group(1), 16), int(m.group(2), 16)
+            print(f"  DRAM: {found['main_ram_bytes'] // 1024**2} MiB at {found['main_ram_base']:#x}")
+        else:
+            faults.append("mem_list: the design has no MAIN_RAM region")
 
-        # Detect calibration failure.
-        if re.search(r"(calibration|leveling).*(fail|error)", line, re.IGNORECASE):
-            print(f"FAIL: DRAM calibration failed: {line}")
-            return False, lines
+        reply = ask("sdram_init")
+        found["leveling"] = leveling = parse_leveling(reply)
+        for lane, window in sorted(leveling.items()):
+            print(f"  read leveling {lane}: {window or 'no window'}")
+        if not leveling:
+            faults.append("sdram_init: no read leveling result")
+        elif not all(leveling.values()):
+            lanes = ", ".join(sorted(lane for lane, window in leveling.items() if not window))
+            faults.append(f"sdram_init: read leveling found no window on {lanes}")
+        memtests.append(("sdram_init", parse_memtest(reply)))
+        found.update(parse_speed(reply))
 
-        # If we see the BIOS prompt without a memtest result, boot
-        # completed but memtest was skipped or not run.
-        if "litex>" in line:
-            break
+        memtests.append(("sdram_test", parse_memtest(ask("sdram_test"))))
+    except bios_console.NoPrompt as e:
+        faults.append(str(e))
 
-    # Report results.
-    results = []
+    for command, memtest in memtests:
+        fault = memtest_fault(command, memtest)
+        if fault:
+            faults.append(fault)
+        else:
+            print(f"PASS: {command}: Memtest OK over {memtest['bytes'] // 1024**2} MiB")
+    found["bytes_tested"] = max((m["bytes"] for _, m in memtests), default=0)
+    found["errors"] = max((sum(bad for bad, _ in m["errors"].values()) for _, m in memtests), default=0)
+    if "write_mib_per_s" in found:
+        print(f"  speed: write {found['write_mib_per_s']} MiB/s, read {found['read_mib_per_s']} MiB/s")
 
-    if calibration_ok:
-        print("PASS: DRAM calibration completed (SDRAM under software control)")
-    else:
-        print("FAIL: DRAM calibration not detected")
-    results.append(calibration_ok)
-
-    if memtest_ok is True:
-        print(f"PASS: {memtest_line}")
-    elif memtest_ok is False:
-        print(f"FAIL: {memtest_line}")
-    else:
-        print("FAIL: Memtest result not detected within timeout")
-    results.append(memtest_ok is True)
-
-    return all(results), lines
+    if faults:
+        for fault in faults:
+            print(f"FAIL: {fault}")
+        return {**found, "result": "fail", "reason": "; ".join(faults)}
+    return {**found, "result": "pass"}
 
 
 # --------------------------------------------------------------------------- #
@@ -105,7 +195,13 @@ def run_ddr_test(ser, board, timeout=BOOT_TIMEOUT_S):
 # --------------------------------------------------------------------------- #
 
 
-def main():
+def open_port(port, baud, timeout):
+    import serial
+
+    return serial.Serial(port, baud, timeout=timeout)
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser(description="DDR memory test for FPGA boards")
     parser.add_argument(
         "--port",
@@ -115,7 +211,7 @@ def main():
     parser.add_argument(
         "--board",
         default="arty",
-        choices=list(EXPECTED_DRAM_SIZE.keys()),
+        choices=list(BOARD_IDENT.keys()),
         help="Board under test (default: arty)",
     )
     parser.add_argument(
@@ -127,33 +223,30 @@ def main():
     parser.add_argument(
         "--timeout",
         type=int,
-        default=BOOT_TIMEOUT_S,
-        help=f"Boot timeout in seconds (default: {BOOT_TIMEOUT_S})",
+        default=ATTACH_TIMEOUT_S,
+        help=f"Seconds to wait for the BIOS prompt (default: {ATTACH_TIMEOUT_S})",
     )
-    args = parser.parse_args()
-
-    boot_timeout = args.timeout
+    args = parser.parse_args(argv)
 
     print(f"Opening {args.port} at {args.baud} baud...")
-    print(f"Board: {args.board}, expected DRAM: {EXPECTED_DRAM_SIZE[args.board] // (1024 * 1024)} MB")
-    print(f"Waiting up to {boot_timeout}s for boot + memtest...")
+    print(f"Board: {args.board}")
     print()
 
-    with serial.Serial(args.port, args.baud, timeout=2) as ser:
-        passed, boot_lines = run_ddr_test(ser, args.board, timeout=boot_timeout)
-
-    if not passed:
-        print("\nFull boot output:")
-        for line in boot_lines:
-            print(f"  {line}")
+    ser = open_port(args.port, args.baud, 1)
+    try:
+        found = run_ddr_test(bios_console.BiosConsole(ser, clock=time.monotonic), args.board, args.timeout)
+    finally:
+        close = getattr(ser, "close", None)
+        if close:
+            close()
 
     print()
-    if passed:
+    if found["result"] == "pass":
         print("RESULT: PASS — DDR memory test completed successfully")
-        return 0
     else:
         print("RESULT: FAIL — DDR memory test had failures")
-        return 1
+    bios_console.print_result_json(found)
+    return 0 if found["result"] == "pass" else 1
 
 
 if __name__ == "__main__":

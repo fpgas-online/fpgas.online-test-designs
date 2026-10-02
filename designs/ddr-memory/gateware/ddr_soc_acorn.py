@@ -3,8 +3,8 @@
 LiteX SoC target for DDR memory test on Sqrl Acorn CLE-215+ / NiteFury / LiteFury.
 
 Builds a SoC with CPU + BIOS + UART + SDRAM (LiteDRAM). The BIOS
-automatically runs DRAM calibration and memtest on boot. The host
-just needs to parse the UART output for "Memtest OK" or "Memtest KO".
+runs DRAM calibration and a memtest on boot; the host test (host/test_ddr.py)
+attaches to the BIOS prompt and asks for both again (`sdram_init`, `sdram_test`).
 
 Acorn DRAM: one 16-bit DDR3 chip: Micron MT41K512M16 (1 GiB) on the CLE-215/215+, MT41K256M16 (512 MiB) on the
 CLE-101 / LiteFury.

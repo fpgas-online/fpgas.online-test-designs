@@ -57,3 +57,62 @@ class FakeBios:
         out = bytes(self.rx[:size])
         del self.rx[:size]
         return out
+
+
+# -- replies of the DDR test design, as the Welland boards gave them ----------------------------------------
+
+
+def leveling(modules, good=True):
+    """Read leveling of `modules` byte lanes: a window at bitslip 1 on each, or none anywhere."""
+    out = ["Read leveling:"]
+    for m in range(modules):
+        for b in range(8):
+            window = good and b == 1
+            scan = "01111111111111111111111111111100" if window else "0" * 32
+            out.append(f"  m{m}, b{b:02d}: |{scan}| delays: {'14+-14' if window else '-'}")
+        out.append(f"  best: m{m}, b{1 if good else 0:02d} delays: {'14+-14' if good else '-'}")
+    return out
+
+
+def memtest(size="2.0MiB", ok=True, words=524288):
+    progress = (
+        f"  Write: 0x40000000-0x40000000 0B   \r  Write: 0x40000000-0x40200000 {size}   \r\n\r"
+        f"   Read: 0x40000000-0x40000000 0B   \r   Read: 0x40000000-0x40200000 {size}   \r"
+    ).encode() + NL
+    head = lines(f"Memtest at 0x40000000 ({size})...") + progress
+    if ok:
+        return head + lines("Memtest OK")
+    return head + lines(
+        "  bus errors:  256/256", "  addr errors: 0/8192", f"  data errors: {words}/{words}", "Memtest KO"
+    )
+
+
+def sdram_init(modules, good=True):
+    """`sdram_init`: leveling, the BIOS's 2 MiB memtest and, when that passes, its speed measurement."""
+    head = lines("Initializing SDRAM @0x40000000...", "Switching SDRAM to software control.", *leveling(modules, good))
+    tail = lines("Switching SDRAM to hardware control.") + memtest(ok=good)
+    if good:
+        tail += lines(
+            "Memspeed at 0x40000000 (Sequential, 2.0MiB)...", "  Write speed: 27.2MiB/s", "   Read speed: 30.9MiB/s"
+        )
+    return head + tail + NL
+
+
+def ddr_replies(board="netv2", good=True):
+    name, modules, ram, test = {
+        "netv2": ("NeTV2", 4, 0x40000000, "32.0MiB"),
+        "arty": ("Arty A7", 2, 0x10000000, "8.0MiB"),
+    }[board]
+    return {
+        "ident": lines(f"Ident: fpgas-online DDR Test SoC -- {name} 2026-10-01 11:00:01"),
+        "mem_list": lines(
+            "Available memory regions:",
+            "ROM       0x00000000 0x20000 ",
+            "SRAM      0x10000000 0x2000 ",
+            f"MAIN_RAM  0x40000000 {ram:#x} ",
+            "CSR       0xf0000000 0x10000 ",
+        )
+        + NL,
+        "sdram_init": sdram_init(modules, good),
+        "sdram_test": memtest(test, good, words=8388608) + NL,
+    }
