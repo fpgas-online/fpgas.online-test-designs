@@ -7,7 +7,7 @@
     driving its pins (the NeTV2's JTAG scan) is looked for under its lock too, never before it is held; one
     that could not be looked for, its lock being busy, is in the document all the same, with every field
     missing for that reason, whatever else was found; so is one whose look failed (a JTAG scan that left a pin
-    driven), with the look's reason. Only one board's lock is held at a time.
+    driven, or a lock that could not be opened), with the look's reason. Only one board's lock is held at a time.
   * Anything only a loaded design can read (the Arty's and NeTV2's flash, through openFPGALoader's
     SPI-over-JTAG bridge) comes from the boot report (runner.REPORT), when the board there is this one by a key
     no other board has (its USB serial, PCI slot or device DNA); the board's dict lists those fields in
@@ -157,8 +157,9 @@ class _Locks:
     def probing(self, board):
         """runner.find's `probing`: hold `board`'s lock while it is looked for by driving its pins, and let it go
         as soon as it has been (its read takes it again). A lock that stays busy: with skip_busy (`auto`) the
-        board is skipped, and listed in `skipped`; else Busy, with .board. A look that fails (a Problem) is
-        listed in `failed` and goes on to runner.find, which may keep a weak claim and say so only in its `how`."""
+        board is skipped, and listed in `skipped`; else Busy, with .board. A look that fails (a Problem), or a
+        lock that cannot be opened (a symlink, a file it may not open), is listed in `failed` and goes on to
+        runner.find, which may keep a weak claim and say so only in its `how`."""
         with contextlib.ExitStack() as stack:
             try:
                 stack.enter_context(hold_lock(board.lock, board.title, timeout=self.wait))
@@ -169,6 +170,9 @@ class _Locks:
                 self.skipped.append(board)
                 yield False
                 return
+            except Problem as p:  # a lock that cannot be opened (a symlink, someone else's file): a failed look
+                self.failed.append((board, p))
+                raise
             try:
                 yield True
             except Problem as p:

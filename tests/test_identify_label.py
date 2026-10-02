@@ -343,6 +343,61 @@ def test_a_failed_look_is_not_lost_when_a_weak_claim_was_seen(tmp_path, locks, c
     assert doc["boards"] == [{"board": "netv2", "kind": "netv2"}] and gaps == [f"netv2: idcode: {reason}"]
 
 
+def _unopenable(how, lock, monkeypatch):
+    """Make `lock` a lock file that cannot be opened: a dangling symlink, or one whose open is refused (EACCES)."""
+    from fpgas_online_verify import core
+
+    if how == "dangling symlink":
+        lock.symlink_to(lock.parent / "nowhere")
+        return "is a symlink"
+    lock.write_text("")
+    real = core.os.open
+
+    def refusing(path, flags, mode=0o777):
+        if str(path) == str(lock):
+            raise PermissionError(13, "Permission denied", str(path))
+        return real(path, flags, mode)
+
+    monkeypatch.setattr(core.os, "open", refusing)
+    return "Permission denied"
+
+
+@pytest.mark.parametrize("how", ["dangling symlink", "permission error"])
+def test_a_lock_that_cannot_be_opened_is_a_failed_look_not_lost(tmp_path, monkeypatch, capsys, how):
+    # The NeTV2's lock cannot be opened, so it is never looked for (its pins never driven). Beside a weak claim,
+    # runner.find keeps the claim and says so only in its `how`: --identify must still put the NeTV2 in the
+    # document, its fields missing for the lock's reason, and exit 1. Configured for the NeTV2 alike.
+    monkeypatch.delenv(identify.ENV, raising=False)
+    lock = tmp_path / "netv2.lock"
+    said = _unopenable(how, lock, monkeypatch)
+
+    def boards():
+        acorn = LockedAt("acorn", tmp_path / "acorn.lock", seen=[{"variant": "cle-215+", "bdf": "0000:01:00.0"}],
+                         weak=True)  # fmt: skip
+        netv2 = LockedAt("netv2", lock, probes=True, probed=[{"variant": "a7-35"}], label_fields=("idcode", "dna"))
+        return {"acorn": acorn, "netv2": netv2}
+
+    options = {"mode_dir": _auto_dir(tmp_path), "admin_dir": tmp_path / "admin", "lock_wait": 0.2,
+               "boot_report": tmp_path / "v.json"}  # fmt: skip
+    found = boards()
+    doc, gaps = identify.read(options, found, usb=[], pci=[])
+    assert found["netv2"].probe_calls == 0 and found["acorn"].identified == ["acorn"]
+    assert [b["board"] for b in doc["boards"]] == ["acorn", "netv2"]
+    assert doc["boards"][1] == {"board": "netv2", "kind": "netv2"}
+    assert [g.split(": ")[:2] for g in gaps] == [["netv2", "idcode"], ["netv2", "dna"]]
+    assert all(str(lock) in g and said in g for g in gaps)
+    capsys.readouterr()
+    assert identify.run(options, boards=boards()) == 1
+    out = capsys.readouterr()
+    assert [b["board"] for b in json.loads(out.out)["boards"]] == ["acorn", "netv2"]
+    assert "--identify: netv2: idcode: error: " in out.err and str(lock) in out.err
+    # configured for the NeTV2 alone: the board is in the document, unread, each field said once
+    netv2 = boards()["netv2"]
+    doc, gaps = _read({"netv2": netv2}, tmp_path, lock_wait=0.2)
+    assert netv2.probe_calls == 0 and doc["boards"] == [{"board": "netv2", "kind": "netv2"}]
+    assert len(gaps) == 2 and all(g.startswith("netv2: ") and said in g for g in gaps)
+
+
 def test_the_netv2_is_scanned_under_its_lock_and_its_pins_put_back_before_it_is_let_go(tmp_path, monkeypatch):
     log = []
     monkeypatch.setattr(identify, "hold_lock", Locks(log))
