@@ -108,12 +108,13 @@ def compare_state(report, targets, reports, update, path):
         state.save(current, report["checked_at"], path)
         info["recorded"] = "--update" if update else "first run"
         return info
-    changes = state.differences(recorded, current, state.quiet_facts(version))
+    upgraded = state.widened(recorded, current, version)
+    changes = state.differences(upgraded, current, state.quiet_facts(version))
     if changes:
         info["changes"] = changes
-    elif report["result"] != "error" and state.merged(recorded, current) != recorded:
-        # only facts the record's older version did not have (an upgrade): added quietly, not a change
-        state.save(state.merged(recorded, current), report["checked_at"], path)
+    elif report["result"] != "error" and state.merged(upgraded, current) != recorded:
+        # only facts the record's older version did not have, or had less of (an upgrade): recorded quietly
+        state.save(state.merged(upgraded, current), report["checked_at"], path)
         info["added"] = True
     return info
 
