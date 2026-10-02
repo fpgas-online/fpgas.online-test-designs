@@ -618,6 +618,26 @@ def test_an_arty_idcode_on_a_record_from_before_it_is_added_quietly(opts):
     assert report["result"] == "pass" and report["state"]["added"]
 
 
+def test_a_dna_recorded_without_its_leading_zeros_is_respelled_quietly(opts):
+    """Before schema 4 the Acorn's DNA was recorded as f"{dna:#x}"; identity.py writes all 16 digits."""
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "dna": "0x54b48664b04854"}}, 3)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "dna": "0x0054b48664b04854"})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and report["state"]["added"]
+    boards, version = state.load_record(opts["state"])
+    assert boards["acorn"]["dna"] == "0x0054b48664b04854" and version == 4
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and "added" not in report["state"]
+
+
+def test_another_dna_is_still_a_change_and_a_respelling_is_one_on_a_new_record(opts):
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "dna": "0x54b48664b04855"}}, 3)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "dna": "0x0054b48664b04854"})
+    assert runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))["result"] == "changed"
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "dna": "0x54b48664b04854"}}, 4)
+    assert runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))["result"] == "changed"
+
+
 def test_a_run_that_errs_adds_nothing_to_the_record(opts):
     _record(opts, {"acorn": {"bdf": "0001:01:00.0"}}, 1)
     now = Seen("acorn", {"bdf": "0001:01:00.0", "dna": "0x1"}, result="error")

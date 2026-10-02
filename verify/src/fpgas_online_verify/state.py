@@ -9,9 +9,10 @@ design into SRAM, which every verify does, and upgrading packages change none of
 A fact the record does not have is a change ("not recorded before"): it may be one that could not be read
 last time, on a board that has since been swapped. The one exception is a fact a newer version of the
 record introduced (NEW_FACTS): on a record of an older version it is added quietly, so an upgrade that reads
-more does not make every stateful host report "changed" once. Likewise a fact a newer version reads more of
-(WIDENED: the IDCODE, once read without its version): on an older record, a recorded value that the new one
-only adds to is replaced quietly.
+more does not make every stateful host report "changed" once. Likewise a fact a newer version reads more of,
+or writes differently (WIDENED: the IDCODE, once read without its version; the device DNA, once written
+without its leading zeros): on an older record, a recorded value that the new one only adds to, or only
+respells, is replaced quietly.
 
 A netboot root keeps /var/lib in tmpfs, so there every boot is a first run.
 """
@@ -20,7 +21,7 @@ import json
 import pathlib
 
 STATE = pathlib.Path("/var/lib/fpgas-online/verify-state.json")
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 # The facts of a board's state that each version of the record introduced: {version: (key, ...)}.
 NEW_FACTS = {2: ("dna",), 3: ("idcode",)}  # 2: the Acorn's device DNA; 3: the Arty's IDCODE
 
@@ -33,8 +34,17 @@ def _idcode_widened(old, new):
         return False
 
 
-# The facts each version of the record reads more of: {version: {key: old value is the new one, less}}.
-WIDENED = {3: {"idcode": _idcode_widened}}
+def _same_number(old, new):
+    """The recorded value is the new one spelled differently (the DNA, before identity.py gave it 16 digits)."""
+    try:
+        return int(old, 16) == int(new, 16)
+    except (TypeError, ValueError):
+        return False
+
+
+# The facts each version of the record reads more of, or writes differently:
+# {version: {key: old value is the new one, less or respelled}}.
+WIDENED = {3: {"idcode": _idcode_widened}, 4: {"dna": _same_number}}
 
 
 def load_record(path=STATE):
