@@ -276,7 +276,7 @@ Some Vivado versions and device families need a licence file, and a
 node-locked licence is tied to one MAC address: Vivado runs only on a machine
 that has a network device with exactly that address.
 
-### Phase one: only versions that need no licence file
+### Phases 0 to 5: only versions that need no licence file
 
 The first deployment supports only licence-free Vivado (2025.2 Standard, which
 covers every current target). Nothing handles a licence file, and the design
@@ -294,13 +294,15 @@ VM**:
   `~/.Xilinx`, or a machine-tied `.lic` file under `/opt/Xilinx` or the home
   directory.
 
-In phase one each VM has one network card, with the fixed per-slot MAC
+In these phases each VM has one network card, with the fixed per-slot MAC
 (`52:54:00:76:00:<slot>`) that ties its address and its proxy log lines to the
 slot. That MAC is not a licence identity.
 
-### Later phase: versions that need a licence file
+### Phase 6: versions that need a licence file
 
-Not built in the first rollout. The design, so that phase one does not block it:
+Decided 2026-10-03: this is an explicit later phase. Phases 0 to 5 support only
+licence-free Vivado, and Phase 6 gets its own implementation plan when it is
+wanted. The design, so that the earlier phases do not block it:
 
 * **A licence seat** is three things that travel together: the licence file,
   the MAC address it is locked to, and the runner label of the Vivado version
@@ -347,14 +349,15 @@ their MAC to match. So for licensed slots:
   workspace and home directory, so artifact globs and `tar` of a build tree do
   not pick it up; a runner job-started hook registers the licence's key strings
   as masked values, so a stray `cat` shows `***` in the log; the artifact
-  staging script refuses a file that looks like a licence; and the phase-one
-  guards above still apply to every unlicensed slot.
+  staging script refuses a file that looks like a licence; and the guards
+  above still apply to every unlicensed slot.
 * **The alternative that removes the exposure** is a floating licence: a
   licence server on the host side holds the file, and VMs only check a licence
   out over the network, so no job ever sees the file. It needs a floating
   licence (a different, dearer product), a firewall opening from job VMs to the
   server's ports, and the server (a closed-source daemon fed by hostile VMs) in
-  a VM of its own. Which of the two to build is decision D-4.
+  a VM of its own. Which of the two to build is decision D-4, taken when
+  Phase 6 starts.
 
 ## Controller
 
@@ -526,13 +529,13 @@ Each phase is a PR with CI green before the next starts.
 | 3 | test-designs: the `patch_yosys_template()` fix, then one design end to end, then the whole matrix | Full Vivado matrix green |
 | 4 | Raise the first host to the slot count it can carry; add further hosts by the same procedure if D-3 says so | Matrix runs in parallel; host load stays within limits |
 | 5 | Release workflow replaces the manual publish | A `vivado-bitstreams-*` release made by CI with matching SHA-256s |
-| later | Vivado versions that need a licence file ("Vivado licences"); needs its own plan and decision D-4 | A licensed version builds on a licensed slot; the licence is absent from every other VM |
+| 6 | Vivado versions that need a licence file ("Vivado licences"). Not part of the first rollout: it needs its own plan, and decision D-4 first | A licensed version builds on a licensed slot; the licence is absent from every other VM |
 
 ## Out of scope
 
 * Toolchains other than Vivado on these runners
-* Vivado versions that need a licence file, in the first rollout (designed in
-  "Vivado licences", built later)
+* Vivado versions that need a licence file: Phase 6, not covered by the three
+  implementation plans below
 * Vivado jobs for fork pull requests (the sandbox is designed for it; the
   policy stays off)
 * Autoscaling beyond fixed slots
@@ -547,7 +550,7 @@ Each phase is a PR with CI green before the next starts.
   available and is already swapping, so even a 16 GiB slot needs its other VMs
   trimmed first; big-storage alone may be enough. Adding any host is the same
   procedure (Plan 2, Task 9).
-* **D-4** (not needed until licensed Vivado versions are built) Node-locked
+* **D-4** (Phase 6 only) Node-locked
   licence files in trusted-only licensed slots, or a floating licence server
   so that no job ever sees the file.
 * **CI-1 to CI-6** are decisions about the test-designs workflows (who
