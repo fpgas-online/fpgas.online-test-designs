@@ -1008,6 +1008,204 @@ def test_a_download_that_keeps_failing_is_a_clear_error_not_a_traceback(tmp_path
         cc.fetch_release_csrs(pin, fetch=down)
 
 
+# -- which kernels get a modules package (§4.2) ---------------------------------------------------------------
+
+plan = _load("plan")
+
+
+def _index(*kernels, images=True):
+    """A Packages index: a linux-headers stanza (and its linux-image) per (kver, Version)."""
+    stanzas = []
+    for kver, version in kernels:
+        kinds = ("headers", "image") if images else ("headers",)
+        for kind in kinds:
+            stanzas.append(f"Package: linux-{kind}-{kver}\nSource: linux\nVersion: {version}\nArchitecture: arm64\n")
+    return "\n".join(stanzas)
+
+
+BOOKWORM = _index(
+    ("rpi-v8", "1:6.12.109-1+rpt1"),  # the meta package: not a kernel
+    ("6.1.0-rpi8-rpi-v8", "1:6.1.73-1+rpt1"),
+    ("6.6.74+rpt-rpi-v8", "1:6.6.74-1+rpt1"),
+    ("6.12.19+rpt-rpi-v8", "1:6.12.19-1+rpt1~bpo12+1"),
+    ("6.12.109+rpt-rpi-v8", "1:6.12.109-1+rpt1"),
+    ("6.12.96+rpt-rpi-v8", "1:6.12.96-1+rpt1"),
+    ("6.12.109+rpt-rpi-v8-rt", "1:6.12.109-1+rpt1"),
+    ("6.12.109+rpt-common-rpi", "1:6.12.109-1+rpt1"),
+    ("6.12.109+rpt-rpi-2712", "1:6.12.109-1+rpt1"),
+    ("6.12.120+rpt-rpi-2712", "1:6.12.120-1+rpt1"),
+)
+TRIXIE = _index(
+    ("6.12.25+rpt-rpi-v8", "1:6.12.25-1+rpt1+trixie"),
+    ("6.18.50+rpt-rpi-v8", "1:6.18.50-1+rpt1"),
+    ("6.18.50+rpt-rpi-2712", "1:6.18.50-1+rpt1"),
+)
+CONFIG = {
+    "fleet_kernel": "6.12.96+rpt-rpi-v8",
+    "fleet_suite": "bookworm",
+    "min_kernel": "6.12",
+    "suites": {"bookworm": {"arm64": ["rpi-v8", "rpi-2712"]}, "trixie": {"arm64": ["rpi-v8", "rpi-2712"]}},
+}
+INDEXES = {("bookworm", "arm64"): BOOKWORM, ("trixie", "arm64"): TRIXIE}
+
+
+def _kvers(found):
+    return [kver for _release, kver in found]
+
+
+def test_the_kernels_of_a_flavour_are_its_versioned_headers_at_or_above_the_floor_oldest_first():
+    """Not the meta package, not the -rt flavour, not the shared -common-rpi headers, and 6.12.19 before 6.12.96."""
+    assert _kvers(plan.kernels(BOOKWORM, "rpi-v8", "6.12")) == [
+        "6.12.19+rpt-rpi-v8",
+        "6.12.96+rpt-rpi-v8",
+        "6.12.109+rpt-rpi-v8",
+    ]
+
+
+def test_the_floor_is_compared_with_the_package_version_not_its_name():
+    """Every 6.1 kernel is named 6.1.0-rpiN: by name 6.1.0-rpi8 would be below a 6.1.50 floor; it is 6.1.73."""
+    assert "6.1.0-rpi8-rpi-v8" in _kvers(plan.kernels(BOOKWORM, "rpi-v8", "6.1.50"))
+    assert "6.1.0-rpi8-rpi-v8" not in _kvers(plan.kernels(BOOKWORM, "rpi-v8", "6.1.74"))
+
+
+def test_a_kernel_without_its_image_package_is_not_built():
+    """The modules package depends on linux-image-<kver>: without one it could never be installed."""
+    assert plan.kernels(_index(("6.12.96+rpt-rpi-v8", "1:6.12.96-1+rpt1"), images=False), "rpi-v8", "6.12") == []
+
+
+@pytest.mark.parametrize(
+    ("version", "release"),
+    [
+        ("1:6.1.73-1+rpt1", (6, 1, 73)),
+        ("1:6.12.34-1+rpt1~bookworm", (6, 12, 34)),
+        ("1:6.12.25-1+rpt1+trixie", (6, 12, 25)),
+        ("6.18.50-1", (6, 18, 50)),
+    ],
+)
+def test_the_upstream_release_of_a_kernel_package_version(version, release):
+    assert plan.upstream_release(version) == release
+
+
+def test_a_version_that_names_no_release_is_an_error():
+    with pytest.raises(plan.PlanError, match="rpt1"):
+        plan.upstream_release("rpt1")
+
+
+def test_there_is_one_job_per_suite_and_kernel_of_each_flavour():
+    jobs = plan.jobs(CONFIG, INDEXES)
+    assert [(j.suite, j.flavour, j.kver) for j in jobs] == [
+        ("bookworm", "rpi-v8", "6.12.19+rpt-rpi-v8"),
+        ("bookworm", "rpi-v8", "6.12.96+rpt-rpi-v8"),
+        ("bookworm", "rpi-v8", "6.12.109+rpt-rpi-v8"),
+        ("bookworm", "rpi-2712", "6.12.109+rpt-rpi-2712"),
+        ("bookworm", "rpi-2712", "6.12.120+rpt-rpi-2712"),
+        ("trixie", "rpi-v8", "6.12.25+rpt-rpi-v8"),
+        ("trixie", "rpi-v8", "6.18.50+rpt-rpi-v8"),
+        ("trixie", "rpi-2712", "6.18.50+rpt-rpi-2712"),
+    ]
+    assert {j.arch for j in jobs} == {"arm64"}
+    assert [j.kver for j in jobs if j.fleet] == ["6.12.96+rpt-rpi-v8"]
+
+
+def test_the_same_kernel_name_in_two_suites_is_two_jobs_and_only_the_fleet_suites_is_the_fleet_kernel():
+    """6.12.34+rpt-rpi-v8 is built with GCC 12 in bookworm and GCC 14 in trixie: never shared between suites."""
+    both = _index(("6.12.34+rpt-rpi-v8", "1:6.12.34-1+rpt1"), ("6.12.34+rpt-rpi-2712", "1:6.12.34-1+rpt1"))
+    config = {**CONFIG, "fleet_kernel": "6.12.34+rpt-rpi-v8"}
+    jobs = plan.jobs(config, {("bookworm", "arm64"): both, ("trixie", "arm64"): both})
+    assert [(j.suite, j.fleet) for j in jobs if j.kver == "6.12.34+rpt-rpi-v8"] == [
+        ("bookworm", True),
+        ("trixie", False),
+    ]
+
+
+def test_a_fleet_kernel_below_the_floor_fails_the_plan():
+    with pytest.raises(plan.PlanError, match="below min_kernel"):
+        plan.jobs({**CONFIG, "min_kernel": "6.13"}, INDEXES)
+
+
+def test_a_fleet_kernel_that_is_not_built_fails_the_plan():
+    """A typo, a kernel the archive dropped, or a flavour kernels.toml does not list."""
+    with pytest.raises(plan.PlanError, match=r"6\.12\.97\+rpt-rpi-v8 \(bookworm\) is not one of the kernels"):
+        plan.jobs({**CONFIG, "fleet_kernel": "6.12.97+rpt-rpi-v8"}, INDEXES)
+
+
+def test_a_flavour_the_archive_has_no_kernel_for_fails_the_plan():
+    """An empty or truncated index must not read as 'nothing to build'."""
+    with pytest.raises(plan.PlanError, match="trixie arm64 index has no rpi-2712"):
+        plan.jobs(CONFIG, {**INDEXES, ("trixie", "arm64"): _index(("6.18.50+rpt-rpi-v8", "1:6.18.50-1+rpt1"))})
+
+
+def test_a_pull_request_builds_the_newest_kernel_of_each_suite_and_flavour_and_the_fleet_kernel():
+    assert [(j.suite, j.kver) for j in plan.sample(plan.jobs(CONFIG, INDEXES))] == [
+        ("bookworm", "6.12.96+rpt-rpi-v8"),  # the fleet kernel, though it is not the newest
+        ("bookworm", "6.12.109+rpt-rpi-v8"),
+        ("bookworm", "6.12.120+rpt-rpi-2712"),
+        ("trixie", "6.18.50+rpt-rpi-v8"),
+        ("trixie", "6.18.50+rpt-rpi-2712"),
+    ]
+
+
+def test_the_deb_is_named_for_the_kernel_the_driver_version_and_the_suite():
+    (job,) = [j for j in plan.jobs(CONFIG, INDEXES) if j.fleet]
+    assert job.package == "fpgas-online-acorn-litepcie-modules-6.12.96+rpt-rpi-v8"
+    assert job.deb("0.0.post7") == "fpgas-online-acorn-litepcie-modules-6.12.96+rpt-rpi-v8_0.0.post7~deb12_arm64.deb"
+
+
+def test_the_asset_is_the_deb_as_github_stores_it():
+    """GitHub turns the `~` of an uploaded file's name into `.`; the release is compared by the stored name."""
+    (job,) = [j for j in plan.jobs(CONFIG, INDEXES) if j.fleet]
+    assert job.asset("0.0.post7") == "fpgas-online-acorn-litepcie-modules-6.12.96+rpt-rpi-v8_0.0.post7.deb12_arm64.deb"
+
+
+def test_main_builds_only_the_packages_the_release_does_not_have_at_this_driver_version():
+    jobs = plan.jobs(CONFIG, INDEXES)
+    published = {j.asset("0.0.post7") for j in jobs if j.suite == "bookworm"}
+    published |= {j.asset("0.0.post6") for j in jobs}  # an older driver version does not count
+    assert {j.suite for j in plan.missing(jobs, "0.0.post7", published)} == {"trixie"}
+    assert plan.missing(jobs, "0.0.post7", {j.asset("0.0.post7") for j in jobs}) == []
+    assert plan.missing(jobs, "0.0.post8", published) == jobs
+
+
+def test_the_matrix_is_what_the_workflow_reads():
+    jobs = [j for j in plan.jobs(CONFIG, INDEXES) if j.fleet]
+    assert plan.matrix(jobs, "0.0.post7") == {
+        "include": [
+            {
+                "suite": "bookworm",
+                "arch": "arm64",
+                "flavour": "rpi-v8",
+                "kver": "6.12.96+rpt-rpi-v8",
+                "package": "fpgas-online-acorn-litepcie-modules-6.12.96+rpt-rpi-v8",
+                "deb": "fpgas-online-acorn-litepcie-modules-6.12.96+rpt-rpi-v8_0.0.post7~deb12_arm64.deb",
+                "asset": "fpgas-online-acorn-litepcie-modules-6.12.96+rpt-rpi-v8_0.0.post7.deb12_arm64.deb",
+                "fleet": True,
+            }
+        ]
+    }
+
+
+def test_the_plan_command_writes_the_matrix_for_the_workflow(tmp_path, monkeypatch, capsys):
+    for (suite, arch), text in INDEXES.items():
+        (tmp_path / f"Packages-{suite}-{arch}").write_text(text)
+    kernels = tmp_path / "kernels.toml"
+    kernels.write_text(
+        'fleet_kernel = "6.12.96+rpt-rpi-v8"\nfleet_suite = "bookworm"\nmin_kernel = "6.12"\n'
+        '[suites.bookworm]\narm64 = ["rpi-v8", "rpi-2712"]\n[suites.trixie]\narm64 = ["rpi-v8", "rpi-2712"]\n'
+    )
+    assets = tmp_path / "assets"
+    assets.write_text("fpgas-online-acorn-litepcie-modules-6.12.96+rpt-rpi-v8_0.0.post7.deb12_arm64.deb\n")
+    output = tmp_path / "github-output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    common = ["--version", "0.0.post7", "--kernels", str(kernels), "--index-dir", str(tmp_path)]
+    plan.main([*common, "--assets-file", str(assets), "--mode", "missing"])
+    out = dict(line.split("=", 1) for line in output.read_text().splitlines())
+    assert out["count"] == "7"
+    assert len(json.loads(out["matrix"])["include"]) == 7
+    text = capsys.readouterr().out
+    assert "published -     fpgas-online-acorn-litepcie-modules-6.12.96+rpt-rpi-v8_0.0.post7.deb12_arm64.deb" in text
+    assert "main and the daily run would build 7 of 8" in text
+
+
 def test_kernels_toml_builds_the_kernels_a_pi_5_boots():
     """Both suites, the two 64-bit flavours: no 32-bit kernel boots on a Pi 5, and no host runs -rt."""
     assert bd.read_kernels()["suites"] == {
