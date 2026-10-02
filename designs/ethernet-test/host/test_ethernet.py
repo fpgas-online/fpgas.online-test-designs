@@ -281,7 +281,11 @@ def main(argv=None):
     if args.uart_port is None:
         args.uart_port = "/dev/ttyUSB1" if args.board == "arty" else "/dev/ttyAMA0"
 
-    found = run_test(args.board, args.uart_port, args.baud, args.interface)
+    try:
+        found = run_test(args.board, args.uart_port, args.baud, args.interface)
+    except (subprocess.SubprocessError, OSError) as e:  # `ip` refused the adapter, ping missing, ...
+        found = {"test": "ethernet", "board": args.board, "result": "fail", "reason": f"the test could not run: {e}"}
+        print(f"FAIL: {found['reason']}")
     print()
     print(
         "RESULT: PASS — Ethernet test completed successfully"

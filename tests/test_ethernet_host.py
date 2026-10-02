@@ -122,6 +122,19 @@ def test_a_port_that_cannot_be_opened_fails(board, monkeypatch):
     assert "cannot open /dev/ttyUSB1" in found["reason"]
 
 
+def test_an_adapter_ip_refuses_still_ends_with_a_result(board, monkeypatch, capsys):
+    def refuse(*args):
+        raise subprocess.CalledProcessError(1, ["ip", "addr", "flush", "dev", "bogus"])
+
+    monkeypatch.setattr(te, "configure_interface", refuse)
+    monkeypatch.setattr(te.os, "geteuid", lambda: 0)
+    assert te.main(["--board", "arty", "--interface", "bogus"]) == 1
+    last = capsys.readouterr().out.strip().splitlines()[-1]
+    found = json.loads(last[len("RESULT_JSON ") :])
+    assert found["result"] == "fail"
+    assert "could not run" in found["reason"]
+
+
 def test_main_ends_with_the_result_line(board, monkeypatch, capsys):
     monkeypatch.setattr(te, "run_test", lambda *args: {"test": "ethernet", "board": "arty", "result": "pass"})
     assert te.main(["--board", "arty"]) == 0
