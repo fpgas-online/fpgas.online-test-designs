@@ -14,6 +14,7 @@ The site hears how it goes through fleet-events, each small and flat (EVENTS): t
 found or no board, a board identified, each test started and finished, and the final result.
 """
 
+import contextlib
 import datetime
 import json
 import pathlib
@@ -46,9 +47,11 @@ def _now():
 def find(boards, mode, options, usb, pci):
     """[(board, host, found)] to check, and how they were chosen. A board that is not there is a Problem.
 
-    options["before_probe"], when given, is called with each board before anything drives its pins to look
-    for it (a `probes` board's find or probe): --identify takes the board's lock there."""
-    before_probe = options.get("before_probe") or (lambda board: None)
+    options["probing"], when given, is called with each `probes` board and gives a context manager that is
+    held around anything that drives the board's pins to look for it (its find or probe), and says whether to
+    go ahead: False skips the board, as not looked for. --identify holds the board's lock there.
+    """
+    probing = options.get("probing") or (lambda board: contextlib.nullcontext(True))
     if mode != config.AUTO:
         board = boards.get(mode) or next((b for b in boards.values() if b.slug == mode), None)
         if board is None:
@@ -56,9 +59,8 @@ def find(boards, mode, options, usb, pci):
             raise Problem("error", f"this host is set up for {mode!r}, but no such board module is installed "
                                    f"(fpgas-online-{mode}-tools?); installed: {have}")  # fmt: skip
         host = board.facts(options.get("port"))
-        if board.probes:
-            before_probe(board)
-        found = board.find(host, usb, pci)
+        with probing(board) if board.probes else contextlib.nullcontext(True) as free:
+            found = board.find(host, usb, pci) if free else []
         if not found:
             raise Problem(
                 "missing", f"no {board.title} found: this host is set up for one, and nothing else is looked for"
@@ -79,8 +81,8 @@ def find(boards, mode, options, usb, pci):
             probed = []
             for n, b in boards.items():
                 if b.probes:
-                    before_probe(b)
-                    probed += [(b, hosts[n], f) for f in b.probe(hosts[n])]
+                    with probing(b) as free:
+                        probed += [(b, hosts[n], f) for f in b.probe(hosts[n])] if free else []
         except Problem as p:
             if not spotted:
                 raise

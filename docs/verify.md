@@ -133,7 +133,9 @@ any state.
   use then has its fields missing, for the reason `board busy`. A NeTV2 is also looked for under its lock,
   since finding it drives its JTAG pins; one that could not be looked for, its lock busy, is in the document
   all the same, with its fields missing for that reason, even when other boards were found (`--identify`
-  then exits 1).
+  then exits 1). `--identify` holds one board's lock at a time: the NeTV2's is let go after its scan and
+  taken again for its read, so no two locks are ever taken in an order that could deadlock with rpi-hwid's
+  (acorn < arty < netv2).
 * A field that needs a design loaded (the Arty's and NeTV2's flash, read through openFPGALoader's
   SPI-over-JTAG bridge) comes from the boot report, `/run/fpgas-online/verify.json`, when the board there is
   this one by a key no other board has: the Arty's USB serial, the Acorn's PCI slot, or the device DNA. Those

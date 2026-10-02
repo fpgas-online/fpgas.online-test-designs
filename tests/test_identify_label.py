@@ -226,12 +226,33 @@ def test_a_board_found_by_driving_its_pins_is_looked_for_under_its_lock(tmp_path
     netv2 = Probed("netv2", locks, probed=[{"variant": "a7-35", "idcode": "0x0362d093"}])
     doc, _ = _read({"netv2": netv2}, tmp_path)  # configured
     assert netv2.probe_calls == 1 and [b["board"] for b in doc["boards"]] == ["netv2"]
-    assert locks.taken == [netv2.lock]  # taken once, before the scan, and kept for the read
+    assert locks.taken == [netv2.lock, netv2.lock]  # taken before the scan, let go, and taken again for the read
     locks.taken.clear()
     netv2 = Probed("netv2", locks, probed=[{"variant": "a7-35", "idcode": "0x0362d093"}])
     doc, _ = _read_auto({"arty": Identified("arty"), "netv2": netv2}, tmp_path)  # auto: nothing seen, so probed
     assert netv2.probe_calls == 1 and [b["board"] for b in doc["boards"]] == ["netv2"]
-    assert locks.taken == [netv2.lock] and locks.held == []
+    assert locks.taken == [netv2.lock, netv2.lock] and locks.held == []
+
+
+def test_identify_holds_one_boards_lock_at_a_time(tmp_path, monkeypatch):
+    # A weak claim seen (a Xilinx PCIe design the Acorn module cannot name) makes `auto` probe the NeTV2 as well.
+    # Holding the NeTV2's lock from its scan through the Acorn's read would take acorn under netv2, the reverse
+    # of rpi-hwid's acorn < arty < netv2: the NeTV2's lock is let go after the scan, before the Acorn's is taken.
+    log = []
+    locks = Locks(log)
+    monkeypatch.setattr(identify, "hold_lock", locks)
+    monkeypatch.delenv(identify.ENV, raising=False)
+    acorn = Identified("acorn", seen=[{"variant": "cle-215+", "bdf": "0000:01:00.0"}], weak=True)
+    netv2 = Probed("netv2", locks, probed=[{"variant": "a7-35", "idcode": "0x0362d093"}])
+    doc, _ = _read_auto({"acorn": acorn, "netv2": netv2}, tmp_path)
+    assert [b["board"] for b in doc["boards"]] == ["acorn", "netv2"] and netv2.probe_calls == 1
+    assert log == [["lock", netv2.lock], ["unlock", netv2.lock],  # the scan
+                   ["lock", acorn.lock], ["unlock", acorn.lock],  # the reads, one board at a time
+                   ["lock", netv2.lock], ["unlock", netv2.lock]]  # fmt: skip
+    depth = 0
+    for op, _ in log:
+        depth += 1 if op == "lock" else -1
+        assert 0 <= depth <= 1  # never two boards' locks at once
 
 
 def test_a_busy_board_found_by_driving_its_pins_is_never_driven(tmp_path, held_lock, monkeypatch):
@@ -290,7 +311,8 @@ def test_the_netv2_is_scanned_under_its_lock_and_its_pins_put_back_before_it_is_
     assert doc["boards"][0]["idcode"] == "0x03631093"
     assert log == [["lock", NETV2.lock], ["pinctrl", "get", "4,17,27,22"], ["openocd", "-c", log[2][2]],
                    ["pinctrl", "set", "4"], ["pinctrl", "set", "17"], ["pinctrl", "set", "22"],
-                   ["pinctrl", "set", "27"], ["unlock", NETV2.lock]]  # fmt: skip
+                   ["pinctrl", "set", "27"], ["unlock", NETV2.lock],
+                   ["lock", NETV2.lock], ["unlock", NETV2.lock]]  # fmt: skip
     assert run.calls[2] == ["pinctrl", "set", "4", "ip", "pn"]  # left driven by openocd: back to an input
 
 

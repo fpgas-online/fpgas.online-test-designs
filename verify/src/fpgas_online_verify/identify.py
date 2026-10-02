@@ -6,7 +6,7 @@
     and a board still busy then has its fields missing, for the reason "board busy". A board found only by
     driving its pins (the NeTV2's JTAG scan) is looked for under its lock too, never before it is held; one
     that could not be looked for, its lock being busy, is in the document all the same, with every field
-    missing for that reason, whatever else was found.
+    missing for that reason, whatever else was found. Only one board's lock is held at a time.
   * Anything only a loaded design can read (the Arty's and NeTV2's flash, through openFPGALoader's
     SPI-over-JTAG bridge) comes from the boot report (runner.REPORT), when the board there is this one by a key
     no other board has (its USB serial, PCI slot or device DNA); the board's dict lists those fields in
@@ -141,27 +141,32 @@ def missing(board, ident, why=None):
 
 
 class _Locks:
-    """The boards' locks --identify holds: each taken at most once, and waited for at most LOCK_WAIT seconds."""
+    """The boards' locks --identify takes, each waited for at most `wait` (LOCK_WAIT) seconds.
 
-    def __init__(self, stack, wait):
-        self.stack, self.wait, self.held, self.busy = stack, wait, set(), set()
+    It holds at most one board's lock at a time, both while looking for a board and while reading one, so it
+    can never take two in an order that deadlocks with another tool's (rpi-hwid takes acorn < arty < netv2).
+    Should two ever have to be held together, take them in that sorted order."""
+
+    def __init__(self, wait):
+        self.wait, self.skip_busy = wait, False
         self.skipped = []  # the boards not looked for because their lock stayed held
 
-    def take(self, board):
-        """Hold `board`'s lock until the read is done; Busy (with .board) if it is not free in time."""
-        if board.lock in self.held:
-            return
-        if board.lock not in self.busy:
+    @contextlib.contextmanager
+    def probing(self, board):
+        """runner.find's `probing`: hold `board`'s lock while it is looked for by driving its pins, and let it go
+        as soon as it has been (its read takes it again). A lock that stays busy: with skip_busy (`auto`) the
+        board is skipped, and listed in `skipped`; else Busy, with .board."""
+        with contextlib.ExitStack() as stack:
             try:
-                self.stack.enter_context(hold_lock(board.lock, board.title, timeout=self.wait))
-                self.held.add(board.lock)
-                return
-            except Busy:
-                self.busy.add(board.lock)
+                stack.enter_context(hold_lock(board.lock, board.title, timeout=self.wait))
+            except Busy as busy:
+                if not self.skip_busy:
+                    busy.board = board
+                    raise
                 self.skipped.append(board)
-        busy = Busy(board.title, self.wait)
-        busy.board = board
-        raise busy
+                yield False
+                return
+            yield True
 
 
 def _busy(key, board, found):
@@ -197,36 +202,35 @@ def read(options, boards=None, usb=None, pci=None):
     A SIGTERM meanwhile exits 143, with everything a board's read changed put back.
 
     Nothing touches a board's pins before its lock is held: a board found by driving its JTAG (the NeTV2's
-    scan) is looked for under its lock, which is then kept for its read."""
+    scan) is looked for under its lock, which is let go before any other board's is taken, and taken again
+    for its read. No two boards' locks are ever held at once."""
     report = options.get("boot_report") or runner.REPORT
     boards = installed() if boards is None else boards
-    with _sigterm_exits(), contextlib.ExitStack() as stack:
-        locks = _Locks(stack, options.get("lock_wait", LOCK_WAIT))
-        mode = None
+    with _sigterm_exits():
+        locks = _Locks(options.get("lock_wait", LOCK_WAIT))
+        out, gaps = [], []
         try:
             if options.get("board"):
                 mode = options["board"]
             else:
                 mode, _ = config.configured(options.get("mode_dir", config.MODE_DIR),
                                             options.get("admin_dir", config.ADMIN_DIR))  # fmt: skip
+            locks.skip_busy = mode == config.AUTO
             usb = usb_devices() if usb is None else usb
             pci = pci_devices() if pci is None else pci
-            targets, _ = runner.find(boards, mode, {**options, "before_probe": locks.take}, usb, pci)
-        except Busy as b:  # a board that is found by driving its pins was busy before it could be looked for
-            if mode != config.AUTO:
-                ident, gaps = _busy(b.board.name, b.board, {})
-                return identity.document([ident]), gaps
-            targets = []  # nothing else was found; the busy board is in the document below
+            targets, _ = runner.find(boards, mode, {**options, "probing": locks.probing}, usb, pci)
+        except Busy as b:  # configured for a board found by driving its pins, busy before it could be looked for
+            ident, gaps = _busy(b.board.name, b.board, {})
+            return identity.document([ident]), gaps
         except Problem as p:
-            return identity.document([]), [f"{p.result}: {p.reason}"]
-        out, gaps = [], []
+            targets = []
+            if not (locks.skipped and p.result == "missing"):  # "none found" is said by the busy board below
+                gaps.append(f"{p.result}: {p.reason}")
         for (board, host, found), key in zip(targets, runner._keys(targets)):
             why = {}
             board_options = {**{k: v for k, v in options.items() if k != "event"}, "board_key": key}
             try:
-                with contextlib.ExitStack() as own:
-                    if board.lock not in locks.held:  # held since it was looked for, or only for this read
-                        own.enter_context(hold_lock(board.lock, board.title, timeout=locks.wait))
+                with hold_lock(board.lock, board.title, timeout=locks.wait):  # the only lock held meanwhile
                     ident = board.identify(host, found, board_options)
                     ident, report_why = from_report(board, ident, _boot_report(report))
                     why = dict.fromkeys(board.report_fields, report_why) if report_why else {}
