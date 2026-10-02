@@ -88,7 +88,7 @@ from designs._shared.pin_check import check_build
 from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name, require_timing
 from designs._shared.s7pcie_clocking import feed_pclk_mux_from_mmcm
 from designs._shared.uartbone_break import BreakResetUARTBone, tuning_word
-from designs._shared.yosys_workarounds import apply_nodram_workaround, patch_yosys_template
+from designs._shared.yosys_workarounds import build_in_block_ram, patch_yosys_template
 
 # The system clock each toolchain builds for, unless --sys-clk-freq says otherwise. nextpnr-xilinx does not
 # place LiteX SoCs on these parts at 100 MHz (designs/ddr-memory's Acorn SoC: 64.9 MHz when asked for 100), and
@@ -397,9 +397,11 @@ def main():
     if args.toolchain == "openxc7":
         ensure_chipdb_symlink(soc.platform)
         patch_yosys_template(soc)
-        # Yosys maps the 8 KiB L2 cache's data memory to 256 RAM256X1S, which the openXC7 image's
-        # nextpnr-xilinx cannot pack (#30); -nodram puts it in block RAM, as for the NeTV2's DDR3 SoCs.
-        apply_nodram_workaround(soc)
+        if not args.golden:
+            # Yosys maps the 8 KiB L2 cache's data memory to 256 RAM256X1S, which the openXC7 image's
+            # nextpnr-xilinx cannot pack (#30). Block RAM for those 16 memories; not -nodram, which also
+            # turns the PCIe PHY's two 92-bit x 256 AsyncFIFOs into 47,000 flip-flops.
+            build_in_block_ram(soc, "data_mem_grain*")
 
     builder_kwargs = parser.builder_argdict
     board = f"acorn-{args.variant}{'-golden' if args.golden else ''}"
