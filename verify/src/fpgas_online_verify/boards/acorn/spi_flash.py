@@ -361,7 +361,7 @@ def bound_driver(bdf, sysfs=None):
 
 def litepcie_bound_anywhere(sysfs=None):
     """The first PCI device litepcie.ko is bound to, or None. For the UART path, which has no BDF: the bridge
-    reaches the same SPI master the driver's flash ioctl drives, and loading the driver resets the SoC."""
+    reaches the same SPI master the driver's flash ioctl drives."""
     root = pathlib.Path(sysfs or SYSFS_PCI)
     if not root.is_dir():
         return None
