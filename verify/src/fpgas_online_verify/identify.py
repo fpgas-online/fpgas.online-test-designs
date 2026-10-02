@@ -25,6 +25,7 @@ import contextlib
 import json
 import os
 import pathlib
+import signal
 import sys
 
 from . import config, identity, runner
@@ -164,14 +165,37 @@ def _busy(key, board, found):
     return identity.base(key, board.name, found), [f"{key}: {f}: {BUSY}" for f in board.label_fields]
 
 
+def _terminated(signum, frame):
+    """SIGTERM during the read (rpi-hwid stops a slow --identify with SIGTERM, then SIGKILL): leave through every
+    finally, so pins, locks and the PCI COMMAND register are put back. A second SIGTERM is ignored meanwhile, so
+    it cannot cut the putting back short."""
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    raise SystemExit(128 + signum)
+
+
+@contextlib.contextmanager
+def _sigterm_exits():
+    """Make SIGTERM raise SystemExit(143) for the duration; the previous handler is put back afterwards."""
+    try:
+        previous = signal.signal(signal.SIGTERM, _terminated)
+    except ValueError:  # not the main thread: signals are not ours to handle
+        yield
+        return
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
 def read(options, boards=None, usb=None, pci=None):
     """(the document, [what is not whole, in words]). options["boot_report"]: the boot report (runner.REPORT).
+    A SIGTERM meanwhile exits 143, with everything a board's read changed put back.
 
     Nothing touches a board's pins before its lock is held: a board found by driving its JTAG (the NeTV2's
     scan) is looked for under its lock, which is then kept for its read."""
     report = options.get("boot_report") or runner.REPORT
     boards = installed() if boards is None else boards
-    with contextlib.ExitStack() as stack:
+    with _sigterm_exits(), contextlib.ExitStack() as stack:
         locks = _Locks(stack, options.get("lock_wait", LOCK_WAIT))
         mode = None
         try:

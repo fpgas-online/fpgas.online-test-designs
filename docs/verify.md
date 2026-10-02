@@ -123,6 +123,8 @@ any state.
   * Acorn, P1 JTAG, and NeTV2: openFPGALoader (or openocd) drives the Pi's JTAG GPIOs. Their state is read
     with `pinctrl` first and put back afterwards; a pin that was an output goes back as an input. Without
     `pinctrl` the scan is not run.
+  * A SIGTERM during the read (rpi-hwid sends one to a slow `--identify`, then SIGKILL) exits 143 after
+    putting all of this back and letting go of the locks; a second SIGTERM meanwhile is ignored.
 * Each board is read under its lock, as a check is. `--identify` waits at most 30 s for it; a board still in
   use then has its fields missing, for the reason `board busy`. A NeTV2 is also looked for under its lock,
   since finding it drives its JTAG pins.
