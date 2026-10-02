@@ -7,7 +7,7 @@ import re
 import sys
 import textwrap
 
-from . import config, debug, identify, runner, state
+from . import config, debug, identify, label, runner, state
 from .board import installed
 from .testbench import TestBoard
 
@@ -70,7 +70,8 @@ def _verify_parser(prog, board=None):
         epilog="\n\n".join(e for e in (board and _tests_epilog(board), _results(), _files(board)) if e),
     )
     if board is None:
-        parser.add_argument("--list", action="store_true", help="list the installed boards and the configured one")
+        parser.add_argument("--list", action="store_true", help="list the installed boards and the configured one; "
+                            "with --label, the labels rpi-hwid would make")  # fmt: skip
         parser.add_argument("--board", help="check BOARD, ignoring the configuration")
         parser.add_argument("--no-probe", action="store_true", help="never scan JTAG to find a board (auto only)")
     partial = parser.add_mutually_exclusive_group()
@@ -80,11 +81,17 @@ def _verify_parser(prog, board=None):
     partial.add_argument("--update", action="store_true", help="accept a changed board or flash: record it")
     partial.add_argument("--identify", action="store_true",
                          help="print who the board is (an identity document, JSON) and nothing else")  # fmt: skip
+    if board is None:
+        partial.add_argument(
+            "--label", action="store_true", help="make this host's labels with rpi-hwid (rpi-hwid labels --this-host)"
+        )
+        parser.add_argument("--out", metavar="FILE", help="with --label: where rpi-hwid writes the labels")  # fmt: skip
     if loads:
         parser.add_argument("--variant", help="use VARIANT's bitstreams, not the detected one")
         parser.add_argument("--port", help="the board's UART (default: the board's usual one)")
     parser.add_argument("--images", type=pathlib.Path, metavar="DIR", help="the bitstreams (default: installed)")
-    parser.add_argument("--state", type=pathlib.Path, default=state.STATE, metavar="FILE", help="the recorded state")
+    # no default here, so --label can tell it was given (the check uses state.STATE when it is not)
+    parser.add_argument("--state", type=pathlib.Path, metavar="FILE", help="the recorded state")
     report = "the JSON report; '-' for stdout" + (" (the default with --test)" if selectable else "")
     parser.add_argument("--report", metavar="FILE", help=report)
     parser.add_argument("--no-publish", action="store_true", help="do not send the result to the fleet")
@@ -106,6 +113,16 @@ def verify_main(argv=None):
     args = _verify_parser("fpgas-verify").parse_args(argv)
     if args.identify:
         return identify.run(_options(args), "fpgas-verify")
+    if args.out and not args.label:
+        _verify_parser("fpgas-verify").error("--out goes with --label")
+    given = [opt for opt, value in (("--report", args.report), ("--state", args.state),
+                                    ("--no-publish", args.no_publish)) if value]  # fmt: skip
+    if args.label and given:
+        _verify_parser("fpgas-verify").error(f"--label writes no report or state and publishes nothing: "
+                                             f"{', '.join(given)} does not go with it")  # fmt: skip
+    if args.label:
+        options = {k: v for k, v in _options(args).items() if k not in ("label", "out", "list")}
+        return label.run(options, args.out, args.list)
     if args.list:
         boards = installed()
         for name, b in boards.items():

@@ -1,4 +1,4 @@
-"""Tests for fpgas-verify --identify (fpgas_online_verify.identify) and the nesting rpi-hwid's labels need.
+"""Tests for fpgas-verify --identify (identify.py), --label (label.py), and the nesting between them and rpi-hwid.
 
 * --identify prints exactly one identity document (identity.document()), read live with the reads that
   disturb nothing, each board under its own lock; fields only the boot check can read come from the boot
@@ -7,14 +7,21 @@
 * With FPGAS_VERIFY_IDENTITY set (inside fpgas-verify --label), --identify prints that file unchanged and
   touches nothing: no lock, no board module, no hardware, even when the file is missing or bad. Every other
   mode refuses.
+* --label reads the identity, releases every lock, hands it to `rpi-hwid labels --this-host` in a file named
+  by FPGAS_VERIFY_IDENTITY, and deletes the file. rpi-hwid is run, never imported; without it, exit 2.
 """
 
+import ast
 import functools
 import json
+import os
 import pathlib
+import signal
+import subprocess
+import sys
 
 import pytest
-from fpgas_online_verify import cli, debug, identify, identity
+from fpgas_online_verify import cli, debug, identify, identity, label
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
 from fpgas_online_verify.core import Problem
 
@@ -709,6 +716,8 @@ def test_nested_identify_prints_the_outer_document_byte_for_byte_and_touches_not
     (cli.verify_main, ["--update"], None),
     (cli.verify_main, ["--list"], None),
     (cli.verify_main, ["--test", "flash"], None),
+    (cli.verify_main, ["--label"], None),
+    (cli.verify_main, ["--label", "--list"], None),
     (cli.board_main, [], "fpgas-acorn-verify"),
     (cli.board_main, ["detect"], "fpgas-acorn-debug"),
     (cli.board_main, ["identify"], "fpgas-arty-debug"),
@@ -762,3 +771,263 @@ def test_the_golden_document_is_one_this_reader_takes():
 
 def test_a_live_document_is_printed_as_the_golden_one_is_written():
     assert identify.dumps(json.loads(GOLDEN.read_text())) == GOLDEN.read_text()
+
+
+# -- --label -------------------------------------------------------------------------------------------------
+
+DOC = identity.document([{"board": "acorn", "kind": "acorn", "dna": "0x0054b48664b04854"}],
+                        tool="fpgas-online-verify 0.0.post1", read_at="2026-10-02T00:00:00+00:00")  # fmt: skip
+
+
+@pytest.fixture
+def labelling(tmp_path, monkeypatch, locks):
+    """--label with rpi-hwid on PATH and the identity read stubbed (under the locks, as identify.read does)."""
+    monkeypatch.setattr(label.shutil, "which", lambda tool: f"/usr/bin/{tool}" if tool == "rpi-hwid" else None)
+
+    def read(options, boards=None):
+        with locks("/run/lock/fpgas-acorn.lock", "Sqrl Acorn", timeout=identify.LOCK_WAIT):
+            return DOC, []
+
+    monkeypatch.setattr(identify, "read", read)
+    return {"identity_dir": tmp_path / "run"}
+
+
+class RpiHwid:
+    """Stands in for subprocess.run of rpi-hwid: records what it was given and what it could see."""
+
+    def __init__(self, locks, rc=0, raises=None):
+        self.locks, self.rc, self.raises, self.seen = locks, rc, raises, {}
+
+    def __call__(self, argv, env, check):
+        path = pathlib.Path(env[identify.ENV])
+        self.seen = {"argv": argv, "path": path, "text": path.read_text(), "held": list(self.locks.held)}
+        if self.raises:
+            raise self.raises
+        return subprocess.CompletedProcess(argv, self.rc)
+
+
+def test_label_hands_rpi_hwid_the_identity_with_every_lock_released_and_deletes_it(labelling, locks):
+    rpi_hwid = RpiHwid(locks, rc=3)
+    assert label.run(labelling, out="labels.pdf", listing=True, runner=rpi_hwid) == 3  # rpi-hwid's own status
+    seen = rpi_hwid.seen
+    assert seen["argv"] == ["/usr/bin/rpi-hwid", "labels", "--this-host", "--out", "labels.pdf", "--list"]
+    assert seen["path"] == labelling["identity_dir"] / f"identity-{os.getpid()}.json"
+    assert seen["text"] == identify.dumps(DOC)
+    assert locks.taken == ["/run/lock/fpgas-acorn.lock"] and seen["held"] == []  # read under it, then let go
+    assert not seen["path"].exists()
+
+
+def test_label_without_out_or_list_asks_for_just_this_hosts_labels(labelling, locks):
+    rpi_hwid = RpiHwid(locks)
+    assert label.run(labelling, runner=rpi_hwid) == 0
+    assert rpi_hwid.seen["argv"] == ["/usr/bin/rpi-hwid", "labels", "--this-host"]
+
+
+def test_label_deletes_the_identity_even_when_rpi_hwid_cannot_run(labelling, locks):
+    rpi_hwid = RpiHwid(locks, raises=OSError("exec format error"))
+    with pytest.raises(OSError):
+        label.run(labelling, runner=rpi_hwid)
+    assert not rpi_hwid.seen["path"].exists()
+
+
+def test_label_deletes_the_identity_on_ctrl_c(labelling, locks):
+    rpi_hwid = RpiHwid(locks, raises=KeyboardInterrupt())
+    with pytest.raises(KeyboardInterrupt):
+        label.run(labelling, runner=rpi_hwid)
+    assert not rpi_hwid.seen["path"].exists()
+
+
+def test_label_deletes_the_identity_on_sigterm_and_puts_the_handler_back(labelling, locks):
+    before = signal.getsignal(signal.SIGTERM)
+
+    class Terminated(RpiHwid):
+        def __call__(self, argv, env, check):
+            super().__call__(argv, env, check)
+            os.kill(os.getpid(), signal.SIGTERM)  # as systemd or kill would, while rpi-hwid runs
+            raise AssertionError("SIGTERM did not stop --label")
+
+    rpi_hwid = Terminated(locks)
+    with pytest.raises(SystemExit) as stopped:
+        label.run(labelling, runner=rpi_hwid)
+    assert stopped.value.code == 128 + signal.SIGTERM
+    assert not rpi_hwid.seen["path"].exists()
+    assert signal.getsignal(signal.SIGTERM) == before
+    assert label.run(labelling, runner=RpiHwid(locks)) == 0 and signal.getsignal(signal.SIGTERM) == before
+
+
+def test_label_writes_the_identity_for_root_alone_and_never_over_a_file_or_link(labelling, locks, capsys):
+    class Mode(RpiHwid):
+        def __call__(self, argv, env, check):
+            self.mode = os.stat(env[identify.ENV]).st_mode & 0o777
+            return super().__call__(argv, env, check)
+
+    rpi_hwid = Mode(locks)
+    assert label.run(labelling, runner=rpi_hwid) == 0 and rpi_hwid.mode == 0o600
+    run_dir = labelling["identity_dir"]
+    path = run_dir / f"identity-{os.getpid()}.json"
+    path.write_text("someone else's")
+    rpi_hwid = RpiHwid(locks)
+    assert label.run(labelling, runner=rpi_hwid) == 2
+    assert rpi_hwid.seen == {} and path.read_text() == "someone else's"  # not run, not overwritten, not deleted
+    assert "is already there" in capsys.readouterr().err
+    path.unlink()
+    target = run_dir / "elsewhere"
+    path.symlink_to(target)
+    assert label.run(labelling, runner=rpi_hwid) == 2
+    assert rpi_hwid.seen == {} and not target.exists() and path.is_symlink()
+
+
+def test_label_that_cannot_write_the_identity_says_so_and_exits_2(tmp_path, labelling, locks, capsys):
+    (tmp_path / "not-a-directory").write_text("")
+    rpi_hwid = RpiHwid(locks)
+    options = {**labelling, "identity_dir": tmp_path / "not-a-directory" / "run"}
+    assert label.run(options, runner=rpi_hwid) == 2 and rpi_hwid.seen == {}
+    err = capsys.readouterr().err
+    assert "cannot write the identity for rpi-hwid" in err and "Not a directory" in err
+    assert "run it as root" not in err and "Traceback" not in err
+
+
+class FailingWrite:
+    """Stands in for os.fdopen in label.py: the file is made (by os.open), then its write raises `exc`."""
+
+    def __init__(self, exc):
+        self.exc = exc
+
+    def __call__(self, fd, mode):
+        os.close(fd)
+        exc = self.exc
+
+        class _File:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def write(self, text):
+                raise exc
+
+        return _File()
+
+
+def _identity_files(labelling):
+    return sorted(p.name for p in labelling["identity_dir"].iterdir())
+
+
+def test_label_whose_write_fails_deletes_the_file_and_gives_the_real_error(labelling, locks, monkeypatch, capsys):
+    import errno
+
+    monkeypatch.setattr(label.os, "fdopen", FailingWrite(OSError(errno.ENOSPC, os.strerror(errno.ENOSPC))))
+    rpi_hwid = RpiHwid(locks)
+    assert label.run(labelling, runner=rpi_hwid) == 2 and rpi_hwid.seen == {}
+    assert _identity_files(labelling) == []  # the file _create made is deleted
+    err = capsys.readouterr().err
+    assert "cannot write the identity for rpi-hwid" in err and os.strerror(errno.ENOSPC) in err
+    assert "run it as root" not in err
+
+
+def test_label_that_may_not_create_the_file_says_permission_denied_and_run_as_root(labelling, locks, monkeypatch,
+                                                                                    capsys):  # fmt: skip
+    import errno
+
+    def refused(path, flags, mode=0o777):
+        raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(path))
+
+    labelling["identity_dir"].mkdir()
+    monkeypatch.setattr(label.os, "open", refused)
+    rpi_hwid = RpiHwid(locks)
+    assert label.run(labelling, runner=rpi_hwid) == 2 and rpi_hwid.seen == {}
+    assert _identity_files(labelling) == []
+    err = capsys.readouterr().err
+    assert os.strerror(errno.EACCES) in err and "(run it as root)" in err
+
+
+def test_label_interrupted_while_writing_deletes_the_file(labelling, locks, monkeypatch):
+    before = signal.getsignal(signal.SIGTERM)
+    monkeypatch.setattr(label.os, "fdopen", FailingWrite(KeyboardInterrupt()))
+    rpi_hwid = RpiHwid(locks)
+    with pytest.raises(KeyboardInterrupt):
+        label.run(labelling, runner=rpi_hwid)
+    assert rpi_hwid.seen == {} and _identity_files(labelling) == []
+    assert signal.getsignal(signal.SIGTERM) == before
+
+
+def test_rpi_hwid_killed_by_a_signal_is_128_plus_the_signal(labelling, locks, capsys):
+    assert label.run(labelling, runner=RpiHwid(locks, rc=-signal.SIGKILL)) == 128 + signal.SIGKILL
+    assert "rpi-hwid was killed by signal 9 (SIGKILL)" in capsys.readouterr().err
+
+
+def test_rpi_hwid_killed_by_a_signal_with_no_name_is_still_128_plus_the_signal(labelling, locks, capsys):
+    with pytest.raises(ValueError):
+        signal.Signals(40)  # a real-time signal: the enum has no member for it
+    assert label.run(labelling, runner=RpiHwid(locks, rc=-40)) == 128 + 40
+    err = capsys.readouterr().err
+    assert "rpi-hwid was killed by signal 40\n" in err and "Traceback" not in err
+
+
+@pytest.mark.parametrize("extra", [["--report", "r.json"], ["--state", "s.json"], ["--no-publish"]])
+def test_label_refuses_the_check_s_report_state_and_publish_options(extra, monkeypatch, untouchable, capsys):
+    monkeypatch.delenv(identify.ENV, raising=False)
+    with pytest.raises(SystemExit) as refused:
+        cli.verify_main(["--label", *extra])
+    assert refused.value.code == 2
+    assert f"{extra[0]} does not go with it" in capsys.readouterr().err
+
+
+def test_without_state_the_check_still_uses_the_recorded_state(monkeypatch):
+    monkeypatch.delenv(identify.ENV, raising=False)
+    seen = []
+    monkeypatch.setattr(cli.runner, "run", lambda options, prog="fpgas-verify": seen.append(options) or 0)
+    assert cli.verify_main([]) == 0 and "state" not in seen[0]  # runner.verify falls back to state.STATE
+    assert cli.verify_main(["--state", "s.json"]) == 0 and seen[1]["state"] == pathlib.Path("s.json")
+
+
+def test_label_without_rpi_hwid_exits_2_says_how_to_install_it_and_reads_nothing(monkeypatch, untouchable, capsys):
+    monkeypatch.delenv(identify.ENV, raising=False)
+    monkeypatch.setattr(label.shutil, "which", lambda tool: None)
+    assert cli.verify_main(["--label"]) == 2
+    err = capsys.readouterr().err
+    assert "python3-rpi-hwid" in err and "uv tool install 'rpi-hwid[labels]'" in err
+
+
+def test_out_goes_only_with_label(monkeypatch):
+    monkeypatch.delenv(identify.ENV, raising=False)
+    with pytest.raises(SystemExit):
+        cli.verify_main(["--out", "labels.pdf"])
+    with pytest.raises(SystemExit):
+        cli.verify_main(["--label", "--identify"])
+
+
+def test_label_and_rpi_hwid_and_the_inner_identify_go_round_once(tmp_path, labelling, monkeypatch):
+    """The whole loop, with a stand-in rpi-hwid that runs the real inner fpgas-verify --identify as rpi-hwid
+    does: the inner run prints the outer run's document, byte for byte."""
+    src = pathlib.Path(__file__).resolve().parents[1] / "verify" / "src"
+    tool = tmp_path / "rpi-hwid"
+    tool.write_text(
+        f"#!{sys.executable}\n"
+        "import os, subprocess, sys\n"
+        f"env = {{**os.environ, 'PYTHONPATH': {str(src)!r}}}\n"
+        f"inner = [{sys.executable!r}, '-m', 'fpgas_online_verify', '--identify']\n"
+        "r = subprocess.run(inner, capture_output=True, env=env)\n"
+        "open(sys.argv[sys.argv.index('--out') + 1], 'wb').write(r.stdout)\n"
+        "sys.exit(r.returncode)\n"
+    )
+    tool.chmod(0o755)
+    monkeypatch.setattr(label.shutil, "which", lambda name: str(tool))
+    out = tmp_path / "labels.txt"
+    assert label.run(labelling, out=out) == 0
+    assert out.read_text() == identify.dumps(DOC)
+    assert list(labelling["identity_dir"].iterdir()) == []
+
+
+def test_no_module_imports_rpi_hwid():
+    """rpi-hwid is a command fpgas-verify runs (shutil.which), never a library it imports."""
+    src = pathlib.Path(__file__).resolve().parents[1] / "verify" / "src"
+    for path in src.rglob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text())):
+            names = [a.name for a in node.names] if isinstance(node, ast.Import) else []
+            if isinstance(node, ast.ImportFrom):
+                names = [node.module or ""]
+            assert not any(n.split(".")[0] == "rpi_hwid" for n in names), path
+            if isinstance(node, ast.Call) and getattr(node.func, "attr", "") == "import_module":
+                assert "rpi_hwid" not in ast.unparse(node), path

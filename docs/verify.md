@@ -76,7 +76,8 @@ sudo fpgas-acorn-verify --test pcie-link --test flash   # only some tests (these
 sudo fpgas-verify --update                 # after flashing or swapping a board on purpose
 fpgas-verify --list                        # the installed boards, and which this host checks
 
-sudo fpgas-verify --identify               # who the board is, as JSON (see "Identity")
+sudo fpgas-verify --identify               # who the board is, as JSON (see "Identity and labels")
+sudo fpgas-verify --label --out labels.pdf # this Pi's and its board's labels, made by rpi-hwid
 
 sudo fpgas-arty-debug test ddr             # load the DDR design and run its test, all output live
 sudo fpgas-acorn-debug identify            # the same as fpgas-acorn-verify --identify
@@ -101,12 +102,17 @@ sudo fpgas-acorn-debug identify            # the same as fpgas-acorn-verify --id
 * Options for the boot run go in `FPGAS_VERIFY_ARGS` in `/etc/default/fpgas-verify`.
 * From a checkout, without installing: `PYTHONPATH=verify/src python3 -m fpgas_online_verify --help`.
 
-### Identity
+### Identity and labels
 
-`fpgas-verify --identify` (also with `--board B`, as `fpgas-<board>-verify --identify`, and as
-`fpgas-acorn-debug identify`) prints one identity document (JSON) for every board found, for
-[rpi-hwid](https://github.com/mithro/rpi-hwid)'s labels. It does not run the check, publish anything or record
-any state.
+Two commands say who the board is, for [rpi-hwid](https://github.com/mithro/rpi-hwid)'s labels. Neither runs
+the check, publishes anything or records any state.
+
+| Command | Does |
+|---|---|
+| `fpgas-verify --identify` (also `--board B`, `fpgas-<board>-verify --identify`, `fpgas-acorn-debug identify`) | prints one identity document (JSON) for every board found |
+| `fpgas-verify --label [--out F] [--list]` | reads the identity, then runs `rpi-hwid labels --this-host [--out F] [--list]` to make this Pi's and its board's labels |
+
+`--identify`:
 
 * The document and every field in it are described in [identity.md](identity.md). It is printed with sorted
   keys and an indent of 1.
@@ -152,16 +158,39 @@ any state.
   [Not done yet](#not-done-yet)). Their IDCODE, and any flash fields the boot report has for an Arty, are still in
   the document.
 
-Nesting: rpi-hwid gets the board's identity by running `fpgas-verify --identify`, and may be run by an
-fpgas-verify that has already read the identity and put it in a file named by `FPGAS_VERIFY_IDENTITY`. So
-that the inner run never waits on a lock the outer run holds or reads a board twice, a run with
+`--label`:
+
+1. reads the identity, as `--identify` does;
+2. releases every board's lock;
+3. writes the document to `/run/fpgas-online/identity-<pid>.json`, a new file readable by root alone (it never
+   writes over a file or through a link already there);
+4. runs `rpi-hwid labels --this-host [--out F] [--list]` with `FPGAS_VERIFY_IDENTITY` set to that file;
+5. deletes the file, whatever happened: an error, Ctrl-C, or a SIGTERM (which exits 143).
+
+Its exit status is rpi-hwid's, or 128 + N when rpi-hwid was killed by signal N, as a shell reports it (137
+for SIGKILL). It exits 2, saying why, when rpi-hwid is not installed or when the file cannot be written: run it
+as root. `--list` (with `--label`) lists the labels rpi-hwid would make; `--out F` is where rpi-hwid writes
+them. `--label` writes no report or state and publishes nothing, so `--report`, `--state` and `--no-publish`
+are refused with it (exit 2).
+
+Nesting: rpi-hwid gets the board's identity by running `fpgas-verify --identify`. So that the inner run never
+waits on a lock the outer run holds, reads a board twice or starts rpi-hwid again, a run with
 `FPGAS_VERIFY_IDENTITY` set (an empty value counts as not set):
 
 | Mode | Does |
 |---|---|
 | `--identify` (and `fpgas-acorn-debug identify`) | checks that the file is an identity document with `identity_version` 1 and prints it unchanged, byte for byte. It takes no lock and runs no board code |
 | a missing or bad file | an error (exit 1). It never falls back to reading the hardware |
-| any other mode | refuses (exit 2) |
+| any other mode, `--label` included | refuses (exit 2) |
+
+rpi-hwid is a soft dependency:
+
+* fpgas-verify finds the `rpi-hwid` command on `PATH` and runs it. It never imports rpi-hwid's Python code.
+* Without it, `--label` exits 2 and says how to install it: `sudo apt install python3-rpi-hwid`, or
+  `uv tool install 'rpi-hwid[labels]'` (Python 3.11 or newer).
+* The `fpgas-online-verify` deb lists `python3-rpi-hwid` in Suggests. The Python package has a `labels` extra
+  (`fpgas-online-verify[labels]`).
+* `--identify` does not need rpi-hwid.
 
 ### Reading the result
 
@@ -280,13 +309,17 @@ Prints a summary to stderr and writes a JSON report.
 
 options:
   -h, --help         show this help message and exit
-  --list             list the installed boards and the configured one
+  --list             list the installed boards and the configured one; with
+                     --label, the labels rpi-hwid would make
   --board BOARD      check BOARD, ignoring the configuration
   --no-probe         never scan JTAG to find a board (auto only)
   --test TEST        run only TEST (repeatable); not published or recorded
   --update           accept a changed board or flash: record it
   --identify         print who the board is (an identity document, JSON) and
                      nothing else
+  --label            make this host's labels with rpi-hwid (rpi-hwid labels
+                     --this-host)
+  --out FILE         with --label: where rpi-hwid writes the labels
   --variant VARIANT  use VARIANT's bitstreams, not the detected one
   --port PORT        the board's UART (default: the board's usual one)
   --images DIR       the bitstreams (default: installed)
@@ -657,8 +690,8 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 * The Arty's and NeTV2's device DNA and flash IDs are not read, nor the flash IDs of the TT and Fomu; their
   [identity](identity.md) has only what finding the board and its IDCODE give.
 * Nothing is compared with the site's records.
-* No rpi-hwid labels are made by fpgas-verify itself. `fpgas-verify --identify` gives rpi-hwid the identity,
-  but exits 1 for an Arty or a NeTV2 until their device DNA and flash unique ID are read.
+* rpi-hwid refuses the Arty's and NeTV2's labels until their device DNA and flash IDs are read; `--identify`
+  exits 1 for them meanwhile.
 
 ### Common failures
 

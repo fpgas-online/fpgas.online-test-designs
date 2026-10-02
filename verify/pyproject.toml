@@ -18,6 +18,8 @@ netv2 = ["pyserial"]
 fomu = ["pyserial"]
 tt-fpga = ["pyserial", "mpremote"]
 debug = ["gpiod"]
+# fpgas-verify --label runs rpi-hwid's command (found on PATH, never imported); rpi-hwid needs Python 3.11.
+labels = ["rpi-hwid[labels]; python_version >= '3.11'"]
 
 [project.scripts]
 fpgas-verify = "fpgas_online_verify.cli:verify_main"
