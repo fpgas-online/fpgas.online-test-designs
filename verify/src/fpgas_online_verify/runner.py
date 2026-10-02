@@ -19,7 +19,7 @@ import json
 import pathlib
 import sys
 
-from . import config, state
+from . import config, identity, state
 from .board import installed
 from .core import Problem, flatten, hold_lock, pci_devices, publish, usb_devices, worst
 
@@ -31,8 +31,7 @@ EVENTS = {
     "fpga-verifying": "started_at",
     "fpga-board-found": "board, variant, where (PCI slot, USB path or JTAG IDCODE)",
     "fpga-no-board": "reason",
-    "fpga-board-identified": "board, then what identifies it (an Acorn's: bdf, pci_ids, subsystem, variant, "
-    "identifier, build, dna, idcode, flash_part, flash_jedec, flash_unique_id)",
+    "fpga-board-identified": "schema (fpga-identity/1), board, then who it is (identity.py, docs/identity.md)",
     "fpga-test-started": "board, test",
     "fpga-test-finished": "board, test, result, reason",
     "fpga-verified": "the report, flattened (details())",
@@ -174,12 +173,19 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
     for (_, _, found), key in zip(targets, keys):
         event("fpga-board-found", {"board": key, "variant": found.get("variant"), "where": _where(found)})
     for (board, host, found), key in zip(targets, keys):
+        identified = []
+
+        def board_event(stage, d, key=key, identified=identified):
+            if stage == "fpga-board-identified":
+                identified.append(key)
+            event(stage, {"board": key, **d})
+
         try:
             board_options, skipped = _for_board(board, options, report["mode"])
             if board_options is None:  # none of the named tests: not checked, and no "pass" for it
                 not_checked.append(board.name)
                 continue
-            board_options = {**board_options, "event": lambda stage, d, key=key: event(stage, {"board": key, **d})}
+            board_options = {**board_options, "event": board_event, "board_key": key}
             with hold_lock(board.lock, board.title):
                 reports.append(board.check(host, found, board_options))
         except Problem as p:
@@ -189,6 +195,9 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
             reports.append({"board": board.name, "found": found, "result": "error",
                             "reason": f"the check crashed: {type(e).__name__}: {e}"})  # fmt: skip
             skipped = []
+        if not identified:  # the check stopped before saying who the board is: say what finding it showed
+            reports[-1].setdefault("identity", identity.base(key, board.name, found))
+            board_event("fpga-board-identified", identity.details(reports[-1]["identity"]))
         if skipped:
             reports[-1]["tests_skipped"] = skipped
     report["boards"] = reports
@@ -229,7 +238,9 @@ def details(report):
             out[f"board{i}_bitstreams"] = str(b["bitstreams"])
         flatten(f"board{i}_state", b.get("state", {}), out)
         if b.get("identity"):
-            flatten(f"board{i}_identity", b["identity"], out)
+            flat = identity.details(b["identity"])
+            del flat["schema"]
+            out.update({f"board{i}_identity_{k}": v for k, v in flat.items()})
     for j, change in enumerate(report.get("state", {}).get("changes", [])):
         out[f"changed{j}"] = change
     return out

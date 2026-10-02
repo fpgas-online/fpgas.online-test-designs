@@ -389,7 +389,9 @@ def test_a_test_board_says_when_each_test_starts_and_how_it_ended(tmp_path):
     events = []
     _check(FOMU, tmp_path, {"variant": "evt", "usb": "1-3", "serial": "fomu-7"}, Runner(),
            event=lambda stage, d: events.append((stage, d)))  # fmt: skip
-    assert events == [("fpga-test-started", {"test": "uart"}),
+    assert events == [("fpga-board-identified", {"board": "fomu", "kind": "fomu", "variant": "evt", "serial": "fomu-7",
+                                                 "usb": "1-3", "schema": "fpga-identity/1"}),
+                      ("fpga-test-started", {"test": "uart"}),
                       ("fpga-test-finished", {"test": "uart", "result": "pass", "reason": ""})]  # fmt: skip
 
 

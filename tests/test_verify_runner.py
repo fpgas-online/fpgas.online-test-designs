@@ -12,7 +12,7 @@ import json
 import subprocess
 
 import pytest
-from fpgas_online_verify import config, core, runner, state
+from fpgas_online_verify import config, core, identity, runner, state
 from fpgas_online_verify.board import Board, installed
 from fpgas_online_verify.core import Problem
 
@@ -427,9 +427,12 @@ def test_every_board_module_is_found():
 
 
 class Busy(Fake):
-    """A board whose check runs two tests and says so through options["event"], as the board modules do."""
+    """A board whose check says who the board is and runs two tests, through options["event"], as the board
+    modules do."""
 
     def check(self, host, found, options):
+        who = identity.base(options["board_key"], self.name, found)
+        options["event"]("fpga-board-identified", identity.details(who))
         for test, result in (("uart", "pass"), ("ddr", self.result)):
             options["event"]("fpga-test-started", {"test": test})
             options["event"]("fpga-test-finished", {"test": test, "result": result, "reason": ""})
@@ -443,11 +446,55 @@ def test_the_site_hears_each_board_found_and_each_test_with_its_board(opts):
                   mode=("auto", "test"))  # fmt: skip
     assert events[0] == ("fpga-board-found", {"board": "arty", "variant": "a7-35", "where": "1-1"})
     assert events[1:] == [
+        ("fpga-board-identified", {"board": "arty", "kind": "arty", "variant": "a7-35", "usb": "1-1",
+                                   "schema": "fpga-identity/1"}),
         ("fpga-test-started", {"board": "arty", "test": "uart"}),
         ("fpga-test-finished", {"board": "arty", "test": "uart", "result": "pass", "reason": ""}),
         ("fpga-test-started", {"board": "arty", "test": "ddr"}),
         ("fpga-test-finished", {"board": "arty", "test": "ddr", "result": "fail", "reason": ""}),
     ]
+
+
+class Stops(Fake):
+    """A board whose check raises `result`."""
+
+    def check(self, host, found, options):
+        raise self.result
+
+
+@pytest.mark.parametrize(
+    "board",
+    [
+        Fake("fomu", seen=[{"variant": "evt", "usb": "1-2", "serial": "S"}]),  # says nothing itself
+        Stops("fomu", seen=[{"variant": "evt", "usb": "1-2", "serial": "S"}], result=Problem("error", "no tool")),
+        Stops("fomu", seen=[{"variant": "evt", "usb": "1-2", "serial": "S"}], result=KeyError("x")),
+    ],
+)
+def test_every_board_found_is_identified_once_even_when_its_check_stops_early(opts, board):
+    events = []
+    report = runner.verify({**opts, "event": lambda s, d: events.append((s, d))}, _boards(board), usb=[], pci=[],
+                           mode=("auto", "test"))  # fmt: skip
+    identified = [d for s, d in events if s == "fpga-board-identified"]
+    assert identified == [{"board": "fomu", "kind": "fomu", "variant": "evt", "serial": "S", "usb": "1-2",
+                           "schema": "fpga-identity/1"}]  # fmt: skip
+    assert report["boards"][0]["identity"] == {"board": "fomu", "kind": "fomu", "variant": "evt", "serial": "S",
+                                               "usb": "1-2"}  # fmt: skip
+
+
+def test_a_board_that_identifies_itself_is_not_identified_again(opts):
+    events = []
+    runner.verify({**opts, "event": lambda s, d: events.append((s, d))},
+                  _boards(Busy("arty", seen=[{"variant": "a7-35", "usb": "1-1"}])), usb=[], pci=[],
+                  mode=("auto", "test"))  # fmt: skip
+    assert [s for s, _ in events].count("fpga-board-identified") == 1
+
+
+def test_the_identity_in_the_verified_event_is_flat_strings(opts):
+    report = {"result": "pass", "boards": [{"board": "acorn", "result": "pass",
+                                            "identity": {"board": "acorn", "flash_quad": True, "idcode_version": 1}}]}  # fmt: skip
+    out = runner.details(report)
+    assert out["board0_identity_flash_quad"] == "true" and out["board0_identity_idcode_version"] == "1"
+    assert "board0_identity_schema" not in out
 
 
 def test_two_boards_of_a_kind_are_told_apart_in_the_events(opts):
@@ -477,8 +524,9 @@ def test_the_events_go_out_in_order_and_a_dead_broker_stops_the_progress_ones(op
     monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append((stage, details)) or True)
     out = tmp_path / "r.json"
     runner.run({**opts, "board": "arty", "report": str(out), "no_publish": False})
-    assert [s for s, _ in sent] == ["fpga-verifying", "fpga-board-found", "fpga-test-started", "fpga-test-finished",
-                                    "fpga-test-started", "fpga-test-finished", "fpga-verified"]  # fmt: skip
+    assert [s for s, _ in sent] == ["fpga-verifying", "fpga-board-found", "fpga-board-identified",
+                                    "fpga-test-started", "fpga-test-finished", "fpga-test-started",
+                                    "fpga-test-finished", "fpga-verified"]  # fmt: skip
     assert all(isinstance(v, str) for _, d in sent for v in d.values())
     assert sent[1][1] == {"board": "arty", "variant": "a7-35", "where": "-"}
     sent.clear()
