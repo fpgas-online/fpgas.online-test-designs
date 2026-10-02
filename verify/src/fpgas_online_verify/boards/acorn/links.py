@@ -99,7 +99,9 @@ def jtag(setup, variant, run, bar0_dna=None, gpiochip=None):
         # openFPGALoader leaves the pins driven; with no way to put them back (on a Blade GPIO14 is also the
         # UART's TX) the probe is not run at all
         reason = f"P1 JTAG not probed: the JTAG pins' state could not be read, so it could not be put back: {p.reason}"
-        return _entry("jtag", [("error", reason)])
+        return _entry("jtag", [("error", reason)], dna_error=f"not read over P1 JTAG: {reason}")
+    # why the device DNA was not read, if it is not: apart from the IDCODE's faults (identity's dna_error)
+    dna_error = "not read over P1 JTAG: --read-dna runs only once --detect has found the one FPGA expected"
     try:
         (gpiochip or header_gpiochip)(setup.gpiochip)
         rc, out = run([*base, "--detect", *idcode.OPENFPGALOADER_RAW_ARGS], JTAG_TIMEOUT)
@@ -128,6 +130,7 @@ def jtag(setup, variant, run, bar0_dna=None, gpiochip=None):
             m = DNA_RE.search(out)
             if rc != 0 or not m:
                 faults.append(("fail", "openFPGALoader --read-dna read no device DNA over P1 JTAG"))
+                dna_error = f"openFPGALoader --read-dna read no device DNA over P1 JTAG (exit status {rc})"
             else:
                 dna = int(m.group(1), 16)
                 seen["dna"] = f"{dna:#x}"
@@ -138,8 +141,11 @@ def jtag(setup, variant, run, bar0_dna=None, gpiochip=None):
         # A missing tool or a wrong gpiochip is the check not running ("error"); a hung probe is a fail.
         result = e.result if isinstance(e, Problem) else "error"
         faults.append((result, f"P1 JTAG could not be probed: {e}"))
+        dna_error = f"not read over P1 JTAG: P1 JTAG could not be probed: {e}"
     finally:
         faults += [("error", f) for f in restore_pins(run, saved)]
+    if "dna" not in seen:
+        seen["dna_error"] = dna_error
     return _entry("jtag", faults, output, **seen)
 
 

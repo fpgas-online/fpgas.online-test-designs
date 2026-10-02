@@ -302,8 +302,10 @@ class _Suite:
             out["dna"] = identity.dna(self.bar0["dna"])
         elif jtag and "dna" in jtag:
             out["dna"] = identity.dna(jtag["dna"])
-        elif jtag and jtag["result"] != "pass":
-            out["dna_error"] = jtag.get("reason") or jtag["result"]
+        elif jtag and jtag.get("dna_error"):
+            out["dna_error"] = jtag["dna_error"]  # why the DNA read itself failed, not the IDCODE's faults
+        elif jtag and jtag["result"] != "pass":  # the jtag test stopped before it said
+            out["dna_error"] = f"not read over P1 JTAG: the jtag test stopped: {jtag.get('reason') or jtag['result']}"
         if jtag:
             out.update(identity.idcode_fields(jtag))
         if (r.get("flash") or {}).get("rdid"):
