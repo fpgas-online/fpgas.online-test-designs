@@ -201,6 +201,9 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
             reports[-1].setdefault("identity", kept[-1])
         if not identified:  # the check stopped before saying who the board is: say what finding it showed
             reports[-1].setdefault("identity", identity.base(key, board.name, found))
+        if "identity" in reports[-1]:
+            _sendable_identity(reports[-1])
+        if not identified:
             board_event("fpga-board-identified", identity.details(reports[-1]["identity"]))
         if skipped:
             reports[-1]["tests_skipped"] = skipped
@@ -224,6 +227,18 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
     return report
 
 
+def _sendable_identity(report):
+    """Leave out of a board's identity any field whose value cannot be sent (a bug in the board's module), and
+    make each one an error on that board, so the other boards are still checked and fpga-verified is sent."""
+    bad = identity.refused(report["identity"])
+    if not bad:
+        return
+    report["identity"] = {k: v for k, v in report["identity"].items() if k not in bad}
+    reasons = [f"the identity field {k} cannot be sent: {why}" for k, why in bad.items()]
+    report["result"] = worst([report.get("result", "error"), "error"])
+    report["reason"] = "; ".join([report["reason"], *reasons] if report.get("reason") else reasons)
+
+
 # -- telling people ------------------------------------------------------------------------------------------
 
 
@@ -242,9 +257,13 @@ def details(report):
             out[f"board{i}_bitstreams"] = str(b["bitstreams"])
         flatten(f"board{i}_state", b.get("state", {}), out)
         if b.get("identity"):
-            flat = identity.details(b["identity"])
-            del flat["schema"]
-            out.update({f"board{i}_identity_{k}": v for k, v in flat.items()})
+            try:
+                flat = identity.details(b["identity"])
+            except TypeError as e:  # never ends the event: that board's identity says why it is not there
+                out[f"board{i}_identity_error"] = str(e)
+            else:
+                del flat["schema"]
+                out.update({f"board{i}_identity_{k}": v for k, v in flat.items()})
     for j, change in enumerate(report.get("state", {}).get("changes", [])):
         out[f"changed{j}"] = change
     return out

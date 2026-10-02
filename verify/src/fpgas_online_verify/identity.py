@@ -168,9 +168,26 @@ def detail(value):
 
 def details(board):
     """The fpga-board-identified event's details: the dict as flat strings, and its schema. A field not read
-    is not in the dict, so not in the details either."""
-    out = {key: detail(value) for key, value in board.items()}
+    is not in the dict, so not in the details either. A value detail() refuses raises TypeError naming its
+    field."""
+    out = {}
+    for key, value in board.items():
+        try:
+            out[key] = detail(value)
+        except TypeError as e:
+            raise TypeError(f"identity field {key}: {e}") from None
     out["schema"] = SCHEMA
+    return out
+
+
+def refused(board):
+    """The fields whose values details() refuses, each with why, so a caller can leave them out and say so."""
+    out = {}
+    for key, value in board.items():
+        try:
+            detail(value)
+        except TypeError as e:
+            out[key] = str(e)
     return out
 
 

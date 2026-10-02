@@ -139,8 +139,13 @@ def test_a_field_not_read_is_left_out_of_the_event_and_never_spelled_none():
 
 @pytest.mark.parametrize("value", [1.5, b"\x00", object()])
 def test_a_value_of_any_other_type_is_a_bug_not_a_repr(value):
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match=r"^identity field field: "):
         identity.details({"field": value})
+
+
+def test_the_fields_refused_are_named_with_why():
+    assert identity.refused({"board": "arty", "volts": 1.5, "raw": b"\x00"}).keys() == {"volts", "raw"}
+    assert identity.refused({"board": "arty", "idcode_version": 1}) == {}
 
 
 def test_the_document_is_versioned_and_holds_every_board():

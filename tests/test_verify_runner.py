@@ -522,6 +522,49 @@ def test_a_board_that_stops_after_identifying_itself_keeps_its_identity(opts, ra
     assert flat["board0_identity_idcode"] == "0x13631093" and flat["board0_identity_idcode_version"] == "1"
 
 
+class KeepsABadValue(Fake):
+    """A board whose check keeps an identity holding a value no event can carry, then crashes sending it."""
+
+    def check(self, host, found, options):
+        who = {**identity.base(options["board_key"], self.name, found), "idcode": "0x13631093", "volts": 1.5}
+        identity.keep(options, who)
+        options["event"]("fpga-board-identified", identity.details(who))
+        return super().check(host, found, options)
+
+
+class ReportsABadValue(Fake):
+    """A board whose check passes, with a value no event can carry in the identity it reports."""
+
+    def check(self, host, found, options):
+        return {**super().check(host, found, options), "identity": {"board": options["board_key"], "x": b"\0"}}
+
+
+@pytest.mark.parametrize("bad", [KeepsABadValue, ReportsABadValue])
+def test_an_identity_value_that_cannot_be_sent_is_an_error_on_that_board_only(opts, bad):
+    events = []
+    netv2 = bad("netv2", seen=[{"variant": "a7-100", "usb": "1-1"}])
+    arty = Fake("arty", seen=[{"variant": "a7-35", "usb": "1-2"}])
+    report = runner.verify({**opts, "event": lambda s, d: events.append((s, d))}, _boards(netv2, arty), usb=[],
+                           pci=[], mode=("auto", "test"))  # fmt: skip
+    first, second = report["boards"]
+    field = "volts" if bad is KeepsABadValue else "x"
+    assert first["result"] == "error" and f"the identity field {field} cannot be sent" in first["reason"]
+    assert field not in first["identity"] and second["result"] == "pass" and arty.checked
+    flat = runner.details(report)  # fpga-verified is still sent
+    assert flat["result"] == "error" and f"board0_identity_{field}" not in flat
+    if bad is KeepsABadValue:  # the identified event its check could not send is sent without the field
+        identified = [d for s, d in events if s == "fpga-board-identified" and d["board"] == "netv2"]
+        assert identified == [{"board": "netv2", "kind": "netv2", "variant": "a7-100", "usb": "1-1",
+                               "idcode": "0x13631093", "schema": "fpga-identity/1"}]  # fmt: skip
+
+
+def test_the_verified_event_says_why_an_identity_it_cannot_carry_is_not_there(opts):
+    report = {"result": "pass", "boards": [{"board": "arty", "result": "pass", "identity": {"volts": 1.5}}]}
+    out = runner.details(report)
+    assert out["board0_identity_error"].startswith("identity field volts: ")
+    assert "board0_identity_volts" not in out
+
+
 def test_a_board_that_identifies_itself_is_not_identified_again(opts):
     events = []
     runner.verify({**opts, "event": lambda s, d: events.append((s, d))},
