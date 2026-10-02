@@ -143,6 +143,27 @@ def test_a_value_of_any_other_type_is_a_bug_not_a_repr(value):
         identity.details({"field": value})
 
 
+@pytest.mark.parametrize(
+    ("value", "where"),
+    [
+        ({"a": 1.5}, "a: "),
+        ([1, 1.5], r"\[1\]: "),
+        ({"a": [{"b": b"\x00"}]}, r"a\[0\]\.b: "),
+        ({1: "x"}, ""),  # json.dumps would quietly make the key "1"
+        ({"a": {None: 1}}, "a: "),
+        ([object()], r"\[0\]: "),
+    ],
+)
+def test_a_value_inside_a_list_or_dict_follows_the_same_rules(value, where):
+    with pytest.raises(TypeError, match=rf"^identity field field: {where}an identity "):
+        identity.details({"field": value})
+
+
+def test_strings_integers_booleans_and_none_are_allowed_at_any_depth():
+    value = {"a": [1, "x", True, None, ("y", {"b": [False]})]}
+    assert identity.details({"field": value})["field"] == '{"a":[1,"x",true,null,["y",{"b":[false]}]]}'
+
+
 def test_the_fields_refused_are_named_with_why():
     assert identity.refused({"board": "arty", "volts": 1.5, "raw": b"\x00"}).keys() == {"volts", "raw"}
     assert identity.refused({"board": "arty", "idcode_version": 1}) == {}

@@ -151,19 +151,38 @@ def _version():
         return "unknown"
 
 
+def _check(value, where=""):
+    """Raise TypeError unless `value` is a string, integer, boolean or None, or a list, tuple or dict of them
+    (to any depth) whose dict keys are strings. The same rules hold at every depth: a float or a non-string
+    key is refused inside a list or dict just as at the top."""
+    at = f"{where}: " if where else ""
+    if value is None or isinstance(value, (str, int)):  # bool is an int
+        return
+    if isinstance(value, (list, tuple)):
+        for i, item in enumerate(value):
+            _check(item, f"{where}[{i}]")
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise TypeError(f"{at}an identity dict's keys must be strings, not {key!r}")
+            _check(item, f"{where}.{key}" if where else key)
+        return
+    raise TypeError(f"{at}an identity value must be a string, integer, boolean, list, dict or None, not {value!r}")
+
+
 def detail(value):
     """One value as an event detail (label contract §13, §17): a string as it is; None (read, and there is
     none) "-"; a boolean "true"/"false"; an integer in decimal; a list or dict compact JSON with sorted keys.
-    Never a Python repr: any other type is a bug, and raises."""
+    Never a Python repr: any other type, at any depth, is a bug, and raises (_check)."""
+    _check(value)
     if value is None:
         return "-"
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, (str, int)):
         return str(value)
-    if isinstance(value, (list, tuple, dict)):
-        return json.dumps(value, separators=(",", ":"), sort_keys=True)
-    raise TypeError(f"an identity value must be a string, number, boolean, list, dict or None, not {value!r}")
+    return json.dumps(value, separators=(",", ":"), sort_keys=True)
 
 
 def details(board):

@@ -78,7 +78,8 @@ fpgas-verify's own fields:
 * strings as they are;
 * numbers in decimal: `flash_size_bytes=33554432`;
 * booleans as `true` or `false`: `flash_quad=true`;
-* a list or object as one key whose value is compact JSON with sorted keys: `["a","b"]`;
+* a list or object as one key whose value is compact JSON with sorted keys: `["a","b"]`, holding only strings,
+  whole numbers, booleans, null, and lists and objects of those (object keys are strings) at any depth;
 * `-` only for a field that was read and has no value; a field that was not read is left out;
 * plus `schema=fpga-identity/1`.
 
