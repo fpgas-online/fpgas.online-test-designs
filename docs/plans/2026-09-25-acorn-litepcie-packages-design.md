@@ -590,12 +590,16 @@ with no repository activity. Workflow runs do not count as activity; pushes do.
      Only those two are named, so apt has to find `-common` and the RPi `linux-image-<kver>:arm64` from the
      modules package's Depends by itself;
   3. check each package is installed for the expected architecture, that `modinfo -k <kver> litepcie liteuart`
-     resolves to the files under `updates/fpgas-online/` with the right vermagic, that `liteuart.ko` carries
-     the `platform:liteuart` alias (§3.4), and that the blacklist is in place;
-  4. check that `litepcie_util` prints its usage;
-  5. `apt-get install fpgas-online-acorn-litepcie`: the meta package must install, and neither `dkms` nor
+     resolves to the files under `updates/fpgas-online/` with the right vermagic, and that `liteuart.ko`
+     carries the `platform:liteuart` alias (§3.4);
+  4. check that `modprobe litepcie` would work, which is what a host runs: `modprobe -c` shows
+     `blacklist litepcie`, `modprobe --show-depends -S <kver> litepcie` still prints an `insmod` of the
+     packaged file (the blacklist stops only the autoload by alias), and the kernel's `modules.dep` lists
+     both modules (the postinst's `depmod`);
+  5. check that `litepcie_util` prints its usage;
+  6. `apt-get install fpgas-online-acorn-litepcie`: the meta package must install, and neither `dkms` nor
      `-dkms` may come with it, although the repository offers `-dkms` (§2);
-  6. remove the meta and the modules package and check that `modinfo -k <kver> litepcie` no longer resolves
+  7. remove the meta and the modules package and check that `modinfo -k <kver> litepcie` no longer resolves
      (the postrm's `depmod`).
 - an install test of the meta package on a plain arm64 host of each suite, from a flat repository of the
   whole assembled `debs-<suite>` and the meta package: `apt-get install fpgas-online-acorn-litepcie` must

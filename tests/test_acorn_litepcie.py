@@ -664,6 +664,35 @@ def test_the_dkms_test_asks_dkms_about_the_drivers_own_version():
     assert ct.driver_version("0.0.post7") == "0.0.post7"
 
 
+K = "6.12.109+rpt-rpi-v8"
+MODPROBE_C = "blacklist litepcie\nalias platform:liteuart liteuart\n"
+SHOW_DEPENDS = f"insmod /lib/modules/{K}/updates/fpgas-online/litepcie.ko \n"
+MODULES_DEP = (
+    "kernel/drivers/tty/serial/8250/8250_bcm2835aux.ko.xz:\n"
+    "updates/fpgas-online/litepcie.ko:\nupdates/fpgas-online/liteuart.ko:\n"
+)
+
+
+def test_modprobe_litepcie_loads_the_packaged_module_though_it_is_blacklisted():
+    """The blacklist stops the autoload by PCI alias only: fpgas-verify's dma test runs `modprobe litepcie`."""
+    assert ct.loadable(K, MODPROBE_C, SHOW_DEPENDS, MODULES_DEP) is None
+
+
+@pytest.mark.parametrize(
+    ("modprobe_c", "show_depends", "modules_dep", "problem"),
+    [
+        ("alias platform:liteuart liteuart\n", SHOW_DEPENDS, MODULES_DEP, "does not show `blacklist litepcie`"),
+        ("# blacklist litepcie\n", SHOW_DEPENDS, MODULES_DEP, "does not show `blacklist litepcie`"),
+        (MODPROBE_C, "", MODULES_DEP, "does not insmod the packaged module"),
+        (MODPROBE_C, f"insmod /lib/modules/{K}/updates/dkms/litepcie.ko \n", MODULES_DEP, "does not insmod"),
+        (MODPROBE_C, f"install /bin/false /lib/modules/{K}/updates/fpgas-online/litepcie.ko\n", MODULES_DEP, "insmod"),
+        (MODPROBE_C, SHOW_DEPENDS, "updates/fpgas-online/litepcie.ko:\n", "not listed liteuart"),
+    ],
+)
+def test_what_would_keep_modprobe_from_loading_the_packaged_module(modprobe_c, show_depends, modules_dep, problem):
+    assert problem in ct.loadable(K, modprobe_c, show_depends, modules_dep)
+
+
 def test_the_newest_installed_headers_name_the_kernel_to_build_for():
     names = [
         "linux-headers-rpi-v8",  # the meta package: not a kernel

@@ -107,6 +107,22 @@ def newest_kernel(header_packages, flavour):
     return max(kvers)[1]
 
 
+def loadable(kver, modprobe_c, show_depends, modules_dep):
+    """Why `modprobe litepcie` would not load the packaged module for `kver`, or None.
+
+    From `modprobe -c`, `modprobe --show-depends -S <kver> litepcie` and the kernel's modules.dep."""
+    if "blacklist litepcie" not in modprobe_c.splitlines():
+        return "modprobe -c does not show `blacklist litepcie`"
+    wanted = f"/modules/{kver}/updates/fpgas-online/litepcie.ko"
+    if not any(line.startswith("insmod ") and line.split()[1].endswith(wanted) for line in show_depends.splitlines()):
+        return f"modprobe --show-depends -S {kver} litepcie does not insmod the packaged module:\n{show_depends}"
+    listed = {line.split(":")[0] for line in modules_dep.splitlines()}
+    missing = [m for m in MODULES if f"updates/fpgas-online/{m}.ko" not in listed]
+    if missing:
+        return f"depmod has not listed {', '.join(missing)} in /lib/modules/{kver}/modules.dep"
+    return None
+
+
 def docker_argv(platform, args, docker=("docker",), suite="bookworm"):
     """Run this script's `args` in debian:<suite> for `platform`, with the repository at /w."""
     boot = (
@@ -299,6 +315,17 @@ def cmd_modules_install_test(args):
     aliases = out("modinfo", "-k", kver, "-F", "alias", "liteuart").split()
     if "platform:liteuart" not in aliases:
         raise ContainerError(f"liteuart.ko has aliases {aliases}: litepcie's platform device would not load it")
+    # What a host does is `modprobe litepcie`. The blacklist must be in force, and must stop only the
+    # autoload by alias: asked for by name, the module still resolves to an insmod of the packaged file.
+    problem = loadable(
+        kver,
+        out("modprobe", "-c"),
+        out("modprobe", "--show-depends", "-S", kver, "litepcie"),
+        pathlib.Path(f"/lib/modules/{kver}/modules.dep").read_text(),
+    )
+    if problem:
+        raise ContainerError(problem)
+    print(f"modprobe -S {kver} litepcie would load it, and `blacklist litepcie` only stops the autoload")
     check_tools(f"{package} and {NAME}-utils")
     # The meta package's driver dependency is `-dkms | -module`: the modules package already installed
     # provides -module, so apt must leave DKMS (and the compiler and headers it would bring) alone.
