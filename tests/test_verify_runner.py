@@ -207,6 +207,34 @@ def test_a_probe_that_fails_beside_a_weak_claim_keeps_the_claim_and_says_why(opt
     assert "probing as well failed: the JTAG chain answers" in report["chosen_by"]
 
 
+class _LockedFake(Fake):
+    def __init__(self, name, lock, **kw):
+        super().__init__(name, **kw)
+        self._lock = str(lock)
+
+    @property
+    def lock(self):
+        return self._lock
+
+
+def test_a_lock_that_cannot_be_opened_beside_a_weak_claim_is_said_in_chosen_by(tmp_path):
+    # The boot check's probing takes the NeTV2's lock with core.hold_lock: one that cannot be opened (here a
+    # dangling symlink) is never followed, the NeTV2 is never driven, and the failure is said, not lost.
+    lock = tmp_path / "netv2.lock"
+    lock.symlink_to(tmp_path / "nowhere")
+    opts = {"state": tmp_path / "state.json", "no_publish": True}
+    acorn = _LockedFake("acorn", tmp_path / "acorn.lock", seen=[{"kind": "litex-other"}], weak=True, result="fail")
+    netv2 = _LockedFake("netv2", lock, probes=True, probed=[{"variant": "a7-35"}])
+    report = runner.verify(opts, _boards(acorn, netv2), usb=[], pci=[], mode=("auto", "test"))
+    assert netv2.probe_calls == 0 and [b["board"] for b in report["boards"]] == ["acorn"]
+    assert report["result"] == "fail" and "probing as well failed: the lock file" in report["chosen_by"]
+    assert str(lock) in report["chosen_by"] and "symlink" in report["chosen_by"]
+    # configured for the NeTV2: the check is an error naming the lock
+    netv2 = _LockedFake("netv2", lock, probes=True, probed=[{"variant": "a7-35"}])
+    report = runner.verify(opts, _boards(netv2), usb=[], pci=[], mode=("netv2", "test"))
+    assert netv2.probe_calls == 0 and report["result"] == "error" and str(lock) in report["reason"]
+
+
 def test_auto_finding_nothing_is_missing(opts):
     netv2 = Fake("netv2", probes=True)
     report = runner.verify(opts, _boards(Fake("arty"), netv2), usb=[], pci=[], mode=("auto", "test"))
