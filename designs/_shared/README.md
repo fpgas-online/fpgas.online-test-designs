@@ -39,3 +39,10 @@ for details.
 | `patch_fasm_gtp.py` | Rewrite FASM to prepend GTP_COMMON tile names to bare IBUFDS_GTE2 references |
 | `patch_gtp_sitetype.py` | Add bracket-form port aliases to GTP site type JSONs for chipdb generation |
 | `fasm2frames_wrapper.py` | Drop-in fasm2frames replacement that patches FASM before forwarding to the real tool |
+
+## Open-source PCIe core
+
+| Module | Purpose |
+|--------|---------|
+| `open_pcie_7x.py` | Put the open `pcie_7x` core behind litepcie's `S7PCIEPHY`, configured from the PHY's own settings as the Xilinx IP would be (device ID, subsystem IDs, BAR0 size, link speed, 64-bit MSI) |
+| `open_pcie_s7.v` | The `pcie_s7` module `S7PCIEPHY` instantiates: upstream `pcie_7x`'s LitePCIe wrapper with its fixed configuration as parameters |
