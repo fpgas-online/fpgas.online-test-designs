@@ -261,9 +261,12 @@ are Python and nfpm only, and LiteX elaborates the SoC faster there.
   pi-sw2-p48 before Part B exists: DKMS cannot serve that host (§2).
 
 A new workflow, `.github/workflows/acorn-litepcie.yml`, builds on pull requests (no publishing), on pushes to
-main, daily, and on demand. On main it uploads to the current `vX.Y` series release, the rolling pre-release
-that `acorn-debs.yml` already publishes to. It sits apart from `acorn-debs.yml` because its matrix, its
-runners (arm64) and its daily schedule are all different.
+main, daily, and on demand. On main it uploads to the build's own release, `build-<version>`
+(`packaging/release.py`), the one `collect-bitstreams.yml` publishes the repository's other debs to: every
+push to main has a release of its own, named by the repository's version at that commit. Only a file no
+release carries yet is uploaded, so a push that leaves the driver's inputs alone adds nothing here. It sits
+apart from `collect-bitstreams.yml` because its matrix, its runners (arm64) and its daily schedule are all
+different.
 
 ### 3.7 What installing the packages does to a host
 
@@ -318,8 +321,8 @@ HEAD. The inputs are:
 - `.github/workflows/acorn-litepcie.yml`.
 
 The version is `git describe` of `git log -1 --first-parent --format=%H -- <inputs>`. Otherwise every merge
-to main would bump the version and rebuild all 63 modules (§4). That would add 63 assets to the series release
-per merge, and a GitHub release holds at most 1000 assets.
+to main would bump the version and rebuild all 63 modules (§4), and fpgas-online/apt would add 63 debs to its
+pool per merge.
 
 `--first-parent` is what keeps versions from going backwards. Without it, `git log` can return a commit
 from a merged side branch, one that was written before an earlier main commit. That commit's `git describe`
@@ -404,7 +407,7 @@ The build set is:
   A script turns that file and the live `Packages` indexes into the job matrix.
 
 A new RPi kernel is picked up by a **daily** scheduled run. A run builds only the (suite, kernel, driver
-version) triples that have no asset on the series release yet, so a quiet day builds nothing, and a new
+version) triples that have no asset on any release yet, so a quiet day builds nothing, and a new
 kernel costs one build per flavour.
 
 The same kernel name can exist in both suites with different builds: `linux-headers-6.12.34+rpt-rpi-v8` is
@@ -415,26 +418,16 @@ Modules are therefore built per suite and never shared between suites.
 
 **Two budgets are at stake.**
 
-- *The series release.* A GitHub release holds at most 1000 assets, and the `vX.Y` series release is shared:
-  `acorn-debs.yml` uploads `fpgas-online-acorn-bitstreams` and `fpgas-online-acorn-tools` there. On
-  2026-09-25 `v0.0` held 9 assets, 2 bitstreams and 7 tools; the tools deb adds one per merge.
+- *A release.* A GitHub release holds at most 1000 assets. Each build has its own release
+  (`build-<version>`), so one release holds one build's debs: the repository's other packages (about 20) and,
+  when the driver's inputs changed, one driver set. The rolling `v0.0` release that held every build until
+  2026-10 had reached 328 assets and is no longer added to.
 - *The apt pool.* fpgas-online/apt commits every deb it pulls into `pool/main/` in git (29 debs, 3.7 MiB on
   2026-09-25), and nothing there is ever deleted.
 
-**Release retention (this repository, Part B).** After a run has uploaded a complete new set,
-`acorn-litepcie.yml` prunes the litepcie assets.
-
-- *What stays*: for every `fpgas-online-acorn-litepcie-*` package, the assets of the current driver version
-  and of the one before it, so a host can roll back one version. Everything older is deleted from the
-  release.
-- *Where old versions live*: in the apt pool. Removing an asset from the release does not remove a deb
-  fpgas-online/apt has already pulled. `pull_debs.py` also counts a package as offered while any version
-  remains, so the prefix entry never goes stale.
-- *Only its own assets*: pruning never touches assets of other packages.
-- *Headroom for acorn-debs*: before uploading, the workflow counts the release's assets and fails if the
-  upload would take it past 900.
-
-Two driver versions of 63 modules, plus `-common`, `-dkms` and two `-utils`, come to about 134 assets.
+**Release retention (this repository).** None is needed. A build's release holds only what that build
+published, and no release is added to afterwards, so no release approaches the asset limit and nothing is
+pruned. Old versions stay on the releases that first carried them.
 
 **Pool retention (fpgas-online/apt, Part C).** fpgas-online/apt keeps the newest two versions of each
 `fpgas-online-acorn-litepcie-*` package in `pool/main/` and removes older ones in the same commit that adds a
