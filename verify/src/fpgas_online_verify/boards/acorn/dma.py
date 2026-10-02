@@ -180,11 +180,15 @@ class Bridge:
         return self._direction(IOCTL_DMA_WRITER, enable)
 
     def close(self):
+        """Close the device. Both directions are stopped first, but only where this file took the channel
+        (lock()): a device that was only looked at (its identifier read, to see whose it is) may be another
+        board's, with another process's transfer running, and the driver stops a direction for whoever asks."""
         if self.fd is None:
             return
         try:
-            self.reader(False)
-            self.writer(False)
+            if self.locked:
+                self.reader(False)
+                self.writer(False)
         finally:
             self._close(self.fd)
             self.fd = None
@@ -346,9 +350,11 @@ MODULES = ("litepcie", "liteuart")  # in the order they are removed
 
 
 def loaded_modules(run):
-    """Which of the driver's modules the kernel has loaded."""
+    """Which of the driver's modules the kernel has loaded; None when lsmod could not say."""
     rc, out = run(["lsmod"], 10)
-    names = {line.split()[0] for line in out.splitlines()[1:] if line.split()} if rc == 0 else set()
+    if rc != 0:
+        return None
+    names = {line.split()[0] for line in out.splitlines()[1:] if line.split()}
     return [m for m in MODULES if m in names]
 
 
@@ -360,6 +366,8 @@ def load_driver(run, found=devices, sleep=time.sleep, wait_s=5.0):
     nodes = found()
     if nodes:
         return {"driver": "was loaded", "devices": nodes}, None
+    if before is None:  # without it nothing could be removed again safely: what was there before is not known
+        return {"driver": "not loaded", "devices": []}, "lsmod failed, so the driver was not loaded for the test"
     note = {"driver": "loaded for the test", "before": before, "devices": []}
     rc, out = run(["modprobe", "litepcie"], 30)
     if rc != 0:
@@ -384,8 +392,11 @@ def unload_driver(run, note):
     registers its device. Returns the faults."""
     if "before" not in note:
         return []
+    now = loaded_modules(run)
+    if now is None:
+        return ["lsmod failed after the DMA test: the modules loaded for it may still be loaded"]
     faults = []
-    for module in [m for m in loaded_modules(run) if m not in note["before"]]:
+    for module in [m for m in now if m not in note["before"]]:
         rc, out = run(["rmmod", module], 30)
         if rc != 0:
             faults.append(f"{module}.ko, loaded for the DMA test, could not be removed: {out.strip()[:200]}")

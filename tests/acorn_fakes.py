@@ -276,6 +276,7 @@ class FakePi:
         self.modules, self.module_installed, self.module_binds = [], True, True
         self.liteuart_late = False  # udev loads liteuart only once litepcie's probe has registered its device
         self.others = {}
+        self.lsmod_fails = False
         self.litepcie = FakeLitePCIe(
             ident=soc.identifier.rstrip(b"\0").decode() if soc is not None else OP_IDENT_ON_CHIP
         )
@@ -333,6 +334,8 @@ class FakePi:
         argv = [str(a) for a in argv]
         self.calls.append(argv)
         if argv[0] == "lsmod":
+            if self.lsmod_fails:
+                return 1, "lsmod: ERROR: could not open /proc/modules\n"
             return 0, "Module                  Size  Used by\n" + "".join(f"{m} 20480 0\n" for m in self.modules)
         if argv == ["modprobe", "litepcie"]:
             if not self.module_installed:
@@ -523,6 +526,7 @@ class FakeLitePCIe:
         self.pending = None  # a to-DRAM transfer waiting for the reader
         self.lost = 0  # words sent while the writer was off
         self.locks = {"reader": False, "writer": False}
+        self.mine = set()  # the locks this file took
         self.closed = False
         self.now = 0.0
 
@@ -533,7 +537,12 @@ class FakeLitePCIe:
         return self.FD
 
     def close(self, fd):
-        self.reader_on = self.writer_on = False
+        """The driver's release(): a direction is stopped, and its lock given back, only if this file had
+        locked it. A lock another process holds stays."""
+        for which in self.mine:
+            setattr(self, f"{which}_on", False)
+            self.locks[which] = False
+        self.mine = set()
         self.closed = True
 
     def clock(self):
@@ -588,9 +597,12 @@ class FakeLitePCIe:
                 ok = 1
                 if req:
                     ok = 0 if self.locks[which] else 1
-                    self.locks[which] = True
+                    if ok:
+                        self.locks[which] = True
+                        self.mine.add(which)
                 if rel:
                     self.locks[which] = False
+                    self.mine.discard(which)
                 status.append(ok)
             buf[:] = dma.LOCK.pack(reader_req, writer_req, reader_rel, writer_rel, *status)
         else:

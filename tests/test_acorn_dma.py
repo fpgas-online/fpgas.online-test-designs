@@ -83,10 +83,21 @@ def test_a_bridge_that_never_finishes_is_reported_with_its_count():
 def test_both_directions_are_off_after_close():
     driver = fk.FakeLitePCIe()
     b = bridge(driver)
+    b.lock()
     b.to_dram(0, words(0, B))
     b.close()
     assert driver.closed and not driver.reader_on and not driver.writer_on
     b.close()  # closing twice is harmless
+
+
+def test_closing_a_device_that_was_only_looked_at_stops_nobodys_transfer():
+    """The check opens every /dev/litepcie<n> to read its identifier. One that is another board's may have
+    another process's DMA running, and the driver stops a direction for whoever asks."""
+    driver = fk.FakeLitePCIe()
+    driver.reader_on = driver.writer_on = True  # someone else's, on this device
+    with bridge(driver) as b:
+        check.read_identifier(b)
+    assert driver.closed and driver.reader_on and driver.writer_on
 
 
 def test_lock_refuses_a_channel_in_use_and_gives_back_what_it_took():
@@ -244,6 +255,14 @@ def test_a_driver_bound_to_another_design_is_not_used(tmp_path, images):  # noqa
         in _dma(report)["reason"]
     )
     assert rig.pi.litepcie.dram == {}  # nothing was written through it
+
+
+def test_when_lsmod_fails_no_module_is_loaded_or_removed(tmp_path, images):  # noqa: F811
+    """What was loaded before the test is how it knows what to remove after: without it, it loads nothing."""
+    rig = Rig(tmp_path, images)
+    rig.pi.lsmod_fails = True
+    report = rig.check()
+    assert "lsmod failed" in report["not_run"]["dma"] and _module_commands(rig) == []
 
 
 def test_the_device_is_found_whatever_number_the_driver_gave_it(tmp_path, images):  # noqa: F811

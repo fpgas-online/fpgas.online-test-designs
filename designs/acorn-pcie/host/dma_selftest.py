@@ -61,7 +61,8 @@ def identifier(bridge, csrs):
 
 
 def wait_dram(bridge, timeout_s, settle_s):
-    """The BIOS sets the DRAM up after every SoC reset (loading litepcie.ko is one), then runs its memtest."""
+    """The BIOS sets the DRAM up after every SoC reset, then runs its memtest (about a second in all). Loading
+    the packaged litepcie.ko does not reset the SoC; upstream's driver does."""
     start = time.monotonic()
     while not bridge.dram_ready():
         if time.monotonic() - start > timeout_s:
