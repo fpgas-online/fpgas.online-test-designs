@@ -10,14 +10,14 @@ identification (a PMOD HAT) and Ethernet (a USB Ethernet adapter).
     sudo fpgas-arty-debug program uart            # load a test's design and leave it running
     sudo fpgas-arty-debug test ddr                # load it and run its test, output as it comes
     sudo fpgas-arty-debug test pin-id -- --hat-port JA    # after --: arguments for the test script
-    sudo fpgas-acorn-debug identify               # the Acorn's running build and flash identity
+    sudo fpgas-acorn-debug identify               # who the Acorn is: fpgas-acorn-verify --identify
 """
 
 import json
 import subprocess
 import sys
 
-from . import bitstreams
+from . import bitstreams, identify
 from .core import Problem, hold_lock, pci_devices, usb_devices
 from .testbench import TestBoard
 
@@ -110,12 +110,9 @@ def _program(board, host, args, bitstream, then_test):
 
 
 def acorn_identify(board, host, args):
-    from .boards.acorn import check
-
-    with hold_lock(board.lock, board.title):
-        report = check.identify(check.scan_pci(), args.images or check.IMAGES)
-    print(json.dumps(report, indent=2))
-    return 0 if report["result"] == "read" else 1
+    """The same document as fpgas-acorn-verify --identify."""
+    options = {"board": board.name, **({"images": args.images} if args.images else {})}
+    return identify.run(options, f"fpgas-{board.slug}-debug", {board.name: board})
 
 
 def commands(board):
@@ -129,7 +126,7 @@ def commands(board):
             "test": (lambda b, h, a: program(b, h, a, then_test=True), "load TEST's design and run its test", True),
         })  # fmt: skip
     if board.name == "acorn":
-        out["identify"] = (acorn_identify, "show the running build and the flash's ID", False)
+        out["identify"] = (acorn_identify, "print who the board is (as fpgas-acorn-verify --identify)", False)
     return out
 
 
