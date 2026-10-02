@@ -9,7 +9,7 @@ Attaches to the LiteX BIOS of the DDR test design over the UART and asks it to t
   3. `sdram_init`  initialisation and read leveling again (a window on every byte lane), the BIOS's
                    2 MiB memtest, and its write and read speed
   4. `sdram_test`  a memtest over 1/32 of the DRAM
-  5. `mem_write`, `flush_l2_cache`, `mem_read`
+  5. `mem_write`, `flush_cpu_dcache`, `flush_l2_cache`, `mem_read`
                    a different word at the DRAM's base and at every address bit up to half its size, all
                    read back from the DRAM: a memtest over a small range passes on a board with half the
                    memory the design was built for, or with a broken address line
@@ -64,6 +64,7 @@ COMMAND_TIMEOUT_S = {
     "sdram_init": 120,
     "sdram_test": 300,
     "mem_write": 10,
+    "flush_cpu_dcache": 10,
     "flush_l2_cache": 10,
     "mem_read": 10,
 }
@@ -163,9 +164,12 @@ def address_test(ask, base, size):
     """(address bits tested, faults): does every address bit of the DRAM reach its own cell?
 
     A different word goes to the base and to base + 2**bit for every bit from 4 bytes up to half the size.
-    The L2 cache is then flushed, so the words are read back from the DRAM and not from the cache. Where
-    two addresses are one cell (an address bit the chip does not have, or a broken address line), the
-    earlier one reads back the later one's word.
+    The CPU's data cache and the L2 cache are then flushed, so the words are read back from the DRAM and
+    not from a cache that still holds what was written. Where two addresses are one cell (an address bit
+    the chip does not have, or a broken address line), one of them reads back the other's word.
+
+    Not covered: addresses that are one cell only with several bits set at once, and the bits inside one
+    L2 cache line (offsets 4 to 16), which reach the DRAM as one burst.
     """
     offsets = [0]
     bit = 2
@@ -175,6 +179,7 @@ def address_test(ask, base, size):
     words = {base + offset: ADDRESS_WORD + index for index, offset in enumerate(offsets)}
     for addr, word in words.items():
         ask(f"mem_write {addr:#x} {word:#x}")
+    ask("flush_cpu_dcache")
     ask("flush_l2_cache")
     written_to = {word: addr for addr, word in words.items()}
     faults = []

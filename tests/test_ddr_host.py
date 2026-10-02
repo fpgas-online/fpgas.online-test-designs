@@ -17,7 +17,8 @@ import test_ddr
 
 from .bios_fakes import MIB, PROMPT, FakeBios, FakeDdrBios, ddr_replies, lines, memtest
 
-COMMANDS = ["ident", "mem_list", "sdram_init", "sdram_test", "mem_write", "flush_l2_cache", "mem_read"]
+ADDRESS_TEST = ["mem_write", "flush_cpu_dcache", "flush_l2_cache", "mem_read"]
+COMMANDS = ["ident", "mem_list", "sdram_init", "sdram_test", *ADDRESS_TEST]
 
 
 def run(fake, board="netv2"):
@@ -123,14 +124,28 @@ def test_a_stuck_address_line_fails_the_address_test():
     assert "address test: 0x40000000 holds the word written to 0x40001000" in found["reason"]
 
 
-def test_the_address_test_reads_the_dram_not_the_cache():
-    # Without the flush the words would come back from the L2 cache whatever the DRAM did with them.
+def test_an_address_line_stuck_high_fails_the_address_test():
+    # Offset 0 lands on the cell of offset 2**20, which is written later.
+    found = run(FakeDdrBios("arty", stuck_high_bit=20), "arty")
+    assert found["result"] == "fail"
+    assert "address test: 0x40000000 holds the word written to 0x40100000" in found["reason"]
+
+
+def test_two_address_lines_shorted_fail_the_address_test():
+    found = run(FakeDdrBios("arty", short=(14, 21)), "arty")
+    assert found["result"] == "fail"
+    assert "address test: 0x40004000 holds the word written to 0x40200000" in found["reason"]
+
+
+def test_the_address_test_reads_the_dram_not_the_caches():
+    # Without the flushes the words would come back from the CPU's data cache or the L2 cache, whatever
+    # the DRAM did with them: the fake's caches answer a read until they are flushed.
     fake = FakeDdrBios("arty", real=128 * MIB)
     run(fake, "arty")
     writes = [i for i, c in enumerate(fake.commands) if c.startswith("mem_write")]
     reads = [i for i, c in enumerate(fake.commands) if c.startswith("mem_read")]
-    flush = fake.commands.index("flush_l2_cache")
-    assert max(writes) < flush < min(reads)
+    dcache, l2 = fake.commands.index("flush_cpu_dcache"), fake.commands.index("flush_l2_cache")
+    assert max(writes) < dcache < l2 < min(reads)
 
 
 def test_a_byte_lane_missing_from_the_leveling_fails():

@@ -56,7 +56,7 @@ for the board, then runs:
 | `mem_list` | the design's `MAIN_RAM` is the size of the board's DRAM (256 MiB on the Arty, 512 MiB on the NeTV2, 512 MiB or 1 GiB on the Acorn) |
 | `sdram_init` | read leveling reports each of the board's byte lanes, with a window on every one; the BIOS's 2 MiB memtest passes; write and read speed are reported |
 | `sdram_test` | a memtest passes, over at least 1/32 of the DRAM (8 MiB on the Arty, 16 MiB on the NeTV2) |
-| `mem_write`, `flush_l2_cache`, `mem_read` | the address test: a different word at the DRAM's base and at every address bit from 4 bytes to half its size, read back from the DRAM after the cache is flushed. Two addresses that are one cell (half the memory missing, a broken address line) fail it; a memtest over a small range does not notice them |
+| `mem_write`, `flush_cpu_dcache`, `flush_l2_cache`, `mem_read` | the address test: a different word at the DRAM's base and at every address bit from 4 bytes to half its size, read back from the DRAM after the CPU's data cache and the L2 cache are flushed. Two addresses that are one cell (half the memory missing, a broken address line) fail it; a memtest over a small range does not notice them |
 
 Its last line is the result for `fpgas-verify`:
 
