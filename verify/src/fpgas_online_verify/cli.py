@@ -8,7 +8,7 @@ import re
 import sys
 import textwrap
 
-from . import config, debug, identify, runner, state
+from . import config, debug, identify, label, runner, state
 from .board import installed
 from .testbench import TestBoard
 
@@ -71,7 +71,8 @@ def _verify_parser(prog, board=None):
         epilog="\n\n".join(e for e in (board and _tests_epilog(board), _results(), _files(board)) if e),
     )
     if board is None:
-        parser.add_argument("--list", action="store_true", help="list the installed boards and the configured one")
+        parser.add_argument("--list", action="store_true", help="list the installed boards and the configured one; "
+                            "with --label, the labels rpi-hwid would make")  # fmt: skip
         parser.add_argument("--board", help="check BOARD, ignoring the configuration")
         parser.add_argument("--no-probe", action="store_true", help="never scan JTAG to find a board (auto only)")
     partial = parser.add_mutually_exclusive_group()
@@ -81,6 +82,11 @@ def _verify_parser(prog, board=None):
     partial.add_argument("--update", action="store_true", help="accept a changed board or flash: record it")
     partial.add_argument("--identify", action="store_true",
                          help="print who the board is (an identity document, JSON) and nothing else")  # fmt: skip
+    if board is None:
+        partial.add_argument(
+            "--label", action="store_true", help="make this host's labels with rpi-hwid (rpi-hwid labels --this-host)"
+        )
+        parser.add_argument("--out", metavar="FILE", help="with --label: where rpi-hwid writes the labels")  # fmt: skip
     if loads:
         parser.add_argument("--variant", help="use VARIANT's bitstreams, not the detected one")
         parser.add_argument("--port", help="the board's UART (default: the board's usual one)")
@@ -107,6 +113,11 @@ def verify_main(argv=None):
     args = _verify_parser("fpgas-verify").parse_args(argv)
     if args.identify:
         return identify.run(_options(args), "fpgas-verify")
+    if args.out and not args.label:
+        _verify_parser("fpgas-verify").error("--out goes with --label")
+    if args.label:
+        options = {k: v for k, v in _options(args).items() if k not in ("label", "out", "list")}
+        return label.run(options, args.out, args.list)
     if args.list:
         boards = installed()
         for name, b in boards.items():
