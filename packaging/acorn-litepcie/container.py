@@ -80,6 +80,11 @@ def max_glibc(objdump_t):
     return max(versions, key=_release)
 
 
+def driver_version(deb_version):
+    """`0.0.post7~deb12~pr3` -> `0.0.post7`: the version DKMS knows the driver by."""
+    return deb_version.split("~")[0]
+
+
 def vermagic_ok(vermagic, kver):
     return vermagic.startswith(f"{kver} ")
 
@@ -339,7 +344,8 @@ def cmd_dkms_test(args):
     installed = out("dpkg-query", "-W", "-f", "${Package}\\n", "linux-headers-*").split()
     kver = newest_kernel(installed, flavour)
     apt_install(*(f"./{d}" for d in args.debs))
-    version = out("dpkg-query", "-W", "-f", "${Version}", f"{NAME}-dkms").strip()
+    # DKMS knows the driver by its own version: the deb's, without the suite and preview suffixes.
+    version = driver_version(out("dpkg-query", "-W", "-f", "${Version}", f"{NAME}-dkms").strip())
     # The package's postinst (common.postinst) must have built and installed the modules by itself: no
     # `dkms install` here, or a postinst that silently builds nothing would still pass.
     status = out("dkms", "status", "-m", NAME, "-v", version, "-k", kver)

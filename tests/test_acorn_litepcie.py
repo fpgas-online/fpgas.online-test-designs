@@ -658,6 +658,12 @@ def test_vermagic_must_name_exactly_the_kernel(vermagic, ok):
     assert ct.vermagic_ok(vermagic, "6.12.109+rpt-rpi-v8") is ok
 
 
+def test_the_dkms_test_asks_dkms_about_the_drivers_own_version():
+    """`dkms status -v 0.0.post7~deb13` finds nothing: dkms.conf says 0.0.post7 (seen in CI on trixie)."""
+    assert ct.driver_version("0.0.post7~deb13~pr79") == bd.driver_of("0.0.post7~deb13~pr79") == "0.0.post7"
+    assert ct.driver_version("0.0.post7") == "0.0.post7"
+
+
 def test_the_newest_installed_headers_name_the_kernel_to_build_for():
     names = [
         "linux-headers-rpi-v8",  # the meta package: not a kernel
