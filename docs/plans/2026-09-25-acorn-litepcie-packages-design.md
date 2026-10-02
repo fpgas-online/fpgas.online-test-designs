@@ -276,7 +276,7 @@ Nothing changes on a running host until an operator loads the module.
   of scope.
 - **Loading does not reset the SoC.** Upstream's probe writes `CSR_CTRL_RESET_ADDR`. The packaging removes
   that write (the fourth patch) and has probe switch off what the driver owns instead: the MSI enables and the
-  DMA channel's reader and writer.
+  DMA channel's reader, writer and loopback.
   - *Why*: this SoC's reset goes to the clock PLL, so the system clock stops while the PCIe core's own clock
     runs on. After DMA has been used, the first thing the SoC sends the host after such a reset can be a
     broken TLP. Seen on pi-sw2-p48 (2026-10-02): the root port logged BadTLP and MalfTLP, the endpoint stopped
