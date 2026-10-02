@@ -5,12 +5,12 @@
   3. run `rpi-hwid labels --this-host [--out F] [--list]` with FPGAS_VERIFY_IDENTITY naming that file, so the
      fpgas-verify --identify rpi-hwid runs prints it and touches nothing (no lock is taken twice, no board is
      read twice, and rpi-hwid is never run again from inside);
-  4. delete the file, whatever happened: an error, Ctrl-C, or a SIGTERM.
+  4. delete the file, whatever happened from its creation on: a failed write, an error, Ctrl-C, or a SIGTERM.
 
 rpi-hwid is a soft dependency: it is found on PATH and run, never imported. Without it, --label exits 2 and
-says how to install it. It also exits 2 when the identity file cannot be written: /run/fpgas-online is root's,
-so --label runs as root. Otherwise the exit status is rpi-hwid's, and 128 + N when rpi-hwid was killed by
-signal N (as a shell says it); a SIGTERM to --label itself exits 143.
+says how to install it. It also exits 2 when the identity file cannot be written, and says why (a full disk,
+say; /run/fpgas-online is root's, so --label runs as root). Otherwise the exit status is rpi-hwid's, and
+128 + N when rpi-hwid was killed by signal N (as a shell says it); a SIGTERM to --label itself exits 143.
 
 Stdlib only: the Pi hosts boot a tmpfs root with no LiteX.
 """
@@ -59,25 +59,32 @@ def run(options, out=None, listing=False, prog="fpgas-verify", boards=None, runn
         print(f"{prog} --label: {gap}", file=sys.stderr)
     directory = pathlib.Path(options.get("identity_dir") or IDENTITY_DIR)
     path = directory / f"identity-{os.getpid()}.json"
+    ours = False  # whether what is at `path` is this run's file: only then is it deleted
     previous = signal.signal(signal.SIGTERM, _terminated)
     try:
         try:
             directory.mkdir(parents=True, exist_ok=True)
+            if os.path.lexists(path):
+                raise FileExistsError
+            ours = True  # O_EXCL: from here on, a file at `path` is the one this run made
             _create(path, identify.dumps(doc))
         except FileExistsError:
+            ours = False
             print(f"{prog} --label: {path} is already there (another run's, or not ours): not overwritten",
                   file=sys.stderr)  # fmt: skip
             return 2
         except OSError as e:
-            print(f"{prog} --label: cannot write the identity for rpi-hwid to {path}: {e.strerror or e} "
-                  "(run it as root)", file=sys.stderr)  # fmt: skip
+            hint = " (run it as root)" if isinstance(e, PermissionError) else ""
+            print(f"{prog} --label: cannot write the identity for rpi-hwid to {path}: {e.strerror or e}{hint}",
+                  file=sys.stderr)  # fmt: skip
             return 2
-        try:
-            rc = runner(argv(tool, out, listing), env={**os.environ, identify.ENV: str(path)}, check=False).returncode
-        finally:
-            path.unlink(missing_ok=True)
+        rc = runner(argv(tool, out, listing), env={**os.environ, identify.ENV: str(path)}, check=False).returncode
     finally:
-        signal.signal(signal.SIGTERM, previous)
+        try:  # whatever happened once the file was made (a failed write, ENOSPC, Ctrl-C, SIGTERM): it goes
+            if ours:
+                path.unlink(missing_ok=True)
+        finally:
+            signal.signal(signal.SIGTERM, previous)
     if rc < 0:
         print(f"{prog} --label: {TOOL} was killed by signal {-rc} ({signal.Signals(-rc).name})", file=sys.stderr)
         return 128 - rc

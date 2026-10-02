@@ -786,8 +786,73 @@ def test_label_that_cannot_write_the_identity_says_so_and_exits_2(tmp_path, labe
     options = {**labelling, "identity_dir": tmp_path / "not-a-directory" / "run"}
     assert label.run(options, runner=rpi_hwid) == 2 and rpi_hwid.seen == {}
     err = capsys.readouterr().err
-    assert "cannot write the identity for rpi-hwid" in err and "run it as root" in err
-    assert "Traceback" not in err
+    assert "cannot write the identity for rpi-hwid" in err and "Not a directory" in err
+    assert "run it as root" not in err and "Traceback" not in err
+
+
+class FailingWrite:
+    """Stands in for os.fdopen in label.py: the file is made (by os.open), then its write raises `exc`."""
+
+    def __init__(self, exc):
+        self.exc = exc
+
+    def __call__(self, fd, mode):
+        os.close(fd)
+        exc = self.exc
+
+        class _File:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def write(self, text):
+                raise exc
+
+        return _File()
+
+
+def _identity_files(labelling):
+    return sorted(p.name for p in labelling["identity_dir"].iterdir())
+
+
+def test_label_whose_write_fails_deletes_the_file_and_gives_the_real_error(labelling, locks, monkeypatch, capsys):
+    import errno
+
+    monkeypatch.setattr(label.os, "fdopen", FailingWrite(OSError(errno.ENOSPC, os.strerror(errno.ENOSPC))))
+    rpi_hwid = RpiHwid(locks)
+    assert label.run(labelling, runner=rpi_hwid) == 2 and rpi_hwid.seen == {}
+    assert _identity_files(labelling) == []  # the file _create made is deleted
+    err = capsys.readouterr().err
+    assert "cannot write the identity for rpi-hwid" in err and os.strerror(errno.ENOSPC) in err
+    assert "run it as root" not in err
+
+
+def test_label_that_may_not_create_the_file_says_permission_denied_and_run_as_root(labelling, locks, monkeypatch,
+                                                                                    capsys):  # fmt: skip
+    import errno
+
+    def refused(path, flags, mode=0o777):
+        raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(path))
+
+    labelling["identity_dir"].mkdir()
+    monkeypatch.setattr(label.os, "open", refused)
+    rpi_hwid = RpiHwid(locks)
+    assert label.run(labelling, runner=rpi_hwid) == 2 and rpi_hwid.seen == {}
+    assert _identity_files(labelling) == []
+    err = capsys.readouterr().err
+    assert os.strerror(errno.EACCES) in err and "(run it as root)" in err
+
+
+def test_label_interrupted_while_writing_deletes_the_file(labelling, locks, monkeypatch):
+    before = signal.getsignal(signal.SIGTERM)
+    monkeypatch.setattr(label.os, "fdopen", FailingWrite(KeyboardInterrupt()))
+    rpi_hwid = RpiHwid(locks)
+    with pytest.raises(KeyboardInterrupt):
+        label.run(labelling, runner=rpi_hwid)
+    assert rpi_hwid.seen == {} and _identity_files(labelling) == []
+    assert signal.getsignal(signal.SIGTERM) == before
 
 
 def test_rpi_hwid_killed_by_a_signal_is_128_plus_the_signal(labelling, locks, capsys):
