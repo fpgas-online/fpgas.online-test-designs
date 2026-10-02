@@ -50,8 +50,9 @@ class Locks:
     def __init__(self):
         self.taken, self.held = [], None
 
-    def __call__(self, path, what):
+    def __call__(self, path, what, timeout=None):
         outer = self
+        assert timeout == identify.LOCK_WAIT  # --identify never waits without a bound
 
         class _Held:
             def __enter__(self):
@@ -105,6 +106,74 @@ def test_each_board_is_read_under_its_own_lock(tmp_path, locks):
     doc, _ = _read_auto({"arty": a, "fomu": f}, tmp_path)
     assert [b["board"] for b in doc["boards"]] == ["arty", "fomu"]
     assert locks.taken == [a.lock, f.lock]
+
+
+class LockedAt(Identified):
+    """An Identified board whose lock is a file of the test's."""
+
+    def __init__(self, name, lock, **kw):
+        super().__init__(name, **kw)
+        self._lock = str(lock)
+
+    @property
+    def lock(self):
+        return self._lock
+
+
+@pytest.fixture
+def held_lock(tmp_path):
+    """A lock file someone else holds (flock is per open file, so this process's own open of it waits too)."""
+    import fcntl
+
+    path = tmp_path / "board.lock"
+    with open(path, "w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        yield path
+
+
+def test_a_board_whose_lock_is_held_is_busy_within_the_bound(tmp_path, held_lock, monkeypatch):
+    import time
+
+    monkeypatch.delenv(identify.ENV, raising=False)
+    arty = LockedAt("arty", held_lock, seen=[{"variant": "a7-35", "serial": "A"}], read={"idcode": "0x0362d093"},
+                    label_fields=("idcode", "dna"))  # fmt: skip
+    started = time.monotonic()
+    doc, gaps = _read({"arty": arty}, tmp_path, lock_wait=0.5)
+    assert 0.5 <= time.monotonic() - started < 5
+    assert arty.identified == []  # nothing of the board ran
+    assert doc["boards"] == [{"board": "arty", "kind": "arty", "variant": "a7-35", "serial": "A"}]
+    assert gaps == ["arty: idcode: board busy", "arty: dna: board busy"]
+
+
+def test_identify_waits_30_s_at_most_and_the_boot_check_without_a_bound():
+    import inspect
+
+    from fpgas_online_verify import core, runner
+
+    assert identify.LOCK_WAIT == 30
+    assert inspect.signature(core.hold_lock).parameters["timeout"].default is None
+    # the boot check waits for its board however long it takes
+    assert "hold_lock(board.lock, board.title):" in inspect.getsource(runner)
+
+
+def test_a_bounded_lock_gives_up_with_busy_and_an_unbounded_one_waits(tmp_path, held_lock):
+    import fcntl
+    import threading
+
+    from fpgas_online_verify import core
+
+    ticks = iter(range(100))
+    with pytest.raises(core.Busy, match="board busy"), \
+            core.hold_lock(held_lock, "board", timeout=3, clock=lambda: next(ticks), sleep=lambda s: None):  # fmt: skip
+        pass
+    free = tmp_path / "free.lock"
+    with core.hold_lock(free, "board", timeout=3):  # free: taken at once
+        pass
+    other = open(free, "w")  # noqa: SIM115
+    fcntl.flock(other, fcntl.LOCK_EX)
+    threading.Timer(0.3, other.close).start()
+    with core.hold_lock(free, "board"):  # no bound: it waits until the other user lets go
+        pass
 
 
 def _read_auto(boards, tmp_path):

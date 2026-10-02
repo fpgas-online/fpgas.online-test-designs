@@ -2,7 +2,8 @@
 
   * Live, the reads are the ones that disturb nothing: the JTAG IDCODE, the device DNA (over BAR0 or JTAG's
     FUSE_DNA) and, on the Acorn, the flash's identity over BAR0. Each board is read under its own lock, so a
-    check or a debug session running on it finishes first.
+    check or a debug session running on it finishes first; it waits at most LOCK_WAIT seconds for the lock,
+    and a board still busy then has its fields missing, for the reason "board busy".
   * Anything only a loaded design can read (the Arty's and NeTV2's flash, through openFPGALoader's
     SPI-over-JTAG bridge) comes from the boot report (runner.REPORT), when the board there is this one (the
     same USB serial, PCI slot or IDCODE); the board's dict lists those fields in "from_report".
@@ -24,9 +25,10 @@ import sys
 
 from . import config, identity, runner
 from .board import installed
-from .core import Problem, hold_lock, pci_devices, usb_devices
+from .core import BUSY, Busy, Problem, hold_lock, pci_devices, usb_devices
 
 ENV = "FPGAS_VERIFY_IDENTITY"
+LOCK_WAIT = 30  # seconds --identify waits for a board's lock before it says the board is busy
 MATCH_KEYS = ("serial", "bdf", "idcode")  # what says a board in the boot report is this one, strongest first
 
 
@@ -132,9 +134,14 @@ def read(options, boards=None, usb=None, pci=None):
     for (board, host, found), key in zip(targets, runner._keys(targets)):
         board_options = {**{k: v for k, v in options.items() if k != "event"}, "board_key": key}
         try:
-            with hold_lock(board.lock, board.title):
+            with hold_lock(board.lock, board.title, timeout=options.get("lock_wait", LOCK_WAIT)):
                 ident = board.identify(host, found, board_options)
                 ident = from_report(board, ident, _boot_report(report))
+        except Busy:
+            ident = identity.base(key, board.name, found)
+            out.append(ident)
+            gaps += [f"{key}: {f}: {BUSY}" for f in board.label_fields]
+            continue
         except Problem as p:
             ident = identity.base(key, board.name, found)
             gaps.append(f"{key}: {p.result}: {p.reason}")
