@@ -11,7 +11,7 @@ Build command (from repo root):
 
 Requires environment variables CHIPDB and PRJXRAY_DB_DIR pointing to the
 openxc7 toolchain directories. The bitstream is written to:
-    designs/uart/build/arty/gateware/digilent_arty.bit
+    designs/uart/build/arty-<variant>-<flow>/gateware/digilent_arty.bit
 """
 
 import pathlib

@@ -11,7 +11,8 @@ Arty A7 DRAM: Micron MT41K128M16JT-125, 256 MB, 16-bit DDR3.
 Build command:
     uv run python designs/ddr-memory/gateware/ddr_soc_arty.py --toolchain openxc7 --build
 
-The bitstream is written to: designs/ddr-memory/build/arty/gateware/digilent_arty.bit
+The bitstream is written to:
+    designs/ddr-memory/build/arty-<variant>-<flow>/gateware/digilent_arty.bit
 """
 
 import pathlib
