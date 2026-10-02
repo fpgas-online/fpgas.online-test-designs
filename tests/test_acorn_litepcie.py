@@ -184,8 +184,11 @@ def test_the_patches_apply(driver):
     pd.apply_patches(driver)
     main_c = (driver / "kernel" / "main.c").read_text()
     assert "CSR_CTRL_RESET_ADDR" not in main_c and "msleep" not in main_c  # probe no longer resets the SoC
-    for off in ("CSR_PCIE_MSI_ENABLE_ADDR", "PCIE_DMA_WRITER_ENABLE_OFFSET", "PCIE_DMA_READER_ENABLE_OFFSET"):
-        assert f"{off}, 0);" in main_c  # it switches off the interrupts and the DMA channel instead
+    # it switches off the interrupts and the DMA channel instead; the loopback too, which `litepcie_util
+    # dma_test` leaves on when it is killed, and which would turn every transfer round before it left the core
+    for off in ("CSR_PCIE_MSI_ENABLE_ADDR", "PCIE_DMA_WRITER_ENABLE_OFFSET", "PCIE_DMA_READER_ENABLE_OFFSET",
+                "PCIE_DMA_LOOPBACK_ENABLE_OFFSET"):  # fmt: skip
+        assert f"{off}, 0);" in main_c
     assert "\t.unlocked_ioctl = litepcie_ioctl,\n\t.compat_ioctl = compat_ptr_ioctl,\n" in main_c
     assert "\tret = dma_set_mask_and_coherent(&dev->dev, DMA_BIT_MASK(DMA_ADDR_WIDTH));\n" in main_c
     assert "dma_set_mask(&dev->dev" not in main_c
