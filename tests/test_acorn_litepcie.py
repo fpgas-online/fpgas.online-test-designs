@@ -143,7 +143,7 @@ def test_a_kernels_toml_without_the_fleet_kernel_is_refused(tmp_path):
         bd.read_kernels(bad)
 
 
-# -- the driver patches (§3.3-§3.5) -----------------------------------------------------------------------
+# -- the driver patches (§3.3-§3.5, §3.7) -----------------------------------------------------------------------
 
 pd = _load("prepare_driver")
 
@@ -153,6 +153,12 @@ MAIN_C = """static const struct file_operations litepcie_fops = {
 \t.unlocked_ioctl = litepcie_ioctl,
 \t.mmap = litepcie_mmap,
 };
+
+\t/* Reset LitePCIe core */
+#ifdef CSR_CTRL_RESET_ADDR
+\tlitepcie_writel(litepcie_dev, CSR_CTRL_RESET_ADDR, 1);
+\tmsleep(10);
+#endif
 
 \tpci_set_master(dev);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 18, 0)
@@ -174,9 +180,12 @@ def driver(tmp_path):
     return d
 
 
-def test_the_three_patches_apply(driver):
+def test_the_patches_apply(driver):
     pd.apply_patches(driver)
     main_c = (driver / "kernel" / "main.c").read_text()
+    assert "CSR_CTRL_RESET_ADDR" not in main_c and "msleep" not in main_c  # probe no longer resets the SoC
+    for off in ("CSR_PCIE_MSI_ENABLE_ADDR", "PCIE_DMA_WRITER_ENABLE_OFFSET", "PCIE_DMA_READER_ENABLE_OFFSET"):
+        assert f"{off}, 0);" in main_c  # it switches off the interrupts and the DMA channel instead
     assert "\t.unlocked_ioctl = litepcie_ioctl,\n\t.compat_ioctl = compat_ptr_ioctl,\n" in main_c
     assert "\tret = dma_set_mask_and_coherent(&dev->dev, DMA_BIT_MASK(DMA_ADDR_WIDTH));\n" in main_c
     assert "dma_set_mask(&dev->dev" not in main_c
