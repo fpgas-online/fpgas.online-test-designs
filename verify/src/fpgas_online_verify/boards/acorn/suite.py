@@ -301,23 +301,25 @@ class _Suite:
         return None
 
     def dma(self, note):
-        opener = self.options.get("dma_bridge") or (lambda csrs: dma.Bridge(csrs))
+        opener = self.options.get("dma_bridge") or dma.Bridge
         clock = self.options.get("clock", time.monotonic)
         entry = {"test": "dma", "driver": note["driver"]}
-        with opener(self.csrs) as bridge:
-            bridge.lock()
-            ident = check.read_identifier(bridge)
-            if ident != self.bar0.get("identifier"):
-                raise Problem("fail", f"litepcie.ko's device runs {ident!r}, not the build BAR0 showed")
-            if not bridge.dram_ready():
-                raise Problem(
-                    "fail", "the DRAM is still under the BIOS's control (sdram_dfii_control): not initialised"
-                )
-            bridge.loopback(False)
-            words = self.csrs.memories["main_ram"]["size"] // dma.WORD
-            out, faults = dma.exercise(bridge, words, self.options.get("dma_bytes", dma.BIG_BYTES), clock=clock)
-        entry.update(out)
-        return {**entry, "result": "fail", "reason": "; ".join(faults)} if faults else {**entry, "result": "pass"}
+        seen = []
+        for device in note["devices"]:  # the one that is this board: the driver's numbering does not say
+            with opener(self.csrs, device) as bridge:
+                ident = check.read_identifier(bridge)
+                if ident != self.bar0.get("identifier"):
+                    seen.append(f"{device} runs {ident!r}")
+                    continue
+                bridge.lock()
+                if not bridge.dram_ready():
+                    raise Problem("fail", "the DRAM is still under the BIOS's control (sdram_dfii_control)")
+                bridge.loopback(False)
+                words = self.csrs.memories["main_ram"]["size"] // dma.WORD
+                out, faults = dma.exercise(bridge, words, self.options.get("dma_bytes", dma.BIG_BYTES), clock=clock)
+            entry.update(out, device=device)
+            return {**entry, "result": "fail", "reason": "; ".join(faults)} if faults else {**entry, "result": "pass"}
+        raise Problem("fail", f"litepcie.ko has no device for the build BAR0 showed: {'; '.join(seen)}")
 
     def _dma(self):
         """The DMA test, with the driver loaded for it if it was not, and removed again if it was loaded here."""
@@ -327,12 +329,14 @@ class _Suite:
         if why_not:
             self.not_run["dma"] = why_not
             return
-        run, kw = self.run, {k: self.options[k] for k in ("exists", "sleep") if self.options.get(k)}
-        note, why_not = dma.load_driver(run, self.options.get("dma_device", dma.DEVICE), **kw)
+        kw = {
+            k: self.options[opt] for k, opt in (("found", "dma_devices"), ("sleep", "sleep")) if self.options.get(opt)
+        }
+        note, why_not = dma.load_driver(self.run, **kw)
         try:
             self.test("dma", why_not, lambda: self.dma(note))
         finally:
-            for fault in dma.unload_driver(run, note):
+            for fault in dma.unload_driver(self.run, note):
                 self.faults.append(("error", fault))
 
     # -- the whole check -------------------------------------------------------------------------------

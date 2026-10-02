@@ -31,12 +31,14 @@ Stdlib only: the Pi hosts boot a tmpfs root with no LiteX.
 """
 
 import fcntl
+import glob
 import os
 import random
 import struct
 import time
 
-DEVICE = "/dev/litepcie0"
+DEVICE = "/dev/litepcie0"  # after a first probe; the driver numbers its device again at every later probe
+DEVICES = "/dev/litepcie[0-9]*"
 MODULE_PACKAGE = "fpgas-online-acorn-litepcie-module"  # virtual: the DKMS package or a prebuilt -modules-<kver>
 
 # litepcie's kernel/config.h. The driver packages are built from the same litepcie (uv.lock), and
@@ -92,11 +94,18 @@ INSTALL = (
 )
 
 
-def module_missing(device=DEVICE, exists=os.path.exists):
-    """Why the DMA cannot be used on this host, or None: litepcie.ko gives /dev/litepcie0 when it is bound."""
-    if exists(device):
+def devices(pattern=DEVICES):
+    """litepcie.ko's device nodes. There is one per bound board, and its number says nothing: the driver
+    counts its probes and never counts back, so a board unbound and bound again (as the check does around
+    its BAR0 tests) is /dev/litepcie1, then /dev/litepcie2."""
+    return sorted(glob.glob(pattern))
+
+
+def module_missing(found=devices):
+    """Why the DMA cannot be used on this host, or None: litepcie.ko gives a /dev/litepcie<n> when it is bound."""
+    if found():
         return None
-    return f"{device} is not there: litepcie.ko is not loaded. To have it, {INSTALL}, then `modprobe litepcie`"
+    return f"there is no /dev/litepcie<n>: litepcie.ko is not loaded. To have it, {INSTALL}, then `modprobe litepcie`"
 
 
 def chunks(nwords, chunk_buffers):
@@ -343,23 +352,29 @@ def loaded_modules(run):
     return [m for m in MODULES if m in names]
 
 
-def load_driver(run, device=DEVICE, exists=os.path.exists, sleep=time.sleep, wait_s=5.0):
+def load_driver(run, found=devices, sleep=time.sleep, wait_s=5.0):
     """Have litepcie.ko bound and its device there. Returns (note, why_not): `note` says what was done, for
-    unload_driver(); `why_not` is why the DMA cannot be used here, naming the package to install."""
+    unload_driver(), and has the device nodes in `devices`; `why_not` is why the DMA cannot be used here,
+    naming the package to install."""
     before = loaded_modules(run)
-    if exists(device):
-        return {"driver": "was loaded"}, None
-    note = {"driver": "loaded for the test", "before": before}
+    nodes = found()
+    if nodes:
+        return {"driver": "was loaded", "devices": nodes}, None
+    note = {"driver": "loaded for the test", "before": before, "devices": []}
     rc, out = run(["modprobe", "litepcie"], 30)
     if rc != 0:
         said = " ".join(out.split())[:200]
         return note, f"litepcie.ko could not be loaded ({said}). To have it, {INSTALL}"
     waited = 0.0
-    while not exists(device) and waited < wait_s:  # udev makes the node
+    while not found() and waited < wait_s:  # udev makes the node
         sleep(0.05)
         waited += 0.05
-    if not exists(device):
-        return note, f"litepcie.ko loaded but {device} did not appear within {wait_s} s: it did not bind to the board"
+    note["devices"] = found()
+    if not note["devices"]:
+        return (
+            note,
+            f"litepcie.ko loaded but no /dev/litepcie<n> appeared within {wait_s} s: it did not bind to the board",
+        )
     return note, None
 
 

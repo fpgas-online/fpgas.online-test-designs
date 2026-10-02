@@ -55,7 +55,7 @@ class Rig:
         return {"images": self.images, "model": self.model, "open_bar": self.bar, "run": self.pi,
                 "gpiochip": lambda compatible: None, "uart_opener": self.uart.open, "settle": self.uart.settle,
                 "sysfs_pci": self.root, "event": lambda stage, d: self.events.append((stage, d)),
-                "sleep": self.soc.sleep, "clock": self.soc.clock, "exists": self.pi.exists,
+                "sleep": self.soc.sleep, "clock": self.soc.clock, "dma_devices": self.pi.dma_devices,
                 "dma_bridge": self.pi.dma_bridge, "dma_bytes": fk.DMA_BYTES, **extra}  # fmt: skip
 
     def check(self, **extra):

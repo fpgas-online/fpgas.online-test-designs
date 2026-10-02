@@ -275,6 +275,7 @@ class FakePi:
         # litepcie.ko: installed for this kernel but not loaded, as on a fleet Pi; it binds when it is loaded
         self.modules, self.module_installed, self.module_binds = [], True, True
         self.liteuart_late = False  # udev loads liteuart only once litepcie's probe has registered its device
+        self.others = {}
         self.litepcie = FakeLitePCIe(
             ident=soc.identifier.rstrip(b"\0").decode() if soc is not None else OP_IDENT_ON_CHIP
         )
@@ -315,16 +316,17 @@ class FakePi:
                 value |= self._pull(gpio) << bit
         return value
 
-    def exists(self, path):
-        """/dev/litepcie0: there while litepcie.ko is loaded and bound to the board."""
-        assert path == dma.DEVICE
-        return "litepcie" in self.modules and self.module_binds
+    def dma_devices(self):
+        """litepcie.ko's device nodes: one, while the module is loaded and bound to the board. `others` are
+        boards of other designs the same driver has bound, by node: {path: FakeLitePCIe}."""
+        mine = [self.litepcie.node] if "litepcie" in self.modules and self.module_binds else []
+        return sorted([*mine, *self.others]) if "litepcie" in self.modules else []
 
-    def dma_bridge(self, csrs):
-        d = self.litepcie
+    def dma_bridge(self, csrs, device):
+        d = self.others.get(device, self.litepcie)
         if "liteuart" not in self.modules:
             self.modules.append("liteuart")
-        return dma.Bridge(csrs, opener=d.open, ioctl=d.ioctl, clock=d.clock, sleep=d.sleep, read=d.read,
+        return dma.Bridge(csrs, device, opener=d.open, ioctl=d.ioctl, clock=d.clock, sleep=d.sleep, read=d.read,
                           write=d.write, close=d.close)  # fmt: skip
 
     def __call__(self, argv, timeout):
@@ -506,8 +508,8 @@ class FakeLitePCIe:
 
     FD = 7
 
-    def __init__(self, irq_counts="next", stuck=False, ident=OP_IDENT_ON_CHIP, corrupt=None):
-        self.irq_counts, self.stuck, self.ident, self.corrupt = irq_counts, stuck, ident, corrupt
+    def __init__(self, irq_counts="next", stuck=False, ident=OP_IDENT_ON_CHIP, corrupt=None, node=dma.DEVICE):
+        self.irq_counts, self.stuck, self.ident, self.corrupt, self.node = irq_counts, stuck, ident, corrupt, node
         self.dram = {}  # word address -> 8 bytes
         self.regs = dict.fromkeys(BRIDGE_REGS, 0)
         self.regs["sdram_dfii_control"] = 1
@@ -527,7 +529,7 @@ class FakeLitePCIe:
     # -- what dma.Bridge is given ----------------------------------------------------------------------
 
     def open(self, path):
-        assert path == dma.DEVICE
+        assert path == self.node
         return self.FD
 
     def close(self, fd):

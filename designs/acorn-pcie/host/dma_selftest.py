@@ -2,9 +2,9 @@
 """Move blocks between the Pi's RAM and the Acorn's DDR3 through litepcie.ko's DMA, and check every byte.
 
 Needs the operational image of a build that has the PCIeDRAMBridge (csr.json lists `pcie_dram`) and
-litepcie.ko bound to the board (/dev/litepcie0). Run as root on the Pi the board is in:
+litepcie.ko bound to the board (a /dev/litepcie<n>). Run as root on the Pi the board is in:
 
-    sudo python3 dma_selftest.py --csr acorn-cle-215p-csr.json [--device /dev/litepcie0] [--big-mib 64]
+    sudo python3 dma_selftest.py --csr acorn-cle-215p-csr.json [--device /dev/litepcie1] [--big-mib 64]
 
 The transfers are done by fpgas_online_verify.boards.acorn.dma, the same code the boot check's `dma` test
 runs. It comes from the installed fpgas-online-acorn-tools package or, run from a checkout, from verify/src.
@@ -126,16 +126,21 @@ def big(bridge, rng, base, mib):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--csr", required=True, type=pathlib.Path, help="the running image's csr.json")
-    parser.add_argument("--device", default=dma.DEVICE)
+    parser.add_argument("--device", help="litepcie.ko's device (default: the only /dev/litepcie<n>)")
     parser.add_argument("--big-mib", type=int, default=64, help="size of the timed block (0: skip it)")
     parser.add_argument("--seed", type=int, default=29)
     parser.add_argument("--dram-timeout", type=float, default=60.0, help="how long to wait for the BIOS's DRAM set-up")
     parser.add_argument("--settle", type=float, default=5.0, help="how long to leave the BIOS memtest after that")
     args = parser.parse_args()
     csrs = check.Csrs(json.loads(args.csr.read_text()), args.csr.name)
-    missing = dma.module_missing(args.device)
-    if missing:
-        sys.exit(f"error: {missing}")
+    if not args.device:
+        missing = dma.module_missing()
+        if missing:
+            sys.exit(f"error: {missing}")
+        nodes = dma.devices()
+        if len(nodes) > 1:
+            sys.exit(f"error: litepcie.ko has {len(nodes)} devices ({', '.join(nodes)}): say which with --device")
+        args.device = nodes[0]
     rng = random.Random(args.seed)
     dram_words = csrs.memories["main_ram"]["size"] // dma.WORD
     report = {"dram_words": dram_words}

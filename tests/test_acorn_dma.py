@@ -112,8 +112,8 @@ def test_padded_buffers_ends_on_an_interrupt():
 
 
 def test_a_missing_module_names_the_package():
-    assert dma.module_missing(exists=lambda path: True) is None
-    reason = dma.module_missing(exists=lambda path: False)
+    assert dma.module_missing(found=lambda: ["/dev/litepcie3"]) is None
+    reason = dma.module_missing(found=list)
     assert "litepcie.ko is not loaded" in reason and dma.MODULE_PACKAGE in reason and "modprobe litepcie" in reason
 
 
@@ -238,15 +238,40 @@ def test_a_driver_bound_to_another_design_is_not_used(tmp_path, images):  # noqa
     rig = Rig(tmp_path, images)
     rig.pi.litepcie.ident = "some other LitePCIe design"
     report = rig.check()
-    assert _dma(report)["result"] == "fail" and "not the build BAR0 showed" in _dma(report)["reason"]
+    assert _dma(report)["result"] == "fail"
+    assert (
+        "no device for the build BAR0 showed: /dev/litepcie0 runs 'some other LitePCIe design'"
+        in _dma(report)["reason"]
+    )
     assert rig.pi.litepcie.dram == {}  # nothing was written through it
+
+
+def test_the_device_is_found_whatever_number_the_driver_gave_it(tmp_path, images):  # noqa: F811
+    """pi-sw2-p48: the driver numbers its device again at every probe, so after the check has unbound and
+    bound it for the BAR0 tests the board is /dev/litepcie1."""
+    rig = Rig(tmp_path, images)
+    rig.pi.modules = ["litepcie", "liteuart"]
+    rig.pi.litepcie.node = "/dev/litepcie1"
+    report = rig.check()
+    assert _dma(report)["result"] == "pass" and _dma(report)["device"] == "/dev/litepcie1"
+
+
+def test_of_two_litepcie_devices_the_one_running_the_boards_build_is_used(tmp_path, images):  # noqa: F811
+    rig = Rig(tmp_path, images)
+    rig.pi.modules = ["litepcie", "liteuart"]
+    rig.pi.litepcie.node = "/dev/litepcie2"
+    other = fk.FakeLitePCIe(ident="another LitePCIe board", node="/dev/litepcie0")
+    rig.pi.others = {"/dev/litepcie0": other}
+    report = rig.check()
+    assert _dma(report)["result"] == "pass" and _dma(report)["device"] == "/dev/litepcie2"
+    assert other.dram == {} and other.closed  # read for its identifier, and nothing else
 
 
 def test_a_module_that_loads_but_does_not_bind_is_reported(tmp_path, images):  # noqa: F811
     rig = Rig(tmp_path, images)
     rig.pi.module_binds = False
     report = rig.check()
-    assert "did not bind to the board" in report["not_run"]["dma"]
+    assert "no /dev/litepcie<n> appeared" in report["not_run"]["dma"]
     assert rig.pi.modules == []  # what was loaded is removed all the same
 
 
