@@ -15,12 +15,13 @@ import json
 import pathlib
 
 import pytest
-from fpgas_online_verify import core
+from fpgas_online_verify import core, identity
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
 from fpgas_online_verify.boards.acorn import check as av
 from fpgas_online_verify.boards.acorn import suite
 
 from tests import acorn_fakes as fk
+from tests import test_spi_flash as tsf
 from tests.test_spi_flash import sf
 
 
@@ -191,11 +192,15 @@ def test_a_board_running_the_release_with_every_link_working_passes_every_test(t
     assert report["running"] == {"identifier": fk.OP_IDENT_ON_CHIP, "build": "operational"}
     assert report["setup"] == "Raspberry Pi 5"
     assert report["identity"] == {
-        "bdf": "0001:01:00.0", "pci_ids": "10ee:7021", "subsystem": "1e24:021f", "variant": "cle-215+",
-        "identifier": fk.OP_IDENT_ON_CHIP, "build": "operational", "dna": "0x54b48664b04854", "idcode": "0x13636093",
-        "flash_part": "S25FL256S", "flash_jedec": "0x010219", "flash_unique_id": report["flash"]["unique_id"],
+        "board": "acorn", "kind": "acorn", "variant": "cle-215+", "bdf": "0001:01:00.0", "soc_model": "cle-215+",
+        "identifier": fk.OP_IDENT_ON_CHIP, "build": "operational", "dna": "0x0054b48664b04854",
+        "idcode": "0x13636093", "idcode_version": 1, "idcode_part_number": "0x3636", "idcode_manufacturer_id": "0x049",
+        "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A200T", "flash": "S25FL256S", "flash_jedec": "0x010219", "flash_extended_id": "0x4d0180",
+        "flash_size_bytes": 33554432, "flash_status": "0x00", "flash_config": "0x02", "flash_quad": True,
+        "flash_uid": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf", "flash_uid_bits": 128, "flash_uid_state": "read",
+        "flash_uid_opcode": "0x4b", "flash_source": "pcie",
     }  # fmt: skip
-    assert report["state"]["dna"] == "0x54b48664b04854"
+    assert report["state"]["dna"] == "0x0054b48664b04854"
     assert set(report["state"]["flash"]["slots"]) == {"0x000000", "0x400000"}
     assert "not_run" not in report
 
@@ -204,7 +209,7 @@ def test_the_state_is_the_slot_ids_dna_and_flash_contents(tmp_path, images):
     report = Rig(tmp_path, images).check()
     flash = report["state"].pop("flash")
     assert report["state"] == {"bdf": "0001:01:00.0", "ids": "10ee:7021", "subsystem": "1e24:021f",
-                               "variant": "cle-215+", "dna": "0x54b48664b04854"}  # fmt: skip
+                               "variant": "cle-215+", "dna": "0x0054b48664b04854"}  # fmt: skip
     assert flash["part"] == "S25FL256S" and flash["jedec"] == "0x010219" and len(flash["unique_id"]) == 32
     assert set(flash["slots"]) == {"0x000000", "0x400000"} and all(len(h) == 64 for h in flash["slots"].values())
     assert report["bitstreams"] == fk.TAG
@@ -238,6 +243,42 @@ def test_the_events_say_each_test_as_it_goes_and_who_the_board_is(tmp_path, imag
     finished = [d for s, d in rig.events if s == "fpga-test-finished"]
     assert finished[0] == {"test": "pcie-link", "result": "pass", "reason": ""}
     assert all(isinstance(v, str) for _, d in rig.events for v in d.values() if v is not None)
+
+
+def test_the_identified_event_is_the_identity_as_flat_strings(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    report = rig.check(board_key="acorn@0001:01:00.0")
+    (sent,) = [d for s, d in rig.events if s == "fpga-board-identified"]
+    assert sent == identity.details(report["identity"])
+    assert sent["schema"] == "fpga-identity/1" and sent["board"] == "acorn@0001:01:00.0"
+    assert sent["flash_quad"] == "true" and sent["flash_size_bytes"] == "33554432"
+    assert "pci_ids" not in sent and "subsystem" not in sent  # in the report's found and state, not the event
+
+
+def test_a_flash_that_did_not_identify_itself_is_a_flash_error(tmp_path, images, monkeypatch):
+    def broken(flash):
+        raise av.spi_flash.FlashError("the SPI master never went idle")
+
+    monkeypatch.setattr(av, "flash_identity", broken)
+    report = Rig(tmp_path, images).check()
+    assert report["identity"]["flash_error"] == "the flash did not identify itself: the SPI master never went idle"
+    assert report["identity"]["flash_source"] == "pcie" and "flash_jedec" not in report["identity"]
+
+
+def test_a_jtag_probe_that_could_not_run_is_an_idcode_and_dna_error(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    rig.pi.tool = False
+    report = rig.check(tests=["jtag"])  # nothing that needs BAR0: no DNA from there either
+    ident = report["identity"]
+    assert "openFPGALoader is not installed" in ident["idcode_error"]
+    assert ident["dna_error"] == ident["idcode_error"]
+    assert "idcode" not in ident and "dna" not in ident and "flash_source" not in ident
+
+
+def test_an_s25fs256s_is_named_by_its_extended_id(tmp_path, images, monkeypatch):
+    monkeypatch.setattr(tsf, "RDID", bytes.fromhex("0102194d0181"))
+    ident = Rig(tmp_path, images).check()["identity"]
+    assert (ident["flash"], ident["flash_jedec"], ident["flash_extended_id"]) == ("S25FS256S", "0x010219", "0x4d0181")
 
 
 # -- faults: each fails the board, and the check goes on -------------------------------------------------

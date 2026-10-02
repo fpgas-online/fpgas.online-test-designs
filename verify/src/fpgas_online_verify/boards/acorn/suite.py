@@ -36,6 +36,7 @@ A test that raises something unexpected is recorded as an error with what it rai
 import contextlib
 import time
 
+from ... import identity
 from ...core import Problem, pi_model, run, worst
 from . import bist, check, links
 from . import setup as setups
@@ -75,6 +76,7 @@ class _Suite:
         self.bar0 = {}  # what BAR0 gave: identifier, build, dna
         self.gate_problem = self.bar0_problem = None
         self.driver = {}  # a kernel driver unbound for the check (check.driver_released)
+        self.flash_error = None  # why the flash did not identify itself
 
     # -- helpers ---------------------------------------------------------------------------------------
 
@@ -205,7 +207,8 @@ class _Suite:
         try:
             self.report["flash"] = check.flash_identity(check.spi_flash.Flash(self.bus))
         except check.spi_flash.FlashError as e:
-            faults.append(f"the flash did not identify itself: {e}")
+            self.flash_error = f"the flash did not identify itself: {e}"
+            faults.append(self.flash_error)
         dna = check.read_dna(self.bus.read, self.csrs)
         self.bar0["dna"] = dna
         xadc = check.read_xadc(self.bus.read, self.csrs)
@@ -283,18 +286,29 @@ class _Suite:
     # -- the whole check -------------------------------------------------------------------------------
 
     def identity(self):
+        """Who the board is (identity.py), from what PCIe, BAR0 and JTAG read."""
         f, r = self.found, self.report
-        out = {"bdf": f["bdf"], "pci_ids": f["ids"], "subsystem": f["subsystem"], "variant": f["variant"]}
-        if r.get("running"):
-            out.update(identifier=r["running"]["identifier"], build=r["running"]["build"])
+        out = identity.base(self.options.get("board_key", "acorn"), "acorn", f)
+        if f["variant"]:
+            out["soc_model"] = f["variant"]
+        running = r.get("running") or {}
+        if running.get("identifier"):
+            out["identifier"] = running["identifier"]
+        if running.get("build"):
+            out["build"] = running["build"]
+        jtag = next((t for t in r["tests"] if t["test"] == "jtag"), None)
         if "dna" in self.bar0:
-            out["dna"] = f"{self.bar0['dna']:#x}"
-        jtag = next((t for t in r["tests"] if t["test"] == "jtag"), {})
-        for key in ("idcode", "dna"):
-            if key in jtag:
-                out.setdefault(key, jtag[key])
-        flash = r.get("flash") or {}
-        out.update({f"flash_{k}": flash[k] for k in ("part", "jedec", "unique_id") if k in flash})
+            out["dna"] = identity.dna(self.bar0["dna"])
+        elif jtag and "dna" in jtag:
+            out["dna"] = identity.dna(jtag["dna"])
+        elif jtag and jtag["result"] != "pass":
+            out["dna_error"] = jtag.get("reason") or jtag["result"]
+        if jtag:
+            out.update(identity.idcode_fields(jtag))
+        if (r.get("flash") or {}).get("rdid"):
+            out.update(identity.flash_fields(r["flash"], "pcie"))
+        elif self.flash_error:
+            out.update(flash_error=self.flash_error, flash_source="pcie")
         return out
 
     def check(self):
@@ -317,7 +331,7 @@ class _Suite:
             self.test("pcie-bar0", None if self.gate_problem else no_bar0, self.pcie_bar0)
             self.test("jtag", self._needs_setup() or no_variant, self.jtag)
             self.report["identity"] = self.identity()
-            self.event("fpga-board-identified", self.report["identity"])
+            self.event("fpga-board-identified", identity.details(self.report["identity"]))
             golden = "the golden image has no {}" if self.bar0.get("build") == "golden" else None
             if golden and "pcie-bar0" not in self.wanted:  # pcie-bar0 says so when it runs
                 self.faults.append(("fail", GOLDEN))
@@ -345,7 +359,7 @@ class _Suite:
         r = self.report
         if "identity" not in r:
             r["identity"] = self.identity()
-            self.event("fpga-board-identified", r["identity"])
+            self.event("fpga-board-identified", identity.details(r["identity"]))
         if self.not_run:
             r["not_run"] = self.not_run
         asked = [t for t in self.wanted if t in TESTS]
@@ -366,7 +380,7 @@ class _Suite:
         state = {"bdf": f["bdf"], "ids": f["ids"], "subsystem": f["subsystem"]}
         if f["variant"]:
             state["variant"] = f["variant"]
-        dna = self.report.get("identity", {}).get("dna")
+        dna = self.report.get("identity", {}).get("dna")  # 16 digits since state schema 4
         if dna:
             state["dna"] = dna
         flash = self.report.get("flash")
