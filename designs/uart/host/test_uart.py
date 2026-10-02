@@ -2,8 +2,18 @@
 """
 Host-side UART test script.
 
-Connects to the FPGA's serial port, waits for the LiteX BIOS banner,
-then performs an echo test with printable ASCII bytes.
+Attaches to the UART test design's console and checks both directions of the UART now:
+
+  1. the prompt   a newline is answered with the `litex>` prompt: the design receives and sends
+  2. `ident`      the design answering is the UART test design for this board
+  3. echo         every printable ASCII byte typed at the prompt comes back as itself
+
+Nothing is read from what the design printed when it started: that output is gone before the Pi's own
+UART is opened (the NeTV2, the Fomu), and is an old log on a USB UART (the Arty). The Arty, NeTV2 and Acorn
+designs run the LiteX BIOS; the Fomu and TT FPGA designs run designs/_shared/ice40_firmware.py, which
+answers a newline with its ident and the prompt as the BIOS's `ident` does. See designs/_host/bios_console.py.
+
+The last line of output is the result for fpgas-verify: RESULT_JSON {"test": "uart", "result": ...}.
 
 Usage:
     uv run python designs/uart/host/test_uart.py --port /dev/ttyUSB1
@@ -11,191 +21,90 @@ Usage:
 """
 
 import argparse
+import os
 import sys
-import time
 
-import serial
+# In the repository the helper is in designs/_host; installed, it is beside this script.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "_host"))
+
+import bios_console
 
 # --------------------------------------------------------------------------- #
 # Constants
 # --------------------------------------------------------------------------- #
 
 BAUD_RATE = 115200
-BOOT_TIMEOUT_S = 30
-ECHO_TIMEOUT_S = 5
+ATTACH_TIMEOUT_S = 30  # the BIOS waits a few seconds for a serial boot before its first prompt
 
-# The LiteX BIOS prints this string early in boot.
-BIOS_BANNER_MARKER = "LiteX"
-
-# Board-specific identification strings set via SoCCore(ident=...).
+# What `ident` must contain: the design, and the board it was built for (SoCCore(ident=...)).
+DESIGN_IDENT = "UART Test SoC"
 BOARD_IDENT = {
     "arty": "Arty A7",
     "netv2": "NeTV2",
     "fomu": "Fomu EVT",
     "tt": "TT FPGA",
+    "acorn": "Acorn",
 }
 
-# The LiteX BIOS readline buffer is ~64 characters.  We must reset
-# the command line periodically during the echo test to avoid overflow.
-BUFFER_RESET_INTERVAL = 50
-
-# Printable ASCII range for the echo test.  Control characters (0x00-0x1F,
-# 0x7F) are excluded because the LiteX BIOS interprets many of them (e.g.
-# backspace, Ctrl-C, newline) rather than echoing them verbatim.
+# Printable ASCII. Control characters (0x00-0x1F, 0x7F) are left out: the BIOS acts on many of them
+# (backspace, Ctrl-C, newline) instead of echoing them.
 ECHO_TEST_BYTES = bytes(range(0x20, 0x7F))
 
+# The BIOS's line buffer holds 64 characters and it rings the bell instead of echoing once it is full, so
+# the bytes are typed as lines shorter than that. Each line is ended with a newline, which has to bring the
+# prompt back (the BIOS says the line is no command; the iCE40 firmware prints its ident).
+LINE_BYTES = 48
+
 
 # --------------------------------------------------------------------------- #
-# Test steps
+# Test logic
 # --------------------------------------------------------------------------- #
 
 
-def wait_for_banner(ser, board):
-    """Read lines until we see the BIOS ``litex>`` prompt or timeout.
-
-    Returns (success, captured_lines).
-    """
-    lines = []
-    deadline = time.monotonic() + BOOT_TIMEOUT_S
-    found_bios = False
-    found_ident = False
-    expected_ident = BOARD_IDENT.get(board, "")
-
-    while time.monotonic() < deadline:
-        raw = ser.readline()
-        if not raw:
-            continue
-        line = raw.decode("utf-8", errors="replace").strip()
-        lines.append(line)
-
-        if BIOS_BANNER_MARKER in line:
-            found_bios = True
-        if expected_ident and expected_ident in line:
-            found_ident = True
-
-        # Once we see the BIOS prompt, boot is complete.
-        if "litex>" in line:
-            break
-
-    if not found_bios:
-        print("FAIL: BIOS banner not detected within timeout")
-        return False, lines
-
-    # If the ident string wasn't found in the boot output, try querying
-    # it explicitly via the BIOS ``ident`` command.  Some LiteX versions
-    # don't print the ident during boot, but the command always works.
-    if expected_ident and not found_ident:
-        found_ident = query_ident(ser, expected_ident, lines)
-
-    if expected_ident and not found_ident:
-        print("FAIL: Board identification string '{}' not found".format(expected_ident))
-        return False, lines
-
-    print("PASS: BIOS banner and board identification received")
-    return True, lines
+def describe(wrong):
+    """The first few bytes that did not echo, for the reason."""
+    shown = [f"0x{sent:02X} came back as " + ("nothing" if got is None else f"0x{got:02X}") for sent, got in wrong[:4]]
+    return ", ".join(shown) + (f" and {len(wrong) - 4} more" if len(wrong) > 4 else "")
 
 
-def query_ident(ser, expected_ident, lines):
-    """Send the ``ident`` command at the litex> prompt and check the response."""
-    ser.reset_input_buffer()
-    ser.write(b"ident\n")
+def run_uart_test(bios, board, attach_timeout=ATTACH_TIMEOUT_S):
+    """Run the test on an open console. Returns the result's fields ("result", "reason", ...)."""
+    found = {"test": "uart", "board": board, "commands": []}
 
-    deadline = time.monotonic() + 5
-    while time.monotonic() < deadline:
-        raw = ser.readline()
-        if not raw:
-            continue
-        line = raw.decode("utf-8", errors="replace").strip()
-        lines.append(line)
-        if expected_ident in line:
-            return True
-        # Stop reading once we see the next prompt.
-        if "litex>" in line:
-            break
-    return False
+    def failed(reason):
+        print(f"FAIL: {reason}")
+        return {**found, "result": "fail", "reason": reason}
 
+    try:
+        bios.attach(attach_timeout)
+    except bios_console.NoPrompt as e:
+        return failed(f"{e}: nothing on the UART answers a newline with the litex> prompt")
+    print("PASS: the design answers at its prompt")
 
-def _reset_command_buffer(ser, deep=False):
-    """Send Ctrl-C to reset the BIOS command line and flush the response.
+    try:
+        found["commands"].append("ident")
+        found["ident"] = ident = bios.ident()
+        name = BOARD_IDENT[board]
+        if not ident or DESIGN_IDENT not in ident or name not in ident:
+            return failed(f"the design on the UART is {ident!r}, not the {DESIGN_IDENT} for the {name}")
+        print(f"PASS: {ident}")
 
-    With deep=True, first drains all queued BIOS output (from boot or
-    prior serial-getty interaction) by reading without sending, then
-    sends Ctrl-C to reset the command line.
-    """
-    if deep:
-        # Drain queued output WITHOUT sending (sending Ctrl-C would
-        # trigger more BIOS prompt output, creating a feedback loop).
-        old_timeout = ser.timeout
-        ser.timeout = 0.3
-        for _ in range(30):
-            chunk = ser.read(4096)
-            if not chunk:
-                break
-        ser.timeout = old_timeout
-    ser.write(b"\x03")
-    # Read and discard the Ctrl-C response (prompt redraw)
-    old_timeout = ser.timeout
-    ser.timeout = 0.2
-    ser.read(256)
-    ser.timeout = old_timeout
+        found["commands"].append("echo")
+        wrong = []
+        for start in range(0, len(ECHO_TEST_BYTES), LINE_BYTES):
+            wrong += bios.echo(ECHO_TEST_BYTES[start : start + LINE_BYTES])
+            bios.command("")  # end the line: the prompt has to come back
+    except bios_console.NoPrompt as e:
+        return failed(str(e))
+    except OSError as e:  # the port went away (pyserial's SerialException is one)
+        return failed(f"the UART failed during {found['commands'][-1]}: {e}")
 
-
-def echo_test(ser: serial.Serial) -> bool:
-    """Send printable ASCII bytes one at a time and verify echo.
-
-    The LiteX BIOS console echoes every printable character it receives.
-    Control characters (0x00-0x1F, 0x7F) are excluded because the BIOS
-    interprets them as commands rather than echoing them verbatim.
-
-    The BIOS readline buffer is ~64 characters, so we periodically send
-    Ctrl-C to reset the command line and prevent buffer overflow (which
-    causes the BIOS to respond with BEL instead of echoing).
-    """
-    # Flush stale BIOS output, then synchronize by sending Ctrl-C and
-    # waiting for a clean prompt echo cycle.
-    _reset_command_buffer(ser, deep=True)
-    # Synchronization: send Ctrl-C, drain response, then send a unique
-    # byte and read until we see it echoed. This ensures all queued
-    # BIOS responses have been consumed.
-    ser.write(b"\x03")  # Ctrl-C to reset command line
-    old_timeout = ser.timeout
-    ser.timeout = 0.3
-    ser.read(4096)  # drain Ctrl-C response
-    ser.write(b"~")  # Tilde is unlikely to appear in BIOS output
-    ser.timeout = 3.0
-    deadline = time.monotonic() + 3.0
-    while time.monotonic() < deadline:
-        b = ser.read(1)
-        if b == b"~":
-            break
-    ser.write(b"\x03")  # Reset command line (discard the "~")
-    ser.timeout = 0.2
-    ser.read(256)  # drain Ctrl-C response
-    ser.timeout = old_timeout
-
-    errors = 0
-
-    for i, byte_val in enumerate(ECHO_TEST_BYTES):
-        # Reset the command buffer periodically to prevent overflow.
-        if i > 0 and i % BUFFER_RESET_INTERVAL == 0:
-            _reset_command_buffer(ser)
-
-        ser.write(bytes([byte_val]))
-        response = ser.read(1)
-        if len(response) == 0:
-            print("  FAIL: Timeout waiting for echo of 0x{:02X}".format(byte_val))
-            errors += 1
-        elif response[0] != byte_val:
-            print("  FAIL: Echo mismatch for 0x{:02X}: got 0x{:02X}".format(byte_val, response[0]))
-            errors += 1
-
-    total = len(ECHO_TEST_BYTES)
-    if errors == 0:
-        print("PASS: Echo test -- all {} printable bytes echoed correctly".format(total))
-        return True
-    else:
-        print("FAIL: Echo test -- {}/{} bytes failed".format(errors, total))
-        return False
+    found["echo_bytes"] = len(ECHO_TEST_BYTES)
+    found["echo_errors"] = len(wrong)
+    if wrong:
+        return failed(f"echo: {len(wrong)} of {len(ECHO_TEST_BYTES)} bytes did not come back: {describe(wrong)}")
+    print(f"PASS: echo: all {len(ECHO_TEST_BYTES)} printable bytes came back")
+    return {**found, "result": "pass"}
 
 
 # --------------------------------------------------------------------------- #
@@ -203,7 +112,7 @@ def echo_test(ser: serial.Serial) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-def main() -> int:
+def main(argv=None):
     parser = argparse.ArgumentParser(description="UART echo test for FPGA boards")
     parser.add_argument(
         "--port",
@@ -213,50 +122,36 @@ def main() -> int:
     parser.add_argument(
         "--board",
         default="arty",
-        choices=["arty", "netv2", "fomu", "tt"],
+        choices=list(BOARD_IDENT),
         help="Board under test (default: arty)",
     )
     parser.add_argument(
         "--baud",
         type=int,
         default=BAUD_RATE,
-        help="Baud rate (default: {})".format(BAUD_RATE),
+        help=f"Baud rate (default: {BAUD_RATE})",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=ATTACH_TIMEOUT_S,
+        help=f"Seconds to wait for the prompt (default: {ATTACH_TIMEOUT_S})",
     )
     parser.add_argument(
         "--skip-banner",
         action="store_true",
-        help="Skip waiting for BIOS banner (assume FPGA is already booted)",
+        help="Accepted and ignored: the test never reads the banner, it asks the design for its ident",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
-    print("Opening {} at {} baud...".format(args.port, args.baud))
-
-    results = []
-
-    with serial.Serial(args.port, args.baud, timeout=ECHO_TIMEOUT_S) as ser:
-        # Step 1: Wait for BIOS banner
-        if not args.skip_banner:
-            passed, boot_lines = wait_for_banner(ser, args.board)
-            results.append(passed)
-            if not passed:
-                print("\nBoot output captured:")
-                for line in boot_lines:
-                    print("  {}".format(line))
-        else:
-            print("Skipping banner check (--skip-banner)")
-
-        # Step 2: Printable-byte echo test
-        passed = echo_test(ser)
-        results.append(passed)
-
-    # Summary
-    print()
-    if all(results):
-        print("RESULT: PASS — UART test completed successfully")
-        return 0
-    else:
-        print("RESULT: FAIL — UART test had failures")
-        return 1
+    return bios_console.run_script(
+        "uart",
+        "UART test",
+        args.board,
+        args.port,
+        args.baud,
+        lambda bios: run_uart_test(bios, args.board, args.timeout),
+    )
 
 
 if __name__ == "__main__":

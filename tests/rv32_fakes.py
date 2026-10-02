@@ -150,10 +150,43 @@ class Machine:
         sent = len(self.tx)
         for _ in range(max_steps):
             if self.step():
-                return self.tx[sent:].decode("ascii")
+                return self.tx[sent:].decode("latin-1")
         raise AssertionError(f"still running after {max_steps} instructions, at pc {self.pc:#x}")
 
     def send(self, data):
         """The host sends `data`; what the firmware sent back by the time it is idle again."""
         self.rx += data
         return self.run()
+
+
+class FirmwarePort:
+    """A serial port with the firmware of `machine` behind it, for a host script's BiosConsole.
+
+    The port is opened after the design started: what the firmware printed until then is `stale` when given,
+    lost otherwise. Time is faked as in bios_fakes.FakeBios: a read that finds nothing advances the clock."""
+
+    def __init__(self, machine, stale=False):
+        boot = machine.run()
+        self.machine = machine
+        self.rx = bytearray(boot.encode() if stale else b"")
+        self.timeout = None
+        self.now = 0.0
+
+    def clock(self):
+        return self.now
+
+    def write(self, data):
+        self.rx += self.machine.send(bytes(data)).encode("latin-1")
+        return len(data)
+
+    @property
+    def in_waiting(self):
+        return len(self.rx)
+
+    def read(self, size=1):
+        if not self.rx:
+            self.now += self.timeout or 0.0
+            return b""
+        out = bytes(self.rx[:size])
+        del self.rx[:size]
+        return out

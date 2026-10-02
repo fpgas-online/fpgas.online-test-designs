@@ -88,8 +88,8 @@ The FPGA's UART pins connect to the RPi's GPIO UART via the 40-pin stacking head
 | Parameter | Value |
 |-----------|-------|
 | Baud rate | 115200 |
-| Test args | `--port /dev/ttyAMA0 --board netv2 --skip-banner` |
-| `--skip-banner` | Required because OpenOCD programming takes ~10s; BIOS banner is missed |
+| Test args | `--port /dev/ttyAMA0 --board netv2` |
+| Boot output | Never seen: the Pi's UART only receives while it is open, and it is opened after the load. The test asks the BIOS for its `ident` instead |
 
 ## PMOD / GPIO Loopback
 
