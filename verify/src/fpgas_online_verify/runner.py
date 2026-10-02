@@ -19,7 +19,7 @@ import json
 import pathlib
 import sys
 
-from . import config, state
+from . import config, identity, state
 from .board import installed
 from .core import Problem, flatten, hold_lock, pci_devices, publish, usb_devices, worst
 
@@ -31,8 +31,7 @@ EVENTS = {
     "fpga-verifying": "started_at",
     "fpga-board-found": "board, variant, where (PCI slot, USB path or JTAG IDCODE)",
     "fpga-no-board": "reason",
-    "fpga-board-identified": "board, then what identifies it (an Acorn's: bdf, pci_ids, subsystem, variant, "
-    "identifier, build, dna, idcode, flash_part, flash_jedec, flash_unique_id)",
+    "fpga-board-identified": "schema (fpga-identity/1), board, then who it is (identity.py, docs/identity.md)",
     "fpga-test-started": "board, test",
     "fpga-test-finished": "board, test, result, reason",
     "fpga-verified": "the report, flattened (details())",
@@ -174,12 +173,21 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
     for (_, _, found), key in zip(targets, keys):
         event("fpga-board-found", {"board": key, "variant": found.get("variant"), "where": _where(found)})
     for (board, host, found), key in zip(targets, keys):
+        identified, kept = [], []  # the identified event sent; the identity the check built (identity.keep())
+
+        def board_event(stage, d, key=key, identified=identified):
+            if stage == "fpga-board-identified":
+                identified.append(key)
+            event(stage, {"board": key, **d})
+
         try:
             board_options, skipped = _for_board(board, options, report["mode"])
             if board_options is None:  # none of the named tests: not checked, and no "pass" for it
                 not_checked.append(board.name)
+                # still found, so still identified (once), from what finding it showed
+                board_event("fpga-board-identified", identity.details(identity.base(key, board.name, found)))
                 continue
-            board_options = {**board_options, "event": lambda stage, d, key=key: event(stage, {"board": key, **d})}
+            board_options = {**board_options, "event": board_event, "board_key": key, identity.KEEP: kept.append}
             with hold_lock(board.lock, board.title):
                 reports.append(board.check(host, found, board_options))
         except Problem as p:
@@ -189,6 +197,14 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
             reports.append({"board": board.name, "found": found, "result": "error",
                             "reason": f"the check crashed: {type(e).__name__}: {e}"})  # fmt: skip
             skipped = []
+        if kept:  # a check that stopped after saying who the board is keeps it in its error report
+            reports[-1].setdefault("identity", kept[-1])
+        if not identified:  # the check stopped before saying who the board is: say what finding it showed
+            reports[-1].setdefault("identity", identity.base(key, board.name, found))
+        if "identity" in reports[-1]:
+            _sendable_identity(reports[-1], identity.base(key, board.name, found))
+        if not identified:
+            board_event("fpga-board-identified", identity.details(reports[-1]["identity"]))
         if skipped:
             reports[-1]["tests_skipped"] = skipped
     report["boards"] = reports
@@ -211,6 +227,23 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
     return report
 
 
+def _sendable_identity(report, base):
+    """Leave out of a board's identity any field whose name or value cannot be sent (a bug in the board's
+    module), and make each one an error on that board, so the other boards are still checked and fpga-verified
+    is sent. An identity that is not a dict is replaced by `base` (what finding the board showed)."""
+    try:
+        bad = identity.refused(report["identity"])
+    except TypeError as e:
+        report["identity"], reasons = base, [f"the identity cannot be sent: {e}"]
+    else:
+        if not bad:
+            return
+        report["identity"] = {k: v for k, v in report["identity"].items() if k not in bad}
+        reasons = [f"the identity field {k} cannot be sent: {why}" for k, why in bad.items()]
+    report["result"] = worst([report.get("result", "error"), "error"])
+    report["reason"] = "; ".join([report["reason"], *reasons] if report.get("reason") else reasons)
+
+
 # -- telling people ------------------------------------------------------------------------------------------
 
 
@@ -229,7 +262,13 @@ def details(report):
             out[f"board{i}_bitstreams"] = str(b["bitstreams"])
         flatten(f"board{i}_state", b.get("state", {}), out)
         if b.get("identity"):
-            flatten(f"board{i}_identity", b["identity"], out)
+            try:
+                flat = identity.details(b["identity"])
+            except TypeError as e:  # never ends the event: that board's identity says why it is not there
+                out[f"board{i}_identity_error"] = str(e)
+            else:
+                del flat["schema"]
+                out.update({f"board{i}_identity_{k}": v for k, v in flat.items()})
     for j, change in enumerate(report.get("state", {}).get("changes", [])):
         out[f"changed{j}"] = change
     return out

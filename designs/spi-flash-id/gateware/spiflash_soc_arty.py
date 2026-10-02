@@ -33,6 +33,10 @@ from designs._shared.yosys_workarounds import patch_yosys_template
 
 kB = 1024
 
+# nextpnr-xilinx places this SoC at 89-102 MHz depending on the seed, so 100 MHz misses timing under openXC7
+# on almost every seed; 75 MHz leaves over 15% margin below the slowest. Vivado makes 100 MHz.
+SYS_CLK_FREQ = {"openxc7": 75e6}
+
 
 # CRG (Clock Reset Generator) ---------------------------------------------------------------------
 
@@ -82,7 +86,8 @@ def main():
     parser = LiteXArgumentParser(platform=Platform, description="SPI Flash ID Test SoC for Arty A7")
     target_group = parser.target_group
     target_group.add_argument("--variant",       default="a7-35",     help="Board variant (a7-35 or a7-100).")
-    target_group.add_argument("--sys-clk-freq",  default=100e6, type=float, help="System clock frequency.")
+    target_group.add_argument("--sys-clk-freq",  default=None, type=float,
+        help="System clock frequency (default: 75 MHz with openXC7, 100 MHz with Vivado).")
     parser.set_defaults(
         ident          = "fpgas-online SPI Flash Test SoC -- Arty A7",
         uart_baudrate  = 115200,
@@ -93,7 +98,7 @@ def main():
     soc = BaseSoC(
         variant      = args.variant,
         toolchain    = args.toolchain,
-        sys_clk_freq = int(args.sys_clk_freq),
+        sys_clk_freq = int(args.sys_clk_freq or SYS_CLK_FREQ.get(args.toolchain, 100e6)),
         **parser.soc_argdict,
     )
 

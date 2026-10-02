@@ -31,7 +31,7 @@ def test_a_chain_with_the_variants_fpga_and_bar0s_dna_passes():
     pi = fk.FakePi()
     t = links.jtag(PI5, "cle-215+", pi, bar0_dna=fk.DNA, gpiochip=_no_chip)
     assert t["result"] == "pass", t
-    assert (t["idcode"], t["dna"]) == ("0x13636093", "0x54b48664b04854")
+    assert (t["idcode"], t["dna"]) == ("0x13636093", "0x54b48664b04854") and "dna_error" not in t
     fields = {"idcode_version": 1, "idcode_part_number": "0x3636", "idcode_manufacturer_id": "0x049",
               "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A200T"}  # fmt: skip
     assert {k: t[k] for k in fields} == fields
@@ -65,6 +65,18 @@ def test_an_empty_chain_fails():
     assert t["result"] == "fail" and t["reason"] == (
         "no device on the P1 JTAG chain; openFPGALoader --detect exited 1 on the P1 JTAG chain"
     )
+    assert t["dna_error"].startswith("not read over P1 JTAG: --read-dna runs only once")
+
+
+def test_a_pin_state_that_cannot_be_read_is_a_dna_error_as_well():
+    class NoPinctrl(fk.FakePi):
+        def __call__(self, argv, timeout):
+            if argv[0] == "pinctrl":
+                raise Problem("error", "pinctrl is not installed")
+            return super().__call__(argv, timeout)
+
+    t = links.jtag(PI5, "cle-215+", NoPinctrl(), gpiochip=_no_chip)
+    assert t["result"] == "error" and t["dna_error"].startswith("not read over P1 JTAG: P1 JTAG not probed")
 
 
 class NoRawScan(fk.FakePi):
@@ -120,12 +132,14 @@ def test_a_detect_that_exits_non_zero_fails_even_with_the_right_idcode():
     assert t["result"] == "fail" and t["reason"] == "openFPGALoader --detect exited 2 on the P1 JTAG chain"
     assert t["idcode_device"] == "XC7A200T" and "dna" not in t  # decoded, but the DNA is not read after it
     assert len(pi.ran("openFPGALoader")) == 1
+    assert t["dna_error"] == "not read over P1 JTAG: openFPGALoader --detect exited 2, so --read-dna was not run"
 
 
 def test_the_wrong_part_and_a_non_zero_exit_are_both_reported():
     t = links.jtag(PI5, "cle-101", DetectExits(1), gpiochip=_no_chip)
     assert t["result"] == "fail" and t["reason"].startswith("P1 JTAG chain has 0x13636093 (XC7A200T)")
     assert t["reason"].endswith("; openFPGALoader --detect exited 1 on the P1 JTAG chain")
+    assert t["dna_error"].startswith("not read over P1 JTAG: --read-dna runs only once")  # not the one expected
 
 
 def test_the_wrong_part_fails_and_says_which():
