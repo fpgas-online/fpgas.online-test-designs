@@ -75,8 +75,11 @@ fpgas-verify's own fields:
 
 `fpga-board-identified` carries the fields as flat `key=value` strings:
 
+* strings as they are;
 * numbers in decimal: `flash_size_bytes=33554432`;
 * booleans as `true` or `false`: `flash_quad=true`;
+* a list or object as one key whose value is compact JSON with sorted keys: `["a","b"]`;
+* `-` only for a field that was read and has no value; a field that was not read is left out;
 * plus `schema=fpga-identity/1`.
 
 The Acorn sends it once PCIe and JTAG have said who it is; every other board sends it before its tests. A board
