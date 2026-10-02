@@ -7,10 +7,13 @@ a LiteX SoC with LiteEth.
 
 Steps:
   1. Detect the USB Ethernet adapter connected to the FPGA
-  2. Configure the adapter with static IP 192.168.1.100/24
-  3. Read MAC address from LiteX BIOS UART output
-  4. Send ARP request and verify response
-  5. Send ICMP ping and verify response
+  2. Attach to the design's LiteX BIOS over the UART and ask for its ident: it must be the Ethernet test
+     design for this board (nothing is read from what the BIOS printed while it booted)
+  3. Configure the adapter with static IP 192.168.1.100/24
+  4. Send ARP requests: the reply must come from the BIOS's MAC (LiteX's 10:e2:d5:00:00:00)
+  5. Send ICMP pings and verify the replies
+
+The last line of output is the result for fpgas-verify: RESULT_JSON {"test": "ethernet", "result": ...}.
 
 Usage:
     sudo python3 host/test_ethernet.py --board arty --uart-port /dev/ttyUSB1
@@ -28,14 +31,26 @@ import subprocess
 import sys
 import time
 
-import serial
+# In the repository the helper is in designs/_host; installed, it is beside this script.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "_host"))
+
+import bios_console
 
 # -- Constants -----------------------------------------------------------------
 
 FPGA_IP = "192.168.1.50"
 HOST_IP = "192.168.1.100"
 NETMASK = "255.255.255.0"
-BIOS_TIMEOUT = 30  # seconds to wait for BIOS boot
+ATTACH_TIMEOUT_S = 60  # the BIOS tries a network boot before its first prompt
+
+# What the BIOS's ident must contain: the design, and the board it was built for.
+DESIGN_IDENT = "Ethernet Test SoC"
+BOARD_IDENT = {"arty": "Arty A7", "netv2": "NeTV2"}
+
+# The MAC the LiteX BIOS gives the design (litex/soc/software/bios/boot.c, macadr): an ARP reply from any
+# other means something else on the link has the FPGA's address.
+LITEX_MAC = "10:e2:d5:00:00:00"
+MAC_RE = re.compile(r"([0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5})")
 
 # -- Network interface detection -----------------------------------------------
 
@@ -122,118 +137,76 @@ def configure_interface(iface, ip, netmask):
     print(f"  {iface} configured: {ip}/{prefix_len}")
 
 
-# -- UART MAC address parsing ---------------------------------------------------
+# -- The BIOS -------------------------------------------------------------------
 
 
-def read_mac_from_bios(uart_port, baud=115200, timeout=None):
-    """Read MAC address from LiteX BIOS boot output over UART.
-
-    The BIOS prints a line like:
-      Initializing Ethernet MAC @ <mac_address>...
-    or:
-      mac: 10:e2:d5:00:00:00
-    or:
-      Network config: MAC: 10:e2:d5:00:00:00
-
-    Returns MAC address string or None.
-    """
-    timeout = timeout or BIOS_TIMEOUT
-
-    mac_pattern = re.compile(
-        r"([0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:"
-        r"[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2})"
-    )
-
-    bios_output = []
-    mac_address = None
-
-    print(f"Reading BIOS output from {uart_port}...")
-    with serial.Serial(uart_port, baud, timeout=1) as ser:
-        ser.reset_input_buffer()
-        deadline = time.time() + timeout
-
-        while time.time() < deadline:
-            line = ser.readline().decode(errors="replace").strip()
-            if not line:
-                continue
-            bios_output.append(line)
-            print(f"  BIOS: {line}")
-
-            # Look for MAC address in the output
-            match = mac_pattern.search(line)
-            if match:
-                mac_address = match.group(1).lower()
-                print(f"  Found MAC: {mac_address}")
-
-            # BIOS is done booting when it shows the prompt
-            if "litex>" in line.lower() or "RUNTIME" in line:
-                break
-
-    return mac_address, bios_output
+def check_bios(bios, board, timeout=ATTACH_TIMEOUT_S):
+    """(ident, None) when the Ethernet test design for `board` answers at its prompt, else (ident, reason)."""
+    try:
+        bios.attach(timeout)
+        ident = bios.ident()
+    except bios_console.NoPrompt as e:
+        return None, f"{e}: nothing on the UART answers as a LiteX BIOS"
+    name = BOARD_IDENT[board]
+    if not ident or DESIGN_IDENT not in ident or name not in ident:
+        return ident, f"the design on the UART is {ident!r}, not the {DESIGN_IDENT} for the {name}"
+    return ident, None
 
 
 # -- Network tests --------------------------------------------------------------
 
 
-def test_arp(fpga_ip, interface, timeout=10):
-    """Send ARP request and verify response. Returns (success, mac_from_arp)."""
+def test_arp(fpga_ip, interface, timeout=10, run=subprocess.run):
+    """Send ARP requests. Returns (replied, the replying MAC or None, reason or None)."""
     print(f"ARP test: arping {fpga_ip} on {interface}...")
     try:
-        result = subprocess.run(
-            ["arping", "-c", "5", "-w", str(timeout), "-I", interface, fpga_ip],
-            capture_output=True,
-            text=True,
+        result = run(
+            ["arping", "-c", "5", "-w", str(timeout), "-I", interface, fpga_ip], capture_output=True, text=True
         )
     except FileNotFoundError:
-        print("  FAIL: 'arping' not found: install iputils-arping (or arping)")
-        return False, None
+        return False, None, "'arping' not found: install iputils-arping (or arping)"
     print(f"  stdout: {result.stdout.strip()}")
-
-    # Check for successful ARP reply
-    if result.returncode == 0:
-        # Extract MAC from arping output
-        mac_match = re.search(
-            r"([0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:"
-            r"[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2})",
-            result.stdout,
-        )
-        mac = mac_match.group(1).lower() if mac_match else None
-        return True, mac
-    return False, None
+    if result.returncode != 0:
+        return False, None, f"no ARP reply from {fpga_ip}"
+    macs = sorted({m.lower() for m in MAC_RE.findall(result.stdout)})
+    if macs != [LITEX_MAC]:
+        return True, ", ".join(macs) or None, f"ARP replies came from {', '.join(macs) or 'no MAC'}, not {LITEX_MAC}"
+    return True, LITEX_MAC, None
 
 
-def test_ping(fpga_ip, interface, count=10, timeout=2):
-    """Send ICMP ping and verify response. Returns (success, stats_line).
+def test_ping(fpga_ip, interface, count=10, timeout=2, run=subprocess.run):
+    """Send ICMP pings. Returns {"ping_sent", "ping_received", "rtt_avg_ms"} and the reason it failed, or None.
 
-    The LiteEth BIOS ICMP handler has limited throughput -- it processes
-    one packet at a time and may miss ~50% of pings at 1/sec rate.
-    We send more pings and accept up to 80% loss (require >= 2 responses).
+    The LiteEth BIOS's ICMP handler takes one packet at a time and can miss about half the pings at one a
+    second, so at least 2 replies out of 10 is a pass.
     """
     print(f"Ping test: ping {fpga_ip} via {interface} (count={count})...")
-    result = subprocess.run(
-        ["ping", "-c", str(count), "-W", str(timeout), "-I", interface, fpga_ip],
-        capture_output=True,
-        text=True,
+    result = run(
+        ["ping", "-c", str(count), "-W", str(timeout), "-I", interface, fpga_ip], capture_output=True, text=True
     )
     print(f"  stdout: {result.stdout.strip()}")
-
-    # Parse received count — require at least 2 responses
-    recv_match = re.search(r"(\d+) received", result.stdout)
-    if recv_match:
-        received = int(recv_match.group(1))
-        stats_line = result.stdout.strip().split("\n")[-1]  # rtt summary
-        return received >= 2, stats_line
-
-    return result.returncode == 0, ""
+    found = {"ping_sent": count, "ping_received": 0}
+    m = re.search(r"(\d+) packets transmitted, (\d+) received", result.stdout)
+    if m:
+        found["ping_sent"], found["ping_received"] = int(m.group(1)), int(m.group(2))
+    rtt = re.search(r"= [0-9.]+/([0-9.]+)/", result.stdout)
+    if rtt:
+        found["rtt_avg_ms"] = float(rtt.group(1))
+    if found["ping_received"] < 2:
+        return found, f"{found['ping_received']} of {found['ping_sent']} pings answered"
+    return found, None
 
 
 # -- Main test runner -----------------------------------------------------------
 
 
-def run_test(board, uart_port, baud, eth_interface=None):
-    """Run the full Ethernet test sequence."""
-    total_tests = 0
-    failures = []
+def run_test(board, uart_port, baud, eth_interface=None, run=subprocess.run, euid=None):
+    """Run the full Ethernet test sequence. Returns the result's fields ("result", "reason", ...)."""
+    found = {"test": "ethernet", "board": board}
+
+    def failed(reason):
+        print(f"FAIL: {reason}")
+        return {**found, "result": "fail", "reason": reason}
 
     print(f"=== Ethernet Test ({board}) ===")
     print(f"UART:     {uart_port} @ {baud}")
@@ -241,92 +214,83 @@ def run_test(board, uart_port, baud, eth_interface=None):
     print(f"Host IP:  {HOST_IP}")
     print()
 
-    # Step 1: Detect USB Ethernet adapter
+    # Step 1: the USB Ethernet adapter, and root to configure it and send ARP
     if eth_interface:
         iface = eth_interface
     else:
-        print("Detecting USB Ethernet adapter...", end=" ", flush=True)
+        print("Detecting USB Ethernet adapter...", flush=True)
         iface, why = find_usb_ethernet_interface()
         if not iface:
-            print(f"FAIL - {why}")
-            return False
-        print(f"found: {iface}")
-
-    # Step 2: Configure interface (from here on, root: `ip addr` and arping)
-    why = not_root_reason(iface)
+            return failed(why)
+        print(f"  found: {iface}")
+    found["interface"] = iface
+    why = not_root_reason(iface, euid)
     if why:
         print(why, file=sys.stderr)
-        return False
+        return {**found, "result": "fail", "reason": "not running as root"}
+
+    # Step 2: the design answering on the UART
+    try:
+        ser = bios_console.open_port(uart_port, baud)
+    except (OSError, ImportError) as e:  # no such port, port in use, no pyserial
+        return failed(f"cannot open {uart_port}: {e}")
+    try:
+        found["ident"], why = check_bios(bios_console.BiosConsole(ser, clock=time.monotonic), board)
+    except OSError as e:  # the port went away (pyserial's SerialException is one)
+        why = f"the UART failed: {e}"
+    finally:
+        ser.close()
+    if why:
+        return failed(why)
+    print(f"PASS: {found['ident']}")
+
+    # Steps 3-5: the network
     configure_interface(iface, HOST_IP, NETMASK)
-
-    # Step 3: Read MAC from BIOS UART
+    faults = []
     print()
-    mac_address, _ = read_mac_from_bios(uart_port, baud)
-    total_tests += 1
-    if mac_address:
-        # Validate MAC is in LiteX default range (10:e2:d5:xx:xx:xx)
-        if mac_address.startswith("10:e2:d5:"):
-            print(f"  MAC address valid: {mac_address}")
-        else:
-            print(f"  MAC address unexpected prefix: {mac_address} (not 10:e2:d5:*)")
-            # Still pass -- custom MAC is valid
+    found["arp"], found["mac"], why = test_arp(FPGA_IP, iface, run=run)
+    if why:
+        faults.append(why)
     else:
-        # The LiteX BIOS may not print the MAC address in a parseable format
-        # but does print "Local IP: x.x.x.x" which confirms Ethernet init.
-        print("  INFO: MAC address not found in BIOS output (Ethernet init confirmed via IP)")
-
-    # Step 4: ARP test
+        print(f"PASS: ARP: {FPGA_IP} is at {found['mac']}")
     print()
-    total_tests += 1
-    arp_ok, arp_mac = test_arp(FPGA_IP, iface)
-    if arp_ok:
-        print(f"  ARP: PASS (MAC={arp_mac})")
-        # Cross-check MAC if we got it from BIOS too
-        if mac_address and arp_mac and mac_address != arp_mac:
-            print(f"  WARNING: BIOS MAC ({mac_address}) != ARP MAC ({arp_mac})")
+    ping, why = test_ping(FPGA_IP, iface, run=run)
+    found.update(ping)
+    if why:
+        faults.append(why)
     else:
-        print("  ARP: FAIL")
-        failures.append("ARP request got no response")
+        print(f"PASS: ping: {ping['ping_received']} of {ping['ping_sent']} answered")
 
-    # Step 5: ICMP ping test
-    print()
-    total_tests += 1
-    ping_ok, ping_stats = test_ping(FPGA_IP, iface)
-    if ping_ok:
-        print(f"  Ping: PASS ({ping_stats})")
-    else:
-        print("  Ping: FAIL")
-        failures.append("ICMP ping failed")
-
-    # Results
-    print()
-    print(f"=== Results: {total_tests - len(failures)}/{total_tests} passed ===")
-    if failures:
-        print("Failures:")
-        for f in failures:
-            print(f"  - {f}")
-        return False
-    else:
-        print("PASS")
-        return True
+    if faults:
+        for fault in faults:
+            print(f"FAIL: {fault}")
+        return {**found, "result": "fail", "reason": "; ".join(faults)}
+    return {**found, "result": "pass"}
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Ethernet Test (host-side)")
-    parser.add_argument("--board", required=True, choices=["arty", "netv2"], help="Target board")
+    parser.add_argument("--board", required=True, choices=list(BOARD_IDENT), help="Target board")
     parser.add_argument(
         "--uart-port", default=None, help="UART port (default: /dev/ttyUSB1 for arty, /dev/ttyAMA0 for netv2)"
     )
     parser.add_argument("--baud", type=int, default=115200)
     parser.add_argument("--interface", default=None, help="Network interface (auto-detect if not specified)")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.uart_port is None:
         args.uart_port = "/dev/ttyUSB1" if args.board == "arty" else "/dev/ttyAMA0"
 
-    success = run_test(args.board, args.uart_port, args.baud, args.interface)
-    sys.exit(0 if success else 1)
+    found = run_test(args.board, args.uart_port, args.baud, args.interface)
+    print()
+    print(
+        "RESULT: PASS — Ethernet test completed successfully"
+        if found["result"] == "pass"
+        else "RESULT: FAIL — Ethernet test had failures"
+    )
+    bios_console.print_result_json(found)
+    return 0 if found["result"] == "pass" else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

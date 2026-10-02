@@ -31,6 +31,9 @@ class FakeBios:
     def clock(self):
         return self.now
 
+    def close(self):
+        self.closed = True
+
     def write(self, data):
         if self.silent:
             return len(data)
