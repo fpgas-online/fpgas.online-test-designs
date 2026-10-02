@@ -1,0 +1,115 @@
+# .github/workflows/deb.yml
+#
+# This repository's apt archive: the LitePCIe driver packages for the Acorn SoC (packaging/acorn-litepcie/,
+# design docs/plans/2026-09-25-acorn-litepcie-packages-design.md), one signed flat repository per suite on
+# this repository's GitHub Pages, through mithro/apt-repo-action's publish-apt.yml:
+#
+#   deb [signed-by=/etc/apt/keyrings/fpgas.online-test-designs.gpg] \
+#       https://fpgas.online/fpgas.online-test-designs/<suite>/ ./
+#
+#   test         lint and unit tests of the packaging
+#   build-deb    acorn-litepcie.yml: every build and test, and one complete debs-<suite> artifact per suite
+#   publish-apt  on main, once the Pages site exists: index, sign and deploy the suites
+#   release      on main, after the archive deployed: the fpgas-online-acorn-litepcie meta package to the
+#                rolling vX.Y series release, where fpgas-online/apt collects it
+#
+# Only the LitePCIe packages are in this archive. The repository's other debs (packaging/debs/,
+# packaging/acorn-pcie/) are release assets that fpgas-online/apt collects.
+#
+# Pull requests build and test everything, versioned below main (~pr<P>), and publish nothing. The daily run
+# is for the Raspberry Pi archive: a new kernel there needs its modules package, and no commit here says so.
+name: Debian packages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deb-${{ github.ref }}
+  # A newer push to a pull request cancels the older build. On the default
+  # branch a running publish is never cancelled: the newest push waits for it,
+  # and replaces any older push still waiting (it contains that one's commits).
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PY: >-
+    packaging/acorn-litepcie/build_debs.py packaging/acorn-litepcie/prepare_driver.py
+    packaging/acorn-litepcie/csr_check.py packaging/acorn-litepcie/container.py
+    packaging/acorn-litepcie/publish.py packaging/acorn-litepcie/plan.py
+    verify/src/fpgas_online_verify/boards/acorn/check.py verify/src/fpgas_online_verify/boards/acorn/spi_flash.py
+    tests/test_acorn_litepcie.py tests/test_acorn_verify.py tests/test_spi_flash.py
+  TESTS: >-
+    tests/test_acorn_litepcie.py tests/test_acorn_verify.py tests/test_spi_flash.py
+    tests/test_acorn_packaging.py
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Lint
+        run: |
+          uv run --no-project --with ruff ruff check $PY
+          uv run --no-project --with ruff ruff format --check $PY
+
+      - name: Tests
+        run: uv run --no-project --python 3.12 --with pytest pytest $TESTS
+
+  build-deb:
+    needs: test
+    uses: ./.github/workflows/acorn-litepcie.yml
+
+  # Only a full build is published: a deploy replaces the whole site, so it must hold every package. A build
+  # is full once the Pages site exists (plan.py), so until then nothing here runs.
+  publish-apt:
+    if: >-
+      github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
+      && needs.build-deb.outputs.mode == 'full'
+    needs: build-deb
+    # Scoped to this job alone: a job calling a reusable workflow sets the
+    # maximum permissions available to it. acorn-litepcie.yml never sees these.
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: mithro/apt-repo-action/.github/workflows/publish-apt.yml@main
+    with:
+      suites: ${{ needs.build-deb.outputs.suites-list }}
+      description: "LitePCIe driver and tools for the fpgas.online Acorn PCIe SoC"
+    secrets:
+      gpg-private-key: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+
+  # After the publish: the meta package depends on what the archive serves.
+  release:
+    if: >-
+      github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
+      && needs.build-deb.outputs.mode == 'full'
+    needs: [build-deb, publish-apt]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: acorn-litepcie-meta
+          path: dist
+
+      # Only a file the release lacks goes up, to the version's own vX.Y series: see publish.py.
+      - name: Upload the meta package if the series release does not have this version yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build-deb.outputs.meta-version }}
+        run: python3 packaging/acorn-litepcie/publish.py --version "$VERSION" dist/*.deb

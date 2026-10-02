@@ -1,45 +1,52 @@
 # .github/workflows/acorn-litepcie.yml
 #
-# The LitePCIe driver packages for the Acorn SoC (packaging/acorn-litepcie/), Parts A and B of
-# docs/plans/2026-09-25-acorn-litepcie-packages-design.md:
+# The builds of the LitePCIe driver packages for the Acorn SoC (packaging/acorn-litepcie/, design
+# docs/plans/2026-09-25-acorn-litepcie-packages-design.md). deb.yml calls this workflow as its build-deb job
+# and publishes what it hands over. Started by hand on any branch, it builds every kernel's modules (the
+# `full` input) and publishes nothing.
 #
-#   driver           generate the driver at this commit from acorn_pcie_soc.py (no Vivado), apply the three
-#                    packaging patches, cross-check its CSRs against all six images of the pinned release,
-#                    and build fpgas-online-acorn-litepcie-common and -dkms
-#   utils            litepcie_util and litepcie_test for armhf, arm64 and amd64 in debian:bookworm, the
-#                    struct-layout asserts, the -utils deb, and an install test
-#   dkms             a DKMS build in the shapes DKMS is for: an arm64 bookworm root with rpi-v8 headers, and
-#                    an amd64 bookworm root with Debian's headers
-#   plan             which Raspberry Pi kernels get a -modules-<kver> package in this run (plan.py, from
-#                    kernels.toml and the Raspberry Pi archive's indexes)
-#   modules          one job per suite and kernel: litepcie.ko and liteuart.ko built in the suite's Debian
-#                    image against that kernel's headers, packaged as -modules-<kver>, then installed
-#                    through apt on an armhf root with the arm64 kernel, as the netbooted fleet is. The
-#                    fleet kernel's job also uploads the two .ko files as a workflow artifact
-#   publish          on main: the debs the rolling series release (which fpgas-online/apt pulls from) does
-#                    not have yet, then the pruning of old LitePCIe assets
-#   publish-dry-run  everywhere else: what publish would upload and prune, read from the real release
+#   plan      the versions (the shared deb-version action, on the driver commit), which Raspberry Pi kernels
+#             get a -modules-<kver> package, and which debs the live site already has (plan.py)
+#   driver    generate the driver at this commit from acorn_pcie_soc.py (no Vivado), apply the three
+#             packaging patches, cross-check its CSRs against all six images of the pinned release, and build
+#             -common and -dkms for each suite and the meta package
+#   utils     litepcie_util and litepcie_test for armhf, arm64 and amd64 in each suite's Debian image, the
+#             struct-layout asserts, the -utils deb, and an install test
+#   dkms      a DKMS build in the shapes DKMS is for, per suite: an arm64 root with the newest rpi-v8 headers,
+#             and an amd64 root with Debian's headers
+#   modules   one job per suite and kernel: litepcie.ko and liteuart.ko built in the suite's Debian image
+#             against that kernel's headers, packaged as -modules-<kver>, then installed through apt on an
+#             armhf root with the arm64 kernel, as the netbooted fleet is; there the meta package must keep
+#             to the modules and not bring DKMS. The fleet kernel's job also uploads the two .ko files as a
+#             workflow artifact
+#   assemble  per suite, the debs-<suite> artifact publish-apt takes: every deb the site already has at this
+#             version, from the site; the rest from this run's builds
+#   meta      per suite, on a plain arm64 host: the meta package, from the assembled suite, must choose DKMS
 #
-# Pull requests build and test the newest kernel of each suite and flavour and the fleet kernel, and publish
-# nothing. Main and the daily run build every kernel the release has no package for at this driver version:
-# all of them after a driver change, only a newly released kernel on a quiet day.
-name: "Acorn LitePCIe debs"
+# A run is a sample or full (plan.py). A sample builds the modules of the newest kernel of each suite and
+# flavour and of the fleet kernel: pull requests, and every run while there is no Pages site to publish to.
+# A full run builds the modules of every kernel the site lacks at this driver version (all of them after a
+# driver change, only a newly released kernel on a quiet day), and its debs-<suite> are complete.
+name: "Acorn LitePCIe builds"
 
 on:
-  pull_request:
-  push:
-    branches: [main]
-  schedule:
-    - cron: "17 4 * * *"
+  workflow_call:
+    outputs:
+      mode:
+        description: "`full` when the debs-<suite> artifacts hold every package and can be published; else `sample`"
+        value: ${{ jobs.plan.outputs.mode }}
+      suites-list:
+        description: "The suites built, space-separated"
+        value: ${{ jobs.plan.outputs.suites-list }}
+      meta-version:
+        description: "The meta package's version: the driver's X.Y.postN, with ~pr<P> on a pull request"
+        value: ${{ jobs.plan.outputs.meta-version }}
   workflow_dispatch:
-
-# A new push to a pull request cancels that pull request's older, now stale, run.
-# Anything else (main, schedule, workflow_dispatch) is grouped by commit, so runs of different commits never
-# wait for or cancel each other. Two runs of the same commit (a push, then the daily run) share a group and the
-# newer cancels the older: harmless, since both build the same thing and publishing only adds missing files.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: true
+    inputs:
+      full:
+        description: "Build the modules of every kernel, not the sample (nothing is published either way)"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -48,53 +55,77 @@ env:
   NFPM_VERSION: "2.47.0"
   NFPM_SHA256_X86_64: "0660ca602b2d2d2ae4781a06c692b3eeb9d437ffea05b831d76e41f4a3188783"
   NFPM_SHA256_ARM64: "1c0f5f2999b9a974bfb04fdb0cc3306096de530ac5dbb25d739cc5f5219c919c"
-  PY: >-
-    packaging/acorn-litepcie/build_debs.py packaging/acorn-litepcie/prepare_driver.py
-    packaging/acorn-litepcie/csr_check.py packaging/acorn-litepcie/container.py
-    packaging/acorn-litepcie/publish.py packaging/acorn-litepcie/plan.py
-    verify/src/fpgas_online_verify/boards/acorn/check.py verify/src/fpgas_online_verify/boards/acorn/spi_flash.py
-    tests/test_acorn_litepcie.py tests/test_acorn_verify.py tests/test_spi_flash.py
-  TESTS: >-
-    tests/test_acorn_litepcie.py tests/test_acorn_verify.py tests/test_spi_flash.py
-    tests/test_acorn_packaging.py
 
 jobs:
-  test:
-    name: "Lint and unit tests"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Lint
-        run: |
-          uv run --no-project --with ruff ruff check $PY
-          uv run --no-project --with ruff ruff format --check $PY
-
-      - name: Tests
-        run: uv run --no-project --python 3.12 --with pytest pytest $TESTS
-
-  driver:
-    name: "Driver: generate, patch, CSR cross-check, -common and -dkms"
+  plan:
+    name: "Versions and plan"
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      versions: ${{ steps.plan.outputs.versions }}
+      meta-version: ${{ steps.sid.outputs.version }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      count: ${{ steps.plan.outputs.count }}
+      mode: ${{ steps.plan.outputs.mode }}
+      suites: ${{ steps.plan.outputs.suites }}
+      suites-list: ${{ steps.plan.outputs.suites-list }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # the version is git describe of the driver inputs' last first-parent commit
 
+      # The shared version script versions a checkout. The driver packages are versioned by the last commit
+      # that changed what they are built from, not by HEAD, so it gets a checkout of that commit.
+      - name: Check out the commit the driver packages are versioned by
+        run: python3 packaging/acorn-litepcie/build_debs.py --version-tree dist/version-tree
+
+      - name: Version (bookworm)
+        id: bookworm
+        uses: mithro/apt-repo-action/deb-version@main
+        with:
+          suite: bookworm
+          source-dir: dist/version-tree
+
+      - name: Version (trixie)
+        id: trixie
+        uses: mithro/apt-repo-action/deb-version@main
+        with:
+          suite: trixie
+          source-dir: dist/version-tree
+
+      # sid carries no suite suffix: the meta package is one file for every suite.
+      - name: Version (the meta package)
+        id: sid
+        uses: mithro/apt-repo-action/deb-version@main
+        with:
+          suite: sid
+          source-dir: dist/version-tree
+
+      # Reads the Raspberry Pi archive's indexes and this repository's Pages site; changes nothing.
+      - name: Which debs each suite wants, and which this run builds
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSIONS: '{"bookworm": "${{ steps.bookworm.outputs.version }}", "trixie": "${{ steps.trixie.outputs.version }}"}'
+        run: |
+          echo "versions=$VERSIONS" >> "$GITHUB_OUTPUT"
+          python3 packaging/acorn-litepcie/plan.py plan --versions "$VERSIONS" --out dist/plan/plan.json \
+            --event "${{ github.event_name }}" ${{ inputs.full && '--full' || '' }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: acorn-litepcie-plan
+          path: dist/plan/plan.json
+          if-no-files-found: error
+
+  driver:
+    name: "Driver: generate, patch, CSR cross-check, -common, -dkms, meta"
+    needs: plan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Install uv
         uses: astral-sh/setup-uv@v4
-
-      - name: Version
-        id: version
-        run: |
-          v="$(uv run --no-project --python 3.12 packaging/acorn-litepcie/build_debs.py --print-version)"
-          echo "version=$v" >> "$GITHUB_OUTPUT"
-          echo "driver version: $v"
 
       - name: Install the LiteX environment
         run: uv sync --locked --python 3.12 --extra build
@@ -113,15 +144,21 @@ jobs:
           echo "${NFPM_SHA256_X86_64}  $f" | sha256sum -c -
           tar xzf "$f" nfpm
 
-      - name: Build -common and -dkms
+      - name: Build -common and -dkms for each suite
+        env:
+          VERSIONS: ${{ needs.plan.outputs.versions }}
         run: >-
-          uv run --no-project --python 3.12 packaging/acorn-litepcie/build_debs.py --out dist/debs
-          --driver dist/driver --only common --only dkms --nfpm ./nfpm
-          --version "${{ steps.version.outputs.version }}"
+          uv run --no-project --python 3.12 packaging/acorn-litepcie/build_debs.py --out dist/built
+          --driver dist/driver --only common --only dkms --nfpm ./nfpm --versions "$VERSIONS"
+
+      - name: Build the meta package
+        run: >-
+          uv run --no-project --python 3.12 packaging/acorn-litepcie/build_debs.py --out dist/meta
+          --only meta --nfpm ./nfpm --version "${{ needs.plan.outputs.meta-version }}"
 
       - name: Show what was built
         run: |
-          for d in dist/debs/*.deb; do echo "== $d"; dpkg-deb -f "$d"; dpkg-deb -c "$d"; done
+          for d in dist/built/*.deb dist/meta/*.deb; do echo "== $d"; dpkg-deb -f "$d"; dpkg-deb -c "$d"; done
 
       - uses: actions/upload-artifact@v4
         with:
@@ -131,21 +168,31 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: acorn-litepcie-debs-all
-          path: dist/debs/*.deb
+          name: built-all
+          path: dist/built/*.deb
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: acorn-litepcie-meta
+          path: dist/meta/*.deb
           if-no-files-found: error
 
   utils:
-    name: "-utils (${{ matrix.arch }})"
-    needs: driver
+    name: "-utils (${{ matrix.suite }} ${{ matrix.arch }})"
+    needs: [plan, driver]
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
+        suite: ${{ fromJSON(needs.plan.outputs.suites) }}
+        arch: [arm64, armhf, amd64]
         include:
           - { arch: arm64, runner: ubuntu-24.04-arm, nfpm: arm64, nfpm_sha256: NFPM_SHA256_ARM64 }
           - { arch: armhf, runner: ubuntu-24.04-arm, nfpm: arm64, nfpm_sha256: NFPM_SHA256_ARM64 }
           - { arch: amd64, runner: ubuntu-latest, nfpm: x86_64, nfpm_sha256: NFPM_SHA256_X86_64 }
+    env:
+      VERSION: ${{ fromJSON(needs.plan.outputs.versions)[matrix.suite] }}
     steps:
       - uses: actions/checkout@v4
 
@@ -159,13 +206,13 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: acorn-litepcie-debs-all
-          path: dist/debs
+          name: built-all
+          path: dist/built
 
-      - name: Build the tools in debian:bookworm (${{ matrix.arch }})
+      - name: Build the tools in debian:${{ matrix.suite }} (${{ matrix.arch }})
         run: >-
-          python3 packaging/acorn-litepcie/container.py run --arch ${{ matrix.arch }} --
-          utils --arch ${{ matrix.arch }} --driver dist/driver --out dist/utils
+          python3 packaging/acorn-litepcie/container.py run --arch ${{ matrix.arch }} --suite ${{ matrix.suite }} --
+          utils --arch ${{ matrix.arch }} --suite ${{ matrix.suite }} --driver dist/driver --out dist/utils
 
       - name: Install nfpm ${{ env.NFPM_VERSION }}
         env:
@@ -181,14 +228,15 @@ jobs:
       - name: Build -utils
         run: >-
           uv run --no-project --python 3.12 packaging/acorn-litepcie/build_debs.py --out dist/utils-deb
-          --driver dist/driver --only utils --arch ${{ matrix.arch }} --bin-dir dist/utils --nfpm ./nfpm
-          --version "${{ needs.driver.outputs.version }}"
+          --driver dist/driver --only utils --suite ${{ matrix.suite }} --arch ${{ matrix.arch }}
+          --bin-dir dist/utils --nfpm ./nfpm --version "$VERSION"
 
-      - name: Install -common and -utils and run litepcie_util (${{ matrix.arch }})
+      - name: Install test (-common and -utils, ${{ matrix.suite }} ${{ matrix.arch }})
         run: >-
-          python3 packaging/acorn-litepcie/container.py run --arch ${{ matrix.arch }} --
-          install-test --arch ${{ matrix.arch }} dist/debs/fpgas-online-acorn-litepcie-common_*.deb
-          dist/utils-deb/fpgas-online-acorn-litepcie-utils_*_${{ matrix.arch }}.deb
+          python3 packaging/acorn-litepcie/container.py run --arch ${{ matrix.arch }} --suite ${{ matrix.suite }} --
+          install-test --arch ${{ matrix.arch }} --suite ${{ matrix.suite }}
+          "dist/built/fpgas-online-acorn-litepcie-common_${VERSION}_all.deb"
+          "dist/utils-deb/fpgas-online-acorn-litepcie-utils_${VERSION}_${{ matrix.arch }}.deb"
 
       - name: Show what was built
         run: |
@@ -196,56 +244,42 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: acorn-litepcie-debs-${{ matrix.arch }}
+          name: built-${{ matrix.suite }}-${{ matrix.arch }}-utils
           path: dist/utils-deb/*.deb
           if-no-files-found: error
 
   dkms:
-    name: "DKMS build (${{ matrix.arch }} bookworm, ${{ matrix.headers }})"
-    needs: driver
+    name: "DKMS build (${{ matrix.suite }} ${{ matrix.arch }}, ${{ matrix.headers }})"
+    needs: [plan, driver]
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
+        suite: ${{ fromJSON(needs.plan.outputs.suites) }}
+        arch: [arm64, amd64]
         include:
           - { arch: arm64, runner: ubuntu-24.04-arm, headers: "newest rpi-v8 headers" }
           - { arch: amd64, runner: ubuntu-latest, headers: "Debian's headers" }
+    env:
+      VERSION: ${{ fromJSON(needs.plan.outputs.versions)[matrix.suite] }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
         with:
-          name: acorn-litepcie-debs-all
-          path: dist/debs
+          name: built-all
+          path: dist/built
 
-      - name: Install -common and -dkms and have DKMS build the modules
+      - name: Install test (-common and -dkms, and DKMS builds the modules)
         run: >-
-          python3 packaging/acorn-litepcie/container.py run --arch ${{ matrix.arch }} --
-          dkms-test --arch ${{ matrix.arch }}
-          dist/debs/fpgas-online-acorn-litepcie-common_*.deb dist/debs/fpgas-online-acorn-litepcie-dkms_*.deb
-
-  plan:
-    name: "Plan the -modules-<kver> builds"
-    needs: driver
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.plan.outputs.matrix }}
-      count: ${{ steps.plan.outputs.count }}
-    steps:
-      - uses: actions/checkout@v4
-
-      # Reads the Raspberry Pi archive's indexes and the series release's asset list; changes nothing.
-      - name: Which kernels this run builds
-        id: plan
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: >-
-          python3 packaging/acorn-litepcie/plan.py --version "${{ needs.driver.outputs.version }}"
-          --mode ${{ github.event_name == 'pull_request' && 'sample' || 'missing' }}
+          python3 packaging/acorn-litepcie/container.py run --arch ${{ matrix.arch }} --suite ${{ matrix.suite }} --
+          dkms-test --arch ${{ matrix.arch }} --suite ${{ matrix.suite }}
+          "dist/built/fpgas-online-acorn-litepcie-common_${VERSION}_all.deb"
+          "dist/built/fpgas-online-acorn-litepcie-dkms_${VERSION}_all.deb"
 
   modules:
     name: "-modules (${{ matrix.suite }}, ${{ matrix.kver }})"
-    needs: [driver, utils, plan]
+    needs: [plan, driver, utils]
     if: needs.plan.outputs.count != '0'
     runs-on: ubuntu-24.04-arm
     strategy:
@@ -264,13 +298,18 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: acorn-litepcie-debs-all
-          path: dist/debs
+          name: built-all
+          path: dist/built
 
       - uses: actions/download-artifact@v4
         with:
-          name: acorn-litepcie-debs-armhf
-          path: dist/debs
+          name: built-${{ matrix.suite }}-armhf-utils
+          path: dist/built
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: acorn-litepcie-meta
+          path: dist/meta
 
       - name: Build litepcie.ko and liteuart.ko in debian:${{ matrix.suite }} against the kernel's headers
         run: >-
@@ -291,7 +330,7 @@ jobs:
           uv run --no-project --python 3.12 packaging/acorn-litepcie/build_debs.py --out dist/modules-deb
           --driver dist/driver --only modules --arch ${{ matrix.arch }} --suite ${{ matrix.suite }}
           --kver "${{ matrix.kver }}" --module-dir dist/modules --nfpm ./nfpm
-          --version "${{ needs.driver.outputs.version }}"
+          --version "${{ matrix.version }}"
 
       - name: Show what was built
         env:
@@ -303,18 +342,23 @@ jobs:
           dpkg-deb -I "$DEB" postrm
           cat dist/modules/modules.json
 
-      # The netbooted fleet's shape: an armhf root that boots this arm64 kernel.
-      - name: Install it through apt on an armhf ${{ matrix.suite }} root with its kernel
+      # The netbooted fleet's shape: an armhf root that boots this arm64 kernel. All the suite's packages are
+      # offered, so apt could take DKMS for the meta package; it must keep to the modules installed first.
+      - name: Install test (armhf ${{ matrix.suite }} root with this kernel, through apt)
+        env:
+          VERSION: ${{ matrix.version }}
         run: >-
           python3 packaging/acorn-litepcie/container.py run --arch armhf --suite ${{ matrix.suite }} --
           modules-install-test --suite ${{ matrix.suite }} --arch ${{ matrix.arch }} --kver "${{ matrix.kver }}"
-          dist/debs/fpgas-online-acorn-litepcie-common_*.deb
-          dist/debs/fpgas-online-acorn-litepcie-utils_*_armhf.deb
+          "dist/built/fpgas-online-acorn-litepcie-common_${VERSION}_all.deb"
+          "dist/built/fpgas-online-acorn-litepcie-dkms_${VERSION}_all.deb"
+          "dist/built/fpgas-online-acorn-litepcie-utils_${VERSION}_armhf.deb"
           "dist/modules-deb/${{ matrix.deb }}"
+          dist/meta/fpgas-online-acorn-litepcie_*_all.deb
 
       - uses: actions/upload-artifact@v4
         with:
-          name: acorn-litepcie-debs-modules-${{ matrix.suite }}-${{ matrix.kver }}
+          name: built-${{ matrix.suite }}-${{ matrix.arch }}-modules-${{ matrix.kver }}
           path: dist/modules-deb/*.deb
           if-no-files-found: error
 
@@ -326,54 +370,70 @@ jobs:
           path: dist/modules
           if-no-files-found: error
 
-  # The modules job is skipped when the release already has every kernel's package, which must not skip the
-  # two jobs below: they run whenever nothing before them failed.
-  publish:
-    name: "Publish to the series release"
-    needs: [test, driver, utils, dkms, plan, modules]
+  # The modules job is skipped when the site already has every kernel's package, which must not skip the
+  # jobs below: they run whenever nothing before them failed.
+  assemble:
+    name: "debs-${{ matrix.suite }}: from the site what it has, the rest from this run"
+    needs: [plan, driver, utils, dkms, modules]
     if: >-
       always() && needs.plan.result == 'success'
       && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
-      && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJSON(needs.plan.outputs.suites) }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
         with:
-          pattern: acorn-litepcie-debs-*
-          path: dist
+          name: acorn-litepcie-plan
+          path: dist/plan
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: built-*
+          path: dist/built
           merge-multiple: true
 
-      # Only files the release lacks go up, to the version's own vX.Y series; then old versions are pruned:
-      # see publish.py.
-      - name: Upload the versions the series release does not have yet, then prune
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.driver.outputs.version }}
-        run: python3 packaging/acorn-litepcie/publish.py --version "$VERSION" dist/*.deb
+      - name: Assemble the suite
+        run: >-
+          python3 packaging/acorn-litepcie/plan.py assemble --plan dist/plan/plan.json
+          --suite ${{ matrix.suite }} --built dist/built --out dist/debs
 
-  publish-dry-run:
-    name: "Publish (dry run: nothing is uploaded or pruned)"
-    needs: [test, driver, utils, dkms, plan, modules]
-    if: >-
-      always() && needs.plan.result == 'success'
-      && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
-      && (github.event_name == 'pull_request' || github.ref != 'refs/heads/main')
-    runs-on: ubuntu-latest
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debs-${{ matrix.suite }}
+          path: dist/debs/*.deb
+          if-no-files-found: error
+          retention-days: 14
+
+  meta:
+    name: "Meta package (${{ matrix.suite }}, plain arm64 host)"
+    needs: [plan, assemble]
+    if: always() && needs.assemble.result == 'success'
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJSON(needs.plan.outputs.suites) }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
         with:
-          pattern: acorn-litepcie-debs-*
-          path: dist
-          merge-multiple: true
+          name: debs-${{ matrix.suite }}
+          path: dist/debs
 
-      - name: What publishing these debs would upload and prune
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.driver.outputs.version }}
-        run: python3 packaging/acorn-litepcie/publish.py --version "$VERSION" --dry-run dist/*.deb
+      - uses: actions/download-artifact@v4
+        with:
+          name: acorn-litepcie-meta
+          path: dist/debs
+
+      # The whole assembled suite is offered, the modules packages included, as the published archive offers
+      # it: with nothing installed, the meta package's driver must be DKMS.
+      - name: Install test (the meta package chooses DKMS)
+        run: >-
+          python3 packaging/acorn-litepcie/container.py run --arch arm64 --suite ${{ matrix.suite }} --
+          meta-install-test --arch arm64 --suite ${{ matrix.suite }} dist/debs/*.deb
