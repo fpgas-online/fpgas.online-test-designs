@@ -90,10 +90,15 @@ def test_acorn_pin_id_artifact_matches_ci_upload_name():
 
 
 def test_arty_artifacts_match_ci_upload_names():
-    # The CI jobs upload the Arty builds under <design>-arty-a7-35.
-    for design in ("uart", "ddr", "spiflash"):
+    # The names fpgas_online_verify and the debs read too (verify/src/fpgas_online_verify/boards/arty.py):
+    # the build directory behind them names the variant and flow, the artifact does not.
+    workflows = {"uart": "build-uart-test.yml", "ddr": "build-ddr-test.yml", "spiflash": "build-spiflash-test.yml"}
+    for design, workflow in workflows.items():
         artifact = vh.DESIGNS[design]["boards"]["arty"]["artifact"]
-        assert artifact.split("/")[0].endswith("-arty-a7-35"), artifact
+        name, bitstream = artifact.split("/")
+        assert name == f"{design}-test-arty" and bitstream == "digilent_arty.bit", artifact
+        text = (_MOD_PATH.parent / ".github" / "workflows" / workflow).read_text()
+        assert f"name: {name}\n" in text, f"{workflow} uploads no artifact named {name}"
 
 
 def test_cli_repeat_and_dry_run_flags_exist():

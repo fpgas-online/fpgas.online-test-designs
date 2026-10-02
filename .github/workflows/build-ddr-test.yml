@@ -51,7 +51,7 @@ jobs:
       - name: Upload bitstream
         uses: actions/upload-artifact@v4
         with:
-          name: ddr-test-arty-a7-35
+          name: ddr-test-arty
           path: |
             designs/ddr-memory/build/arty-a7-35-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error

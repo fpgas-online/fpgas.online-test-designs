@@ -190,7 +190,7 @@ DESIGNS = {
         "test_script": "designs/uart/host/test_uart.py",
         "boards": {
             "arty": {
-                "artifact": "uart-test-arty-a7-35/digilent_arty.bit",
+                "artifact": "uart-test-arty/digilent_arty.bit",
                 "test_args": "--port /dev/ttyUSB1 --board arty",
             },
             "netv2": {
@@ -233,7 +233,7 @@ DESIGNS = {
         "test_script": "designs/ddr-memory/host/test_ddr.py",
         "boards": {
             "arty": {
-                "artifact": "ddr-test-arty-a7-35/digilent_arty.bit",
+                "artifact": "ddr-test-arty/digilent_arty.bit",
                 "test_args": "--port /dev/ttyUSB1 --board arty",
             },
             "netv2": {
@@ -267,7 +267,7 @@ DESIGNS = {
         "test_script": "designs/spi-flash-id/host/test_spiflash.py",
         "boards": {
             "arty": {
-                "artifact": "spiflash-test-arty-a7-35/digilent_arty.bit",
+                "artifact": "spiflash-test-arty/digilent_arty.bit",
                 "test_args": "--port /dev/ttyUSB1 --board arty",
             },
             "netv2": {
