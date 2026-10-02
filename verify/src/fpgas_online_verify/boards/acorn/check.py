@@ -262,6 +262,19 @@ def read_identifier(bus):
     return out.decode("ascii", "replace")
 
 
+SOC_IDENTIFIER_PREFIX = "fpgas-online "  # our SoC's identifier: "fpgas-online Acorn PCIe SoC cle-215+ <date>"
+
+
+def soc_model(kind, identifier):
+    """The card our SoC says it was built for (rpi-hwid's soc_model), from its identifier string: the variant
+    the identifier names, when the running design is ours (`kind` fpgas-online) and its identifier is our
+    SoC's. None for anything else (SQRL's factory image, a design we do not know, no identifier)."""
+    if kind != "fpgas-online" or not identifier or not identifier.startswith(SOC_IDENTIFIER_PREFIX):
+        return None
+    words = identifier.casefold().split()
+    return next((v for v in OUR_SUBSYSTEMS.values() if v in words), None)
+
+
 # -- the release ---------------------------------------------------------------------------------------
 
 
@@ -423,15 +436,24 @@ def scratch_faults(read, write, csrs, where):
 
 
 def flash_identity(flash):
-    """The flash row of an rpi-hwid label. openFPGALoader reads an S25FL-S's unique id with the same OTPR
-    (0x4B, 3 address + 1 dummy, 16 bytes from 0) that spi_flash.identify() sends; on pi-sw2-p48 the two gave
-    the same 128 bits in the same order."""
+    """Everything the flash said about itself (spi_flash.Flash.identify()): all six RDID bytes, the part, its
+    size, the status and configuration registers, and the factory unique ID. openFPGALoader reads an
+    S25FL-S's unique id with the same OTPR (0x4B, 3 address + 1 dummy, 16 bytes from 0) that identify() sends;
+    on pi-sw2-p48 the two gave the same 128 bits in the same order.
+
+    part, jedec and unique_id are what the recorded state and fpgas-acorn-debug identify have always had;
+    identity.flash_fields() turns the whole read into the identity's flash fields."""
     ident = flash.identify()
     return {
         "part": ident["part"],
         "jedec": "0x" + ident["rdid"][:6],
         "unique_id": ident["unique_id"],
         "size_bytes": ident["size_bytes"],
+        "rdid": ident["rdid"],
+        "status": ident["status"],
+        "config": ident["config"],
+        "quad_enabled": ident["quad_enabled"],
+        "unique_id_opcode": ident["unique_id_opcode"],
     }
 
 

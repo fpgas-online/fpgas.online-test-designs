@@ -27,7 +27,7 @@ import sys
 import tempfile
 from typing import ClassVar
 
-from . import bitstreams, host_tests, idcode
+from . import bitstreams, host_tests, idcode, identity
 from .board import Board
 from .core import Problem, host_facts, run, tail, usb_matching, worst
 
@@ -249,6 +249,16 @@ class TestBoard(Board):
     def identity(self, found):
         return {k: v for k, v in found.items() if k in ("variant", "serial", "idcode") and v is not None}
 
+    def identified(self, report, found, options):
+        """Who the board is (identity.py), from how it was found and its JTAG IDCODE: put in the report and sent
+        as fpga-board-identified, before any test runs."""
+        out = identity.base(options.get("board_key", self.name), self.name, found, report["variant"])
+        if "jtag" in report:
+            out.update(identity.idcode_fields(report["jtag"]))
+        report["identity"] = out
+        identity.keep(options, out)
+        (options.get("event") or (lambda stage, details: None))("fpga-board-identified", identity.details(out))
+
     def check(self, host, found, options, runner=run):
         variant = options.get("variant") or found["variant"]
         report = {"board": self.name, "variant": variant, "found": found, "tests": []}
@@ -265,10 +275,12 @@ class TestBoard(Board):
                                        f"({', '.join(self.variants)})")  # fmt: skip
             manifest = bitstreams.load_manifest(images, self.bitstreams_package)
         except Problem as p:
+            self.identified(report, found, options)
             return {**report, "result": p.result, "reason": p.reason}
         report["bitstreams"] = manifest.get("version")
         if self.idcodes:
             report["jtag"] = self.jtag(host, found, variant, runner)
+        self.identified(report, found, options)
         event = options.get("event") or (lambda stage, details: None)
         with self.services_stopped(runner) as held:
             for test in tests:

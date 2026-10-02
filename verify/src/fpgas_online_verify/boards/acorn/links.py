@@ -99,7 +99,9 @@ def jtag(setup, variant, run, bar0_dna=None, gpiochip=None):
         # openFPGALoader leaves the pins driven; with no way to put them back (on a Blade GPIO14 is also the
         # UART's TX) the probe is not run at all
         reason = f"P1 JTAG not probed: the JTAG pins' state could not be read, so it could not be put back: {p.reason}"
-        return _entry("jtag", [("error", reason)])
+        return _entry("jtag", [("error", reason)], dna_error=f"not read over P1 JTAG: {reason}")
+    # why the device DNA was not read, if it is not: apart from the IDCODE's faults (identity's dna_error)
+    dna_error = "not read over P1 JTAG: --read-dna runs only once --detect has found the one FPGA expected"
     try:
         (gpiochip or header_gpiochip)(setup.gpiochip)
         rc, out = run([*base, "--detect", *idcode.OPENFPGALOADER_RAW_ARGS], JTAG_TIMEOUT)
@@ -126,24 +128,35 @@ def jtag(setup, variant, run, bar0_dna=None, gpiochip=None):
             chain_ok = True
         if rc != 0 and scanned:  # whatever it printed, a scan that failed is not trusted
             faults.append(("fail", f"openFPGALoader --detect exited {rc} on the P1 JTAG chain"))
+            if chain_ok:  # it found the one FPGA expected, so that is not why the DNA was not read
+                dna_error = f"not read over P1 JTAG: openFPGALoader --detect exited {rc}, so --read-dna was not run"
         elif chain_ok:
             rc, out = run([*base, "--read-dna"], JTAG_TIMEOUT)
             output += out.strip().splitlines()[-4:]
             m = DNA_RE.search(out)
             if rc != 0 or not m:
                 faults.append(("fail", "openFPGALoader --read-dna read no device DNA over P1 JTAG"))
+                dna_error = f"openFPGALoader --read-dna read no device DNA over P1 JTAG (exit status {rc})"
             else:
                 dna = int(m.group(1), 16)
-                seen["dna"] = f"{dna:#x}"
-                if bar0_dna is not None and dna != bar0_dna:
+                stuck = check.dna_faults(dna, "P1 JTAG")
+                if stuck:  # a DNA port not being read, so not the board's DNA (identity uses dna_error instead)
+                    faults += [("fail", f) for f in stuck]
+                    dna_error = "; ".join(stuck)
+                else:
+                    seen["dna"] = f"{dna:#x}"
+                if bar0_dna is not None and dna != bar0_dna:  # a good BAR0 DNA, so this may be TDI: both listed
                     faults.append(("fail", f"device DNA over JTAG {dna:#x} is not the one over BAR0 {bar0_dna:#x}: "
                                            "TDI (or the DNA readout) is wrong"))  # fmt: skip
     except (Problem, OSError) as e:
         # A missing tool or a wrong gpiochip is the check not running ("error"); a hung probe is a fail.
         result = e.result if isinstance(e, Problem) else "error"
         faults.append((result, f"P1 JTAG could not be probed: {e}"))
+        dna_error = f"not read over P1 JTAG: P1 JTAG could not be probed: {e}"
     finally:
         faults += [("error", f) for f in restore_pins(run, saved)]
+    if "dna" not in seen:
+        seen["dna_error"] = dna_error
     return _entry("jtag", faults, output, **seen)
 
 
