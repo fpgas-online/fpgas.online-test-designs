@@ -13,8 +13,10 @@ from litex.build.generic_platform import IOStandard, Subsignal
 # nextpnr-xilinx (openXC7 0.8.2, and its master as of 2026-09) only knows SSTL12/SSTL135/SSTL15.
 # For any other SSTL name it writes no input-buffer, drive or VREF bits, so an input in, say,
 # SSTL15_R has no receiver: the NeTV2's DDR3 data pins read back nothing at any IDELAY tap.
-# The _R ("reduced drive") standards differ from their plain ones only in output drive strength,
-# and prjxray has no bits for that difference, so the plain standard is all this flow can build.
+# The _R ("reduced drive") standards differ from their plain ones only in output drive strength, and
+# nextpnr-xilinx has no _R standards, so they are built as the plain ones. For SSTL15_R the reduced drive is
+# put back in the FASM (fasm_io_fixups.py: LVCMOS15.DRIVE.I8, as Vivado encodes it); for SSTL135_R no such
+# feature has been decoded, so it builds at full drive (no board here uses it).
 _REDUCED_DRIVE_IOSTANDARDS = {
     "SSTL15_R": "SSTL15",
     "DIFF_SSTL15_R": "DIFF_SSTL15",
@@ -46,19 +48,20 @@ def constrain_openxc7_clocks(platform, domains):
 
     *domains* maps each ClockDomain to its frequency in Hz. Vivado derives PLL output clocks itself,
     so this does nothing unless the toolchain is openXC7. nextpnr-xilinx does not: LiteX constrains
-    only the board's input clock and passes that frequency as `--freq`, so every PLL output was timed
-    at the input frequency (the Arty's 100 MHz, the Acorn's 200 MHz), and LiteX also passes
-    `--timing-allow-fail`. Arty DDR images that missed 100 MHz by up to a third were shipped, and
-    whether one could read its DDR3 depended on where that build happened to place things.
+    only the board's input clock and passes that frequency as `--freq`, so without this every PLL output
+    is timed at the input frequency (the Arty's 100 MHz, the Acorn's 200 MHz), and LiteX also passes
+    `--timing-allow-fail`, so a build that misses timing still produces a bitstream.
     """
     if not getattr(platform.toolchain, "is_openxc7", False):
         return
-    for domain, freq in domains.items():
-        if freq <= 0:
-            raise ValueError(f"clock domain {domain.name}: frequency {freq} is not positive")
-        platform.add_period_constraint(domain.clk, 1e9 / freq)
+    _add_period_constraints(platform, domains)
 
     toolchain = platform.toolchain
+    # Wrap the toolchain once: a second call (two CRG helpers, say) only adds its periods. Wrapping again
+    # would pass nextpnr --log twice, which it refuses, and nest the seed retries.
+    if getattr(toolchain, "_fpgas_online_strict_timing", False):
+        return
+    toolchain._fpgas_online_strict_timing = True
 
     # build() resets timingstrict from its keyword argument, so force it there.
     build = toolchain.build
@@ -81,6 +84,79 @@ def constrain_openxc7_clocks(platform, domains):
 
     toolchain.finalize = finalize_with_log
     toolchain.run_script = _retry_missed_timing(toolchain)
+
+
+def _add_period_constraints(platform, domains):
+    for domain, freq in domains.items():
+        if freq <= 0:
+            raise ValueError(f"clock domain {domain.name}: frequency {freq} is not positive")
+        platform.add_period_constraint(domain.clk, 1e9 / freq)
+
+
+def require_timing(platform, domains):
+    """Fail the build if the design misses timing: every design calls this once, before building.
+
+    *domains* maps each ClockDomain the design's CRG makes (a PLL output, or a board clock used as sys
+    through a buffer) to its frequency in Hz; a design clocked straight from a board input passes {}, as the
+    board's own constraint covers it. Every clock that drives logic must be named: nextpnr times any other at
+    the fastest constrained frequency.
+
+    openXC7: constrain_openxc7_clocks (real PLL periods, strict nextpnr, retries with other seeds).
+    iCE40 (icestorm): the periods, and strict nextpnr, which LiteX otherwise runs with --timing-allow-fail.
+    Vivado: nothing; it derives PLL clocks itself and reports timing in its own way.
+    """
+    toolchain = platform.toolchain
+    if getattr(toolchain, "is_openxc7", False):
+        constrain_openxc7_clocks(platform, domains)
+    elif getattr(toolchain, "family", None) == "ice40":
+        _add_period_constraints(platform, domains)
+        if getattr(toolchain, "_fpgas_online_strict_timing", False):
+            return
+        toolchain._fpgas_online_strict_timing = True
+        build = toolchain.build
+
+        def strict_build(*args, **kwargs):
+            kwargs["timingstrict"] = True
+            return build(*args, **kwargs)
+
+        toolchain.build = strict_build
+
+
+def require_litex_boards_timing(soc, sys_clk_freq):
+    """require_timing() for a SoC built from a litex-boards target (its _CRG, and its Ethernet PHY if any).
+
+    Those CRGs make a different set of domains with and without DRAM; each one must be named here, so a CRG
+    with one this does not know fails the build rather than have it timed at the wrong frequency.
+    """
+    board = type(soc.crg).__module__.rsplit(".", 1)[-1]
+    # The CRG's eth domain is the PHY's reference clock, made whether or not the SoC has Ethernet.
+    eth = {"digilent_arty": 25e6, "kosagi_netv2": 50e6}.get(board)  # MII / RMII reference
+    known = {
+        "sys": sys_clk_freq,
+        "sys4x": 4 * sys_clk_freq,
+        "sys4x_dqs": 4 * sys_clk_freq,
+        "idelay": 200e6,
+        "clk100": 100e6,
+        "eth": eth,
+    }
+    domains = {}
+    for name, cd in vars(soc.crg).items():
+        if not name.startswith("cd_"):
+            continue
+        if known.get(name[3:]) is None:
+            raise ValueError(f"{board}'s CRG has clock domain {name[3:]}, whose frequency this helper does not know")
+        domains[cd] = known[name[3:]]
+    phy = getattr(soc, "ethphy", None)
+    if phy is not None:
+        phy_freq = {"LiteEthPHYMII": 25e6, "LiteEthPHYRMII": 50e6}.get(type(phy).__name__)
+        if phy_freq is None:
+            raise ValueError(f"Ethernet PHY {type(phy).__name__}: its clock frequency is unknown to this helper")
+        # Clocked from the PHY's pins. SoC.add_ethernet constrains these too, at the same periods: naming them
+        # here keeps the helper complete if a design builds the PHY without add_ethernet.
+        for name in ("cd_eth_rx", "cd_eth_tx"):
+            if hasattr(phy.crg, name):
+                domains[getattr(phy.crg, name)] = phy_freq
+    require_timing(soc.platform, domains)
 
 
 OPENXC7_TIMING_SEEDS = 5

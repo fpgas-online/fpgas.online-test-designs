@@ -9,6 +9,8 @@ from litex.soc.cores.clock import iCE40PLL
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
+from designs._shared.platform_fixups import require_timing
+
 
 class TtFpgaCRG(LiteXModule):
     """Minimal CRG for TT FPGA: 50 MHz input → 12 MHz sys clock."""
@@ -36,3 +38,4 @@ class TtFpgaCRG(LiteXModule):
         pll.register_clkin(clk50, 50e6)
         pll.create_clkout(self.cd_sys, 12e6, with_reset=False)
         self.specials += AsyncResetSynchronizer(self.cd_sys, ~por_done | ~pll.locked)
+        require_timing(platform, {self.cd_sys: 12e6})  # por runs on sys's clock

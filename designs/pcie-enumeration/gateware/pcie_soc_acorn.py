@@ -38,10 +38,10 @@ from litex.gen import *
 from litex.soc.cores.clock import S7PLL
 from litex.soc.integration.builder import Builder
 from litex.soc.integration.soc_core import SoCCore
-from litex_boards.platforms import sqrl_acorn
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+from designs._shared.acorn_p2 import fleet_platform
 from designs._shared.build_helpers import default_build_dir
 from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
 from designs._shared.yosys_workarounds import patch_yosys_template
@@ -90,7 +90,7 @@ class _CRG(LiteXModule):
 
 class PCIeEnumerationSoC(SoCCore):
     def __init__(self, variant="cle-215+", toolchain="openxc7", sys_clk_freq=100e6, **kwargs):
-        platform = sqrl_acorn.Platform(variant=variant, toolchain=toolchain)
+        platform = fleet_platform(variant, toolchain)
 
         if toolchain == "openxc7":
             fix_openxc7_device_name(platform)

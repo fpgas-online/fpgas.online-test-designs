@@ -51,12 +51,18 @@ def test_each_board_tools_package_has_its_module_and_only_its_own_tooling(tmp_pa
     assert set(_dst(arty)) == {f"{bd.DIST}/boards/arty.py", "/usr/bin/fpgas-arty-verify"}
     acorn = bd.tools_nfpm(B["acorn"], V, ACORN_BITS, tmp_path)
     # the P1 JTAG probe (openFPGALoader) and the P2 UART read (pyserial) are boot-check tests; pinctrl, which
-    # releases the JTAG pins, is Raspberry Pi OS's raspi-utils-core, not in Debian, so only Recommended
+    # puts the JTAG pins back, is Raspberry Pi OS's raspi-utils-core, not in Debian, so only Recommended; the
+    # setups' wiring is TOML (tomllib: Python 3.11)
     assert acorn["depends"] == [f"fpgas-online-verify (= {V})", f"fpgas-online-acorn-bitstreams (= {ACORN_BITS})",
-                                bd.OPENFPGALOADER, "python3-serial"]  # fmt: skip
+                                "python3 (>= 3.11)", bd.OPENFPGALOADER, "python3-serial"]  # fmt: skip
     assert acorn["recommends"] == ["raspi-utils-core"]
-    modules = ("__init__", "check", "links", "spi_flash", "uartbone_link")
+    modules = ("__init__", "check", "links", "setup", "spi_flash", "suite", "uartbone_link")
     assert {f"{bd.DIST}/boards/acorn/{m}.py" for m in modules} <= set(_dst(acorn))
+    # the wiring and the expected figures, from docs/wiring/acorn/, where setup.py looks for them
+    data = {f"{bd.DIST}/boards/acorn/data/{n}": n for n in ("wiring.toml", "expected.toml")}
+    assert set(data) <= set(_dst(acorn))
+    for dst, name in data.items():
+        assert _dst(acorn)[dst]["src"].endswith(f"docs/wiring/acorn/{name}")
     assert "/usr/bin/fpgas-acorn-flash" in _dst(acorn)
     netv2 = bd.tools_nfpm(B["netv2"], V, V, tmp_path)
     assert "openocd" in netv2["depends"]

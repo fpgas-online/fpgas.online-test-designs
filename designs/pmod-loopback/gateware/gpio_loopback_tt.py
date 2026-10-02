@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
+from designs._shared.platform_fixups import require_timing
 from designs._shared.tt_fpga_platform import Platform
 
 
@@ -38,6 +39,7 @@ def main():
 
     module = GPIOLoopback(platform)
 
+    require_timing(platform, {})  # no clock: strict mode only
     if args.build:
         build_dir = str(Path(__file__).resolve().parent.parent / "build" / "tt")
         platform.build(module, build_dir=build_dir)

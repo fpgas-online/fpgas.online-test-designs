@@ -17,11 +17,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from litex_boards.platforms.sqrl_acorn import Platform
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
+from designs._shared.acorn_p2 import fleet_platform
+from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name, require_timing
 from designs._shared.yosys_workarounds import YOSYS_TEMPLATE_STRIP_SCOPEINFO
 
 
@@ -42,7 +42,7 @@ def main():
     parser.add_argument("--build", action="store_true")
     args = parser.parse_args()
 
-    platform = Platform(variant=args.variant, toolchain=args.toolchain)
+    platform = fleet_platform(args.variant, args.toolchain)
 
     if args.toolchain == "openxc7":
         fix_openxc7_device_name(platform)
@@ -53,6 +53,7 @@ def main():
     if args.toolchain == "openxc7" and hasattr(platform.toolchain, "_yosys_template"):
         platform.toolchain._yosys_template = list(YOSYS_TEMPLATE_STRIP_SCOPEINFO)
 
+    require_timing(platform, {})  # no clock: strict mode only
     if args.build:
         build_dir = str(Path(__file__).resolve().parent.parent / "build" / "acorn")
         platform.build(module, build_dir=build_dir)

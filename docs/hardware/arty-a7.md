@@ -220,10 +220,9 @@ on the welland pool image does not ship them, so fetch them from
 [upstream](https://github.com/trabucayre/openFPGALoader/tree/master/spiOverJtag)
 by hand.
 
-**What the welland pool has.** Read on 2026-09-09 through each board's own
-FT2232 on `pi-sw2-p16`, `p37`, `p38` and `p42`: every one is an XC7A35T
-(idcode `0x362d093`) with a Spansion part at JEDEC `0x012018`, so none has the
-Micron flash. The other three signals worth reading at the same time, since
+**What the welland pool has.** Read through each board's own FT2232: every
+Welland Arty is an XC7A35T (idcode `0x362d093`) with a Spansion part at JEDEC
+`0x012018`, so none has the Micron flash. The other three signals worth reading at the same time, since
 neither the serial nor the model badge gives them:
 
 ```bash

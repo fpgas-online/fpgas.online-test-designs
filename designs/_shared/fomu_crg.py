@@ -12,6 +12,8 @@ from litex.soc.cores.clock import iCE40PLL
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
+from designs._shared.platform_fixups import require_timing
+
 
 class FomuCRG(LiteXModule):
     """Minimal CRG for Fomu EVT: 48 MHz input → 12 MHz sys clock."""
@@ -39,3 +41,4 @@ class FomuCRG(LiteXModule):
         pll.register_clkin(clk48, 48e6)
         pll.create_clkout(self.cd_sys, 12e6, with_reset=False)
         self.specials += AsyncResetSynchronizer(self.cd_sys, ~por_done | ~pll.locked)
+        require_timing(platform, {self.cd_sys: 12e6})  # por runs on sys's clock

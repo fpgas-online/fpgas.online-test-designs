@@ -421,3 +421,180 @@ def test_a_publish_that_times_out_is_said_and_changes_nothing(monkeypatch, capsy
 
 def test_every_board_module_is_found():
     assert set(installed()) == {"acorn", "arty", "fomu", "netv2", "tt"}
+
+
+# -- the progress events ---------------------------------------------------------------------------------------
+
+
+class Busy(Fake):
+    """A board whose check runs two tests and says so through options["event"], as the board modules do."""
+
+    def check(self, host, found, options):
+        for test, result in (("uart", "pass"), ("ddr", self.result)):
+            options["event"]("fpga-test-started", {"test": test})
+            options["event"]("fpga-test-finished", {"test": test, "result": result, "reason": ""})
+        return super().check(host, found, options)
+
+
+def test_the_site_hears_each_board_found_and_each_test_with_its_board(opts):
+    events = []
+    arty = Busy("arty", seen=[{"variant": "a7-35", "usb": "1-1"}], result="fail")
+    runner.verify({**opts, "event": lambda s, d: events.append((s, d))}, _boards(arty), usb=[], pci=[],
+                  mode=("auto", "test"))  # fmt: skip
+    assert events[0] == ("fpga-board-found", {"board": "arty", "variant": "a7-35", "where": "1-1"})
+    assert events[1:] == [
+        ("fpga-test-started", {"board": "arty", "test": "uart"}),
+        ("fpga-test-finished", {"board": "arty", "test": "uart", "result": "pass", "reason": ""}),
+        ("fpga-test-started", {"board": "arty", "test": "ddr"}),
+        ("fpga-test-finished", {"board": "arty", "test": "ddr", "result": "fail", "reason": ""}),
+    ]
+
+
+def test_two_boards_of_a_kind_are_told_apart_in_the_events(opts):
+    events = []
+    acorns = Busy("acorn", seen=[{"variant": "cle-215+", "bdf": "0001:01:00.0"},
+                                    {"variant": "cle-101", "bdf": "0002:01:00.0"}])  # fmt: skip
+    runner.verify({**opts, "event": lambda s, d: events.append((s, d))}, _boards(acorns), usb=[], pci=[],
+                  mode=("auto", "test"))  # fmt: skip
+    found = [d["board"] for s, d in events if s == "fpga-board-found"]
+    assert found == ["acorn@0001:01:00.0", "acorn@0002:01:00.0"]
+    assert {d["board"] for s, d in events if s == "fpga-test-started"} == set(found)
+
+
+def test_no_board_is_an_event_too(opts):
+    events = []
+    runner.verify({**opts, "event": lambda s, d: events.append((s, d))}, _boards(Fake("arty")), usb=[], pci=[],
+                  mode=("auto", "test"))  # fmt: skip
+    assert [s for s, _ in events] == ["fpga-no-board"]
+    assert "none of the installed boards" in events[0][1]["reason"]
+
+
+def test_the_events_go_out_in_order_and_a_dead_broker_stops_the_progress_ones(opts, tmp_path, monkeypatch):
+    monkeypatch.setattr(runner, "installed", lambda: _boards(Busy("arty", seen=[{"variant": "a7-35"}])))
+    monkeypatch.setattr(runner, "usb_devices", lambda: [])
+    monkeypatch.setattr(runner, "pci_devices", lambda: [])
+    sent = []
+    monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append((stage, details)) or True)
+    out = tmp_path / "r.json"
+    runner.run({**opts, "board": "arty", "report": str(out), "no_publish": False})
+    assert [s for s, _ in sent] == ["fpga-verifying", "fpga-board-found", "fpga-test-started", "fpga-test-finished",
+                                    "fpga-test-started", "fpga-test-finished", "fpga-verified"]  # fmt: skip
+    assert all(isinstance(v, str) for _, d in sent for v in d.values())
+    assert sent[1][1] == {"board": "arty", "variant": "a7-35", "where": "-"}
+    sent.clear()
+    monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append(stage) and False)
+    runner.run({**opts, "board": "arty", "report": str(out), "no_publish": False})
+    assert sent == ["fpga-verifying", "fpga-verified"]  # one timeout, not one per test; the result is still tried
+
+
+def test_the_gate_events_are_the_ones_the_site_reads():
+    """fpgas.online-site's fpga_states() reads only fpga-verifying and fpga-verified (FPGA_STAGES); the rest are
+    progress, and must not be mistaken for them."""
+    assert {"fpga-verifying", "fpga-verified"} <= set(runner.EVENTS)
+    assert all(s.startswith("fpga-") for s in runner.EVENTS)
+
+
+class Crashes(Fake):
+    def check(self, host, found, options):
+        raise IndexError("list index out of range")
+
+
+def test_a_board_check_that_crashes_is_an_error_and_the_others_are_still_checked(opts):
+    bad, good = Crashes("acorn", seen=[{"variant": "cle-215+"}]), Fake("arty", seen=[{"variant": "a7-35"}])
+    report = runner.verify(opts, _boards(bad, good), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "error"
+    assert report["boards"][0]["reason"] == "the check crashed: IndexError: list index out of range"
+    assert report["boards"][1]["result"] == "pass"
+
+
+def test_even_a_crash_outside_any_board_gives_a_report_and_fpga_verified(opts, tmp_path, monkeypatch):
+    def broken(options):
+        raise KeyError("boards")
+
+    monkeypatch.setattr(runner, "verify", broken)
+    sent = []
+    monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append((stage, details)) or True)
+    out = tmp_path / "r.json"
+    assert runner.run({**opts, "report": str(out), "no_publish": False}) == 1
+    report = json.loads(out.read_text())
+    assert report["result"] == "error" and "KeyError" in report["reason"]
+    assert sent[-1][0] == "fpga-verified" and sent[-1][1]["result"] == "error"
+
+
+def test_a_fact_the_old_record_lacks_is_added_quietly_not_a_change(opts):
+    """An upgrade that reads more (the Acorn's DNA) must not make every stateful host report "changed" once."""
+    old = Fake("arty", seen=[{"variant": "a7-35", "serial": "A"}])
+    runner.verify(opts, _boards(old), usb=[], pci=[], mode=("auto", "test"))
+    _record(opts, state.load(opts["state"]), 1)  # recorded by the version before dna
+
+    class Reads(Fake):
+        def check(self, host, found, options):
+            report = super().check(host, found, options)
+            report["state"]["dna"] = "0x54b48664b04854"
+            return report
+
+    report = runner.verify(opts, _boards(Reads("arty", seen=[{"variant": "a7-35", "serial": "A"}])), usb=[], pci=[],
+                           mode=("auto", "test"))  # fmt: skip
+    assert report["result"] == "pass" and "changes" not in report["state"] and report["state"]["added"]
+    assert state.load(opts["state"])["arty"]["dna"] == "0x54b48664b04854"
+    # and the next run sees the same facts: nothing to add, nothing changed
+    report = runner.verify(opts, _boards(Reads("arty", seen=[{"variant": "a7-35", "serial": "A"}])), usb=[], pci=[],
+                           mode=("auto", "test"))  # fmt: skip
+    assert report["result"] == "pass" and "added" not in report["state"]
+
+
+def test_a_fact_that_differs_is_still_a_change(opts):
+    runner.verify(opts, _boards(Fake("arty", seen=[{"variant": "a7-35", "serial": "A"}])), usb=[], pci=[],
+                  mode=("auto", "test"))  # fmt: skip
+    report = runner.verify(opts, _boards(Fake("arty", seen=[{"variant": "a7-35", "serial": "A"}], flash="bbbb")),
+                           usb=[], pci=[], mode=("auto", "test"))  # fmt: skip
+    assert report["result"] == "changed"
+
+
+class Seen(Fake):
+    """A board whose state this run is `facts`."""
+
+    def __init__(self, name, facts, **kw):
+        super().__init__(name, seen=[{"variant": "cle-215+"}], **kw)
+        self.now = facts
+
+    def check(self, host, found, options):
+        return {"board": self.name, "variant": "cle-215+", "result": self.result, "state": dict(self.now)}
+
+
+def _record(opts, boards, version):
+    state.save(boards, "then", opts["state"])
+    data = json.loads(opts["state"].read_text())
+    data["schema_version"] = version
+    opts["state"].write_text(json.dumps(data))
+
+
+def test_a_swapped_board_whose_flash_was_not_read_last_time_is_changed(opts):
+    """Recorded when BAR0 could not be read (no flash, no DNA); then the Acorn was swapped for another of the
+    same variant. Its flash IDs were never recorded, so they are not an upgrade's new facts: changed."""
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "variant": "cle-215+"}}, state.SCHEMA_VERSION)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "variant": "cle-215+", "dna": "0x1", "flash": {"jedec": "0x010219"}})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "changed"
+    assert any("flash: not recorded before" in c for c in report["state"]["changes"])
+    assert any("dna: not recorded before" in c for c in report["state"]["changes"])  # the record's version has dna
+
+
+def test_on_a_record_from_before_dna_only_dna_is_added_quietly(opts):
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0", "flash": {"jedec": "0x010219"}}}, 1)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "flash": {"jedec": "0x010219"}, "dna": "0x1"})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and report["state"]["added"]
+    boards, version = state.load_record(opts["state"])
+    assert boards["acorn"]["dna"] == "0x1" and version == state.SCHEMA_VERSION
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0"}}, 1)
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "changed"  # the flash is not one of the version's new facts
+
+
+def test_a_run_that_errs_adds_nothing_to_the_record(opts):
+    _record(opts, {"acorn": {"bdf": "0001:01:00.0"}}, 1)
+    now = Seen("acorn", {"bdf": "0001:01:00.0", "dna": "0x1"}, result="error")
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert "added" not in report["state"]
+    assert "dna" not in state.load(opts["state"])["acorn"]

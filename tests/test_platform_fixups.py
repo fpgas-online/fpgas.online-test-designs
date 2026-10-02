@@ -1,13 +1,19 @@
 """openXC7 fixups for litex-boards platforms (designs/_shared/platform_fixups.py)."""
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from litex.build.generic_platform import IOStandard, Subsignal
-from litex_boards.platforms import digilent_arty, kosagi_netv2
+from litex_boards.platforms import digilent_arty, kosagi_fomu_evt, kosagi_netv2
 from migen import ClockDomain
 
-from designs._shared.platform_fixups import constrain_openxc7_clocks, fix_openxc7_reduced_drive_iostandards
+from designs._shared.platform_fixups import (
+    constrain_openxc7_clocks,
+    fix_openxc7_reduced_drive_iostandards,
+    require_litex_boards_timing,
+    require_timing,
+)
 
 
 def iostandards(resource):
@@ -165,3 +171,90 @@ def test_nextpnr_logs_to_a_file_the_retry_can_read():
     constrain_openxc7_clocks(platform, {ClockDomain("sys"): 75e6})
     tc.finalize()
     assert "--log digilent_arty_nextpnr.log" in tc._nextpnr._pnr_opts
+
+
+def test_a_second_call_adds_its_clocks_but_wraps_nothing_twice():
+    platform = digilent_arty.Platform(variant="a7-35", toolchain="openxc7")
+    tc = platform.toolchain
+
+    class _Nextpnr:
+        _pnr_opts = "--seed 1 "
+
+    def finalize():
+        tc._nextpnr = _Nextpnr()
+
+    tc.finalize = finalize
+    tc._build_name = "digilent_arty"
+    sys, eth = ClockDomain("sys"), ClockDomain("eth")
+    constrain_openxc7_clocks(platform, {sys: 75e6})
+    constrain_openxc7_clocks(platform, {eth: 25e6})
+    tc.finalize()
+    assert tc._nextpnr._pnr_opts.count("--log ") == 1
+    assert tc.clocks[eth.clk][0] == 40.0
+
+
+def test_require_timing_on_openxc7_is_constrain_openxc7_clocks():
+    platform = digilent_arty.Platform(variant="a7-35", toolchain="openxc7")
+    seen = {}
+    platform.toolchain.build = lambda *args, **kwargs: seen.update(kwargs)
+    sys = ClockDomain("sys")
+    require_timing(platform, {sys: 75e6})
+    platform.toolchain.build(platform, None, timingstrict=False)
+    assert seen["timingstrict"] is True
+    assert platform.toolchain.clocks[sys.clk][0] == pytest.approx(1e3 / 75, abs=1e-3)
+
+
+def test_ice40_builds_fail_when_timing_fails():
+    platform = kosagi_fomu_evt.Platform()
+    seen = []
+    platform.toolchain.build = lambda *args, **kwargs: seen.append(kwargs)
+    sys = ClockDomain("sys")
+    require_timing(platform, {sys: 12e6})
+    require_timing(platform, {})  # a second call wraps nothing again
+    platform.toolchain.build(platform, None, timingstrict=False)
+    assert seen == [{"timingstrict": True}]
+    assert platform.toolchain.clocks[sys.clk][0] == pytest.approx(1e3 / 12, abs=1e-3)
+
+
+def test_require_timing_leaves_vivado_alone():
+    platform = digilent_arty.Platform(variant="a7-35", toolchain="vivado")
+    build = platform.toolchain.build
+    require_timing(platform, {ClockDomain("sys"): 75e6})
+    assert platform.toolchain.build == build
+    assert not platform.toolchain.clocks
+
+
+class LiteEthPHYMII:  # named as LiteEth's: the helper reads the PHY's clock off its class name
+    def __init__(self):
+        self.crg = SimpleNamespace(cd_eth_rx=ClockDomain("eth_rx"), cd_eth_tx=ClockDomain("eth_tx"))
+
+
+def _litex_boards_soc(platform, *domains, board="digilent_arty"):
+    crg = type("_CRG", (), {"__module__": f"litex_boards.targets.{board}"})()
+    for n in domains:
+        setattr(crg, f"cd_{n}", ClockDomain(n))
+    return SimpleNamespace(platform=platform, crg=crg)
+
+
+def test_a_litex_boards_soc_has_every_crg_domain_and_its_phy_clocks_constrained():
+    platform = digilent_arty.Platform(variant="a7-35", toolchain="openxc7")
+    soc = _litex_boards_soc(platform, "sys", "eth", "sys4x", "sys4x_dqs", "idelay")
+    soc.ethphy = LiteEthPHYMII()
+    require_litex_boards_timing(soc, 50e6)
+    periods = {cd.name: platform.toolchain.clocks[cd.clk][0] for cd in vars(soc.crg).values()}
+    assert periods == {"sys": 20.0, "eth": 40.0, "sys4x": 5.0, "sys4x_dqs": 5.0, "idelay": 5.0}
+    assert platform.toolchain.clocks[soc.ethphy.crg.cd_eth_rx.clk][0] == 40.0
+    assert platform.toolchain.clocks[soc.ethphy.crg.cd_eth_tx.clk][0] == 40.0
+
+
+def test_a_crg_domain_the_helper_does_not_know_fails_the_build():
+    soc = _litex_boards_soc(digilent_arty.Platform(variant="a7-35", toolchain="openxc7"), "sys", "hdmi")
+    with pytest.raises(ValueError, match="clock domain hdmi"):
+        require_litex_boards_timing(soc, 50e6)
+
+
+def test_the_eth_reference_clock_comes_from_the_board_not_the_phy():
+    platform = kosagi_netv2.Platform(variant="a7-35", toolchain="openxc7")
+    soc = _litex_boards_soc(platform, "sys", "eth", board="kosagi_netv2")  # no Ethernet PHY in this SoC
+    require_litex_boards_timing(soc, 50e6)
+    assert platform.toolchain.clocks[soc.crg.cd_eth.clk][0] == 20.0

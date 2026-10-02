@@ -59,8 +59,9 @@ ETHERNET = ["iproute2", "iputils-ping", "iputils-arping | arping"]  # no sudo: t
 # What each board's verify needs, and nothing it does not. Every test the boot check runs needs its tools here,
 # not in -debug (only Suggested): the Arty's Ethernet test and the Arty's and TT's Pmod pin-ID scan (GPIO reads),
 # and the Acorn's P1 JTAG probe (openFPGALoader, then pinctrl to release the pins) and P2 UART read (pyserial).
+# The Acorn reads its setup's wiring and figures from TOML (tomllib: Python 3.11).
 TOOLS_DEPENDS = {
-    "acorn": [OPENFPGALOADER, "python3-serial"],
+    "acorn": ["python3 (>= 3.11)", OPENFPGALOADER, "python3-serial"],
     "arty": ["python3-serial", OPENFPGALOADER, "python3-libgpiod", *ETHERNET],
     "netv2": ["python3-serial", OPENFPGALOADER, "openocd"],
     "fomu": ["python3-serial", OPENFPGALOADER],
@@ -81,6 +82,11 @@ DEBUG_DEPENDS = {
     "tt": ["python3-libgpiod"],
 }
 BOARDS = installed()
+# Data a board's module reads, shipped beside it: (source in the repository, path under fpgas_online_verify).
+BOARD_DATA = {
+    "acorn": [(REPO / "docs" / "wiring" / "acorn" / name, f"boards/acorn/data/{name}")
+              for name in ("wiring.toml", "expected.toml")],
+}  # fmt: skip
 
 
 def _common(name, version, description):
@@ -196,6 +202,7 @@ def all_boards_nfpm(version):
 
 def tools_nfpm(board, version, bitstreams, staging):
     contents = [_py(src, rel) for src, rel in board_files(board)]
+    contents += [_py(src, rel) for src, rel in BOARD_DATA.get(board.name, [])]
     contents.append(wrapper(staging, f"fpgas-{board.slug}-verify", BOARD_MAIN))
     if board.name == "acorn":
         contents.append(wrapper(staging, "fpgas-acorn-flash",
@@ -224,7 +231,7 @@ def debug_nfpm(board, version, staging):
     recommends = ["kmod"] if isinstance(board, TestBoard) else []  # rmmod: the PMOD tests free the SPI pins
     if isinstance(board, TestBoard) and "ethernet" in board.tests:
         recommends += ETHERNET
-    extra = [t for t in getattr(board, "tests", {}) if not board.tests[t].get("verify")]
+    extra = [t for t, spec in board.tests.items() if not spec.get("verify")] if isinstance(board, TestBoard) else []
     what = (f"loads any test design and runs its test with its output live, including the tests the\n"
             f"boot check leaves out ({', '.join(extra)})." if extra else
             "reads the running build and the flash's identity; with openFPGALoader, a board still on SQRL's\n"

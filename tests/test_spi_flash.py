@@ -304,10 +304,10 @@ def test_the_flash_tool_refuses_a_board_litepcie_holds_before_mapping_bar0(tmp_p
     monkeypatch.setattr(sf, "SYSFS_PCI", str(_pci(tmp_path, driver="litepcie")))
     monkeypatch.setattr(sf, "LOCK", str(tmp_path / "lock"))
 
-    def no_bar0(bdf):
+    def no_bar0(bdf, sysfs=None):
         raise AssertionError("BAR0 belongs to litepcie.ko")
 
-    monkeypatch.setattr(sf, "Bar0Bus", no_bar0)
+    monkeypatch.setattr(sf, "open_bar0", no_bar0)
     assert sf.main(["--bdf", "0001:01:00.0", "id"]) == 1
     out = capsys.readouterr().out
     assert "error: litepcie.ko is bound: not checked" in out
@@ -330,3 +330,34 @@ def test_the_uart_path_is_refused_too_while_litepcie_is_bound(tmp_path, monkeypa
 def test_the_uart_path_is_fine_on_a_host_without_pci(tmp_path, monkeypatch):
     monkeypatch.setattr(sf, "SYSFS_PCI", str(tmp_path / "no-pci"))
     assert sf.litepcie_bound_anywhere() is None
+
+
+def _bar0_sysfs(tmp_path, command):
+    dev = tmp_path / "0001:01:00.0"
+    dev.mkdir(parents=True)
+    config = bytearray(64)
+    config[4:6] = command.to_bytes(2, "little")
+    (dev / "config").write_bytes(config)
+    (dev / "resource0").write_bytes(b"\xff" * sf.BAR0_SIZE)  # what an unanswered read gives
+    return dev
+
+
+def test_the_flash_tool_turns_memory_decoding_on_for_bar0_and_back_off_after(tmp_path, monkeypatch, capsys):
+    """With no driver bound, memory decoding is off and every BAR0 read is all ones ("RDID ffffffffffff"): the tool
+    turns it on as the check does (open_bar0), and puts it back. Here resource0 is a plain file of all ones, so the
+    flash does not identify itself, but the decoding bit is seen on while BAR0 is read."""
+    dev = _bar0_sysfs(tmp_path / "devices", 0x0000)
+    monkeypatch.setattr(sf, "SYSFS_PCI", str(tmp_path / "devices"))
+    monkeypatch.setattr(sf, "LOCK", str(tmp_path / "lock"))
+    seen = []
+    real = sf.Bar0Bus.read
+
+    def read(self, addr):
+        seen.append(int.from_bytes((dev / "config").read_bytes()[4:6], "little"))
+        return real(self, addr)
+
+    monkeypatch.setattr(sf.Bar0Bus, "read", read)
+    assert sf.main(["--bdf", "0001:01:00.0", "id"]) == 1
+    assert seen and all(c & 0x2 for c in seen)
+    assert int.from_bytes((dev / "config").read_bytes()[4:6], "little") == 0x0000
+    assert "flash did not identify itself" in capsys.readouterr().out
