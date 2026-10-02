@@ -102,6 +102,9 @@ The identity document holds the fields of every board found:
 }
 ```
 
+`source` is always `live`. A run inside `fpgas-verify --label` prints the outer run's document byte for byte,
+so it says `live` too.
+
 [`tests/data/identity-v1-acorn-p48.json`](../tests/data/identity-v1-acorn-p48.json) is a complete example: the
 Acorn on pi-sw2-p48. rpi-hwid keeps a byte-identical copy and tests its reader on it.
 

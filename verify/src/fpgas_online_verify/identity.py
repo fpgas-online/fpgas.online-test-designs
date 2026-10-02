@@ -176,8 +176,9 @@ def keep(options, board):
     (options.get(KEEP) or (lambda board: None))(board)
 
 
-def document(boards, source="live", tool=None, read_at=None):
-    """The identity document: every board's dict, with what read them and when."""
+def document(boards, tool=None, read_at=None):
+    """The identity document: every board's dict, with what read them and when. "source" is always "live": a
+    run inside fpgas-verify --label prints the outer run's document unchanged, and never builds one."""
     if tool is None:
         tool = f"fpgas-online-verify {_version()}"
     if read_at is None:
@@ -187,6 +188,6 @@ def document(boards, source="live", tool=None, read_at=None):
         "identity_version": IDENTITY_VERSION,
         "tool": tool,
         "read_at": read_at,
-        "source": source,
+        "source": "live",
         "boards": [dict(b) for b in boards],
     }

@@ -279,8 +279,14 @@ def test_run_prints_one_document_and_exits_0_only_when_every_field_was_read(tmp_
     assert identify.run(options, boards={"arty": part}) == 1
     out = capsys.readouterr()
     assert json.loads(out.out)["boards"][0]["idcode_error"] == "no chain"  # printed all the same
-    assert "arty: not read: idcode" in out.err and "arty: not read: dna" in out.err
-    assert "arty: not read: idcode_error" in out.err
+    # each field with why: a read that failed says its own error
+    assert out.err.splitlines() == ["fpgas-verify --identify: arty: idcode: no chain",
+                                    "fpgas-verify --identify: arty: dna: not read"]  # fmt: skip
+    flash = Identified("arty", seen=[{"variant": "a7-35", "serial": "A"}], read={"flash_error": "no bridge"},
+                       label_fields=("dna",))  # fmt: skip
+    assert identify.run(options, boards={"arty": flash}) == 1
+    assert capsys.readouterr().err.splitlines() == ["fpgas-verify --identify: arty: dna: not read",
+                                                    "fpgas-verify --identify: arty: flash: no bridge"]  # fmt: skip
 
 
 def test_a_board_whose_read_crashes_is_not_whole_and_the_others_are_still_read(tmp_path, locks):
@@ -292,7 +298,9 @@ def test_a_board_whose_read_crashes_is_not_whole_and_the_others_are_still_read(t
     f = Identified("fomu", seen=[{"variant": "evt", "serial": "F"}])
     doc, gaps = _read_auto({"arty": a, "fomu": f}, tmp_path)
     assert [b["board"] for b in doc["boards"]] == ["arty", "fomu"]
-    assert gaps == ["arty: the read crashed: RuntimeError: bug"]
+    assert gaps == ["arty: read: the read crashed: RuntimeError: bug"]
+    a = Broken("arty", seen=[{"variant": "a7-35", "serial": "A"}], label_fields=("idcode",))
+    assert _read({"arty": a}, tmp_path)[1] == ["arty: idcode: the read crashed: RuntimeError: bug"]
 
 
 # -- the boot report -----------------------------------------------------------------------------------------

@@ -122,14 +122,19 @@ def from_report(board, live, previous):
     return {**live, **taken, "from_report": sorted(taken)}, None
 
 
-def missing(board, ident, report_why=None):
-    """What keeps an identity from being whole, as (field, why): the label fields not read, and the reads that
-    failed. `report_why`: why the fields the boot report gives (board.report_fields) were not taken from it."""
+def missing(board, ident, why=None):
+    """What keeps an identity from being whole, as [(field, why)]: each label field not read, and each read that
+    failed (a <field>_error, whose text is the why). `why`: {field prefix: reason} for a field not read that has
+    no <field>_error of its own (the boot report's fields, or "" for every field of a read that stopped)."""
+    why = why or {}
     out = []
     for f in board.label_fields:
         if f not in ident:
-            out.append((f, report_why if report_why and f.startswith(board.report_fields) else "not read"))
-    return out + [(k, "not read") for k in sorted(ident) if k.endswith("_error")]
+            reason = ident.get(f"{f}_error") or next((w for pre, w in why.items() if f.startswith(pre)), "not read")
+            out.append((f, str(reason)))
+    named = {f for f, _ in out}
+    failed = [(k.removesuffix("_error"), str(ident[k])) for k in sorted(ident) if k.endswith("_error")]
+    return out + [(f, reason) for f, reason in failed if f not in named]
 
 
 class _Locks:
@@ -187,7 +192,7 @@ def read(options, boards=None, usb=None, pci=None):
             return identity.document([]), [f"{p.result}: {p.reason}"]
         out, gaps = [], []
         for (board, host, found), key in zip(targets, runner._keys(targets)):
-            report_why = None
+            why = {}
             board_options = {**{k: v for k, v in options.items() if k != "event"}, "board_key": key}
             try:
                 with contextlib.ExitStack() as own:
@@ -195,20 +200,22 @@ def read(options, boards=None, usb=None, pci=None):
                         own.enter_context(hold_lock(board.lock, board.title, timeout=locks.wait))
                     ident = board.identify(host, found, board_options)
                     ident, report_why = from_report(board, ident, _boot_report(report))
+                    why = dict.fromkeys(board.report_fields, report_why) if report_why else {}
             except Busy:
                 ident, busy = _busy(key, board, found)
                 out.append(ident)
                 gaps += busy
                 continue
             except Problem as p:
-                ident = identity.base(key, board.name, found)
-                gaps.append(f"{key}: {p.result}: {p.reason}")
+                ident, why = identity.base(key, board.name, found), {"": f"{p.result}: {p.reason}"}
             except Exception as e:  # a bug in a board's read: that board is not whole, the others are still read
                 ident = identity.base(key, board.name, found)
-                gaps.append(f"{key}: the read crashed: {type(e).__name__}: {e}")
+                why = {"": f"the read crashed: {type(e).__name__}: {e}"}
             out.append(ident)
-            gaps += [f"{key}: not read: {f}" if why == "not read" else f"{key}: {f}: {why}"
-                     for f, why in missing(board, ident, report_why)]  # fmt: skip
+            fields = missing(board, ident, why)
+            if not fields and "" in why:  # a board with no label fields whose read stopped
+                fields = [("read", why[""])]
+            gaps += [f"{key}: {f}: {reason}" for f, reason in fields]
     return identity.document(out), gaps
 
 
