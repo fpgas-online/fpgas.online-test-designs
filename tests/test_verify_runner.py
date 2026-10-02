@@ -592,6 +592,32 @@ def test_on_a_record_from_before_dna_only_dna_is_added_quietly(opts):
     assert report["result"] == "changed"  # the flash is not one of the version's new facts
 
 
+def test_an_idcode_recorded_without_its_version_gets_its_version_quietly(opts):
+    """Before schema 3 a NeTV2 on a Pi 5 recorded openFPGALoader's masked IDCODE; now the whole one is read."""
+    _record(opts, {"netv2": {"variant": "a7-35", "idcode": "0x0362d093"}}, 2)
+    now = Seen("netv2", {"variant": "a7-35", "idcode": "0x1362d093"})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and report["state"]["added"]
+    boards, version = state.load_record(opts["state"])
+    assert boards["netv2"]["idcode"] == "0x1362d093" and version == state.SCHEMA_VERSION
+
+
+def test_an_idcode_of_another_part_or_version_is_still_a_change(opts):
+    _record(opts, {"netv2": {"variant": "a7-35", "idcode": "0x03631093"}}, 2)  # another part, old record
+    now = Seen("netv2", {"variant": "a7-35", "idcode": "0x1362d093"})
+    assert runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))["result"] == "changed"
+    _record(opts, {"netv2": {"variant": "a7-35", "idcode": "0x0362d093"}}, 3)  # a whole IDCODE: another chip
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["state"]["changes"] == ["netv2.idcode: was '0x0362d093', now '0x1362d093'"]
+
+
+def test_an_arty_idcode_on_a_record_from_before_it_is_added_quietly(opts):
+    _record(opts, {"arty": {"variant": "a7-35", "serial": "A"}}, 2)
+    now = Seen("arty", {"variant": "a7-35", "serial": "A", "idcode": "0x0362d093"})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and report["state"]["added"]
+
+
 def test_a_run_that_errs_adds_nothing_to_the_record(opts):
     _record(opts, {"acorn": {"bdf": "0001:01:00.0"}}, 1)
     now = Seen("acorn", {"bdf": "0001:01:00.0", "dna": "0x1"}, result="error")
