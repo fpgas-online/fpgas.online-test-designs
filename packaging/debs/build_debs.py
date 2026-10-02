@@ -71,7 +71,12 @@ TOOLS_DEPENDS = {
 # after the probe; puts back the UART/I2C/SPI functions the PMOD HAT scan takes): Raspberry Pi OS's
 # raspi-utils-core, not in Debian, so not a Depends.
 PINCTRL = "raspi-utils-core"
-TOOLS_RECOMMENDS = {"tt": ["micropython-mpremote", PINCTRL], "acorn": [PINCTRL], "arty": [PINCTRL]}
+# The Acorn's `dma` test goes through litepcie.ko: either package that has it (packaging/acorn-litepcie/), and
+# kmod to load and remove it. DKMS first, so apt picks it on a host with neither; a host that already has a
+# prebuilt fpgas-online-acorn-litepcie-modules-<kernel> (the netbooted fleet's root) satisfies this through the
+# virtual package and gets no DKMS. Without the driver the test is not run, and says which package has it.
+LITEPCIE = "fpgas-online-acorn-litepcie-dkms | fpgas-online-acorn-litepcie-module"
+TOOLS_RECOMMENDS = {"tt": ["micropython-mpremote", PINCTRL], "acorn": [PINCTRL, LITEPCIE, "kmod"], "arty": [PINCTRL]}
 # What fpgas-<b>-debug needs on top: the Acorn's conversion from SQRL's factory image loads a .bit over JTAG,
 # and fpgas-acorn-flash --uart talks UARTBone; the PMOD tests read GPIOs; the Ethernet test configures a link.
 DEBUG_DEPENDS = {
