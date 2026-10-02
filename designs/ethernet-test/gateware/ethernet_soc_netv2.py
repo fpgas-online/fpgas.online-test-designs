@@ -33,6 +33,19 @@ from designs._shared.platform_fixups import (
 )
 from designs._shared.yosys_workarounds import apply_nodram_workaround, patch_yosys_template
 
+IDENT = "fpgas-online Ethernet Test SoC -- NeTV2"
+
+
+class EthernetTestSoC(BaseSoC):
+    """litex_boards' SoC with this design's ident.
+
+    The target gives SoCCore its own ident ("LiteX SoC on NeTV2"), which says nothing of the design:
+    the host test asks the BIOS for its ident to know the Ethernet test design is the one answering.
+    """
+
+    def add_identifier(self, name="identifier", identifier=IDENT, with_build_time=True):
+        BaseSoC.add_identifier(self, name, identifier=IDENT, with_build_time=True)
+
 
 def main():
     from litex.build.parser import LiteXArgumentParser
@@ -57,7 +70,7 @@ def main():
         _orig_init(self, variant=_variant, toolchain=_toolchain)
     kosagi_netv2.Platform.__init__ = _patched_platform_init
 
-    soc = BaseSoC(
+    soc = EthernetTestSoC(
         sys_clk_freq  = int(args.sys_clk_freq),
         with_ethernet = True,
         **soc_kwargs,
