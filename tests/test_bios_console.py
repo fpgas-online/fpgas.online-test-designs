@@ -125,3 +125,12 @@ def test_result_json_is_one_parseable_line(capsys):
     marker, _, payload = out[0].partition(" ")
     assert marker == "RESULT_JSON"
     assert json.loads(payload) == {"test": "ddr", "result": "pass", "errors": 0}
+
+
+def test_a_prompt_that_arrives_a_byte_at_a_time_is_still_found():
+    # A read can end inside the prompt's colour codes; the reply must come out the same.
+    fake = FakeBios(REPLIES, chunk=1)
+    bios = console(fake)
+    bios.attach()
+    assert bios.command("mem_list") == ["Available memory regions:", "ROM  0x0 0x20000"]
+    assert bios.ident() == IDENT

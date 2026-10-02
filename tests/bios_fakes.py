@@ -17,11 +17,12 @@ def lines(*text):
 
 
 class FakeBios:
-    def __init__(self, replies=None, stale=b"", silent=False, deaf_newlines=0):
+    def __init__(self, replies=None, stale=b"", silent=False, deaf_newlines=0, chunk=None):
         self.replies = dict(replies or {})  # command -> the bytes printed before the next prompt
         self.rx = bytearray(stale)  # what the host will read: `stale` is output from before it opened the port
         self.silent = silent  # nothing is listening
         self.deaf_newlines = deaf_newlines  # still booting: this many newlines go unanswered
+        self.chunk = chunk  # at most this many bytes per read, as a slow UART delivers them
         self.timeout = None
         self.now = 0.0
         self.typed = bytearray()
@@ -54,6 +55,7 @@ class FakeBios:
         if not self.rx:
             self.now += self.timeout or 0.0
             return b""
+        size = min(size, self.chunk or size)
         out = bytes(self.rx[:size])
         del self.rx[:size]
         return out
@@ -102,6 +104,7 @@ def ddr_replies(board="netv2", good=True):
     name, modules, ram, test = {
         "netv2": ("NeTV2", 4, 0x40000000, "32.0MiB"),
         "arty": ("Arty A7", 2, 0x10000000, "8.0MiB"),
+        "acorn": ("Acorn/LiteFury", 2, 0x40000000, "32.0MiB"),
     }[board]
     return {
         "ident": lines(f"Ident: fpgas-online DDR Test SoC -- {name} 2026-10-01 11:00:01"),

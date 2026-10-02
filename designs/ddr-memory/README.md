@@ -50,8 +50,8 @@ for the board, then runs:
 | Command | Checked |
 |---------|---------|
 | `mem_list` | the design has a `MAIN_RAM` region (its size is reported) |
-| `sdram_init` | read leveling finds a window on every byte lane; the BIOS's 2 MiB memtest passes; write and read speed are reported |
-| `sdram_test` | a memtest over 1/32 of the DRAM passes (8 MiB on the Arty, 32 MiB on the NeTV2) |
+| `sdram_init` | read leveling reports each of the board's byte lanes, with a window on every one; the BIOS's 2 MiB memtest passes; write and read speed are reported |
+| `sdram_test` | a memtest passes, over at least 1/32 of the DRAM (8 MiB on the Arty, 32 MiB on the NeTV2) |
 
 Its last line is the result for `fpgas-verify`:
 
@@ -62,7 +62,8 @@ RESULT_JSON {"test": "ddr", "board": "netv2", "result": "pass", "ident": "...", 
 ```
 
 A failure adds `"reason"`; `leveling` has `null` for a lane with no window, and `errors` is the worst
-memtest's bus, address and data errors together. The speeds are the BIOS's, in MiB/s over 2 MiB.
+memtest's bus, address and data errors together. A port that cannot be opened, or that fails during the
+test, is a `fail` with that `reason`: the line is always printed. The speeds are the BIOS's, in MiB/s over 2 MiB.
 
 ## Directory Structure
 

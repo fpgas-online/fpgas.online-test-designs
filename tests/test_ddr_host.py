@@ -114,6 +114,34 @@ def test_a_command_that_hangs_fails_and_says_which():
     assert "`sdram_init` did not return to the prompt" in found["reason"]
 
 
+def test_the_acorn_design_is_accepted_for_the_acorn():
+    assert run(FakeBios(ddr_replies("acorn")), "acorn")["result"] == "pass"
+
+
+def test_a_byte_lane_missing_from_the_leveling_fails():
+    replies = ddr_replies("arty")  # two lanes
+    replies["ident"] = ddr_replies("netv2")["ident"]
+    found = run(FakeBios(replies), "netv2")
+    assert found["result"] == "fail"
+    assert "read leveling reported 2 byte lanes; the NeTV2 has 4" in found["reason"]
+
+
+def test_a_memtest_that_covered_nothing_fails():
+    replies = ddr_replies("netv2")
+    replies["sdram_test"] = memtest("0B")
+    found = run(FakeBios(replies))
+    assert found["result"] == "fail"
+    assert "sdram_test: Memtest OK over 0 bytes" in found["reason"]
+
+
+def test_a_memtest_smaller_than_the_design_s_share_fails():
+    replies = ddr_replies("netv2")  # 1 GiB: sdram_test covers 32 MiB
+    replies["sdram_test"] = memtest("8.0MiB")
+    found = run(FakeBios(replies))
+    assert found["result"] == "fail"
+    assert "sdram_test: Memtest OK over 8 MiB, less than 1/32 of the DRAM (32 MiB)" in found["reason"]
+
+
 def test_parse_size():
     assert test_ddr.parse_size("2.0MiB") == 2 * 1024 * 1024
     assert test_ddr.parse_size("8.0KiB") == 8 * 1024
@@ -146,3 +174,53 @@ def test_main_prints_one_result_json_line_and_exits_by_the_result(capsys, monkey
         json.loads(next(x for x in out.splitlines() if x.startswith("RESULT_JSON ")).split(" ", 1)[1])["result"]
         == "fail"
     )
+
+
+def result_json(out):
+    payload = [line for line in out.splitlines() if line.startswith("RESULT_JSON ")]
+    assert len(payload) == 1
+    return json.loads(payload[0].split(" ", 1)[1])
+
+
+def test_a_port_that_cannot_be_opened_still_ends_with_a_result(capsys, monkeypatch):
+    def opener(port, baud, timeout):
+        raise OSError(2, "No such file or directory", port)
+
+    monkeypatch.setattr(test_ddr, "open_port", opener)
+    assert test_ddr.main(["--port", "/dev/ttyUSB9", "--board", "arty"]) == 1
+    found = result_json(capsys.readouterr().out)
+    assert found["result"] == "fail"
+    assert "/dev/ttyUSB9" in found["reason"]
+
+
+def test_a_port_that_dies_mid_test_still_ends_with_a_result(capsys, monkeypatch):
+    fake = FakeBios(ddr_replies("arty"))
+    read = fake.read
+
+    def dying_read(size=1):
+        if "sdram_init" in fake.commands:
+            raise OSError(5, "Input/output error")
+        return read(size)
+
+    fake.read = dying_read
+    monkeypatch.setattr(test_ddr, "open_port", lambda port, baud, timeout: fake)
+    monkeypatch.setattr(test_ddr.time, "monotonic", lambda: fake.now)
+    assert test_ddr.main(["--port", "/dev/ttyUSB1", "--board", "arty"]) == 1
+    found = result_json(capsys.readouterr().out)
+    assert found["result"] == "fail"
+    assert "Input/output error" in found["reason"]
+    assert found["commands"] == ["ident", "mem_list", "sdram_init"]
+
+
+def test_a_port_that_dies_before_the_prompt_still_ends_with_a_result(capsys, monkeypatch):
+    fake = FakeBios(ddr_replies("arty"))
+
+    def dead_read(size=1):
+        raise OSError(5, "Input/output error")
+
+    fake.read = dead_read
+    monkeypatch.setattr(test_ddr, "open_port", lambda port, baud, timeout: fake)
+    assert test_ddr.main(["--port", "/dev/ttyUSB1", "--board", "arty"]) == 1
+    found = result_json(capsys.readouterr().out)
+    assert found["result"] == "fail"
+    assert "Input/output error" in found["reason"]

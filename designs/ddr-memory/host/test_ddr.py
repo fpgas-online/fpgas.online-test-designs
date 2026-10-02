@@ -39,11 +39,13 @@ import bios_console
 BAUD_RATE = 115200
 ATTACH_TIMEOUT_S = 60  # the BIOS waits for a serial boot before its first prompt
 
-# What `ident` must contain: the design, and the board it was built for.
+# What `ident` must contain: the design, and the board it was built for. `lanes` is the board's DDR3 byte
+# lanes: read leveling must report each of them.
 DESIGN_IDENT = "DDR Test SoC"
-BOARD_IDENT = {
-    "arty": "Arty A7",
-    "netv2": "NeTV2",
+BOARDS = {
+    "arty": {"ident": "Arty A7", "lanes": 2},
+    "netv2": {"ident": "NeTV2", "lanes": 4},
+    "acorn": {"ident": "Acorn", "lanes": 2},
 }
 
 # How long each command is given. sdram_test prints a progress line per 128 KiB: at 115200 baud that
@@ -107,14 +109,21 @@ def parse_speed(reply):
     return found
 
 
-def memtest_fault(command, memtest):
-    """Why this memtest is a failure, or None."""
-    if memtest["verdict"] == "OK":
-        return None
+def memtest_fault(command, memtest, at_least=1):
+    """Why this memtest is a failure, or None. It must have covered `at_least` bytes."""
     if memtest["verdict"] is None:
         return f"{command}: no memtest verdict"
-    counts = ", ".join(f"{kind} errors {bad}/{of}" for kind, (bad, of) in memtest["errors"].items())
-    return f"{command}: Memtest KO ({counts})"
+    if memtest["verdict"] == "KO":
+        counts = ", ".join(f"{kind} errors {bad}/{of}" for kind, (bad, of) in memtest["errors"].items())
+        return f"{command}: Memtest KO ({counts})"
+    if memtest["bytes"] == 0:
+        return f"{command}: Memtest OK over 0 bytes"
+    if memtest["bytes"] < at_least:
+        return (
+            f"{command}: Memtest OK over {memtest['bytes'] // 1024**2} MiB, "
+            f"less than 1/32 of the DRAM ({at_least // 1024**2} MiB)"
+        )
+    return None
 
 
 # --------------------------------------------------------------------------- #
@@ -145,8 +154,9 @@ def run_ddr_test(bios, board, attach_timeout=ATTACH_TIMEOUT_S):
     try:
         found["ident"] = ident = bios.ident()
         found["commands"].append("ident")
-        if not ident or DESIGN_IDENT not in ident or BOARD_IDENT[board] not in ident:
-            return failed(f"the design on the UART is {ident!r}, not the {DESIGN_IDENT} for the {BOARD_IDENT[board]}")
+        name = BOARDS[board]["ident"]
+        if not ident or DESIGN_IDENT not in ident or name not in ident:
+            return failed(f"the design on the UART is {ident!r}, not the {DESIGN_IDENT} for the {name}")
         print(f"PASS: {ident}")
 
         m = MAIN_RAM_RE.search("\n".join(ask("mem_list")))
@@ -165,15 +175,23 @@ def run_ddr_test(bios, board, attach_timeout=ATTACH_TIMEOUT_S):
         elif not all(leveling.values()):
             lanes = ", ".join(sorted(lane for lane, window in leveling.items() if not window))
             faults.append(f"sdram_init: read leveling found no window on {lanes}")
+        if leveling and len(leveling) != BOARDS[board]["lanes"]:
+            faults.append(
+                f"sdram_init: read leveling reported {len(leveling)} byte lanes; "
+                f"the {name} has {BOARDS[board]['lanes']}"
+            )
         memtests.append(("sdram_init", parse_memtest(reply)))
         found.update(parse_speed(reply))
 
         memtests.append(("sdram_test", parse_memtest(ask("sdram_test"))))
     except bios_console.NoPrompt as e:
         faults.append(str(e))
+    except OSError as e:  # the port went away (pyserial's SerialException is one)
+        faults.append(f"the UART failed during `{found['commands'][-1]}`: {e}")
 
+    share = {"sdram_test": found.get("main_ram_bytes", 0) // 32}  # what sdram_test covers of the DRAM
     for command, memtest in memtests:
-        fault = memtest_fault(command, memtest)
+        fault = memtest_fault(command, memtest, share.get(command, 1))
         if fault:
             faults.append(fault)
         else:
@@ -211,7 +229,7 @@ def main(argv=None):
     parser.add_argument(
         "--board",
         default="arty",
-        choices=list(BOARD_IDENT.keys()),
+        choices=list(BOARDS),
         help="Board under test (default: arty)",
     )
     parser.add_argument(
@@ -232,13 +250,23 @@ def main(argv=None):
     print(f"Board: {args.board}")
     print()
 
-    ser = open_port(args.port, args.baud, 1)
+    # Whatever happens to the port, the script ends with a result line.
+    found = {"test": "ddr", "board": args.board, "result": "fail"}
     try:
-        found = run_ddr_test(bios_console.BiosConsole(ser, clock=time.monotonic), args.board, args.timeout)
-    finally:
-        close = getattr(ser, "close", None)
-        if close:
-            close()
+        ser = open_port(args.port, args.baud, 1)
+    except (OSError, ImportError) as e:  # no such port, port in use, no pyserial
+        found["reason"] = f"cannot open {args.port}: {e}"
+        print(f"FAIL: {found['reason']}")
+    else:
+        try:
+            found = run_ddr_test(bios_console.BiosConsole(ser, clock=time.monotonic), args.board, args.timeout)
+        except OSError as e:  # the port went away before the BIOS answered
+            found["reason"] = f"the UART failed: {e}"
+            print(f"FAIL: {found['reason']}")
+        finally:
+            close = getattr(ser, "close", None)
+            if close:
+                close()
 
     print()
     if found["result"] == "pass":
