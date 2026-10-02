@@ -56,6 +56,7 @@ class TestBoard(Board):
 
     # A board with JTAG: variant -> its FPGA's IDCODE at version 0. The check reads the whole IDCODE (from
     # `found`, when finding the board read it, else with idcode_argv) and fails a part that is not the variant's.
+    # A `found` with an IDCODE also has the scan that read it: {"idcode_scan": {"tool", "exit", "output"}}.
     idcodes: ClassVar[dict] = {}
 
     def idcode_argv(self, host):
@@ -187,7 +188,10 @@ class TestBoard(Board):
         want = self.idcodes[variant]
         output, scan_faults = [], []
         if found.get("idcode"):  # read when the board was found (the NeTV2's scan)
-            codes = [int(found["idcode"], 16)]
+            codes, scan = [int(found["idcode"], 16)], found["idcode_scan"]
+            output = scan["output"]
+            if scan["exit"] != 0:  # whatever it printed, a scan that failed is not trusted
+                scan_faults.append(f"{scan['tool']} exited {scan['exit']} reading the IDCODE")
         else:
             argv = self.idcode_argv(host)
             try:
