@@ -943,3 +943,9 @@ def test_the_modules_package_ships_the_litepcie_notice(tree, built, tmp_path):
     notice = pathlib.Path(_dst(config)[f"/usr/share/doc/{config['name']}/copyright"]["src"]).read_text()
     assert "LitePCIe is Copyright 2015-2024 / EnjoyDigital" in notice
     assert "GPL-2" in notice  # liteuart.ko
+
+
+def test_common_satisfies_a_modules_package_of_a_foreign_architecture():
+    """The fleet's root is armhf and its modules package arm64: apt lets an arm64 package's dependency be met
+    by an Architecture: all package only when that one is Multi-Arch: foreign."""
+    assert bd.common_nfpm(VERSION)["deb"]["fields"] == {"Multi-Arch": "foreign"}

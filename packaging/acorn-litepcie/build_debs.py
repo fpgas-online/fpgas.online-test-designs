@@ -206,6 +206,8 @@ def common_nfpm(version):
             "loading it resets the SoC and takes BAR0 from fpgas-acorn-verify. `modprobe litepcie` still\n"
             "loads it on purpose.",
         ),
+        # A modules package of a foreign architecture (arm64 on the fleet's armhf root) depends on this one.
+        "deb": {"fields": {"Multi-Arch": "foreign"}},
         "contents": [
             {
                 "src": str(HERE / "fpgas-online-acorn-litepcie.conf"),
