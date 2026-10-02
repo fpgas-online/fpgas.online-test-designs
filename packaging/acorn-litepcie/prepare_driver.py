@@ -18,8 +18,8 @@ dropped as soon as `uv.lock` moves to a litepcie that has it:
 The fourth is for this SoC, not an upstream bug:
 
   * probe does not reset the SoC. It switches off what the driver owns instead (the MSI enables, and the DMA
-    channel's reader, writer and loopback). The SoC's reset stops the system clock under a running PCIe core, and after DMA that sends the
-    host broken TLPs which a Pi 5's root complex does not recover from (§3.7).
+    channel's reader, writer and loopback). The SoC's reset stops the system clock under a running PCIe core,
+    and after DMA that sends the host broken TLPs which a Pi 5's root complex does not recover from (§3.7).
 
     uv run --extra build python packaging/acorn-litepcie/prepare_driver.py --out dist/driver
     uv run --no-project python packaging/acorn-litepcie/prepare_driver.py --out dist/driver --from-dir <tree>
