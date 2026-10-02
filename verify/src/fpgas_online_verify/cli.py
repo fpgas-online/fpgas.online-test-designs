@@ -2,12 +2,13 @@
 board from the name they are run by (the deb's /usr/bin wrappers and pip's console scripts both call them)."""
 
 import argparse
+import os
 import pathlib
 import re
 import sys
 import textwrap
 
-from . import config, debug, runner, state
+from . import config, debug, identify, runner, state
 from .board import installed
 from .testbench import TestBoard
 
@@ -78,6 +79,8 @@ def _verify_parser(prog, board=None):
         partial.add_argument("--test", action="append", dest="tests", metavar="TEST",
                              help="run only TEST (repeatable); not published or recorded")  # fmt: skip
     partial.add_argument("--update", action="store_true", help="accept a changed board or flash: record it")
+    partial.add_argument("--identify", action="store_true",
+                         help="print who the board is (an identity document, JSON) and nothing else")  # fmt: skip
     if loads:
         parser.add_argument("--variant", help="use VARIANT's bitstreams, not the detected one")
         parser.add_argument("--port", help="the board's UART (default: the board's usual one)")
@@ -98,7 +101,12 @@ def _options(args, board=None):
 
 def verify_main(argv=None):
     """fpgas-verify: the configured board(s)."""
+    argv = sys.argv[1:] if argv is None else argv
+    if identify.ENV in os.environ:  # inside fpgas-verify --label: before any lock or board code
+        return identify.nested("fpgas-verify", "--identify" in argv)
     args = _verify_parser("fpgas-verify").parse_args(argv)
+    if args.identify:
+        return identify.run(_options(args), "fpgas-verify")
     if args.list:
         boards = installed()
         for name, b in boards.items():
@@ -116,12 +124,19 @@ def board_main(argv=None, prog=None):
     """fpgas-<board>-verify or fpgas-<board>-debug, the board and which of the two from the command's name."""
     prog = prog or pathlib.Path(sys.argv[0]).name
     m = re.fullmatch(r"fpgas-(.+)-(verify|debug)", prog)
+    if m and identify.ENV in os.environ:  # inside fpgas-verify --label: before any lock or board code
+        argv = sys.argv[1:] if argv is None else argv
+        asked = "--identify" in argv if m.group(2) == "verify" else (m.group(1) == "acorn" and "identify" in argv)
+        return identify.nested(prog, asked)
     boards = installed()
     board = m and next((b for b in boards.values() if b.slug == m.group(1)), None)
     if board is None:
         sys.exit(f"{prog}: run this as fpgas-<board>-verify or fpgas-<board>-debug (installed: {', '.join(boards)})")
     if m.group(2) == "verify":
-        return runner.run(_options(_verify_parser(prog, board).parse_args(argv), board.name), prog)
+        args = _verify_parser(prog, board).parse_args(argv)
+        if args.identify:
+            return identify.run(_options(args, board.name), prog, {board.name: board})
+        return runner.run(_options(args, board.name), prog)
     return debug_main(argv, prog, board)
 
 
