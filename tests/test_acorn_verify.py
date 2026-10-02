@@ -333,6 +333,28 @@ def test_with_bar0_down_a_failed_dna_read_says_so(tmp_path, images, monkeypatch)
     assert ident["dna_error"] == "openFPGALoader --read-dna read no device DNA over P1 JTAG (exit status 1)"
 
 
+@pytest.mark.parametrize("stuck", [0, (1 << 57) - 1])
+def test_a_stuck_bar0_dna_is_no_dna_and_a_good_jtag_one_is_used(tmp_path, images, stuck):
+    report = Rig(tmp_path, images, dna=stuck).check()
+    assert "the DNA port is not being read" in {t["test"]: t for t in report["tests"]}["pcie-bar0"]["reason"]
+    assert report["identity"]["dna"] == "0x0054b48664b04854" and "dna_error" not in report["identity"]
+
+
+def test_a_stuck_bar0_dna_with_no_jtag_read_is_a_dna_error(tmp_path, images):
+    ident = Rig(tmp_path, images, dna=0).check(tests=["pcie-bar0"])["identity"]
+    assert "dna" not in ident
+    assert ident["dna_error"] == "device DNA over BAR0 reads 0x0: the DNA port is not being read"
+
+
+def test_a_stuck_dna_over_both_bar0_and_jtag_is_a_dna_error_saying_both(tmp_path, images):
+    rig = Rig(tmp_path, images, dna=0)
+    rig.pi.jtag_dna = 0
+    ident = rig.check()["identity"]
+    assert "dna" not in ident
+    assert ident["dna_error"] == ("device DNA over BAR0 reads 0x0: the DNA port is not being read; "
+                                  "device DNA over P1 JTAG reads 0x0: the DNA port is not being read")  # fmt: skip
+
+
 def test_an_s25fs256s_is_named_by_its_extended_id(tmp_path, images, monkeypatch):
     monkeypatch.setattr(tsf, "RDID", bytes.fromhex("0102194d0181"))
     ident = Rig(tmp_path, images).check()["identity"]
