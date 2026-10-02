@@ -28,23 +28,38 @@ permissions:
 
 jobs:
   build:
-    name: "${{ matrix.board }} (${{ matrix.image }} image)"
+    name: "${{ matrix.board }} (${{ matrix.image }} image${{ matrix.experiment && format(', EXPERIMENT {0}', matrix.experiment) || '' }})"
     runs-on: ubuntu-latest
     container:
       image: regymm/openxc7
     strategy:
       fail-fast: false
       matrix:
+        board: ["Acorn CLE-215+", "NiteFury (CLE-215)", "LiteFury (CLE-101)"]
+        image: ["operational", "golden"]
+        # "" is the SoC. Anything else is an EXPERIMENT (acorn_pcie_soc.py --experiment): the SoC with something
+        # left out, to find what else stops an openXC7 build once the first blocker is out of the way. A green
+        # EXPERIMENT job does not mean the SoC builds.
+        experiment: ["", "no-xadc"]
         include:
-          - {board: "Acorn CLE-215+", variant: "cle-215+", slug: "cle-215plus", image: "operational", flags: ""}
-          - {board: "Acorn CLE-215+", variant: "cle-215+", slug: "cle-215plus", image: "golden", flags: "--golden"}
-          - {board: "NiteFury (CLE-215)", variant: "cle-215", slug: "cle-215", image: "operational", flags: ""}
-          - {board: "NiteFury (CLE-215)", variant: "cle-215", slug: "cle-215", image: "golden", flags: "--golden"}
-          - {board: "LiteFury (CLE-101)", variant: "cle-101", slug: "cle-101", image: "operational", flags: ""}
-          - {board: "LiteFury (CLE-101)", variant: "cle-101", slug: "cle-101", image: "golden", flags: "--golden"}
+          - {board: "Acorn CLE-215+", variant: "cle-215+", slug: "cle-215plus"}
+          - {board: "NiteFury (CLE-215)", variant: "cle-215", slug: "cle-215"}
+          - {board: "LiteFury (CLE-101)", variant: "cle-101", slug: "cle-101"}
+          - board: "Acorn CLE-215+"
+            variant: "cle-215+"
+            slug: "cle-215plus"
+            image: "operational"
+            experiment: "no-xadc-nodram"
+            experiment_flags: "--experiment no-xadc --experiment nodram"
     env:
-      # acorn_pcie_soc.py's output directory: build/acorn-<variant>, with -golden for the golden image.
-      BUILD_DIR: designs/acorn-pcie/build/acorn-${{ matrix.variant }}${{ matrix.image == 'golden' && '-golden' || '' }}
+      # acorn_pcie_soc.py's output directory: build/acorn-<variant>, then -golden, then -EXPERIMENT-<names>.
+      BUILD_DIR: >-
+        designs/acorn-pcie/build/acorn-${{ matrix.variant }}${{
+        matrix.image == 'golden' && '-golden' || '' }}${{
+        matrix.experiment && format('-EXPERIMENT-{0}', matrix.experiment) || '' }}
+      ARTIFACT: >-
+        acorn-pcie-soc-openxc7-${{ matrix.slug }}-${{ matrix.image }}${{
+        matrix.experiment && format('-EXPERIMENT-{0}', matrix.experiment) || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -78,7 +93,9 @@ jobs:
           PRJXRAY_DB_DIR: /nextpnr-xilinx/xilinx/external/prjxray-db
           NEXTPNR_XILINX_PYTHON_DIR: /nextpnr-xilinx/xilinx/python
           VARIANT: ${{ matrix.variant }}
-          FLAGS: ${{ matrix.flags }}
+          FLAGS: >-
+            ${{ matrix.image == 'golden' && '--golden' || '' }}
+            ${{ matrix.experiment_flags || (matrix.experiment && format('--experiment {0}', matrix.experiment)) || '' }}
         run: |
           uv run python designs/acorn-pcie/gateware/acorn_pcie_soc.py \
             --variant "$VARIANT" \
@@ -96,7 +113,7 @@ jobs:
       - name: Upload bitstream, CSR map and reports
         uses: actions/upload-artifact@v4
         with:
-          name: acorn-pcie-soc-openxc7-${{ matrix.slug }}-${{ matrix.image }}
+          name: ${{ env.ARTIFACT }}
           path: |
             ${{ env.BUILD_DIR }}/gateware/sqrl_acorn.bit
             ${{ env.BUILD_DIR }}/csr.json
@@ -111,7 +128,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: acorn-pcie-soc-openxc7-${{ matrix.slug }}-${{ matrix.image }}-failed-logs
+          name: ${{ env.ARTIFACT }}-failed-logs
           path: |
             ${{ env.BUILD_DIR }}/gateware/sqrl_acorn_nextpnr.log
             ${{ env.BUILD_DIR }}/gateware/sqrl_acorn.rpt

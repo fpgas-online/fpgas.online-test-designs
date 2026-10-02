@@ -88,12 +88,19 @@ from designs._shared.pin_check import check_build
 from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name, require_timing
 from designs._shared.s7pcie_clocking import feed_pclk_mux_from_mmcm
 from designs._shared.uartbone_break import BreakResetUARTBone, tuning_word
-from designs._shared.yosys_workarounds import build_in_block_ram, patch_yosys_template
+from designs._shared.yosys_workarounds import apply_nodram_workaround, build_in_block_ram, patch_yosys_template
 
 # The system clock each toolchain builds for, unless --sys-clk-freq says otherwise. nextpnr-xilinx does not
 # place LiteX SoCs on these parts at 100 MHz (designs/ddr-memory's Acorn SoC: 64.9 MHz when asked for 100), and
 # the DDR3 needs at least 75 MHz here: its clock is 4x the system clock and its DLL wants 300 MHz or more.
 SYS_CLK_FREQ = {"vivado": 100e6, "openxc7": 80e6}
+
+# EXPERIMENT ONLY: what --experiment can leave out or change, to learn what stops an openXC7 build. None of
+# these is a way to build the SoC: the owner decides whether the SoC may lose a feature under openXC7.
+EXPERIMENTS = {
+    "no-xadc": "no XADC (nextpnr-xilinx has no XADC site: 'no Bels remaining of type XADC')",
+    "nodram": "Yosys -nodram instead of block RAM for the L2 cache's data memory alone",
+}
 
 UART_RESET_BAUD = 1200
 UART_FAST_BAUD = 921600
@@ -200,7 +207,14 @@ class AcornPCIeSoC(SoCCore):
         "p2_serial": 20,
     }
 
-    def __init__(self, variant="cle-215+", toolchain="vivado", sys_clk_freq=100e6, golden=False, **kwargs):
+    def __init__(
+        self, variant="cle-215+", toolchain="vivado", sys_clk_freq=100e6, golden=False, experiments=(), **kwargs
+    ):
+        # EXPERIMENT ONLY (see --experiment in main()): leaves parts of the SoC out to find what else stops an
+        # openXC7 build. A SoC built with any of these is not this SoC.
+        unknown = set(experiments) - set(EXPERIMENTS)
+        if unknown:
+            raise ValueError(f"unknown experiments {sorted(unknown)}")
         platform = fleet_platform(variant, toolchain)
         platform.add_extension(_extension_io)
         platform.add_extension(spare_gpio_io())
@@ -227,7 +241,8 @@ class AcornPCIeSoC(SoCCore):
             self,
             platform,
             int(sys_clk_freq),
-            ident=f"fpgas-online Acorn PCIe SoC {variant}{' golden' if golden else ''}",
+            ident=f"fpgas-online Acorn PCIe SoC {variant}{' golden' if golden else ''}"
+            + "".join(f" EXPERIMENT {name}" for name in sorted(experiments)),
             ident_version=True,
             **kwargs,
         )
@@ -269,7 +284,8 @@ class AcornPCIeSoC(SoCCore):
                 platform.add_platform_command("set_property PULLTYPE PULLUP [get_ports {{" + port + "}}]")
 
         # XADC + DNA (R1) --------------------------------------------------------------------------
-        self.xadc = XADC()
+        if "no-xadc" not in experiments:
+            self.xadc = XADC()
         self.dna = DNAReader(sys_clk_freq)  # not litex.soc.cores.dna: see designs/_shared/dna_reader.py
         self.dna.add_timing_constraints(platform, sys_clk_freq, self.crg.cd_sys.clk)
 
@@ -379,6 +395,13 @@ def main():
         help="System clock frequency (default: 100 MHz with Vivado, 80 MHz with openXC7).",
     )
     parser.add_target_argument("--golden", action="store_true", help="Build the minimal recovery image.")
+    parser.add_target_argument(
+        "--experiment",
+        action="append",
+        default=[],
+        choices=sorted(EXPERIMENTS),
+        help="EXPERIMENT ONLY, not the SoC: " + "; ".join(f"{k}: {v}" for k, v in sorted(EXPERIMENTS.items())),
+    )
     parser.add_target_argument("--driver", action="store_true", help="Generate the LitePCIe driver and tools.")
     args = parser.parse_args()
 
@@ -392,12 +415,15 @@ def main():
         toolchain=args.toolchain,
         sys_clk_freq=args.sys_clk_freq or SYS_CLK_FREQ.get(args.toolchain, 100e6),
         golden=args.golden,
+        experiments=tuple(args.experiment),
         **soc_kwargs,
     )
     if args.toolchain == "openxc7":
         ensure_chipdb_symlink(soc.platform)
         patch_yosys_template(soc)
-        if not args.golden:
+        if "nodram" in args.experiment:
+            apply_nodram_workaround(soc)
+        elif not args.golden:
             # Yosys maps the 8 KiB L2 cache's data memory to 256 RAM256X1S, which the openXC7 image's
             # nextpnr-xilinx cannot pack (#30). Block RAM for those 16 memories; not -nodram, which also
             # turns the PCIe PHY's two 92-bit x 256 AsyncFIFOs into 47,000 flip-flops.
@@ -405,6 +431,9 @@ def main():
 
     builder_kwargs = parser.builder_argdict
     board = f"acorn-{args.variant}{'-golden' if args.golden else ''}"
+    if args.experiment:
+        board += "-EXPERIMENT-" + "-".join(sorted(args.experiment))
+        print(f"EXPERIMENT ONLY, not the Acorn PCIe SoC: {', '.join(sorted(args.experiment))}")
     builder_kwargs["output_dir"] = default_build_dir(__file__, board)
     builder = Builder(soc, **builder_kwargs)
     builder.build(**parser.toolchain_argdict, run=args.build)
