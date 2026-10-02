@@ -6,7 +6,8 @@
     and a board still busy then has its fields missing, for the reason "board busy". A board found only by
     driving its pins (the NeTV2's JTAG scan) is looked for under its lock too, never before it is held; one
     that could not be looked for, its lock being busy, is in the document all the same, with every field
-    missing for that reason, whatever else was found. Only one board's lock is held at a time.
+    missing for that reason, whatever else was found; so is one whose look failed (a JTAG scan that left a pin
+    driven), with the look's reason. Only one board's lock is held at a time.
   * Anything only a loaded design can read (the Arty's and NeTV2's flash, through openFPGALoader's
     SPI-over-JTAG bridge) comes from the boot report (runner.REPORT), when the board there is this one by a key
     no other board has (its USB serial, PCI slot or device DNA); the board's dict lists those fields in
@@ -150,12 +151,14 @@ class _Locks:
     def __init__(self, wait):
         self.wait, self.skip_busy = wait, False
         self.skipped = []  # the boards not looked for because their lock stayed held
+        self.failed = []  # (board, Problem): the boards whose look (driving their pins) failed
 
     @contextlib.contextmanager
     def probing(self, board):
         """runner.find's `probing`: hold `board`'s lock while it is looked for by driving its pins, and let it go
         as soon as it has been (its read takes it again). A lock that stays busy: with skip_busy (`auto`) the
-        board is skipped, and listed in `skipped`; else Busy, with .board."""
+        board is skipped, and listed in `skipped`; else Busy, with .board. A look that fails (a Problem) is
+        listed in `failed` and goes on to runner.find, which may keep a weak claim and say so only in its `how`."""
         with contextlib.ExitStack() as stack:
             try:
                 stack.enter_context(hold_lock(board.lock, board.title, timeout=self.wait))
@@ -166,13 +169,25 @@ class _Locks:
                 self.skipped.append(board)
                 yield False
                 return
-            yield True
+            try:
+                yield True
+            except Problem as p:
+                self.failed.append((board, p))
+                raise
 
 
 def _busy(key, board, found):
     """A board whose lock stayed held: how it was found, and every field missing for that reason."""
     gaps = [f"{key}: {f}: {BUSY}" for f in board.label_fields] or [f"{key}: read: {BUSY}"]
     return identity.base(key, board.name, found), gaps
+
+
+def _failed(board, problem):
+    """A board whose look (driving its pins) failed: every field missing, for the look's reason."""
+    ident = identity.base(board.name, board.name, {})
+    why = {"": f"{problem.result}: {problem.reason}"}
+    fields = missing(board, ident, why) or [("read", why[""])]
+    return ident, [f"{board.name}: {f}: {reason}" for f, reason in fields]
 
 
 def _terminated(signum, frame):
@@ -224,7 +239,8 @@ def read(options, boards=None, usb=None, pci=None):
             return identity.document([ident]), gaps
         except Problem as p:
             targets = []
-            if not (locks.skipped and p.result == "missing"):  # "none found" is said by the busy board below
+            said = any(p is f for _, f in locks.failed)  # a failed look: said by its board below
+            if not (said or (locks.skipped and p.result == "missing")):  # "none found": said by the busy board
                 gaps.append(f"{p.result}: {p.reason}")
         for (board, host, found), key in zip(targets, runner._keys(targets)):
             why = {}
@@ -256,6 +272,12 @@ def read(options, boards=None, usb=None, pci=None):
             ident, busy = _busy(board.name, board, {})
             out.append(ident)
             gaps += busy
+        # Likewise a board whose look failed (the NeTV2's scan left a pin driven): beside a weak claim,
+        # runner.find keeps the claim and says the probe failed only in its `how`. It is in the document, unread.
+        for board, problem in locks.failed:
+            ident, failed = _failed(board, problem)
+            out.append(ident)
+            gaps += failed
     return identity.document(out), gaps
 
 
