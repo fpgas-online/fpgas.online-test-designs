@@ -289,7 +289,7 @@ def _outer(tmp_path):
     path = tmp_path / "identity-123.json"
     doc = identity.document([{"board": "acorn", "kind": "acorn", "dna": "0x0054b48664b04854"}],
                             tool="fpgas-online-verify 0.0.post1", read_at="2026-10-02T00:00:00+00:00")  # fmt: skip
-    path.write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
+    path.write_text(identify.dumps(doc))
     return path
 
 
@@ -378,3 +378,7 @@ def test_the_golden_document_is_one_this_reader_takes():
     assert identify.load_outer(GOLDEN) == GOLDEN.read_text()
     (board,) = json.loads(GOLDEN.read_text())["boards"]
     assert board["dna"] == "0x0054b48664b04854" and board["idcode"] == "0x13636093"
+
+
+def test_a_live_document_is_printed_as_the_golden_one_is_written():
+    assert identify.dumps(json.loads(GOLDEN.read_text())) == GOLDEN.read_text()

@@ -77,7 +77,8 @@ def nested(prog, identifying):
 
 
 def dumps(doc):
-    return json.dumps(doc, indent=2) + "\n"
+    """The document as printed: sorted keys, indent 1, a trailing newline (as tests/data's golden fixture)."""
+    return json.dumps(doc, indent=1, sort_keys=True) + "\n"
 
 
 # -- the live read ---------------------------------------------------------------------------------------
