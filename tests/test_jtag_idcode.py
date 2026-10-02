@@ -68,6 +68,27 @@ def test_a_version_0_idcode_keeps_its_leading_zero():
     }
 
 
+def test_an_altera_idcode_names_altera():
+    d = idcode.decode(0x020F30DD)
+    assert (d["manufacturer_id"], d["manufacturer"], d["part_number"], d["device"]) == (
+        "0x06e",
+        "Altera",
+        "0x20f3",
+        "unknown",
+    )
+
+
+def test_an_ecp5_idcode_names_lattice():
+    d = idcode.decode(0x41111043)
+    assert (d["version"], d["manufacturer_id"], d["manufacturer"], d["part_number"], d["device"]) == (
+        4,
+        "0x021",
+        "Lattice",
+        "0x1111",
+        "unknown",
+    )
+
+
 def test_the_parts_on_the_boards_have_names():
     names = {code: idcode.device(code) for code in (0x13631093, 0x0362C093, 0x2362D093, 0x03636093)}
     assert names == {0x13631093: "XC7A100T", 0x0362C093: "XC7A50T", 0x2362D093: "XC7A35T", 0x03636093: "XC7A200T"}

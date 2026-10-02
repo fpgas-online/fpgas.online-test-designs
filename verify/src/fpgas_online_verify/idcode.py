@@ -26,8 +26,8 @@ OPENOCD = re.compile(r"tap/device found:\s*(0x[0-9a-fA-F]{1,8})")
 # Asks openFPGALoader to print its raw scan (Jtag::detectChain prints it when the level is above 1).
 OPENFPGALOADER_RAW_ARGS = ("--verbose-level", "2")
 
-# JEP106 codes, as bits 11:1 of an IDCODE (bank in the top four bits), of the parts these boards carry.
-MANUFACTURERS = {0x049: "Xilinx", 0x06E: "Lattice"}
+# JEP106 codes, as bits 11:1 of an IDCODE (bank in the top four bits), as openFPGALoader's src/part.hpp has them.
+MANUFACTURERS = {0x021: "Lattice", 0x049: "Xilinx", 0x06E: "Altera"}
 # Devices by IDCODE with the version masked off.
 DEVICES = {
     0x0362E093: "XC7A15T",
