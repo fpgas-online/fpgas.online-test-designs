@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
-"""Build every fpgas-online-verify deb: the shared core, and each board's tools, debug tools, bitstreams and
-mode package, plus the multi-board ones (docs/plans/2026-09-26-fpgas-online-verify-design.md).
+"""Build every fpgas-online-verify deb: the shared core, and for each board its tools, debug tools,
+bitstreams and the package that installs them all, plus the multi-board ones
+(docs/plans/2026-09-26-fpgas-online-verify-design.md).
 
   fpgas-online-verify           the fpgas_online_verify Python package without its boards, the host test
-                                scripts, fpgas-verify and fpgas-verify.service (enabled by a mode package)
+                                scripts, fpgas-verify and fpgas-verify.service (turned on by fpgas-online-<b>
+                                or fpgas-online-multi-board)
   fpgas-online-<b>-tools        the board's module, fpgas-<b>-verify; only the board's own tooling
   fpgas-online-<b>-debug        fpgas-<b>-debug and what the tests the boot check leaves out need
   fpgas-online-<b>-bitstreams   the test boards': this commit's CI bitstreams and a manifest. The Acorn's come
                                 from its pinned Vivado release (packaging/acorn-pcie/build_debs.py)
-  fpgas-online-<b>              the mode package: this host has board <b>. Conflicts with every other one
-  fpgas-online-multi-board      the mode package for fpga-board = auto: whichever installed board is there
+  fpgas-online-<b>              everything to check board <b>, and turns the boot check on for it.
+                                Conflicts with the other boards' (and multi-board)
+  fpgas-online-multi-board      turns the boot check on for whichever installed board is there
+                                (fpga-board = auto)
   fpgas-online-all-boards       fpgas-online-multi-board and every board's tools
 
 Everything but the Acorn's bitstreams is versioned by the repository (`X.Y.postN` from git describe), and a
@@ -139,10 +143,10 @@ def verify_nfpm(version, staging):
     ]
     return {
         **_common("fpgas-online-verify", version, (
-            "fpgas.online boot-time FPGA board verification (core)\n"
-            "fpgas-verify checks the board (or boards) the host is set up for with the fpgas.online test\n"
-            "bitstreams and compares it with the state recorded last time. Each board's module comes in\n"
-            "fpgas-online-<board>-tools; install fpgas-online-<board> (or fpgas-online-all-boards) to set a host up."
+            "fpgas.online boot-time FPGA board check (core)\n"
+            "fpgas-verify checks the host's FPGA board with the fpgas.online test bitstreams, and compares\n"
+            "it with what it recorded last time. To check a board, install fpgas-online-<board> (or\n"
+            "fpgas-online-all-boards), which installs this and turns the check on at boot."
         )),
         "depends": ["python3 (>= 3.9)"],
         "suggests": ["fpgas-online-all-boards", "fpgas-online-setup-pi"],  # fleet-event, for publishing
@@ -172,19 +176,20 @@ def mode_nfpm(name, version, setting, depends, description, staging):
 
 def multi_board_nfpm(version, staging):
     return mode_nfpm("fpgas-online-multi-board", version, "auto", [f"fpgas-online-verify (= {version})"], (
-        "fpgas.online boot-time check: whichever installed board is there\n"
-        "Sets fpgas-verify to fpga-board = auto and enables it at boot: it looks for every board whose\n"
-        "fpgas-online-<board>-tools is installed, and finding none is a fatal error. Install the boards'\n"
-        "tools packages alongside (or fpgas-online-all-boards for every board)."
+        "fpgas.online boot-time check of whichever board is there\n"
+        "Turns the boot check on for any board whose fpgas-online-<board>-tools is installed\n"
+        "(fpga-board = auto). Finding none is a failure. Install the tools for the boards you want\n"
+        "with it, or fpgas-online-all-boards for every board."
     ), staging)  # fmt: skip
 
 
 def all_boards_nfpm(version):
     return {
         **_common("fpgas-online-all-boards", version, (
-            "fpgas.online boot-time check for every FPGA board\n"
-            "fpgas-online-multi-board and every board's tools, so a netboot root verifies whichever board the\n"
-            "booting Pi has: Acorn, Arty A7, NeTV2, Fomu EVT or TT FPGA. Recommends each board's debug tools."
+            "fpgas.online boot-time check of any FPGA board\n"
+            "Installs everything to check any fpgas.online board (Acorn, Arty A7, NeTV2, Fomu EVT, TT FPGA),\n"
+            "and turns the boot check on for whichever one is there. For a netboot root shared by Pis with\n"
+            "different boards. Recommends each board's debug tools."
         )),
         "depends": [f"fpgas-online-multi-board (= {version})",
                     *(f"{b.package} (= {version})" for b in BOARDS.values())],
@@ -211,8 +216,8 @@ def tools_nfpm(board, version, bitstreams, staging):
         **_common(board.package, version, (
             f"fpgas.online {board.title} check\n"
             f"fpgas-{board.slug}-verify finds the {board.title}, {what},\n"
-            "and records its identity and flash so a later change is caught. Set a host up for it with\n"
-            f"fpgas-online-{board.slug}, which runs it at boot."
+            "and records its identity and flash so a later change is caught. To run it at every boot,\n"
+            f"install fpgas-online-{board.slug}."
         )),
         "depends": [f"fpgas-online-verify (= {version})", f"fpgas-online-{board.slug}-bitstreams (= {bitstreams})",
                     *TOOLS_DEPENDS[board.name]],
@@ -244,10 +249,10 @@ def debug_nfpm(board, version, staging):
 
 def board_mode_nfpm(board, version, staging):
     return mode_nfpm(f"fpgas-online-{board.slug}", version, board.name, [f"{board.package} (= {version})"], (
-        f"fpgas.online boot-time check for a {board.title}\n"
-        f"Sets this host up as having a {board.title}: fpgas-verify checks it at every boot, and not finding\n"
-        "it is a fatal error, whatever else is attached. Conflicts with the other boards' packages: for more\n"
-        "than one board, install fpgas-online-multi-board or fpgas-online-all-boards instead."
+        f"fpgas.online boot-time check of a {board.title}\n"
+        f"Installs everything to check a {board.title}, and turns the boot check on for it. Not finding\n"
+        "the board at boot is a failure, whatever else is attached. Conflicts with the other boards'\n"
+        "packages: for a host that may have any board, install fpgas-online-all-boards instead."
     ), staging)  # fmt: skip
 
 

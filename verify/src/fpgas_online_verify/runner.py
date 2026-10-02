@@ -123,12 +123,12 @@ def _for_board(board, options, mode):
     board has none of the named tests (with `auto`), so it is not checked at all.
 
     With `auto`, --test names the tests of whichever boards are found: a board runs those it has and skips the
-    rest. Configured for one board, a name it does not have is the check's error (testbench.py), and a board
-    whose check has no selectable tests (the Acorn) cannot take --test."""
+    rest. Configured for one board, a name it does not have is the check's error (testbench.py, or the Acorn's
+    suite.py), and a board whose check has no selectable tests cannot take --test."""
     wanted = options.get("tests")
     if not wanted:
         return options, []
-    have = getattr(board, "tests", None) or {}  # none: a board whose check has no selectable tests (the Acorn)
+    have = getattr(board, "tests", None) or {}  # none: a board whose check has no selectable tests
     if mode != config.AUTO:
         if not have:
             raise Problem("error", f"{board.title}'s check has no selectable tests: run it without --test")

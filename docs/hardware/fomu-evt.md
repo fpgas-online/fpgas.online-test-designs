@@ -14,7 +14,7 @@ sudo apt install fpgas-online-fomu
 
 | Package | Installs |
 |---------|----------|
-| `fpgas-online-fomu` | sets the host up as having a Fomu, and enables `fpgas-verify.service` |
+| `fpgas-online-fomu` | installs everything below to check a Fomu, and turns the boot check (`fpgas-verify.service`) on for it |
 | `fpgas-online-fomu-tools` | the Fomu's module of `fpgas_online_verify`, and `fpgas-fomu-verify`; with `python3-serial` and openFPGALoader |
 | `fpgas-online-fomu-bitstreams` | the test bitstreams built by the same commit's CI, in `/usr/share/fpgas-online/fomu/bitstreams/` |
 | `fpgas-online-verify` | `fpgas-verify`, the unit, and the host test scripts |

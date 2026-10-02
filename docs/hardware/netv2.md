@@ -14,7 +14,7 @@ sudo apt install fpgas-online-netv2
 
 | Package | Installs |
 |---------|----------|
-| `fpgas-online-netv2` | sets the host up as having a NeTV2, and enables `fpgas-verify.service` |
+| `fpgas-online-netv2` | installs everything below to check a NeTV2, and turns the boot check (`fpgas-verify.service`) on for it |
 | `fpgas-online-netv2-tools` | the NeTV2's module of `fpgas_online_verify`, and `fpgas-netv2-verify`; with `python3-serial`, openFPGALoader and openocd |
 | `fpgas-online-netv2-bitstreams` | the XC7A35T and XC7A100T test bitstreams built by the same commit's CI, in `/usr/share/fpgas-online/netv2/bitstreams/` |
 | `fpgas-online-verify` | `fpgas-verify`, the unit, and the host test scripts |

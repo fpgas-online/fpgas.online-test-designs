@@ -367,6 +367,46 @@ def test_update_and_test_cannot_be_given_together(monkeypatch):
         cli.verify_main(["--update", "--test", "uart"])
 
 
+@pytest.mark.parametrize("prog", ["fpgas-verify", "fpgas-acorn-flash"] + [
+    f"fpgas-{slug}-{kind}" for slug in ("acorn", "arty", "netv2", "fomu", "tt-fpga") for kind in ("verify", "debug")
+])  # fmt: skip
+def test_every_help_fits_an_80_column_console(prog, monkeypatch, capsys):
+    from fpgas_online_verify.boards.acorn import spi_flash
+
+    monkeypatch.setenv("COLUMNS", "80")
+    monkeypatch.setattr(sys, "argv", [prog])
+    with pytest.raises(SystemExit):
+        if prog == "fpgas-verify":
+            cli.verify_main(["--help"])
+        elif prog == "fpgas-acorn-flash":
+            spi_flash.main(["--help"])
+        else:
+            cli.board_main(["--help"], prog=prog)
+    text = capsys.readouterr().out
+    assert text.startswith(f"usage: {prog} ") and max(map(len, text.splitlines())) <= 80
+
+
+def test_the_acorn_commands_offer_only_the_options_its_check_uses(monkeypatch, capsys):
+    seen = {}
+    monkeypatch.setattr(cli.runner, "run", lambda options, prog: seen.update(options) or 0)
+    cli.board_main(["--test", "jtag"], prog="fpgas-acorn-verify")
+    assert seen["tests"] == ["jtag"]
+    for option in (["--port", "/dev/ttyAMA0"], ["--variant", "cle-101"]):  # it loads nothing: no UART, no variant
+        with pytest.raises(SystemExit):
+            cli.board_main(option, prog="fpgas-acorn-verify")
+    with pytest.raises(SystemExit):
+        cli.board_main(["--help"], prog="fpgas-acorn-verify")
+    assert f"tests in the boot check:\n  {' '.join(ACORN.tests)}\n" in capsys.readouterr().out
+    with pytest.raises(SystemExit):  # the debug tool has no per-test commands for the Acorn
+        cli.board_main(["--help"], prog="fpgas-acorn-debug")
+    out = capsys.readouterr().out
+    assert "usage: fpgas-acorn-debug [options] COMMAND\n" in out and "tests in the boot check" not in out
+
+
+def test_the_help_lists_every_result_the_check_gives():
+    assert [r for r, _ in cli.RESULTS] == list(core.SEVERITY)
+
+
 def test_the_report_goes_to_the_boot_path_only_when_not_given(monkeypatch):
     seen = {}
     monkeypatch.setattr(cli.runner, "run", lambda options, prog: seen.update(options) or 0)
