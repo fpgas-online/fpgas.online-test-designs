@@ -34,7 +34,6 @@ import shlex
 import shutil
 import subprocess
 import sys
-import urllib.request
 
 import tomllib
 
@@ -44,8 +43,11 @@ IN_CONTAINER = "packaging/acorn-litepcie/container.py"
 PLATFORMS = {"arm64": "linux/arm64", "armhf": "linux/arm/v7", "amd64": "linux/amd64"}
 SUITES = ("bookworm", "trixie")  # the Debian images
 RPI_ARCHIVE = "https://archive.raspberrypi.com/debian"
-RPI_KEY = f"{RPI_ARCHIVE}/raspberrypi.gpg.key"
-RPI_KEYRING = "/usr/share/keyrings/raspberrypi-archive.gpg"
+# The archive's signing key, CF8A1AF502A2AA2D763BAE7E82B129927FA3303E, as raspberrypi-archive-keyring
+# 2025.1+rpt1 ships it. The copy at <archive>/raspberrypi.gpg.key still carries a SHA-1 self-signature, which
+# trixie's apt (sqv) refuses.
+RPI_KEY = HERE / "raspberrypi-archive-keyring.gpg"
+RPI_KEYRING = "/usr/share/keyrings/raspberrypi-archive-keyring.gpg"
 NAME = "fpgas-online-acorn-litepcie"
 TOOLS = ("litepcie_util", "litepcie_test")
 MODULES = ("litepcie", "liteuart")
@@ -136,10 +138,8 @@ def expect_suite(suite):
 
 
 def add_rpi_archive(suite):
-    apt_install("ca-certificates", "gpg")
-    with urllib.request.urlopen(RPI_KEY, timeout=120) as r:
-        key = r.read()
-    subprocess.run(["gpg", "--dearmor", "--yes", "-o", RPI_KEYRING], input=key, check=True)
+    apt_install("ca-certificates")
+    shutil.copyfile(RPI_KEY, RPI_KEYRING)
     pathlib.Path("/etc/apt/sources.list.d/raspberrypi.list").write_text(
         f"deb [signed-by={RPI_KEYRING}] {RPI_ARCHIVE} {suite} main\n"
     )
