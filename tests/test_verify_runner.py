@@ -446,8 +446,10 @@ def test_the_site_hears_each_board_found_and_each_test_with_its_board(opts):
                   mode=("auto", "test"))  # fmt: skip
     assert events[0] == ("fpga-board-found", {"board": "arty", "variant": "a7-35", "where": "1-1"})
     assert events[1:] == [
-        ("fpga-board-identified", {"board": "arty", "kind": "arty", "variant": "a7-35", "usb": "1-1",
-                                   "schema": "fpga-identity/1"}),
+        (
+            "fpga-board-identified",
+            {"board": "arty", "kind": "arty", "variant": "a7-35", "usb": "1-1", "schema": "fpga-identity/1"},
+        ),
         ("fpga-test-started", {"board": "arty", "test": "uart"}),
         ("fpga-test-finished", {"board": "arty", "test": "uart", "result": "pass", "reason": ""}),
         ("fpga-test-started", {"board": "arty", "test": "ddr"}),
@@ -490,8 +492,9 @@ def test_a_board_that_identifies_itself_is_not_identified_again(opts):
 
 
 def test_the_identity_in_the_verified_event_is_flat_strings(opts):
-    report = {"result": "pass", "boards": [{"board": "acorn", "result": "pass",
-                                            "identity": {"board": "acorn", "flash_quad": True, "idcode_version": 1}}]}  # fmt: skip
+    who = {"board": "acorn", "flash_quad": True, "idcode_version": 1}
+    board = {"board": "acorn", "result": "pass", "identity": who}
+    report = {"result": "pass", "boards": [board]}
     out = runner.details(report)
     assert out["board0_identity_flash_quad"] == "true" and out["board0_identity_idcode_version"] == "1"
     assert "board0_identity_schema" not in out
