@@ -6,10 +6,10 @@ Design: docs/plans/2026-09-25-acorn-litepcie-packages-design.md. What must hold:
   * the fleet kernel the CI module is built for is named in one place, above the kernel floor (§3.6, §4.3).
 """
 
+import hashlib
 import importlib.util
 import json
 import pathlib
-import shutil
 import subprocess
 
 import pytest
@@ -567,12 +567,12 @@ def bins(tmp_path):
     d.mkdir()
     for name in ("litepcie_util", "litepcie_test"):
         (d / name).write_bytes(b"\x7fELF")
-    (d / "utils.json").write_text('{"arch": "armhf", "glibc": "2.34"}')
+    (d / "utils.json").write_text('{"suite": "bookworm", "arch": "armhf", "glibc": "2.34"}')
     return d
 
 
 def test_the_utils_package_installs_both_tools_for_its_architecture(tree, bins):
-    config = bd.utils_nfpm(VERSION, "armhf", bins, tree)
+    config = bd.utils_nfpm(VERSION, "bookworm", "armhf", bins, tree)
     assert config["name"] == "fpgas-online-acorn-litepcie-utils"
     assert config["arch"] == "armhf"
     dst = _dst(config)
@@ -584,7 +584,7 @@ def test_the_utils_package_installs_both_tools_for_its_architecture(tree, bins):
 def test_the_utils_package_only_suggests_a_driver(tree, bins):
     """apt installs Recommends by default and picks the sole provider of a virtual package: a Recommends would
     pull -dkms, dkms and gcc into the netbooted fleet's armhf root, where DKMS cannot work (§2)."""
-    config = bd.utils_nfpm(VERSION, "armhf", bins, tree)
+    config = bd.utils_nfpm(VERSION, "bookworm", "armhf", bins, tree)
     assert config["suggests"] == ["fpgas-online-acorn-litepcie-module"]
     assert "recommends" not in config
 
@@ -596,18 +596,21 @@ def test_generation_uses_exactly_what_uv_lock_pins():
 
 def test_binaries_built_for_another_architecture_are_refused(tree, bins):
     with pytest.raises(bd.BuildError, match="armhf"):
-        bd.utils_nfpm(VERSION, "arm64", bins, tree)
+        bd.utils_nfpm(VERSION, "bookworm", "arm64", bins, tree)
 
 
 def test_the_litepcie_notice_ships_with_the_binaries_and_the_sources(tree, bins, tmp_path):
-    for config in (bd.utils_nfpm(VERSION, "armhf", bins, tree), bd.dkms_nfpm(VERSION, tree, tmp_path / "s")):
+    for config in (
+        bd.utils_nfpm(VERSION, "bookworm", "armhf", bins, tree),
+        bd.dkms_nfpm(VERSION, tree, tmp_path / "s"),
+    ):
         copyright_file = _dst(config)[f"/usr/share/doc/{config['name']}/copyright"]
         assert "LitePCIe is Copyright 2015-2024 / EnjoyDigital" in pathlib.Path(copyright_file["src"]).read_text()
 
 
 def test_every_package_keeps_its_version_exactly_as_given(tree, bins, tmp_path):
     configs = [bd.common_nfpm(VERSION), bd.dkms_nfpm(VERSION, tree, tmp_path / "s"),
-               bd.utils_nfpm(VERSION, "armhf", bins, tree)]  # fmt: skip
+               bd.utils_nfpm(VERSION, "bookworm", "armhf", bins, tree)]  # fmt: skip
     assert {c["version"] for c in configs} == {VERSION}
     assert {c["version_schema"] for c in configs} == {"none"}
 
@@ -698,7 +701,7 @@ def test_the_dkms_test_finds_debians_own_amd64_kernel():
 
 def test_the_container_and_the_packager_agree_on_names():
     assert (ct.NAME, ct.TOOLS, ct.MODULES) == (bd.NAME, bd.TOOLS, bd.MODULES)
-    assert set(bd.SUITE_RELEASE) >= set(ct.SUITES) >= set(bd.read_kernels()["suites"])
+    assert set(ct.SUITES) == set(bd.SUITES) >= set(bd.read_kernels()["suites"])
 
 
 def test_the_command_line_prints_the_version_for_the_workflow(monkeypatch, capsys):
@@ -722,8 +725,6 @@ def test_a_string_define_python_cannot_read_is_kept_as_text_not_a_crash():
 # -- publishing (§3.6) -----------------------------------------------------------------------------------------
 
 pub = _load("publish")
-P = "fpgas-online-acorn-litepcie"
-X = f"{P}-common_0.0.post1_all.deb"
 
 
 @pytest.mark.parametrize(("version", "series"), [("0.0.post42", "v0.0"), ("0.1", "v0.1"), ("1.12.post3", "v1.12")])
@@ -734,9 +735,8 @@ def test_the_series_release_is_the_versions_own(version, series):
 
 def test_only_files_the_release_lacks_are_uploaded(tmp_path):
     """A published version never changes under an apt repository that already pulled it."""
-    debs = [tmp_path / n for n in (f"{P}-common_0.0.post1_all.deb", f"{P}-dkms_0.0.post1_all.deb")]
-    published = {f"{P}-common_0.0.post1_all.deb", "fpgas-online-acorn-tools_0.0.post9_all.deb"}
-    assert pub.to_upload(debs, published) == [debs[1]]
+    debs = [tmp_path / n for n in ("a_0.0.post1_all.deb", "b_0.0.post1_all.deb")]
+    assert pub.to_upload(debs, {"a_0.0.post1_all.deb", "fpgas-online-acorn-tools_0.0.post9_all.deb"}) == [debs[1]]
 
 
 class FakeGh:
@@ -754,45 +754,31 @@ class FakeGh:
             return ""
         if args[:2] == ("release", "upload"):
             name = pathlib.Path(args[3]).name
-            assert pathlib.Path(args[3]).is_file()
-            name = self.stored(name)
             if name in self.race:  # another run got there first
                 self.assets.add(name)
                 raise pub.GhError(f"asset {name} already exists")
             self.assets.add(name)
             return ""
-        if args[:2] == ("release", "delete-asset"):
-            assert args[4:] == ("--yes",)
-            self.assets.remove(args[3])
-            return ""
         raise AssertionError(args)
-
-    @staticmethod
-    def stored(name):
-        """What GitHub does to an uploaded file's name."""
-        return name.replace("~", ".")
-
-    def did(self, verb):
-        return [c[3] if verb == "delete-asset" else pathlib.Path(c[3]).name for c in self.calls if c[1] == verb]
 
 
 def test_publish_creates_the_series_release_when_missing_and_uploads(tmp_path):
-    deb = tmp_path / X
+    deb = tmp_path / "x_0.0.post1_all.deb"
     deb.write_bytes(b"x")
     gh = FakeGh([], exists=False)
     pub.publish([deb], "0.0.post1", gh=gh)
     assert gh.calls[1][:2] == ("release", "create") and gh.calls[1][2] == "v0.0"
-    assert X in gh.assets
+    assert "x_0.0.post1_all.deb" in gh.assets
 
 
 def test_an_upload_another_run_made_meanwhile_is_not_a_failure(tmp_path):
-    deb = tmp_path / X
+    deb = tmp_path / "x_0.0.post1_all.deb"
     deb.write_bytes(b"x")
-    pub.publish([deb], "0.0.post1", gh=FakeGh([], race={X}))
+    pub.publish([deb], "0.0.post1", gh=FakeGh([], race={"x_0.0.post1_all.deb"}))
 
 
 def test_an_upload_that_really_failed_is_a_failure(tmp_path):
-    deb = tmp_path / X
+    deb = tmp_path / "x_0.0.post1_all.deb"
     deb.write_bytes(b"x")
 
     class Broken(FakeGh):
@@ -807,7 +793,7 @@ def test_an_upload_that_really_failed_is_a_failure(tmp_path):
 
 def test_a_release_view_that_fails_for_another_reason_is_reported_as_itself(tmp_path):
     """Only a missing release is created; an auth or network failure must not turn into a bogus create."""
-    deb = tmp_path / X
+    deb = tmp_path / "x_0.0.post1_all.deb"
     deb.write_bytes(b"x")
 
     class Offline(FakeGh):
@@ -820,178 +806,6 @@ def test_a_release_view_that_fails_for_another_reason_is_reported_as_itself(tmp_
     with pytest.raises(pub.GhError, match="401"):
         pub.publish([deb], "0.0.post1", gh=gh)
     assert not [c for c in gh.calls if c[:2] == ("release", "create")]
-
-
-# -- the release's asset names, the asset budget and retention (§4.3) --------------------------------------------
-
-M = f"{P}-modules-6.12.109+rpt-rpi-v8"
-
-
-def test_github_stores_a_tilde_as_a_dot_and_keeps_the_plus():
-    """GitHub "renames asset filenames that have special characters": seen on this organisation's releases."""
-    assert pub.release_name(f"{M}_0.0.post7~deb12_arm64.deb") == f"{M}_0.0.post7.deb12_arm64.deb"
-    assert pub.release_name(f"{P}-utils_0.0.post7_armhf.deb") == f"{P}-utils_0.0.post7_armhf.deb"
-
-
-@pytest.mark.parametrize(
-    ("name", "parsed"),
-    [
-        (f"{P}-common_0.0.post7_all.deb", (f"{P}-common", "0.0.post7")),
-        (f"{M}_0.0.post7.deb12_arm64.deb", (M, "0.0.post7")),
-        (f"{M}_0.0.post7~deb13_arm64.deb", (M, "0.0.post7")),
-        (f"{P}-utils_0.1_amd64.deb", (f"{P}-utils", "0.1")),
-        ("fpgas-online-acorn-tools_0.0.post7_all.deb", None),
-        (f"{P}-common_20260921+gf3355dccf443_all.deb", None),
-        (f"{P}-common_0.0.post7_all.deb.sha256", None),
-    ],
-)
-def test_an_asset_name_gives_the_package_and_the_driver_version(name, parsed):
-    assert pub.parse_asset(name) == parsed
-
-
-def _set(version, kvers=("6.12.109+rpt-rpi-v8",), suite="deb12"):
-    """The assets of one driver version."""
-    names = {f"{P}-common_{version}_all.deb", f"{P}-dkms_{version}_all.deb"}
-    names |= {f"{P}-utils_{version}_{arch}.deb" for arch in ("armhf", "arm64", "amd64")}
-    return names | {f"{P}-modules-{kver}_{version}.{suite}_arm64.deb" for kver in kvers}
-
-
-OTHERS = {
-    "fpgas-online-acorn-tools_0.0.post3_all.deb",
-    "fpgas-online-acorn-bitstreams_20260921+gf3355dccf443_all.deb",
-    "fpgas-online-acorn_0.0.post3_all.deb",
-}
-
-
-def test_pruning_keeps_the_current_driver_version_and_the_one_before_it():
-    assets = _set("0.0.post3") | _set("0.0.post5") | _set("0.0.post9") | _set("0.0.post10") | OTHERS
-    assert set(pub.plan_prune(assets, "0.0.post10", "6.12")) == _set("0.0.post3") | _set("0.0.post5")
-
-
-def test_pruning_never_touches_another_packages_assets():
-    assets = _set("0.0.post9") | _set("0.0.post10") | _set("0.0.post11") | OTHERS
-    assert not set(pub.plan_prune(assets, "0.0.post11", "6.12")) & OTHERS
-
-
-def test_the_one_before_is_the_newest_older_version_on_the_release_not_the_previous_number():
-    """Driver versions skip numbers: most merges change no driver input."""
-    assets = _set("0.0.post621") | _set("0.0.post776") | _set("0.0.post800")
-    assert set(pub.plan_prune(assets, "0.0.post800", "6.12")) == _set("0.0.post621")
-
-
-def test_versions_are_ordered_as_numbers_and_across_series():
-    assets = _set("0.0.post99") | _set("0.0.post100") | _set("0.1")
-    assert set(pub.plan_prune(assets, "0.1", "6.12")) == _set("0.0.post99")
-    assert pub.plan_prune(_set("0.0.post9") | _set("0.0.post10"), "0.0.post10", "6.12") == []
-
-
-def test_a_run_of_an_older_commit_never_prunes_what_a_newer_one_published():
-    assets = _set("0.0.post8") | _set("0.0.post9") | _set("0.0.post10") | _set("0.0.post11")
-    assert set(pub.plan_prune(assets, "0.0.post10", "6.12")) == _set("0.0.post8")
-
-
-def test_with_only_the_current_version_nothing_is_pruned():
-    assert pub.plan_prune(_set("0.0.post10") | OTHERS, "0.0.post10", "6.12") == []
-
-
-def test_modules_for_a_kernel_below_the_floor_are_pruned_whatever_their_version():
-    kept = _set("0.0.post10", kvers=("6.12.109+rpt-rpi-v8", "6.18.50+rpt-rpi-2712"))
-    below = {f"{P}-modules-6.6.74+rpt-rpi-v8_0.0.post10.deb12_arm64.deb",
-             f"{P}-modules-6.1.0-rpi8-rpi-v8_0.0.post10.deb12_arm64.deb"}  # fmt: skip
-    assert set(pub.plan_prune(kept | below, "0.0.post10", "6.12")) == below
-    raised = {f"{P}-modules-6.12.109+rpt-rpi-v8_0.0.post10.deb12_arm64.deb"}
-    assert set(pub.plan_prune(kept, "0.0.post10", "6.13")) == raised
-
-
-def test_an_upload_that_would_take_the_release_past_900_assets_is_refused():
-    """A release holds 1000 assets and the series release is shared with the other packages' workflows."""
-    pub.check_room(858, 42)
-    with pytest.raises(pub.PublishError, match=r"859 assets.*42.*900"):
-        pub.check_room(859, 42)
-    pub.check_room(950, 0)  # nothing to upload: nothing to refuse
-
-
-def _debs(tmp_path, names):
-    paths = []
-    for name in sorted(names):
-        (tmp_path / name).write_bytes(b"deb")
-        paths.append(tmp_path / name)
-    return paths
-
-
-def test_a_modules_deb_is_uploaded_under_the_name_github_stores(tmp_path):
-    """Uploaded as `...~deb12_arm64.deb`, GitHub would rename it; the upload names it so nothing is implicit."""
-    deb = tmp_path / f"{M}_0.0.post10~deb12_arm64.deb"
-    deb.write_bytes(b"deb")
-    gh = FakeGh(OTHERS)
-    pub.publish([deb], "0.0.post10", gh=gh, min_kernel="6.12")
-    assert gh.did("upload") == [f"{M}_0.0.post10.deb12_arm64.deb"]
-    assert f"{M}_0.0.post10.deb12_arm64.deb" in gh.assets
-
-
-def test_publish_uploads_what_is_missing_then_prunes(tmp_path):
-    new = {n.replace(".deb12", "~deb12") for n in _set("0.0.post10")}
-    gh = FakeGh(_set("0.0.post3") | _set("0.0.post9") | OTHERS | {f"{P}-common_0.0.post10_all.deb"})
-    pub.publish(_debs(tmp_path, new), "0.0.post10", gh=gh, min_kernel="6.12")
-    assert gh.assets == _set("0.0.post9") | _set("0.0.post10") | OTHERS
-    assert set(gh.did("upload")) == _set("0.0.post10") - {f"{P}-common_0.0.post10_all.deb"}
-    assert set(gh.did("delete-asset")) == _set("0.0.post3")
-    verbs = [c[1] for c in gh.calls]
-    assert verbs.index("delete-asset") > max(i for i, v in enumerate(verbs) if v == "upload")
-
-
-def test_a_dry_run_changes_nothing_and_says_what_it_would_do(tmp_path, capsys):
-    new = {n.replace(".deb12", "~deb12") for n in _set("0.0.post10")}
-    before = _set("0.0.post3") | _set("0.0.post9") | OTHERS
-    gh = FakeGh(before)
-    pub.publish(_debs(tmp_path, new), "0.0.post10", gh=gh, min_kernel="6.12", dry_run=True)
-    assert gh.assets == before
-    assert {c[1] for c in gh.calls} == {"view"}
-    out = capsys.readouterr().out
-    assert f"would upload {M}_0.0.post10.deb12_arm64.deb" in out
-    assert f"would prune {P}-dkms_0.0.post3_all.deb" in out
-    assert f"would prune {P}-dkms_0.0.post9_all.deb" not in out
-    assert "v0.0: 15 assets now, 6 to upload, 6 to prune, 15 afterwards (the limit is 900)" in out
-
-
-def test_a_dry_run_does_not_create_a_missing_release(tmp_path, capsys):
-    gh = FakeGh([], exists=False)
-    pub.publish(_debs(tmp_path, {X}), "0.0.post1", gh=gh, dry_run=True)
-    assert {c[1] for c in gh.calls} == {"view"}
-    assert "would create the release v0.0" in capsys.readouterr().out
-
-
-def test_the_budget_is_checked_before_anything_is_uploaded(tmp_path):
-    gh = FakeGh({f"other_{i}_all.deb" for i in range(900)})
-    with pytest.raises(pub.PublishError, match="900"):
-        pub.publish(_debs(tmp_path, {X}), "0.0.post1", gh=gh)
-    assert not gh.did("upload")
-
-
-def test_a_deb_of_another_driver_version_is_refused(tmp_path):
-    """A stale artifact must not be published as part of this version's set."""
-    gh = FakeGh(OTHERS)
-    with pytest.raises(pub.PublishError, match=r"0\.0\.post1"):
-        pub.publish(_debs(tmp_path, {X}), "0.0.post2", gh=gh)
-    with pytest.raises(pub.PublishError, match="not a"):
-        pub.publish(_debs(tmp_path, {"fpgas-online-acorn-tools_0.0.post2_all.deb"}), "0.0.post2", gh=gh)
-    assert not gh.did("upload")
-
-
-def test_an_upload_the_release_does_not_list_afterwards_is_a_failure(tmp_path):
-    """If GitHub stored the file under another name, the next run would build and upload it again, for ever."""
-
-    class Renaming(FakeGh):
-        @staticmethod
-        def stored(name):
-            return name.replace(".deb12", "-deb12")
-
-    deb = tmp_path / f"{M}_0.0.post10~deb12_arm64.deb"
-    deb.write_bytes(b"deb")
-    gh = Renaming(OTHERS)
-    with pytest.raises(pub.PublishError, match="does not list"):
-        pub.publish([deb], "0.0.post10", gh=gh, min_kernel="6.12")
-    assert not gh.did("delete-asset")
 
 
 def test_a_transient_download_failure_is_retried(tmp_path, monkeypatch):
@@ -1065,6 +879,8 @@ CONFIG = {
     "suites": {"bookworm": {"arm64": ["rpi-v8", "rpi-2712"]}, "trixie": {"arm64": ["rpi-v8", "rpi-2712"]}},
 }
 INDEXES = {("bookworm", "arm64"): BOOKWORM, ("trixie", "arm64"): TRIXIE}
+P = "fpgas-online-acorn-litepcie"
+VERSIONS = {"bookworm": "0.0.post7~deb12", "trixie": "0.0.post7~deb13"}
 
 
 def _kvers(found):
@@ -1148,12 +964,12 @@ def test_a_fleet_kernel_that_is_not_built_fails_the_plan():
 
 
 def test_a_flavour_the_archive_has_no_kernel_for_fails_the_plan():
-    """An empty or truncated index must not read as 'nothing to build'."""
+    """An empty or truncated index must not read as 'nothing to build': the publish would drop every module."""
     with pytest.raises(plan.PlanError, match="trixie arm64 index has no rpi-2712"):
         plan.jobs(CONFIG, {**INDEXES, ("trixie", "arm64"): _index(("6.18.50+rpt-rpi-v8", "1:6.18.50-1+rpt1"))})
 
 
-def test_a_pull_request_builds_the_newest_kernel_of_each_suite_and_flavour_and_the_fleet_kernel():
+def test_a_sample_is_the_newest_kernel_of_each_suite_and_flavour_and_the_fleet_kernel():
     assert [(j.suite, j.kver) for j in plan.sample(plan.jobs(CONFIG, INDEXES))] == [
         ("bookworm", "6.12.96+rpt-rpi-v8"),  # the fleet kernel, though it is not the newest
         ("bookworm", "6.12.109+rpt-rpi-v8"),
@@ -1161,67 +977,6 @@ def test_a_pull_request_builds_the_newest_kernel_of_each_suite_and_flavour_and_t
         ("trixie", "6.18.50+rpt-rpi-v8"),
         ("trixie", "6.18.50+rpt-rpi-2712"),
     ]
-
-
-def test_the_deb_is_named_for_the_kernel_the_driver_version_and_the_suite():
-    (job,) = [j for j in plan.jobs(CONFIG, INDEXES) if j.fleet]
-    assert job.package == "fpgas-online-acorn-litepcie-modules-6.12.96+rpt-rpi-v8"
-    assert job.deb("0.0.post7") == "fpgas-online-acorn-litepcie-modules-6.12.96+rpt-rpi-v8_0.0.post7~deb12_arm64.deb"
-
-
-def test_the_asset_is_the_deb_as_github_stores_it():
-    """GitHub turns the `~` of an uploaded file's name into `.`; the release is compared by the stored name."""
-    (job,) = [j for j in plan.jobs(CONFIG, INDEXES) if j.fleet]
-    assert job.asset("0.0.post7") == "fpgas-online-acorn-litepcie-modules-6.12.96+rpt-rpi-v8_0.0.post7.deb12_arm64.deb"
-
-
-def test_main_builds_only_the_packages_the_release_does_not_have_at_this_driver_version():
-    jobs = plan.jobs(CONFIG, INDEXES)
-    published = {j.asset("0.0.post7") for j in jobs if j.suite == "bookworm"}
-    published |= {j.asset("0.0.post6") for j in jobs}  # an older driver version does not count
-    assert {j.suite for j in plan.missing(jobs, "0.0.post7", published)} == {"trixie"}
-    assert plan.missing(jobs, "0.0.post7", {j.asset("0.0.post7") for j in jobs}) == []
-    assert plan.missing(jobs, "0.0.post8", published) == jobs
-
-
-def test_the_matrix_is_what_the_workflow_reads():
-    jobs = [j for j in plan.jobs(CONFIG, INDEXES) if j.fleet]
-    assert plan.matrix(jobs, "0.0.post7") == {
-        "include": [
-            {
-                "suite": "bookworm",
-                "arch": "arm64",
-                "flavour": "rpi-v8",
-                "kver": "6.12.96+rpt-rpi-v8",
-                "package": "fpgas-online-acorn-litepcie-modules-6.12.96+rpt-rpi-v8",
-                "deb": "fpgas-online-acorn-litepcie-modules-6.12.96+rpt-rpi-v8_0.0.post7~deb12_arm64.deb",
-                "asset": "fpgas-online-acorn-litepcie-modules-6.12.96+rpt-rpi-v8_0.0.post7.deb12_arm64.deb",
-                "fleet": True,
-            }
-        ]
-    }
-
-
-def test_the_plan_command_writes_the_matrix_for_the_workflow(tmp_path, monkeypatch, capsys):
-    for (suite, arch), text in INDEXES.items():
-        (tmp_path / f"Packages-{suite}-{arch}").write_text(text)
-    kernels = tmp_path / "kernels.toml"
-    kernels.write_text(
-        'fleet_kernel = "6.12.96+rpt-rpi-v8"\nfleet_suite = "bookworm"\nmin_kernel = "6.12"\n'
-        '[suites.bookworm]\narm64 = ["rpi-v8", "rpi-2712"]\n[suites.trixie]\narm64 = ["rpi-v8", "rpi-2712"]\n'
-    )
-    assets = tmp_path / "assets"
-    assets.write_text("fpgas-online-acorn-litepcie-modules-6.12.96+rpt-rpi-v8_0.0.post7.deb12_arm64.deb\n")
-    output = tmp_path / "github-output"
-    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
-    common = ["--version", "0.0.post7", "--kernels", str(kernels), "--index-dir", str(tmp_path)]
-    plan.main([*common, "--assets-file", str(assets), "--mode", "missing"])
-    out = dict(line.split("=", 1) for line in output.read_text().splitlines())
-    assert out["count"] == "7"
-    assert len(json.loads(out["matrix"])["include"]) == 7
-    text = capsys.readouterr().out
-    assert "published -     fpgas-online-acorn-litepcie-modules-6.12.96+rpt-rpi-v8_0.0.post7.deb12_arm64.deb" in text
-    assert "main and the daily run would build 7 of 8" in text
 
 
 def test_kernels_toml_builds_the_kernels_a_pi_5_boots():
@@ -1239,19 +994,254 @@ def test_a_kernels_toml_without_suites_is_refused(tmp_path):
         bd.read_kernels(bad)
 
 
-def test_a_flavour_for_an_architecture_no_build_exists_for_is_refused(tmp_path):
+@pytest.mark.parametrize(("table", "problem"), [('[suites.bookworm]\nriscv64 = ["rpi-v8"]\n', "riscv64"),
+                                                ('[suites.buster]\narm64 = ["rpi-v8"]\n', "buster")])  # fmt: skip
+def test_a_suite_or_an_architecture_no_build_exists_for_is_refused(tmp_path, table, problem):
     bad = tmp_path / "kernels.toml"
-    bad.write_text(
-        'fleet_kernel = "6.12.96+rpt-rpi-v8"\nfleet_suite = "bookworm"\nmin_kernel = "6.12"\n'
-        '[suites.bookworm]\nriscv64 = ["rpi-v8"]\n'
-    )
-    with pytest.raises(bd.BuildError, match="riscv64"):
+    bad.write_text('fleet_kernel = "6.12.96+rpt-rpi-v8"\nfleet_suite = "bookworm"\nmin_kernel = "6.12"\n' + table)
+    with pytest.raises(bd.BuildError, match=problem):
         bd.read_kernels(bad)
+
+
+# -- what a suite's archive holds, and where each deb comes from (§4.3) -------------------------------------------
+
+
+def _wanted(suite="bookworm"):
+    jobs = [j for j in plan.jobs(CONFIG, INDEXES) if j.suite == suite]
+    return plan.wanted(suite, VERSIONS[suite], jobs)
+
+
+def test_a_suite_wants_the_complete_set_at_its_own_version():
+    """publish-apt drops a package the deploy does not hold: every publish hands over all of them."""
+    files = [deb["file"] for deb in _wanted("trixie")]
+    assert files == [
+        f"{P}-common_0.0.post7~deb13_all.deb",
+        f"{P}-dkms_0.0.post7~deb13_all.deb",
+        f"{P}-utils_0.0.post7~deb13_armhf.deb",
+        f"{P}-utils_0.0.post7~deb13_arm64.deb",
+        f"{P}-utils_0.0.post7~deb13_amd64.deb",
+        f"{P}-modules-6.12.25+rpt-rpi-v8_0.0.post7~deb13_arm64.deb",
+        f"{P}-modules-6.18.50+rpt-rpi-v8_0.0.post7~deb13_arm64.deb",
+        f"{P}-modules-6.18.50+rpt-rpi-2712_0.0.post7~deb13_arm64.deb",
+    ]
+    assert P not in {deb["package"] for deb in _wanted("trixie")}  # the meta package is not in this archive
+
+
+def _site(*debs, version=None):
+    """A live suite's Packages, as publish-apt's dpkg-scanpackages writes it."""
+    return "\n".join(
+        f"Package: {deb['package']}\nVersion: {version or deb['version']}\nArchitecture: {deb['arch']}\n"
+        f"Depends: x\nFilename: ./{deb['file']}\nSize: {len(deb['file'])}\n"
+        f"SHA256: {hashlib.sha256(deb['file'].encode()).hexdigest()}\nDescription: d\n more\n"
+        for deb in debs
+    )
+
+
+def test_without_a_site_everything_is_built():
+    planned = plan.plan_suite(_wanted(), None, selected={"6.12.96+rpt-rpi-v8"})
+    assert {deb["action"] for deb in planned} == {"build"}
+    assert [deb["kver"] for deb in planned if "kver" in deb and deb["selected"]] == ["6.12.96+rpt-rpi-v8"]
+    assert all(deb["selected"] for deb in planned if "kver" not in deb)  # -common, -dkms, -utils: always built
+
+
+def test_a_deb_the_site_has_at_this_version_is_reused_never_rebuilt():
+    """A published (package, version) never changes its bytes."""
+    debs = _wanted()
+    planned = plan.plan_suite(debs, _site(*debs[:3]), selected={j["kver"] for j in debs if "kver" in j})
+    assert [deb["action"] for deb in planned[:4]] == ["reuse", "reuse", "reuse", "build"]
+    first = planned[0]
+    assert first["filename"] == first["file"] and first["size"] == len(first["file"])
+    assert first["sha256"] == hashlib.sha256(first["file"].encode()).hexdigest()
+
+
+def test_another_version_or_architecture_on_the_site_is_not_this_deb():
+    debs = _wanted()
+    older = _site(*debs, version="0.0.post6~deb12")
+    assert {deb["action"] for deb in plan.plan_suite(debs, older)} == {"build"}
+    armhf = next(deb for deb in debs if deb["arch"] == "armhf")
+    other = plan.plan_suite(debs, _site(armhf))
+    assert [deb["arch"] for deb in other if deb["action"] == "reuse"] == ["armhf"]
+
+
+def test_a_quiet_day_builds_no_module_and_a_new_kernel_only_its_own():
+    jobs = plan.jobs(CONFIG, INDEXES)
+    site = {suite: _site(*_wanted(suite)) for suite in VERSIONS}
+    quiet = plan.make_plan(CONFIG, jobs, VERSIONS, "https://site", site, "full")
+    assert plan.matrix(quiet, jobs) == {"include": []}
+    site["bookworm"] = _site(*[d for d in _wanted() if d.get("kver") != "6.12.120+rpt-rpi-2712"])
+    new = plan.make_plan(CONFIG, jobs, VERSIONS, "https://site", site, "full")
+    assert plan.matrix(new, jobs) == {
+        "include": [
+            {
+                "suite": "bookworm",
+                "arch": "arm64",
+                "flavour": "rpi-2712",
+                "kver": "6.12.120+rpt-rpi-2712",
+                "package": f"{P}-modules-6.12.120+rpt-rpi-2712",
+                "version": "0.0.post7~deb12",
+                "deb": f"{P}-modules-6.12.120+rpt-rpi-2712_0.0.post7~deb12_arm64.deb",
+                "fleet": False,
+            }
+        ]
+    }
+
+
+def test_a_new_driver_version_builds_every_kernel():
+    jobs = plan.jobs(CONFIG, INDEXES)
+    site = {suite: _site(*_wanted(suite)) for suite in VERSIONS}
+    newer = {"bookworm": "0.0.post8~deb12", "trixie": "0.0.post8~deb13"}
+    made = plan.make_plan(CONFIG, jobs, newer, "https://site", site, "full")
+    assert len(plan.matrix(made, jobs)["include"]) == len(jobs) == 8
+
+
+def test_a_sample_run_builds_the_sample_whatever_the_site_has():
+    jobs = plan.jobs(CONFIG, INDEXES)
+    pr = {"bookworm": "0.0.post8~deb12~pr79", "trixie": "0.0.post8~deb13~pr79"}
+    made = plan.make_plan(CONFIG, jobs, pr, None, {}, "sample")
+    built = plan.matrix(made, jobs)["include"]
+    assert [(j["suite"], j["kver"], j["fleet"]) for j in built] == [
+        ("bookworm", "6.12.96+rpt-rpi-v8", True),
+        ("bookworm", "6.12.109+rpt-rpi-v8", False),
+        ("bookworm", "6.12.120+rpt-rpi-2712", False),
+        ("trixie", "6.18.50+rpt-rpi-v8", False),
+        ("trixie", "6.18.50+rpt-rpi-2712", False),
+    ]
+    assert {j["version"] for j in built} == set(pr.values())
+
+
+@pytest.mark.parametrize(
+    ("event", "site", "full", "expected"),
+    [
+        ("pull_request", "https://site", False, "sample"),  # never published
+        ("push", None, False, "sample"),  # nothing to publish to, or to reuse from
+        ("push", "https://site", False, "full"),
+        ("schedule", "https://site", False, "full"),
+        ("workflow_dispatch", None, True, "full"),  # asked for by hand
+    ],
+)
+def test_a_run_builds_every_missing_kernel_only_when_it_can_publish_or_is_asked_to(event, site, full, expected):
+    assert plan.mode(event, site, full) == expected
+
+
+def test_a_preview_version_without_its_pull_request_is_the_merged_builds():
+    assert plan.main_version("0.0.post8~deb12~pr79") == "0.0.post8~deb12"
+    assert plan.main_version("0.0.post8~deb12") == "0.0.post8~deb12"
+
+
+def test_a_site_index_without_a_checksum_is_refused():
+    debs = _wanted()
+    with pytest.raises(plan.PlanError, match="SHA256"):
+        plan.plan_suite(debs, _site(*debs).replace("SHA256", "MD5sum"))
+
+
+def _fetcher(files):
+    def fetch(url, missing_ok=False):
+        if url not in files:
+            if missing_ok:
+                return None
+            raise plan.PlanError(f"{url}: HTTP 404")
+        return files[url]
+
+    return fetch
+
+
+def _assembled(tmp_path, mode, on_site, built, corrupt=None):
+    debs = _wanted()
+    jobs = plan.jobs(CONFIG, INDEXES)
+    site = {"bookworm": _site(*[d for d in debs if d["file"] in on_site]), "trixie": None}
+    made = plan.make_plan(CONFIG, jobs, VERSIONS, "https://site", site, mode)
+    files = {f"https://site/bookworm/{name}": name.encode() for name in on_site}
+    if corrupt:
+        files[f"https://site/bookworm/{corrupt}"] = b"other bytes"
+    (tmp_path / "built" / "artifact").mkdir(parents=True)
+    for name in built:
+        (tmp_path / "built" / "artifact" / name).write_bytes(b"built " + name.encode())
+    result = plan.assemble(made, "bookworm", tmp_path / "built", tmp_path / "out", fetch=_fetcher(files))
+    return result, {p.name: p.read_bytes() for p in (tmp_path / "out").iterdir()}
+
+
+def test_assembling_takes_the_sites_copy_over_this_runs_rebuild(tmp_path):
+    """-common is rebuilt by every run; the bytes that were published are the ones published again."""
+    names = [deb["file"] for deb in _wanted()]
+    (reused, taken, left), out = _assembled(tmp_path, "full", on_site=names[:2], built=names)
+    assert reused == names[:2] and taken == names[2:] and left == []
+    assert out[names[0]] == names[0].encode()
+    assert out[names[2]] == b"built " + names[2].encode()
+    assert sorted(out) == sorted(names)
+
+
+def test_a_full_run_refuses_an_incomplete_suite(tmp_path):
+    """The deploy would drop the missing package from the archive."""
+    names = [deb["file"] for deb in _wanted()]
+    with pytest.raises(plan.PlanError, match=r"modules-6\.12\.120\+rpt-rpi-2712.*neither on the site nor among"):
+        _assembled(tmp_path, "full", on_site=names[:2], built=names[:-1])
+
+
+def test_a_sample_run_leaves_out_the_kernels_it_did_not_build(tmp_path):
+    names = [deb["file"] for deb in _wanted()]
+    not_sampled = [n for n in names if "6.12.19+rpt" in n]
+    built = [n for n in names if n not in not_sampled]
+    (reused, taken, left), out = _assembled(tmp_path, "sample", on_site=[], built=built)
+    assert (reused, taken, left) == ([], built, not_sampled)
+    assert sorted(out) == sorted(built)
+
+
+def test_a_sample_run_still_fails_when_something_it_should_have_built_is_missing(tmp_path):
+    names = [deb["file"] for deb in _wanted()]
+    with pytest.raises(plan.PlanError, match="utils"):
+        _assembled(tmp_path, "sample", on_site=[], built=[n for n in names if "utils" not in n])
+
+
+def test_a_site_file_that_is_not_what_its_index_says_is_refused(tmp_path):
+    names = [deb["file"] for deb in _wanted()]
+    with pytest.raises(plan.PlanError, match="does not match the site's own Packages"):
+        _assembled(tmp_path, "full", on_site=names, built=[], corrupt=names[1])
+
+
+def test_a_site_without_a_suite_yet_reads_as_nothing_published():
+    files = {"https://site/bookworm/Packages": b"Package: x\nVersion: 1\n"}
+    assert plan.read_site("https://site", ["bookworm", "trixie"], fetch=_fetcher(files)) == {
+        "bookworm": "Package: x\nVersion: 1\n",
+        "trixie": None,
+    }
+    assert plan.read_site(None, ["bookworm"], fetch=_fetcher({})) == {"bookworm": None}
+
+
+def test_the_plan_command_writes_the_plan_and_the_matrix_for_the_workflow(tmp_path, monkeypatch, capsys):
+    for (suite, arch), text in INDEXES.items():
+        (tmp_path / f"Packages-{suite}-{arch}").write_text(text)
+    kernels = tmp_path / "kernels.toml"
+    kernels.write_text(
+        'fleet_kernel = "6.12.96+rpt-rpi-v8"\nfleet_suite = "bookworm"\nmin_kernel = "6.12"\n'
+        '[suites.bookworm]\narm64 = ["rpi-v8", "rpi-2712"]\n[suites.trixie]\narm64 = ["rpi-v8", "rpi-2712"]\n'
+    )
+    output = tmp_path / "github-output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    versions = {"bookworm": "0.0.post7~deb12~pr79", "trixie": "0.0.post7~deb13~pr79"}
+    where = ["--kernels", str(kernels), "--index-dir", str(tmp_path), "--out", str(tmp_path / "plan.json")]
+    plan.main(["plan", "--versions", json.dumps(versions), "--event", "pull_request", "--no-site", *where])
+    out = dict(line.split("=", 1) for line in output.read_text().splitlines())
+    assert out["count"] == "5" and out["mode"] == "sample" and out["site"] == ""
+    assert json.loads(out["suites"]) == ["bookworm", "trixie"] and out["suites-list"] == "bookworm trixie"
+    assert len(json.loads(out["matrix"])["include"]) == 5
+    written = json.loads((tmp_path / "plan.json").read_text())
+    assert written["mode"] == "sample" and written["versions"] == versions
+    text = capsys.readouterr().out
+    assert f"skip  {P}-modules-6.12.19+rpt-rpi-v8_0.0.post7~deb12~pr79_arm64.deb" in text
+    assert "dry run: on the default branch, the publishing run of this driver version would" in text
+    assert f"build {P}-modules-6.12.19+rpt-rpi-v8_0.0.post7~deb12_arm64.deb" in text
+    assert "bookworm: 0 from the site, 10 built by this run, 0 left out" in text
+
+
+def test_the_plan_wants_a_version_for_exactly_the_suites_of_kernels_toml(tmp_path):
+    with pytest.raises(SystemExit, match="trixie"):
+        plan.main(["plan", "--versions", '{"bookworm": "0.0.post7~deb12"}', "--event", "push", "--no-site"])
 
 
 # -- the prebuilt modules package (§2, §3.8) ---------------------------------------------------------------------
 
 KVER = "6.12.109+rpt-rpi-v8"
+DEB12 = "0.0.post7~deb12"
 
 
 @pytest.fixture
@@ -1266,7 +1256,7 @@ def built(tmp_path):
 
 
 def _modules(tree, built, tmp_path, suite="bookworm", kver=KVER, arch="arm64"):
-    return bd.modules_nfpm(VERSION, suite, kver, arch, built, tree, tmp_path / "stage")
+    return bd.modules_nfpm(DEB12, suite, kver, arch, built, tree, tmp_path / "stage")
 
 
 def test_the_modules_package_is_named_for_its_kernel_and_built_for_the_kernels_architecture(tree, built, tmp_path):
@@ -1274,6 +1264,7 @@ def test_the_modules_package_is_named_for_its_kernel_and_built_for_the_kernels_a
     assert config["name"] == "fpgas-online-acorn-litepcie-modules-6.12.109+rpt-rpi-v8"
     assert config["arch"] == "arm64"
     assert config["section"] == "kernel"
+    assert (config["version"], config["version_schema"]) == (DEB12, "none")
 
 
 def test_the_modules_go_where_depmod_prefers_them_over_the_kernels_own(tree, built, tmp_path):
@@ -1301,34 +1292,9 @@ def test_the_modules_maintainer_scripts_run_depmod_for_the_packages_kernel(tree,
         assert "@" not in script  # every template field was filled
 
 
-def test_the_modules_version_carries_the_suites_debian_release(tree, built, tmp_path):
-    assert _modules(tree, built, tmp_path)["version"] == "0.0.post7~deb12"
-    (built / "modules.json").write_text(json.dumps({"kver": KVER, "suite": "trixie", "arch": "arm64"}))
-    config = _modules(tree, built, tmp_path / "t", suite="trixie")
-    assert config["version"] == "0.0.post7~deb13"
-    assert config["version_schema"] == "none"
-
-
-def test_the_suite_suffix_is_never_a_date_or_a_codename():
-    assert bd.modules_version("0.0.post7", "bookworm") == "0.0.post7~deb12"
-    assert bd.modules_version("0.0", "trixie") == "0.0~deb13"
-    with pytest.raises(bd.BuildError, match="buster"):
-        bd.modules_version("0.0.post7", "buster")
-
-
-@pytest.mark.skipif(not shutil.which("dpkg"), reason="needs dpkg --compare-versions")
-def test_the_older_suites_build_sorts_lower_so_a_release_upgrade_replaces_it():
-    """bookworm < trixie < forky < an unsuffixed version, by dpkg's own comparison."""
-    order = [bd.modules_version("0.0.post5", suite) for suite in ("bookworm", "trixie", "forky")]
-    assert order == ["0.0.post5~deb12", "0.0.post5~deb13", "0.0.post5~deb14"]
-    order += ["0.0.post5", "0.0.post6~deb12"]
-    for lower, higher in zip(order, order[1:]):
-        subprocess.run(["dpkg", "--compare-versions", lower, "lt", higher], check=True)
-
-
 def test_the_deb_file_name_is_the_debian_one():
     assert (
-        bd.deb_name("fpgas-online-acorn-litepcie-modules-6.12.109+rpt-rpi-v8", "0.0.post7~deb12", "arm64")
+        bd.deb_name("fpgas-online-acorn-litepcie-modules-6.12.109+rpt-rpi-v8", DEB12, "arm64")
         == "fpgas-online-acorn-litepcie-modules-6.12.109+rpt-rpi-v8_0.0.post7~deb12_arm64.deb"
     )
 
@@ -1353,8 +1319,76 @@ def test_the_modules_package_ships_the_litepcie_notice(tree, built, tmp_path):
 def test_common_satisfies_a_modules_package_of_a_foreign_architecture():
     """The fleet's root is armhf and its modules package arm64: apt lets an arm64 package's dependency be met
     by an Architecture: all package only when that one is Multi-Arch: foreign."""
-    assert bd.common_nfpm(VERSION)["deb"]["fields"] == {"Multi-Arch": "foreign"}
+    assert bd.common_nfpm(DEB12)["deb"]["fields"] == {"Multi-Arch": "foreign"}
 
 
 def test_the_utils_are_built_for_the_pi_architectures_and_x86():
     assert set(bd.ARCHES) == {"armhf", "arm64", "amd64"}
+
+
+@pytest.mark.parametrize(
+    ("version", "driver"),
+    [
+        ("0.0.post7~deb12", "0.0.post7"),
+        ("0.0.post7~deb13~pr79", "0.0.post7"),
+        ("0.1~deb12", "0.1"),
+        ("1.2.post3", "1.2.post3"),
+    ],
+)
+def test_the_drivers_own_version_is_the_debs_without_the_suite_and_preview_suffixes(version, driver):
+    assert bd.driver_of(version) == driver
+
+
+@pytest.mark.parametrize("version", ["20261002~deb12", "~deb12", "0.0.post7+bookworm", "v0.0.post7"])
+def test_a_version_that_is_not_a_git_describe_one_is_refused(version):
+    with pytest.raises(bd.BuildError, match=r"X\.Y"):
+        bd.driver_of(version)
+
+
+def test_dkms_knows_the_driver_by_its_own_version_in_every_suite(tree, tmp_path):
+    """The suite is in the deb's version only: the sources, dkms.conf and the DKMS module version are the same."""
+    for n, version in enumerate(("0.0.post7~deb12", "0.0.post7~deb13~pr79")):
+        config = bd.dkms_nfpm(version, tree, tmp_path / str(n))
+        assert config["version"] == version
+        src = pathlib.Path(_dst(config)["/usr/src/fpgas-online-acorn-litepcie-0.0.post7"]["src"])
+        assert (src / "dkms.conf").read_text() == DKMS_CONF
+        postinst = pathlib.Path(config["scripts"]["postinstall"]).read_text()
+        assert "/usr/lib/dkms/common.postinst fpgas-online-acorn-litepcie 0.0.post7 " in postinst
+
+
+def test_tools_built_in_another_suite_are_refused(tree, bins):
+    """Each suite's tools are compiled in that suite's image, against its glibc."""
+    with pytest.raises(bd.BuildError, match="bookworm armhf, not trixie armhf"):
+        bd.utils_nfpm("0.0.post7~deb13", "trixie", "armhf", bins, tree)
+
+
+def test_the_command_line_builds_common_and_dkms_once_per_suite(tree, tmp_path, monkeypatch):
+    built = []
+    monkeypatch.setattr(bd, "run_nfpm", lambda config, out, nfpm: built.append((config["name"], config["version"])))
+    versions = {"bookworm": "0.0.post7~deb12", "trixie": "0.0.post7~deb13"}
+    bd.main(["--out", str(tmp_path / "out"), "--driver", str(tree), "--only", "common", "--only", "dkms",
+             "--versions", json.dumps(versions)])  # fmt: skip
+    assert built == [
+        ("fpgas-online-acorn-litepcie-common", "0.0.post7~deb12"),
+        ("fpgas-online-acorn-litepcie-dkms", "0.0.post7~deb12"),
+        ("fpgas-online-acorn-litepcie-common", "0.0.post7~deb13"),
+        ("fpgas-online-acorn-litepcie-dkms", "0.0.post7~deb13"),
+    ]
+
+
+def test_the_command_line_wants_the_version_it_is_given_not_one_of_its_own(tmp_path):
+    with pytest.raises(SystemExit):
+        bd.main(["--out", str(tmp_path), "--only", "common"])
+    with pytest.raises(SystemExit, match=r"X\.Y"):
+        bd.main(["--out", str(tmp_path), "--only", "common", "--version", "2026.10.02"])
+
+
+def test_the_driver_commit_can_be_checked_out_for_the_shared_version_action(repo, tmp_path):
+    """deb-version versions a checkout: it gets one of the last commit that changed a driver input, not HEAD."""
+    _commit(repo, "uv.lock", "1\n", "lock")
+    want = _git(repo, "rev-parse", "HEAD")
+    _commit(repo, "README.md", "1\n", "docs")
+    assert bd.driver_commit(repo) == want
+    assert bd.version_tree(tmp_path / "tree", repo) == want
+    assert _git(tmp_path / "tree", "rev-parse", "HEAD") == want
+    assert _git(tmp_path / "tree", "describe", "--tags", "--long", "--match", "v[0-9]*").startswith("v0.0-1-g")

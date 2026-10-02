@@ -6,17 +6,19 @@ Design: docs/plans/2026-09-25-acorn-litepcie-packages-design.md (§2, §3, §4).
   * fpgas-online-acorn-litepcie-common (all): the modprobe.d blacklist that keeps udev from loading
     litepcie.ko at boot. Loading it is always an operator's decision.
   * fpgas-online-acorn-litepcie-dkms (all): the patched kernel sources and a dkms.conf, for single-architecture
-    SD-booted hosts. The netbooted fleet (armhf root, arm64 kernel) cannot use DKMS; it gets prebuilt modules.
-  * fpgas-online-acorn-litepcie-utils (armhf, arm64, amd64): litepcie_util and litepcie_test, compiled in
-    debian:bookworm by container.py.
+    hosts. The netbooted fleet (armhf root, arm64 kernel) cannot use DKMS; it gets prebuilt modules.
+  * fpgas-online-acorn-litepcie-utils (armhf, arm64, amd64): litepcie_util and litepcie_test, compiled in each
+    suite's Debian image by container.py.
   * fpgas-online-acorn-litepcie-modules-<kver> (the kernel's architecture): litepcie.ko and liteuart.ko
     built by container.py against one Raspberry Pi kernel's headers, for the hosts DKMS cannot serve.
 
 Takes the tree prepare_driver.py writes (patched, with litepcie's LICENSE).
 
-The version is `X.Y.postN` from `git describe`, as the repository's other debs, but of the last commit on
-main's first-parent line that changed one of the driver's inputs (VERSION_INPUTS), not of HEAD: a merge that
-touches nothing the driver is built from gives it no new version.
+Every package is built once per suite, at that suite's version: `X.Y.postN~deb<R>`, and `~pr<P>` after it
+on a pull request (mithro/apt-repo-action, docs/packaging.md). CI gets it from the shared deb-version action
+and passes it in. That action versions a checkout, so CI gives it one of the driver commit (--version-tree):
+the last commit on main's first-parent line that changed one of the driver's inputs (VERSION_INPUTS), not
+HEAD. A merge that touches nothing the driver is built from gives it no new version.
 """
 
 import argparse
@@ -41,8 +43,7 @@ TOOLS = ("litepcie_util", "litepcie_test")
 MODULES = ("litepcie", "liteuart")
 ARCHES = ("armhf", "arm64", "amd64")  # -utils
 KERNEL_ARCHES = ("arm64", "armhf")  # -modules-<kver>: the Raspberry Pi archive's
-# A suite's Debian release number, for the `~deb<R>` suffix of a suite-specific build (§3.8).
-SUITE_RELEASE = {"bookworm": 12, "trixie": 13, "forky": 14}
+SUITES = ("bookworm", "trixie")  # the suites the Raspberry Pi archive has kernels for
 MAINTAINER = "fpgas.online <fpgas@fpgas.online>"
 HOMEPAGE = "https://github.com/fpgas-online/fpgas.online-test-designs"
 
@@ -70,13 +71,26 @@ def _git(repo, *args):
         raise BuildError(f"git {' '.join(args)}: {e.stderr.strip()}") from None
 
 
-def driver_version(repo=REPO):
-    """`X.Y` / `X.Y.postN` for the last first-parent commit that changed a VERSION_INPUTS path."""
+def driver_commit(repo=REPO):
+    """The last first-parent commit that changed a VERSION_INPUTS path: the commit the packages are versioned by."""
     if _git(repo, "rev-parse", "--is-shallow-repository") == "true":
         raise BuildError(f"{repo} is a shallow clone: the version needs the full history (fetch-depth: 0)")
     commit = _git(repo, "log", "-1", "--first-parent", "--format=%H", "--", *VERSION_INPUTS)
     if not commit:
         raise BuildError(f"no commit changes any of {', '.join(VERSION_INPUTS)}")
+    return commit
+
+
+def version_tree(path, repo=REPO):
+    """Check the driver commit out at `path` (a detached worktree), for the shared deb-version action to version."""
+    commit = driver_commit(repo)
+    _git(repo, "worktree", "add", "--detach", str(path), commit)
+    return commit
+
+
+def driver_version(repo=REPO):
+    """`X.Y` / `X.Y.postN` of the driver commit: what the shared deb-version action puts before `~deb<R>`."""
+    commit = driver_commit(repo)
     try:
         out = _git(repo, "describe", "--tags", "--long", "--match", "v[0-9]*.[0-9]*", commit)
     except BuildError as e:
@@ -105,8 +119,8 @@ def read_kernels(path=KERNELS):
     if not isinstance(suites, dict) or not suites:
         raise BuildError(f"{path}: no [suites.<suite>] table says which kernel flavours to build")
     for suite, arches in suites.items():
-        if suite not in SUITE_RELEASE:
-            raise BuildError(f"{path}: {suite} is not a suite build_debs.py knows the Debian release of")
+        if suite not in SUITES:
+            raise BuildError(f"{path}: {suite} is not one of the suites the builds run in ({', '.join(SUITES)})")
         for arch, flavours in arches.items():
             if arch not in KERNEL_ARCHES:
                 raise BuildError(f"{path}: {suite} lists flavours for {arch}, which no build exists for")
@@ -119,12 +133,12 @@ def modules_package(kver):
     return f"{NAME}-modules-{kver}"
 
 
-def modules_version(version, suite):
-    """`X.Y.postN~deb<R>`: the older suite's build of one driver version sorts lower, so a release upgrade
-    replaces it, and every suite's build sorts below an unsuffixed version."""
-    if suite not in SUITE_RELEASE:
-        raise BuildError(f"{suite} is not a suite build_debs.py knows the Debian release of")
-    return f"{version}~deb{SUITE_RELEASE[suite]}"
+def driver_of(version):
+    """`0.0.post7~deb12~pr3` -> `0.0.post7`: the driver's own version, without the suite and preview suffixes."""
+    driver = version.split("~")[0]
+    if not re.fullmatch(r"\d+\.\d+(\.post\d+)?", driver):
+        raise BuildError(f"{version!r} does not start with an X.Y or X.Y.postN version")
+    return driver
 
 
 def deb_name(package, version, arch):
@@ -155,7 +169,7 @@ def _base(name, arch, version, license_, summary, body):
     return {
         "name": name,
         "arch": arch,
-        "section": "misc" if name in (COMMON, UTILS) else "kernel",
+        "section": "kernel" if name == DKMS or name.startswith(f"{NAME}-modules-") else "misc",
         "platform": "linux",
         "version": version,
         "version_schema": "none",  # nfpm would otherwise rewrite it as semver
@@ -225,8 +239,13 @@ def common_nfpm(version):
 
 
 def dkms_nfpm(version, tree, stage):
-    """Stage /usr/src/<name>-<version> (the kernel sources and dkms.conf) and the maintainer scripts."""
+    """Stage /usr/src/<name>-<driver version> (the kernel sources and dkms.conf) and the maintainer scripts.
+
+    DKMS knows the module by the driver's own version, which is the same in every suite: only the deb's
+    version carries the suite."""
     stage = pathlib.Path(stage)
+    stage.mkdir(parents=True, exist_ok=True)
+    version, deb_version = driver_of(version), version
     src = stage / f"{NAME}-{version}"
     shutil.copytree(pathlib.Path(tree) / "kernel", src)
     (src / "dkms.conf").write_text(dkms_conf(version))
@@ -240,7 +259,7 @@ def dkms_nfpm(version, tree, stage):
         **_base(
             DKMS,
             "all",
-            version,
+            deb_version,
             "BSD-2-Clause AND GPL-2.0-only",
             "fpgas.online Acorn LitePCIe driver: DKMS source",
             "litepcie.ko and liteuart.ko for the fpgas.online Acorn PCIe SoC, generated from its gateware and\n"
@@ -278,7 +297,7 @@ def modules_nfpm(version, suite, kver, arch, module_dir, tree, stage):
         **_base(
             package,
             arch,
-            modules_version(version, suite),
+            version,
             "BSD-2-Clause AND GPL-2.0-only",
             f"fpgas.online Acorn LitePCIe driver: modules for Linux {kver}",
             "litepcie.ko and liteuart.ko for the fpgas.online Acorn PCIe SoC, built for this one kernel. For\n"
@@ -309,12 +328,12 @@ def modules_nfpm(version, suite, kver, arch, module_dir, tree, stage):
     }
 
 
-def utils_nfpm(version, arch, bin_dir, tree):
-    """The tools container.py built: `bin_dir` holds them and utils.json (their architecture and glibc floor)."""
+def utils_nfpm(version, suite, arch, bin_dir, tree):
+    """The tools container.py built: `bin_dir` holds them and utils.json (what for, and their glibc floor)."""
     bin_dir = pathlib.Path(bin_dir)
     info = json.loads((bin_dir / "utils.json").read_text())
-    if info.get("arch") != arch:
-        raise BuildError(f"{bin_dir} holds tools built for {info.get('arch')}, not {arch}")
+    if (info.get("suite"), info.get("arch")) != (suite, arch):
+        raise BuildError(f"{bin_dir} holds tools built for {info.get('suite')} {info.get('arch')}, not {suite} {arch}")
     exe = {"file_info": {"mode": 0o755}}
     return {
         **_base(
@@ -352,46 +371,57 @@ def run_nfpm(config, out_dir, nfpm="nfpm"):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--print-version", action="store_true", help="print driver_version() and stop")
+    parser.add_argument("--version-tree", type=pathlib.Path, help="check the driver commit out there and stop")
     parser.add_argument("--out", type=pathlib.Path, help="where the .deb files go")
     parser.add_argument("--driver", type=pathlib.Path, help="the tree prepare_driver.py wrote")
     parser.add_argument("--only", choices=("common", "dkms", "utils", "modules"), action="append")
+    parser.add_argument("--version", help="the deb's version, from the shared deb-version action")
+    parser.add_argument("--versions", help='-common, -dkms: {"<suite>": "<version>"} as JSON, one deb each')
+    parser.add_argument("--suite", help="-utils, -modules: the suite they were built in")
     parser.add_argument("--arch", choices=ARCHES, help="-utils, -modules: the architecture they were built for")
     parser.add_argument("--bin-dir", type=pathlib.Path, help="-utils: where container.py put the tools")
-    parser.add_argument("--suite", help="-modules: the suite whose kernel the modules were built for")
-    parser.add_argument("--kver", help="-modules: that kernel")
+    parser.add_argument("--kver", help="-modules: the kernel the modules were built for")
     parser.add_argument("--module-dir", type=pathlib.Path, help="-modules: where container.py put the modules")
-    parser.add_argument("--version", help="override the version (default: driver_version())")
     parser.add_argument("--nfpm", default="nfpm", help="the nfpm binary")
     args = parser.parse_args(argv)
-    if not args.print_version and not (args.out and args.driver and args.only):
-        parser.error("--out, --driver and at least one --only are required")
     try:
         if args.print_version:
             print(driver_version())
             return
-        version = args.version or driver_version()
+        if args.version_tree:
+            print(f"the driver commit {version_tree(args.version_tree)} is checked out at {args.version_tree}")
+            return
+        if not (args.out and args.only and (args.version or args.versions)):
+            parser.error("--out, at least one --only, and --version or --versions are required")
+        versions = list(json.loads(args.versions).values()) if args.versions else [args.version]
+        if len(versions) > 1 and set(args.only) - {"common", "dkms"}:
+            raise BuildError("--versions is for -common and -dkms, which are the same in every suite")
+        if set(args.only) - {"common"} and not args.driver:
+            raise BuildError("--driver is required for everything but -common")
         args.out.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(dir=args.out, prefix=".stage-") as stage:
-            for which in args.only:
-                if which == "common":
-                    config = common_nfpm(version)
-                elif which == "dkms":
-                    config = dkms_nfpm(version, args.driver, stage)
-                elif which == "modules":
-                    if not (args.arch and args.suite and args.kver and args.module_dir):
-                        raise BuildError("-modules needs --arch, --suite, --kver and --module-dir")
-                    stage_modules = pathlib.Path(stage) / "modules"
-                    config = modules_nfpm(
-                        version, args.suite, args.kver, args.arch, args.module_dir, args.driver, stage_modules
-                    )
-                else:
-                    if not (args.arch and args.bin_dir):
-                        raise BuildError("-utils needs --arch and --bin-dir")
-                    config = utils_nfpm(version, args.arch, args.bin_dir, args.driver)
-                run_nfpm(config, args.out, args.nfpm)
-    except BuildError as e:
+        with tempfile.TemporaryDirectory(dir=args.out, prefix=".stage-") as tmp:
+            for n, version in enumerate(versions):
+                driver_of(version)  # refuse anything that is not X.Y[.postN][~...]
+                for which in args.only:
+                    stage = pathlib.Path(tmp) / f"{n}-{which}"
+                    if which == "common":
+                        config = common_nfpm(version)
+                    elif which == "dkms":
+                        config = dkms_nfpm(version, args.driver, stage)
+                    elif which == "modules":
+                        if not (args.arch and args.suite and args.kver and args.module_dir):
+                            raise BuildError("-modules needs --arch, --suite, --kver and --module-dir")
+                        config = modules_nfpm(
+                            version, args.suite, args.kver, args.arch, args.module_dir, args.driver, stage
+                        )
+                    else:
+                        if not (args.arch and args.suite and args.bin_dir):
+                            raise BuildError("-utils needs --arch, --suite and --bin-dir")
+                        config = utils_nfpm(version, args.suite, args.arch, args.bin_dir, args.driver)
+                    run_nfpm(config, args.out, args.nfpm)
+    except (BuildError, json.JSONDecodeError) as e:
         sys.exit(f"error: {e}")
-    print(f"built {', '.join(args.only)} at version {version}")
+    print(f"built {', '.join(args.only)} at {', '.join(versions)}")
 
 
 if __name__ == "__main__":
