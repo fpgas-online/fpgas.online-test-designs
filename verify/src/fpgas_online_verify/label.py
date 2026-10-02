@@ -9,7 +9,8 @@
 
 rpi-hwid is a soft dependency: it is found on PATH and run, never imported. Without it, --label exits 2 and
 says how to install it. It also exits 2 when the identity file cannot be written: /run/fpgas-online is root's,
-so --label runs as root. Otherwise the exit status is rpi-hwid's; a SIGTERM to --label itself exits 143.
+so --label runs as root. Otherwise the exit status is rpi-hwid's, and 128 + N when rpi-hwid was killed by
+signal N (as a shell says it); a SIGTERM to --label itself exits 143.
 
 Stdlib only: the Pi hosts boot a tmpfs root with no LiteX.
 """
@@ -72,8 +73,12 @@ def run(options, out=None, listing=False, prog="fpgas-verify", boards=None, runn
                   "(run it as root)", file=sys.stderr)  # fmt: skip
             return 2
         try:
-            return runner(argv(tool, out, listing), env={**os.environ, identify.ENV: str(path)}, check=False).returncode
+            rc = runner(argv(tool, out, listing), env={**os.environ, identify.ENV: str(path)}, check=False).returncode
         finally:
             path.unlink(missing_ok=True)
     finally:
         signal.signal(signal.SIGTERM, previous)
+    if rc < 0:
+        print(f"{prog} --label: {TOOL} was killed by signal {-rc} ({signal.Signals(-rc).name})", file=sys.stderr)
+        return 128 - rc
+    return rc

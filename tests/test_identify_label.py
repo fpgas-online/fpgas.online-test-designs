@@ -719,6 +719,28 @@ def test_label_that_cannot_write_the_identity_says_so_and_exits_2(tmp_path, labe
     assert "Traceback" not in err
 
 
+def test_rpi_hwid_killed_by_a_signal_is_128_plus_the_signal(labelling, locks, capsys):
+    assert label.run(labelling, runner=RpiHwid(locks, rc=-signal.SIGKILL)) == 128 + signal.SIGKILL
+    assert "rpi-hwid was killed by signal 9 (SIGKILL)" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("extra", [["--report", "r.json"], ["--state", "s.json"], ["--no-publish"]])
+def test_label_refuses_the_check_s_report_state_and_publish_options(extra, monkeypatch, untouchable, capsys):
+    monkeypatch.delenv(identify.ENV, raising=False)
+    with pytest.raises(SystemExit) as refused:
+        cli.verify_main(["--label", *extra])
+    assert refused.value.code == 2
+    assert f"{extra[0]} does not go with it" in capsys.readouterr().err
+
+
+def test_without_state_the_check_still_uses_the_recorded_state(monkeypatch):
+    monkeypatch.delenv(identify.ENV, raising=False)
+    seen = []
+    monkeypatch.setattr(cli.runner, "run", lambda options, prog="fpgas-verify": seen.append(options) or 0)
+    assert cli.verify_main([]) == 0 and "state" not in seen[0]  # runner.verify falls back to state.STATE
+    assert cli.verify_main(["--state", "s.json"]) == 0 and seen[1]["state"] == pathlib.Path("s.json")
+
+
 def test_label_without_rpi_hwid_exits_2_says_how_to_install_it_and_reads_nothing(monkeypatch, untouchable, capsys):
     monkeypatch.delenv(identify.ENV, raising=False)
     monkeypatch.setattr(label.shutil, "which", lambda tool: None)

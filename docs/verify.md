@@ -155,9 +155,11 @@ the check, publishes anything or records any state.
 4. runs `rpi-hwid labels --this-host [--out F] [--list]` with `FPGAS_VERIFY_IDENTITY` set to that file;
 5. deletes the file, whatever happened: an error, Ctrl-C, or a SIGTERM (which exits 143).
 
-Its exit status is rpi-hwid's. It exits 2, saying why, when rpi-hwid is not installed or when the file cannot
-be written: run it as root. `--list` (with `--label`) lists the labels rpi-hwid would make; `--out F` is where
-rpi-hwid writes them.
+Its exit status is rpi-hwid's, or 128 + N when rpi-hwid was killed by signal N, as a shell reports it (137
+for SIGKILL). It exits 2, saying why, when rpi-hwid is not installed or when the file cannot be written: run it
+as root. `--list` (with `--label`) lists the labels rpi-hwid would make; `--out F` is where rpi-hwid writes
+them. `--label` writes no report or state and publishes nothing, so `--report`, `--state` and `--no-publish`
+are refused with it (exit 2).
 
 Nesting: rpi-hwid gets the board's identity by running `fpgas-verify --identify`. So that the inner run never
 waits on a lock the outer run holds, reads a board twice or starts rpi-hwid again, a run with
