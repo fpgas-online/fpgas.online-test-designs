@@ -629,6 +629,11 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 * Loading a test design and upgrading the packages are not changes. A flash that could not be read is not compared.
 * An IDCODE recorded without its version (a record with `schema_version` below 3) takes the whole one
   quietly. On a newer record, another version is a change: it is another chip.
+* One swap is missed because of that, once. A NeTV2 on a Pi 3/4 recorded its whole IDCODE even before
+  schema 3 (OpenOCD prints it), but the record cannot say whether its value was whole or masked. A version 0
+  value looks the same either way. So if such a board's version 0 chip was swapped for a version 1 chip of
+  the same part, the first run on schema 3 takes the new IDCODE quietly instead of reporting `changed`.
+  Later runs compare the whole IDCODE as usual.
 * A `--test` run neither records nor compares the state.
 
 ---
