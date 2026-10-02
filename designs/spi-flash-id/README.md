@@ -27,8 +27,30 @@ uv run python designs/spi-flash-id/gateware/spiflash_soc_arty.py --toolchain ope
 ## Testing
 
 ```sh
-uv run python designs/spi-flash-id/host/test_spiflash.py --port /dev/ttyUSB1
+uv run python designs/spi-flash-id/host/test_spiflash.py --port /dev/ttyUSB1                 # Arty
+uv run python designs/spi-flash-id/host/test_spiflash.py --port /dev/ttyAMA0 --board netv2
 ```
+
+The firmware (`designs/_shared/ice40_firmware.py`, on every board) reads the ID when the design starts,
+prints it and the `litex> ` prompt, then waits. A newline on the UART makes it read the flash again. The
+test does not use the reading printed at start. It runs:
+
+| Step | Checked |
+|------|---------|
+| a newline | the `litex> ` prompt comes back: the firmware is there and answers |
+| a newline, twice | each makes the firmware send `0x9F` to the flash again. The ident is the SPI flash test design for this board; the ID is not `000000` or `ffffff`; the firmware's verdict is PASS; both readings agree; the ID is the board's known one (the Fomu's `1f8601`) or the `--expected-jedec` given |
+
+Its last line is the result for `fpgas-verify`:
+
+```text
+RESULT_JSON {"test": "spiflash", "board": "netv2", "result": "pass", "ident": "...", "commands": ["read", "read"],
+             "rdid": "ef4018", "manufacturer": "Winbond", "capacity_bytes": 16777216}
+```
+
+A failure adds `"reason"`. `capacity_bytes` is given only where the ID's third byte is the size's log2. A
+port that cannot be opened, or that fails during the test, is a `fail` with that `reason`: the line is
+always printed. The script can be started before or after the design is loaded: `--timeout` is how long it
+waits for the prompt.
 
 ## Key Files
 

@@ -2,14 +2,18 @@
 """
 Host-side SPI Flash ID test script.
 
-Captures UART output from the FPGA and looks for the JEDEC ID
-printed by the custom firmware or by the LiteX BIOS.
+Attaches to the SPI flash test design's firmware (designs/_shared/ice40_firmware.py) over the UART and asks
+it to read the flash's JEDEC ID now:
 
-Two modes of operation:
-  1. Custom firmware mode (default): Looks for "JEDEC_ID:" and
-     "SPI_FLASH_TEST: PASS/FAIL" lines.
-  2. BIOS mode (--bios): Parses the BIOS boot output for SPI flash
-     identification messages.
+  1. the prompt   a newline is answered with the `litex>` prompt
+  2. a newline    the firmware sends 0x9F to the flash again and prints its ident, the three ID bytes and
+                  its own verdict; asked twice, and both readings have to agree
+
+The verdict is on these readings, not on the one the firmware printed when the design started: that output
+is gone before the Pi's own UART is opened (the NeTV2, the Fomu), and is an old log on a USB UART (the
+Arty). See designs/_host/bios_console.py.
+
+The last line of output is the result for fpgas-verify: RESULT_JSON {"test": "spiflash", "result": ...}.
 
 Usage:
     uv run python designs/spi-flash-id/host/test_spiflash.py --port /dev/ttyUSB1
@@ -17,27 +21,32 @@ Usage:
 """
 
 import argparse
+import os
 import re
 import sys
-import time
 
-import serial
+# In the repository the helper is in designs/_host; installed, it is beside this script.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "_host"))
+
+import bios_console
 
 # --------------------------------------------------------------------------- #
 # Constants
 # --------------------------------------------------------------------------- #
 
 BAUD_RATE = 115200
-BOOT_TIMEOUT_S = 30
+ATTACH_TIMEOUT_S = 30
+READ_TIMEOUT_S = 10  # one reading: about 100 characters and 40 bit-banged SPI clocks
 
-# Known-good JEDEC IDs per board (to be filled in after initial runs).
-# Format: (manufacturer, device_type, capacity)
-# Set to None to skip validation — only check for non-zero/non-FF.
-EXPECTED_JEDEC_IDS = {
-    "arty": None,  # TBD — varies by board revision
-    "netv2": None,  # TBD — to be determined
-    "fomu": (0x1F, 0x86, 0x01),  # AT25SF161: Adesto/Renesas, 16 Mbit
-    "tt": None,  # TBD — TT FPGA Demo Board SPI flash
+# What the ident must contain: the design, and the board it was built for. `jedec` is the ID of the flash
+# the board is known to carry (manufacturer, device type, capacity), None where boards differ.
+DESIGN_IDENT = "SPI Flash Test SoC"
+BOARDS = {
+    "arty": {"ident": "Arty A7", "jedec": None},  # varies by board revision
+    "netv2": {"ident": "NeTV2", "jedec": None},
+    "fomu": {"ident": "Fomu EVT", "jedec": (0x1F, 0x86, 0x01)},  # AT25SF161: Adesto/Renesas, 16 Mbit
+    "tt": {"ident": "TT FPGA", "jedec": None},
+    "acorn": {"ident": "Acorn", "jedec": None},
 }
 
 # Common manufacturer names for reporting.
@@ -50,125 +59,107 @@ MANUFACTURER_NAMES = {
     0xBF: "SST/Microchip",
 }
 
+JEDEC_RE = re.compile(r"JEDEC_ID:\s+0x([0-9A-Fa-f]{2})\s+0x([0-9A-Fa-f]{2})\s+0x([0-9A-Fa-f]{2})")
+VERDICT_RE = re.compile(r"SPI_FLASH_TEST:\s+(PASS|FAIL)")
+IDENT_RE = re.compile(r"Ident:\s*(.+)")
+READINGS = 2
+
+
+# --------------------------------------------------------------------------- #
+# Parsing
+# --------------------------------------------------------------------------- #
+
+
+def parse_reading(reply):
+    """{"ident", "jedec", "verdict"} of one reading's lines; None for what the firmware did not print."""
+    text = "\n".join(reply)
+    ident, jedec, verdict = IDENT_RE.search(text), JEDEC_RE.search(text), VERDICT_RE.search(text)
+    return {
+        "ident": ident.group(1).strip() if ident else None,
+        "jedec": tuple(int(b, 16) for b in jedec.groups()) if jedec else None,
+        "verdict": verdict.group(1) if verdict else None,
+    }
+
+
+def rdid(jedec):
+    return "".join(f"{b:02x}" for b in jedec)
+
+
+def capacity_bytes(jedec):
+    """The flash's size, where the third ID byte is its log2 (most manufacturers; not Adesto's 0x1F parts)."""
+    return 2 ** jedec[2] if jedec[0] != 0x1F and 0x10 <= jedec[2] <= 0x20 else None
+
 
 # --------------------------------------------------------------------------- #
 # Test logic
 # --------------------------------------------------------------------------- #
 
 
-def run_firmware_mode(ser, board, expected_ids=None, timeout=BOOT_TIMEOUT_S):
-    """Parse output from custom JEDEC ID firmware.
+def run_spiflash_test(bios, board, expected=None, attach_timeout=ATTACH_TIMEOUT_S):
+    """Run the test on an open console. Returns the result's fields ("result", "reason", ...)."""
+    found = {"test": "spiflash", "board": board, "commands": []}
 
-    Looks for lines:
-        JEDEC_ID: 0xMM 0xTT 0xCC
-        SPI_FLASH_TEST: PASS
-    """
-    lines = []
-    deadline = time.monotonic() + timeout
+    def failed(reason):
+        print(f"FAIL: {reason}")
+        return {**found, "result": "fail", "reason": reason}
 
-    jedec_id = None
-    test_result = None
+    try:
+        bios.attach(attach_timeout)
+    except bios_console.NoPrompt as e:
+        return failed(f"{e}: nothing on the UART answers a newline with the litex> prompt")
+    print("PASS: the design answers at its prompt")
 
-    jedec_re = re.compile(r"JEDEC_ID:\s+0x([0-9A-Fa-f]{2})\s+0x([0-9A-Fa-f]{2})\s+0x([0-9A-Fa-f]{2})")
-    result_re = re.compile(r"SPI_FLASH_TEST:\s+(PASS|FAIL)")
+    readings = []
+    try:
+        for _ in range(READINGS):
+            found["commands"].append("read")
+            readings.append(parse_reading(bios.command("", READ_TIMEOUT_S)))
+    except bios_console.NoPrompt as e:
+        return failed(str(e))
+    except OSError as e:  # the port went away (pyserial's SerialException is one)
+        return failed(f"the UART failed during a reading: {e}")
 
-    while time.monotonic() < deadline:
-        raw = ser.readline()
-        if not raw:
-            continue
-        line = raw.decode("utf-8", errors="replace").strip()
-        lines.append(line)
+    first = readings[0]
+    found["ident"] = ident = first["ident"]
+    name = BOARDS[board]["ident"]
+    if not ident or DESIGN_IDENT not in ident or name not in ident:
+        return failed(f"the design on the UART is {ident!r}, not the {DESIGN_IDENT} for the {name}")
+    print(f"PASS: {ident}")
 
-        m = jedec_re.search(line)
-        if m:
-            jedec_id = (int(m.group(1), 16), int(m.group(2), 16), int(m.group(3), 16))
+    jedec = first["jedec"]
+    if jedec is None:
+        return failed("the firmware printed no JEDEC_ID line")
+    found["rdid"] = rdid(jedec)
+    found["manufacturer"] = MANUFACTURER_NAMES.get(jedec[0], "unknown")
+    size = capacity_bytes(jedec)
+    if size:
+        found["capacity_bytes"] = size
+    print(f"JEDEC ID: 0x{jedec[0]:02X} 0x{jedec[1]:02X} 0x{jedec[2]:02X}")
+    print(f"  Manufacturer: {found['manufacturer']} (0x{jedec[0]:02X})")
+    print(f"  Device type:  0x{jedec[1]:02X}")
+    print(f"  Capacity:     0x{jedec[2]:02X}" + (f" ({size // 1024} KiB)" if size else ""))
 
-        m = result_re.search(line)
-        if m:
-            test_result = m.group(1)
+    faults = []
+    if jedec in ((0x00, 0x00, 0x00), (0xFF, 0xFF, 0xFF)):
+        faults.append(f"the ID is {found['rdid']}: no flash answered")
+    if first["verdict"] != "PASS":
+        faults.append(f"the firmware's verdict is {first['verdict'] or 'missing'}")
+    others = sorted({rdid(r["jedec"]) if r["jedec"] else "nothing" for r in readings[1:]} - {found["rdid"]})
+    if others:
+        faults.append(f"the ID read again is {', '.join(others)}, not {found['rdid']}")
+    if expected is None:
+        expected = BOARDS[board]["jedec"]
+    if expected is not None and jedec != tuple(expected):
+        faults.append(f"the ID is {found['rdid']}, not the {rdid(expected)} expected for the {name}")
 
-        if "Test Complete" in line:
-            break
-
-    # Report.
-    if jedec_id is None:
-        print("FAIL: JEDEC ID not found in firmware output")
-        return False, lines
-
-    mfr, dtype, cap = jedec_id
-    mfr_name = MANUFACTURER_NAMES.get(mfr, "Unknown")
-    cap_bytes = 2**cap if cap else 0
-    if cap_bytes >= 1024 * 1024:
-        cap_str = f"{cap_bytes // (1024 * 1024)} MB"
-    elif cap_bytes >= 1024:
-        cap_str = f"{cap_bytes // 1024} KB"
-    else:
-        cap_str = f"{cap_bytes} B"
-    print(f"JEDEC ID: 0x{mfr:02X} 0x{dtype:02X} 0x{cap:02X}")
-    print(f"  Manufacturer: {mfr_name} (0x{mfr:02X})")
-    print(f"  Device type:  0x{dtype:02X}")
-    print(f"  Capacity:     0x{cap:02X} ({cap_str})")
-
-    results = []
-
-    # Check firmware's own verdict.
-    if test_result == "PASS":
-        print("PASS: Firmware reported SPI flash test passed")
-        results.append(True)
-    elif test_result == "FAIL":
-        print("FAIL: Firmware reported SPI flash test failed")
-        results.append(False)
-    else:
-        print("FAIL: Firmware test result not found in output")
-        results.append(False)
-
-    # Optionally compare against expected JEDEC ID.
-    ids = expected_ids if expected_ids is not None else EXPECTED_JEDEC_IDS
-    expected = ids.get(board)
+    if faults:
+        for fault in faults:
+            print(f"FAIL: {fault}")
+        return {**found, "result": "fail", "reason": "; ".join(faults)}
+    print(f"PASS: the flash answered {found['rdid']} on each of {READINGS} readings")
     if expected is not None:
-        if jedec_id == expected:
-            print(f"PASS: JEDEC ID matches expected value for {board}")
-            results.append(True)
-        else:
-            exp_str = " ".join(f"0x{b:02X}" for b in expected)
-            got_str = " ".join(f"0x{b:02X}" for b in jedec_id)
-            print(f"FAIL: JEDEC ID mismatch -- expected {exp_str}, got {got_str}")
-            results.append(False)
-
-    return all(results), lines
-
-
-def run_bios_mode(ser, board, timeout=BOOT_TIMEOUT_S):
-    """Parse SPI flash info from standard LiteX BIOS boot output.
-
-    The BIOS prints flash identification during boot, e.g.:
-        Initializing SPI Flash @0x...
-    """
-    lines = []
-    deadline = time.monotonic() + timeout
-
-    spi_detected = False
-
-    while time.monotonic() < deadline:
-        raw = ser.readline()
-        if not raw:
-            continue
-        line = raw.decode("utf-8", errors="replace").strip()
-        lines.append(line)
-
-        if "SPI" in line.upper() and "flash" in line.lower():
-            spi_detected = True
-            print(f"  SPI Flash detected: {line}")
-
-        if "litex>" in line:
-            break
-
-    if spi_detected:
-        print("PASS: SPI flash detected during BIOS boot")
-        return True, lines
-    else:
-        print("FAIL: No SPI flash detection in BIOS output")
-        return False, lines
+        print(f"PASS: the ID is the one expected for the {name}")
+    return {**found, "result": "pass"}
 
 
 # --------------------------------------------------------------------------- #
@@ -176,7 +167,7 @@ def run_bios_mode(ser, board, timeout=BOOT_TIMEOUT_S):
 # --------------------------------------------------------------------------- #
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="SPI Flash ID test for FPGA boards")
     parser.add_argument(
         "--port",
@@ -186,7 +177,7 @@ def main():
     parser.add_argument(
         "--board",
         default="arty",
-        choices=list(EXPECTED_JEDEC_IDS.keys()),
+        choices=list(BOARDS),
         help="Board under test (default: arty)",
     )
     parser.add_argument(
@@ -196,60 +187,34 @@ def main():
         help=f"Baud rate (default: {BAUD_RATE})",
     )
     parser.add_argument(
-        "--bios",
-        action="store_true",
-        help="Use BIOS mode (parse standard BIOS output instead of custom firmware)",
-    )
-    parser.add_argument(
         "--timeout",
         type=float,
-        default=BOOT_TIMEOUT_S,
-        help=f"Seconds to wait for the result (default: {BOOT_TIMEOUT_S}); longer when the port is opened "
+        default=ATTACH_TIMEOUT_S,
+        help=f"Seconds to wait for the prompt (default: {ATTACH_TIMEOUT_S}); longer when the port is opened "
         "before the design is loaded, as fpgas-verify's listen does",
     )
     parser.add_argument(
         "--expected-jedec",
         help="Expected JEDEC ID as hex string, e.g. '20BA18' for Micron 128Mbit",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
-    # Build a local copy of expected IDs so we don't mutate the module constant.
-    expected_ids = dict(EXPECTED_JEDEC_IDS)
-
+    expected = None
     if args.expected_jedec:
         hex_str = args.expected_jedec.replace("0x", "").replace(" ", "")
-        if len(hex_str) != 6:
+        if not re.fullmatch(r"[0-9A-Fa-f]{6}", hex_str):
             print(f"ERROR: --expected-jedec must be 6 hex digits, got '{args.expected_jedec}'")
             return 2
-        expected_ids[args.board] = (
-            int(hex_str[0:2], 16),
-            int(hex_str[2:4], 16),
-            int(hex_str[4:6], 16),
-        )
+        expected = tuple(bytes.fromhex(hex_str))
 
-    print(f"Opening {args.port} at {args.baud} baud...")
-    print(f"Board: {args.board}")
-    print("Mode: {}".format("BIOS" if args.bios else "Custom firmware"))
-    print()
-
-    with serial.Serial(args.port, args.baud, timeout=2) as ser:
-        if args.bios:
-            passed, boot_lines = run_bios_mode(ser, args.board, args.timeout)
-        else:
-            passed, boot_lines = run_firmware_mode(ser, args.board, expected_ids, args.timeout)
-
-    if not passed:
-        print("\nFull output:")
-        for line in boot_lines:
-            print(f"  {line}")
-
-    print()
-    if passed:
-        print("RESULT: PASS — SPI Flash ID test completed successfully")
-        return 0
-    else:
-        print("RESULT: FAIL — SPI Flash ID test had failures")
-        return 1
+    return bios_console.run_script(
+        "spiflash",
+        "SPI Flash ID test",
+        args.board,
+        args.port,
+        args.baud,
+        lambda bios: run_spiflash_test(bios, args.board, expected, args.timeout),
+    )
 
 
 if __name__ == "__main__":
