@@ -46,26 +46,63 @@ def test_an_empty_or_stuck_chain_has_no_devices():
     assert idcode.parse("Raw IDCODE:\n- 0 -> 0x00000000\nJTAG init failed with: TDO is stuck at 0\n") == []
 
 
+def test_an_empty_chain_is_told_from_output_with_no_scan_in_it():
+    assert idcode.empty_chain("Raw IDCODE:\n- 0 -> 0xffffffff\nFetched TDI, end-of-chain\n")
+    assert idcode.empty_chain("JTAG init failed with: TDO is stuck at 0\n")
+    assert idcode.empty_chain("found 0 devices\n")
+    assert idcode.empty_chain("JTAG init failed with: no device found\n")
+    # the part table alone (no --verbose-level 2) says nothing about the chain's whole IDCODEs
+    assert not idcode.empty_chain("found 1 devices\nindex 0:" + P48.split("index 0:")[1])
+    assert not idcode.empty_chain("")
+
+
 def test_p48s_idcode_decodes_to_an_xc7a200t_version_1():
     assert idcode.decode(0x13636093) == {
         "idcode": "0x13636093",
-        "version": 1,
-        "part_number": "0x3636",
-        "manufacturer_id": "0x049",
-        "manufacturer": "Xilinx",
-        "device": "XC7A200T",
+        "idcode_version": 1,
+        "idcode_part_number": "0x3636",
+        "idcode_manufacturer_id": "0x049",
+        "idcode_manufacturer": "Xilinx",
+        "idcode_device": "XC7A200T",
     }
 
 
 def test_a_version_0_idcode_keeps_its_leading_zero():
     assert idcode.decode(0x0362D093) == {
         "idcode": "0x0362d093",
-        "version": 0,
-        "part_number": "0x362d",
-        "manufacturer_id": "0x049",
-        "manufacturer": "Xilinx",
-        "device": "XC7A35T",
+        "idcode_version": 0,
+        "idcode_part_number": "0x362d",
+        "idcode_manufacturer_id": "0x049",
+        "idcode_manufacturer": "Xilinx",
+        "idcode_device": "XC7A35T",
     }
+
+
+def test_an_altera_idcode_names_altera():
+    d = idcode.decode(0x020F30DD)
+    assert (d["idcode_manufacturer_id"], d["idcode_manufacturer"], d["idcode_part_number"], d["idcode_device"]) == (
+        "0x06e",
+        "Altera",
+        "0x20f3",
+        "unknown",
+    )
+
+
+def test_an_ecp5_idcode_names_lattice():
+    d = idcode.decode(0x41111043)
+    assert (
+        d["idcode_version"],
+        d["idcode_manufacturer_id"],
+        d["idcode_manufacturer"],
+        d["idcode_part_number"],
+        d["idcode_device"],
+    ) == (
+        4,
+        "0x021",
+        "Lattice",
+        "0x1111",
+        "unknown",
+    )
 
 
 def test_the_parts_on_the_boards_have_names():
@@ -75,7 +112,7 @@ def test_the_parts_on_the_boards_have_names():
 
 def test_an_unknown_part_and_manufacturer_say_so():
     d = idcode.decode(0x41234567)
-    assert (d["device"], d["manufacturer"], d["manufacturer_id"], d["part_number"]) == (
+    assert (d["idcode_device"], d["idcode_manufacturer"], d["idcode_manufacturer_id"], d["idcode_part_number"]) == (
         "unknown",
         "unknown",
         "0x2b3",
