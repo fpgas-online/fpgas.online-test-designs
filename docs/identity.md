@@ -28,8 +28,8 @@ rpi-hwid's `FpgaBoard` fields:
 |---|---|---|---|
 | `kind` | string | `acorn`, `arty`, `netv2`, `tt`, `fomu`, `pcileech`, or `unknown-fpga` for a PCIe FPGA design that is not known | never |
 | `serial` | string | the USB serial number (Arty: its FT2232H; TT: its RP2350; Fomu: its bootloader) | the board is not found on USB |
-| `dna` | string | the Xilinx device DNA, 16 hex digits: `0x0054b48664b04854` | not read: only the Acorn reads it, over BAR0, or over JTAG when BAR0 cannot be used. When the JTAG read fails or is not run (the chain did not show the one FPGA expected), `dna_error` says why the DNA itself was not read |
-| `idcode` | string | the whole 32-bit JTAG IDCODE, 8 hex digits: `0x13636093` | the board has no JTAG link to the Pi (TT, Fomu), or the JTAG test was not run |
+| `dna` | string | the Xilinx device DNA, 16 hex digits: `0x0054b48664b04854` | not read: only the Acorn reads it, over BAR0, or over JTAG when BAR0 cannot be used. When the JTAG read fails or is not run (the chain did not show the one FPGA expected, or the scan that showed it exited non-zero), `dna_error` says why the DNA itself was not read. A DNA of all zeros or all ones means the DNA port is not being read, so it is no DNA: the other path's is used if it is good, and otherwise `dna_error` says so |
+| `idcode` | string | the whole 32-bit JTAG IDCODE, 8 hex digits: `0x13636093` | the board has no JTAG link to the Pi (TT, Fomu), or the JTAG test was not run. The NeTV2 is found by scanning its JTAG chain, so it has the IDCODE that scan read even when its JTAG test is not run |
 | `flash` | string | the flash part: `S25FL256S`, `S25FS256S`, told apart by RDID byte 6 (the family ID); the family's name, `S25Fx256S`, when byte 6 is not known | the flash was not read, or its part is not known |
 | `flash_jedec` | string | RDID bytes 1-3, 6 hex digits: `0x010219` | the flash was not read |
 | `flash_extended_id` | string | RDID bytes 4-6, 6 hex digits: `0x4d0180` | the flash was not read |
@@ -78,14 +78,17 @@ fpgas-verify's own fields:
 * strings as they are;
 * numbers in decimal: `flash_size_bytes=33554432`;
 * booleans as `true` or `false`: `flash_quad=true`;
-* a list or object as one key whose value is compact JSON with sorted keys: `["a","b"]`;
+* a list or object as one key whose value is compact JSON with sorted keys: `["a","b"]`, holding only strings,
+  whole numbers, booleans, null, and lists and objects of those (object keys are strings) at any depth;
 * `-` only for a field that was read and has no value; a field that was not read is left out;
 * plus `schema=fpga-identity/1`.
 
 The Acorn sends it once PCIe and JTAG have said who it is; every other board sends it before its tests. A board
 whose check stops before it says who the board is, or that is not checked at all (`--test` naming none of its
-tests), still gets one, with what finding the board showed. In
-`fpga-verified` the same fields appear per board as `board0_identity_<field>`.
+tests), still gets one, with what finding the board showed (for the NeTV2, the IDCODE fields). In
+`fpga-verified` the same fields appear per board as `board0_identity_<field>`. A field whose value has no
+event form (a bug in the board's module) is left out of both, and that board's result is `error`, its
+reason naming the field; the other boards are still checked.
 
 ## The document
 

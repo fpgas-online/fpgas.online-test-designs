@@ -56,6 +56,8 @@ class TestBoard(Board):
 
     # A board with JTAG: variant -> its FPGA's IDCODE at version 0. The check reads the whole IDCODE (from
     # `found`, when finding the board read it, else with idcode_argv) and fails a part that is not the variant's.
+    # A `found` with an IDCODE also has the scan that read it: {"idcode_scan": {"tool", "exit", "output"}}, and
+    # every IDCODE that scan saw on the chain, in order: {"idcodes": ["0x...", ...]}.
     idcodes: ClassVar[dict] = {}
 
     def idcode_argv(self, host):
@@ -187,7 +189,11 @@ class TestBoard(Board):
         want = self.idcodes[variant]
         output, scan_faults = [], []
         if found.get("idcode"):  # read when the board was found (the NeTV2's scan)
-            codes = [int(found["idcode"], 16)]
+            codes = [int(c, 16) for c in found.get("idcodes") or [found["idcode"]]]
+            scan = found["idcode_scan"]
+            output = scan["output"]
+            if scan["exit"] != 0:  # whatever it printed, a scan that failed is not trusted
+                scan_faults.append(f"{scan['tool']} exited {scan['exit']} reading the IDCODE")
         else:
             argv = self.idcode_argv(host)
             try:
@@ -199,8 +205,12 @@ class TestBoard(Board):
             if rc != 0:  # whatever it printed, a scan that failed is not trusted
                 scan_faults.append(f"{argv[0]} exited {rc} reading the IDCODE")
             if not codes:
-                why = "no device on the JTAG chain" if idcode.empty_chain(text) else idcode.NO_RAW_SCAN
-                reason = "; ".join([why, *scan_faults])
+                if idcode.empty_chain(text):
+                    reason = "; ".join(["no device on the JTAG chain", *scan_faults])
+                elif rc != 0:
+                    reason = idcode.scan_failed(argv[0], rc, text)
+                else:
+                    reason = idcode.NO_RAW_SCAN
                 return {"result": "fail", "reason": reason, "output": output}
         entry = {**idcode.decode(codes[0]), **({"output": output} if output else {})}
         faults = idcode.faults(codes[0])

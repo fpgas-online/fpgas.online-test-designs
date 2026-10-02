@@ -416,13 +416,14 @@ def test_the_arty_reads_only_its_idcode_and_loads_nothing(tmp_path):
 def test_an_arty_with_no_jtag_chain_is_an_idcode_error(tmp_path):
     run = Runner([("--detect", (1, "JTAG init failed"))])
     out = ARTY.identify(_host(ARTY), ARTY_FOUND, {"board_key": "arty"}, runner=run)
-    assert "exited 1" in out["idcode_error"] and "idcode" not in out  # the check's own reason (testbench.jtag)
+    assert "(exit 1)" in out["idcode_error"] and "idcode" not in out  # the check's own reason (testbench.jtag)
 
 
 def test_the_netv2_uses_the_idcode_its_scan_found_and_runs_nothing():
     run = Runner()
-    out = NETV2.identify(_host(NETV2), {"variant": "a7-100", "idcode": "0x13631093"}, {"board_key": "netv2"},
-                         runner=run)  # fmt: skip
+    scan = {"tool": "openocd", "exit": 0, "output": ["tap/device found: 0x13631093"]}
+    found = {"variant": "a7-100", "idcode": "0x13631093", "idcodes": ["0x13631093"], "idcode_scan": scan}
+    out = NETV2.identify(_host(NETV2), found, {"board_key": "netv2"}, runner=run)
     assert run.calls == [] and out["idcode"] == "0x13631093" and out["idcode_device"] == "XC7A100T"
 
 
