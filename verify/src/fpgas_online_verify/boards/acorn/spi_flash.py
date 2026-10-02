@@ -70,7 +70,12 @@ PAGE = 256
 SECTOR = 0x10000
 PARAM_SECTOR = 0x1000
 READ_CHUNK = 0x10000
+# Parts by RDID bytes 1-3 (manufacturer, type, capacity). The 256 Mbit S25FL-S and S25FS-S share these and
+# differ in bytes 4-6 (PARTS_EXTENDED): bytes 1-3 alone name the family.
 PARTS = {0x010219: "S25FL256S", 0x010220: "S25FL512S", 0x012018: "S25FL128S"}
+# Parts by all six RDID bytes: (bytes 1-3, bytes 4-6). S25FL256S and S25FS256S datasheets, RDID table.
+PARTS_EXTENDED = {(0x010219, 0x4D0180): "S25FL256S", (0x010219, 0x4D0181): "S25FS256S"}
+UNIQUE_ID_BYTES = 16  # OTPR from 0: the 128-bit random number Spansion programs at the factory
 
 SYNC = bytes.fromhex("aa995566")
 REG_CMD, REG_IDCODE, REG_WBSTAR, REG_TIMER, REG_FDRI = 0x04, 0x0C, 0x10, 0x11, 0x02
@@ -81,6 +86,14 @@ HEADER_WORDS = 64
 
 class FlashError(Exception):
     pass
+
+
+def part(rdid):
+    """The part's name from its RDID bytes: exact from all six where PARTS_EXTENDED knows them, else the
+    family's from bytes 1-3, else "unknown"."""
+    jedec = int.from_bytes(rdid[:3], "big")
+    extended = int.from_bytes(rdid[3:6], "big") if len(rdid) >= 6 else None
+    return PARTS_EXTENDED.get((jedec, extended)) or PARTS.get(jedec, "unknown")
 
 
 def image_info(data):
@@ -185,14 +198,14 @@ class Flash:
 
     def identify(self):
         rdid = self.transaction([RDID], 6)
-        jedec = int.from_bytes(rdid[:3], "big")
         capacity = rdid[2]
-        otp = self.transaction([OTPR, 0, 0, 0, 0], 16)
+        otp = self.transaction([OTPR, 0, 0, 0, 0], UNIQUE_ID_BYTES)
         return {
             "rdid": rdid.hex(),
-            "part": PARTS.get(jedec, "unknown"),
+            "part": part(rdid),
             "size_bytes": 1 << capacity if 0x10 <= capacity <= 0x20 else None,
             "unique_id": otp.hex(),  # Spansion programs a 128-bit random number here at the factory
+            "unique_id_opcode": OTPR,
             "status": self.transaction([RDSR1], 1).hex(),
             "config": self.transaction([RDCR], 1).hex(),
             "quad_enabled": bool(self.transaction([RDCR], 1)[0] & 0x02),
