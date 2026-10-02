@@ -32,9 +32,9 @@ def test_a_chain_with_the_variants_fpga_and_bar0s_dna_passes():
     t = links.jtag(PI5, "cle-215+", pi, bar0_dna=fk.DNA, gpiochip=_no_chip)
     assert t["result"] == "pass", t
     assert (t["idcode"], t["dna"]) == ("0x13636093", "0x54b48664b04854")
-    assert {k: t[k] for k in ("version", "part_number", "manufacturer_id", "manufacturer", "device")} == {
-        "version": 1, "part_number": "0x3636", "manufacturer_id": "0x049", "manufacturer": "Xilinx",
-        "device": "XC7A200T"}  # fmt: skip
+    fields = {"idcode_version": 1, "idcode_part_number": "0x3636", "idcode_manufacturer_id": "0x049",
+              "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A200T"}  # fmt: skip
+    assert {k: t[k] for k in fields} == fields
     # the raw scan, not openFPGALoader's part table, which prints the IDCODE masked
     assert t["output"] == ["- 0 -> 0x13636093", "- 1 -> 0xffffffff", '{"dna": "0x0054b48664b04854"}']
     loads = pi.ran("openFPGALoader")
@@ -46,7 +46,7 @@ def test_a_chain_with_the_variants_fpga_and_bar0s_dna_passes():
 def test_another_silicon_version_of_the_right_part_passes_and_is_reported():
     t = links.jtag(PI5, "cle-215+", fk.FakePi(idcode=0x03636093), bar0_dna=fk.DNA, gpiochip=_no_chip)
     assert t["result"] == "pass", t
-    assert (t["idcode"], t["version"], t["device"]) == ("0x03636093", 0, "XC7A200T")
+    assert (t["idcode"], t["idcode_version"], t["idcode_device"]) == ("0x03636093", 0, "XC7A200T")
 
 
 def test_an_idcode_with_bit_0_clear_fails():
@@ -62,7 +62,61 @@ def test_a_dna_over_jtag_that_is_not_bar0s_fails_because_tdi_is_not_proven():
 
 def test_an_empty_chain_fails():
     t = links.jtag(PI5, "cle-215+", fk.FakePi(chain=False), gpiochip=_no_chip)
+    assert t["result"] == "fail" and t["reason"] == (
+        "no device on the P1 JTAG chain; openFPGALoader --detect exited 1 on the P1 JTAG chain"
+    )
+
+
+class NoRawScan(fk.FakePi):
+    """openFPGALoader --detect that prints `text` in place of its raw scan and part table."""
+
+    def __init__(self, text, **kw):
+        super().__init__(**kw)
+        self.text = text
+
+    def __call__(self, argv, timeout):
+        rc, out = super().__call__(argv, timeout)
+        return (0, self.text) if "--detect" in argv else (rc, out)
+
+
+def test_output_without_the_raw_scan_says_so_not_that_the_chain_is_empty():
+    part_table = "found 1 devices\n" + fk.DETECT.format(masked=0x3636093)
+    t = links.jtag(PI5, "cle-215+", NoRawScan(part_table), gpiochip=_no_chip)
+    assert t["result"] == "fail" and t["reason"] == (
+        "P1 JTAG: openFPGALoader printed no raw IDCODE scan (needs --verbose-level 2 output)"
+    )
+
+
+def test_a_stuck_tdo_is_an_empty_chain():
+    stuck = "Raw IDCODE:\n- 0 -> 0x00000000\nJTAG init failed with: TDO is stuck at 0\n"
+    t = links.jtag(PI5, "cle-215+", NoRawScan(stuck), gpiochip=_no_chip)
     assert t["result"] == "fail" and t["reason"] == "no device on the P1 JTAG chain"
+
+
+class DetectExits(fk.FakePi):
+    """openFPGALoader --detect prints the scan, then exits with `rc`."""
+
+    def __init__(self, rc, **kw):
+        super().__init__(**kw)
+        self.rc = rc
+
+    def __call__(self, argv, timeout):
+        rc, out = super().__call__(argv, timeout)
+        return (self.rc, out) if "--detect" in argv else (rc, out)
+
+
+def test_a_detect_that_exits_non_zero_fails_even_with_the_right_idcode():
+    pi = DetectExits(2)
+    t = links.jtag(PI5, "cle-215+", pi, bar0_dna=fk.DNA, gpiochip=_no_chip)
+    assert t["result"] == "fail" and t["reason"] == "openFPGALoader --detect exited 2 on the P1 JTAG chain"
+    assert t["idcode_device"] == "XC7A200T" and "dna" not in t  # decoded, but the DNA is not read after it
+    assert len(pi.ran("openFPGALoader")) == 1
+
+
+def test_the_wrong_part_and_a_non_zero_exit_are_both_reported():
+    t = links.jtag(PI5, "cle-101", DetectExits(1), gpiochip=_no_chip)
+    assert t["result"] == "fail" and t["reason"].startswith("P1 JTAG chain has 0x13636093 (XC7A200T)")
+    assert t["reason"].endswith("; openFPGALoader --detect exited 1 on the P1 JTAG chain")
 
 
 def test_the_wrong_part_fails_and_says_which():

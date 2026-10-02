@@ -516,15 +516,17 @@ Every board with JTAG has its FPGA's whole 32-bit IDCODE read and decoded
   `fpgas-acorn-flash`), and on the Acorn the JTAG pins are put back as they were found.
 * The part is compared without the version, so another silicon revision of the right part passes. A part
   that is not the variant's fails the board, and so does an IDCODE with bit 0 clear.
+* A scan whose tool exits with an error fails, even when it printed the right IDCODE; the reason gives the
+  exit code. The IDCODE it printed is still decoded in the report.
 
 | Field | Bits | Example (pi-sw2-p48's Acorn CLE-215+) |
 |---|---|---|
 | `idcode` | 31:0, 8 hex digits | `0x13636093` |
-| `version` | 31:28, the silicon revision | `1` |
-| `part_number` | 27:12 | `0x3636` |
-| `manufacturer_id` | 11:1, the JEP106 code (bank in 11:8) | `0x049` |
-| `manufacturer` | the JEP106 code's name | `Xilinx` |
-| `device` | the IDCODE without its version, from the table below (`unknown` if not in it) | `XC7A200T` |
+| `idcode_version` | 31:28, the silicon revision | `1` |
+| `idcode_part_number` | 27:12 | `0x3636` |
+| `idcode_manufacturer_id` | 11:1, the JEP106 code (bank in 11:8) | `0x049` |
+| `idcode_manufacturer` | the JEP106 code's name | `Xilinx` |
+| `idcode_device` | the IDCODE without its version, from the table below (`unknown` if not in it) | `XC7A200T` |
 
 | IDCODE, version 0 | Device |
 |---|---|
@@ -556,8 +558,9 @@ index 0:
 Its `jtag` test entry:
 
 ```json
-{"test": "jtag", "idcode": "0x13636093", "version": 1, "part_number": "0x3636", "manufacturer_id": "0x049",
- "manufacturer": "Xilinx", "device": "XC7A200T", "dna": "0x54b48664b04854",
+{"test": "jtag", "idcode": "0x13636093", "idcode_version": 1, "idcode_part_number": "0x3636",
+ "idcode_manufacturer_id": "0x049", "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A200T",
+ "dna": "0x54b48664b04854",
  "output": ["- 0 -> 0x13636093", "- 1 -> 0xffffffff", "{\"dna\": \"0x0054b48664b04854\"}"], "result": "pass"}
 ```
 
@@ -598,6 +601,8 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 | `fail`: `running the golden image` | the Acorn's operational slot did not boot; it fell back to golden |
 | `fail`: `link is x2, expected x1` | the Acorn's PCIe link is not the setup's (`expected.toml`) |
 | `fail`: `no device on the P1 JTAG chain` / `no UARTBone reply on /dev/ttyAMA0` | an Acorn's JTAG or P2 UART cable is off or miswired |
+| `fail`: `openFPGALoader printed no raw IDCODE scan (needs --verbose-level 2 output)` | the tool's output, not the board: this openFPGALoader prints no `- 0 -> 0x...` lines at `--verbose-level 2` (older than v0.10.0), or failed before scanning. Its last lines are in the report's `output` |
+| `fail`: `… exited N reading the IDCODE` / `openFPGALoader --detect exited N …` | the IDCODE scan reported an error, even if it printed an IDCODE; its last lines are in the report's `output` |
 | `fail`: `device DNA over JTAG … is not the one over BAR0` | the P1 TDI wire does not carry, or the DNA readout is wrong |
 | `fail`: `J5 -> GPIO3: the FPGA drove 0, the Pi read 1` (or the other way) | a P2 spare wire is cut or miswired |
 | `fail`: `K2 -> GPIO15: …` / `GPIO14 -> J2: …` | a P2 serial wire is cut or miswired |
@@ -625,6 +630,11 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 * Loading a test design and upgrading the packages are not changes. A flash that could not be read is not compared.
 * An IDCODE recorded without its version (a record with `schema_version` below 3) takes the whole one
   quietly. On a newer record, another version is a change: it is another chip.
+* One swap is missed because of that, once. A NeTV2 on a Pi 3/4 recorded its whole IDCODE even before
+  schema 3 (OpenOCD prints it), but the record cannot say whether its value was whole or masked. A version 0
+  value looks the same either way. So if such a board's version 0 chip was swapped for a version 1 chip of
+  the same part, the first run on schema 3 takes the new IDCODE quietly instead of reporting `changed`.
+  Later runs compare the whole IDCODE as usual.
 * A device DNA recorded without its leading zeros (a record with `schema_version` below 4) takes the 16-digit
   spelling quietly. Another DNA is a change.
 * A `--test` run neither records nor compares the state.

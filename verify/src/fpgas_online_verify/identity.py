@@ -41,6 +41,11 @@ EXTRA_FIELDS = (
     "idcode_manufacturer", "idcode_device",
 )  # fmt: skip
 ERROR_SUFFIX = "_error"
+# idcode.decode()'s fields, in this order.
+IDCODE_FIELDS = (
+    "idcode", "idcode_version", "idcode_part_number", "idcode_manufacturer_id", "idcode_manufacturer",
+    "idcode_device",
+)  # fmt: skip
 
 # A board module's name -> rpi-hwid's kind. The Acorn's own claims give theirs (kind()).
 KINDS = {"acorn": "acorn", "arty": "arty", "netv2": "netv2", "tt": "tt", "fomu": "fomu"}
@@ -86,19 +91,15 @@ def base(board_key, board_name, found, variant=None):
 
 
 def idcode_fields(entry):
-    """The IDCODE fields from a JTAG entry: idcode.decode()'s fields (and maybe result/reason).
+    """The IDCODE fields from a JTAG entry: idcode.decode()'s fields, which are already identity fields (and
+    maybe result/reason).
 
     One device on the chain gives the IDCODE and its decoded fields; anything else gives idcode_error."""
     code = entry.get("idcode")
-    if code and "," not in code and "version" in entry:
-        return {
-            "idcode": hex_id(int(code, 16), IDCODE_DIGITS),
-            "idcode_version": entry["version"],
-            "idcode_part_number": entry["part_number"],
-            "idcode_manufacturer_id": entry["manufacturer_id"],
-            "idcode_manufacturer": entry["manufacturer"],
-            "idcode_device": entry["device"],
-        }
+    if code and "," not in code and "idcode_version" in entry:
+        out = {key: entry[key] for key in IDCODE_FIELDS}
+        out["idcode"] = hex_id(int(code, 16), IDCODE_DIGITS)
+        return out
     if code:
         return {"idcode_error": f"the JTAG chain has more than one device ({code})"}
     if entry.get("result") not in (None, "pass"):

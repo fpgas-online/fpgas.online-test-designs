@@ -183,28 +183,34 @@ class TestBoard(Board):
     # -- JTAG ------------------------------------------------------------------------------------------------
 
     def jtag(self, host, found, variant, runner=run):
-        """The board's IDCODE, decoded, against its variant's part: {result, reason?, idcode, version, ...}."""
+        """The board's IDCODE, decoded, against its variant's part: {result, reason?, idcode, idcode_version, ...}."""
         want = self.idcodes[variant]
-        output = []
+        output, scan_faults = [], []
         if found.get("idcode"):  # read when the board was found (the NeTV2's scan)
             codes = [int(found["idcode"], 16)]
         else:
+            argv = self.idcode_argv(host)
             try:
-                rc, text = runner(self.idcode_argv(host), JTAG_TIMEOUT)
+                rc, text = runner(argv, JTAG_TIMEOUT)
             except Problem as p:
                 return {"result": p.result, "reason": f"the JTAG chain could not be scanned: {p.reason}"}
             codes = idcode.parse(text)
             output = (codes and rc == 0 and idcode.scan_lines(text)) or tail(text, 6)
+            if rc != 0:  # whatever it printed, a scan that failed is not trusted
+                scan_faults.append(f"{argv[0]} exited {rc} reading the IDCODE")
             if not codes:
-                return {"result": "fail", "reason": f"no device on the JTAG chain (exit {rc})", "output": output}
+                why = "no device on the JTAG chain" if idcode.empty_chain(text) else idcode.NO_RAW_SCAN
+                reason = "; ".join([why, *scan_faults])
+                return {"result": "fail", "reason": reason, "output": output}
         entry = {**idcode.decode(codes[0]), **({"output": output} if output else {})}
         faults = idcode.faults(codes[0])
         if len(codes) != 1:
             entry["idcode"] = ", ".join(f"{c:#010x}" for c in codes)
             faults.append(f"the JTAG chain has {len(codes)} devices ({entry['idcode']}), not one")
         elif not idcode.same_part(codes[0], want):
-            faults.append(f"the JTAG IDCODE {entry['idcode']} is an {entry['device']}, not the {variant}'s "
+            faults.append(f"the JTAG IDCODE {entry['idcode']} is an {entry['idcode_device']}, not the {variant}'s "
                           f"{idcode.device(want)} (IDCODE {want:#010x}, any version)")  # fmt: skip
+        faults += scan_faults
         return {**entry, "result": "fail", "reason": "; ".join(faults)} if faults else {**entry, "result": "pass"}
 
     # -- the flash -----------------------------------------------------------------------------------------
