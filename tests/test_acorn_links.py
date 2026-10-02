@@ -32,9 +32,9 @@ def test_a_chain_with_the_variants_fpga_and_bar0s_dna_passes():
     t = links.jtag(PI5, "cle-215+", pi, bar0_dna=fk.DNA, gpiochip=_no_chip)
     assert t["result"] == "pass", t
     assert (t["idcode"], t["dna"]) == ("0x13636093", "0x54b48664b04854")
-    assert {k: t[k] for k in ("version", "part_number", "manufacturer_id", "manufacturer", "device")} == {
-        "version": 1, "part_number": "0x3636", "manufacturer_id": "0x049", "manufacturer": "Xilinx",
-        "device": "XC7A200T"}  # fmt: skip
+    fields = {"idcode_version": 1, "idcode_part_number": "0x3636", "idcode_manufacturer_id": "0x049",
+              "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A200T"}  # fmt: skip
+    assert {k: t[k] for k in fields} == fields
     # the raw scan, not openFPGALoader's part table, which prints the IDCODE masked
     assert t["output"] == ["- 0 -> 0x13636093", "- 1 -> 0xffffffff", '{"dna": "0x0054b48664b04854"}']
     loads = pi.ran("openFPGALoader")
@@ -46,7 +46,7 @@ def test_a_chain_with_the_variants_fpga_and_bar0s_dna_passes():
 def test_another_silicon_version_of_the_right_part_passes_and_is_reported():
     t = links.jtag(PI5, "cle-215+", fk.FakePi(idcode=0x03636093), bar0_dna=fk.DNA, gpiochip=_no_chip)
     assert t["result"] == "pass", t
-    assert (t["idcode"], t["version"], t["device"]) == ("0x03636093", 0, "XC7A200T")
+    assert (t["idcode"], t["idcode_version"], t["idcode_device"]) == ("0x03636093", 0, "XC7A200T")
 
 
 def test_an_idcode_with_bit_0_clear_fails():

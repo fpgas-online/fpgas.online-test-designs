@@ -49,28 +49,28 @@ def test_an_empty_or_stuck_chain_has_no_devices():
 def test_p48s_idcode_decodes_to_an_xc7a200t_version_1():
     assert idcode.decode(0x13636093) == {
         "idcode": "0x13636093",
-        "version": 1,
-        "part_number": "0x3636",
-        "manufacturer_id": "0x049",
-        "manufacturer": "Xilinx",
-        "device": "XC7A200T",
+        "idcode_version": 1,
+        "idcode_part_number": "0x3636",
+        "idcode_manufacturer_id": "0x049",
+        "idcode_manufacturer": "Xilinx",
+        "idcode_device": "XC7A200T",
     }
 
 
 def test_a_version_0_idcode_keeps_its_leading_zero():
     assert idcode.decode(0x0362D093) == {
         "idcode": "0x0362d093",
-        "version": 0,
-        "part_number": "0x362d",
-        "manufacturer_id": "0x049",
-        "manufacturer": "Xilinx",
-        "device": "XC7A35T",
+        "idcode_version": 0,
+        "idcode_part_number": "0x362d",
+        "idcode_manufacturer_id": "0x049",
+        "idcode_manufacturer": "Xilinx",
+        "idcode_device": "XC7A35T",
     }
 
 
 def test_an_altera_idcode_names_altera():
     d = idcode.decode(0x020F30DD)
-    assert (d["manufacturer_id"], d["manufacturer"], d["part_number"], d["device"]) == (
+    assert (d["idcode_manufacturer_id"], d["idcode_manufacturer"], d["idcode_part_number"], d["idcode_device"]) == (
         "0x06e",
         "Altera",
         "0x20f3",
@@ -80,7 +80,13 @@ def test_an_altera_idcode_names_altera():
 
 def test_an_ecp5_idcode_names_lattice():
     d = idcode.decode(0x41111043)
-    assert (d["version"], d["manufacturer_id"], d["manufacturer"], d["part_number"], d["device"]) == (
+    assert (
+        d["idcode_version"],
+        d["idcode_manufacturer_id"],
+        d["idcode_manufacturer"],
+        d["idcode_part_number"],
+        d["idcode_device"],
+    ) == (
         4,
         "0x021",
         "Lattice",
@@ -96,7 +102,7 @@ def test_the_parts_on_the_boards_have_names():
 
 def test_an_unknown_part_and_manufacturer_say_so():
     d = idcode.decode(0x41234567)
-    assert (d["device"], d["manufacturer"], d["manufacturer_id"], d["part_number"]) == (
+    assert (d["idcode_device"], d["idcode_manufacturer"], d["idcode_manufacturer_id"], d["idcode_part_number"]) == (
         "unknown",
         "unknown",
         "0x2b3",

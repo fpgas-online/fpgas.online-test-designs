@@ -520,11 +520,11 @@ Every board with JTAG has its FPGA's whole 32-bit IDCODE read and decoded
 | Field | Bits | Example (pi-sw2-p48's Acorn CLE-215+) |
 |---|---|---|
 | `idcode` | 31:0, 8 hex digits | `0x13636093` |
-| `version` | 31:28, the silicon revision | `1` |
-| `part_number` | 27:12 | `0x3636` |
-| `manufacturer_id` | 11:1, the JEP106 code (bank in 11:8) | `0x049` |
-| `manufacturer` | the JEP106 code's name | `Xilinx` |
-| `device` | the IDCODE without its version, from the table below (`unknown` if not in it) | `XC7A200T` |
+| `idcode_version` | 31:28, the silicon revision | `1` |
+| `idcode_part_number` | 27:12 | `0x3636` |
+| `idcode_manufacturer_id` | 11:1, the JEP106 code (bank in 11:8) | `0x049` |
+| `idcode_manufacturer` | the JEP106 code's name | `Xilinx` |
+| `idcode_device` | the IDCODE without its version, from the table below (`unknown` if not in it) | `XC7A200T` |
 
 | IDCODE, version 0 | Device |
 |---|---|
@@ -556,8 +556,9 @@ index 0:
 Its `jtag` test entry:
 
 ```json
-{"test": "jtag", "idcode": "0x13636093", "version": 1, "part_number": "0x3636", "manufacturer_id": "0x049",
- "manufacturer": "Xilinx", "device": "XC7A200T", "dna": "0x54b48664b04854",
+{"test": "jtag", "idcode": "0x13636093", "idcode_version": 1, "idcode_part_number": "0x3636",
+ "idcode_manufacturer_id": "0x049", "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A200T",
+ "dna": "0x54b48664b04854",
  "output": ["- 0 -> 0x13636093", "- 1 -> 0xffffffff", "{\"dna\": \"0x0054b48664b04854\"}"], "result": "pass"}
 ```
 

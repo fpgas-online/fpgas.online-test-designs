@@ -183,7 +183,7 @@ class TestBoard(Board):
     # -- JTAG ------------------------------------------------------------------------------------------------
 
     def jtag(self, host, found, variant, runner=run):
-        """The board's IDCODE, decoded, against its variant's part: {result, reason?, idcode, version, ...}."""
+        """The board's IDCODE, decoded, against its variant's part: {result, reason?, idcode, idcode_version, ...}."""
         want = self.idcodes[variant]
         output = []
         if found.get("idcode"):  # read when the board was found (the NeTV2's scan)
@@ -203,7 +203,7 @@ class TestBoard(Board):
             entry["idcode"] = ", ".join(f"{c:#010x}" for c in codes)
             faults.append(f"the JTAG chain has {len(codes)} devices ({entry['idcode']}), not one")
         elif not idcode.same_part(codes[0], want):
-            faults.append(f"the JTAG IDCODE {entry['idcode']} is an {entry['device']}, not the {variant}'s "
+            faults.append(f"the JTAG IDCODE {entry['idcode']} is an {entry['idcode_device']}, not the {variant}'s "
                           f"{idcode.device(want)} (IDCODE {want:#010x}, any version)")  # fmt: skip
         return {**entry, "result": "fail", "reason": "; ".join(faults)} if faults else {**entry, "result": "pass"}
 

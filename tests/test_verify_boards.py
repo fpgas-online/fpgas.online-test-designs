@@ -202,8 +202,8 @@ def test_an_arty_that_passes_loads_each_test_runs_it_and_records_its_flash(tmp_p
     assert run.calls[2] == ["openFPGALoader", "-b", "arty", str(images / "uart-test-arty/digilent_arty.bit")]
     assert run.calls[-1][:5] == ["openFPGALoader", "-b", "arty", "--dump-flash", "--file-size"]
     assert {k: v for k, v in report["jtag"].items() if k != "output"} == {
-        "result": "pass", "idcode": "0x0362d093", "version": 0, "part_number": "0x362d",
-        "manufacturer_id": "0x049", "manufacturer": "Xilinx", "device": "XC7A35T"}  # fmt: skip
+        "result": "pass", "idcode": "0x0362d093", "idcode_version": 0, "idcode_part_number": "0x362d",
+        "idcode_manufacturer_id": "0x049", "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A35T"}  # fmt: skip
     sha = hashlib.sha256(flash).hexdigest()
     assert report["state"] == {"variant": "a7-35", "serial": "210319B", "idcode": "0x0362d093",
                                "flash_jedec": "0x20ba18",
@@ -227,13 +227,16 @@ def test_an_arty_whose_jtag_chain_is_empty_fails_and_an_arty_of_another_version_
     assert report["result"] == "fail" and report["jtag"]["reason"] == "no device on the JTAG chain (exit 1)"
     run = Runner([("--detect", (0, _scan(0x2362D093)))], flash=b"\0" * ARTY.flash_region["a7-35"])
     report = _check(ARTY, tmp_path, ARTY_FOUND, run)
-    assert report["result"] == "pass" and (report["jtag"]["idcode"], report["jtag"]["version"]) == ("0x2362d093", 2)
+    assert report["result"] == "pass" and (report["jtag"]["idcode"], report["jtag"]["idcode_version"]) == (
+        "0x2362d093",
+        2,
+    )
 
 
 def test_a_netv2_configured_as_the_other_variant_fails_on_its_idcode(tmp_path):
     run = Runner(flash=b"\0" * NETV2.flash_region["a7-100"])
     report = _check(NETV2, tmp_path, {"variant": "a7-35", "idcode": "0x13631093"}, run, variant="a7-100")
-    assert report["jtag"]["result"] == "pass" and report["jtag"]["device"] == "XC7A100T"
+    assert report["jtag"]["result"] == "pass" and report["jtag"]["idcode_device"] == "XC7A100T"
     report = _check(NETV2, tmp_path, {"variant": "a7-100", "idcode": "0x13631093"}, run, variant="a7-35")
     assert report["jtag"]["result"] == "fail" and "is an XC7A100T, not the a7-35's XC7A35T" in report["reason"]
 
@@ -326,7 +329,7 @@ def test_a_netv2_on_a_pi5_loads_with_rp1pio_and_muxes_its_uart(tmp_path):
     report = NETV2.check(_host(NETV2, PI5, None), {"variant": "a7-35"},
                          {"images": _install(tmp_path, NETV2)}, runner=run)  # fmt: skip
     assert report["result"] == "pass"
-    assert run.calls[0][-3:] == ["--detect", "--verbose-level", "2"] and report["jtag"]["device"] == "XC7A35T"
+    assert run.calls[0][-3:] == ["--detect", "--verbose-level", "2"] and report["jtag"]["idcode_device"] == "XC7A35T"
     assert run.calls[2][:3] == ["pinctrl", "set", "14"]
     assert any(c[:3] == ["openFPGALoader", "-c", "rp1pio"] and c[-1].endswith("kosagi_netv2.bit") for c in run.calls)
 
