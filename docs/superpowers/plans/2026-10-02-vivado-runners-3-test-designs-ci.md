@@ -114,7 +114,7 @@ Create the worktree with `superpowers:using-git-worktrees`: `.worktrees/ci-vivad
 
 ### Task 1: `patch_yosys_template()` leaves the Vivado toolchain alone
 
-Without this no LiteX SoC design in the repository builds with Vivado on `main`.
+Without this no LiteX SoC design in the repository builds with Vivado on `main`. This is issue #102 (filed 2026-10-03); the commit message below closes it. If Tim wants the fix sooner than the runners exist, this task can go in as a pull request of its own: it needs no runner, only its unit test.
 
 **Files:**
 - Modify: `designs/_shared/yosys_workarounds.py:19-29`
@@ -227,7 +227,7 @@ Expected: `All checks passed!`
 
 ```bash
 git add designs/_shared/yosys_workarounds.py tests/test_yosys_workarounds.py
-git commit -m "yosys_workarounds: Vivado runs no Yosys, so leave its toolchain alone" -m "patch_yosys_template() asserted that every toolchain has _yosys_template, which LiteX's Vivado toolchain does not: every SoC design failed with --toolchain vivado before building anything. Yosys toolchains are still required to have it." -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
+git commit -m "yosys_workarounds: Vivado runs no Yosys, so leave its toolchain alone" -m "patch_yosys_template() asserted that every toolchain has _yosys_template, which LiteX's Vivado toolchain does not: every SoC design failed with --toolchain vivado before building anything. Yosys toolchains are still required to have it." -m "Fixes #102" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01LmomwnyBcsZWKXnx2Thc2Y"
 ```
 
