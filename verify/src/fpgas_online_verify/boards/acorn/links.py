@@ -139,8 +139,13 @@ def jtag(setup, variant, run, bar0_dna=None, gpiochip=None):
                 dna_error = f"openFPGALoader --read-dna read no device DNA over P1 JTAG (exit status {rc})"
             else:
                 dna = int(m.group(1), 16)
-                seen["dna"] = f"{dna:#x}"
-                if bar0_dna is not None and dna != bar0_dna:
+                stuck = check.dna_faults(dna, "P1 JTAG")
+                if stuck:  # a DNA port not being read, so not the board's DNA (identity uses dna_error instead)
+                    faults += [("fail", f) for f in stuck]
+                    dna_error = "; ".join(stuck)
+                else:
+                    seen["dna"] = f"{dna:#x}"
+                if bar0_dna is not None and dna != bar0_dna:  # a good BAR0 DNA, so this may be TDI: both listed
                     faults.append(("fail", f"device DNA over JTAG {dna:#x} is not the one over BAR0 {bar0_dna:#x}: "
                                            "TDI (or the DNA readout) is wrong"))  # fmt: skip
     except (Problem, OSError) as e:
