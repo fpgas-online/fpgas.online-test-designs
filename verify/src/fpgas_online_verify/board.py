@@ -8,6 +8,7 @@ modules that are installed. A board module is the only place that knows its boar
 import importlib
 import pkgutil
 
+from . import identity
 from .core import host_facts
 
 
@@ -19,6 +20,11 @@ class Board:
     slug = ""  # in package and command names: fpgas-online-<slug>-tools, fpgas-<slug>-verify
     title = ""
     probes = False  # True when finding it means driving something (a JTAG scan over the GPIO header)
+    # fpgas-verify --identify (identify.py): the fields a whole identity has (any missing makes it exit 1), and
+    # the prefixes of the fields only the boot check can read (they need a design loaded), which --identify
+    # takes from the boot report instead.
+    label_fields = ()
+    report_fields = ()
 
     def facts(self, port=None):
         """What the check needs to know about this host."""
@@ -48,6 +54,11 @@ class Board:
 
     def find(self, host, usb, pci):
         return self.spot(host, usb, pci) or (self.probe(host) if self.probes else [])
+
+    def identify(self, host, found, options):
+        """Who `found` is (identity.py), read live and without disturbing it: no design loaded, nothing
+        reconfigured, no test run. options["board_key"] is its state key. By default, how it was found."""
+        return identity.base(options.get("board_key", self.name), self.name, found)
 
     def check(self, host, found, options):
         """Verify one found board: a dict with "result", maybe "reason", and the details; "state" holds the

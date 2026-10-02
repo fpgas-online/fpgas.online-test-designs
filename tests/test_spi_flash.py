@@ -379,3 +379,104 @@ def test_the_flash_tool_turns_memory_decoding_on_for_bar0_and_back_off_after(tmp
     assert seen and all(c & 0x2 for c in seen)
     assert int.from_bytes((dev / "config").read_bytes()[4:6], "little") == 0x0000
     assert "flash did not identify itself" in capsys.readouterr().out
+
+
+# -- lock files ------------------------------------------------------------------------------------------------
+
+
+class Opens:
+    """Wraps os.open: records each (path, flags), and can refuse with EACCES as fs.protected_regular does."""
+
+    def __init__(self, monkeypatch, module, refuse=False):
+        self.calls, self.refuse, self.real = [], refuse, module.os.open
+        monkeypatch.setattr(module.os, "open", self)
+
+    def __call__(self, path, flags, mode=0o777):
+        self.calls.append((str(path), flags))
+        if self.refuse:
+            raise PermissionError(13, "Permission denied", str(path))
+        return self.real(path, flags, mode)
+
+
+def test_an_existing_lock_file_is_opened_without_o_creat(tmp_path, monkeypatch):
+    import os
+
+    lock = tmp_path / "board.lock"
+    lock.write_text("")
+    opens = Opens(monkeypatch, sf)
+    sf.hold_lock(str(lock)).close()
+    assert opens.calls and all(not flags & os.O_CREAT for _, flags in opens.calls)
+    assert all(not flags & (os.O_WRONLY | os.O_RDWR | os.O_TRUNC) for _, flags in opens.calls)
+
+
+def test_a_missing_lock_file_is_created_0644_with_o_excl(tmp_path, monkeypatch):
+    import os
+
+    old = os.umask(0o022)
+    try:
+        lock = tmp_path / "run" / "board.lock"
+        opens = Opens(monkeypatch, sf)
+        sf.hold_lock(str(lock)).close()
+    finally:
+        os.umask(old)
+    assert (lock.stat().st_mode & 0o777) == 0o644
+    created = [flags for _, flags in opens.calls if flags & os.O_CREAT]
+    assert created and all(flags & os.O_EXCL for flags in created)
+
+
+def test_a_lock_file_that_cannot_be_opened_is_a_clear_error(tmp_path, monkeypatch):
+    lock = tmp_path / "board.lock"
+    lock.write_text("")
+    Opens(monkeypatch, sf, refuse=True)
+    with pytest.raises(sf.LockError) as refused:
+        sf.hold_lock(str(lock)).close()
+    assert str(lock) in str(refused.value) and "owned by" in str(refused.value)
+
+
+def test_fpgas_acorn_flash_says_why_it_cannot_take_the_lock(tmp_path, monkeypatch, capsys):
+    lock = tmp_path / "lock"
+    lock.write_text("")
+    monkeypatch.setattr(sf, "LOCK", str(lock))
+    Opens(monkeypatch, sf, refuse=True)
+    assert sf.main(["id"]) == 1
+    out = capsys.readouterr().out
+    assert f"cannot open the lock file {lock}" in out and "RESULT: FAIL" in out
+
+
+# -- the SoC lock file ------------------------------------------------------------------------------------------
+
+
+def test_a_normal_soc_lock_file_is_opened(tmp_path):
+    lock = tmp_path / "acorn.lock"
+    lock.write_text("")
+    sf.hold_lock(str(lock)).close()
+    assert lock.is_file() and not lock.is_symlink()
+
+
+@pytest.mark.parametrize("target", ["dangling", "real"])
+def test_a_soc_lock_file_that_is_a_symlink_is_refused_and_named(tmp_path, target):
+    # A dangling link spun fpgas-acorn-flash for ever (ENOENT, then EEXIST); a link is never followed.
+    real = tmp_path / "elsewhere"
+    if target == "real":
+        real.write_text("keep")
+    lock = tmp_path / "acorn.lock"
+    lock.symlink_to(real)
+    with pytest.raises(sf.LockError, match="symlink") as refused:
+        sf.hold_lock(str(lock))
+    assert str(lock) in str(refused.value)
+    assert lock.is_symlink() and (real.read_text() == "keep" if target == "real" else not real.exists())
+
+
+def test_a_soc_lock_file_that_keeps_vanishing_is_an_error_not_a_spin(tmp_path, monkeypatch):
+    import os
+
+    calls = []
+
+    def racing(path, flags, mode=0o777):  # gone for the plain open, there for the create: every time
+        calls.append(flags)
+        raise FileExistsError(17, "File exists") if flags & os.O_CREAT else FileNotFoundError(2, "No such file")
+
+    monkeypatch.setattr(sf.os, "open", racing)
+    with pytest.raises(sf.LockError, match="gone, then there"):
+        sf.open_lock(str(tmp_path / "acorn.lock"))
+    assert len(calls) == 2 * sf.LOCK_OPEN_TRIES and all(flags & os.O_NOFOLLOW for flags in calls)
