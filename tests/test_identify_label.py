@@ -860,6 +860,14 @@ def test_rpi_hwid_killed_by_a_signal_is_128_plus_the_signal(labelling, locks, ca
     assert "rpi-hwid was killed by signal 9 (SIGKILL)" in capsys.readouterr().err
 
 
+def test_rpi_hwid_killed_by_a_signal_with_no_name_is_still_128_plus_the_signal(labelling, locks, capsys):
+    with pytest.raises(ValueError):
+        signal.Signals(40)  # a real-time signal: the enum has no member for it
+    assert label.run(labelling, runner=RpiHwid(locks, rc=-40)) == 128 + 40
+    err = capsys.readouterr().err
+    assert "rpi-hwid was killed by signal 40\n" in err and "Traceback" not in err
+
+
 @pytest.mark.parametrize("extra", [["--report", "r.json"], ["--state", "s.json"], ["--no-publish"]])
 def test_label_refuses_the_check_s_report_state_and_publish_options(extra, monkeypatch, untouchable, capsys):
     monkeypatch.delenv(identify.ENV, raising=False)

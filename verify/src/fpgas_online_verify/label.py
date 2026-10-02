@@ -49,6 +49,14 @@ def _create(path, text):
         f.write(text)
 
 
+def _signal_name(number):
+    """How a signal is named: signal 9 (SIGKILL), or signal 40 for a number the enum lacks (a real-time one)."""
+    try:
+        return f"signal {number} ({signal.Signals(number).name})"
+    except ValueError:
+        return f"signal {number}"
+
+
 def run(options, out=None, listing=False, prog="fpgas-verify", boards=None, runner=subprocess.run):
     tool = shutil.which(TOOL)
     if tool is None:
@@ -86,6 +94,6 @@ def run(options, out=None, listing=False, prog="fpgas-verify", boards=None, runn
         finally:
             signal.signal(signal.SIGTERM, previous)
     if rc < 0:
-        print(f"{prog} --label: {TOOL} was killed by signal {-rc} ({signal.Signals(-rc).name})", file=sys.stderr)
+        print(f"{prog} --label: {TOOL} was killed by {_signal_name(-rc)}", file=sys.stderr)
         return 128 - rc
     return rc
