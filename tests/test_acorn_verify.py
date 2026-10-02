@@ -384,6 +384,35 @@ def test_a_stuck_dna_over_both_bar0_and_jtag_is_a_dna_error_saying_both(tmp_path
                                   "device DNA over P1 JTAG reads 0x0: the DNA port is not being read")  # fmt: skip
 
 
+STUCK_DNAS = [0, (1 << 57) - 1]  # openFPGALoader masks the DNA to 57 bits, so all ones is 0x1ffffffffffffff
+
+
+@pytest.mark.parametrize("bar0_dna", [fk.DNA, *STUCK_DNAS], ids=["bar0-good", "bar0-zeros", "bar0-ones"])
+@pytest.mark.parametrize("jtag_dna", STUCK_DNAS, ids=["jtag-zeros", "jtag-ones"])
+def test_a_stuck_jtag_dna_fails_the_jtag_test_whatever_bar0_read(tmp_path, images, bar0_dna, jtag_dna):
+    """A stuck JTAG DNA is the jtag test's own fault, with a good BAR0 DNA or a stuck one, and is not the
+    board's DNA."""
+    rig = Rig(tmp_path, images, dna=bar0_dna)
+    rig.pi.jtag_dna = jtag_dna
+    report = rig.check()
+    tests = {t["test"]: t for t in report["tests"]}
+    stuck = f"device DNA over P1 JTAG reads {jtag_dna:#x}: the DNA port is not being read"
+    assert tests["jtag"]["result"] == "fail"
+    assert "dna" not in tests["jtag"] and tests["jtag"]["dna_error"] == stuck
+    assert stuck in report["reason"]
+    ident = report["identity"]
+    if bar0_dna == fk.DNA:  # BAR0's DNA is good, so the JTAG one is compared with it as well (a TDI fault)
+        assert tests["jtag"]["reason"] == (f"{stuck}; device DNA over JTAG {jtag_dna:#x} is not the one over BAR0 "
+                                           f"{fk.DNA:#x}: TDI (or the DNA readout) is wrong")  # fmt: skip
+        assert ident["dna"] == "0x0054b48664b04854" and "dna_error" not in ident
+        assert tests["pcie-bar0"]["result"] == "pass"
+    else:  # BAR0's is stuck too, so not compared
+        assert tests["jtag"]["reason"] == stuck
+        bar0_stuck = f"device DNA over BAR0 reads {bar0_dna:#x}: the DNA port is not being read"
+        assert tests["pcie-bar0"]["reason"] == bar0_stuck
+        assert "dna" not in ident and ident["dna_error"] == f"{bar0_stuck}; {stuck}"
+
+
 def test_an_s25fs256s_is_named_by_its_extended_id(tmp_path, images, monkeypatch):
     monkeypatch.setattr(tsf, "RDID", bytes.fromhex("0102194d0181"))
     ident = Rig(tmp_path, images).check()["identity"]
