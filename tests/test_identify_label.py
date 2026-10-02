@@ -294,6 +294,20 @@ def test_a_busy_board_is_not_dropped_when_a_weak_claim_was_seen(tmp_path, held_l
     assert "--identify: netv2: read: board busy" in out.err
 
 
+def test_a_busy_board_lists_only_the_fields_it_is_missing(tmp_path, held_lock, monkeypatch):
+    # Found by its JTAG scan, the NeTV2 already has its IDCODE (and the decoded part) in the document: busy for
+    # its read, only the fields not there are missing. A board whose finding gave every field is still not whole.
+    monkeypatch.delenv(identify.ENV, raising=False)
+    found = {"variant": "a7-35", "idcode": "0x0362d093"}
+    netv2 = LockedAt("netv2", held_lock, seen=[found], label_fields=("idcode", "dna", "flash_jedec"))
+    doc, gaps = _read({"netv2": netv2}, tmp_path, lock_wait=0.2)
+    assert doc["boards"][0]["idcode"] == "0x0362d093" and "dna" not in doc["boards"][0]
+    assert gaps == ["netv2: dna: board busy", "netv2: flash_jedec: board busy"]
+    fomu = LockedAt("fomu", held_lock, seen=[{"variant": "evt", "serial": "F"}], label_fields=("serial",))
+    doc, gaps = _read({"fomu": fomu}, tmp_path, lock_wait=0.2)
+    assert doc["boards"][0]["serial"] == "F" and gaps == ["fomu: read: board busy"]
+
+
 def test_a_failed_look_is_not_lost_when_a_weak_claim_was_seen(tmp_path, locks, capsys):
     # runner.find keeps a weak claim when the NeTV2's probe fails and says so only in its `how`: --identify must
     # still put the NeTV2 in the document, its fields missing for the probe's reason, and exit 1 saying why.

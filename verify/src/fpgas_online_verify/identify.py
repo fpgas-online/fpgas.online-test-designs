@@ -176,18 +176,22 @@ class _Locks:
                 raise
 
 
+def _unread(key, board, found, reason):
+    """A board found but not read: how it was found, and each label field that leaves missing, for `reason`
+    (only those: finding the NeTV2 reads its IDCODE). With none missing, the read itself is the gap."""
+    ident = identity.base(key, board.name, found)
+    fields = missing(board, ident, {"": reason}) or [("read", reason)]
+    return ident, [f"{key}: {f}: {why}" for f, why in fields]
+
+
 def _busy(key, board, found):
-    """A board whose lock stayed held: how it was found, and every field missing for that reason."""
-    gaps = [f"{key}: {f}: {BUSY}" for f in board.label_fields] or [f"{key}: read: {BUSY}"]
-    return identity.base(key, board.name, found), gaps
+    """A board whose lock stayed held: how it was found, and every field that leaves missing, for that reason."""
+    return _unread(key, board, found, BUSY)
 
 
 def _failed(board, problem):
     """A board whose look (driving its pins) failed: every field missing, for the look's reason."""
-    ident = identity.base(board.name, board.name, {})
-    why = {"": f"{problem.result}: {problem.reason}"}
-    fields = missing(board, ident, why) or [("read", why[""])]
-    return ident, [f"{board.name}: {f}: {reason}" for f, reason in fields]
+    return _unread(board.name, board, {}, f"{problem.result}: {problem.reason}")
 
 
 def _terminated(signum, frame):
