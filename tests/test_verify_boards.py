@@ -153,7 +153,10 @@ def test_idcodes_are_read_whole_from_openocd_and_openfpgaloader():
 
 def test_the_netv2_is_scanned_with_openocd_on_a_pi3_and_rp1pio_on_a_pi5():
     run = Runner([("--detect", (0, _scan(0x1362D093)))])
-    assert NETV2.probe(_host(NETV2, PI5, None), runner=run) == [{"variant": "a7-35", "idcode": "0x1362d093"}]
+    scan = {"tool": "openFPGALoader", "exit": 0, "output": ["- 0 -> 0x1362d093", "- 1 -> 0xffffffff"]}
+    assert NETV2.probe(_host(NETV2, PI5, None), runner=run) == [
+        {"variant": "a7-35", "idcode": "0x1362d093", "idcodes": ["0x1362d093"], "idcode_scan": scan}
+    ]
     assert run.calls[1] == ["openFPGALoader", "-c", "rp1pio", "--pins", "27:22:4:17", "--detect",
                              "--verbose-level", "2"]  # fmt: skip
     run = Runner([("init; exit", (1, "tap/device found: 0x03631093"))])
@@ -224,6 +227,12 @@ def _check(board, tmp_path, found, run, **options):
 ARTY_FOUND = {"variant": "a7-35", "usb": "1-1", "serial": "210319B"}
 
 
+def _netv2_found(code):
+    """The NeTV2 as finding it on a Pi 3 reports it: its OpenOCD scan answered `code`."""
+    (found,) = NETV2.probe(_host(NETV2), runner=Runner([("init; exit", (0, f"tap/device found: {code}"))]))
+    return found
+
+
 def test_an_arty_that_passes_loads_each_test_runs_it_and_records_its_flash(tmp_path):
     flash = b"\x5a" * ARTY.flash_region["a7-35"]
     run = Runner([("test_spiflash.py", (0, "JEDEC ID: 0x20 0xBA 0x18\nRESULT: PASS"))], flash=flash)
@@ -277,6 +286,20 @@ def test_an_arty_scan_without_the_raw_idcodes_says_so_not_that_the_chain_is_empt
     assert _check(ARTY, tmp_path, ARTY_FOUND, run)["jtag"]["reason"] == "no device on the JTAG chain"
 
 
+def test_an_arty_scan_that_fails_before_scanning_says_the_tool_failed_and_why(tmp_path):
+    text = "write to ftdi failed\nunable to open ftdi device: -3 (device not found)\n\n"
+    run = Runner([("--detect", (1, text))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    assert report["result"] == "fail" and report["jtag"]["reason"] == (
+        "openFPGALoader failed (exit 1) before scanning the JTAG chain: "
+        "unable to open ftdi device: -3 (device not found)"
+    )
+    assert report["jtag"]["output"] == ["write to ftdi failed", "unable to open ftdi device: -3 (device not found)"]
+    run = Runner([("--detect", (1, ""))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    reason = _check(ARTY, tmp_path, ARTY_FOUND, run)["jtag"]["reason"]
+    assert reason == "openFPGALoader failed (exit 1) before scanning the JTAG chain: no output"
+
+
 def test_an_arty_scan_that_exits_non_zero_fails_even_with_the_right_idcode(tmp_path):
     run = Runner([("--detect", (2, ARTY_SCAN))], flash=b"\0" * ARTY.flash_region["a7-35"])
     report = _check(ARTY, tmp_path, ARTY_FOUND, run)
@@ -293,11 +316,63 @@ def test_an_arty_of_the_wrong_part_whose_scan_exits_non_zero_gives_both_faults(t
     )
 
 
+@pytest.mark.parametrize(
+    ("model", "needle", "text", "tool"),
+    [
+        (PI3, "init; exit", "Info : JTAG tap: xc7.tap tap/device found: 0x03631093 (mfg: 0x049 (Xilinx))", "openocd"),
+        (PI5, "--detect", _scan(0x03631093), "openFPGALoader"),
+    ],
+    ids=["openocd-pi3", "rp1pio-pi5"],
+)
+def test_a_netv2_whose_finding_scan_exits_non_zero_fails_even_with_the_right_idcode(tmp_path, model, needle, text,
+                                                                                    tool):  # fmt: skip
+    host = _host(NETV2, model, None if model == PI5 else 0x3F000000)
+    for rc in (0, 2):
+        (found,) = NETV2.probe(host, runner=Runner([(needle, (rc, text))]))
+        run = Runner(flash=b"\0" * NETV2.flash_region["a7-100"])
+        report = NETV2.check(host, found, {"images": _install(tmp_path, NETV2)}, runner=run)
+        assert not any(needle in " ".join(c) for c in run.calls)  # the check does not scan again
+        assert report["jtag"]["idcode_device"] == "XC7A100T"
+        if rc == 0:
+            assert report["result"] == "pass" and report["jtag"]["result"] == "pass", report
+        else:
+            assert report["result"] == "fail" and report["jtag"]["result"] == "fail"
+            assert report["jtag"]["reason"] == f"{tool} exited 2 reading the IDCODE"
+
+
+def _openocd_chain(*codes):
+    return "\n".join(f"Info : JTAG tap: xc7.tap{i} tap/device found: {c:#010x}" for i, c in enumerate(codes))
+
+
+@pytest.mark.parametrize(
+    ("model", "needle", "chain", "tool"),
+    [(PI3, "init; exit", _openocd_chain, "openocd"), (PI5, "--detect", _scan, "openFPGALoader")],
+    ids=["openocd-pi3", "rp1pio-pi5"],
+)
+def test_a_netv2_on_a_jtag_chain_of_two_devices_fails_as_the_other_boards_do(tmp_path, model, needle, chain, tool):
+    """Finding the board takes the NeTV2 part from the chain; the JTAG check still counts every device on it."""
+    host = _host(NETV2, model, None if model == PI5 else 0x3F000000)
+    for codes, want in [((0x13631093, 0x0362D093), "a7-100"), ((0x0362D093, 0x13631093), "a7-35")]:
+        (found,) = NETV2.probe(host, runner=Runner([(needle, (0, chain(*codes)))]))
+        assert found["variant"] == want and found["idcodes"] == [f"{c:#010x}" for c in codes]
+        run = Runner(flash=b"\0" * NETV2.flash_region[want])
+        report = NETV2.check(host, found, {"images": _install(tmp_path, NETV2)}, runner=run)
+        listed = ", ".join(f"{c:#010x}" for c in codes)
+        assert report["result"] == "fail" and report["jtag"]["result"] == "fail", report
+        assert report["jtag"]["reason"] == f"the JTAG chain has 2 devices ({listed}), not one"
+        assert report["jtag"]["idcode"] == listed
+    (found,) = NETV2.probe(host, runner=Runner([(needle, (0, chain(0x13631093)))]))
+    run = Runner(flash=b"\0" * NETV2.flash_region["a7-100"])
+    report = NETV2.check(host, found, {"images": _install(tmp_path, NETV2)}, runner=run)
+    assert report["result"] == "pass" and report["jtag"]["result"] == "pass", report
+    assert (report["jtag"]["idcode"], found["idcode_scan"]["tool"]) == ("0x13631093", tool)
+
+
 def test_a_netv2_configured_as_the_other_variant_fails_on_its_idcode(tmp_path):
     run = Runner(flash=b"\0" * NETV2.flash_region["a7-100"])
-    report = _check(NETV2, tmp_path, {"variant": "a7-35", "idcode": "0x13631093"}, run, variant="a7-100")
+    report = _check(NETV2, tmp_path, {**_netv2_found("0x13631093"), "variant": "a7-35"}, run, variant="a7-100")
     assert report["jtag"]["result"] == "pass" and report["jtag"]["idcode_device"] == "XC7A100T"
-    report = _check(NETV2, tmp_path, {"variant": "a7-100", "idcode": "0x13631093"}, run, variant="a7-35")
+    report = _check(NETV2, tmp_path, _netv2_found("0x13631093"), run, variant="a7-35")
     assert report["jtag"]["result"] == "fail" and "is an XC7A100T, not the a7-35's XC7A35T" in report["reason"]
 
 
@@ -345,7 +420,7 @@ def test_a_flash_that_cannot_be_read_back_is_an_error(tmp_path):
 
 def test_a_netv2_on_a_pi3_loads_with_openocd_and_frees_its_uart(tmp_path):
     run = Runner(flash=b"\0" * NETV2.flash_region["a7-100"])
-    report = _check(NETV2, tmp_path, {"variant": "a7-100", "idcode": "0x13631093"}, run)
+    report = _check(NETV2, tmp_path, _netv2_found("0x13631093"), run)
     assert report["result"] == "pass", report
     loads = [c for c in run.calls if c[0] == "openocd"]
     assert f"pld load 0 {tmp_path}/images/uart-test-netv2-a7-100t/kosagi_netv2.bit" in loads[0][-1]
@@ -358,7 +433,7 @@ def test_a_netv2_on_a_pi3_loads_with_openocd_and_frees_its_uart(tmp_path):
 def test_the_netv2_spi_flash_test_listens_before_its_design_is_loaded(tmp_path):
     """Its firmware prints the JEDEC ID once, at start, onto ttyAMA0 (pi-sw1-p10, 2026-09-27): listen.py."""
     run = Runner(flash=b"\0" * NETV2.flash_region["a7-35"])
-    _check(NETV2, tmp_path, {"variant": "a7-35", "idcode": "0x0362d093"}, run)
+    _check(NETV2, tmp_path, _netv2_found("0x0362d093"), run)
     (argv,) = [c for c in run.calls if "fpgas_online_verify.listen" in c]
     assert argv[3] == "/dev/ttyAMA0"
     test, program = argv[5 : 5 + int(argv[4])], argv[5 + int(argv[4]) :]

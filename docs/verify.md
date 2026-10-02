@@ -137,7 +137,11 @@ the check, publishes anything or records any state.
     putting all of this back and letting go of the locks; a second SIGTERM meanwhile is ignored.
 * Each board is read under its lock, as a check is. `--identify` waits at most 30 s for it; a board still in
   use then has its fields missing, for the reason `board busy`. A NeTV2 is also looked for under its lock,
-  since finding it drives its JTAG pins.
+  since finding it drives its JTAG pins; one that could not be looked for, its lock busy, is in the document
+  all the same, with its fields missing for that reason, even when other boards were found (`--identify`
+  then exits 1). `--identify` holds one board's lock at a time: the NeTV2's is let go after its scan and
+  taken again for its read, so no two locks are ever taken in an order that could deadlock with rpi-hwid's
+  (acorn < arty < netv2).
 * A field that needs a design loaded (the Arty's and NeTV2's flash, read through openFPGALoader's
   SPI-over-JTAG bridge) comes from the boot report, `/run/fpgas-online/verify.json`, when the board there is
   this one by a key no other board has: the Arty's USB serial, the Acorn's PCI slot, or the device DNA. Those
@@ -619,6 +623,8 @@ Every board with JTAG has its FPGA's whole 32-bit IDCODE read and decoded
   `fpgas-acorn-flash`), and on the Acorn the JTAG pins are put back as they were found.
 * The part is compared without the version, so another silicon revision of the right part passes. A part
   that is not the variant's fails the board, and so does an IDCODE with bit 0 clear.
+* A JTAG chain of more than one device fails the board, with every IDCODE on it in the reason. That holds for
+  the NeTV2 too: finding it picks its part out of the chain, but the check counts every device the scan saw.
 * A scan whose tool exits with an error fails, even when it printed the right IDCODE; the reason gives the
   exit code. The IDCODE it printed is still decoded in the report.
 
@@ -699,15 +705,17 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 | `fail`: `the test exited 1` | the test failed; its last lines are in the summary. `fpgas-<board>-debug test <test>` shows all of it |
 | `fail`: `N/18 pins match expected wiring` | the Pmod HAT cabling differs from the board's expected map |
 | `fail`: `… is an XC7A100T, not the a7-35's XC7A35T …` / `P1 JTAG chain has … expected one …` | the JTAG IDCODE is not the variant's part: the wrong board, or the wrong `--variant` |
+| `fail`: `the JTAG chain has N devices (…), not one` | more than the board's FPGA answers on its JTAG chain (an Arty or a NeTV2): another device wired into it, or a fault on the cable |
 | `fail`: `unconverted: …` | an Acorn on SQRL's factory image (or the XDMA sample): convert it ([acorn-pcie-programming.md](hardware/acorn-pcie-programming.md)) |
 | `fail`: `… is not a design we built` | a Xilinx PCIe design the Acorn check does not know; its flash is not read |
 | `fail`: `… has no test design for this board yet` | a Xilinx PCIe board that is not an Acorn (a PCIe Screamer, a PicoEVB) |
 | `fail`: `running the golden image` | the Acorn's operational slot did not boot; it fell back to golden |
 | `fail`: `link is x2, expected x1` | the Acorn's PCIe link is not the setup's (`expected.toml`) |
 | `fail`: `no device on the P1 JTAG chain` / `no UARTBone reply on /dev/ttyAMA0` | an Acorn's JTAG or P2 UART cable is off or miswired |
-| `fail`: `openFPGALoader printed no raw IDCODE scan (needs --verbose-level 2 output)` | the tool's output, not the board: this openFPGALoader prints no `- 0 -> 0x...` lines at `--verbose-level 2` (older than v0.10.0), or failed before scanning. Its last lines are in the report's `output` |
+| `fail`: `openFPGALoader printed no raw IDCODE scan (needs --verbose-level 2 output)` | the tool's version, not the board: openFPGALoader exited 0 but printed no `- 0 -> 0x...` lines at `--verbose-level 2`, so it is older than v0.9.0. Its last lines are in the report's `output` |
+| `fail`: `… failed (exit N) before scanning the JTAG chain: …` | the scan tool exited with an error and printed no scan: the cable or gpiochip would not open, say. The reason ends with its last line of output; more is in the report's `output` |
 | `fail`: `… exited N reading the IDCODE` / `openFPGALoader --detect exited N …` | the IDCODE scan reported an error, even if it printed an IDCODE; its last lines are in the report's `output` |
-| `fail`: `device DNA over JTAG … is not the one over BAR0` | the P1 TDI wire does not carry, or the DNA readout is wrong |
+| `fail`: `device DNA over JTAG … is not the one over BAR0` | the P1 TDI wire does not carry, or the DNA readout is wrong. Only a good BAR0 DNA is compared: one of all zeros or all ones is pcie-bar0's own fault (`device DNA over BAR0 reads 0x0: the DNA port is not being read`) |
 | `fail`: `J5 -> GPIO3: the FPGA drove 0, the Pi read 1` (or the other way) | a P2 spare wire is cut or miswired |
 | `fail`: `K2 -> GPIO15: …` / `GPIO14 -> J2: …` | a P2 serial wire is cut or miswired |
 | `fail`: `DRAM write … MB/s, below the … MB/s expected` / `… words wrong in the … half` | the DRAM is slow or broken; `selftest.py` shows more |

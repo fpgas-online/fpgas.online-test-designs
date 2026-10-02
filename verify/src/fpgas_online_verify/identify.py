@@ -4,7 +4,9 @@
     FUSE_DNA) and, on the Acorn, the flash's identity over BAR0. Each board is read under its own lock, so a
     check or a debug session running on it finishes first; it waits at most LOCK_WAIT seconds for the lock,
     and a board still busy then has its fields missing, for the reason "board busy". A board found only by
-    driving its pins (the NeTV2's JTAG scan) is looked for under its lock too, never before it is held.
+    driving its pins (the NeTV2's JTAG scan) is looked for under its lock too, never before it is held; one
+    that could not be looked for, its lock being busy, is in the document all the same, with every field
+    missing for that reason, whatever else was found. Only one board's lock is held at a time.
   * Anything only a loaded design can read (the Arty's and NeTV2's flash, through openFPGALoader's
     SPI-over-JTAG bridge) comes from the boot report (runner.REPORT), when the board there is this one by a key
     no other board has (its USB serial, PCI slot or device DNA); the board's dict lists those fields in
@@ -139,30 +141,38 @@ def missing(board, ident, why=None):
 
 
 class _Locks:
-    """The boards' locks --identify holds: each taken at most once, and waited for at most LOCK_WAIT seconds."""
+    """The boards' locks --identify takes, each waited for at most `wait` (LOCK_WAIT) seconds.
 
-    def __init__(self, stack, wait):
-        self.stack, self.wait, self.held, self.busy = stack, wait, set(), set()
+    It holds at most one board's lock at a time, both while looking for a board and while reading one, so it
+    can never take two in an order that deadlocks with another tool's (rpi-hwid takes acorn < arty < netv2).
+    Should two ever have to be held together, take them in that sorted order."""
 
-    def take(self, board):
-        """Hold `board`'s lock until the read is done; Busy (with .board) if it is not free in time."""
-        if board.lock in self.held:
-            return
-        if board.lock not in self.busy:
+    def __init__(self, wait):
+        self.wait, self.skip_busy = wait, False
+        self.skipped = []  # the boards not looked for because their lock stayed held
+
+    @contextlib.contextmanager
+    def probing(self, board):
+        """runner.find's `probing`: hold `board`'s lock while it is looked for by driving its pins, and let it go
+        as soon as it has been (its read takes it again). A lock that stays busy: with skip_busy (`auto`) the
+        board is skipped, and listed in `skipped`; else Busy, with .board."""
+        with contextlib.ExitStack() as stack:
             try:
-                self.stack.enter_context(hold_lock(board.lock, board.title, timeout=self.wait))
-                self.held.add(board.lock)
+                stack.enter_context(hold_lock(board.lock, board.title, timeout=self.wait))
+            except Busy as busy:
+                if not self.skip_busy:
+                    busy.board = board
+                    raise
+                self.skipped.append(board)
+                yield False
                 return
-            except Busy:
-                self.busy.add(board.lock)
-        busy = Busy(board.title, self.wait)
-        busy.board = board
-        raise busy
+            yield True
 
 
 def _busy(key, board, found):
     """A board whose lock stayed held: how it was found, and every field missing for that reason."""
-    return identity.base(key, board.name, found), [f"{key}: {f}: {BUSY}" for f in board.label_fields]
+    gaps = [f"{key}: {f}: {BUSY}" for f in board.label_fields] or [f"{key}: read: {BUSY}"]
+    return identity.base(key, board.name, found), gaps
 
 
 def _terminated(signum, frame):
@@ -192,36 +202,35 @@ def read(options, boards=None, usb=None, pci=None):
     A SIGTERM meanwhile exits 143, with everything a board's read changed put back.
 
     Nothing touches a board's pins before its lock is held: a board found by driving its JTAG (the NeTV2's
-    scan) is looked for under its lock, which is then kept for its read."""
+    scan) is looked for under its lock, which is let go before any other board's is taken, and taken again
+    for its read. No two boards' locks are ever held at once."""
     report = options.get("boot_report") or runner.REPORT
     boards = installed() if boards is None else boards
-    with _sigterm_exits(), contextlib.ExitStack() as stack:
-        locks = _Locks(stack, options.get("lock_wait", LOCK_WAIT))
-        mode = None
+    with _sigterm_exits():
+        locks = _Locks(options.get("lock_wait", LOCK_WAIT))
+        out, gaps = [], []
         try:
             if options.get("board"):
                 mode = options["board"]
             else:
                 mode, _ = config.configured(options.get("mode_dir", config.MODE_DIR),
                                             options.get("admin_dir", config.ADMIN_DIR))  # fmt: skip
+            locks.skip_busy = mode == config.AUTO
             usb = usb_devices() if usb is None else usb
             pci = pci_devices() if pci is None else pci
-            targets, _ = runner.find(boards, mode, {**options, "before_probe": locks.take}, usb, pci)
-        except Busy as b:  # a board that is found by driving its pins was busy before it could be looked for
-            if mode == config.AUTO:
-                return identity.document([]), [f"{b.board.name}: not looked for: {BUSY}"]
+            targets, _ = runner.find(boards, mode, {**options, "probing": locks.probing}, usb, pci)
+        except Busy as b:  # configured for a board found by driving its pins, busy before it could be looked for
             ident, gaps = _busy(b.board.name, b.board, {})
             return identity.document([ident]), gaps
         except Problem as p:
-            return identity.document([]), [f"{p.result}: {p.reason}"]
-        out, gaps = [], []
+            targets = []
+            if not (locks.skipped and p.result == "missing"):  # "none found" is said by the busy board below
+                gaps.append(f"{p.result}: {p.reason}")
         for (board, host, found), key in zip(targets, runner._keys(targets)):
             why = {}
             board_options = {**{k: v for k, v in options.items() if k != "event"}, "board_key": key}
             try:
-                with contextlib.ExitStack() as own:
-                    if board.lock not in locks.held:  # held since it was looked for, or only for this read
-                        own.enter_context(hold_lock(board.lock, board.title, timeout=locks.wait))
+                with hold_lock(board.lock, board.title, timeout=locks.wait):  # the only lock held meanwhile
                     ident = board.identify(host, found, board_options)
                     ident, report_why = from_report(board, ident, _boot_report(report))
                     why = dict.fromkeys(board.report_fields, report_why) if report_why else {}
@@ -240,6 +249,13 @@ def read(options, boards=None, usb=None, pci=None):
             if not fields and "" in why:  # a board with no label fields whose read stopped
                 fields = [("read", why[""])]
             gaps += [f"{key}: {f}: {reason}" for f, reason in fields]
+        # With `auto`, a board that could not be looked for because its lock stayed held is never dropped, even
+        # when other boards were found (runner.find keeps a weak claim when probing fails, and says so only in
+        # its `how`): it is in the document with every field missing, for the reason "board busy".
+        for board in locks.skipped:
+            ident, busy = _busy(board.name, board, {})
+            out.append(ident)
+            gaps += busy
     return identity.document(out), gaps
 
 

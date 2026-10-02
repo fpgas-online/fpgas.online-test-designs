@@ -55,6 +55,29 @@ def test_an_idcode_that_could_not_be_read_is_an_error_and_one_never_tried_is_abs
     assert identity.idcode_fields({}) == {}
 
 
+NETV2_FOUND = {"variant": "a7-100", "idcode": "0x13631093", "idcodes": ["0x13631093"],
+               "idcode_scan": {"tool": "openFPGALoader", "exit": 0, "output": []}}  # fmt: skip
+
+
+def test_the_idcode_read_when_the_board_was_found_is_in_its_base():
+    out = identity.base("netv2", "netv2", NETV2_FOUND)
+    assert out == {"board": "netv2", "kind": "netv2", "variant": "a7-100", **idcode.decode(0x13631093)}
+    # a found with only the IDCODE, as before the whole chain was kept
+    assert identity.base("netv2", "netv2", {"variant": "a7-100", "idcode": "0x13631093"}) == out
+
+
+def test_a_chain_of_more_than_one_device_found_is_an_idcode_error_in_the_base():
+    found = {**NETV2_FOUND, "idcodes": ["0x13631093", "0x0362d093"]}
+    out = identity.base("netv2", "netv2", found)
+    assert "idcode" not in out
+    assert out["idcode_error"] == "the JTAG chain has more than one device (0x13631093, 0x0362d093)"
+
+
+def test_a_board_found_without_an_idcode_has_none_in_its_base():
+    out = identity.base("acorn", "acorn", {"kind": "fpgas-online", "bdf": "0000:01:00.0", "variant": "cle-215+"})
+    assert out == {"board": "acorn", "kind": "acorn", "variant": "cle-215+", "bdf": "0000:01:00.0"}
+
+
 def test_the_flash_keeps_every_rdid_byte_and_register():
     out = identity.flash_fields(P48_FLASH, "pcie")
     assert out == {
@@ -116,8 +139,48 @@ def test_a_field_not_read_is_left_out_of_the_event_and_never_spelled_none():
 
 @pytest.mark.parametrize("value", [1.5, b"\x00", object()])
 def test_a_value_of_any_other_type_is_a_bug_not_a_repr(value):
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match=r"^identity field field: "):
         identity.details({"field": value})
+
+
+@pytest.mark.parametrize(
+    ("value", "where"),
+    [
+        ({"a": 1.5}, "a: "),
+        ([1, 1.5], r"\[1\]: "),
+        ({"a": [{"b": b"\x00"}]}, r"a\[0\]\.b: "),
+        ({1: "x"}, ""),  # json.dumps would quietly make the key "1"
+        ({"a": {None: 1}}, "a: "),
+        ([object()], r"\[0\]: "),
+    ],
+)
+def test_a_value_inside_a_list_or_dict_follows_the_same_rules(value, where):
+    with pytest.raises(TypeError, match=rf"^identity field field: {where}an identity "):
+        identity.details({"field": value})
+
+
+def test_strings_integers_booleans_and_none_are_allowed_at_any_depth():
+    value = {"a": [1, "x", True, None, ("y", {"b": [False]})]}
+    assert identity.details({"field": value})["field"] == '{"a":[1,"x",true,null,["y",{"b":[false]}]]}'
+
+
+def test_the_fields_refused_are_named_with_why():
+    assert identity.refused({"board": "arty", "volts": 1.5, "raw": b"\x00"}).keys() == {"volts", "raw"}
+    assert identity.refused({"board": "arty", "idcode_version": 1}) == {}
+
+
+def test_a_field_name_that_is_not_a_string_is_refused_like_a_nested_one():
+    with pytest.raises(TypeError, match="identity field 5: an identity's field names must be strings, not 5"):
+        identity.details({"board": "arty", 5: "x"})
+    assert identity.refused({"board": "arty", 5: "x"}) == {5: "an identity's field names must be strings, not 5"}
+
+
+@pytest.mark.parametrize("board", ["arty", ["board", "arty"], None])
+def test_an_identity_that_is_not_a_dict_is_refused(board):
+    with pytest.raises(TypeError, match="an identity must be a dict, not "):
+        identity.details(board)
+    with pytest.raises(TypeError, match="an identity must be a dict, not "):
+        identity.refused(board)
 
 
 def test_the_document_is_versioned_and_holds_every_board():

@@ -223,8 +223,14 @@ class _Suite:
         return {**entry, "result": "fail", "reason": "; ".join(faults)} if faults else {**entry, "result": "pass"}
 
     def jtag(self):
-        return links.jtag(self.setup, self.found["variant"], self.run, self.bar0.get("dna"),
+        return links.jtag(self.setup, self.found["variant"], self.run, self._good_bar0_dna(),
                           self.options.get("gpiochip"))  # fmt: skip
+
+    def _good_bar0_dna(self):
+        """BAR0's DNA, for the other paths to be compared with, unless it is stuck (check.dna_faults): that is
+        pcie-bar0's own fault, not the JTAG's or the P2 UART's, so it is not compared at all."""
+        dna = self.bar0.get("dna")
+        return None if dna is None or check.dna_faults(dna, "BAR0") else dna
 
     def flash(self):
         manifest, files, _, layout = self.release
@@ -238,7 +244,7 @@ class _Suite:
         return {**entry, "result": "fail", "reason": f"flash does not hold release {manifest.get('tag')}: {where}"}
 
     def p2_uart(self):
-        bar0 = {"identifier": self.bar0.get("identifier"), "dna": self.bar0.get("dna")}
+        bar0 = {"identifier": self.bar0.get("identifier"), "dna": self._good_bar0_dna()}
         return links.p2_uart(self.setup, self.uart_builds, self.figures, bar0, self.options.get("uart_opener"),
                              self.options.get("settle"))  # fmt: skip
 
@@ -303,14 +309,26 @@ class _Suite:
         if running.get("build"):
             out["build"] = running["build"]
         jtag = next((t for t in r["tests"] if t["test"] == "jtag"), None)
+        # A DNA of all zeros or all ones is a DNA port not being read (check.dna_faults), so not a DNA: the other
+        # path's is used if it is good, and otherwise dna_error says why neither was.
+        dna, dna_errors = None, []
         if "dna" in self.bar0:
-            out["dna"] = identity.dna(self.bar0["dna"])
-        elif jtag and "dna" in jtag:
-            out["dna"] = identity.dna(jtag["dna"])
-        elif jtag and jtag.get("dna_error"):
-            out["dna_error"] = jtag["dna_error"]  # why the DNA read itself failed, not the IDCODE's faults
-        elif jtag and jtag["result"] != "pass":  # the jtag test stopped before it said
-            out["dna_error"] = f"not read over P1 JTAG: the jtag test stopped: {jtag.get('reason') or jtag['result']}"
+            dna_errors += check.dna_faults(self.bar0["dna"], "BAR0")
+            dna = None if dna_errors else self.bar0["dna"]
+        if dna is None and jtag:
+            if "dna" in jtag:
+                stuck = check.dna_faults(int(jtag["dna"], 16), "P1 JTAG")
+                dna_errors += stuck
+                dna = None if stuck else jtag["dna"]
+            elif jtag.get("dna_error"):
+                dna_errors.append(jtag["dna_error"])  # why the DNA read itself failed, not the IDCODE's faults
+            elif jtag["result"] != "pass":  # the jtag test stopped before it said
+                stopped = jtag.get("reason") or jtag["result"]
+                dna_errors.append(f"not read over P1 JTAG: the jtag test stopped: {stopped}")
+        if dna is not None:
+            out["dna"] = identity.dna(dna)
+        elif dna_errors:
+            out["dna_error"] = "; ".join(dna_errors)
         if jtag:
             out.update(identity.idcode_fields(jtag))
         if (r.get("flash") or {}).get("rdid"):

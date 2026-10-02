@@ -19,7 +19,7 @@ import contextlib
 from typing import ClassVar
 
 from .. import idcode
-from ..core import Problem, host_facts, is_pi, is_pi5, peripheral_base, pin_states, restore_pins, run
+from ..core import Problem, host_facts, is_pi, is_pi5, peripheral_base, pin_states, restore_pins, run, tail
 from ..testbench import TestBoard
 
 TCK, TMS, TDI, TDO = 4, 17, 27, 22
@@ -101,18 +101,24 @@ class NeTV2(TestBoard):
         except Problem as p:
             raise Problem("error", "the NeTV2's JTAG was not scanned: the state of its pins could not be read, so "
                                    f"it could not be put back: {p.reason}") from None  # fmt: skip
+        argv = self.idcode_argv(host)
         try:
-            _, text = runner(self.idcode_argv(host), 60)
+            rc, text = runner(argv, 60)
         finally:
             faults = restore_pins(runner, saved, exact=False)
         if faults:
             raise Problem("error", f"after the NeTV2's JTAG scan: {'; '.join(faults)}")
-        variant, code = part_of(idcode.parse(text))
+        codes = idcode.parse(text)
+        variant, code = part_of(codes)
         if code is None:
             return []
         if variant is None:
             raise Problem("error", f"the JTAG chain answers with IDCODE {code:#010x}, which is no NeTV2 part")
-        return [{"variant": variant, "idcode": f"{code:#010x}"}]
+        # The JTAG check (TestBoard.jtag) uses this scan: it fails it if the tool exited non-zero, and, with
+        # every IDCODE on the chain kept, if the chain has more than the one device, as for the other boards.
+        scan = {"tool": argv[0], "exit": rc, "output": idcode.scan_lines(text) if rc == 0 else tail(text, 6)}
+        return [{"variant": variant, "idcode": f"{code:#010x}", "idcodes": [f"{c:#010x}" for c in codes],
+                 "idcode_scan": scan}]  # fmt: skip
 
     def program_argv(self, bitstream, host, test):
         if is_pi5(host["model"]):

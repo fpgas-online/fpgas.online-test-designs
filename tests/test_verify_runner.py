@@ -522,6 +522,102 @@ def test_a_board_that_stops_after_identifying_itself_keeps_its_identity(opts, ra
     assert flat["board0_identity_idcode"] == "0x13631093" and flat["board0_identity_idcode_version"] == "1"
 
 
+class KeepsABadValue(Fake):
+    """A board whose check keeps an identity holding a value no event can carry, then crashes sending it."""
+
+    def check(self, host, found, options):
+        who = {**identity.base(options["board_key"], self.name, found), "idcode": "0x13631093", "volts": 1.5}
+        identity.keep(options, who)
+        options["event"]("fpga-board-identified", identity.details(who))
+        return super().check(host, found, options)
+
+
+class ReportsABadValue(Fake):
+    """A board whose check passes, with a value no event can carry in the identity it reports."""
+
+    def check(self, host, found, options):
+        return {**super().check(host, found, options), "identity": {"board": options["board_key"], "x": b"\0"}}
+
+
+class ReportsABadName(Fake):
+    """A board whose check passes, with a field name that is not a string in the identity it reports."""
+
+    def check(self, host, found, options):
+        return {**super().check(host, found, options), "identity": {"board": options["board_key"], 5: "x"}}
+
+
+class ReportsANonDict(Fake):
+    """A board whose check passes, reporting an identity that is not a dict."""
+
+    def check(self, host, found, options):
+        return {**super().check(host, found, options), "identity": ["netv2"]}
+
+
+def test_an_identity_field_name_that_cannot_be_sent_is_an_error_on_that_board_only(opts):
+    netv2 = ReportsABadName("netv2", seen=[{"variant": "a7-100", "usb": "1-1"}])
+    arty = Fake("arty", seen=[{"variant": "a7-35", "usb": "1-2"}])
+    report = runner.verify(opts, _boards(netv2, arty), usb=[], pci=[], mode=("auto", "test"))
+    first, second = report["boards"]
+    assert first["result"] == "error" and second["result"] == "pass"
+    assert "the identity field 5 cannot be sent: an identity's field names must be strings" in first["reason"]
+    assert 5 not in first["identity"]
+    flat = runner.details(report)
+    assert "board0_identity_5" not in flat and "board0_identity_error" not in flat
+
+
+def test_an_identity_that_is_not_a_dict_is_replaced_by_what_finding_the_board_showed(opts):
+    events = []
+    netv2 = ReportsANonDict("netv2", seen=[{"variant": "a7-100", "usb": "1-1"}])
+    arty = Fake("arty", seen=[{"variant": "a7-35", "usb": "1-2"}])
+    report = runner.verify({**opts, "event": lambda s, d: events.append((s, d))}, _boards(netv2, arty), usb=[],
+                           pci=[], mode=("auto", "test"))  # fmt: skip
+    first, second = report["boards"]
+    assert first["result"] == "error" and second["result"] == "pass"
+    assert "the identity cannot be sent: an identity must be a dict, not ['netv2']" in first["reason"]
+    assert first["identity"] == identity.base("netv2", "netv2", {"variant": "a7-100", "usb": "1-1"})
+    identified = [d for s, d in events if s == "fpga-board-identified" and d["board"] == "netv2"]
+    assert identified == [{**first["identity"], "schema": identity.SCHEMA}]
+    assert runner.details(report)["result"] == "error"
+
+
+@pytest.mark.parametrize(("ident", "why"), [
+    (["arty"], "an identity must be a dict, not ['arty']"),
+    ("arty", "an identity must be a dict, not 'arty'"),
+    ({"board": "arty", 5: "x"}, "identity field 5: an identity's field names must be strings, not 5"),
+])  # fmt: skip
+def test_the_verified_event_says_why_a_non_dict_identity_or_a_bad_field_name_is_not_there(opts, ident, why):
+    report = {"result": "pass", "boards": [{"board": "arty", "result": "pass", "identity": ident}]}
+    out = runner.details(report)
+    assert out["board0_identity_error"] == why
+    assert not [k for k in out if k.startswith("board0_identity_") and k != "board0_identity_error"]
+
+
+@pytest.mark.parametrize("bad", [KeepsABadValue, ReportsABadValue])
+def test_an_identity_value_that_cannot_be_sent_is_an_error_on_that_board_only(opts, bad):
+    events = []
+    netv2 = bad("netv2", seen=[{"variant": "a7-100", "usb": "1-1"}])
+    arty = Fake("arty", seen=[{"variant": "a7-35", "usb": "1-2"}])
+    report = runner.verify({**opts, "event": lambda s, d: events.append((s, d))}, _boards(netv2, arty), usb=[],
+                           pci=[], mode=("auto", "test"))  # fmt: skip
+    first, second = report["boards"]
+    field = "volts" if bad is KeepsABadValue else "x"
+    assert first["result"] == "error" and f"the identity field {field} cannot be sent" in first["reason"]
+    assert field not in first["identity"] and second["result"] == "pass" and arty.checked
+    flat = runner.details(report)  # fpga-verified is still sent
+    assert flat["result"] == "error" and f"board0_identity_{field}" not in flat
+    if bad is KeepsABadValue:  # the identified event its check could not send is sent without the field
+        identified = [d for s, d in events if s == "fpga-board-identified" and d["board"] == "netv2"]
+        assert identified == [{"board": "netv2", "kind": "netv2", "variant": "a7-100", "usb": "1-1",
+                               "idcode": "0x13631093", "schema": "fpga-identity/1"}]  # fmt: skip
+
+
+def test_the_verified_event_says_why_an_identity_it_cannot_carry_is_not_there(opts):
+    report = {"result": "pass", "boards": [{"board": "arty", "result": "pass", "identity": {"volts": 1.5}}]}
+    out = runner.details(report)
+    assert out["board0_identity_error"].startswith("identity field volts: ")
+    assert "board0_identity_volts" not in out
+
+
 def test_a_board_that_identifies_itself_is_not_identified_again(opts):
     events = []
     runner.verify({**opts, "event": lambda s, d: events.append((s, d))},
@@ -850,6 +946,45 @@ def test_a_lock_file_that_cannot_be_opened_is_a_clear_error(tmp_path, monkeypatc
 def _hold(lock):
     with core.hold_lock(lock, "board"):
         pass
+
+
+def test_a_normal_lock_file_is_opened(tmp_path):
+    lock = tmp_path / "board.lock"
+    lock.write_text("")
+    _hold(lock)
+    assert lock.is_file() and not lock.is_symlink()
+
+
+@pytest.mark.parametrize("target", ["dangling", "real"])
+def test_a_lock_file_that_is_a_symlink_is_refused_and_named(tmp_path, target):
+    # A dangling link made the plain open fail with ENOENT and the O_EXCL create with EEXIST, for ever, at 100%
+    # CPU, before the bounded wait. A link, dangling or to a real file, is never followed: a clear error.
+    real = tmp_path / "elsewhere"
+    if target == "real":
+        real.write_text("keep")
+    lock = tmp_path / "board.lock"
+    lock.symlink_to(real)
+    with pytest.raises(Problem) as refused:
+        _hold(lock)
+    assert str(lock) in refused.value.reason and "symlink" in refused.value.reason
+    assert lock.is_symlink() and (real.read_text() == "keep" if target == "real" else not real.exists())
+
+
+def test_a_lock_file_that_keeps_vanishing_is_an_error_not_a_spin(tmp_path, monkeypatch):
+    import os
+
+    lock = tmp_path / "board.lock"
+    calls = []
+
+    def racing(path, flags, mode=0o777):  # gone for the plain open, there for the create: every time
+        calls.append(flags)
+        raise FileExistsError(17, "File exists") if flags & os.O_CREAT else FileNotFoundError(2, "No such file")
+
+    monkeypatch.setattr(core.os, "open", racing)
+    with pytest.raises(Problem, match="gone, then there") as refused:
+        _hold(lock)
+    assert str(lock) in refused.value.reason and len(calls) == 2 * core.LOCK_OPEN_TRIES
+    assert all(flags & os.O_NOFOLLOW for flags in calls)
 
 
 def test_hold_lock_flock_works_on_the_read_only_descriptor(tmp_path):

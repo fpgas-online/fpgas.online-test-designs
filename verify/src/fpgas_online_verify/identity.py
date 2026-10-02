@@ -21,6 +21,8 @@ import datetime
 import importlib.metadata
 import json
 
+from fpgas_online_verify import idcode
+
 SCHEMA = "fpga-identity/1"  # the event's schema detail
 DOCUMENT_SCHEMA = "fpgas-verify/identity"
 IDENTITY_VERSION = 1
@@ -81,7 +83,8 @@ def kind(board_name, found):
 
 
 def base(board_key, board_name, found, variant=None):
-    """What every board's dict starts with: board (the state key), kind, variant, and how it was found."""
+    """What every board's dict starts with: board (the state key), kind, variant, and how it was found,
+    including the IDCODE when finding the board read it (the NeTV2's scan)."""
     out = {"board": board_key, "kind": kind(board_name, found)}
     variant = variant or found.get("variant")
     if variant:
@@ -89,6 +92,10 @@ def base(board_key, board_name, found, variant=None):
     for key in ("serial", "usb", "bdf"):
         if found.get(key):
             out[key] = found[key]
+    if found.get("idcode"):
+        codes = found.get("idcodes") or [found["idcode"]]
+        entry = idcode.decode(int(codes[0], 16)) if len(codes) == 1 else {"idcode": ", ".join(codes)}
+        out.update(idcode_fields(entry))
     return out
 
 
@@ -144,26 +151,77 @@ def _version():
         return "unknown"
 
 
+def _check(value, where=""):
+    """Raise TypeError unless `value` is a string, integer, boolean or None, or a list, tuple or dict of them
+    (to any depth) whose dict keys are strings. The same rules hold at every depth: a float or a non-string
+    key is refused inside a list or dict just as at the top."""
+    at = f"{where}: " if where else ""
+    if value is None or isinstance(value, (str, int)):  # bool is an int
+        return
+    if isinstance(value, (list, tuple)):
+        for i, item in enumerate(value):
+            _check(item, f"{where}[{i}]")
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise TypeError(f"{at}an identity dict's keys must be strings, not {key!r}")
+            _check(item, f"{where}.{key}" if where else key)
+        return
+    raise TypeError(f"{at}an identity value must be a string, integer, boolean, list, dict or None, not {value!r}")
+
+
 def detail(value):
     """One value as an event detail (label contract §13, §17): a string as it is; None (read, and there is
     none) "-"; a boolean "true"/"false"; an integer in decimal; a list or dict compact JSON with sorted keys.
-    Never a Python repr: any other type is a bug, and raises."""
+    Never a Python repr: any other type, at any depth, is a bug, and raises (_check)."""
+    _check(value)
     if value is None:
         return "-"
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, (str, int)):
         return str(value)
-    if isinstance(value, (list, tuple, dict)):
-        return json.dumps(value, separators=(",", ":"), sort_keys=True)
-    raise TypeError(f"an identity value must be a string, number, boolean, list, dict or None, not {value!r}")
+    return json.dumps(value, separators=(",", ":"), sort_keys=True)
+
+
+def _field(key, value):
+    """One field as an event detail: TypeError for a field name that is not a string (as for a nested dict's
+    keys, _check) or a value detail() refuses."""
+    if not isinstance(key, str):
+        raise TypeError(f"an identity's field names must be strings, not {key!r}")
+    return detail(value)
+
+
+def _fields(board):
+    if not isinstance(board, dict):
+        raise TypeError(f"an identity must be a dict, not {board!r}")
+    return board.items()
 
 
 def details(board):
     """The fpga-board-identified event's details: the dict as flat strings, and its schema. A field not read
-    is not in the dict, so not in the details either."""
-    out = {key: detail(value) for key, value in board.items()}
+    is not in the dict, so not in the details either. A field name that is not a string, or a value detail()
+    refuses, raises TypeError naming its field; an identity that is not a dict raises TypeError too."""
+    out = {}
+    for key, value in _fields(board):
+        try:
+            out[key] = _field(key, value)
+        except TypeError as e:
+            raise TypeError(f"identity field {key}: {e}") from None
     out["schema"] = SCHEMA
+    return out
+
+
+def refused(board):
+    """The fields (names or values) details() refuses, each with why, so a caller can leave them out and say
+    so. An identity that is not a dict has no fields to leave out: TypeError."""
+    out = {}
+    for key, value in _fields(board):
+        try:
+            _field(key, value)
+        except TypeError as e:
+            out[key] = str(e)
     return out
 
 

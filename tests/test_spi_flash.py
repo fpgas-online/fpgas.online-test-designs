@@ -441,3 +441,42 @@ def test_fpgas_acorn_flash_says_why_it_cannot_take_the_lock(tmp_path, monkeypatc
     assert sf.main(["id"]) == 1
     out = capsys.readouterr().out
     assert f"cannot open the lock file {lock}" in out and "RESULT: FAIL" in out
+
+
+# -- the SoC lock file ------------------------------------------------------------------------------------------
+
+
+def test_a_normal_soc_lock_file_is_opened(tmp_path):
+    lock = tmp_path / "acorn.lock"
+    lock.write_text("")
+    sf.hold_lock(str(lock)).close()
+    assert lock.is_file() and not lock.is_symlink()
+
+
+@pytest.mark.parametrize("target", ["dangling", "real"])
+def test_a_soc_lock_file_that_is_a_symlink_is_refused_and_named(tmp_path, target):
+    # A dangling link spun fpgas-acorn-flash for ever (ENOENT, then EEXIST); a link is never followed.
+    real = tmp_path / "elsewhere"
+    if target == "real":
+        real.write_text("keep")
+    lock = tmp_path / "acorn.lock"
+    lock.symlink_to(real)
+    with pytest.raises(sf.LockError, match="symlink") as refused:
+        sf.hold_lock(str(lock))
+    assert str(lock) in str(refused.value)
+    assert lock.is_symlink() and (real.read_text() == "keep" if target == "real" else not real.exists())
+
+
+def test_a_soc_lock_file_that_keeps_vanishing_is_an_error_not_a_spin(tmp_path, monkeypatch):
+    import os
+
+    calls = []
+
+    def racing(path, flags, mode=0o777):  # gone for the plain open, there for the create: every time
+        calls.append(flags)
+        raise FileExistsError(17, "File exists") if flags & os.O_CREAT else FileNotFoundError(2, "No such file")
+
+    monkeypatch.setattr(sf.os, "open", racing)
+    with pytest.raises(sf.LockError, match="gone, then there"):
+        sf.open_lock(str(tmp_path / "acorn.lock"))
+    assert len(calls) == 2 * sf.LOCK_OPEN_TRIES and all(flags & os.O_NOFOLLOW for flags in calls)
