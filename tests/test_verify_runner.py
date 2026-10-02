@@ -497,6 +497,31 @@ def test_every_board_found_is_identified_once_even_when_its_check_stops_early(op
                                                "usb": "1-2"}  # fmt: skip
 
 
+class IdentifiesThenStops(Fake):
+    """A board whose check says who the board is (with what it read: the IDCODE), then raises `result`."""
+
+    def check(self, host, found, options):
+        who = {**identity.base(options["board_key"], self.name, found), "idcode": "0x13631093", "idcode_version": 1}
+        identity.keep(options, who)
+        options["event"]("fpga-board-identified", identity.details(who))
+        raise self.result
+
+
+@pytest.mark.parametrize("raised", [KeyError("x"), Problem("error", "the services would not stop")])
+def test_a_board_that_stops_after_identifying_itself_keeps_its_identity(opts, raised):
+    events = []
+    netv2 = IdentifiesThenStops("netv2", seen=[{"variant": "a7-100", "usb": "1-1"}], result=raised)
+    report = runner.verify({**opts, "event": lambda s, d: events.append((s, d))}, _boards(netv2), usb=[], pci=[],
+                           mode=("auto", "test"))  # fmt: skip
+    (board,) = report["boards"]
+    assert board["result"] == "error"
+    assert board["identity"] == {"board": "netv2", "kind": "netv2", "variant": "a7-100", "usb": "1-1",
+                                 "idcode": "0x13631093", "idcode_version": 1}  # fmt: skip
+    assert [s for s, _ in events].count("fpga-board-identified") == 1
+    flat = runner.details(report)
+    assert flat["board0_identity_idcode"] == "0x13631093" and flat["board0_identity_idcode_version"] == "1"
+
+
 def test_a_board_that_identifies_itself_is_not_identified_again(opts):
     events = []
     runner.verify({**opts, "event": lambda s, d: events.append((s, d))},

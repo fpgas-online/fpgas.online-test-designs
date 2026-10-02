@@ -160,6 +160,12 @@ def test_the_soc_model_is_what_our_socs_identifier_names(kind, identifier, model
     assert av.soc_model(kind, identifier) == model
 
 
+def test_the_identity_is_handed_to_the_runner_once_it_is_built(tmp_path, images):
+    kept = []
+    report = Rig(tmp_path, images).check(**{identity.KEEP: kept.append})
+    assert kept == [report["identity"]]
+
+
 def test_the_soc_model_comes_from_the_identifier_and_not_the_pci_ids(tmp_path, images):
     ident = Rig(tmp_path, images).check()["identity"]
     assert ident["soc_model"] == "cle-215+" and ident["identifier"] == fk.OP_IDENT_ON_CHIP

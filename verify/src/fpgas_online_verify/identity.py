@@ -167,6 +167,15 @@ def details(board):
     return out
 
 
+KEEP = "keep_identity"  # the option the runner gives a board's check: called with the dict once it is built
+
+
+def keep(options, board):
+    """Hand the board's dict to the runner as soon as it is built, so a check that stops after sending
+    fpga-board-identified still has it in its error report (and so in verify.json and fpga-verified)."""
+    (options.get(KEEP) or (lambda board: None))(board)
+
+
 def document(boards, source="live", tool=None, read_at=None):
     """The identity document: every board's dict, with what read them and when."""
     if tool is None:
