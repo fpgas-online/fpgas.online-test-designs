@@ -11,7 +11,7 @@
 #   build-deb    acorn-litepcie.yml: every build and test, and one complete debs-<suite> artifact per suite
 #   publish-apt  on main, once the Pages site exists: index, sign and deploy the suites
 #   release      on main, after the archive deployed: the fpgas-online-acorn-litepcie meta package to the
-#                rolling vX.Y series release, where fpgas-online/apt collects it
+#                build's own release, build-<version>, where fpgas-online/apt collects it
 #
 # Only the LitePCIe packages are in this archive. The repository's other debs (packaging/debs/,
 # packaging/acorn-pcie/) are release assets that fpgas-online/apt collects.
@@ -42,7 +42,7 @@ env:
   PY: >-
     packaging/acorn-litepcie/build_debs.py packaging/acorn-litepcie/prepare_driver.py
     packaging/acorn-litepcie/csr_check.py packaging/acorn-litepcie/container.py
-    packaging/acorn-litepcie/publish.py packaging/acorn-litepcie/plan.py
+    packaging/acorn-litepcie/plan.py
     verify/src/fpgas_online_verify/boards/acorn/check.py verify/src/fpgas_online_verify/boards/acorn/spi_flash.py
     tests/test_acorn_litepcie.py tests/test_acorn_verify.py tests/test_spi_flash.py
   TESTS: >-
@@ -105,15 +105,16 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the release is named by the repository's version: git describe
 
       - uses: actions/download-artifact@v4
         with:
           name: acorn-litepcie-meta
           path: dist
 
-      # Only a file the release lacks goes up, to the version's own vX.Y series: see publish.py.
-      - name: Upload the meta package if the series release does not have this version yet
+      # Only a file no release carries yet goes up, to this build's own release: see packaging/release.py.
+      - name: Upload the meta package if no release has this version yet
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.build-deb.outputs.meta-version }}
-        run: python3 packaging/acorn-litepcie/publish.py --version "$VERSION" dist/*.deb
+        run: python3 packaging/release.py dist/*.deb
