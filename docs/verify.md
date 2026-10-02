@@ -701,9 +701,9 @@ What the failures are:
   100 MHz timing (it reaches 70 MHz). Main's bitstreams run the Arty DDR design at 75 MHz under openXC7, and its
   build fails if it misses timing; the devices run `0.0.post673`.
 * **Arty `uart`** (all four): the design prints nothing and the test times out. Cause: the build misses
-  timing (82.8 MHz achieved against 100 MHz). Tracked by
-  [#64](https://github.com/fpgas-online/fpgas.online-test-designs/pull/64), which fails CI on missed timing
-  and runs the Arty UART design at 75 MHz.
+  timing (82.8 MHz achieved against 100 MHz). Main's bitstreams run the Arty UART design at 75 MHz, and
+  its build fails if it misses timing ([#64](https://github.com/fpgas-online/fpgas.online-test-designs/pull/64));
+  the devices run `0.0.post673`.
 * **Arty and TT `pin-id`**: the Pmod HAT cabling differs from the expected maps
   ([#58](https://github.com/fpgas-online/fpgas.online-test-designs/issues/58)), pending recabling.
 * **Arty `ethernet` on pi-sw2-p10**: no ARP reply through the USB adapter.
