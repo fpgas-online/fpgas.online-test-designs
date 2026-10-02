@@ -54,16 +54,19 @@ def _listed(title, words):
 
 
 def _verify_parser(prog, board=None):
-    what = "this host's FPGA board" if board is None else f"this host's {board.title}"
     selectable = board is None or bool(getattr(board, "tests", None))
     loads = board is None or isinstance(board, TestBoard)  # loads test designs: has variants and a UART to choose
+    if board is None:  # any board: some load test designs, the Acorn is checked as it booted
+        what = "Check this host's FPGA board and its wiring to this Pi."
+    elif loads:
+        what = f"Check this host's {board.title} with the fpgas.online test designs."
+    else:
+        what = f"Check this host's {board.title} as it booted from its flash."
     parser = argparse.ArgumentParser(
         prog=prog,
         usage="%(prog)s [options]",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description=f"Check {what} "
-        + ("with the fpgas.online test designs.\n" if loads else "as it booted from its flash.\n")
-        + "Prints a summary to stderr and writes a JSON report.",
+        description=f"{what}\nPrints a summary to stderr and writes a JSON report.",
         epilog="\n\n".join(e for e in (board and _tests_epilog(board), _results(), _files(board)) if e),
     )
     if board is None:
