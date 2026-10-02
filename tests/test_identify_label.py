@@ -301,6 +301,48 @@ def test_a_busy_board_is_not_dropped_when_a_weak_claim_was_seen(tmp_path, held_l
     assert "--identify: netv2: read: board busy" in out.err
 
 
+def test_a_busy_board_lists_only_the_fields_it_is_missing(tmp_path, held_lock, monkeypatch):
+    # Found by its JTAG scan, the NeTV2 already has its IDCODE (and the decoded part) in the document: busy for
+    # its read, only the fields not there are missing. A board whose finding gave every field is still not whole.
+    monkeypatch.delenv(identify.ENV, raising=False)
+    found = {"variant": "a7-35", "idcode": "0x0362d093"}
+    netv2 = LockedAt("netv2", held_lock, seen=[found], label_fields=("idcode", "dna", "flash_jedec"))
+    doc, gaps = _read({"netv2": netv2}, tmp_path, lock_wait=0.2)
+    assert doc["boards"][0]["idcode"] == "0x0362d093" and "dna" not in doc["boards"][0]
+    assert gaps == ["netv2: dna: board busy", "netv2: flash_jedec: board busy"]
+    fomu = LockedAt("fomu", held_lock, seen=[{"variant": "evt", "serial": "F"}], label_fields=("serial",))
+    doc, gaps = _read({"fomu": fomu}, tmp_path, lock_wait=0.2)
+    assert doc["boards"][0]["serial"] == "F" and gaps == ["fomu: read: board busy"]
+
+
+def test_a_failed_look_is_not_lost_when_a_weak_claim_was_seen(tmp_path, locks, capsys):
+    # runner.find keeps a weak claim when the NeTV2's probe fails and says so only in its `how`: --identify must
+    # still put the NeTV2 in the document, its fields missing for the probe's reason, and exit 1 saying why.
+    class Stuck(Probed):
+        def probe(self, host):
+            super().probe(host)
+            raise Problem("error", "after the NeTV2's JTAG scan: GPIO4 left driven")
+
+    def boards():
+        acorn = Identified("acorn", seen=[{"variant": "cle-215+", "bdf": "0000:01:00.0"}], weak=True)
+        return {"acorn": acorn, "netv2": Stuck("netv2", locks, label_fields=("idcode", "dna"))}
+
+    reason = "error: after the NeTV2's JTAG scan: GPIO4 left driven"
+    doc, gaps = _read_auto(boards(), tmp_path)
+    assert [b["board"] for b in doc["boards"]] == ["acorn", "netv2"]
+    assert doc["boards"][1] == {"board": "netv2", "kind": "netv2"}
+    assert gaps == [f"netv2: idcode: {reason}", f"netv2: dna: {reason}"]
+    options = {"mode_dir": _auto_dir(tmp_path), "admin_dir": tmp_path / "admin", "boot_report": tmp_path / "v.json"}
+    capsys.readouterr()
+    assert identify.run(options, boards=boards()) == 1
+    out = capsys.readouterr()
+    assert [b["board"] for b in json.loads(out.out)["boards"]] == ["acorn", "netv2"]
+    assert f"--identify: netv2: idcode: {reason}" in out.err
+    # configured for the NeTV2 alone, the failed look is said once, by the board
+    doc, gaps = _read({"netv2": Stuck("netv2", locks, label_fields=("idcode",))}, tmp_path)
+    assert doc["boards"] == [{"board": "netv2", "kind": "netv2"}] and gaps == [f"netv2: idcode: {reason}"]
+
+
 def test_the_netv2_is_scanned_under_its_lock_and_its_pins_put_back_before_it_is_let_go(tmp_path, monkeypatch):
     log = []
     monkeypatch.setattr(identify, "hold_lock", Locks(log))

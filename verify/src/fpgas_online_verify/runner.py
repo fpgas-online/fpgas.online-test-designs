@@ -44,14 +44,23 @@ def _now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
 
 
+@contextlib.contextmanager
+def probing(board):
+    """find's `probing` for the boot check and fpgas-<board>-debug: hold the board's lock while its pins are
+    driven to look for it, waiting as long as it takes (as the check does), and let it go once it has been."""
+    with hold_lock(board.lock, board.title):
+        yield True
+
+
 def find(boards, mode, options, usb, pci):
     """[(board, host, found)] to check, and how they were chosen. A board that is not there is a Problem.
 
-    options["probing"], when given, is called with each `probes` board and gives a context manager that is
-    held around anything that drives the board's pins to look for it (its find or probe), and says whether to
-    go ahead: False skips the board, as not looked for. --identify holds the board's lock there.
+    options["probing"] is called with each `probes` board and gives a context manager that is held around
+    anything that drives the board's pins to look for it (its find or probe), and says whether to go ahead:
+    False skips the board, as not looked for. By default (`probing`) it holds the board's lock, unbounded;
+    --identify's waits at most LOCK_WAIT. Either way no board's pins are driven without its lock.
     """
-    probing = options.get("probing") or (lambda board: contextlib.nullcontext(True))
+    probing_board = options.get("probing") or probing
     if mode != config.AUTO:
         board = boards.get(mode) or next((b for b in boards.values() if b.slug == mode), None)
         if board is None:
@@ -59,7 +68,7 @@ def find(boards, mode, options, usb, pci):
             raise Problem("error", f"this host is set up for {mode!r}, but no such board module is installed "
                                    f"(fpgas-online-{mode}-tools?); installed: {have}")  # fmt: skip
         host = board.facts(options.get("port"))
-        with probing(board) if board.probes else contextlib.nullcontext(True) as free:
+        with probing_board(board) if board.probes else contextlib.nullcontext(True) as free:
             found = board.find(host, usb, pci) if free else []
         if not found:
             raise Problem(
@@ -81,7 +90,7 @@ def find(boards, mode, options, usb, pci):
             probed = []
             for n, b in boards.items():
                 if b.probes:
-                    with probing(b) as free:
+                    with probing_board(b) as free:
                         probed += [(b, hosts[n], f) for f in b.probe(hosts[n])] if free else []
         except Problem as p:
             if not spotted:

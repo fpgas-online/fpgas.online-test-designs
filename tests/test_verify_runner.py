@@ -136,6 +136,66 @@ def test_auto_still_probes_when_every_claim_is_weak_and_keeps_the_claim(opts):
     assert report["chosen_by"] == "auto: USB/PCI IDs, and probing found nothing more"
 
 
+class HeldLocks:
+    """Stands in for core.hold_lock: which locks are held, and that each is waited for without a bound."""
+
+    def __init__(self):
+        self.held, self.taken = [], []
+
+    def __call__(self, path, what, timeout=None):
+        assert timeout is None  # the boot check and the debug tool wait for a board however long it takes
+        outer = self
+
+        class _Held:
+            def __enter__(self):
+                outer.held.append(path)
+                outer.taken.append(path)
+
+            def __exit__(self, *a):
+                outer.held.remove(path)
+                return False
+
+        return _Held()
+
+
+class LockedProbe(Fake):
+    """A Fake whose pins are driven to find it: it records whether its lock was held each time."""
+
+    def __init__(self, name, locks, **kw):
+        super().__init__(name, probes=True, **kw)
+        self.locks, self.under_lock = locks, []
+
+    def probe(self, host):
+        self.under_lock.append(self.lock in self.locks.held)
+        return super().probe(host)
+
+
+def test_the_boot_check_drives_a_boards_pins_only_under_its_lock(opts, monkeypatch):
+    locks = HeldLocks()
+    monkeypatch.setattr(runner, "hold_lock", locks)
+    netv2 = LockedProbe("netv2", locks, probed=[{"variant": "a7-35", "idcode": "0x0362d093"}])
+    report = runner.verify({**opts, "board": "netv2"}, _boards(netv2), usb=[], pci=[])  # configured
+    assert report["result"] == "pass" and netv2.probe_calls == 1 and netv2.under_lock == [True]
+    assert locks.taken == [netv2.lock, netv2.lock] and locks.held == []  # the scan, then the check
+    netv2 = LockedProbe("netv2", locks, probed=[{"variant": "a7-35", "idcode": "0x0362d093"}])
+    weak = Fake("acorn", seen=[{"kind": "litex-other"}], weak=True)
+    runner.verify(opts, _boards(weak, netv2), usb=[], pci=[], mode=("auto", "test"))  # auto, beside a weak claim
+    assert netv2.probe_calls == 1 and netv2.under_lock == [True] and locks.held == []
+
+
+def test_the_debug_tool_drives_a_boards_pins_only_under_its_lock(monkeypatch, capsys):
+    from fpgas_online_verify import debug
+
+    locks = HeldLocks()
+    monkeypatch.setattr(runner, "hold_lock", locks)
+    monkeypatch.setattr(debug, "usb_devices", lambda: [])
+    monkeypatch.setattr(debug, "pci_devices", lambda: [])
+    netv2 = LockedProbe("netv2", locks, probed=[{"variant": "a7-35", "idcode": "0x0362d093"}])
+    assert debug.detect(netv2, netv2.facts(), None) == 0
+    assert netv2.probe_calls == 1 and netv2.under_lock == [True] and locks.held == []
+    assert '"idcode": "0x0362d093"' in capsys.readouterr().out
+
+
 def test_a_probe_that_fails_beside_a_weak_claim_keeps_the_claim_and_says_why(opts):
     class Broken(Fake):
         def probe(self, host):
