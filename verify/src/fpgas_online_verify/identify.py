@@ -37,8 +37,9 @@ class BadDocument(Exception):
 
 
 def outer_path():
-    """The outer run's document, when this runs inside fpgas-verify --label; else None."""
-    return os.environ.get(ENV)
+    """The outer run's document, when this runs inside fpgas-verify --label; else None. An empty
+    FPGAS_VERIFY_IDENTITY counts as not set (label contract §22)."""
+    return os.environ.get(ENV) or None
 
 
 def load_outer(path):

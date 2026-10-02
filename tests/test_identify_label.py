@@ -436,9 +436,16 @@ def test_nested_a_missing_or_bad_document_is_an_error_and_never_the_hardware(
     assert out.out == "" and why in out.err
 
 
-def test_nested_an_empty_variable_is_still_nested(tmp_path, monkeypatch, untouchable, capsys):
+def test_an_empty_variable_is_not_nested(tmp_path, monkeypatch):
     monkeypatch.setenv(identify.ENV, "")
-    assert cli.verify_main(["--identify"]) == 1 and capsys.readouterr().out == ""
+    assert identify.outer_path() is None
+    ran = []
+    monkeypatch.setattr(identify, "run", lambda options, prog="fpgas-verify", boards=None: ran.append(prog) or 0)
+    monkeypatch.setattr(cli.runner, "run", lambda options, prog="fpgas-verify": ran.append("check") or 0)
+    assert cli.verify_main(["--identify"]) == 0
+    assert cli.verify_main([]) == 0  # the boot unit's plain fpgas-verify runs the check, not exit 2
+    assert cli.board_main(["--identify"], "fpgas-acorn-verify") == 0
+    assert ran == ["fpgas-verify", "check", "fpgas-acorn-verify"]
 
 
 def test_the_golden_document_is_one_this_reader_takes():
