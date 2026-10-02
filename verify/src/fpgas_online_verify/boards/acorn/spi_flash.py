@@ -32,6 +32,7 @@ LiteX. Runs over PCIe BAR0 by default, or over the UART bridge with `--uart`.
 
 import argparse
 import contextlib
+import errno
 import fcntl
 import hashlib
 import json
@@ -376,19 +377,27 @@ class LockError(Exception):
     """The lock file cannot be opened (another user's file, say)."""
 
 
+LOCK_OPEN_TRIES = 3  # a lock file that vanishes and reappears more often than this is an error, not a spin
+
+
 def open_lock(path):
     """A read-only descriptor of the lock file `path`: opened without O_CREAT when it is there (in the sticky
     /run/lock, fs.protected_regular refuses even root an O_CREAT open of another user's file), created 0644
-    only when it is not. The verify core's core.open_lock does the same; this file stays stdlib-only."""
+    only when it is not. A symlink is never followed (O_NOFOLLOW) and is a LockError naming it, and the open
+    is tried LOCK_OPEN_TRIES times at most. The verify core's core.open_lock does the same; this file stays
+    stdlib-only."""
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    while True:
+    nofollow = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+    for _ in range(LOCK_OPEN_TRIES):
         try:
+            if os.path.islink(path):  # lstat: a link, dangling or not, is refused before anything opens it
+                raise OSError(errno.ELOOP, "is a symlink")
             try:
-                return os.open(path, os.O_RDONLY | os.O_CLOEXEC)
+                return os.open(path, nofollow)
             except FileNotFoundError:
                 pass
             try:
-                return os.open(path, os.O_RDONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o644)
+                return os.open(path, nofollow | os.O_CREAT | os.O_EXCL, 0o644)
             except FileExistsError:
                 continue  # created in between: open that one
         except PermissionError as e:
@@ -398,6 +407,12 @@ def open_lock(path):
                 owner = "unknown"
             raise LockError(f"cannot open the lock file {path} (owned by {owner}): {e.strerror}; it should be "
                             "root's: remove it, or reboot") from None  # fmt: skip
+        except OSError as e:
+            if e.errno != errno.ELOOP:
+                raise
+            raise LockError(f"the lock file {path} is a symlink, which is never followed: remove it, or "
+                            "reboot") from None  # fmt: skip
+    raise LockError(f"cannot open the lock file {path}: it was gone, then there, {LOCK_OPEN_TRIES} times over")
 
 
 def hold_lock(path=LOCK):

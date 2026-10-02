@@ -948,6 +948,45 @@ def _hold(lock):
         pass
 
 
+def test_a_normal_lock_file_is_opened(tmp_path):
+    lock = tmp_path / "board.lock"
+    lock.write_text("")
+    _hold(lock)
+    assert lock.is_file() and not lock.is_symlink()
+
+
+@pytest.mark.parametrize("target", ["dangling", "real"])
+def test_a_lock_file_that_is_a_symlink_is_refused_and_named(tmp_path, target):
+    # A dangling link made the plain open fail with ENOENT and the O_EXCL create with EEXIST, for ever, at 100%
+    # CPU, before the bounded wait. A link, dangling or to a real file, is never followed: a clear error.
+    real = tmp_path / "elsewhere"
+    if target == "real":
+        real.write_text("keep")
+    lock = tmp_path / "board.lock"
+    lock.symlink_to(real)
+    with pytest.raises(Problem) as refused:
+        _hold(lock)
+    assert str(lock) in refused.value.reason and "symlink" in refused.value.reason
+    assert lock.is_symlink() and (real.read_text() == "keep" if target == "real" else not real.exists())
+
+
+def test_a_lock_file_that_keeps_vanishing_is_an_error_not_a_spin(tmp_path, monkeypatch):
+    import os
+
+    lock = tmp_path / "board.lock"
+    calls = []
+
+    def racing(path, flags, mode=0o777):  # gone for the plain open, there for the create: every time
+        calls.append(flags)
+        raise FileExistsError(17, "File exists") if flags & os.O_CREAT else FileNotFoundError(2, "No such file")
+
+    monkeypatch.setattr(core.os, "open", racing)
+    with pytest.raises(Problem, match="gone, then there") as refused:
+        _hold(lock)
+    assert str(lock) in refused.value.reason and len(calls) == 2 * core.LOCK_OPEN_TRIES
+    assert all(flags & os.O_NOFOLLOW for flags in calls)
+
+
 def test_hold_lock_flock_works_on_the_read_only_descriptor(tmp_path):
     import fcntl
 

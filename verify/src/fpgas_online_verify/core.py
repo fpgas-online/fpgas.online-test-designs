@@ -4,6 +4,7 @@ Stdlib only: the Pi hosts boot a tmpfs root with no LiteX.
 """
 
 import contextlib
+import errno
 import fcntl
 import os
 import pathlib
@@ -208,27 +209,43 @@ def _owner(path):
         return f"uid {uid}"
 
 
+LOCK_OPEN_TRIES = 3  # a lock file that vanishes and reappears more often than this is an error, not a spin
+
+
 def open_lock(path):
     """A read-only file descriptor of the lock file `path`, for flock. A lock file that is there is opened
     without O_CREAT: in a sticky, world-writable directory (/run/lock) the kernel's fs.protected_regular refuses
     even root an O_CREAT open of a file another user owns, which would stop the check until a reboot. Only a
     missing one is created (0644). The package's tmpfiles.d entry creates them root-owned at boot. A lock
-    that cannot be opened is a Problem naming the file and its owner."""
+    that cannot be opened is a Problem naming the file and its owner.
+
+    A symlink is never followed (O_NOFOLLOW), and is a Problem naming it: a dangling one would make the open
+    fail with ENOENT and the create with EEXIST for ever. The open is tried LOCK_OPEN_TRIES times at most."""
     path = pathlib.Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    while True:
+    nofollow = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+    for _ in range(LOCK_OPEN_TRIES):
         try:
+            if path.is_symlink():  # lstat: a link, dangling or not, is refused before anything opens it
+                raise OSError(errno.ELOOP, "is a symlink")
             try:
-                return os.open(path, os.O_RDONLY | os.O_CLOEXEC)
+                return os.open(path, nofollow)
             except FileNotFoundError:
                 pass
             try:
-                return os.open(path, os.O_RDONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o644)
+                return os.open(path, nofollow | os.O_CREAT | os.O_EXCL, 0o644)
             except FileExistsError:
                 continue  # someone created it in between: open theirs
         except PermissionError as e:
             raise Problem("error", f"cannot open the lock file {path} (owned by {_owner(path)}): {e.strerror}; "
                                    "it should be root's: remove it, or reboot") from None  # fmt: skip
+        except OSError as e:
+            if e.errno != errno.ELOOP:
+                raise
+            raise Problem("error", f"the lock file {path} is a symlink, which is never followed: remove it, "
+                                   "or reboot") from None  # fmt: skip
+    raise Problem("error", f"cannot open the lock file {path}: it was gone, then there, {LOCK_OPEN_TRIES} times "
+                           "over") from None  # fmt: skip
 
 
 @contextlib.contextmanager
