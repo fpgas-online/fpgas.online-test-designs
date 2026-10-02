@@ -6,8 +6,10 @@
     and a board still busy then has its fields missing, for the reason "board busy". A board found only by
     driving its pins (the NeTV2's JTAG scan) is looked for under its lock too, never before it is held.
   * Anything only a loaded design can read (the Arty's and NeTV2's flash, through openFPGALoader's
-    SPI-over-JTAG bridge) comes from the boot report (runner.REPORT), when the board there is this one (the
-    same USB serial, PCI slot or IDCODE); the board's dict lists those fields in "from_report".
+    SPI-over-JTAG bridge) comes from the boot report (runner.REPORT), when the board there is this one by a key
+    no other board has (its USB serial, PCI slot or device DNA); the board's dict lists those fields in
+    "from_report". An IDCODE names a part, not a board, so a board known only by its IDCODE (every NeTV2, for
+    now) gets nothing from the report: those fields stay missing, for the reason NO_MATCH.
   * Inside fpgas-verify --label (FPGAS_VERIFY_IDENTITY names the document the outer run read), --identify
     prints that file unchanged and does nothing else: no lock, no board code, and never the hardware, even
     when the file is missing or bad (that is an error). Every other mode refuses, so the outer run's locks
@@ -31,7 +33,11 @@ from .core import BUSY, Busy, Problem, hold_lock, pci_devices, usb_devices
 
 ENV = "FPGAS_VERIFY_IDENTITY"
 LOCK_WAIT = 30  # seconds --identify waits for a board's lock before it says the board is busy
-MATCH_KEYS = ("serial", "bdf", "idcode")  # what says a board in the boot report is this one, strongest first
+# What says a board in the boot report is this one: keys no two boards share (USB serial, PCI slot, device
+# DNA). Never the IDCODE, which every board with the same part has.
+MATCH_KEYS = ("serial", "bdf", "dna")
+NO_MATCH = "no board-unique match in the boot report"
+NOT_IN_REPORT = "this board is not in the boot report"
 
 
 class BadDocument(Exception):
@@ -100,22 +106,30 @@ def _boot_report(path):
 
 
 def from_report(board, live, previous):
-    """`live`, with the fields only the boot check reads taken from the boot report's identity of this board."""
+    """(`live` with the fields only the boot check reads taken from the boot report's identity of this board,
+    why none were taken or None)."""
     if not board.report_fields:
-        return live
+        return live, None
     key = next((k for k in MATCH_KEYS if live.get(k)), None)
-    match = key and next((p for p in previous if p.get("kind") == live.get("kind") and p.get(key) == live[key]), None)
+    if key is None:
+        return live, NO_MATCH
+    match = next((p for p in previous if p.get("kind") == live.get("kind") and p.get(key) == live[key]), None)
     if not match:
-        return live
+        return live, NOT_IN_REPORT
     taken = {k: v for k, v in match.items() if k not in live and k.startswith(board.report_fields)}
     if not taken:
-        return live
-    return {**live, **taken, "from_report": sorted(taken)}
+        return live, None
+    return {**live, **taken, "from_report": sorted(taken)}, None
 
 
-def missing(board, ident):
-    """What keeps an identity from being whole: the label fields not read, and the reads that failed."""
-    return [f for f in board.label_fields if f not in ident] + sorted(k for k in ident if k.endswith("_error"))
+def missing(board, ident, report_why=None):
+    """What keeps an identity from being whole, as (field, why): the label fields not read, and the reads that
+    failed. `report_why`: why the fields the boot report gives (board.report_fields) were not taken from it."""
+    out = []
+    for f in board.label_fields:
+        if f not in ident:
+            out.append((f, report_why if report_why and f.startswith(board.report_fields) else "not read"))
+    return out + [(k, "not read") for k in sorted(ident) if k.endswith("_error")]
 
 
 class _Locks:
@@ -173,13 +187,14 @@ def read(options, boards=None, usb=None, pci=None):
             return identity.document([]), [f"{p.result}: {p.reason}"]
         out, gaps = [], []
         for (board, host, found), key in zip(targets, runner._keys(targets)):
+            report_why = None
             board_options = {**{k: v for k, v in options.items() if k != "event"}, "board_key": key}
             try:
                 with contextlib.ExitStack() as own:
                     if board.lock not in locks.held:  # held since it was looked for, or only for this read
                         own.enter_context(hold_lock(board.lock, board.title, timeout=locks.wait))
                     ident = board.identify(host, found, board_options)
-                    ident = from_report(board, ident, _boot_report(report))
+                    ident, report_why = from_report(board, ident, _boot_report(report))
             except Busy:
                 ident, busy = _busy(key, board, found)
                 out.append(ident)
@@ -192,7 +207,8 @@ def read(options, boards=None, usb=None, pci=None):
                 ident = identity.base(key, board.name, found)
                 gaps.append(f"{key}: the read crashed: {type(e).__name__}: {e}")
             out.append(ident)
-            gaps += [f"{key}: not read: {f}" for f in missing(board, ident)]
+            gaps += [f"{key}: not read: {f}" if why == "not read" else f"{key}: {f}: {why}"
+                     for f, why in missing(board, ident, report_why)]  # fmt: skip
     return identity.document(out), gaps
 
 

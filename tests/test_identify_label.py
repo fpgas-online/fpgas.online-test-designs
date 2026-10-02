@@ -323,6 +323,32 @@ def test_another_boards_boot_report_is_never_used(tmp_path, locks):
     assert "flash_jedec" not in board and "from_report" not in board
 
 
+def test_a_board_known_only_by_its_idcode_takes_nothing_from_the_boot_report(tmp_path, locks):
+    netv2_boot = {"board": "netv2", "kind": "netv2", "idcode": "0x0362d093", "flash_jedec": "0xc22018"}
+    _boot_report(tmp_path, netv2_boot)
+    netv2 = Identified("netv2", seen=[{"variant": "a7-35", "idcode": "0x0362d093"}], read={"idcode": "0x0362d093"},
+                       label_fields=("idcode", "flash_jedec"), report_fields=("flash",))  # fmt: skip
+    doc, gaps = _read({"netv2": netv2}, tmp_path)
+    (board,) = doc["boards"]
+    assert board["kind"] == "netv2" and board["idcode"] == "0x0362d093"  # the same part, maybe not the same board
+    assert "flash_jedec" not in board and "from_report" not in board
+    assert gaps == ["netv2: flash_jedec: no board-unique match in the boot report"]
+
+
+def test_the_arty_matches_by_usb_serial_and_the_acorn_by_pci_slot(tmp_path, locks):
+    _boot_report(tmp_path, {**ARTY_BOOT, "idcode": "0x0362d093"},
+                 {"board": "acorn", "kind": "acorn", "bdf": "0001:01:00.0", "flash_uid": "aa"})  # fmt: skip
+    arty = Identified("arty", seen=[ARTY_FOUND], report_fields=("flash",), label_fields=("flash_uid",))
+    assert _read({"arty": arty}, tmp_path)[0]["boards"][0]["flash_uid"] == "0123456789abcdef"
+    acorn = Identified("acorn", seen=[{"variant": "cle-215+", "kind": "fpgas-online", "bdf": "0001:01:00.0"}],
+                       report_fields=("flash",))  # fmt: skip
+    (board,) = _read({"acorn": acorn}, tmp_path)[0]["boards"]
+    assert board["from_report"] == ["flash_uid"]
+    other = Identified("arty", seen=[{**ARTY_FOUND, "serial": "OTHER"}], report_fields=("flash",),
+                       label_fields=("flash_uid",))  # fmt: skip
+    assert _read({"arty": other}, tmp_path)[1] == ["arty: flash_uid: this board is not in the boot report"]
+
+
 def test_a_live_read_is_never_replaced_by_the_report(tmp_path, locks):
     _boot_report(tmp_path, ARTY_BOOT)
     arty = Identified("arty", seen=[ARTY_FOUND], read={"flash_jedec": "0xef4018"}, report_fields=("flash",))
