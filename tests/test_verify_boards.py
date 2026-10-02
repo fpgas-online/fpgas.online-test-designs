@@ -234,6 +234,16 @@ def test_an_arty_whose_jtag_chain_is_empty_fails_and_an_arty_of_another_version_
     )
 
 
+def test_an_arty_scan_without_the_raw_idcodes_says_so_not_that_the_chain_is_empty(tmp_path):
+    part_table = "found 1 devices\nindex 0:\n\tidcode 0x362d093\n\tmanufacturer xilinx\n\tfamily artix a7 35t\n"
+    run = Runner([("--detect", (0, part_table))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    assert report["result"] == "fail"
+    assert report["jtag"]["reason"] == "openFPGALoader printed no raw IDCODE scan (needs --verbose-level 2 output)"
+    run = Runner([("--detect", (0, "found 0 devices\n"))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    assert _check(ARTY, tmp_path, ARTY_FOUND, run)["jtag"]["reason"] == "no device on the JTAG chain"
+
+
 def test_an_arty_scan_that_exits_non_zero_fails_even_with_the_right_idcode(tmp_path):
     run = Runner([("--detect", (2, ARTY_SCAN))], flash=b"\0" * ARTY.flash_region["a7-35"])
     report = _check(ARTY, tmp_path, ARTY_FOUND, run)

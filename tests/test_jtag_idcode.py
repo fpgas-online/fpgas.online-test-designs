@@ -46,6 +46,16 @@ def test_an_empty_or_stuck_chain_has_no_devices():
     assert idcode.parse("Raw IDCODE:\n- 0 -> 0x00000000\nJTAG init failed with: TDO is stuck at 0\n") == []
 
 
+def test_an_empty_chain_is_told_from_output_with_no_scan_in_it():
+    assert idcode.empty_chain("Raw IDCODE:\n- 0 -> 0xffffffff\nFetched TDI, end-of-chain\n")
+    assert idcode.empty_chain("JTAG init failed with: TDO is stuck at 0\n")
+    assert idcode.empty_chain("found 0 devices\n")
+    assert idcode.empty_chain("JTAG init failed with: no device found\n")
+    # the part table alone (no --verbose-level 2) says nothing about the chain's whole IDCODEs
+    assert not idcode.empty_chain("found 1 devices\nindex 0:" + P48.split("index 0:")[1])
+    assert not idcode.empty_chain("")
+
+
 def test_p48s_idcode_decodes_to_an_xc7a200t_version_1():
     assert idcode.decode(0x13636093) == {
         "idcode": "0x13636093",

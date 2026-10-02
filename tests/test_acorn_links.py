@@ -67,6 +67,32 @@ def test_an_empty_chain_fails():
     )
 
 
+class NoRawScan(fk.FakePi):
+    """openFPGALoader --detect that prints `text` in place of its raw scan and part table."""
+
+    def __init__(self, text, **kw):
+        super().__init__(**kw)
+        self.text = text
+
+    def __call__(self, argv, timeout):
+        rc, out = super().__call__(argv, timeout)
+        return (0, self.text) if "--detect" in argv else (rc, out)
+
+
+def test_output_without_the_raw_scan_says_so_not_that_the_chain_is_empty():
+    part_table = "found 1 devices\n" + fk.DETECT.format(masked=0x3636093)
+    t = links.jtag(PI5, "cle-215+", NoRawScan(part_table), gpiochip=_no_chip)
+    assert t["result"] == "fail" and t["reason"] == (
+        "P1 JTAG: openFPGALoader printed no raw IDCODE scan (needs --verbose-level 2 output)"
+    )
+
+
+def test_a_stuck_tdo_is_an_empty_chain():
+    stuck = "Raw IDCODE:\n- 0 -> 0x00000000\nJTAG init failed with: TDO is stuck at 0\n"
+    t = links.jtag(PI5, "cle-215+", NoRawScan(stuck), gpiochip=_no_chip)
+    assert t["result"] == "fail" and t["reason"] == "no device on the P1 JTAG chain"
+
+
 class DetectExits(fk.FakePi):
     """openFPGALoader --detect prints the scan, then exits with `rc`."""
 

@@ -112,7 +112,8 @@ def jtag(setup, variant, run, bar0_dna=None, gpiochip=None):
         faults += [("fail", f"P1 JTAG: {f}") for c in found for f in idcode.faults(c)]
         chain_ok = False
         if not found:
-            faults.append(("fail", "no device on the P1 JTAG chain"))
+            empty = idcode.empty_chain(out)
+            faults.append(("fail", "no device on the P1 JTAG chain" if empty else f"P1 JTAG: {idcode.NO_RAW_SCAN}"))
         elif len(found) != 1 or not idcode.same_part(found[0], want):
             has = seen["idcode"] + (f" ({seen['idcode_device']})" if len(found) == 1 else "")
             faults.append(("fail", f"P1 JTAG chain has {has}, expected one {idcode.device(want)} "

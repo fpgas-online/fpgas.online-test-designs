@@ -25,6 +25,10 @@ OPENFPGALOADER_RAW = re.compile(r"^- \d+ -> (0x[0-9a-fA-F]{8})\s*$", re.MULTILIN
 OPENOCD = re.compile(r"tap/device found:\s*(0x[0-9a-fA-F]{1,8})")
 # Asks openFPGALoader to print its raw scan (Jtag::detectChain prints it when the level is above 1).
 OPENFPGALOADER_RAW_ARGS = ("--verbose-level", "2")
+# Output that shows the chain was scanned and nothing answered, besides a raw scan of only all-ones or all-zeros.
+EMPTY_CHAIN = re.compile(r"found 0 devices|no device found|TDO is stuck|JTAG scan chain interrogation failed")
+# Why no IDCODE was read when the output has no scan at all: the tool's output, not the board, is the problem.
+NO_RAW_SCAN = "openFPGALoader printed no raw IDCODE scan (needs --verbose-level 2 output)"
 
 # JEP106 codes, as bits 11:1 of an IDCODE (bank in the top four bits), as openFPGALoader's src/part.hpp has them.
 MANUFACTURERS = {0x021: "Lattice", 0x049: "Xilinx", 0x06E: "Altera"}
@@ -44,6 +48,12 @@ def parse(text):
     past the end of the chain, and the all-zeros of a stuck TDO, are not devices."""
     codes = [int(x, 16) for x in OPENFPGALOADER_RAW.findall(text) + OPENOCD.findall(text)]
     return [c for c in codes if c not in (0, 0xFFFFFFFF)]
+
+
+def empty_chain(text):
+    """Whether output with no IDCODE in it shows an empty chain (a raw scan of only all-ones or all-zeros,
+    "found 0 devices", a stuck TDO), rather than no scan at all."""
+    return bool(OPENFPGALOADER_RAW.search(text) or EMPTY_CHAIN.search(text))
 
 
 def scan_lines(text):
