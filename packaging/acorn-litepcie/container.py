@@ -8,14 +8,18 @@ mounts this repository at /w and bootstraps python3 (stdlib only: bookworm's 3.1
 repository.
 
     utils                 compile the struct-layout asserts, then litepcie_util and litepcie_test, and record
-                          the glibc floor they need (utils.json), for build_debs.py to package
+                          what they were built for and the glibc floor they need (utils.json), for
+                          build_debs.py to package
     install-test          install the -common and -utils debs and run litepcie_util
     module                build litepcie.ko and liteuart.ko against one kernel's headers from the Raspberry Pi
                           archive (default: the fleet kernel of kernels.toml), check their vermagic, and
                           record what they were built for (modules.json), for build_debs.py to package
     modules-install-test  in the fleet's shape, an armhf root with an arm64 kernel: install a
                           -modules-<kver> deb and -utils through apt from a flat repository of the given
-                          debs, and check modinfo finds the modules for that kernel
+                          debs, and check modinfo finds the modules for that kernel; then install the meta
+                          package, which must take those modules and not DKMS
+    meta-install-test     on a host with nothing installed: install the meta package through apt from a
+                          flat repository of the given debs; it must choose DKMS, not a modules package
     dkms-test             install kernel headers (the newest rpi-v8 on arm64, Debian's on amd64) and the
                           -common and -dkms debs, have DKMS build the modules, and check modinfo finds them
 
@@ -163,6 +167,7 @@ def fresh(path):
 
 def cmd_utils(args):
     expect_arch(args.arch)
+    expect_suite(args.suite)
     apt_install("gcc", "make", "libc6-dev", "binutils")
     driver = pathlib.Path(args.driver)
     sh("gcc", "-fsyntax-only", "-Wall", "-Werror", f"-I{driver / 'kernel'}", HERE / "struct_layout.c")
@@ -176,10 +181,10 @@ def cmd_utils(args):
         sh("strip", dest / tool)
         floors.append(max_glibc(out("objdump", "-T", dest / tool)))
     shutil.rmtree(work)
-    info = {"arch": args.arch, "glibc": max(floors, key=_release)}
+    info = {"suite": args.suite, "arch": args.arch, "glibc": max(floors, key=_release)}
     (dest / "utils.json").write_text(json.dumps(info) + "\n")
     give_back(dest, driver)
-    print(f"built {', '.join(TOOLS)} for {args.arch}, needing glibc {info['glibc']}")
+    print(f"built {', '.join(TOOLS)} for {args.suite} {args.arch}, needing glibc {info['glibc']}")
 
 
 def check_tools(what):
@@ -194,8 +199,30 @@ def check_tools(what):
         raise ContainerError(f"{BLACKLIST} does not blacklist litepcie")
 
 
+def flat_repository(debs):
+    """Offer `debs` to apt as a local flat repository, as the published archive offers them: apt chooses."""
+    apt_install("apt-utils")
+    repo = fresh(FLAT_REPO)
+    for deb in debs:
+        shutil.copy2(deb, repo)
+    (repo / "Packages").write_text(out("apt-ftparchive", "packages", ".", cwd=repo))
+    pathlib.Path("/etc/apt/sources.list.d/fpgas-online-acorn-litepcie.list").write_text(
+        f"deb [trusted=yes] file:{FLAT_REPO} ./\n"
+    )
+    sh("apt-get", "update", "-qq")
+
+
+def installed(name):
+    """`<architecture> <version>` of an installed package, or None."""
+    run = subprocess.run(["dpkg-query", "-W", "-f", "${db:Status-Status} ${Architecture} ${Version}", name],
+                         capture_output=True, text=True)  # fmt: skip
+    status, _, rest = run.stdout.partition(" ")
+    return rest.strip() if run.returncode == 0 and status == "installed" else None
+
+
 def cmd_install_test(args):
     expect_arch(args.arch)
+    expect_suite(args.suite)
     debs = [f"./{d}" for d in args.debs]
     apt_install(*debs)
     check_tools(", ".join(args.debs))
@@ -240,26 +267,16 @@ def cmd_modules_install_test(args):
     if arch != "armhf":
         sh("dpkg", "--add-architecture", arch)
     add_rpi_archive(args.suite)
-    apt_install("apt-utils")
-    repo = fresh(FLAT_REPO)
-    for deb in args.debs:
-        shutil.copy2(deb, repo)
-    (repo / "Packages").write_text(out("apt-ftparchive", "packages", ".", cwd=repo))
-    pathlib.Path("/etc/apt/sources.list.d/fpgas-online-acorn-litepcie.list").write_text(
-        f"deb [trusted=yes] file:{FLAT_REPO} ./\n"
-    )
-    sh("apt-get", "update", "-qq")
+    flat_repository(args.debs)
     # Only the modules and the tools are named: apt has to find -common (Architecture: all, for an arm64
     # package on an armhf root) and the kernel image (arm64) from the modules package's Depends by itself.
     apt_install(f"{package}:{arch}", f"{NAME}-utils")
-    installed = {}
-    for name in (package, f"linux-image-{kver}", f"{NAME}-common", f"{NAME}-utils"):
-        installed[name] = out("dpkg-query", "-W", "-f", "${Architecture} ${Version}", name).strip()
-        print(f"installed: {name} {installed[name]}")
     want = {package: arch, f"linux-image-{kver}": arch, f"{NAME}-common": "all", f"{NAME}-utils": "armhf"}
     for name, architecture in want.items():
-        if installed[name].split()[0] != architecture:
-            raise ContainerError(f"{name} is installed as {installed[name]}, not as {architecture}")
+        got = installed(name)
+        print(f"installed: {name} {got}")
+        if not got or got.split()[0] != architecture:
+            raise ContainerError(f"{name} is installed as {got}, not as {architecture}")
     for module in MODULES:
         path = out("modinfo", "-k", kver, "-F", "filename", module).strip()
         vermagic = out("modinfo", "-k", kver, "-F", "vermagic", module).strip()
@@ -270,18 +287,54 @@ def cmd_modules_install_test(args):
     if "platform:liteuart" not in aliases:
         raise ContainerError(f"liteuart.ko has aliases {aliases}: litepcie's platform device would not load it")
     check_tools(f"{package} and {NAME}-utils")
-    sh("apt-get", "remove", "-y", "-qq", f"{package}:{arch}")
+    # The meta package's driver dependency is `-dkms | -module`: the modules package already installed
+    # provides -module, so apt must leave DKMS (and the compiler and headers it would bring) alone.
+    apt_install(NAME)
+    print(f"installed: {NAME} {installed(NAME)}")
+    for name in (NAME, package):
+        if not installed(name):
+            raise ContainerError(f"{name} is not installed after installing {NAME}")
+    for name in (f"{NAME}-dkms", "dkms"):
+        if installed(name):
+            raise ContainerError(f"installing {NAME} pulled in {name} although {package} is installed")
+    sh("apt-get", "remove", "-y", "-qq", NAME, f"{package}:{arch}")
     gone = subprocess.run(["modinfo", "-k", kver, "litepcie"], capture_output=True, text=True)
     if gone.returncode == 0:
         raise ContainerError(f"modinfo -k {kver} still finds litepcie after removing {package}:\n{gone.stdout}")
-    print(f"apt installed {package}:{arch} with its kernel on an armhf {args.suite} root, and removed it")
+    print(
+        f"apt installed {package}:{arch} with its kernel on an armhf {args.suite} root; {NAME} kept to it "
+        "without DKMS; and it was removed again"
+    )
+
+
+def cmd_meta_install_test(args):
+    """An ordinary host with nothing of ours installed: the meta package's first alternative, DKMS, is taken,
+    although the repository also offers the modules packages that provide the second."""
+    expect_arch(args.arch)
+    expect_suite(args.suite)
+    flat_repository(args.debs)
+    offered = out("apt-cache", "showpkg", f"{NAME}-module")
+    print(f"apt-cache showpkg {NAME}-module:\n{offered}")
+    apt_install(NAME)
+    for name in (NAME, f"{NAME}-common", f"{NAME}-utils", f"{NAME}-dkms", "dkms"):
+        got = installed(name)
+        print(f"installed: {name} {got}")
+        if not got:
+            raise ContainerError(f"{name} is not installed after installing {NAME}")
+    packages = out("dpkg-query", "-W", "-f", "${Package} ${db:Status-Status}\\n").splitlines()
+    modules = [line for line in packages if line.startswith(f"{NAME}-modules-") and line.endswith(" installed")]
+    if modules:
+        raise ContainerError(f"installing {NAME} on a plain host took prebuilt modules, not DKMS: {modules}")
+    check_tools(NAME)
+    print(f"apt installed {NAME} on a plain {args.arch} {args.suite} host: it chose {NAME}-dkms")
 
 
 def cmd_dkms_test(args):
     meta, flavour, rpi = DKMS_KERNELS[args.arch]
     expect_arch(args.arch)
+    expect_suite(args.suite)
     if rpi:
-        add_rpi_archive("bookworm")
+        add_rpi_archive(args.suite)
     apt_install("dkms", meta)
     installed = out("dpkg-query", "-W", "-f", "${Package}\\n", "linux-headers-*").split()
     kver = newest_kernel(installed, flavour)
@@ -327,10 +380,12 @@ def main(argv=None):
     run.add_argument("inner", nargs=argparse.REMAINDER)
     p = sub.add_parser("utils")
     p.add_argument("--arch", choices=sorted(PLATFORMS), required=True)
+    p.add_argument("--suite", choices=SUITES, required=True)
     p.add_argument("--driver", required=True)
     p.add_argument("--out", required=True)
     p = sub.add_parser("install-test")
     p.add_argument("--arch", choices=sorted(PLATFORMS), required=True)
+    p.add_argument("--suite", choices=SUITES, required=True)
     p.add_argument("debs", nargs="+")
     p = sub.add_parser("module")
     p.add_argument("--driver", required=True)
@@ -342,9 +397,14 @@ def main(argv=None):
     p.add_argument("--suite", choices=SUITES, required=True)
     p.add_argument("--kver", required=True)
     p.add_argument("--arch", choices=("arm64", "armhf"), default="arm64", help="the kernel's architecture")
-    p.add_argument("debs", nargs="+", help="the -common, -utils (armhf) and -modules-<kver> debs")
+    p.add_argument("debs", nargs="+", help="-common, -dkms, -utils (armhf), -modules-<kver> and the meta package")
+    p = sub.add_parser("meta-install-test")
+    p.add_argument("--suite", choices=SUITES, required=True)
+    p.add_argument("--arch", choices=sorted(PLATFORMS), required=True)
+    p.add_argument("debs", nargs="+", help="the suite's debs and the meta package")
     p = sub.add_parser("dkms-test")
     p.add_argument("--arch", choices=sorted(DKMS_KERNELS), default="arm64")
+    p.add_argument("--suite", choices=SUITES, required=True)
     p.add_argument("debs", nargs="+", help="the -common and -dkms debs")
     args = parser.parse_args(argv)
     if args.command == "run":
@@ -355,6 +415,7 @@ def main(argv=None):
             "install-test": cmd_install_test,
             "module": cmd_module,
             "modules-install-test": cmd_modules_install_test,
+            "meta-install-test": cmd_meta_install_test,
             "dkms-test": cmd_dkms_test,
         }[args.command](args)
     except (ContainerError, subprocess.CalledProcessError) as e:
