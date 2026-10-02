@@ -156,7 +156,7 @@ def common_nfpm(version):
             "Apache-2.0",
             "fpgas.online Acorn LitePCIe driver: shared configuration",
             "Blacklists litepcie so that udev never loads it at boot for an Acorn running the fpgas.online SoC:\n"
-            "loading it resets the SoC and takes BAR0 from fpgas-acorn-verify. `modprobe litepcie` still\n"
+            "loaded, it holds BAR0, which fpgas-acorn-verify then has to take from it. `modprobe litepcie` still\n"
             "loads it on purpose.",
         ),
         "contents": [
