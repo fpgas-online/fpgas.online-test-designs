@@ -1,0 +1,120 @@
+# .github/workflows/acorn-pcie-build.yml
+#
+# The Acorn PCIe SoC (designs/acorn-pcie/gateware/acorn_pcie_soc.py), built with the open-source flow
+# (openXC7: Yosys, nextpnr-xilinx, prjxray) for every variant, as the operational and the golden image.
+#
+# A build that misses timing fails: the SoC gives nextpnr-xilinx every clock's period and runs it in strict
+# mode (designs/_shared/platform_fixups.py require_timing), trying up to five seeds.
+#
+# These bitstreams have not run on a board. What the fleet's flash carries is the Vivado build of the same
+# source, published by designs/acorn-pcie/tools/publish_release.py.
+name: "Build: Acorn PCIe SoC"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to a pull request cancels that pull request's older, now stale, run.
+# Anything else (main, workflow_dispatch) is grouped by commit, so it never waits
+# behind or cancels another run: every merge builds, exactly as before.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: "${{ matrix.board }} (${{ matrix.image }} image)"
+    runs-on: ubuntu-latest
+    container:
+      image: regymm/openxc7
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {board: "Acorn CLE-215+", variant: "cle-215+", slug: "cle-215plus", image: "operational", flags: ""}
+          - {board: "Acorn CLE-215+", variant: "cle-215+", slug: "cle-215plus", image: "golden", flags: "--golden"}
+          - {board: "NiteFury (CLE-215)", variant: "cle-215", slug: "cle-215", image: "operational", flags: ""}
+          - {board: "NiteFury (CLE-215)", variant: "cle-215", slug: "cle-215", image: "golden", flags: "--golden"}
+          - {board: "LiteFury (CLE-101)", variant: "cle-101", slug: "cle-101", image: "operational", flags: ""}
+          - {board: "LiteFury (CLE-101)", variant: "cle-101", slug: "cle-101", image: "golden", flags: "--golden"}
+    env:
+      # acorn_pcie_soc.py's output directory: build/acorn-<variant>, with -golden for the golden image.
+      BUILD_DIR: designs/acorn-pcie/build/acorn-${{ matrix.variant }}${{ matrix.image == 'golden' && '-golden' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install cross compiler and Python tooling
+        run: |
+          apt-get update
+          apt-get install -y gcc-riscv64-unknown-elf curl git
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          echo "/prjxray/env/bin" >> $GITHUB_PATH
+
+      - name: Install Python dependencies
+        run: uv sync --python 3.12 --extra build
+
+      - name: Install FASM GTP fixup wrapper
+        run: |
+          [ -f /prjxray/env/bin/fasm2frames.real ] || mv /prjxray/env/bin/fasm2frames /prjxray/env/bin/fasm2frames.real
+          cp designs/_shared/fasm2frames_wrapper.py /prjxray/env/bin/fasm2frames
+          chmod +x /prjxray/env/bin/fasm2frames
+
+      - name: Toolchain versions
+        run: |
+          yosys -V
+          nextpnr-xilinx --version
+
+      - name: Build ${{ matrix.board }} ${{ matrix.image }} bitstream
+        env:
+          CHIPDB: /chipdb
+          PRJXRAY_DB_DIR: /nextpnr-xilinx/xilinx/external/prjxray-db
+          NEXTPNR_XILINX_PYTHON_DIR: /nextpnr-xilinx/xilinx/python
+          VARIANT: ${{ matrix.variant }}
+          FLAGS: ${{ matrix.flags }}
+        run: |
+          uv run python designs/acorn-pcie/gateware/acorn_pcie_soc.py \
+            --variant "$VARIANT" \
+            --toolchain openxc7 \
+            $FLAGS \
+            --build
+
+      - name: Timing, utilisation and placement report
+        run: |
+          uv run python scripts/openxc7_build_report.py "$BUILD_DIR/gateware" sqrl_acorn \
+            > "$BUILD_DIR/gateware/sqrl_acorn_report.md"
+          cat "$BUILD_DIR/gateware/sqrl_acorn_report.md"
+          cat "$BUILD_DIR/gateware/sqrl_acorn_report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload bitstream, CSR map and reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: acorn-pcie-soc-openxc7-${{ matrix.slug }}-${{ matrix.image }}
+          path: |
+            ${{ env.BUILD_DIR }}/gateware/sqrl_acorn.bit
+            ${{ env.BUILD_DIR }}/csr.json
+            ${{ env.BUILD_DIR }}/csr.csv
+            ${{ env.BUILD_DIR }}/gateware/sqrl_acorn_report.md
+            ${{ env.BUILD_DIR }}/gateware/sqrl_acorn_nextpnr.log
+            ${{ env.BUILD_DIR }}/gateware/sqrl_acorn.rpt
+          if-no-files-found: error
+
+      # What a failed build leaves behind, to find out why without running it again.
+      - name: Upload logs of a failed build
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acorn-pcie-soc-openxc7-${{ matrix.slug }}-${{ matrix.image }}-failed-logs
+          path: |
+            ${{ env.BUILD_DIR }}/gateware/sqrl_acorn_nextpnr.log
+            ${{ env.BUILD_DIR }}/gateware/sqrl_acorn.rpt
+            ${{ env.BUILD_DIR }}/gateware/sqrl_acorn.xdc
+            ${{ env.BUILD_DIR }}/gateware/build_sqrl_acorn.sh
+          if-no-files-found: warn
