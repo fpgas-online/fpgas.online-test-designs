@@ -149,7 +149,8 @@ def verify_nfpm(version, staging):
             "fpgas-online-all-boards), which installs this and turns the check on at boot."
         )),
         "depends": ["python3 (>= 3.9)"],
-        "suggests": ["fpgas-online-all-boards", "fpgas-online-setup-pi"],  # fleet-event, for publishing
+        # fleet-event, for publishing; rpi-hwid, for fpgas-verify --label (run as a command, never imported)
+        "suggests": ["fpgas-online-all-boards", "fpgas-online-setup-pi", "python3-rpi-hwid"],
         "contents": [
             *(_py(src, rel) for src, rel in core_files()),
             *scripts,

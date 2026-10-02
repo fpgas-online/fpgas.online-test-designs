@@ -33,6 +33,8 @@ def test_the_core_has_every_module_but_the_boards_and_every_host_script(tmp_path
     assert not any("/boards/" in d for d in dst)
     assert {f"{bd.DIST}/scripts/{n}" for n in bd.host_tests.SCRIPTS} <= set(dst)
     assert config["depends"] == ["python3 (>= 3.9)"]
+    # fpgas-verify --label runs rpi-hwid when it is there: a soft dependency, Suggested only
+    assert "python3-rpi-hwid" in config["suggests"] and "recommends" not in config
     assert "/usr/lib/systemd/system/fpgas-verify.service" in dst
     assert "scripts" not in config  # installing the core alone does not turn the boot check on
     wrapper = pathlib.Path(dst["/usr/bin/fpgas-verify"]["src"]).read_text()
