@@ -61,8 +61,9 @@ def _verify_parser(prog, board=None):
         prog=prog,
         usage="%(prog)s [options]",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description=f"Check {what} with the fpgas.online test designs.\n"
-        "Prints a summary to stderr and writes a JSON report.",
+        description=f"Check {what} "
+        + ("with the fpgas.online test designs.\n" if loads else "as it booted from its flash.\n")
+        + "Prints a summary to stderr and writes a JSON report.",
         epilog="\n\n".join(e for e in (board and _tests_epilog(board), _results(), _files(board)) if e),
     )
     if board is None:
