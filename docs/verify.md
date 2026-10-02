@@ -136,6 +136,7 @@ fpgas-verify: pass (mode auto, auto: USB/PCI IDs)
 
 ```text
 $ sudo fpgas-verify --no-publish
+
 ******************************************************************************
 *** FPGA VERIFY: FAIL ******************************************************
 fpgas-verify: fail (mode auto, auto: USB/PCI IDs)
