@@ -842,3 +842,104 @@ def test_a_flavour_for_an_architecture_no_build_exists_for_is_refused(tmp_path):
     )
     with pytest.raises(bd.BuildError, match="riscv64"):
         bd.read_kernels(bad)
+
+
+# -- the prebuilt modules package (§2, §3.8) ---------------------------------------------------------------------
+
+KVER = "6.12.109+rpt-rpi-v8"
+
+
+@pytest.fixture
+def built(tmp_path):
+    """What container.py's `module` leaves: the two modules and modules.json saying what they were built for."""
+    d = tmp_path / "modules"
+    d.mkdir()
+    for name in ("litepcie.ko", "liteuart.ko"):
+        (d / name).write_bytes(b"\x7fELF")
+    (d / "modules.json").write_text(json.dumps({"kver": KVER, "suite": "bookworm", "arch": "arm64"}))
+    return d
+
+
+def _modules(tree, built, tmp_path, suite="bookworm", kver=KVER, arch="arm64"):
+    return bd.modules_nfpm(VERSION, suite, kver, arch, built, tree, tmp_path / "stage")
+
+
+def test_the_modules_package_is_named_for_its_kernel_and_built_for_the_kernels_architecture(tree, built, tmp_path):
+    config = _modules(tree, built, tmp_path)
+    assert config["name"] == "fpgas-online-acorn-litepcie-modules-6.12.109+rpt-rpi-v8"
+    assert config["arch"] == "arm64"
+    assert config["section"] == "kernel"
+
+
+def test_the_modules_go_where_depmod_prefers_them_over_the_kernels_own(tree, built, tmp_path):
+    dst = _dst(_modules(tree, built, tmp_path))
+    for name in ("litepcie.ko", "liteuart.ko"):
+        entry = dst[f"/lib/modules/{KVER}/updates/fpgas-online/{name}"]
+        assert entry["src"] == str(built / name)
+        assert entry["file_info"]["mode"] == 0o644
+
+
+def test_the_modules_package_relationships_are_the_specs(tree, built, tmp_path):
+    config = _modules(tree, built, tmp_path)
+    assert config["depends"] == ["fpgas-online-acorn-litepcie-common", f"linux-image-{KVER}"]
+    assert config["provides"] == ["fpgas-online-acorn-litepcie-module", "fpgas-online-acorn-litepcie-prebuilt"]
+    assert "conflicts" not in config  # -dkms conflicts with -prebuilt; modules for two kernels install together
+
+
+def test_the_modules_maintainer_scripts_run_depmod_for_the_packages_kernel(tree, built, tmp_path):
+    config = _modules(tree, built, tmp_path)
+    postinst = pathlib.Path(config["scripts"]["postinstall"]).read_text()
+    postrm = pathlib.Path(config["scripts"]["postremove"]).read_text()
+    for script in (postinst, postrm):
+        assert script.startswith("#!/bin/sh\nset -e\n")
+        assert f"depmod -a {KVER}\n" in script
+        assert "@" not in script  # every template field was filled
+
+
+def test_the_modules_version_carries_the_suites_debian_release(tree, built, tmp_path):
+    assert _modules(tree, built, tmp_path)["version"] == "0.0.post7~deb12"
+    (built / "modules.json").write_text(json.dumps({"kver": KVER, "suite": "trixie", "arch": "arm64"}))
+    config = _modules(tree, built, tmp_path / "t", suite="trixie")
+    assert config["version"] == "0.0.post7~deb13"
+    assert config["version_schema"] == "none"
+
+
+def test_the_suite_suffix_is_never_a_date_or_a_codename():
+    assert bd.modules_version("0.0.post7", "bookworm") == "0.0.post7~deb12"
+    assert bd.modules_version("0.0", "trixie") == "0.0~deb13"
+    with pytest.raises(bd.BuildError, match="buster"):
+        bd.modules_version("0.0.post7", "buster")
+
+
+@pytest.mark.skipif(not shutil.which("dpkg"), reason="needs dpkg --compare-versions")
+def test_the_older_suites_build_sorts_lower_so_a_release_upgrade_replaces_it():
+    """bookworm < trixie < forky < an unsuffixed version, by dpkg's own comparison."""
+    order = [bd.modules_version("0.0.post5", suite) for suite in ("bookworm", "trixie", "forky")]
+    assert order == ["0.0.post5~deb12", "0.0.post5~deb13", "0.0.post5~deb14"]
+    order += ["0.0.post5", "0.0.post6~deb12"]
+    for lower, higher in zip(order, order[1:]):
+        subprocess.run(["dpkg", "--compare-versions", lower, "lt", higher], check=True)
+
+
+def test_the_deb_file_name_is_the_debian_one():
+    assert (
+        bd.deb_name("fpgas-online-acorn-litepcie-modules-6.12.109+rpt-rpi-v8", "0.0.post7~deb12", "arm64")
+        == "fpgas-online-acorn-litepcie-modules-6.12.109+rpt-rpi-v8_0.0.post7~deb12_arm64.deb"
+    )
+
+
+def test_modules_built_for_another_kernel_suite_or_architecture_are_refused(tree, built, tmp_path):
+    """The same kernel name is a different build in each suite (§4.2): never package one as the other."""
+    with pytest.raises(bd.BuildError, match="trixie"):
+        _modules(tree, built, tmp_path / "a", suite="trixie")
+    with pytest.raises(bd.BuildError, match=r"6\.12\.96"):
+        _modules(tree, built, tmp_path / "b", kver="6.12.96+rpt-rpi-v8")
+    with pytest.raises(bd.BuildError, match="armhf"):
+        _modules(tree, built, tmp_path / "c", arch="armhf")
+
+
+def test_the_modules_package_ships_the_litepcie_notice(tree, built, tmp_path):
+    config = _modules(tree, built, tmp_path)
+    notice = pathlib.Path(_dst(config)[f"/usr/share/doc/{config['name']}/copyright"]["src"]).read_text()
+    assert "LitePCIe is Copyright 2015-2024 / EnjoyDigital" in notice
+    assert "GPL-2" in notice  # liteuart.ko

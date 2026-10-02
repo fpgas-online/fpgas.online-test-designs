@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Build the Acorn LitePCIe driver debs: -common, -dkms and -utils.
+"""Build the Acorn LitePCIe driver debs: -common, -dkms, -utils and -modules-<kver>.
 
-Design: docs/plans/2026-09-25-acorn-litepcie-packages-design.md (§2, §3).
+Design: docs/plans/2026-09-25-acorn-litepcie-packages-design.md (§2, §3, §4).
 
   * fpgas-online-acorn-litepcie-common (all): the modprobe.d blacklist that keeps udev from loading
     litepcie.ko at boot. Loading it is always an operator's decision.
@@ -9,6 +9,8 @@ Design: docs/plans/2026-09-25-acorn-litepcie-packages-design.md (§2, §3).
     SD-booted hosts. The netbooted fleet (armhf root, arm64 kernel) cannot use DKMS; it gets prebuilt modules.
   * fpgas-online-acorn-litepcie-utils (armhf, arm64): litepcie_util and litepcie_test, compiled in
     debian:bookworm by container.py.
+  * fpgas-online-acorn-litepcie-modules-<kver> (the kernel's architecture): litepcie.ko and liteuart.ko
+    built by container.py against one Raspberry Pi kernel's headers, for the hosts DKMS cannot serve.
 
 Takes the tree prepare_driver.py writes (patched, with litepcie's LICENSE).
 
@@ -33,10 +35,11 @@ REPO = HERE.parents[1]
 KERNELS = HERE / "kernels.toml"
 NAME = "fpgas-online-acorn-litepcie"
 COMMON, DKMS, UTILS = f"{NAME}-common", f"{NAME}-dkms", f"{NAME}-utils"
-MODULE = f"{NAME}-module"  # virtual: Provided by -dkms and (Part B) every -modules-<kver>
+MODULE = f"{NAME}-module"  # virtual: Provided by -dkms and every -modules-<kver>
 PREBUILT = f"{NAME}-prebuilt"  # virtual: Provided by every -modules-<kver>
 TOOLS = ("litepcie_util", "litepcie_test")
-ARCHES = ("armhf", "arm64")
+MODULES = ("litepcie", "liteuart")
+ARCHES = ("armhf", "arm64")  # -utils
 KERNEL_ARCHES = ("arm64", "armhf")  # -modules-<kver>: the Raspberry Pi archive's
 # A suite's Debian release number, for the `~deb<R>` suffix of a suite-specific build (§3.8).
 SUITE_RELEASE = {"bookworm": 12, "trixie": 13, "forky": 14}
@@ -112,6 +115,23 @@ def read_kernels(path=KERNELS):
     return kernels
 
 
+def modules_package(kver):
+    return f"{NAME}-modules-{kver}"
+
+
+def modules_version(version, suite):
+    """`X.Y.postN~deb<R>`: the older suite's build of one driver version sorts lower, so a release upgrade
+    replaces it, and every suite's build sorts below an unsuffixed version."""
+    if suite not in SUITE_RELEASE:
+        raise BuildError(f"{suite} is not a suite build_debs.py knows the Debian release of")
+    return f"{version}~deb{SUITE_RELEASE[suite]}"
+
+
+def deb_name(package, version, arch):
+    """The file name nfpm gives a deb."""
+    return f"{package}_{version}_{arch}.deb"
+
+
 # -- the packages ----------------------------------------------------------------------------------------
 
 
@@ -135,7 +155,7 @@ def _base(name, arch, version, license_, summary, body):
     return {
         "name": name,
         "arch": arch,
-        "section": "kernel" if name == DKMS else "misc",
+        "section": "misc" if name in (COMMON, UTILS) else "kernel",
         "platform": "linux",
         "version": version,
         "version_schema": "none",  # nfpm would otherwise rewrite it as semver
@@ -146,8 +166,11 @@ def _base(name, arch, version, license_, summary, body):
     }
 
 
-def _render(template, out, version):
-    text = (HERE / template).read_text().replace("@NAME@", NAME).replace("@VERSION@", version)
+def _render(template, out, **fields):
+    """Fill a maintainer script template's @FIELD@s."""
+    text = (HERE / template).read_text()
+    for field, value in fields.items():
+        text = text.replace(f"@{field.upper()}@", value)
     out = pathlib.Path(out)
     out.write_text(text)
     out.chmod(0o755)
@@ -159,6 +182,16 @@ def _license(tree):
     if not path.is_file():
         raise BuildError(f"{tree} has no LICENSE: prepare the tree with prepare_driver.py")
     return path
+
+
+def _driver_notice(tree, stage):
+    """litepcie's BSD-2-Clause notice, and a pointer to the GPL for the files that are under it."""
+    notice = pathlib.Path(stage) / "copyright"
+    notice.write_text(
+        _license(tree).read_text()
+        + "\nliteuart.c and litex.h are GPL-2.0 (their SPDX headers): see /usr/share/common-licenses/GPL-2.\n"
+    )
+    return notice
 
 
 def common_nfpm(version):
@@ -200,11 +233,7 @@ def dkms_nfpm(version, tree, stage):
         if not path.is_file():
             raise BuildError(f"{path}: the kernel tree has a subdirectory, which DKMS would not build")
         path.chmod(0o644)
-    notice = stage / "copyright"
-    notice.write_text(
-        _license(tree).read_text()
-        + "\nliteuart.c and litex.h are GPL-2.0 (their SPDX headers): see /usr/share/common-licenses/GPL-2.\n"
-    )
+    notice = _driver_notice(tree, stage)
     return {
         **_base(
             DKMS,
@@ -224,8 +253,56 @@ def dkms_nfpm(version, tree, stage):
             {"src": str(notice), "dst": f"/usr/share/doc/{DKMS}/copyright", "file_info": {"mode": 0o644}},
         ],
         "scripts": {
-            "postinstall": _render("dkms-postinst.in", stage / "postinst", version),
-            "preremove": _render("dkms-prerm.in", stage / "prerm", version),
+            "postinstall": _render("dkms-postinst.in", stage / "postinst", name=NAME, version=version),
+            "preremove": _render("dkms-prerm.in", stage / "prerm", name=NAME, version=version),
+        },
+    }
+
+
+def modules_nfpm(version, suite, kver, arch, module_dir, tree, stage):
+    """The modules container.py built: `module_dir` holds them and modules.json (what they were built for)."""
+    module_dir, stage = pathlib.Path(module_dir), pathlib.Path(stage)
+    stage.mkdir(parents=True, exist_ok=True)
+    info = json.loads((module_dir / "modules.json").read_text())
+    want = {"kver": kver, "suite": suite, "arch": arch}
+    got = {key: info.get(key) for key in want}
+    if got != want:
+        raise BuildError(
+            f"{module_dir} holds modules built for {got['kver']} ({got['suite']}, {got['arch']}), "
+            f"not {kver} ({suite}, {arch})"
+        )
+    package = modules_package(kver)
+    return {
+        **_base(
+            package,
+            arch,
+            modules_version(version, suite),
+            "BSD-2-Clause AND GPL-2.0-only",
+            f"fpgas.online Acorn LitePCIe driver: modules for Linux {kver}",
+            "litepcie.ko and liteuart.ko for the fpgas.online Acorn PCIe SoC, built for this one kernel. For\n"
+            "hosts DKMS cannot serve: a root filesystem of another architecture than its kernel, or one that\n"
+            "does not keep what DKMS builds.",
+        ),
+        "depends": [COMMON, f"linux-image-{kver}"],
+        "provides": [MODULE, PREBUILT],
+        "contents": [
+            *(
+                {
+                    "src": str(module_dir / f"{module}.ko"),
+                    "dst": f"/lib/modules/{kver}/updates/fpgas-online/{module}.ko",
+                    "file_info": {"mode": 0o644},
+                }
+                for module in MODULES
+            ),
+            {
+                "src": str(_driver_notice(tree, stage)),
+                "dst": f"/usr/share/doc/{package}/copyright",
+                "file_info": {"mode": 0o644},
+            },
+        ],
+        "scripts": {
+            "postinstall": _render("modules-postinst.in", stage / "postinst", package=package, kver=kver),
+            "postremove": _render("modules-postrm.in", stage / "postrm", package=package, kver=kver),
         },
     }
 
@@ -275,9 +352,12 @@ def main(argv=None):
     parser.add_argument("--print-version", action="store_true", help="print driver_version() and stop")
     parser.add_argument("--out", type=pathlib.Path, help="where the .deb files go")
     parser.add_argument("--driver", type=pathlib.Path, help="the tree prepare_driver.py wrote")
-    parser.add_argument("--only", choices=("common", "dkms", "utils"), action="append")
-    parser.add_argument("--arch", choices=ARCHES, help="-utils: the architecture the tools were built for")
+    parser.add_argument("--only", choices=("common", "dkms", "utils", "modules"), action="append")
+    parser.add_argument("--arch", choices=ARCHES, help="-utils, -modules: the architecture they were built for")
     parser.add_argument("--bin-dir", type=pathlib.Path, help="-utils: where container.py put the tools")
+    parser.add_argument("--suite", help="-modules: the suite whose kernel the modules were built for")
+    parser.add_argument("--kver", help="-modules: that kernel")
+    parser.add_argument("--module-dir", type=pathlib.Path, help="-modules: where container.py put the modules")
     parser.add_argument("--version", help="override the version (default: driver_version())")
     parser.add_argument("--nfpm", default="nfpm", help="the nfpm binary")
     args = parser.parse_args(argv)
@@ -295,6 +375,13 @@ def main(argv=None):
                     config = common_nfpm(version)
                 elif which == "dkms":
                     config = dkms_nfpm(version, args.driver, stage)
+                elif which == "modules":
+                    if not (args.arch and args.suite and args.kver and args.module_dir):
+                        raise BuildError("-modules needs --arch, --suite, --kver and --module-dir")
+                    stage_modules = pathlib.Path(stage) / "modules"
+                    config = modules_nfpm(
+                        version, args.suite, args.kver, args.arch, args.module_dir, args.driver, stage_modules
+                    )
                 else:
                     if not (args.arch and args.bin_dir):
                         raise BuildError("-utils needs --arch and --bin-dir")
