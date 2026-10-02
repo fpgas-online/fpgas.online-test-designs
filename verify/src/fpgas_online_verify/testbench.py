@@ -193,7 +193,8 @@ class TestBoard(Board):
                 rc, text = runner(self.idcode_argv(host), JTAG_TIMEOUT)
             except Problem as p:
                 return {"result": p.result, "reason": f"the JTAG chain could not be scanned: {p.reason}"}
-            codes, output = idcode.parse(text), tail(text, 6)
+            codes = idcode.parse(text)
+            output = (codes and rc == 0 and idcode.scan_lines(text)) or tail(text, 6)
             if not codes:
                 return {"result": "fail", "reason": f"no device on the JTAG chain (exit {rc})", "output": output}
         entry = {**idcode.decode(codes[0]), **({"output": output} if output else {})}

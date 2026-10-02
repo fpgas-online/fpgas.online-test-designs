@@ -46,6 +46,12 @@ def parse(text):
     return [c for c in codes if c not in (0, 0xFFFFFFFF)]
 
 
+def scan_lines(text):
+    """The lines of the output that hold whole IDCODEs, for a report's output: openFPGALoader's part table,
+    which follows its raw scan, prints them masked."""
+    return [line.strip() for line in text.splitlines() if OPENFPGALOADER_RAW.match(line) or OPENOCD.search(line)]
+
+
 def masked(code):
     """The IDCODE without its version: the part, whatever its silicon revision."""
     return code & VERSION_MASK

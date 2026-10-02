@@ -35,6 +35,8 @@ def test_a_chain_with_the_variants_fpga_and_bar0s_dna_passes():
     assert {k: t[k] for k in ("version", "part_number", "manufacturer_id", "manufacturer", "device")} == {
         "version": 1, "part_number": "0x3636", "manufacturer_id": "0x049", "manufacturer": "Xilinx",
         "device": "XC7A200T"}  # fmt: skip
+    # the raw scan, not openFPGALoader's part table, which prints the IDCODE masked
+    assert t["output"] == ["- 0 -> 0x13636093", "- 1 -> 0xffffffff", '{"dna": "0x0054b48664b04854"}']
     loads = pi.ran("openFPGALoader")
     assert loads == [["openFPGALoader", "--cable", "libgpiod", "--pins", "10:9:11:8", "--detect",
                       "--verbose-level", "2"],

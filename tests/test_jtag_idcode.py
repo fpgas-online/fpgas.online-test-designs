@@ -27,6 +27,11 @@ def test_the_raw_scan_gives_the_whole_idcode_not_the_masked_one():
     assert idcode.parse(P48) == [0x13636093]
 
 
+def test_the_report_keeps_the_raw_scan_lines_not_the_masked_part_table():
+    assert idcode.scan_lines(P48) == ["- 0 -> 0x13636093", "- 1 -> 0xffffffff"]
+    assert idcode.scan_lines(OPENOCD) == [OPENOCD.strip()]
+
+
 def test_plain_detect_output_has_no_whole_idcode():
     """Without the raw scan there is only the part table's masked value, which is not read as the IDCODE."""
     assert idcode.parse(P48.split("index 0:")[1]) == []

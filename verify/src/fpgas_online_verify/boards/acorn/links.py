@@ -103,8 +103,8 @@ def jtag(setup, variant, run, bar0_dna=None, gpiochip=None):
     try:
         (gpiochip or header_gpiochip)(setup.gpiochip)
         rc, out = run([*base, "--detect", *idcode.OPENFPGALOADER_RAW_ARGS], JTAG_TIMEOUT)
-        output += out.strip().splitlines()[-10:]
         found = idcode.parse(out)
+        output += (found and rc == 0 and idcode.scan_lines(out)) or out.strip().splitlines()[-6:]
         if found:
             seen["idcode"] = ", ".join(f"{i:#010x}" for i in found)
         if len(found) == 1:
