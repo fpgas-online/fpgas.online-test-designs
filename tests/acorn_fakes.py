@@ -6,12 +6,17 @@
   FakePi    the Pi's side as the check drives it: `pinctrl get/set` on its pins, and openFPGALoader on P1. The
             spare balls J5/H5 are wired to GPIO3/GPIO4 as on the Pi 5 setup; a wire can be cut.
   release   an installed fpgas-online-acorn-bitstreams: both flash images, both builds' csr.json, a manifest.
+  FakeLitePCIe  litepcie.ko and the SoC behind it, as far as dma.Bridge can tell: the two rings of DMA buffers
+            and the PCIeDRAMBridge's CSRs through the register ioctl. FakePi has one, with the kernel's side
+            of it: lsmod, modprobe, rmmod and whether /dev/litepcie0 is there.
 
 Register addresses are the ones in the pinned release's csr.csv (vivado-bitstreams-acorn-pcie-20260923).
 """
 
 import hashlib
 import json
+
+from fpgas_online_verify.boards.acorn import dma
 
 from tests.test_spi_flash import FakeBus, FakeS25FL, image, sf
 from tests.test_uartbone_link import FakeFPGA
@@ -41,10 +46,15 @@ REGS = {
        for i, reg in enumerate(("reset", "start", "done", "base", "end", "length", "random", "ticks", "errors"))
        if (core, reg) != ("generator", "errors")},
     **{f"p2_serial_{reg}": 0xF000A000 + 4 * i for i, reg in enumerate(("mode", "oe", "in", "out", "timeout"))},
+    "sdram_dfii_control": 0xF0008800,
+    **{f"pcie_dram_{reg}": 0xF000A800 + 4 * i
+       for i, reg in enumerate(("base", "length", "mode", "start", "done", "count"))},
 }  # fmt: skip
-GOLDEN_HAS_NO = tuple(n for n in REGS if n.startswith(("p2_gpio_", "p2_serial_", "dram_")))
+GOLDEN_HAS_NO = tuple(n for n in REGS if n.startswith(("p2_gpio_", "p2_serial_", "dram_", "sdram_", "pcie_dram_")))
+BRIDGE_REGS = tuple(n for n in REGS if n.startswith(("sdram_", "pcie_dram_")))  # what the driver's ioctl reaches
 NAMES = {a: n for n, a in REGS.items()}  # address -> name
 DRAM_BYTES = 64 * 16  # 64 words of the BIST's 128 bits
+DMA_BYTES = 3 * dma.DMA_BUFFER_SIZE + 8  # the `dma` test's timed block: small, ending part-way through a buffer
 P48_MBPS = 1327.4  # pi-sw2-p48's DRAM write bandwidth, 2026-10-01
 # pi-sw2-p48's readings: 39.1 °C, VCCINT 1.022 V, VCCAUX 1.789 V, VCCBRAM 1.022 V
 XADC_RAW = {"xadc_temperature": 0x9EA, "xadc_vccint": 0x573, "xadc_vccaux": 0x98A, "xadc_vccbram": 0x573}
@@ -262,6 +272,11 @@ class FakePi:
         self.pins.update({g: ["ip", "pd", None] for g in (8, 9, 10, 11)})
         self.pins.update({14: ["a4", "pn", None], 15: ["a4", "pu", None]})
         self.calls = []
+        # litepcie.ko: installed for this kernel but not loaded, as on a fleet Pi; it binds when it is loaded
+        self.modules, self.module_installed, self.module_binds = [], True, True
+        self.litepcie = FakeLitePCIe(
+            ident=soc.identifier.rstrip(b"\0").decode() if soc is not None else OP_IDENT_ON_CHIP
+        )
 
     def _pull(self, gpio):
         return {"pu": 1, "pd": 0}.get(self.pins[gpio][1], 1)
@@ -299,9 +314,29 @@ class FakePi:
                 value |= self._pull(gpio) << bit
         return value
 
+    def exists(self, path):
+        """/dev/litepcie0: there while litepcie.ko is loaded and bound to the board."""
+        assert path == dma.DEVICE
+        return "litepcie" in self.modules and self.module_binds
+
+    def dma_bridge(self, csrs):
+        d = self.litepcie
+        return dma.Bridge(csrs, opener=d.open, ioctl=d.ioctl, clock=d.clock, sleep=d.sleep, read=d.read,
+                          write=d.write, close=d.close)  # fmt: skip
+
     def __call__(self, argv, timeout):
         argv = [str(a) for a in argv]
         self.calls.append(argv)
+        if argv[0] == "lsmod":
+            return 0, "Module                  Size  Used by\n" + "".join(f"{m} 20480 0\n" for m in self.modules)
+        if argv == ["modprobe", "litepcie"]:
+            if not self.module_installed:
+                return 1, "modprobe: FATAL: Module litepcie not found in directory /lib/modules/6.12.109+rpt-rpi-v8\n"
+            self.modules += ["litepcie", "liteuart"]  # liteuart through its platform alias
+            return 0, ""
+        if argv[0] == "rmmod":
+            self.modules.remove(argv[1])
+            return 0, ""
         if argv[:2] == ["pinctrl", "get"]:
             gpios = [int(g) for g in argv[2].split(",")]
             lines = []
@@ -445,3 +480,154 @@ class DramModel:
             elif self.mem.get(addr) != want:
                 self.errors += 1
         self.regs[f"{core}_ticks"] = round(length * self.clk / (self.mbps * 1e6))
+
+
+IDENTIFIER_BASE = 0xF0000800  # csr_map: identifier_mem = 1
+
+
+class FakeLitePCIe:
+    """litepcie.ko and the SoC behind it, as far as dma.Bridge can tell: the two rings of DMA buffers, the
+    bridge's CSRs through the register ioctl, and the three things that make a block transfer more than a
+    write() and a read():
+
+      * the FPGA fetches the reader's ring from buffer 0 each time the reader is enabled, and stops fetching
+        when the bridge stops taking;
+      * the driver's count of complete writer buffers only moves on an interrupt, raised when buffer 0, 32,
+        64, ... completes; read() gives no more than that count;
+      * while the writer is off its FIFOs are held in reset, and words the bridge sends then are lost.
+
+    `irq_counts` picks what the interrupt after buffer i reports, i or i+1 buffers: LitePCIe's loop status is
+    the index of "the last descriptor executed", and the transfers must not depend on which of the two that
+    means. `stuck`: a bridge that never finishes. `corrupt`: a DRAM word that does not hold what is written."""
+
+    FD = 7
+
+    def __init__(self, irq_counts="next", stuck=False, ident=OP_IDENT_ON_CHIP, corrupt=None):
+        self.irq_counts, self.stuck, self.ident, self.corrupt = irq_counts, stuck, ident, corrupt
+        self.dram = {}  # word address -> 8 bytes
+        self.regs = dict.fromkeys(BRIDGE_REGS, 0)
+        self.regs["sdram_dfii_control"] = 1
+        self.tx = bytearray(dma.DMA_BUFFER_COUNT * dma.DMA_BUFFER_SIZE)
+        self.rx = bytearray(dma.DMA_BUFFER_COUNT * dma.DMA_BUFFER_SIZE)
+        self.reader_on = self.writer_on = False
+        self.tx_sw = 0  # buffers write() has filled since the reader was last off
+        self.tx_taken = 0  # words the FPGA has taken from the ring since the reader was enabled
+        self.rx_words = 0  # words the FPGA has stored since the writer was enabled
+        self.rx_hw = self.rx_sw = 0  # the driver's counts of complete and of read buffers
+        self.pending = None  # a to-DRAM transfer waiting for the reader
+        self.lost = 0  # words sent while the writer was off
+        self.locks = {"reader": False, "writer": False}
+        self.closed = False
+        self.now = 0.0
+
+    # -- what dma.Bridge is given ----------------------------------------------------------------------
+
+    def open(self, path):
+        assert path == dma.DEVICE
+        return self.FD
+
+    def close(self, fd):
+        self.reader_on = self.writer_on = False
+        self.closed = True
+
+    def clock(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+    def write(self, fd, data):
+        assert not self.reader_on, "write() while the reader runs would race the FPGA"
+        n = min(len(data) // dma.DMA_BUFFER_SIZE, dma.DMA_BUFFER_COUNT // 2 - self.tx_sw)
+        at = self.tx_sw * dma.DMA_BUFFER_SIZE
+        self.tx[at : at + n * dma.DMA_BUFFER_SIZE] = data[: n * dma.DMA_BUFFER_SIZE]
+        self.tx_sw += n
+        return n * dma.DMA_BUFFER_SIZE
+
+    def read(self, fd, size):
+        n = min(size // dma.DMA_BUFFER_SIZE, self.rx_hw - self.rx_sw)
+        at = self.rx_sw * dma.DMA_BUFFER_SIZE
+        self.rx_sw += n
+        return bytes(self.rx[at : at + n * dma.DMA_BUFFER_SIZE])
+
+    def ioctl(self, fd, request, buf):
+        assert fd == self.FD
+        if request == dma.IOCTL_REG:
+            addr, value, is_write = dma.REG.unpack(buf)
+            if is_write:
+                self._reg_write(NAMES[addr], value)
+            elif addr in NAMES:
+                buf[:] = dma.REG.pack(addr, self.regs[NAMES[addr]], 0)
+            else:  # the identifier memory
+                i = (addr - IDENTIFIER_BASE) // 4
+                buf[:] = dma.REG.pack(addr, ord(self.ident[i]) if i < len(self.ident) else 0, 0)
+        elif request == dma.IOCTL_DMA:
+            self.loopback = dma.DMA.unpack(buf)[0]
+        elif request == dma.IOCTL_DMA_READER:
+            enable = bool(dma.DMA_DIR.unpack(buf)[0])
+            if enable != self.reader_on:
+                self.reader_on, self.tx_taken = enable, 0
+                if not enable:
+                    self.tx_sw, self.pending = 0, None
+            self._run()
+        elif request == dma.IOCTL_DMA_WRITER:
+            enable = bool(dma.DMA_DIR.unpack(buf)[0])
+            if enable != self.writer_on:
+                self.writer_on, self.rx_words, self.rx_hw, self.rx_sw = enable, 0, 0, 0
+            buf[:] = dma.DMA_DIR.pack(enable, self.rx_hw, self.rx_sw)
+        elif request == dma.IOCTL_LOCK:
+            reader_req, writer_req, reader_rel, writer_rel, _, _ = dma.LOCK.unpack(buf)
+            status = []
+            for which, req, rel in (("reader", reader_req, reader_rel), ("writer", writer_req, writer_rel)):
+                ok = 1
+                if req:
+                    ok = 0 if self.locks[which] else 1
+                    self.locks[which] = True
+                if rel:
+                    self.locks[which] = False
+                status.append(ok)
+            buf[:] = dma.LOCK.pack(reader_req, writer_req, reader_rel, writer_rel, *status)
+        else:
+            raise AssertionError(f"unexpected ioctl {request:#x}")
+
+    # -- the SoC ---------------------------------------------------------------------------------------
+
+    def _reg_write(self, name, value):
+        self.regs[name] = value
+        if name != "pcie_dram_start":
+            return
+        base, length, mode = (self.regs[f"pcie_dram_{r}"] for r in ("base", "length", "mode"))
+        self.regs["pcie_dram_done"], self.regs["pcie_dram_count"] = int(length == 0), 0
+        if length == 0 or self.stuck:
+            return
+        if mode == dma.MODE_TO_DRAM:
+            self.pending = (base, length)
+            self._run()
+        elif mode == dma.MODE_FROM_DRAM:
+            for word in range(base, base + length):
+                self._store(self.dram.get(word, bytes(dma.WORD)))
+            self.regs["pcie_dram_done"], self.regs["pcie_dram_count"] = 1, length
+
+    def _run(self):
+        """A waiting to-DRAM transfer takes its words from the ring once the reader is fetching it."""
+        if not (self.reader_on and self.pending):
+            return
+        base, length = self.pending
+        for i in range(length):
+            at = (self.tx_taken + i) * dma.WORD
+            word = bytes(self.tx[at : at + dma.WORD])
+            self.dram[base + i] = bytes(8) if base + i == self.corrupt else word  # `corrupt`: a word that does not hold
+        self.tx_taken += length
+        self.pending = None
+        self.regs["pcie_dram_done"], self.regs["pcie_dram_count"] = 1, length
+
+    def _store(self, word):
+        if not self.writer_on:
+            self.lost += 1
+            return
+        at = self.rx_words * dma.WORD
+        self.rx[at : at + dma.WORD] = word
+        self.rx_words += 1
+        complete, part = divmod(self.rx_words, dma.BUFFER_WORDS)
+        if part == 0 and (complete - 1) % dma.DMA_BUFFER_PER_IRQ == 0:  # buffer 0, 32, 64, ... just completed
+            self.rx_hw = complete if self.irq_counts == "next" else complete - 1

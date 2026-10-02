@@ -22,13 +22,20 @@ read; and the FPGA is never reconfigured.
   p2-serial  J2/K2 in both directions through the p2_serial switch, then the UARTBone again (links.py)
   scratch    the ctrl scratch register written and read back over BAR0 and over the P2 UART
   p2-gpio    J5/H5 in both directions (links.py), on a setup whose cable carries them
+  dma        blocks written from the Pi's RAM to the DRAM and read back through litepcie.ko's DMA and the
+             SoC's PCIeDRAMBridge, every byte compared, and one block timed in each direction (dma.py)
 
-The golden image has no DRAM and no P2 switch or spare GPIO: on it `ddr`, `p2-serial` and `p2-gpio` are
-not run, and running it is already a fault (`pcie-bar0`).
+The golden image has no DRAM and no P2 switch or spare GPIO: on it `ddr`, `p2-serial`, `p2-gpio` and `dma`
+are not run, and running it is already a fault (`pcie-bar0`).
 
 A kernel driver holding BAR0 (litepcie.ko) is unbound for the check, only when a test asked for needs BAR0,
 and bound again after it. No events are sent while it is unbound: they are held and sent once it is bound
 again.
+
+`dma` is the one test that needs the driver, so it runs last, once the driver is bound again. On a host where
+the driver was not loaded, the test loads it (`modprobe litepcie`) and removes it again afterwards. A host
+with no litepcie.ko for its kernel does not have the test run, and `not_run` names the package that has it:
+that is a missing package, not a fault of the board. So is a build from before the bridge existed.
 
 A test that raises something unexpected is recorded as an error with what it raised, and the rest still run.
 """
@@ -37,11 +44,12 @@ import contextlib
 import time
 
 from ...core import Problem, pi_model, run, worst
-from . import bist, check, links
+from . import bist, check, dma, links
 from . import setup as setups
 
-TESTS = ("pcie-link", "pcie-bar0", "jtag", "flash", "ddr", "p2-uart", "p2-serial", "scratch", "p2-gpio")
-NEEDS_BAR0 = ("pcie-bar0", "flash", "ddr", "p2-serial", "scratch", "p2-gpio")
+TESTS = ("pcie-link", "pcie-bar0", "jtag", "flash", "ddr", "p2-uart", "p2-serial", "scratch", "p2-gpio", "dma")
+# `dma` goes through the driver, not BAR0, but which build runs (and so its CSR map) is only known over BAR0.
+NEEDS_BAR0 = ("pcie-bar0", "flash", "ddr", "p2-serial", "scratch", "p2-gpio", "dma")
 CONSOLE_TAIL = 8  # BIOS console lines kept in the ddr test's output
 GOLDEN = "running the golden image: the operational slot did not boot"
 
@@ -280,6 +288,53 @@ class _Suite:
                     faults.append(f"DRAM {what} {got} MB/s, below the {want} MB/s expected of {self.found['variant']}")
         return {**entry, "result": "fail", "reason": "; ".join(faults)} if faults else {**entry, "result": "pass"}
 
+    def _no_dma(self):
+        """Why the DMA test cannot run on this board as it is, before the driver is looked for."""
+        if self._needs_bar0():
+            return self._needs_bar0()
+        if self.bar0.get("build") == "golden":
+            return "the golden image has no DRAM"
+        if not all(self.csrs.has(name) for name in dma.USED_CSRS):
+            return f"the running build has no DMA bridge (no pcie_dram CSRs in {self.csrs.asset})"
+        if "rebind_error" in self.driver:
+            return self.driver["rebind_error"]
+        return None
+
+    def dma(self, note):
+        opener = self.options.get("dma_bridge") or (lambda csrs: dma.Bridge(csrs))
+        clock = self.options.get("clock", time.monotonic)
+        entry = {"test": "dma", "driver": note["driver"]}
+        with opener(self.csrs) as bridge:
+            bridge.lock()
+            ident = check.read_identifier(bridge)
+            if ident != self.bar0.get("identifier"):
+                raise Problem("fail", f"litepcie.ko's device runs {ident!r}, not the build BAR0 showed")
+            if not bridge.dram_ready():
+                raise Problem(
+                    "fail", "the DRAM is still under the BIOS's control (sdram_dfii_control): not initialised"
+                )
+            bridge.loopback(False)
+            words = self.csrs.memories["main_ram"]["size"] // dma.WORD
+            out, faults = dma.exercise(bridge, words, self.options.get("dma_bytes", dma.BIG_BYTES), clock=clock)
+        entry.update(out)
+        return {**entry, "result": "fail", "reason": "; ".join(faults)} if faults else {**entry, "result": "pass"}
+
+    def _dma(self):
+        """The DMA test, with the driver loaded for it if it was not, and removed again if it was loaded here."""
+        if "dma" not in self.wanted:
+            return
+        why_not = self._no_dma()
+        if why_not:
+            self.not_run["dma"] = why_not
+            return
+        run, kw = self.run, {k: self.options[k] for k in ("exists", "sleep") if self.options.get(k)}
+        note, why_not = dma.load_driver(run, self.options.get("dma_device", dma.DEVICE), **kw)
+        try:
+            self.test("dma", why_not, lambda: self.dma(note))
+        finally:
+            for fault in dma.unload_driver(run, note):
+                self.faults.append(("error", fault))
+
     # -- the whole check -------------------------------------------------------------------------------
 
     def identity(self):
@@ -339,6 +394,10 @@ class _Suite:
             self.report["driver"] = self.driver
             if "rebind_error" in self.driver:
                 self.faults.append(("error", self.driver["rebind_error"]))
+        if self.csrs is not None:
+            self._dma()  # the driver is bound again by now, if it was bound at all
+        elif "dma" in self.wanted:
+            self.not_run["dma"] = self._needs_bar0()
         return self.finish()
 
     def finish(self):

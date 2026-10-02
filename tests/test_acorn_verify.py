@@ -3,7 +3,7 @@
 The check never writes the flash and never reconfigures the FPGA. It runs every test it can and lists every
 fault: one result, pass or fail (docs/verify-goals.md). Its tests, in order:
 
-  pcie-link, pcie-bar0, jtag, flash, p2-uart, scratch, p2-gpio
+  pcie-link, pcie-bar0, jtag, flash, ddr, p2-uart, p2-serial, scratch, p2-gpio, dma
 
 The SoC is tests/acorn_fakes.py's FakeSoC (its flash side is tests/test_spi_flash.py's fake S25FL256S, so
 a read goes through the real spi_flash.Flash code path, STARTUPE2's swallowed clocks included), the Pi is
@@ -55,7 +55,8 @@ class Rig:
         return {"images": self.images, "model": self.model, "open_bar": self.bar, "run": self.pi,
                 "gpiochip": lambda compatible: None, "uart_opener": self.uart.open, "settle": self.uart.settle,
                 "sysfs_pci": self.root, "event": lambda stage, d: self.events.append((stage, d)),
-                "sleep": self.soc.sleep, "clock": self.soc.clock, **extra}  # fmt: skip
+                "sleep": self.soc.sleep, "clock": self.soc.clock, "exists": self.pi.exists,
+                "dma_bridge": self.pi.dma_bridge, "dma_bytes": fk.DMA_BYTES, **extra}  # fmt: skip
 
     def check(self, **extra):
         return suite.check_board(self.found(), self.options(**extra))
@@ -147,7 +148,8 @@ def test_a_board_on_sqrl_factory_image_still_has_its_link_and_jtag_checked(tmp_p
     rig = Rig(tmp_path, images, ids=fk.FACTORY)
     report = suite.check_board(rig.found(), rig.options(open_bar=fk.refuse))
     assert _results(report) == {"pcie-link": "pass", "jtag": "pass"}
-    assert set(report["not_run"]) == {"pcie-bar0", "flash", "ddr", "p2-uart", "p2-serial", "scratch", "p2-gpio"}
+    assert set(report["not_run"]) == {"pcie-bar0", "flash", "ddr", "p2-uart", "p2-serial", "scratch", "p2-gpio",
+                                      "dma"}  # fmt: skip
     assert "unconverted" in report["not_run"]["flash"]
 
 
@@ -254,7 +256,8 @@ def test_running_the_golden_image_fails_and_the_flash_is_still_checked(tmp_path,
     # the golden image has no DRAM, P2 switch or spare GPIO: not run, and the board fails for running golden
     assert report["not_run"] == {"ddr": "the golden image has no DRAM",
                                  "p2-serial": "the golden image has no P2 serial switch",
-                                 "p2-gpio": "the golden image has no P2 spare GPIO"}  # fmt: skip
+                                 "p2-gpio": "the golden image has no P2 spare GPIO",
+                                 "dma": "the golden image has no DRAM"}  # fmt: skip
 
 
 def test_a_changed_operational_slot_fails_and_says_where(tmp_path, images):
@@ -381,7 +384,7 @@ def test_a_host_that_is_no_acorn_setup_is_an_error_but_the_pcie_side_is_still_ch
     report = Rig(tmp_path, images, model="Raspberry Pi 4 Model B Rev 1.4").check()
     assert report["result"] == "error"
     assert "is not an Acorn setup in wiring.toml" in report["reason"]
-    assert _results(report) == {"pcie-bar0": "pass", "flash": "pass", "ddr": "pass", "scratch": "pass"}
+    assert _results(report) == {"pcie-bar0": "pass", "flash": "pass", "ddr": "pass", "scratch": "pass", "dma": "pass"}
     assert set(report["not_run"]) >= {"pcie-link", "jtag", "p2-uart", "p2-gpio"}
 
 
