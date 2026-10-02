@@ -9,6 +9,7 @@
   mode refuses.
 """
 
+import functools
 import json
 import pathlib
 
@@ -45,10 +46,10 @@ class Identified(Fake):
 
 
 class Locks:
-    """Stands in for core.hold_lock: records each lock taken, and what is read while it is held."""
+    """Stands in for core.hold_lock: records each lock taken (and in `log`, when it was), and which are held."""
 
-    def __init__(self):
-        self.taken, self.held = [], None
+    def __init__(self, log=None):
+        self.taken, self.held, self.log = [], [], log if log is not None else []
 
     def __call__(self, path, what, timeout=None):
         outer = self
@@ -57,10 +58,12 @@ class Locks:
         class _Held:
             def __enter__(self):
                 outer.taken.append(path)
-                outer.held = path
+                outer.held.append(path)
+                outer.log.append(["lock", path])
 
             def __exit__(self, *a):
-                outer.held = None
+                outer.held.remove(path)
+                outer.log.append(["unlock", path])
                 return False
 
         return _Held()
@@ -98,7 +101,7 @@ def test_the_document_is_identity_document_with_every_board(tmp_path, locks):
 def test_each_board_is_read_under_its_own_lock(tmp_path, locks):
     class Seen(Identified):
         def identify(self, host, found, options):
-            assert locks.held == self.lock
+            assert locks.held == [self.lock]
             return super().identify(host, found, options)
 
     a = Seen("arty", seen=[{"variant": "a7-35", "serial": "A"}])
@@ -174,6 +177,79 @@ def test_a_bounded_lock_gives_up_with_busy_and_an_unbounded_one_waits(tmp_path, 
     threading.Timer(0.3, other.close).start()
     with core.hold_lock(free, "board"):  # no bound: it waits until the other user lets go
         pass
+
+
+class Probed(Identified):
+    """A board found only by driving its pins (as the NeTV2's JTAG scan): its probe checks its lock is held."""
+
+    def __init__(self, name, locks, **kw):
+        super().__init__(name, probes=True, **kw)
+        self.locks = locks
+
+    def probe(self, host):
+        assert self.lock in self.locks.held, "a board's pins were driven before its lock was held"
+        return super().probe(host)
+
+    def identify(self, host, found, options):
+        assert self.lock in self.locks.held
+        return super().identify(host, found, options)
+
+
+def test_a_board_found_by_driving_its_pins_is_looked_for_under_its_lock(tmp_path, locks):
+    netv2 = Probed("netv2", locks, probed=[{"variant": "a7-35", "idcode": "0x0362d093"}])
+    doc, _ = _read({"netv2": netv2}, tmp_path)  # configured
+    assert netv2.probe_calls == 1 and [b["board"] for b in doc["boards"]] == ["netv2"]
+    assert locks.taken == [netv2.lock]  # taken once, before the scan, and kept for the read
+    locks.taken.clear()
+    netv2 = Probed("netv2", locks, probed=[{"variant": "a7-35", "idcode": "0x0362d093"}])
+    doc, _ = _read_auto({"arty": Identified("arty"), "netv2": netv2}, tmp_path)  # auto: nothing seen, so probed
+    assert netv2.probe_calls == 1 and [b["board"] for b in doc["boards"]] == ["netv2"]
+    assert locks.taken == [netv2.lock] and locks.held == []
+
+
+def test_a_busy_board_found_by_driving_its_pins_is_never_driven(tmp_path, held_lock, monkeypatch):
+    monkeypatch.delenv(identify.ENV, raising=False)
+
+    class Busy(LockedAt):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, probes=True, **kw)
+
+    netv2 = Busy("netv2", held_lock, probed=[{"variant": "a7-35"}], label_fields=("idcode",))
+    doc, gaps = _read({"netv2": netv2}, tmp_path, lock_wait=0.2)
+    assert netv2.probe_calls == 0 and netv2.identified == []
+    assert doc["boards"] == [{"board": "netv2", "kind": "netv2"}] and gaps == ["netv2: idcode: board busy"]
+    netv2 = Busy("netv2", held_lock, probed=[{"variant": "a7-35"}], label_fields=("idcode",))
+    doc, gaps = identify.read({"mode_dir": _auto_dir(tmp_path), "admin_dir": tmp_path / "admin", "lock_wait": 0.2,
+                               "boot_report": tmp_path / "v.json"}, {"netv2": netv2}, usb=[], pci=[])  # fmt: skip
+    assert netv2.probe_calls == 0 and doc["boards"] == [] and gaps == ["netv2: not looked for: board busy"]
+
+
+def test_the_netv2_is_scanned_under_its_lock_and_its_pins_put_back_before_it_is_let_go(tmp_path, monkeypatch):
+    log = []
+    monkeypatch.setattr(identify, "hold_lock", Locks(log))
+    monkeypatch.delenv(identify.ENV, raising=False)
+    run = Runner([("pinctrl get", (0, "4: op dh pn | hi\n17: ip pu | hi\n27: ip pd | lo\n22: ip pd | lo\n")),
+                  ("init; exit", (0, "tap/device found: 0x03631093"))])  # fmt: skip
+
+    def logged(argv, timeout, **kw):
+        log.append([str(a) for a in argv][:3])
+        return run(argv, timeout, **kw)
+
+    monkeypatch.setattr(NETV2, "probe", functools.partial(type(NETV2).probe, NETV2, runner=logged))
+    monkeypatch.setattr(NETV2, "facts", lambda port=None: _host(NETV2))
+    doc, _ = _read({"netv2": NETV2}, tmp_path)
+    assert doc["boards"][0]["idcode"] == "0x03631093"
+    assert log == [["lock", NETV2.lock], ["pinctrl", "get", "4,17,27,22"], ["openocd", "-c", log[2][2]],
+                   ["pinctrl", "set", "4"], ["pinctrl", "set", "17"], ["pinctrl", "set", "22"],
+                   ["pinctrl", "set", "27"], ["unlock", NETV2.lock]]  # fmt: skip
+    assert run.calls[2] == ["pinctrl", "set", "4", "ip", "pn"]  # left driven by openocd: back to an input
+
+
+def _auto_dir(tmp_path):
+    mode = tmp_path / "mode"
+    mode.mkdir(exist_ok=True)
+    (mode / "auto.ini").write_text("[verify]\nfpga-board = auto\n")
+    return mode
 
 
 def _read_auto(boards, tmp_path):

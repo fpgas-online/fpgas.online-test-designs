@@ -44,7 +44,11 @@ def _now():
 
 
 def find(boards, mode, options, usb, pci):
-    """[(board, host, found)] to check, and how they were chosen. A board that is not there is a Problem."""
+    """[(board, host, found)] to check, and how they were chosen. A board that is not there is a Problem.
+
+    options["before_probe"], when given, is called with each board before anything drives its pins to look
+    for it (a `probes` board's find or probe): --identify takes the board's lock there."""
+    before_probe = options.get("before_probe") or (lambda board: None)
     if mode != config.AUTO:
         board = boards.get(mode) or next((b for b in boards.values() if b.slug == mode), None)
         if board is None:
@@ -52,6 +56,8 @@ def find(boards, mode, options, usb, pci):
             raise Problem("error", f"this host is set up for {mode!r}, but no such board module is installed "
                                    f"(fpgas-online-{mode}-tools?); installed: {have}")  # fmt: skip
         host = board.facts(options.get("port"))
+        if board.probes:
+            before_probe(board)
         found = board.find(host, usb, pci)
         if not found:
             raise Problem(
@@ -70,7 +76,11 @@ def find(boards, mode, options, usb, pci):
         how = "auto: USB/PCI IDs, probing disabled"
     else:
         try:
-            probed = [(b, hosts[n], f) for n, b in boards.items() if b.probes for f in b.probe(hosts[n])]
+            probed = []
+            for n, b in boards.items():
+                if b.probes:
+                    before_probe(b)
+                    probed += [(b, hosts[n], f) for f in b.probe(hosts[n])]
         except Problem as p:
             if not spotted:
                 raise

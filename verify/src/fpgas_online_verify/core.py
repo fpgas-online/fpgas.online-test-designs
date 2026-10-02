@@ -147,6 +147,38 @@ def pci_devices(root=SYSFS_PCI):
     return found
 
 
+# -- the Pi's pins -------------------------------------------------------------------------------------------
+
+# pinctrl get: "14: a4    pn | hi // GPIO14 = TXD0", "8: op dl pd | lo // GPIO8 = output"
+PIN_RE = re.compile(r"^\s*(\d+):\s+(\w+)(?:\s+d[hl])?\s+(p[udn])\s*\|\s*(\w+|--)", re.MULTILINE)
+
+
+def pin_states(run, gpios):
+    """{gpio: (function, pull, level)} from pinctrl."""
+    rc, out = run(["pinctrl", "get", ",".join(str(g) for g in gpios)], 10)
+    found = {int(m[0]): (m[1], m[2], m[3]) for m in PIN_RE.findall(out)}
+    if rc != 0 or set(found) != set(gpios):
+        raise Problem("error", f"pinctrl get {','.join(map(str, gpios))} gave {out.strip()[:200]!r}")
+    return found
+
+
+def restore_pins(run, saved, exact=True):
+    """Put each pin back as it was found. `exact`: an output goes back to an output at the level it had;
+    otherwise to an input. Returns the faults."""
+    faults = []
+    for gpio, (func, pull, level) in sorted(saved.items()):
+        args = [func, pull]
+        if func == "op":
+            args = [func, pull, "dh" if level == "hi" else "dl"] if exact else ["ip", pull]
+        try:
+            rc, out = run(["pinctrl", "set", str(gpio), *args], 10)
+        except Problem as p:
+            rc, out = 1, p.reason
+        if rc != 0:
+            faults.append(f"could not put GPIO{gpio} back to {' '.join(args)}: {out.strip()[:200]}")
+    return faults
+
+
 # -- one user of a board at a time ----------------------------------------------------------------------------
 
 
