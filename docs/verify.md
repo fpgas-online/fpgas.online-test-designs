@@ -144,11 +144,8 @@ fpgas-verify: fail (mode auto, auto: USB/PCI IDs)
     pcie-link  fail: link is x2, expected x1
     pcie-bar0  pass
     jtag       fail: device DNA over JTAG 0x1 is not the one over BAR0 0x54b48664b04854: TDI (or the DNA readout) is wrong
-        index 0:
-            idcode 0x3636093
-            manufacturer xilinx
-            family artix a7 200t
-            model  xc7a200
+        - 0 -> 0x13636093
+        - 1 -> 0xffffffff
         {"dna": "0x0000000000000001"}
     flash      pass
     ddr        pass
@@ -403,13 +400,15 @@ Each test checks its bitstream's sha256 against the `-bitstreams` package's mani
 
 | Board | Found by | Loaded with | UART | Boot-check tests, in order | Only in `-debug` | Recorded state |
 |---|---|---|---|---|---|---|
-| Arty A7 | USB `0403:6010` | `openFPGALoader -b arty` | `/dev/ttyUSB1` | `uart`, `ddr`, `spiflash`, `ethernet`, `pin-id` | `pmod` | FTDI serial, flash JEDEC ID, sha256 of the flash's first 2.1 MiB |
+| Arty A7 | USB `0403:6010` | `openFPGALoader -b arty` | `/dev/ttyUSB1` | `uart`, `ddr`, `spiflash`, `ethernet`, `pin-id` | `pmod` | FTDI serial, IDCODE, flash JEDEC ID, sha256 of the flash's first 2.1 MiB |
 | NeTV2 | JTAG IDCODE over GPIO 4/17/27/22 | openocd (Pi 3/4), openFPGALoader `rp1pio` (Pi 5) | `/dev/ttyAMA0` | `uart`, `ddr`, `spiflash` | `ethernet`, `pmod`, `pin-id` | IDCODE, flash JEDEC ID, sha256 of the flash's boot image |
 | Fomu EVT | USB `1209:5bf0` (DFU bootloader) | openFPGALoader over DFU | `/dev/serial0` | `uart` | `spiflash`, `pmod`, `pin-id` | USB serial |
 | TT FPGA | USB `2e8a:*` | `tt_fpga_program.py` over `mpremote` | `/dev/ttyACM0` | `pin-id`, `uart`, `spiflash` | `pmod` | USB serial |
 
 * The Arty and NeTV2 are left running openFPGALoader's SPI-over-JTAG bridge (used to read the flash back), the
   others the last test design. Each returns to its flash image at its next power cycle.
+* The Arty and NeTV2 have their whole JTAG IDCODE read and decoded before the tests
+  ([the JTAG IDCODE](#the-jtag-idcode)): a part that is not the variant's fails the board.
 * The Fomu runs only `uart` at boot: a DFU load replaces the bootloader until the next power cycle.
 * The TT FPGA's `fpgas-tt.service` is stopped for the tests and started again after.
 * The NeTV2 has no USB, so finding it means driving the GPIO header. With `fpga-board = auto` the JTAG scan
@@ -468,7 +467,7 @@ From a checkout, the check reads them from the repository.
 |---|---|---|
 | `pcie-link` | sysfs | `current_link_speed` and `current_link_width` are the setup's (5.0 GT/s, x1) |
 | `pcie-bar0` | BAR0 | the operational build runs (the golden build means the operational slot did not boot), the flash identifies itself, the device DNA is neither all zeros nor all ones, and the XADC temperature and VCCINT, VCCAUX and VCCBRAM are in range |
-| `jtag` | P1 | `openFPGALoader --detect` finds one device with the variant's IDCODE, and `openFPGALoader --read-dna` reads the DNA BAR0 gave. The IDCODE read does not use TDI; the DNA read does |
+| `jtag` | P1 | `openFPGALoader --detect` finds one device, the variant's part in any silicon version ([the JTAG IDCODE](#the-jtag-idcode)), and `openFPGALoader --read-dna` reads the DNA BAR0 gave. The IDCODE read does not use TDI; the DNA read does |
 | `flash` | BAR0 | both 4 MiB slots (golden at `0x000000`, operational at `0x400000`), read whole with read opcodes only, hold the release's images |
 | `ddr` | BAR0 | after the BIOS console is read out, the DRAM BIST makes two passes over the whole DRAM: no errors, and write and read bandwidth at least the variant's minimum |
 | `p2-uart` | P2 | the UARTBone identifier at 1200 baud is BAR0's; at 921600 baud the identifier, DNA and XADC readings are right and the DNA is BAR0's. The link is left at 1200 baud |
@@ -513,6 +512,76 @@ From a checkout, the check reads them from the repository.
   side is left as inputs. On a Compute Blade GPIO14 is both TMS and the UART's TX, and goes back to its UART
   function.
 
+#### The JTAG IDCODE
+
+Every board with JTAG has its FPGA's whole 32-bit IDCODE read and decoded
+([`idcode.py`](../verify/src/fpgas_online_verify/idcode.py)):
+
+| Board | Read with | Must be | In the report |
+|---|---|---|---|
+| Acorn | `openFPGALoader --cable libgpiod --pins <setup's> --detect --verbose-level 2` over P1 | CLE-215+ and CLE-215: XC7A200T; CLE-101: XC7A100T | the `jtag` test |
+| Arty A7 | `openFPGALoader -b arty --detect --verbose-level 2` over its FT2232H | XC7A35T | the board's `jtag` |
+| NeTV2 | the scan that finds it: OpenOCD (Pi 3/4) or `openFPGALoader -c rp1pio ... --detect --verbose-level 2` (Pi 5) | the variant's part: XC7A35T or XC7A100T | the board's `jtag` |
+
+* The Fomu EVT and TT FPGA have no JTAG.
+* Plain `openFPGALoader --detect` prints the IDCODE its part table holds, which for these parts has the
+  version masked off (`idcode 0x3636093` for an XC7A200T that answers `0x13636093`). Its raw scan, printed at
+  `--verbose-level 2` as `- 0 -> 0x13636093`, is the whole value; OpenOCD's `tap/device found:` is too.
+* Reading the IDCODE only shifts the data register after a TAP reset: it never reconfigures the FPGA. The
+  check holds the board's lock throughout (the Acorn's is `/run/lock/fpgas-acorn.lock`, shared with
+  `fpgas-acorn-flash`), and on the Acorn the JTAG pins are put back as they were found.
+* The part is compared without the version, so another silicon revision of the right part passes. A part
+  that is not the variant's fails the board, and so does an IDCODE with bit 0 clear.
+* A JTAG chain of more than one device fails the board, with every IDCODE on it in the reason. That holds for
+  the NeTV2 too: finding it picks its part out of the chain, but the check counts every device the scan saw.
+* A scan whose tool exits with an error fails, even when it printed the right IDCODE; the reason gives the
+  exit code. The IDCODE it printed is still decoded in the report.
+
+| Field | Bits | Example (pi-sw2-p48's Acorn CLE-215+) |
+|---|---|---|
+| `idcode` | 31:0, 8 hex digits | `0x13636093` |
+| `idcode_version` | 31:28, the silicon revision | `1` |
+| `idcode_part_number` | 27:12 | `0x3636` |
+| `idcode_manufacturer_id` | 11:1, the JEP106 code (bank in 11:8) | `0x049` |
+| `idcode_manufacturer` | the JEP106 code's name | `Xilinx` |
+| `idcode_device` | the IDCODE without its version, from the table below (`unknown` if not in it) | `XC7A200T` |
+
+| IDCODE, version 0 | Device |
+|---|---|
+| `0x0362e093` | XC7A15T |
+| `0x0362d093` | XC7A35T |
+| `0x0362c093` | XC7A50T |
+| `0x03632093` | XC7A75T |
+| `0x03631093` | XC7A100T |
+| `0x03636093` | XC7A200T |
+
+pi-sw2-p48 (Acorn CLE-215+, Pi 5 setup), read holding the Acorn lock, 2026-10-02:
+
+```text
+$ sudo openFPGALoader --cable libgpiod --pins 10:9:11:8 --detect --verbose-level 2
+libgpiod jtag bitbang driver, dev=/dev/gpiochip0, tck_pin=11, tms_pin=8, tdi_pin=10, tdo_pin=9
+Raw IDCODE:
+- 0 -> 0x13636093
+- 1 -> 0xffffffff
+Fetched TDI, end-of-chain
+found 1 devices
+index 0:
+	idcode 0x3636093
+	manufacturer xilinx
+	family artix a7 200t
+	model  xc7a200
+	irlength 6
+```
+
+Its `jtag` test entry:
+
+```json
+{"test": "jtag", "idcode": "0x13636093", "idcode_version": 1, "idcode_part_number": "0x3636",
+ "idcode_manufacturer_id": "0x049", "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A200T",
+ "dna": "0x54b48664b04854",
+ "output": ["- 0 -> 0x13636093", "- 1 -> 0xffffffff", "{\"dna\": \"0x0054b48664b04854\"}"], "result": "pass"}
+```
+
 #### Not done yet
 
 What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
@@ -542,12 +611,17 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 | `fail`: `python3 did not finish within 300 s` | the design never printed what the test waits for: wrong UART, or the design does not run |
 | `fail`: `the test exited 1` | the test failed; its last lines are in the summary. `fpgas-<board>-debug test <test>` shows all of it |
 | `fail`: `N/18 pins match expected wiring` | the Pmod HAT cabling differs from the board's expected map |
+| `fail`: `… is an XC7A100T, not the a7-35's XC7A35T …` / `P1 JTAG chain has … expected one …` | the JTAG IDCODE is not the variant's part: the wrong board, or the wrong `--variant` |
+| `fail`: `the JTAG chain has N devices (…), not one` | more than the board's FPGA answers on its JTAG chain (an Arty or a NeTV2): another device wired into it, or a fault on the cable |
 | `fail`: `unconverted: …` | an Acorn on SQRL's factory image (or the XDMA sample): convert it ([acorn-pcie-programming.md](hardware/acorn-pcie-programming.md)) |
 | `fail`: `… is not a design we built` | a Xilinx PCIe design the Acorn check does not know; its flash is not read |
 | `fail`: `… has no test design for this board yet` | a Xilinx PCIe board that is not an Acorn (a PCIe Screamer, a PicoEVB) |
 | `fail`: `running the golden image` | the Acorn's operational slot did not boot; it fell back to golden |
 | `fail`: `link is x2, expected x1` | the Acorn's PCIe link is not the setup's (`expected.toml`) |
 | `fail`: `no device on the P1 JTAG chain` / `no UARTBone reply on /dev/ttyAMA0` | an Acorn's JTAG or P2 UART cable is off or miswired |
+| `fail`: `openFPGALoader printed no raw IDCODE scan (needs --verbose-level 2 output)` | the tool's version, not the board: openFPGALoader exited 0 but printed no `- 0 -> 0x...` lines at `--verbose-level 2`, so it is older than v0.9.0. Its last lines are in the report's `output` |
+| `fail`: `… failed (exit N) before scanning the JTAG chain: …` | the scan tool exited with an error and printed no scan: the cable or gpiochip would not open, say. The reason ends with its last line of output; more is in the report's `output` |
+| `fail`: `… exited N reading the IDCODE` / `openFPGALoader --detect exited N …` | the IDCODE scan reported an error, even if it printed an IDCODE; its last lines are in the report's `output` |
 | `fail`: `device DNA over JTAG … is not the one over BAR0` | the P1 TDI wire does not carry, or the DNA readout is wrong |
 | `fail`: `J5 -> GPIO3: the FPGA drove 0, the Pi read 1` (or the other way) | a P2 spare wire is cut or miswired |
 | `fail`: `K2 -> GPIO15: …` / `GPIO14 -> J2: …` | a P2 serial wire is cut or miswired |
@@ -564,7 +638,7 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
   | `result`, `reason` | the result, and why, when no board was checked |
   | `checked_at` | when (UTC, ISO 8601) |
   | `mode`, `configured_by`, `chosen_by` | `auto` or the board, the file (or "command line") that said so, and how the boards were found |
-  | `boards[]` | per board: `board`, `variant`, `found`, `result`, `reason` (every fault), `bitstreams`, `tests[]` (`test`, `result`, `reason`, `output`, and what the test read or measured), `state`. The Acorn's also has `setup`, `identity`, `running`, `flash`, `not_run`, and `driver` when one was unbound |
+  | `boards[]` | per board: `board`, `variant`, `found`, `result`, `reason` (every fault), `bitstreams`, `tests[]` (`test`, `result`, `reason`, `output`, and what the test read or measured), `state`. The Arty's and NeTV2's also have `jtag`: `result`, `reason`, and the [IDCODE's fields](#the-jtag-idcode). The Acorn's also has `setup`, `identity`, `running`, `flash`, `not_run`, and `driver` when one was unbound |
   | `state` | `file`, and `recorded` (`first run` or `--update`) or `changes` |
 
   ```bash
@@ -573,6 +647,13 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 * The first run records each board's identity and flash fingerprint in `/var/lib/fpgas-online/verify-state.json`.
   Later runs compare against it; a difference is `changed` until `sudo fpgas-verify --update`.
 * Loading a test design and upgrading the packages are not changes. A flash that could not be read is not compared.
+* An IDCODE recorded without its version (a record with `schema_version` below 3) takes the whole one
+  quietly. On a newer record, another version is a change: it is another chip.
+* One swap is missed because of that, once. A NeTV2 on a Pi 3/4 recorded its whole IDCODE even before
+  schema 3 (OpenOCD prints it), but the record cannot say whether its value was whole or masked. A version 0
+  value looks the same either way. So if such a board's version 0 chip was swapped for a version 1 chip of
+  the same part, the first run on schema 3 takes the new IDCODE quietly instead of reporting `changed`.
+  Later runs compare the whole IDCODE as usual.
 * A `--test` run neither records nor compares the state.
 
 ---
@@ -626,7 +707,7 @@ fpga-test-started {"board": "acorn", "test": "pcie-bar0"}
 fpga-test-finished {"board": "acorn", "test": "pcie-bar0", "result": "pass", "reason": ""}
 fpga-test-started {"board": "acorn", "test": "jtag"}
 fpga-test-finished {"board": "acorn", "test": "jtag", "result": "pass", "reason": ""}
-fpga-board-identified {"board": "acorn", "bdf": "0001:01:00.0", "pci_ids": "10ee:7021", "subsystem": "1e24:021f", "variant": "cle-215+", "identifier": "fpgas-online Acorn PCIe SoC cle-215+ 2026-09-21 14:23:32", "build": "operational", "dna": "0x54b48664b04854", "idcode": "0x3636093", "flash_part": "S25FL256S", "flash_jedec": "0x010219", "flash_unique_id": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf"}
+fpga-board-identified {"board": "acorn", "bdf": "0001:01:00.0", "pci_ids": "10ee:7021", "subsystem": "1e24:021f", "variant": "cle-215+", "identifier": "fpgas-online Acorn PCIe SoC cle-215+ 2026-09-21 14:23:32", "build": "operational", "dna": "0x54b48664b04854", "idcode": "0x13636093", "flash_part": "S25FL256S", "flash_jedec": "0x010219", "flash_unique_id": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf"}
 ```
 
 They come between `fpga-verifying` and `fpga-verified`.

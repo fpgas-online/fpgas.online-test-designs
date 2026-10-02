@@ -194,7 +194,7 @@ def test_a_board_running_the_release_with_every_link_working_passes_every_test(t
     assert report["setup"] == "Raspberry Pi 5"
     assert report["identity"] == {
         "bdf": "0001:01:00.0", "pci_ids": "10ee:7021", "subsystem": "1e24:021f", "variant": "cle-215+",
-        "identifier": fk.OP_IDENT_ON_CHIP, "build": "operational", "dna": "0x54b48664b04854", "idcode": "0x3636093",
+        "identifier": fk.OP_IDENT_ON_CHIP, "build": "operational", "dna": "0x54b48664b04854", "idcode": "0x13636093",
         "flash_part": "S25FL256S", "flash_jedec": "0x010219", "flash_unique_id": report["flash"]["unique_id"],
     }  # fmt: skip
     assert report["state"]["dna"] == "0x54b48664b04854"
@@ -374,7 +374,8 @@ def test_on_a_compute_blade_jtag_uses_its_pins_and_j5_h5_are_not_tested(tmp_path
     assert report["setup"] == "Compute Blade"
     assert report["result"] == "pass", report.get("reason")
     loads = rig.pi.ran("openFPGALoader")
-    assert loads[0] == ["openFPGALoader", "--cable", "libgpiod", "--pins", "2:3:4:14", "--detect"]
+    blade_p1 = ["openFPGALoader", "--cable", "libgpiod", "--pins", "2:3:4:14"]
+    assert loads[0] == [*blade_p1, "--detect", "--verbose-level", "2"]
     assert report["not_run"] == {"p2-gpio": "J5 and H5 are not wired on the Compute Blade setup"}
     # GPIO14 is TMS and the UART's TX: it goes back to its UART function, or the P2 UART would be dead
     assert rig.pi.pins[14][:2] == ["a4", "pn"]
