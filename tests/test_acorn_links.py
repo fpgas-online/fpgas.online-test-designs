@@ -1,8 +1,9 @@
 """The Acorn's P1 JTAG, P2 UART and P2 GPIO tests (boards/acorn/links.py), one at a time.
 
-Real output from pi-sw2-p48 (2026-10-01): `openFPGALoader --cable libgpiod --pins 10:9:11:8 --detect` printed
-"idcode 0x3636093", `--read-dna` printed {"dna": "0x0054b48664b04854"}, which is what the `dna_id` CSR gave over
-BAR0 and over the P2 UARTBone. tests/test_acorn_verify.py runs them inside the whole check.
+Real output from pi-sw2-p48: `openFPGALoader --cable libgpiod --pins 10:9:11:8 --detect --verbose-level 2`
+printed the raw scan "- 0 -> 0x13636093" and, from its part table, "idcode 0x3636093" (2026-10-02);
+`--read-dna` printed {"dna": "0x0054b48664b04854"}, which is what the `dna_id` CSR gave over BAR0 and over the
+P2 UARTBone (2026-10-01). tests/test_acorn_verify.py runs them inside the whole check.
 """
 
 import ast
@@ -30,10 +31,25 @@ def test_a_chain_with_the_variants_fpga_and_bar0s_dna_passes():
     pi = fk.FakePi()
     t = links.jtag(PI5, "cle-215+", pi, bar0_dna=fk.DNA, gpiochip=_no_chip)
     assert t["result"] == "pass", t
-    assert (t["idcode"], t["dna"]) == ("0x3636093", "0x54b48664b04854")
+    assert (t["idcode"], t["dna"]) == ("0x13636093", "0x54b48664b04854")
+    assert {k: t[k] for k in ("version", "part_number", "manufacturer_id", "manufacturer", "device")} == {
+        "version": 1, "part_number": "0x3636", "manufacturer_id": "0x049", "manufacturer": "Xilinx",
+        "device": "XC7A200T"}  # fmt: skip
     loads = pi.ran("openFPGALoader")
-    assert loads == [["openFPGALoader", "--cable", "libgpiod", "--pins", "10:9:11:8", "--detect"],
+    assert loads == [["openFPGALoader", "--cable", "libgpiod", "--pins", "10:9:11:8", "--detect",
+                      "--verbose-level", "2"],
                      ["openFPGALoader", "--cable", "libgpiod", "--pins", "10:9:11:8", "--read-dna"]]  # fmt: skip
+
+
+def test_another_silicon_version_of_the_right_part_passes_and_is_reported():
+    t = links.jtag(PI5, "cle-215+", fk.FakePi(idcode=0x03636093), bar0_dna=fk.DNA, gpiochip=_no_chip)
+    assert t["result"] == "pass", t
+    assert (t["idcode"], t["version"], t["device"]) == ("0x03636093", 0, "XC7A200T")
+
+
+def test_an_idcode_with_bit_0_clear_fails():
+    t = links.jtag(PI5, "cle-215+", fk.FakePi(idcode=0x13636092), bar0_dna=fk.DNA, gpiochip=_no_chip)
+    assert t["result"] == "fail" and "bit 0 clear" in t["reason"], t
 
 
 def test_a_dna_over_jtag_that_is_not_bar0s_fails_because_tdi_is_not_proven():
@@ -49,7 +65,10 @@ def test_an_empty_chain_fails():
 
 def test_the_wrong_part_fails_and_says_which():
     t = links.jtag(PI5, "cle-101", fk.FakePi(), gpiochip=_no_chip)
-    assert t["result"] == "fail" and t["reason"] == "P1 JTAG chain has 0x3636093, expected 0x3631093 for cle-101"
+    assert t["result"] == "fail" and t["reason"] == (
+        "P1 JTAG chain has 0x13636093 (XC7A200T), expected one XC7A100T (IDCODE 0x03631093, any version) for cle-101"
+    )
+    assert t["idcode"] == "0x13636093" and "dna" not in t  # the DNA is not read from the wrong part
 
 
 def test_the_pins_go_back_as_they_were_found_even_after_a_hang():
@@ -67,7 +86,7 @@ def test_the_pins_go_back_as_they_were_found_even_after_a_hang():
 
 
 def test_on_a_blade_gpio14_goes_back_to_the_uart_not_to_an_input():
-    pi = fk.FakePi(idcode=0x3631093)
+    pi = fk.FakePi(idcode=0x13631093)
     pi.pins.update({2: ["a0", "pu", None], 3: ["a0", "pu", None], 4: ["ip", "pu", None]})
     t = links.jtag(BLADE, "cle-101", pi, gpiochip=_no_chip)
     assert t["result"] == "pass"
