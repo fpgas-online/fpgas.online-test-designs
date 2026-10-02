@@ -80,7 +80,8 @@ fpgas-verify's own fields:
 * plus `schema=fpga-identity/1`.
 
 The Acorn sends it once PCIe and JTAG have said who it is; every other board sends it before its tests. A board
-whose check stops before it says who the board is still gets one, with what finding the board showed. In
+whose check stops before it says who the board is, or that is not checked at all (`--test` naming none of its
+tests), still gets one, with what finding the board showed. In
 `fpga-verified` the same fields appear per board as `board0_identity_<field>`.
 
 ## The document

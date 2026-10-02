@@ -219,6 +219,20 @@ def test_with_auto_a_board_with_none_of_the_tests_is_not_checked_and_not_passed(
     assert report["result"] == "pass"  # arty's ddr ran and passed
 
 
+def test_with_auto_a_board_not_checked_is_still_identified_once(opts):
+    events = []
+    arty = WithTests("arty", ["uart", "ddr"], seen=[{"variant": "a7-35", "usb": "1-1"}])
+    fomu = WithTests("fomu", ["uart"], seen=[{"variant": "evt", "usb": "1-2", "serial": "S"}])
+    report = runner.verify({**opts, "tests": ["ddr"], "event": lambda s, d: events.append((s, d))},
+                           _boards(arty, fomu), usb=[], pci=[], mode=("auto", "test"))  # fmt: skip
+    assert report["not_checked"] == ["fomu"]
+    found = [d["board"] for s, d in events if s == "fpga-board-found"]
+    identified = [d for s, d in events if s == "fpga-board-identified"]
+    assert sorted(d["board"] for d in identified) == sorted(found) == ["arty", "fomu"]
+    assert {"board": "fomu", "kind": "fomu", "variant": "evt", "serial": "S", "usb": "1-2",
+            "schema": "fpga-identity/1"} in identified  # fmt: skip
+
+
 def test_with_auto_a_test_no_board_found_has_is_an_error(opts):
     tt = WithTests("tt", ["uart"], seen=[{"variant": "tt-fpga", "serial": "T"}])
     report = runner.verify({**opts, "tests": ["ddr"]}, _boards(tt), usb=[], pci=[], mode=("auto", "test"))

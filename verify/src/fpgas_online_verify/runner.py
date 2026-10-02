@@ -184,6 +184,8 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
             board_options, skipped = _for_board(board, options, report["mode"])
             if board_options is None:  # none of the named tests: not checked, and no "pass" for it
                 not_checked.append(board.name)
+                # still found, so still identified (once), from what finding it showed
+                board_event("fpga-board-identified", identity.details(identity.base(key, board.name, found)))
                 continue
             board_options = {**board_options, "event": board_event, "board_key": key}
             with hold_lock(board.lock, board.title):
