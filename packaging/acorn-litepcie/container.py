@@ -247,7 +247,9 @@ def cmd_module(args):
     expect_arch(args.arch)
     expect_suite(suite)
     add_rpi_archive(suite)
-    apt_install("make", "kmod", f"linux-headers-{kver}")
+    # binutils by name: trixie's headers depend on gcc-14-for-host, which brings aarch64-linux-gnu-as but not
+    # the plain `as` its gcc runs.
+    apt_install("make", "kmod", "binutils", f"linux-headers-{kver}")
     dest = fresh(args.out)
     work = dest / ".build"
     shutil.copytree(pathlib.Path(args.driver) / "kernel", work)
