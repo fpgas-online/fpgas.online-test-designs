@@ -4,7 +4,9 @@
     FUSE_DNA) and, on the Acorn, the flash's identity over BAR0. Each board is read under its own lock, so a
     check or a debug session running on it finishes first; it waits at most LOCK_WAIT seconds for the lock,
     and a board still busy then has its fields missing, for the reason "board busy". A board found only by
-    driving its pins (the NeTV2's JTAG scan) is looked for under its lock too, never before it is held.
+    driving its pins (the NeTV2's JTAG scan) is looked for under its lock too, never before it is held; one
+    that could not be looked for, its lock being busy, is in the document all the same, with every field
+    missing for that reason, whatever else was found.
   * Anything only a loaded design can read (the Arty's and NeTV2's flash, through openFPGALoader's
     SPI-over-JTAG bridge) comes from the boot report (runner.REPORT), when the board there is this one by a key
     no other board has (its USB serial, PCI slot or device DNA); the board's dict lists those fields in
@@ -143,6 +145,7 @@ class _Locks:
 
     def __init__(self, stack, wait):
         self.stack, self.wait, self.held, self.busy = stack, wait, set(), set()
+        self.skipped = []  # the boards not looked for because their lock stayed held
 
     def take(self, board):
         """Hold `board`'s lock until the read is done; Busy (with .board) if it is not free in time."""
@@ -155,6 +158,7 @@ class _Locks:
                 return
             except Busy:
                 self.busy.add(board.lock)
+                self.skipped.append(board)
         busy = Busy(board.title, self.wait)
         busy.board = board
         raise busy
@@ -162,7 +166,8 @@ class _Locks:
 
 def _busy(key, board, found):
     """A board whose lock stayed held: how it was found, and every field missing for that reason."""
-    return identity.base(key, board.name, found), [f"{key}: {f}: {BUSY}" for f in board.label_fields]
+    gaps = [f"{key}: {f}: {BUSY}" for f in board.label_fields] or [f"{key}: read: {BUSY}"]
+    return identity.base(key, board.name, found), gaps
 
 
 def _terminated(signum, frame):
@@ -208,10 +213,10 @@ def read(options, boards=None, usb=None, pci=None):
             pci = pci_devices() if pci is None else pci
             targets, _ = runner.find(boards, mode, {**options, "before_probe": locks.take}, usb, pci)
         except Busy as b:  # a board that is found by driving its pins was busy before it could be looked for
-            if mode == config.AUTO:
-                return identity.document([]), [f"{b.board.name}: not looked for: {BUSY}"]
-            ident, gaps = _busy(b.board.name, b.board, {})
-            return identity.document([ident]), gaps
+            if mode != config.AUTO:
+                ident, gaps = _busy(b.board.name, b.board, {})
+                return identity.document([ident]), gaps
+            targets = []  # nothing else was found; the busy board is in the document below
         except Problem as p:
             return identity.document([]), [f"{p.result}: {p.reason}"]
         out, gaps = [], []
@@ -240,6 +245,13 @@ def read(options, boards=None, usb=None, pci=None):
             if not fields and "" in why:  # a board with no label fields whose read stopped
                 fields = [("read", why[""])]
             gaps += [f"{key}: {f}: {reason}" for f, reason in fields]
+        # With `auto`, a board that could not be looked for because its lock stayed held is never dropped, even
+        # when other boards were found (runner.find keeps a weak claim when probing fails, and says so only in
+        # its `how`): it is in the document with every field missing, for the reason "board busy".
+        for board in locks.skipped:
+            ident, busy = _busy(board.name, board, {})
+            out.append(ident)
+            gaps += busy
     return identity.document(out), gaps
 
 

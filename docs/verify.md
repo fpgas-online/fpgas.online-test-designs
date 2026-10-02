@@ -131,7 +131,9 @@ any state.
     putting all of this back and letting go of the locks; a second SIGTERM meanwhile is ignored.
 * Each board is read under its lock, as a check is. `--identify` waits at most 30 s for it; a board still in
   use then has its fields missing, for the reason `board busy`. A NeTV2 is also looked for under its lock,
-  since finding it drives its JTAG pins.
+  since finding it drives its JTAG pins; one that could not be looked for, its lock busy, is in the document
+  all the same, with its fields missing for that reason, even when other boards were found (`--identify`
+  then exits 1).
 * A field that needs a design loaded (the Arty's and NeTV2's flash, read through openFPGALoader's
   SPI-over-JTAG bridge) comes from the boot report, `/run/fpgas-online/verify.json`, when the board there is
   this one by a key no other board has: the Arty's USB serial, the Acorn's PCI slot, or the device DNA. Those

@@ -248,7 +248,29 @@ def test_a_busy_board_found_by_driving_its_pins_is_never_driven(tmp_path, held_l
     netv2 = Busy("netv2", held_lock, probed=[{"variant": "a7-35"}], label_fields=("idcode",))
     doc, gaps = identify.read({"mode_dir": _auto_dir(tmp_path), "admin_dir": tmp_path / "admin", "lock_wait": 0.2,
                                "boot_report": tmp_path / "v.json"}, {"netv2": netv2}, usb=[], pci=[])  # fmt: skip
-    assert netv2.probe_calls == 0 and doc["boards"] == [] and gaps == ["netv2: not looked for: board busy"]
+    assert netv2.probe_calls == 0 and doc["boards"] == [{"board": "netv2", "kind": "netv2"}]
+    assert gaps == ["netv2: idcode: board busy"]
+
+
+def test_a_busy_board_is_not_dropped_when_a_weak_claim_was_seen(tmp_path, held_lock, monkeypatch, capsys):
+    # A Xilinx PCIe design the Acorn module cannot name (a weak claim) makes `auto` probe as well; a NeTV2 whose
+    # lock is busy then could not be looked for. runner.find keeps the weak claim and says the probe failed only
+    # in its `how`: --identify must still put the NeTV2 in the document, as busy, and exit 1.
+    monkeypatch.delenv(identify.ENV, raising=False)
+    acorn = LockedAt("acorn", tmp_path / "acorn.lock", seen=[{"variant": "cle-215+", "bdf": "0000:01:00.0"}],
+                     weak=True)  # fmt: skip
+    netv2 = LockedAt("netv2", held_lock, probes=True, probed=[{"variant": "a7-35"}], label_fields=("idcode",))
+    options = {"mode_dir": _auto_dir(tmp_path), "admin_dir": tmp_path / "admin", "lock_wait": 0.2,
+               "boot_report": tmp_path / "v.json"}  # fmt: skip
+    doc, gaps = identify.read(options, {"acorn": acorn, "netv2": netv2}, usb=[], pci=[])
+    assert netv2.probe_calls == 0 and netv2.identified == [] and acorn.identified == ["acorn"]
+    assert [b["board"] for b in doc["boards"]] == ["acorn", "netv2"]
+    assert doc["boards"][1] == {"board": "netv2", "kind": "netv2"} and gaps == ["netv2: idcode: board busy"]
+    netv2 = LockedAt("netv2", held_lock, probes=True, probed=[{"variant": "a7-35"}])  # no label fields: still not whole
+    assert identify.run(options, boards={"acorn": acorn, "netv2": netv2}) == 1
+    out = capsys.readouterr()
+    assert [b["board"] for b in json.loads(out.out)["boards"]] == ["acorn", "netv2"]
+    assert "--identify: netv2: read: board busy" in out.err
 
 
 def test_the_netv2_is_scanned_under_its_lock_and_its_pins_put_back_before_it_is_let_go(tmp_path, monkeypatch):
