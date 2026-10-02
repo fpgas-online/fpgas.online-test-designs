@@ -135,6 +135,10 @@ any state.
 * The exit status is 0 when every board's identity is whole (no field missing, no `<field>_error`), 1
   otherwise. Each missing field is printed on stderr with why. The document is printed either way; readers
   use it and ignore the exit status.
+* For an Arty or a NeTV2, `--identify` always exits 1 for now: their labels need the device DNA and the
+  flash's unique ID (`dna`, `flash_uid`), and neither the boot check nor `--identify` reads them yet (see
+  [Not done yet](#not-done-yet)). Their IDCODE, and any flash fields the boot report has for an Arty, are still in
+  the document.
 
 Nesting: rpi-hwid gets the board's identity by running `fpgas-verify --identify`, and may be run by an
 fpgas-verify that has already read the identity and put it in a file named by `FPGAS_VERIFY_IDENTITY`. So
@@ -639,7 +643,8 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 * The Arty's and NeTV2's device DNA and flash IDs are not read, nor the flash IDs of the TT and Fomu; their
   [identity](identity.md) has only what finding the board and its IDCODE give.
 * Nothing is compared with the site's records.
-* No rpi-hwid labels are made. `fpgas-acorn-debug identify` reads the Acorn's identity and flash IDs for them.
+* No rpi-hwid labels are made by fpgas-verify itself. `fpgas-verify --identify` gives rpi-hwid the identity,
+  but exits 1 for an Arty or a NeTV2 until their device DNA and flash unique ID are read.
 
 ### Common failures
 
