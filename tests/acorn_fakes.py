@@ -274,6 +274,7 @@ class FakePi:
         self.calls = []
         # litepcie.ko: installed for this kernel but not loaded, as on a fleet Pi; it binds when it is loaded
         self.modules, self.module_installed, self.module_binds = [], True, True
+        self.liteuart_late = False  # udev loads liteuart only once litepcie's probe has registered its device
         self.litepcie = FakeLitePCIe(
             ident=soc.identifier.rstrip(b"\0").decode() if soc is not None else OP_IDENT_ON_CHIP
         )
@@ -321,6 +322,8 @@ class FakePi:
 
     def dma_bridge(self, csrs):
         d = self.litepcie
+        if "liteuart" not in self.modules:
+            self.modules.append("liteuart")
         return dma.Bridge(csrs, opener=d.open, ioctl=d.ioctl, clock=d.clock, sleep=d.sleep, read=d.read,
                           write=d.write, close=d.close)  # fmt: skip
 
@@ -332,7 +335,8 @@ class FakePi:
         if argv == ["modprobe", "litepcie"]:
             if not self.module_installed:
                 return 1, "modprobe: FATAL: Module litepcie not found in directory /lib/modules/6.12.109+rpt-rpi-v8\n"
-            self.modules += ["litepcie", "liteuart"]  # liteuart through its platform alias
+            # liteuart through its platform alias: at once, or a moment later (by the time the device is used)
+            self.modules += ["litepcie"] if self.liteuart_late else ["litepcie", "liteuart"]
             return 0, ""
         if argv[0] == "rmmod":
             self.modules.remove(argv[1])

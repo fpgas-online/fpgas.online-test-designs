@@ -348,9 +348,9 @@ def load_driver(run, device=DEVICE, exists=os.path.exists, sleep=time.sleep, wai
     unload_driver(); `why_not` is why the DMA cannot be used here, naming the package to install."""
     before = loaded_modules(run)
     if exists(device):
-        return {"driver": "was loaded", "loaded": []}, None
+        return {"driver": "was loaded"}, None
+    note = {"driver": "loaded for the test", "before": before}
     rc, out = run(["modprobe", "litepcie"], 30)
-    note = {"driver": "loaded for the test", "loaded": [m for m in loaded_modules(run) if m not in before]}
     if rc != 0:
         said = " ".join(out.split())[:200]
         return note, f"litepcie.ko could not be loaded ({said}). To have it, {INSTALL}"
@@ -360,14 +360,17 @@ def load_driver(run, device=DEVICE, exists=os.path.exists, sleep=time.sleep, wai
         waited += 0.05
     if not exists(device):
         return note, f"litepcie.ko loaded but {device} did not appear within {wait_s} s: it did not bind to the board"
-    note["loaded"] = [m for m in loaded_modules(run) if m not in before]
     return note, None
 
 
 def unload_driver(run, note):
-    """Remove the modules load_driver() loaded, so the host is left as it was found. Returns the faults."""
+    """Remove the modules that were not loaded before load_driver(), so the host is left as it was found.
+    Looked up now, not when the driver was loaded: udev loads liteuart.ko a moment after litepcie.ko's probe
+    registers its device. Returns the faults."""
+    if "before" not in note:
+        return []
     faults = []
-    for module in note.get("loaded", []):
+    for module in [m for m in loaded_modules(run) if m not in note["before"]]:
         rc, out = run(["rmmod", module], 30)
         if rc != 0:
             faults.append(f"{module}.ko, loaded for the DMA test, could not be removed: {out.strip()[:200]}")

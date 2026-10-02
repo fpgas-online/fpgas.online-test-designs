@@ -164,6 +164,15 @@ def test_the_check_loads_the_driver_for_the_dma_test_and_removes_it_again(tmp_pa
     assert report["tests"][-1] is entry  # after every test that uses BAR0
 
 
+def test_liteuart_loaded_by_udev_after_the_driver_is_removed_too(tmp_path, images):  # noqa: F811
+    """Seen on pi-sw2-p48: liteuart.ko was not there yet when the driver had just been loaded, and stayed."""
+    rig = Rig(tmp_path, images)
+    rig.pi.liteuart_late = True
+    report = rig.check(tests=["dma"])
+    assert report["result"] == "pass" and rig.pi.modules == []
+    assert _module_commands(rig) == [["modprobe", "litepcie"], ["rmmod", "litepcie"], ["rmmod", "liteuart"]]
+
+
 def test_a_driver_that_was_already_loaded_is_used_and_left_loaded(tmp_path, images):  # noqa: F811
     rig = Rig(tmp_path, images)
     rig.pi.modules = ["litepcie", "liteuart"]
