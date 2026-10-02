@@ -128,6 +128,8 @@ def jtag(setup, variant, run, bar0_dna=None, gpiochip=None):
             chain_ok = True
         if rc != 0 and scanned:  # whatever it printed, a scan that failed is not trusted
             faults.append(("fail", f"openFPGALoader --detect exited {rc} on the P1 JTAG chain"))
+            if chain_ok:  # it found the one FPGA expected, so that is not why the DNA was not read
+                dna_error = f"not read over P1 JTAG: openFPGALoader --detect exited {rc}, so --read-dna was not run"
         elif chain_ok:
             rc, out = run([*base, "--read-dna"], JTAG_TIMEOUT)
             output += out.strip().splitlines()[-4:]
