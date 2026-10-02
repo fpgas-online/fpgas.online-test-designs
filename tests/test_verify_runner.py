@@ -793,3 +793,68 @@ def test_a_run_that_errs_adds_nothing_to_the_record(opts):
     report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
     assert "added" not in report["state"]
     assert "dna" not in state.load(opts["state"])["acorn"]
+
+
+# -- lock files ------------------------------------------------------------------------------------------------
+
+
+class Opens:
+    """Wraps os.open: records each (path, flags), and can refuse with EACCES as fs.protected_regular does."""
+
+    def __init__(self, monkeypatch, module, refuse=False):
+        self.calls, self.refuse, self.real = [], refuse, module.os.open
+        monkeypatch.setattr(module.os, "open", self)
+
+    def __call__(self, path, flags, mode=0o777):
+        self.calls.append((str(path), flags))
+        if self.refuse:
+            raise PermissionError(13, "Permission denied", str(path))
+        return self.real(path, flags, mode)
+
+
+def test_an_existing_lock_file_is_opened_without_o_creat(tmp_path, monkeypatch):
+    import os
+
+    lock = tmp_path / "board.lock"
+    lock.write_text("")
+    opens = Opens(monkeypatch, core)
+    _hold(lock)
+    assert opens.calls and all(not flags & os.O_CREAT for _, flags in opens.calls)
+    assert all(not flags & (os.O_WRONLY | os.O_RDWR | os.O_TRUNC) for _, flags in opens.calls)
+
+
+def test_a_missing_lock_file_is_created_0644_with_o_excl(tmp_path, monkeypatch):
+    import os
+
+    old = os.umask(0o022)
+    try:
+        lock = tmp_path / "run" / "board.lock"
+        opens = Opens(monkeypatch, core)
+        _hold(lock)
+    finally:
+        os.umask(old)
+    assert (lock.stat().st_mode & 0o777) == 0o644
+    created = [flags for _, flags in opens.calls if flags & os.O_CREAT]
+    assert created and all(flags & os.O_EXCL for flags in created)
+
+
+def test_a_lock_file_that_cannot_be_opened_is_a_clear_error(tmp_path, monkeypatch):
+    lock = tmp_path / "board.lock"
+    lock.write_text("")
+    Opens(monkeypatch, core, refuse=True)
+    with pytest.raises(Problem) as refused:
+        _hold(lock)
+    assert str(lock) in str(refused.value) and "owned by" in str(refused.value)
+
+
+def _hold(lock):
+    with core.hold_lock(lock, "board"):
+        pass
+
+
+def test_hold_lock_flock_works_on_the_read_only_descriptor(tmp_path):
+    import fcntl
+
+    lock = tmp_path / "board.lock"
+    with core.hold_lock(lock, "board"), open(lock) as other, pytest.raises(BlockingIOError):
+        fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)

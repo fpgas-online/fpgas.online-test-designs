@@ -379,3 +379,65 @@ def test_the_flash_tool_turns_memory_decoding_on_for_bar0_and_back_off_after(tmp
     assert seen and all(c & 0x2 for c in seen)
     assert int.from_bytes((dev / "config").read_bytes()[4:6], "little") == 0x0000
     assert "flash did not identify itself" in capsys.readouterr().out
+
+
+# -- lock files ------------------------------------------------------------------------------------------------
+
+
+class Opens:
+    """Wraps os.open: records each (path, flags), and can refuse with EACCES as fs.protected_regular does."""
+
+    def __init__(self, monkeypatch, module, refuse=False):
+        self.calls, self.refuse, self.real = [], refuse, module.os.open
+        monkeypatch.setattr(module.os, "open", self)
+
+    def __call__(self, path, flags, mode=0o777):
+        self.calls.append((str(path), flags))
+        if self.refuse:
+            raise PermissionError(13, "Permission denied", str(path))
+        return self.real(path, flags, mode)
+
+
+def test_an_existing_lock_file_is_opened_without_o_creat(tmp_path, monkeypatch):
+    import os
+
+    lock = tmp_path / "board.lock"
+    lock.write_text("")
+    opens = Opens(monkeypatch, sf)
+    sf.hold_lock(str(lock)).close()
+    assert opens.calls and all(not flags & os.O_CREAT for _, flags in opens.calls)
+    assert all(not flags & (os.O_WRONLY | os.O_RDWR | os.O_TRUNC) for _, flags in opens.calls)
+
+
+def test_a_missing_lock_file_is_created_0644_with_o_excl(tmp_path, monkeypatch):
+    import os
+
+    old = os.umask(0o022)
+    try:
+        lock = tmp_path / "run" / "board.lock"
+        opens = Opens(monkeypatch, sf)
+        sf.hold_lock(str(lock)).close()
+    finally:
+        os.umask(old)
+    assert (lock.stat().st_mode & 0o777) == 0o644
+    created = [flags for _, flags in opens.calls if flags & os.O_CREAT]
+    assert created and all(flags & os.O_EXCL for flags in created)
+
+
+def test_a_lock_file_that_cannot_be_opened_is_a_clear_error(tmp_path, monkeypatch):
+    lock = tmp_path / "board.lock"
+    lock.write_text("")
+    Opens(monkeypatch, sf, refuse=True)
+    with pytest.raises(sf.LockError) as refused:
+        sf.hold_lock(str(lock)).close()
+    assert str(lock) in str(refused.value) and "owned by" in str(refused.value)
+
+
+def test_fpgas_acorn_flash_says_why_it_cannot_take_the_lock(tmp_path, monkeypatch, capsys):
+    lock = tmp_path / "lock"
+    lock.write_text("")
+    monkeypatch.setattr(sf, "LOCK", str(lock))
+    Opens(monkeypatch, sf, refuse=True)
+    assert sf.main(["id"]) == 1
+    out = capsys.readouterr().out
+    assert f"cannot open the lock file {lock}" in out and "RESULT: FAIL" in out

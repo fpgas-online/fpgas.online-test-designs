@@ -5,6 +5,7 @@ Stdlib only: the Pi hosts boot a tmpfs root with no LiteX.
 
 import contextlib
 import fcntl
+import os
 import pathlib
 import re
 import struct
@@ -193,13 +194,48 @@ class Busy(Problem):
         self.what, self.timeout = what, timeout
 
 
+def _owner(path):
+    """Who owns `path`, as a user name if there is one."""
+    import pwd  # stdlib, Unix only
+
+    try:
+        uid = os.stat(path).st_uid
+    except OSError:
+        return "unknown"
+    try:
+        return pwd.getpwuid(uid).pw_name
+    except KeyError:
+        return f"uid {uid}"
+
+
+def open_lock(path):
+    """A read-only file descriptor of the lock file `path`, for flock. A lock file that is there is opened
+    without O_CREAT: in a sticky, world-writable directory (/run/lock) the kernel's fs.protected_regular refuses
+    even root an O_CREAT open of a file another user owns, which would stop the check until a reboot. Only a
+    missing one is created (0644). The package's tmpfiles.d entry creates them root-owned at boot. A lock
+    that cannot be opened is a Problem naming the file and its owner."""
+    path = pathlib.Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    while True:
+        try:
+            try:
+                return os.open(path, os.O_RDONLY | os.O_CLOEXEC)
+            except FileNotFoundError:
+                pass
+            try:
+                return os.open(path, os.O_RDONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o644)
+            except FileExistsError:
+                continue  # someone created it in between: open theirs
+        except PermissionError as e:
+            raise Problem("error", f"cannot open the lock file {path} (owned by {_owner(path)}): {e.strerror}; "
+                                   "it should be root's: remove it, or reboot") from None  # fmt: skip
+
+
 @contextlib.contextmanager
 def hold_lock(path, what, timeout=None, poll=0.2, clock=time.monotonic, sleep=time.sleep):
     """Hold `path` locked, waiting (and saying so) while someone else has it. With `timeout` (seconds), give up
     after that long and raise Busy; without it (the boot check, fpgas-<board>-debug), wait as long as it takes."""
-    path = pathlib.Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w") as f:
+    with os.fdopen(open_lock(path), "r") as f:
         try:
             fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
