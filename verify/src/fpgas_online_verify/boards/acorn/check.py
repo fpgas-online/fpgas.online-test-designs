@@ -34,6 +34,7 @@ import hashlib
 import json
 import pathlib
 
+from ... import dna
 from ...core import Problem, pci_devices
 from . import spi_flash
 
@@ -87,7 +88,7 @@ NO_TEST_DESIGN = "fpgas.online has no test design for this board yet"
 
 XADC_TEMPERATURE = ("temperature_c", "xadc_temperature")
 XADC_VOLTAGES = (("vccint_v", "xadc_vccint"), ("vccaux_v", "xadc_vccaux"), ("vccbram_v", "xadc_vccbram"))
-DNA_BITS = 57
+dna_faults = dna.faults  # a DNA of all zeros or all ones is no DNA (dna.py)
 SCRATCH_PATTERNS = (0xA5A55A5A, 0x5A5AA5A5)
 
 
@@ -386,12 +387,6 @@ def read_dna(read, csrs):
     for i in range(csrs.words("dna_id")):
         value = value << 32 | read(addr + 4 * i)
     return value
-
-
-def dna_faults(dna, where):
-    if dna == 0 or dna == (1 << DNA_BITS) - 1:
-        return [f"device DNA over {where} reads {dna:#x}: the DNA port is not being read"]
-    return []
 
 
 def read_xadc(read, csrs):

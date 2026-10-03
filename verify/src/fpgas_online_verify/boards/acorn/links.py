@@ -28,8 +28,8 @@ Each gives a test entry in the board's report: {test, result, reason, output, ..
 
 import contextlib
 import os
-import re
 
+from ... import dna as device_dna
 from ... import idcode
 from ...core import Problem
 from . import bist, check, uartbone_link
@@ -37,7 +37,6 @@ from . import bist, check, uartbone_link
 JTAG_TIMEOUT = 60
 # The IDCODE of each variant's FPGA at version 0 (check.py's variants); compared without the version.
 IDCODES = {"cle-215+": 0x03636093, "cle-215": 0x03636093, "cle-101": 0x03631093}
-DNA_RE = re.compile(r"\bdna\"?\s*[:=]\s*\"?(0x[0-9a-fA-F]+)", re.IGNORECASE)
 # openFPGALoader's libgpiod cable opens /dev/gpiochip0. The header's chip is found by its device-tree
 # compatible (wiring.toml), not by number: a Pi 5 can have gpiochip11-15, 15 the RP1.
 GPIOCHIP = "/dev/gpiochip0"
@@ -133,12 +132,11 @@ def jtag(setup, variant, run, bar0_dna=None, gpiochip=None):
         elif chain_ok:
             rc, out = run([*base, "--read-dna"], JTAG_TIMEOUT)
             output += out.strip().splitlines()[-4:]
-            m = DNA_RE.search(out)
-            if rc != 0 or not m:
+            dna = device_dna.parse(out)
+            if rc != 0 or dna is None:
                 faults.append(("fail", "openFPGALoader --read-dna read no device DNA over P1 JTAG"))
                 dna_error = f"openFPGALoader --read-dna read no device DNA over P1 JTAG (exit status {rc})"
             else:
-                dna = int(m.group(1), 16)
                 stuck = check.dna_faults(dna, "P1 JTAG")
                 if stuck:  # a DNA port not being read, so not the board's DNA (identity uses dna_error instead)
                     faults += [("fail", f) for f in stuck]
