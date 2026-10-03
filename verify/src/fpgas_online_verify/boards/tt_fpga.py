@@ -105,9 +105,9 @@ class TTFPGA(TestBoard):
     doc = "tt-fpga.md"
     usb = (("2e8a", None),)  # any Raspberry Pi USB product: the RP2350 running MicroPython
     variants: ClassVar[dict] = {"tt-fpga": "tt-fpga"}
-    # rpi-hwid's Tiny Tapeout label (label contract §10). Only the boot check reads the fields rpi-hwid gives
-    # (it owns the port then): --identify takes them, and why they are missing, from the boot report, matched
-    # by usb_serial.
+    # rpi-hwid's Tiny Tapeout label (its LABEL-CONTRACT.md, sections 1 and 7). Only the boot check reads the
+    # fields rpi-hwid gives (it owns the port then): --identify takes them, and why they are missing, from the
+    # boot report, matched by usb_serial.
     label_fields = ("usb_serial", "mcu", "chip", "demoboard", "demoboard_version", "sdk")
     report_fields = (*RPI_HWID_FIELDS, "tinytapeout_")
     port = "/dev/ttyACM0"
