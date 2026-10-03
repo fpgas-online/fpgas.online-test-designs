@@ -10,6 +10,8 @@ on:
     paths:
       - "designs/uart/**"
       - "designs/_shared/**"
+      # designs/_shared/build_helpers.py checks it exists at import
+      - "scripts/fix_yosys_edif_libref.py"
       - "tmp/**"
       - "pyproject.toml"
       - "uv.lock"

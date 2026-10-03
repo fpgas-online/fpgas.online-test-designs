@@ -10,6 +10,8 @@ on:
     paths:
       - "designs/ddr-memory/**"
       - "designs/_shared/**"
+      # designs/_shared/build_helpers.py checks it exists at import
+      - "scripts/fix_yosys_edif_libref.py"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/build-ddr-test.yml"

@@ -63,7 +63,9 @@ jobs:
       # On a pull request the build workflows' paths filters can leave out every workflow
       # with a board check (a docs-only change, or one that builds only Acorn boards), and
       # then none ever appears: once every other run on the commit has finished with still
-      # no board check, there is nothing to wait for, so skip the next step.
+      # no board check -- seen on two polls 20 s apart, so runs not yet created cannot end
+      # the wait early -- there is nothing to wait for, so skip the next step. Pull requests
+      # only: on main every build workflow runs, so main keeps waiting for its checks.
       - name: Wait for the build workflows to start
         id: started
         env:
@@ -71,15 +73,18 @@ jobs:
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
           WORKFLOW: ${{ github.workflow }}
+          EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
+          idle=0
           for _ in $(seq 180); do
             n="$(gh api "repos/${REPO}/commits/${HEAD_SHA}/check-runs?per_page=100" \
               --jq '[.check_runs[].name | select(test("^(Arty|NeTV2|Fomu|TT FPGA|netv2|Acorn CLE|NiteFury|LiteFury)"))] | length' || echo 0)"  # gh's jq has no lookahead; an API error just retries
             if [ "$n" -gt 0 ]; then echo "$n build checks on ${HEAD_SHA}"; echo "builds=true" >> "$GITHUB_OUTPUT"; exit 0; fi
             left="$(gh api "repos/${REPO}/actions/runs?head_sha=${HEAD_SHA}&per_page=100" \
               --jq "[.workflow_runs[] | select(.status != \"completed\" and .id != ${RUN_ID} and .name != \"${WORKFLOW}\")] | length" || echo 1)"
-            if [ "$left" -eq 0 ]; then
+            if [ "$EVENT" = pull_request ] && [ "$left" -eq 0 ]; then idle=$((idle + 1)); else idle=0; fi
+            if [ "$idle" -ge 2 ]; then
               echo "no board build ran on ${HEAD_SHA} (paths filters) and every other run has finished"
               echo "builds=false" >> "$GITHUB_OUTPUT"
               exit 0

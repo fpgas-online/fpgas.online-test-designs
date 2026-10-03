@@ -10,6 +10,8 @@ on:
     paths:
       - "designs/pmod-pin-id/**"
       - "designs/_shared/**"
+      # designs/_shared/build_helpers.py checks it exists at import
+      - "scripts/fix_yosys_edif_libref.py"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/pmod-pin-id-build.yml"
