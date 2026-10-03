@@ -9,7 +9,8 @@ UART: GPIO to RPi (FPGA TX=E14, RX=E13) -> /dev/ttyAMA0.
 Build command:
     uv run python designs/ddr-memory/gateware/ddr_soc_netv2.py --toolchain openxc7 --build
 
-The bitstream is written to: designs/ddr-memory/build/netv2/gateware/kosagi_netv2.bit
+The bitstream is written to:
+    designs/ddr-memory/build/netv2-<variant>-<flow>/gateware/kosagi_netv2.bit
 """
 
 import pathlib
@@ -120,7 +121,7 @@ def main():
         **parser.soc_argdict,
     )
 
-    from designs._shared.build_helpers import default_build_dir
+    from designs._shared.build_helpers import board_dir, default_build_dir, flow_suffix
     from designs._shared.platform_fixups import ensure_chipdb_symlink
     from designs._shared.yosys_workarounds import apply_nodram_workaround, patch_yosys_template
 
@@ -128,8 +129,10 @@ def main():
     patch_yosys_template(soc)
     apply_nodram_workaround(soc)
 
+    board_name = board_dir("netv2", args.variant) + flow_suffix(
+        parser._toolchain, parser.toolchain_argdict.get("synth_mode"))
     builder_kwargs = parser.builder_argdict
-    builder_kwargs["output_dir"] = default_build_dir(__file__, "netv2")
+    builder_kwargs["output_dir"] = default_build_dir(__file__, board_name)
     builder = Builder(soc, **builder_kwargs)
     if args.build:
         builder.build(**parser.toolchain_argdict)

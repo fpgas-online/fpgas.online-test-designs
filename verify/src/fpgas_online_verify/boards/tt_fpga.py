@@ -30,7 +30,7 @@ class TTFPGA(TestBoard):
     # comes first, so a UART-bridge design (one TX pin) is what stays, not one driving every Pmod line.
     tests: ClassVar[dict] = {
         # The Pmod HAT cabling, against identify_pmod_pins.BOARDS["tt"] (uo_out on HAT JA, uio JB, ui_in JC).
-        "pin-id": {"artifact": "pmod-pin-id-{v}/top.bin", "script": "identify_pmod_pins.py",
+        "pin-id": {"artifact": "pmod-pin-id-{v}/tt_fpga_platform.bin", "script": "identify_pmod_pins.py",
                    "args": ["--board", "tt"], "pre": PMOD_PRE, "program_args": ["--gpio-release"],
                    "verify": True},
         "uart": {"artifact": "uart-test-tt-fpga/tt_fpga_platform.bin", "script": "test_uart.py",
@@ -38,7 +38,7 @@ class TTFPGA(TestBoard):
                  "runner": "tt-bridge"},
         "spiflash": {"artifact": "spiflash-test-tt-fpga/tt_fpga_platform.bin", "script": "test_spiflash.py",
                      "args": ["--port", "{port}", "--board", "tt"], "verify": True, "runner": "tt-bridge"},
-        "pmod": {"artifact": "gpio-loopback-{v}/top.bin", "script": "test_pmod_loopback.py",
+        "pmod": {"artifact": "gpio-loopback-{v}/tt_fpga_platform.bin", "script": "test_pmod_loopback.py",
                  "args": ["--board", "tt"], "pre": PMOD_PRE, "program_args": ["--gpio-release"]},
     }  # fmt: skip
 
