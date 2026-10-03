@@ -9,6 +9,12 @@ Attaches to the LiteX BIOS of the DDR test design over the UART and asks it to t
   3. `sdram_init`  initialisation and read leveling again (a window on every byte lane), the BIOS's
                    2 MiB memtest, and its write and read speed
   4. `sdram_test`  a memtest over 1/32 of the DRAM
+  5. `mem_write`, `flush_cpu_dcache`, `flush_l2_cache`, `mem_read`
+                   a different word at the DRAM's base and at every address bit up to half its size, all
+                   read back from the DRAM: a memtest over a small range passes on a board with half the
+                   memory the design was built for, or with a broken address line
+
+The design's DRAM size (`mem_list`) must be the board's.
 
 The verdict is these runs', not the one the BIOS made while it booted: that output is gone before the
 Pi's own UART is opened (the NeTV2), and is an old log on an FTDI UART (the Arty). See
@@ -40,17 +46,28 @@ BAUD_RATE = 115200
 ATTACH_TIMEOUT_S = 60  # the BIOS waits for a serial boot before its first prompt
 
 # What `ident` must contain: the design, and the board it was built for. `lanes` is the board's DDR3 byte
-# lanes: read leveling must report each of them.
+# lanes: read leveling must report each of them. `ram` is the DRAM the board has, which the design must
+# have been built for: the Acorn's is 1 GiB on the CLE-215/215+ and 512 MiB on the CLE-101.
+MIB = 1024**2
 DESIGN_IDENT = "DDR Test SoC"
 BOARDS = {
-    "arty": {"ident": "Arty A7", "lanes": 2},
-    "netv2": {"ident": "NeTV2", "lanes": 4},
-    "acorn": {"ident": "Acorn", "lanes": 2},
+    "arty": {"ident": "Arty A7", "lanes": 2, "ram": (256 * MIB,)},
+    "netv2": {"ident": "NeTV2", "lanes": 4, "ram": (512 * MIB,)},
+    "acorn": {"ident": "Acorn", "lanes": 2, "ram": (512 * MIB, 1024 * MIB)},
 }
 
 # How long each command is given. sdram_test prints a progress line per 128 KiB: at 115200 baud that
-# printing, not the memory, is most of its time (12.5 s for the NeTV2's 32 MiB).
-COMMAND_TIMEOUT_S = {"ident": 10, "mem_list": 10, "sdram_init": 120, "sdram_test": 300}
+# printing, not the memory, is most of its time.
+COMMAND_TIMEOUT_S = {
+    "ident": 10,
+    "mem_list": 10,
+    "sdram_init": 120,
+    "sdram_test": 300,
+    "mem_write": 10,
+    "flush_cpu_dcache": 10,
+    "flush_l2_cache": 10,
+    "mem_read": 10,
+}
 
 UNITS = {"B": 1, "KiB": 1024, "MiB": 1024**2, "GiB": 1024**3}
 SIZE_RE = re.compile(r"([0-9.]+)(B|KiB|MiB|GiB)")
@@ -59,6 +76,9 @@ ERRORS_RE = re.compile(r"(bus|addr|data) errors:\s*(\d+)/(\d+)")
 BEST_RE = re.compile(r"best: (m\d+), (b\d+) delays: (\S+)")
 SPEED_RE = re.compile(r"(Write|Read) speed: ([0-9.]+)MiB/s")
 MAIN_RAM_RE = re.compile(r"MAIN_RAM\s+(0x[0-9a-fA-F]+)\s+(0x[0-9a-fA-F]+)")
+DUMP_RE = re.compile(r"^0x[0-9a-fA-F]+\s+((?:[0-9a-fA-F]{2} ){3}[0-9a-fA-F]{2})\b")
+ADDRESS_WORD = 0xADD00000  # the address test's words: this plus the index of the address
+ADDRESS_FAULTS_SHOWN = 4
 
 
 # --------------------------------------------------------------------------- #
@@ -109,6 +129,15 @@ def parse_speed(reply):
     return found
 
 
+def parse_word(reply):
+    """The 32-bit word `mem_read <addr> 4` dumped (the CPU is little-endian), or None without a dump."""
+    for line in reply:
+        m = DUMP_RE.search(line)
+        if m:
+            return int.from_bytes(bytes.fromhex(m.group(1).replace(" ", "")), "little")
+    return None
+
+
 def memtest_fault(command, memtest, at_least=1):
     """Why this memtest is a failure, or None. It must have covered `at_least` bytes."""
     if memtest["verdict"] is None:
@@ -131,13 +160,51 @@ def memtest_fault(command, memtest, at_least=1):
 # --------------------------------------------------------------------------- #
 
 
+def address_test(ask, base, size):
+    """(address bits tested, faults): does every address bit of the DRAM reach its own cell?
+
+    A different word goes to the base and to base + 2**bit for every bit from 4 bytes up to half the size.
+    The CPU's data cache and the L2 cache are then flushed, so the words are read back from the DRAM and
+    not from a cache that still holds what was written. Where two addresses are one cell (an address bit
+    the chip does not have, or a broken address line), one of them reads back the other's word.
+
+    Not covered: addresses that are one cell only with several bits set at once, and the bits inside one
+    L2 cache line (offsets 4 to 16), which reach the DRAM as one burst.
+    """
+    offsets = [0]
+    bit = 2
+    while 1 << bit < size:
+        offsets.append(1 << bit)
+        bit += 1
+    words = {base + offset: ADDRESS_WORD + index for index, offset in enumerate(offsets)}
+    for addr, word in words.items():
+        ask(f"mem_write {addr:#x} {word:#x}")
+    ask("flush_cpu_dcache")
+    ask("flush_l2_cache")
+    written_to = {word: addr for addr, word in words.items()}
+    faults = []
+    for addr, word in words.items():
+        got = parse_word(ask(f"mem_read {addr:#x} 4"))
+        if got == word:
+            continue
+        if got in written_to:
+            faults.append(f"{addr:#x} holds the word written to {written_to[got]:#x}")
+        elif got is None:
+            faults.append(f"{addr:#x} could not be read")
+        else:
+            faults.append(f"{addr:#x} reads {got:#010x}, not {word:#010x}")
+    return len(offsets) - 1, faults
+
+
 def run_ddr_test(bios, board, attach_timeout=ATTACH_TIMEOUT_S):
     """Run the test on an open BIOS console. Returns the result's fields ("result", "reason", ...)."""
     found = {"test": "ddr", "board": board, "commands": []}
 
     def ask(command):
-        found["commands"].append(command)
-        return bios.command(command, COMMAND_TIMEOUT_S[command])
+        name = command.split()[0]
+        if name not in found["commands"]:
+            found["commands"].append(name)
+        return bios.command(command, COMMAND_TIMEOUT_S[name])
 
     def failed(reason):
         print(f"FAIL: {reason}")
@@ -151,6 +218,7 @@ def run_ddr_test(bios, board, attach_timeout=ATTACH_TIMEOUT_S):
 
     faults = []
     memtests = []
+    address_faults = []
     try:
         found["commands"].append("ident")
         found["ident"] = ident = bios.ident()
@@ -162,7 +230,11 @@ def run_ddr_test(bios, board, attach_timeout=ATTACH_TIMEOUT_S):
         m = MAIN_RAM_RE.search("\n".join(ask("mem_list")))
         if m:
             found["main_ram_base"], found["main_ram_bytes"] = int(m.group(1), 16), int(m.group(2), 16)
-            print(f"  DRAM: {found['main_ram_bytes'] // 1024**2} MiB at {found['main_ram_base']:#x}")
+            ram = found["main_ram_bytes"]
+            print(f"  DRAM: {ram // MIB} MiB at {found['main_ram_base']:#x}")
+            if ram not in BOARDS[board]["ram"]:
+                has = " or ".join(str(size // MIB) for size in BOARDS[board]["ram"])
+                faults.append(f"mem_list: the design has {ram // MIB} MiB of DRAM; the {name} has {has} MiB")
         else:
             faults.append("mem_list: the design has no MAIN_RAM region")
 
@@ -184,6 +256,14 @@ def run_ddr_test(bios, board, attach_timeout=ATTACH_TIMEOUT_S):
         found.update(parse_speed(reply))
 
         memtests.append(("sdram_test", parse_memtest(ask("sdram_test"))))
+
+        # Only on memory that passes its memtests: on memory that does not, every address would be a fault.
+        if "main_ram_bytes" in found and all(m["verdict"] == "OK" for _, m in memtests):
+            found["address_bits_tested"], bad = address_test(ask, found["main_ram_base"], found["main_ram_bytes"])
+            if bad:
+                shown = "; ".join(bad[:ADDRESS_FAULTS_SHOWN])
+                more = f"; and {len(bad) - ADDRESS_FAULTS_SHOWN} more" if len(bad) > ADDRESS_FAULTS_SHOWN else ""
+                address_faults.append(f"address test: {shown}{more}")
     except bios_console.NoPrompt as e:
         faults.append(str(e))
     except OSError as e:  # the port went away (pyserial's SerialException is one)
@@ -196,6 +276,9 @@ def run_ddr_test(bios, board, attach_timeout=ATTACH_TIMEOUT_S):
             faults.append(fault)
         else:
             print(f"PASS: {command}: Memtest OK over {memtest['bytes'] // 1024**2} MiB")
+    if "address_bits_tested" in found and not address_faults:
+        print(f"PASS: address test: {found['address_bits_tested']} address bits each reach their own cell")
+    faults += address_faults
     found["bytes_tested"] = max((m["bytes"] for _, m in memtests), default=0)
     found["errors"] = max((sum(bad for bad, _ in m["errors"].values()) for _, m in memtests), default=0)
     if "write_mib_per_s" in found:

@@ -2,7 +2,8 @@
 """
 LiteX SoC target for DDR memory test on Kosagi NeTV2.
 
-NeTV2 DRAM: 512 MB, 32-bit DDR3 (4 byte lanes).
+NeTV2 DRAM: 512 MiB, 32-bit DDR3 (4 byte lanes): two 2 Gbit, 16-bit chips with 14 row address bits
+(the board routes A[13:0]). The module is K4B2G1646F, as in litex-boards' kosagi_netv2 target.
 Clock: 50 MHz system clock (pin J19).
 UART: GPIO to RPi (FPGA TX=E14, RX=E13) -> /dev/ttyAMA0.
 
@@ -17,7 +18,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
-from litedram.modules import MT41K256M16
+from litedram.modules import K4B2G1646F
 from litedram.phy import s7ddrphy
 from litex.gen import *
 from litex.soc.cores.clock import *
@@ -88,7 +89,8 @@ class BaseSoC(SoCCore):
         )
 
         # DDR3 SDRAM -------------------------------------------------------------------------------
-        # NeTV2 has 32-bit wide DDR3 (4 byte lanes, 512 MB total).
+        # NeTV2 has 32-bit wide DDR3 (4 byte lanes, 512 MiB total). A module with 15 row bits (MT41K256M16)
+        # makes a 1 GiB MAIN_RAM whose top half is the bottom half again: the board has no A14.
         if not self.integrated_main_ram_size:
             self.ddrphy = s7ddrphy.A7DDRPHY(
                 platform.request("ddram"),
@@ -98,7 +100,7 @@ class BaseSoC(SoCCore):
             )
             self.add_sdram("sdram",
                 phy           = self.ddrphy,
-                module        = MT41K256M16(sys_clk_freq, "1:4"),
+                module        = K4B2G1646F(sys_clk_freq, "1:4"),
                 l2_cache_size = kwargs.get("l2_size", 8192),
             )
 

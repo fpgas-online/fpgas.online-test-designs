@@ -8,9 +8,13 @@ and `mem_speed` commands for verifying memory integrity and bandwidth.
 
 | Script | Board | FPGA | DDR3 |
 |--------|-------|------|------|
-| `gateware/ddr_soc_arty.py` | Digilent Arty A7 | XC7A35T | MT41K128M16 |
-| `gateware/ddr_soc_netv2.py` | Kosagi NeTV2 | XC7A35T / XC7A100T | MT41K256M16 |
-| `gateware/ddr_soc_acorn.py` | SQRL Acorn (CLE-215+/215/101) | XC7A200T / XC7A100T | MT41K512M16 (CLE-215+/215), MT41K256M16 (CLE-101) |
+| `gateware/ddr_soc_arty.py` | Digilent Arty A7 | XC7A35T | MT41K128M16, 256 MiB |
+| `gateware/ddr_soc_netv2.py` | Kosagi NeTV2 | XC7A35T / XC7A100T | 2 × K4B2G1646F, 512 MiB |
+| `gateware/ddr_soc_acorn.py` | SQRL Acorn (CLE-215+/215/101) | XC7A200T / XC7A100T | MT41K512M16, 1 GiB (CLE-215+/215); MT41K256M16, 512 MiB (CLE-101) |
+
+The module decides how many address bits the SoC drives, so it has to be the board's: one with a row
+bit the board does not route gives a `MAIN_RAM` twice the real size, whose top half is the bottom half
+again. The host test checks for that.
 
 Boards without DDR3 (Fomu, TT FPGA) are not supported by this design.
 
@@ -49,16 +53,18 @@ for the board, then runs:
 
 | Command | Checked |
 |---------|---------|
-| `mem_list` | the design has a `MAIN_RAM` region (its size is reported) |
+| `mem_list` | the design's `MAIN_RAM` is the size of the board's DRAM (256 MiB on the Arty, 512 MiB on the NeTV2, 512 MiB or 1 GiB on the Acorn) |
 | `sdram_init` | read leveling reports each of the board's byte lanes, with a window on every one; the BIOS's 2 MiB memtest passes; write and read speed are reported |
-| `sdram_test` | a memtest passes, over at least 1/32 of the DRAM (8 MiB on the Arty, 32 MiB on the NeTV2) |
+| `sdram_test` | a memtest passes, over at least 1/32 of the DRAM (8 MiB on the Arty, 16 MiB on the NeTV2) |
+| `mem_write`, `flush_cpu_dcache`, `flush_l2_cache`, `mem_read` | the address test: a different word at the DRAM's base and at every address bit from 4 bytes to half its size, read back from the DRAM after the CPU's data cache and the L2 cache are flushed. Two addresses that are one cell (half the memory missing, a broken address line) fail it; a memtest over a small range does not notice them |
 
 Its last line is the result for `fpgas-verify`:
 
 ```text
 RESULT_JSON {"test": "ddr", "board": "netv2", "result": "pass", "ident": "...", "commands": [...],
-             "main_ram_base": 1073741824, "main_ram_bytes": 1073741824, "leveling": {"m0": "b01 14+-14", ...},
-             "bytes_tested": 33554432, "errors": 0, "write_mib_per_s": 27.2, "read_mib_per_s": 30.9}
+             "main_ram_base": 1073741824, "main_ram_bytes": 536870912, "leveling": {"m0": "b01 14+-14", ...},
+             "bytes_tested": 16777216, "errors": 0, "address_bits_tested": 27,
+             "write_mib_per_s": 27.2, "read_mib_per_s": 30.9}
 ```
 
 A failure adds `"reason"`; `leveling` has `null` for a lane with no window, and `errors` is the worst

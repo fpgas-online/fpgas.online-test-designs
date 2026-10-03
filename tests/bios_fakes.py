@@ -47,21 +47,25 @@ class FakeBios:
             self.commands.append(command)
             self.rx += NL
             if command:
-                self.rx += self.replies.get(command, lines("Command not found"))
+                self.rx += self.reply(command)
             self.rx += PROMPT
         return len(data)
+
+    def reply(self, command):
+        return self.replies.get(command, lines("Command not found"))
 
     @property
     def in_waiting(self):
         return min(len(self.rx), self.chunk or len(self.rx))
 
     def read(self, size=1):
-        if not self.rx:
+        # As pyserial does: a read returns once it has `size` bytes, and otherwise sits out its timeout and
+        # returns what there is.
+        available = min(len(self.rx), self.chunk or len(self.rx))
+        if available < size:
             self.now += self.timeout or 0.0
-            return b""
-        size = min(size, self.chunk or size)
-        out = bytes(self.rx[:size])
-        del self.rx[:size]
+        out = bytes(self.rx[: min(size, available)])
+        del self.rx[: len(out)]
         return out
 
 
@@ -104,12 +108,20 @@ def sdram_init(modules, good=True):
     return head + tail + NL
 
 
-def ddr_replies(board="netv2", good=True):
-    name, modules, ram, test = {
-        "netv2": ("NeTV2", 4, 0x40000000, "32.0MiB"),
-        "arty": ("Arty A7", 2, 0x10000000, "8.0MiB"),
-        "acorn": ("Acorn/LiteFury", 2, 0x40000000, "32.0MiB"),
-    }[board]
+MIB = 1024**2
+# name in the ident, byte lanes, DRAM bytes
+DDR_BOARDS = {
+    "netv2": ("NeTV2", 4, 512 * MIB),
+    "arty": ("Arty A7", 2, 256 * MIB),
+    "acorn": ("Acorn/LiteFury", 2, 1024 * MIB),
+}
+
+
+def ddr_replies(board="netv2", good=True, ram=None):
+    """The fixed replies of the DDR test design for `board`, built with `ram` bytes of DRAM."""
+    name, modules, board_ram = DDR_BOARDS[board]
+    ram = ram or board_ram
+    test = f"{ram // 32 / MIB:.1f}MiB"
     return {
         "ident": lines(f"Ident: fpgas-online DDR Test SoC -- {name} 2026-10-01 11:00:01"),
         "mem_list": lines(
@@ -121,5 +133,61 @@ def ddr_replies(board="netv2", good=True):
         )
         + NL,
         "sdram_init": sdram_init(modules, good),
-        "sdram_test": memtest(test, good, words=8388608) + NL,
+        "sdram_test": memtest(test, good, words=ram // 32 // 4) + NL,
     }
+
+
+class FakeDdrBios(FakeBios):
+    """The DDR test design's BIOS, with memory behind mem_write and mem_read.
+
+    `declared` is the DRAM the design was built for, `real` what the board has: an address past `real`
+    lands on the cell `real` bytes below it, as it does when the design drives an address bit the chip
+    does not have. A broken address line: `stuck_bit` reads one address bit as 0, `stuck_high_bit` as 1,
+    and `short=(j, k)` joins two lines (either high drives both).
+
+    A write is seen by neither the DRAM nor a later read of the DRAM until both caches are flushed: it
+    stays in the CPU's data cache (which answers a read of that address) until flush_cpu_dcache, and in the
+    L2 cache (unwritten to the DRAM) until flush_l2_cache.
+    """
+
+    BASE = 0x40000000
+
+    def __init__(self, board="netv2", good=True, declared=None, real=None, stuck_bit=None, stuck_high_bit=None,
+                 short=None, replies=None, **kwargs):  # fmt: skip
+        self.declared = declared or DDR_BOARDS[board][2]
+        self.real = real or self.declared
+        self.stuck_bit, self.stuck_high_bit, self.short = stuck_bit, stuck_high_bit, short
+        self.mem = {}
+        self.dcache = {}
+        self.l2 = {}
+        FakeBios.__init__(self, {**ddr_replies(board, good, self.declared), **(replies or {})}, **kwargs)
+
+    def cell(self, addr):
+        offset = (addr - self.BASE) % self.real
+        if self.stuck_bit is not None:
+            offset &= ~(1 << self.stuck_bit)
+        if self.stuck_high_bit is not None:
+            offset |= 1 << self.stuck_high_bit
+        if self.short and offset & (1 << self.short[0] | 1 << self.short[1]):
+            offset |= 1 << self.short[0] | 1 << self.short[1]
+        return offset
+
+    def reply(self, command):
+        words = command.split()
+        if words[0] == "mem_write":
+            self.dcache[int(words[1], 16)] = self.l2[int(words[1], 16)] = int(words[2], 16)
+            return b""
+        if words[0] == "flush_cpu_dcache":
+            self.dcache.clear()
+            return b""
+        if words[0] == "flush_l2_cache":
+            for addr, value in self.l2.items():
+                self.mem[self.cell(addr)] = value
+            self.l2.clear()
+            return b""
+        if words[0] == "mem_read":
+            addr = int(words[1], 16)
+            value = self.dcache.get(addr, self.l2.get(addr, self.mem.get(self.cell(addr), 0)))
+            dump = " ".join(f"{b:02x}" for b in value.to_bytes(4, "little"))
+            return lines("Memory dump:", f"{addr:#010x}  {dump}                                      ....")
+        return FakeBios.reply(self, command)

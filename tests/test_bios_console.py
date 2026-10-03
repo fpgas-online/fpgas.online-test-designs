@@ -72,6 +72,17 @@ def test_command_returns_the_reply_without_echo_or_prompt():
     assert bios.command("mem_list") == ["Available memory regions:", "ROM  0x0 0x20000"]
 
 
+def test_a_reply_that_is_already_there_costs_no_read_timeout():
+    # A read for more bytes than have arrived sits out its timeout: a command whose reply is waiting
+    # must not ask for more than is there.
+    fake = FakeBios(REPLIES)
+    bios = console(fake)
+    bios.attach()
+    before = fake.now
+    bios.command("mem_list")
+    assert fake.now == before
+
+
 def test_command_keeps_the_last_state_of_a_progress_line():
     # memtest rewrites its progress line with bare carriage returns.
     progress = b"  Write: 0x40000000-0x40000000 0B   \r  Write: 0x40000000-0x40200000 2.0MiB   \r" + lines("")
