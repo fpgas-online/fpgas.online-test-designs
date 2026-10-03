@@ -616,6 +616,9 @@ def test_without_rpi_hwid_the_tt_fields_are_not_read_and_the_board_does_not_fail
         (_rpi_hwid({**TT_BOARD, "demoboard": None})[1], ": rpi-hwid could not read demoboard"),
         (_rpi_hwid({**TT_BOARD, "sdk": None})[1], ": rpi-hwid could not read sdk"),
         (_rpi_hwid({**TT_BOARD, "mcu": None, "sdk": None})[1], ": rpi-hwid could not read mcu, sdk"),
+        # an identity field is never present and empty, nullable or not
+        (_rpi_hwid({**TT_BOARD, "sdk": ""})[1], ": empty: sdk"),
+        (_rpi_hwid({**TT_BOARD, "repo": "", "commit": ""})[1], ": empty: repo, commit"),
     ],
 )  # fmt: skip
 def test_rpi_hwid_that_cannot_say_who_the_tt_board_is_makes_the_check_an_error(tmp_path, monkeypatch, answer, why):

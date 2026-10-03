@@ -86,6 +86,9 @@ def tinytapeout_fields(usb_serial, runner=run):
     bad = [k for k, v in out.items() if v is not None and not isinstance(v, str)]
     if bad:
         return {"tinytapeout_error": f"{command}: not text: {', '.join(f'{k}={out[k]!r}' for k in bad)}"}
+    empty = [k for k, v in out.items() if v == ""]  # an identity field is never present and empty
+    if empty:
+        return {"tinytapeout_error": f"{command}: empty: {', '.join(empty)}"}
     unread = [k for k in ALWAYS_THERE if k in out and out[k] is None]
     if unread:
         return {"tinytapeout_error": f"{command}: rpi-hwid could not read {', '.join(unread)}"}
