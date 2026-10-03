@@ -49,9 +49,11 @@ class PCIeDRAMBridge(LiteXModule):
             aw, description="First DRAM word of the transfer (64-bit words from the start of main RAM)."
         )
         self._length = CSRStorage(aw + 1, description="Number of 64-bit words to move.")
-        self._mode = CSRStorage(2, description="1: host to DRAM. 2: DRAM to host.")
+        self._mode = CSRStorage(2, description="1: host to DRAM. 2: DRAM to host. Any other mode moves nothing.")
         self._start = CSRStorage(1, description="Write to start a transfer with the settings above.")
-        self._done = CSRStatus(1, description="The last transfer has finished. Cleared by start.")
+        self._done = CSRStatus(
+            1, description="The last transfer has finished. Cleared by start; set at once if it has nothing to move."
+        )
         self._count = CSRStatus(aw + 1, description="Words moved so far in this transfer.")
 
         # # #
@@ -90,7 +92,12 @@ class PCIeDRAMBridge(LiteXModule):
                     to_store,
                     ((self._base.storage + self._length.storage - 1) >> shift) - (self._base.storage >> shift) + 1,
                 ),
-                NextValue(done, self._length.storage == 0),
+                # nothing to move, or no such mode: done at once, so a host polling `done` never hangs
+                NextValue(
+                    done,
+                    (self._length.storage == 0)
+                    | ((self._mode.storage != MODE_TO_DRAM) & (self._mode.storage != MODE_FROM_DRAM)),
+                ),
                 If(
                     self._length.storage != 0,
                     If(self._mode.storage == MODE_TO_DRAM, NextState("TO-DRAM")),

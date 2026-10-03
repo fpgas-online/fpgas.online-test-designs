@@ -226,6 +226,13 @@ def test_zero_length_is_done_at_once_and_moves_nothing():
     assert bench.mem == {} and bench.unsent == _words(4)
 
 
+def test_an_unknown_mode_is_done_at_once_and_moves_nothing():
+    for mode in (0, 3):
+        bench = Bench(_dut(), seed=9)
+        bench.run(bench.transfer(mode, base=0, length=4, timeout=10), push=_words(4))
+        assert bench.mem == {} and bench.unsent == _words(4)
+
+
 def test_count_reports_progress():
     bench = Bench(_dut(), seed=8)
     seen = {}
