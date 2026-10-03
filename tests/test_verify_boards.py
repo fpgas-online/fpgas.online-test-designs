@@ -609,6 +609,13 @@ def test_without_rpi_hwid_the_tt_fields_are_not_read_and_the_board_does_not_fail
         (_rpi_hwid({"kind": "rp2-micropython", "usb_serial": "E661", "how": "MicroPython RP2; REPL: no answer"})[1],
          "not a Tiny Tapeout board: MicroPython RP2; REPL: no answer"),
         (_rpi_hwid({**TT_BOARD, "sdk": 3})[1], "not text: sdk=3"),
+        # null in a field every TT FPGA board has is a read that failed, never "there is none"
+        (_rpi_hwid({**TT_BOARD, "mcu": None})[1], ": rpi-hwid could not read mcu"),
+        (_rpi_hwid({**TT_BOARD, "chip": None, "how": "chip ROM not cached on the board"})[1],
+         ": rpi-hwid could not read chip"),
+        (_rpi_hwid({**TT_BOARD, "demoboard": None})[1], ": rpi-hwid could not read demoboard"),
+        (_rpi_hwid({**TT_BOARD, "sdk": None})[1], ": rpi-hwid could not read sdk"),
+        (_rpi_hwid({**TT_BOARD, "mcu": None, "sdk": None})[1], ": rpi-hwid could not read mcu, sdk"),
     ],
 )  # fmt: skip
 def test_rpi_hwid_that_cannot_say_who_the_tt_board_is_makes_the_check_an_error(tmp_path, monkeypatch, answer, why):

@@ -64,27 +64,29 @@ fpgas-verify's own fields:
 | `flash_quad` | boolean | the configuration register's QUAD bit | the flash was not read |
 | `flash_uid_opcode` | string | the command that read the unique ID: `0x4b` | as `flash_uid` |
 | `tinytapeout_note` | string | why the [Tiny Tapeout fields](#tiny-tapeout-fields) were not read: rpi-hwid is not installed | not a TT board, or rpi-hwid is installed |
-| `tinytapeout_error` | string | why rpi-hwid could not give the Tiny Tapeout fields: it failed, gave no usable answer, did not see the board, or found no Tiny Tapeout SDK on it | not a TT board, rpi-hwid gave the fields, or it is not installed |
+| `tinytapeout_error` | string | why rpi-hwid could not give the Tiny Tapeout fields: it failed, gave no usable answer, did not see the board, found no Tiny Tapeout SDK on it, or could not read `mcu`, `chip`, `demoboard` or `sdk` | not a TT board, rpi-hwid gave the fields, or it is not installed |
 
 ### Tiny Tapeout fields
 
 A TT board's fields are rpi-hwid's `TinyTapeoutBoard` fields, under its names. The site makes rpi-hwid's Tiny
 Tapeout label from them. Except `usb_serial`, they come from `rpi-hwid tinytapeout --json --no-stop-service`,
 which the boot check runs while it holds the board's port (see [verify.md](verify.md#tt-fpga-identity)).
-rpi-hwid gives `null` for a field it read and found no value for: the TT FPGA demo board has no shuttle, for
-example.
+rpi-hwid gives `null` for a field it read and found no value for: the TT FPGA has no shuttle, for example.
+Every TT FPGA board has an `mcu`, `chip`, `demoboard` and `sdk`, so rpi-hwid giving `null` for one of those
+means its read failed: the identity then has `tinytapeout_error` instead of the Tiny Tapeout fields. A field
+rpi-hwid leaves out was not read, and is missing from the identity too.
 
 | Field | Type | Value | Missing when |
 |---|---|---|---|
 | `usb_serial` | string | the RP2350's USB serial number, the same as `serial`; the site drops a TT board without it | the board is not found on USB |
-| `mcu` | string or null | the demo board's microcontroller: `RP2350`, `RP2040` | rpi-hwid did not read the board (`tinytapeout_note` or `tinytapeout_error` says why) |
+| `mcu` | string | the demo board's microcontroller: `RP2350`, `RP2040` | rpi-hwid did not read the board (`tinytapeout_note` or `tinytapeout_error` says why), or did not give the field |
 | `shuttle` | string or null | the Tiny Tapeout shuttle of the chip, from its ROM: `tt06` | as `mcu` |
-| `chip` | string or null | `asic`, or `fpga` for the FPGA breakout | as `mcu` |
+| `chip` | string | `asic`, or `fpga` for the FPGA breakout | as `mcu` |
 | `repo` | string or null | the chip's repository, from its ROM | as `mcu` |
 | `commit` | string or null | the chip's commit, from its ROM | as `mcu` |
-| `demoboard` | string or null | the demo board as the SDK detected it: `TTDBv3 [3.2]` | as `mcu` |
+| `demoboard` | string | the demo board as the SDK detected it: `TTDBv3 [3.2]` | as `mcu` |
 | `demoboard_version` | string or null | the demo board version that shipped with the shuttle's kit: `v2.0.1` | as `mcu` |
-| `sdk` | string or null | the Tiny Tapeout SDK release on the board | as `mcu` |
+| `sdk` | string | the Tiny Tapeout SDK release on the board | as `mcu` |
 
 ## SFDP
 

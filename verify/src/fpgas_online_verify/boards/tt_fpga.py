@@ -30,6 +30,11 @@ RPI_HWID_ARGS = ("tinytapeout", "--json", "--no-stop-service")
 NOT_INSTALLED = "not read: rpi-hwid is not installed (python3-rpi-hwid, or `uv tool install rpi-hwid`)"
 # The identity fields rpi-hwid gives: TinyTapeoutBoard's, less usb_serial, which finding the board gives.
 RPI_HWID_FIELDS = tuple(f for f in identity.TINYTAPEOUT_FIELDS if f != "usb_serial")
+# The fields every TT FPGA board has a value for: its RP2350, its chip (the FPGA), the demo board it sits on and
+# the SDK that answered. rpi-hwid gives null for one of these only when its read failed (the machine string, the
+# chip ROM or the demo board detection), so null here is an error, never "there is none". shuttle, repo, commit
+# and demoboard_version can be null: the FPGA has no shuttle, so no ROM repository and no shuttle kit.
+ALWAYS_THERE = ("mcu", "chip", "demoboard", "sdk")
 
 
 def which(name):
@@ -81,6 +86,9 @@ def tinytapeout_fields(usb_serial, runner=run):
     bad = [k for k, v in out.items() if v is not None and not isinstance(v, str)]
     if bad:
         return {"tinytapeout_error": f"{command}: not text: {', '.join(f'{k}={out[k]!r}' for k in bad)}"}
+    unread = [k for k in ALWAYS_THERE if k in out and out[k] is None]
+    if unread:
+        return {"tinytapeout_error": f"{command}: rpi-hwid could not read {', '.join(unread)}"}
     return out
 
 

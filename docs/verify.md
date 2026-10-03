@@ -555,8 +555,9 @@ starts `fpgas-tt.service` again after the tests, as it always does, whatever rpi
   USB serial, and copies its fields into the identity under rpi-hwid's names.
 * Without rpi-hwid, the fields are left out and `tinytapeout_note` says why. The board does not fail for that.
 * When rpi-hwid is installed but cannot say who the board is, `tinytapeout_error` says why, and the check is
-  an `error`. That is the case when rpi-hwid fails, prints no JSON, does not list the board, or finds no Tiny
-  Tapeout SDK on it.
+  an `error`. That is the case when rpi-hwid fails, prints no JSON, does not list the board, finds no Tiny
+  Tapeout SDK on it, or gives `null` for `mcu`, `chip`, `demoboard` or `sdk`, which every TT FPGA board has.
+* A field rpi-hwid leaves out is left out of the identity too, so `--identify` says it is missing.
 * The identity always has `usb_serial` (the same as `serial`): the site drops a TT board without one.
 * A check that stops before its tests (no bitstreams installed, an unknown test) does not run rpi-hwid.
 
