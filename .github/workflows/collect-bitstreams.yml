@@ -25,6 +25,11 @@ permissions:
   contents: read
 
 env:
+  # Built in CI but NOT shipped: the openXC7 build of the Acorn PCIe SoC, expected to fail (issue #105). This
+  # workflow does not wait for it and does not bundle its artifacts, so no package can carry them.
+  # tests/test_unshipped_bitstreams.py checks both, and that nothing in packaging/ or verify/ names them.
+  UNSHIPPED_WORKFLOW: "Build: Acorn PCIe SoC"
+  UNSHIPPED_ARTIFACTS: "acorn-pcie-soc-openxc7-"
   NFPM_VERSION: "2.47.0"
   NFPM_SHA256: "0660ca602b2d2d2ae4781a06c692b3eeb9d437ffea05b831d76e41f4a3188783"
   VERIFY_TESTS: >-
@@ -32,7 +37,7 @@ env:
     tests/test_acorn_verify.py tests/test_acorn_links.py tests/test_acorn_setup.py tests/test_acorn_packaging.py
     tests/test_spi_flash.py tests/test_uartbone_link.py tests/test_acorn_pcie_publish_release.py tests/test_pcie_match_mps.py
     tests/test_acorn_bist.py tests/test_acorn_selftest.py tests/test_jtag_idcode.py tests/test_identity.py
-    tests/test_identify_label.py
+    tests/test_identify_label.py tests/test_unshipped_bitstreams.py
   VERIFY_PY: >-
     verify/src packaging/debs/build_debs.py packaging/acorn-pcie/build_debs.py tests/conftest.py
     tests/test_verify_runner.py tests/test_verify_boards.py tests/test_debs_packaging.py
@@ -41,6 +46,7 @@ env:
     designs/acorn-pcie/host/pcie_match_mps.py tests/test_pcie_match_mps.py
     designs/acorn-pcie/host/selftest.py tests/test_acorn_bist.py tests/test_acorn_selftest.py tests/test_jtag_idcode.py
     tests/test_identity.py tests/test_identify_label.py
+    scripts/openxc7_expected_failure.py tests/test_unshipped_bitstreams.py
 
 jobs:
   collect:
@@ -105,7 +111,7 @@ jobs:
           set -euo pipefail
           for _ in $(seq 120); do
             left="$(gh api "repos/${REPO}/actions/runs?head_sha=${HEAD_SHA}&per_page=100" \
-              --jq "[.workflow_runs[] | select(.status != \"completed\" and .id != ${RUN_ID} and .name != \"${WORKFLOW}\") | .name] | join(\", \")" || echo "?")"
+              --jq "[.workflow_runs[] | select(.status != \"completed\" and .id != ${RUN_ID} and .name != \"${WORKFLOW}\" and .name != \"${UNSHIPPED_WORKFLOW}\") | .name] | join(\", \")" || echo "?")"
             if [ -z "$left" ]; then echo "every other run on ${HEAD_SHA} has finished"; exit 0; fi
             echo "still running: $left"
             sleep 30
@@ -121,7 +127,7 @@ jobs:
 
           # List all workflow runs for this commit
           runs=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${HEAD_SHA}&status=completed&per_page=100" \
-            --jq '.workflow_runs[] | select(.conclusion == "success") | .id')
+            --jq ".workflow_runs[] | select(.conclusion == \"success\" and .name != \"${UNSHIPPED_WORKFLOW}\") | .id")
 
           for run_id in $runs; do
             # List artifacts for this run
@@ -130,6 +136,7 @@ jobs:
 
             while IFS=' ' read -r artifact_id artifact_name; do
               [ -z "$artifact_id" ] && continue
+              case "$artifact_name" in "${UNSHIPPED_ARTIFACTS}"*) echo "Not shipped: ${artifact_name}"; continue ;; esac
               echo "Downloading: ${artifact_name} (artifact ${artifact_id} from run ${run_id})"
               gh api "repos/${{ github.repository }}/actions/artifacts/${artifact_id}/zip" > "/tmp/${artifact_name}.zip"
               mkdir -p "bitstreams/${artifact_name}"
