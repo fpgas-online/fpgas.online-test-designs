@@ -1,0 +1,12 @@
+#!/bin/sh
+# fpgas-online-verify and the tools packages whose board locks outside /run/fpgas-online (the Acorn's
+# /run/lock/fpgas-acorn.lock): create the lock files their tmpfiles.d entries name now, root-owned, as
+# dh_installtmpfiles does, rather than wait for the next boot. In a chroot (the netboot root) nothing is
+# created: the boot does it.
+set -e
+if [ "$1" = "configure" ] && [ -d /run/systemd/system ]; then
+	for conf in /usr/lib/tmpfiles.d/fpgas-online-*.conf; do
+		[ -e "$conf" ] && systemd-tmpfiles --create "$conf" >/dev/null || true
+	done
+fi
+exit 0

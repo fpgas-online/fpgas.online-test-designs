@@ -33,8 +33,12 @@ def test_the_core_has_every_module_but_the_boards_and_every_host_script(tmp_path
     assert not any("/boards/" in d for d in dst)
     assert {f"{bd.DIST}/scripts/{n}" for n in bd.host_tests.SCRIPTS} <= set(dst)
     assert config["depends"] == ["python3 (>= 3.9)"]
+    # fpgas-verify --label runs rpi-hwid when it is there: a soft dependency, Suggested only
+    assert "python3-rpi-hwid" in config["suggests"] and "recommends" not in config
     assert "/usr/lib/systemd/system/fpgas-verify.service" in dst
-    assert "scripts" not in config  # installing the core alone does not turn the boot check on
+    # installing the core alone does not turn the boot check on: its only script creates the lock files
+    postinst = pathlib.Path(config["scripts"]["postinstall"]).read_text()
+    assert "systemd-tmpfiles --create" in postinst and "systemctl" not in postinst and "enable" not in postinst
     wrapper = pathlib.Path(dst["/usr/bin/fpgas-verify"]["src"]).read_text()
     assert "sys.dont_write_bytecode = True" in wrapper and "verify_main()" in wrapper
     for c in config["contents"]:
@@ -66,6 +70,7 @@ def test_each_board_tools_package_has_its_module_and_only_its_own_tooling(tmp_pa
     assert "/usr/bin/fpgas-acorn-flash" in _dst(acorn)
     netv2 = bd.tools_nfpm(B["netv2"], V, V, tmp_path)
     assert "openocd" in netv2["depends"]
+    assert netv2["recommends"] == [bd.PINCTRL]  # the JTAG scan's pins are put back with pinctrl
     tt = bd.tools_nfpm(B["tt"], V, V, tmp_path)
     assert tt["name"] == "fpgas-online-tt-fpga-tools" and tt["recommends"] == ["micropython-mpremote", bd.PINCTRL]
     assert arty["recommends"] == [bd.PINCTRL]  # the PMOD HAT scan puts back the pins' UART/I2C/SPI functions
@@ -149,3 +154,24 @@ def test_the_boot_check_runs_after_the_fleet_agent_and_before_the_tt_bridge():
     assert "fpgas-fleet-agent.service" in after and "fpgas-fleet-agent.service" not in before
     assert "fpgas-tt.service" in before and "fpgas-tt.service" not in after
     assert not [k for k, _ in lines if k.strip() in ("Requires", "Requisite", "BindsTo")]
+
+
+def test_the_run_directory_and_every_lock_file_are_made_root_owned_at_boot(tmp_path):
+    core = _dst(bd.verify_nfpm(V, tmp_path))["/usr/lib/tmpfiles.d/fpgas-online-verify.conf"]
+    lines = [ln for ln in pathlib.Path(core["src"]).read_text().splitlines() if not ln.startswith("#")]
+    assert lines[0] == "d /run/fpgas-online 0755 root root -"
+    slugs = {b.slug for b in B.values() if b.name != "acorn"}
+    assert set(lines[1:]) == {f"f /run/fpgas-online/{s}.lock 0644 root root -" for s in slugs}
+    acorn = bd.tools_nfpm(B["acorn"], V, ACORN_BITS, tmp_path)
+    conf = _dst(acorn)["/usr/lib/tmpfiles.d/fpgas-online-acorn-tools.conf"]
+    assert pathlib.Path(conf["src"]).read_text().splitlines()[1:] == ["f /run/lock/fpgas-acorn.lock 0644 root root -"]
+    assert conf["file_info"]["mode"] == 0o644
+    assert acorn["scripts"]["postinstall"].endswith("tmpfiles.postinst")
+    for name in ("arty", "netv2", "fomu", "tt"):  # their locks are in /run/fpgas-online: the core's entry
+        config = bd.tools_nfpm(B[name], V, V, tmp_path)
+        assert not any(d.startswith("/usr/lib/tmpfiles.d/") for d in _dst(config)) and "scripts" not in config
+
+
+def test_the_tmpfiles_postinst_creates_only_when_systemd_runs():
+    text = (_REPO / "packaging" / "debs" / "tmpfiles.postinst").read_text()
+    assert "[ -d /run/systemd/system ]" in text and "/usr/lib/tmpfiles.d/fpgas-online-*.conf" in text

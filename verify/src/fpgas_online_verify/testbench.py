@@ -1,10 +1,12 @@
 """The check shared by the boards verified with the LiteX test designs: the Arty A7, NeTV2, Fomu EVT and TT FPGA.
 
-For each of the board's boot-check tests (UART, DDR, SPI flash): check its bitstream against the manifest of
-fpgas-online-<board>-bitstreams, load it (into SRAM, except the Fomu's DFU), run its host test script and keep
-the tail of its output. Then, where the board can, read back the region of its flash that holds the boot
-image, for the state (state.py): loading test designs into SRAM does not touch the flash, so a flash that
-differs from the recorded one was written by someone.
+On a board with JTAG (the Arty and the NeTV2) its whole IDCODE is read first and decoded (idcode.py): a part
+that is not the variant's fails the board, whatever its silicon version. For each of the board's boot-check
+tests (UART, DDR, SPI flash): check its bitstream against the manifest of fpgas-online-<board>-bitstreams,
+load it (into SRAM, except the Fomu's DFU), run its host test script and keep the tail of its output. Then,
+where the board can, read back the region of its flash that holds the boot image, for the state (state.py):
+loading test designs into SRAM does not touch the flash, so a flash that differs from the recorded one was
+written by someone.
 
 The board is left running the last design loaded. A board module is a TestBoard with its detection, its
 programmer and its tests; `tests` maps a test to:
@@ -25,13 +27,14 @@ import sys
 import tempfile
 from typing import ClassVar
 
-from . import bitstreams, host_tests
+from . import bitstreams, host_tests, idcode, identity
 from .board import Board
 from .core import Problem, host_facts, run, tail, usb_matching, worst
 
 PROGRAM_TIMEOUT = 300
 TEST_TIMEOUT = 300
 DUMP_TIMEOUT = 900
+JTAG_TIMEOUT = 60
 JEDEC_RE = re.compile(r"JEDEC ID: 0x([0-9A-Fa-f]{2}) 0x([0-9A-Fa-f]{2}) 0x([0-9A-Fa-f]{2})")
 
 
@@ -50,6 +53,16 @@ class TestBoard(Board):
     def flash_dump_argv(self, host, variant, size, out):
         """openFPGALoader (or similar) reading `size` bytes of flash from 0 into `out`; None if not possible."""
         return None
+
+    # A board with JTAG: variant -> its FPGA's IDCODE at version 0. The check reads the whole IDCODE (from
+    # `found`, when finding the board read it, else with idcode_argv) and fails a part that is not the variant's.
+    # A `found` with an IDCODE also has the scan that read it: {"idcode_scan": {"tool", "exit", "output"}}, and
+    # every IDCODE that scan saw on the chain, in order: {"idcodes": ["0x...", ...]}.
+    idcodes: ClassVar[dict] = {}
+
+    def idcode_argv(self, host):
+        """The command that scans the board's JTAG chain and prints whole IDCODEs (idcode.parse)."""
+        raise NotImplementedError
 
     flash_region: ClassVar[dict] = {}  # variant -> bytes of flash holding the boot image (a whole .bit for that part)
     flash_note = ""  # when there is no readback: why the flash is not part of the state
@@ -169,6 +182,47 @@ class TestBoard(Board):
             found["flash_jedec"] = "0x" + "".join(m.groups()).lower()
         return {**out, **found}
 
+    # -- JTAG ------------------------------------------------------------------------------------------------
+
+    def jtag(self, host, found, variant, runner=run):
+        """The board's IDCODE, decoded, against its variant's part: {result, reason?, idcode, idcode_version, ...}."""
+        want = self.idcodes[variant]
+        output, scan_faults = [], []
+        if found.get("idcode"):  # read when the board was found (the NeTV2's scan)
+            codes = [int(c, 16) for c in found.get("idcodes") or [found["idcode"]]]
+            scan = found["idcode_scan"]
+            output = scan["output"]
+            if scan["exit"] != 0:  # whatever it printed, a scan that failed is not trusted
+                scan_faults.append(f"{scan['tool']} exited {scan['exit']} reading the IDCODE")
+        else:
+            argv = self.idcode_argv(host)
+            try:
+                rc, text = runner(argv, JTAG_TIMEOUT)
+            except Problem as p:
+                return {"result": p.result, "reason": f"the JTAG chain could not be scanned: {p.reason}"}
+            codes = idcode.parse(text)
+            output = (codes and rc == 0 and idcode.scan_lines(text)) or tail(text, 6)
+            if rc != 0:  # whatever it printed, a scan that failed is not trusted
+                scan_faults.append(f"{argv[0]} exited {rc} reading the IDCODE")
+            if not codes:
+                if idcode.empty_chain(text):
+                    reason = "; ".join(["no device on the JTAG chain", *scan_faults])
+                elif rc != 0:
+                    reason = idcode.scan_failed(argv[0], rc, text)
+                else:
+                    reason = idcode.NO_RAW_SCAN
+                return {"result": "fail", "reason": reason, "output": output}
+        entry = {**idcode.decode(codes[0]), **({"output": output} if output else {})}
+        faults = idcode.faults(codes[0])
+        if len(codes) != 1:
+            entry["idcode"] = ", ".join(f"{c:#010x}" for c in codes)
+            faults.append(f"the JTAG chain has {len(codes)} devices ({entry['idcode']}), not one")
+        elif not idcode.same_part(codes[0], want):
+            faults.append(f"the JTAG IDCODE {entry['idcode']} is an {entry['idcode_device']}, not the {variant}'s "
+                          f"{idcode.device(want)} (IDCODE {want:#010x}, any version)")  # fmt: skip
+        faults += scan_faults
+        return {**entry, "result": "fail", "reason": "; ".join(faults)} if faults else {**entry, "result": "pass"}
+
     # -- the flash -----------------------------------------------------------------------------------------
 
     def read_flash(self, host, variant, runner=run):
@@ -195,6 +249,28 @@ class TestBoard(Board):
     def identity(self, found):
         return {k: v for k, v in found.items() if k in ("variant", "serial", "idcode") and v is not None}
 
+    def identified(self, report, found, options):
+        """Who the board is (identity.py), from how it was found and its JTAG IDCODE: put in the report and sent
+        as fpga-board-identified, before any test runs."""
+        out = identity.base(options.get("board_key", self.name), self.name, found, report["variant"])
+        if "jtag" in report:
+            out.update(identity.idcode_fields(report["jtag"]))
+        report["identity"] = out
+        identity.keep(options, out)
+        (options.get("event") or (lambda stage, details: None))("fpga-board-identified", identity.details(out))
+
+    # The flash is read back with a design loaded (openFPGALoader's SPI-over-JTAG bridge): --identify takes it
+    # from the boot report.
+    report_fields = ("flash",)
+
+    def identify(self, host, found, options, runner=run):
+        """How the board was found, and its IDCODE over JTAG on a board with JTAG: nothing is loaded."""
+        variant = options.get("variant") or found["variant"]
+        out = identity.base(options.get("board_key", self.name), self.name, found, variant)
+        if self.idcodes and variant in self.idcodes:
+            out.update(identity.idcode_fields(self.jtag(host, found, variant, runner)))
+        return out
+
     def check(self, host, found, options, runner=run):
         variant = options.get("variant") or found["variant"]
         report = {"board": self.name, "variant": variant, "found": found, "tests": []}
@@ -211,8 +287,12 @@ class TestBoard(Board):
                                        f"({', '.join(self.variants)})")  # fmt: skip
             manifest = bitstreams.load_manifest(images, self.bitstreams_package)
         except Problem as p:
+            self.identified(report, found, options)
             return {**report, "result": p.result, "reason": p.reason}
         report["bitstreams"] = manifest.get("version")
+        if self.idcodes:
+            report["jtag"] = self.jtag(host, found, variant, runner)
+        self.identified(report, found, options)
         event = options.get("event") or (lambda stage, details: None)
         with self.services_stopped(runner) as held:
             for test in tests:
@@ -222,11 +302,12 @@ class TestBoard(Board):
                 event("fpga-test-finished", {"test": test, "result": done["result"], "reason": done.get("reason", "")})
         if held["stopped"]:
             report["services_stopped"] = held["stopped"]
-        state = self.identity({**found, "variant": variant})
+        jtag = report.get("jtag", {})
+        state = self.identity({**found, "variant": variant, "idcode": jtag.get("idcode") or found.get("idcode")})
         jedec = next((t["flash_jedec"] for t in report["tests"] if "flash_jedec" in t), None)
         if jedec:
             state["flash_jedec"] = jedec
-        results = [t["result"] for t in report["tests"]]
+        results = [t["result"] for t in report["tests"]] + ([jtag["result"]] if jtag else [])
         try:
             flash = self.read_flash(host, variant, runner)
             if flash:
@@ -243,6 +324,8 @@ class TestBoard(Board):
         report["result"] = worst(results)
         bad = [t for t in report["tests"] if t["result"] != "pass"]
         reasons = [f"{t['test']} {t['result']}: {t.get('reason', '')}" for t in bad] + held["failed"]
+        if jtag and jtag["result"] != "pass":
+            reasons.insert(0, f"jtag {jtag['result']}: {jtag['reason']}")
         if reasons:
             report["reason"] = "; ".join(reasons)
         elif "flash_error" in report:

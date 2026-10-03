@@ -15,12 +15,13 @@ import json
 import pathlib
 
 import pytest
-from fpgas_online_verify import core
+from fpgas_online_verify import core, identity
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
 from fpgas_online_verify.boards.acorn import check as av
 from fpgas_online_verify.boards.acorn import suite
 
 from tests import acorn_fakes as fk
+from tests import test_spi_flash as tsf
 from tests.test_spi_flash import sf
 
 
@@ -142,6 +143,37 @@ def test_a_board_on_factory_or_vendor_firmware_fails_as_unconverted_and_its_bar_
     assert not rig.uart.opened_at  # no UARTBone traffic to a design we did not build
 
 
+@pytest.mark.parametrize(
+    ("kind", "identifier", "model"),
+    [
+        ("fpgas-online", fk.OP_IDENT_ON_CHIP, "cle-215+"),
+        ("fpgas-online", "fpgas-online Acorn PCIe SoC cle-101 2026-09-21 14:23:32", "cle-101"),
+        ("fpgas-online", fk.GOLDEN_IDENT_ON_CHIP, "cle-215+"),
+        ("fpgas-online", "fpgas-online Acorn PCIe SoC 2026-09-21 14:23:32", None),  # names no variant
+        ("fpgas-online", "LiteX SoC on Acorn CLE-215+ 2026-09-21", None),  # not our SoC's identifier
+        ("fpgas-online", None, None),  # BAR0 not read
+        ("sqrl-factory", fk.OP_IDENT_ON_CHIP, None),  # not our design, whatever it says
+        ("litex-other", fk.OP_IDENT_ON_CHIP, None),
+    ],
+)
+def test_the_soc_model_is_what_our_socs_identifier_names(kind, identifier, model):
+    assert av.soc_model(kind, identifier) == model
+
+
+def test_the_identity_is_handed_to_the_runner_once_it_is_built(tmp_path, images):
+    kept = []
+    report = Rig(tmp_path, images).check(**{identity.KEEP: kept.append})
+    assert kept == [report["identity"]]
+
+
+def test_the_soc_model_comes_from_the_identifier_and_not_the_pci_ids(tmp_path, images):
+    ident = Rig(tmp_path, images).check()["identity"]
+    assert ident["soc_model"] == "cle-215+" and ident["identifier"] == fk.OP_IDENT_ON_CHIP
+    rig = Rig(tmp_path / "factory", images, ids=fk.FACTORY)  # the variant is known, from SQRL's IDs
+    ident = suite.check_board(rig.found(), rig.options(open_bar=fk.refuse))["identity"]
+    assert ident["variant"] == "cle-215+" and "soc_model" not in ident and "identifier" not in ident
+
+
 def test_a_board_on_sqrl_factory_image_still_has_its_link_and_jtag_checked(tmp_path, images):
     """Its variant is known from the factory IDs, so its P1 JTAG and PCIe link are tested; nothing on BAR0."""
     rig = Rig(tmp_path, images, ids=fk.FACTORY)
@@ -191,11 +223,16 @@ def test_a_board_running_the_release_with_every_link_working_passes_every_test(t
     assert report["running"] == {"identifier": fk.OP_IDENT_ON_CHIP, "build": "operational"}
     assert report["setup"] == "Raspberry Pi 5"
     assert report["identity"] == {
-        "bdf": "0001:01:00.0", "pci_ids": "10ee:7021", "subsystem": "1e24:021f", "variant": "cle-215+",
-        "identifier": fk.OP_IDENT_ON_CHIP, "build": "operational", "dna": "0x54b48664b04854", "idcode": "0x3636093",
-        "flash_part": "S25FL256S", "flash_jedec": "0x010219", "flash_unique_id": report["flash"]["unique_id"],
+        "board": "acorn", "kind": "acorn", "variant": "cle-215+", "bdf": "0001:01:00.0", "soc_model": "cle-215+",
+        "identifier": fk.OP_IDENT_ON_CHIP, "build": "operational", "dna": "0x0054b48664b04854",
+        "idcode": "0x13636093", "idcode_version": 1, "idcode_part_number": "0x3636", "idcode_manufacturer_id": "0x049",
+        "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A200T",
+        "flash": "S25FL256S", "flash_jedec": "0x010219", "flash_extended_id": "0x4d0180",
+        "flash_size_bytes": 33554432, "flash_status": "0x00", "flash_config": "0x02", "flash_quad": True,
+        "flash_uid": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf", "flash_uid_bits": 128, "flash_uid_state": "read",
+        "flash_uid_opcode": "0x4b", "flash_source": "pcie",
     }  # fmt: skip
-    assert report["state"]["dna"] == "0x54b48664b04854"
+    assert report["state"]["dna"] == "0x0054b48664b04854"
     assert set(report["state"]["flash"]["slots"]) == {"0x000000", "0x400000"}
     assert "not_run" not in report
 
@@ -204,7 +241,7 @@ def test_the_state_is_the_slot_ids_dna_and_flash_contents(tmp_path, images):
     report = Rig(tmp_path, images).check()
     flash = report["state"].pop("flash")
     assert report["state"] == {"bdf": "0001:01:00.0", "ids": "10ee:7021", "subsystem": "1e24:021f",
-                               "variant": "cle-215+", "dna": "0x54b48664b04854"}  # fmt: skip
+                               "variant": "cle-215+", "dna": "0x0054b48664b04854"}  # fmt: skip
     assert flash["part"] == "S25FL256S" and flash["jedec"] == "0x010219" and len(flash["unique_id"]) == 32
     assert set(flash["slots"]) == {"0x000000", "0x400000"} and all(len(h) == 64 for h in flash["slots"].values())
     assert report["bitstreams"] == fk.TAG
@@ -238,6 +275,165 @@ def test_the_events_say_each_test_as_it_goes_and_who_the_board_is(tmp_path, imag
     finished = [d for s, d in rig.events if s == "fpga-test-finished"]
     assert finished[0] == {"test": "pcie-link", "result": "pass", "reason": ""}
     assert all(isinstance(v, str) for _, d in rig.events for v in d.values() if v is not None)
+
+
+def test_the_identified_event_is_the_identity_as_flat_strings(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    report = rig.check(board_key="acorn@0001:01:00.0")
+    (sent,) = [d for s, d in rig.events if s == "fpga-board-identified"]
+    assert sent == identity.details(report["identity"])
+    assert sent["schema"] == "fpga-identity/1" and sent["board"] == "acorn@0001:01:00.0"
+    assert sent["flash_quad"] == "true" and sent["flash_size_bytes"] == "33554432"
+    assert "pci_ids" not in sent and "subsystem" not in sent  # in the report's found and state, not the event
+
+
+def test_a_flash_that_did_not_identify_itself_is_a_flash_error(tmp_path, images, monkeypatch):
+    def broken(flash):
+        raise av.spi_flash.FlashError("the SPI master never went idle")
+
+    monkeypatch.setattr(av, "flash_identity", broken)
+    report = Rig(tmp_path, images).check()
+    assert report["identity"]["flash_error"] == "the flash did not identify itself: the SPI master never went idle"
+    assert report["identity"]["flash_source"] == "pcie" and "flash_jedec" not in report["identity"]
+
+
+def test_a_jtag_probe_that_could_not_run_is_an_idcode_and_dna_error(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    rig.pi.tool = False
+    report = rig.check(tests=["jtag"])  # nothing that needs BAR0: no DNA from there either
+    ident = report["identity"]
+    assert "openFPGALoader is not installed" in ident["idcode_error"]
+    assert ident["dna_error"] == "not read over P1 JTAG: P1 JTAG could not be probed: openFPGALoader is not installed"
+    assert "idcode" not in ident and "dna" not in ident and "flash_source" not in ident
+
+
+def test_with_bar0_down_and_the_wrong_idcode_the_dna_error_says_why_the_dna_was_not_read(tmp_path, images):
+    """The JTAG test's reason is about the IDCODE; the DNA's is that --read-dna was never run."""
+    rig = Rig(tmp_path, images)
+    rig.pi.idcode = 0x13631093  # an XC7A100T on a cle-215+
+    report = rig.check(tests=["jtag"])
+    ident = report["identity"]
+    assert "expected one XC7A200T" in report["tests"][0]["reason"] and ident["idcode"] == "0x13631093"
+    assert ident["dna_error"] == (
+        "not read over P1 JTAG: --read-dna runs only once --detect has found the one FPGA expected"
+    )
+    assert "XC7A200T" not in ident["dna_error"]
+
+
+def test_with_bar0_down_a_failed_dna_read_says_so(tmp_path, images, monkeypatch):
+    rig = Rig(tmp_path, images)
+    real = rig.pi.__call__
+
+    def no_dna(argv, timeout):
+        return (1, "JTAG error\n") if "--read-dna" in argv else real(argv, timeout)
+
+    monkeypatch.setattr(rig, "pi", no_dna)
+    ident = rig.check(tests=["jtag"])["identity"]
+    assert ident["idcode"] == "0x13636093" and "idcode_error" not in ident
+    assert ident["dna_error"] == "openFPGALoader --read-dna read no device DNA over P1 JTAG (exit status 1)"
+
+
+@pytest.mark.parametrize("stuck", [0, (1 << 57) - 1])
+def test_a_stuck_bar0_dna_is_no_dna_and_a_good_jtag_one_is_used(tmp_path, images, stuck):
+    report = Rig(tmp_path, images, dna=stuck).check()
+    assert "the DNA port is not being read" in {t["test"]: t for t in report["tests"]}["pcie-bar0"]["reason"]
+    assert report["identity"]["dna"] == "0x0054b48664b04854" and "dna_error" not in report["identity"]
+
+
+@pytest.mark.parametrize("stuck", [0, (1 << 57) - 1])
+def test_a_stuck_bar0_dna_is_not_compared_with_a_good_jtag_one(tmp_path, images, stuck):
+    """A stuck BAR0 DNA is pcie-bar0's fault, not a wrong TDI: jtag passes on its own good DNA."""
+    report = Rig(tmp_path, images, dna=stuck).check()
+    tests = {t["test"]: t for t in report["tests"]}
+    assert tests["pcie-bar0"]["result"] == "fail"
+    assert tests["pcie-bar0"]["reason"] == f"device DNA over BAR0 reads {stuck:#x}: the DNA port is not being read"
+    assert tests["jtag"]["result"] == "pass" and tests["jtag"]["dna"] == "0x54b48664b04854"
+    assert "is not the one over BAR0" not in report["reason"]
+
+
+def test_a_good_jtag_dna_that_differs_from_a_good_bar0_one_still_fails(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    rig.pi.jtag_dna = 0x1234
+    jtag = {t["test"]: t for t in rig.check()["tests"]}["jtag"]
+    assert jtag["result"] == "fail"
+    assert jtag["reason"] == ("device DNA over JTAG 0x1234 is not the one over BAR0 0x54b48664b04854: "
+                              "TDI (or the DNA readout) is wrong")  # fmt: skip
+
+
+def test_a_stuck_bar0_dna_is_not_compared_with_a_good_p2_uart_one(tmp_path, images, monkeypatch):
+    """A stuck BAR0 DNA (here, BAR0's DNA read alone stuck) is not blamed on the P2 UART."""
+    real = av.read_dna
+    monkeypatch.setattr(av, "read_dna", lambda read, csrs: 0 if read.__name__ == "read" else real(read, csrs))
+    tests = {t["test"]: t for t in Rig(tmp_path, images).check()["tests"]}
+    assert tests["pcie-bar0"]["reason"] == "device DNA over BAR0 reads 0x0: the DNA port is not being read"
+    assert tests["p2-uart"]["result"] == "pass" and tests["jtag"]["result"] == "pass"
+
+
+def test_a_stuck_bar0_dna_with_no_jtag_read_is_a_dna_error(tmp_path, images):
+    ident = Rig(tmp_path, images, dna=0).check(tests=["pcie-bar0"])["identity"]
+    assert "dna" not in ident
+    assert ident["dna_error"] == "device DNA over BAR0 reads 0x0: the DNA port is not being read"
+
+
+def test_a_stuck_dna_over_both_bar0_and_jtag_is_a_dna_error_saying_both(tmp_path, images):
+    rig = Rig(tmp_path, images, dna=0)
+    rig.pi.jtag_dna = 0
+    ident = rig.check()["identity"]
+    assert "dna" not in ident
+    assert ident["dna_error"] == ("device DNA over BAR0 reads 0x0: the DNA port is not being read; "
+                                  "device DNA over P1 JTAG reads 0x0: the DNA port is not being read")  # fmt: skip
+
+
+STUCK_DNAS = [0, (1 << 57) - 1]  # openFPGALoader masks the DNA to 57 bits, so all ones is 0x1ffffffffffffff
+
+
+@pytest.mark.parametrize("bar0_dna", [fk.DNA, *STUCK_DNAS], ids=["bar0-good", "bar0-zeros", "bar0-ones"])
+@pytest.mark.parametrize("jtag_dna", STUCK_DNAS, ids=["jtag-zeros", "jtag-ones"])
+def test_a_stuck_jtag_dna_fails_the_jtag_test_whatever_bar0_read(tmp_path, images, bar0_dna, jtag_dna):
+    """A stuck JTAG DNA is the jtag test's own fault, with a good BAR0 DNA or a stuck one, and is not the
+    board's DNA."""
+    rig = Rig(tmp_path, images, dna=bar0_dna)
+    rig.pi.jtag_dna = jtag_dna
+    report = rig.check()
+    tests = {t["test"]: t for t in report["tests"]}
+    stuck = f"device DNA over P1 JTAG reads {jtag_dna:#x}: the DNA port is not being read"
+    assert tests["jtag"]["result"] == "fail"
+    assert "dna" not in tests["jtag"] and tests["jtag"]["dna_error"] == stuck
+    assert stuck in report["reason"]
+    ident = report["identity"]
+    if bar0_dna == fk.DNA:  # BAR0's DNA is good, so the JTAG one is compared with it as well (a TDI fault)
+        assert tests["jtag"]["reason"] == (f"{stuck}; device DNA over JTAG {jtag_dna:#x} is not the one over BAR0 "
+                                           f"{fk.DNA:#x}: TDI (or the DNA readout) is wrong")  # fmt: skip
+        assert ident["dna"] == "0x0054b48664b04854" and "dna_error" not in ident
+        assert tests["pcie-bar0"]["result"] == "pass"
+    else:  # BAR0's is stuck too, so not compared
+        assert tests["jtag"]["reason"] == stuck
+        bar0_stuck = f"device DNA over BAR0 reads {bar0_dna:#x}: the DNA port is not being read"
+        assert tests["pcie-bar0"]["reason"] == bar0_stuck
+        assert "dna" not in ident and ident["dna_error"] == f"{bar0_stuck}; {stuck}"
+
+
+def test_an_s25fs256s_is_named_by_its_extended_id(tmp_path, images, monkeypatch):
+    monkeypatch.setattr(tsf, "RDID", bytes.fromhex("0102194d0181"))
+    ident = Rig(tmp_path, images).check()["identity"]
+    assert (ident["flash"], ident["flash_jedec"], ident["flash_extended_id"]) == ("S25FS256S", "0x010219", "0x4d0181")
+
+
+FIXTURE = pathlib.Path(__file__).parent / "data" / "identity-v1-acorn-p48.json"
+P48_FLASH_UID = "edcbeececb2b2a88b04f914d2e46af90"  # pi-sw2-p48's S25FL256S, read over BAR0 and by openFPGALoader
+
+
+def p48_document(tmp_path, images):
+    """The golden fixture: the Acorn fakes' identity (pi-sw2-p48's DNA, IDCODE and RDID), with p48's flash
+    unique ID, as fpgas-verify --identify prints it."""
+    board = {**Rig(tmp_path / "p48", images).check()["identity"], "flash_uid": P48_FLASH_UID}
+    doc = identity.document([board], tool="fpgas-online-verify 0.0.post808", read_at="2026-10-02T00:00:00+00:00")
+    return json.dumps(doc, indent=1, sort_keys=True) + "\n"
+
+
+def test_the_golden_fixture_is_what_the_check_reads_from_p48(tmp_path, images):
+    """tests/data/identity-v1-acorn-p48.json; rpi-hwid keeps a byte-identical copy and tests its parser on it."""
+    assert FIXTURE.read_text() == p48_document(tmp_path, images)
 
 
 # -- faults: each fails the board, and the check goes on -------------------------------------------------
@@ -371,7 +567,8 @@ def test_on_a_compute_blade_jtag_uses_its_pins_and_j5_h5_are_not_tested(tmp_path
     assert report["setup"] == "Compute Blade"
     assert report["result"] == "pass", report.get("reason")
     loads = rig.pi.ran("openFPGALoader")
-    assert loads[0] == ["openFPGALoader", "--cable", "libgpiod", "--pins", "2:3:4:14", "--detect"]
+    blade_p1 = ["openFPGALoader", "--cable", "libgpiod", "--pins", "2:3:4:14"]
+    assert loads[0] == [*blade_p1, "--detect", "--verbose-level", "2"]
     assert report["not_run"] == {"p2-gpio": "J5 and H5 are not wired on the Compute Blade setup"}
     # GPIO14 is TMS and the UART's TX: it goes back to its UART function, or the P2 UART would be dead
     assert rig.pi.pins[14][:2] == ["a4", "pn"]
@@ -455,56 +652,6 @@ def test_memory_decoding_that_was_already_on_is_left_on(tmp_path):
     with av.open_bar0("0001:01:00.0", sysfs=tmp_path):
         pass
     assert int.from_bytes((dev / "config").read_bytes()[4:6], "little") == 0x0006
-
-
-# -- the live identity read, for rpi-hwid's labels ----------------------------------------------------
-
-
-def _identify(rig):
-    return av.identify(av.scan_pci(rig.root), rig.images, open_bar=rig.bar, root=rig.root)
-
-
-def test_identify_reads_the_flash_row_and_not_the_slots(tmp_path, images):
-    rig = Rig(tmp_path, images)
-    report = _identify(rig)
-    (board,) = report["boards"]
-    assert report["result"] == board["result"] == "read"
-    assert board["flash"]["part"] == "S25FL256S"
-    assert board["flash"]["jedec"] == "0x010219"
-    assert len(board["flash"]["unique_id"]) == 32
-    assert sf.READ4 not in rig.soc.flash.opcodes  # identity only: no page of either slot is read
-
-
-def test_identify_gives_the_same_row_as_the_full_check(tmp_path, images):
-    full = Rig(tmp_path / "a", images).check()["flash"]
-    quick = _identify(Rig(tmp_path / "b", images))["boards"][0]["flash"]
-    assert {k: full[k] for k in ("part", "jedec", "unique_id")} == {k: quick[k] for k in ("part", "jedec", "unique_id")}
-
-
-def test_identify_will_not_touch_the_flash_of_a_build_it_does_not_know(tmp_path, images):
-    rig = Rig(tmp_path, images, identifier="fpgas-online Acorn PCIe SoC cle-215+ 2026-10-01 09:00:00")
-    report = _identify(rig)
-    assert report["result"] == "fail"
-    assert report["boards"][0]["running"]["build"] is None
-    assert not rig.soc.flash_touched
-
-
-def test_identify_never_opens_the_bar_of_a_factory_board(tmp_path, images):
-    root = fk.pci(tmp_path / "devices", ids=fk.FACTORY)
-    report = av.identify(av.scan_pci(root), images, open_bar=fk.refuse, root=root)
-    assert report["result"] == "fail"
-    assert report["boards"][0]["reason"] == "unconverted: runs SQRL's factory image, not the fpgas.online design"
-
-
-def test_identify_unbinds_a_bound_driver_and_binds_it_again(tmp_path, images):
-    rig = Rig(tmp_path, images, driver="litepcie")
-    assert _identify(rig)["result"] == "read"
-    assert (tmp_path / "sys" / "drivers" / "litepcie" / "bind").read_text() == "0001:01:00.0"
-
-
-def test_identify_on_a_pi_with_no_fpga_is_none(tmp_path, images):
-    root = fk.pci(tmp_path / "devices", ids=fk.RP1)
-    assert av.identify(av.scan_pci(root), images)["result"] == "none"
 
 
 def test_the_check_and_spi_flash_share_one_lock(tmp_path):

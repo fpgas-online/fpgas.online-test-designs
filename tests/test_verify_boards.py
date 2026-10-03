@@ -10,7 +10,7 @@ import struct
 import sys
 
 import pytest
-from fpgas_online_verify import cli, core, debug, host_tests
+from fpgas_online_verify import cli, core, debug, host_tests, idcode, identity
 from fpgas_online_verify.boards import arty, fomu, netv2, tt_fpga
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
 
@@ -58,7 +58,20 @@ class Runner:
                 if isinstance(answer, Exception):
                     raise answer
                 return answer
+        if "--detect" in argv:  # the Arty's JTAG scan
+            return 0, ARTY_SCAN
+        if argv[:2] == ["pinctrl", "get"]:  # every pin an input, pulled down
+            return 0, "".join(f"{g}: ip    pd | lo // GPIO{g} = input\n" for g in argv[2].split(","))
         return 0, "ok"
+
+
+def _scan(*codes):
+    """openFPGALoader --detect --verbose-level 2's raw scan of a chain of `codes`."""
+    lines = [f"- {i} -> {c:#010x}" for i, c in enumerate([*codes, 0xFFFFFFFF])]
+    return "Raw IDCODE:\n" + "\n".join(lines) + "\nFetched TDI, end-of-chain\n"
+
+
+ARTY_SCAN = _scan(0x0362D093) + "index 0:\n\tidcode 0x362d093\n\tmanufacturer xilinx\n\tfamily artix a7 35t\n"
 
 
 # -- what the boards are ---------------------------------------------------------------------------------
@@ -130,21 +143,25 @@ def test_a_pi_with_no_pci_or_usb_bus_has_no_devices_and_finds_no_acorn(tmp_path)
     assert ACORN.spot({}, [], core.pci_devices(tmp_path / "no-such-bus")) == []
 
 
-def test_idcodes_are_read_from_openocd_and_openfpgaloader():
+def test_idcodes_are_read_whole_from_openocd_and_openfpgaloader():
     openocd = "Info : JTAG tap: xc7.tap tap/device found: 0x0362d093 (mfg: 0x049 (Xilinx), part: 0x362d, ver: 0x0)"
-    ofl = "index 0:\n\tidcode 0x13631093\n\tmanufacturer xilinx\n\tfamily artix a7 100t"
-    assert netv2.part_of(netv2.parse_idcodes(openocd)) == ("a7-35", 0x0362D093)
-    assert netv2.part_of(netv2.parse_idcodes(ofl)) == ("a7-100", 0x13631093)  # revision nibble ignored
-    assert netv2.part_of(netv2.parse_idcodes("Error: JTAG scan chain interrogation failed: all zeroes")) == (None, None)
+    ofl = _scan(0x13631093) + "index 0:\n\tidcode 0x3631093\n\tmanufacturer xilinx\n\tfamily artix a7 100t"
+    assert netv2.part_of(idcode.parse(openocd)) == ("a7-35", 0x0362D093)
+    assert netv2.part_of(idcode.parse(ofl)) == ("a7-100", 0x13631093)  # any version of the part
+    assert netv2.part_of(idcode.parse("Error: JTAG scan chain interrogation failed: all zeroes")) == (None, None)
 
 
 def test_the_netv2_is_scanned_with_openocd_on_a_pi3_and_rp1pio_on_a_pi5():
-    run = Runner([("--detect", (0, "idcode 0x0362d093"))])
-    assert NETV2.probe(_host(NETV2, PI5, None), runner=run) == [{"variant": "a7-35", "idcode": "0x0362d093"}]
-    assert run.calls[-1][:5] == ["openFPGALoader", "-c", "rp1pio", "--pins", "27:22:4:17"]
+    run = Runner([("--detect", (0, _scan(0x1362D093)))])
+    scan = {"tool": "openFPGALoader", "exit": 0, "output": ["- 0 -> 0x1362d093", "- 1 -> 0xffffffff"]}
+    assert NETV2.probe(_host(NETV2, PI5, None), runner=run) == [
+        {"variant": "a7-35", "idcode": "0x1362d093", "idcodes": ["0x1362d093"], "idcode_scan": scan}
+    ]
+    assert run.calls[1] == ["openFPGALoader", "-c", "rp1pio", "--pins", "27:22:4:17", "--detect",
+                             "--verbose-level", "2"]  # fmt: skip
     run = Runner([("init; exit", (1, "tap/device found: 0x03631093"))])
     assert NETV2.probe(_host(NETV2), runner=run)[0]["variant"] == "a7-100"
-    argv = run.calls[-1]
+    argv = run.calls[1]  # between reading the pins and putting them back
     assert argv[0] == "openocd" and "bcm2835gpio peripheral_base 0x3f000000" in argv[2]
     assert "bcm2835gpio jtag_nums 4 17 27 22" in argv[2]  # TCK TMS TDI TDO
 
@@ -153,6 +170,37 @@ def test_the_netv2_is_not_scanned_off_a_pi_and_an_empty_chain_is_no_board():
     run = Runner()
     assert NETV2.probe(_host(NETV2, model=""), runner=run) == [] and run.calls == []
     assert NETV2.probe(_host(NETV2), runner=Runner([("init", (1, "all zeroes"))])) == []
+
+
+NETV2_PINS = "4: op dh pn | hi // GPIO4 = output\n17: ip pu | hi // GPIO17 = input\n" \
+             "27: a3 pn | lo // GPIO27 = SPI\n22: ip pd | lo // GPIO22 = input\n"  # fmt: skip
+
+
+def test_the_netv2_scan_puts_its_jtag_pins_back_as_they_were():
+    run = Runner([("pinctrl get", (0, NETV2_PINS)), ("init; exit", (0, "tap/device found: 0x03631093"))])
+    assert NETV2.probe(_host(NETV2), runner=run)[0]["variant"] == "a7-100"
+    assert run.calls[0] == ["pinctrl", "get", "4,17,27,22"]
+    assert run.calls[1][0] == "openocd"
+    # an output goes back as an input (openocd leaves its outputs driven); the rest exactly as they were
+    assert run.calls[2:] == [["pinctrl", "set", "4", "ip", "pn"], ["pinctrl", "set", "17", "ip", "pu"],
+                             ["pinctrl", "set", "22", "ip", "pd"], ["pinctrl", "set", "27", "a3", "pn"]]  # fmt: skip
+
+
+def test_the_netv2_pins_go_back_even_when_the_scan_fails():
+    run = Runner([("pinctrl get", (0, NETV2_PINS)), ("init; exit", core.Problem("fail", "openocd hung"))])
+    with pytest.raises(core.Problem, match="openocd hung"):
+        NETV2.probe(_host(NETV2), runner=run)
+    assert [c[:3] for c in run.calls[2:]] == [["pinctrl", "set", g] for g in ("4", "17", "22", "27")]
+
+
+def test_the_netv2_is_not_scanned_when_its_pins_cannot_be_put_back():
+    run = Runner([("pinctrl get", core.Problem("error", "pinctrl is not installed"))])
+    with pytest.raises(core.Problem, match=r"not scanned.*pinctrl is not installed"):
+        NETV2.probe(_host(NETV2), runner=run)
+    assert run.calls == [["pinctrl", "get", "4,17,27,22"]]  # no openocd, nothing driven
+    run = Runner([("pinctrl set", (1, "no such pin")), ("init; exit", (0, "tap/device found: 0x03631093"))])
+    with pytest.raises(core.Problem, match="could not put GPIO4 back"):
+        NETV2.probe(_host(NETV2), runner=run)
 
 
 def test_an_unknown_part_on_the_chain_is_an_error():
@@ -179,6 +227,12 @@ def _check(board, tmp_path, found, run, **options):
 ARTY_FOUND = {"variant": "a7-35", "usb": "1-1", "serial": "210319B"}
 
 
+def _netv2_found(code):
+    """The NeTV2 as finding it on a Pi 3 reports it: its OpenOCD scan answered `code`."""
+    (found,) = NETV2.probe(_host(NETV2), runner=Runner([("init; exit", (0, f"tap/device found: {code}"))]))
+    return found
+
+
 def test_an_arty_that_passes_loads_each_test_runs_it_and_records_its_flash(tmp_path):
     flash = b"\x5a" * ARTY.flash_region["a7-35"]
     run = Runner([("test_spiflash.py", (0, "JEDEC ID: 0x20 0xBA 0x18\nRESULT: PASS"))], flash=flash)
@@ -186,11 +240,140 @@ def test_an_arty_that_passes_loads_each_test_runs_it_and_records_its_flash(tmp_p
     assert report["result"] == "pass", report
     assert [t["test"] for t in report["tests"]] == ["uart", "ddr", "spiflash", "ethernet", "pin-id"]
     images = tmp_path / "images"
-    assert run.calls[1] == ["openFPGALoader", "-b", "arty", str(images / "uart-test-arty/digilent_arty.bit")]
+    assert run.calls[0] == ["openFPGALoader", "-b", "arty", "--detect", "--verbose-level", "2"]
+    assert run.calls[2] == ["openFPGALoader", "-b", "arty", str(images / "uart-test-arty/digilent_arty.bit")]
     assert run.calls[-1][:5] == ["openFPGALoader", "-b", "arty", "--dump-flash", "--file-size"]
+    assert {k: v for k, v in report["jtag"].items() if k != "output"} == {
+        "result": "pass", "idcode": "0x0362d093", "idcode_version": 0, "idcode_part_number": "0x362d",
+        "idcode_manufacturer_id": "0x049", "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A35T"}  # fmt: skip
     sha = hashlib.sha256(flash).hexdigest()
-    assert report["state"] == {"variant": "a7-35", "serial": "210319B", "flash_jedec": "0x20ba18",
+    assert report["state"] == {"variant": "a7-35", "serial": "210319B", "idcode": "0x0362d093",
+                               "flash_jedec": "0x20ba18",
                                "flash": {"region_bytes": 0x220000, "sha256": sha}}  # fmt: skip
+
+
+def test_an_arty_whose_jtag_answers_with_another_part_fails_and_says_which(tmp_path):
+    run = Runner([("--detect", (0, _scan(0x13631093)))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    assert report["result"] == "fail" and report["jtag"]["result"] == "fail"
+    assert report["reason"].startswith(
+        "jtag fail: the JTAG IDCODE 0x13631093 is an XC7A100T, not the a7-35's XC7A35T (IDCODE 0x0362d093, any version)"
+    )
+    assert report["state"]["idcode"] == "0x13631093"
+
+
+def test_an_arty_whose_jtag_chain_is_empty_fails_and_an_arty_of_another_version_passes(tmp_path):
+    scan = (1, "Raw IDCODE:\n- 0 -> 0xffffffff\nJTAG init failed: no device found\n")
+    run = Runner([("--detect", scan)], flash=b"\0" * ARTY.flash_region["a7-35"])
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    assert report["result"] == "fail"
+    assert report["jtag"]["reason"] == "no device on the JTAG chain; openFPGALoader exited 1 reading the IDCODE"
+    run = Runner([("--detect", (0, _scan(0x2362D093)))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    assert report["result"] == "pass" and (report["jtag"]["idcode"], report["jtag"]["idcode_version"]) == (
+        "0x2362d093",
+        2,
+    )
+
+
+def test_an_arty_scan_without_the_raw_idcodes_says_so_not_that_the_chain_is_empty(tmp_path):
+    part_table = "found 1 devices\nindex 0:\n\tidcode 0x362d093\n\tmanufacturer xilinx\n\tfamily artix a7 35t\n"
+    run = Runner([("--detect", (0, part_table))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    assert report["result"] == "fail"
+    assert report["jtag"]["reason"] == "openFPGALoader printed no raw IDCODE scan (needs --verbose-level 2 output)"
+    run = Runner([("--detect", (0, "found 0 devices\n"))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    assert _check(ARTY, tmp_path, ARTY_FOUND, run)["jtag"]["reason"] == "no device on the JTAG chain"
+
+
+def test_an_arty_scan_that_fails_before_scanning_says_the_tool_failed_and_why(tmp_path):
+    text = "write to ftdi failed\nunable to open ftdi device: -3 (device not found)\n\n"
+    run = Runner([("--detect", (1, text))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    assert report["result"] == "fail" and report["jtag"]["reason"] == (
+        "openFPGALoader failed (exit 1) before scanning the JTAG chain: "
+        "unable to open ftdi device: -3 (device not found)"
+    )
+    assert report["jtag"]["output"] == ["write to ftdi failed", "unable to open ftdi device: -3 (device not found)"]
+    run = Runner([("--detect", (1, ""))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    reason = _check(ARTY, tmp_path, ARTY_FOUND, run)["jtag"]["reason"]
+    assert reason == "openFPGALoader failed (exit 1) before scanning the JTAG chain: no output"
+
+
+def test_an_arty_scan_that_exits_non_zero_fails_even_with_the_right_idcode(tmp_path):
+    run = Runner([("--detect", (2, ARTY_SCAN))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    assert report["result"] == "fail" and report["jtag"]["result"] == "fail"
+    assert report["jtag"]["reason"] == "openFPGALoader exited 2 reading the IDCODE"
+    assert report["jtag"]["idcode_device"] == "XC7A35T"  # still decoded, for the report
+
+
+def test_an_arty_of_the_wrong_part_whose_scan_exits_non_zero_gives_both_faults(tmp_path):
+    run = Runner([("--detect", (1, _scan(0x13631093)))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    reason = _check(ARTY, tmp_path, ARTY_FOUND, run)["jtag"]["reason"]
+    assert reason.startswith("the JTAG IDCODE 0x13631093 is an XC7A100T") and reason.endswith(
+        "; openFPGALoader exited 1 reading the IDCODE"
+    )
+
+
+@pytest.mark.parametrize(
+    ("model", "needle", "text", "tool"),
+    [
+        (PI3, "init; exit", "Info : JTAG tap: xc7.tap tap/device found: 0x03631093 (mfg: 0x049 (Xilinx))", "openocd"),
+        (PI5, "--detect", _scan(0x03631093), "openFPGALoader"),
+    ],
+    ids=["openocd-pi3", "rp1pio-pi5"],
+)
+def test_a_netv2_whose_finding_scan_exits_non_zero_fails_even_with_the_right_idcode(tmp_path, model, needle, text,
+                                                                                    tool):  # fmt: skip
+    host = _host(NETV2, model, None if model == PI5 else 0x3F000000)
+    for rc in (0, 2):
+        (found,) = NETV2.probe(host, runner=Runner([(needle, (rc, text))]))
+        run = Runner(flash=b"\0" * NETV2.flash_region["a7-100"])
+        report = NETV2.check(host, found, {"images": _install(tmp_path, NETV2)}, runner=run)
+        assert not any(needle in " ".join(c) for c in run.calls)  # the check does not scan again
+        assert report["jtag"]["idcode_device"] == "XC7A100T"
+        if rc == 0:
+            assert report["result"] == "pass" and report["jtag"]["result"] == "pass", report
+        else:
+            assert report["result"] == "fail" and report["jtag"]["result"] == "fail"
+            assert report["jtag"]["reason"] == f"{tool} exited 2 reading the IDCODE"
+
+
+def _openocd_chain(*codes):
+    return "\n".join(f"Info : JTAG tap: xc7.tap{i} tap/device found: {c:#010x}" for i, c in enumerate(codes))
+
+
+@pytest.mark.parametrize(
+    ("model", "needle", "chain", "tool"),
+    [(PI3, "init; exit", _openocd_chain, "openocd"), (PI5, "--detect", _scan, "openFPGALoader")],
+    ids=["openocd-pi3", "rp1pio-pi5"],
+)
+def test_a_netv2_on_a_jtag_chain_of_two_devices_fails_as_the_other_boards_do(tmp_path, model, needle, chain, tool):
+    """Finding the board takes the NeTV2 part from the chain; the JTAG check still counts every device on it."""
+    host = _host(NETV2, model, None if model == PI5 else 0x3F000000)
+    for codes, want in [((0x13631093, 0x0362D093), "a7-100"), ((0x0362D093, 0x13631093), "a7-35")]:
+        (found,) = NETV2.probe(host, runner=Runner([(needle, (0, chain(*codes)))]))
+        assert found["variant"] == want and found["idcodes"] == [f"{c:#010x}" for c in codes]
+        run = Runner(flash=b"\0" * NETV2.flash_region[want])
+        report = NETV2.check(host, found, {"images": _install(tmp_path, NETV2)}, runner=run)
+        listed = ", ".join(f"{c:#010x}" for c in codes)
+        assert report["result"] == "fail" and report["jtag"]["result"] == "fail", report
+        assert report["jtag"]["reason"] == f"the JTAG chain has 2 devices ({listed}), not one"
+        assert report["jtag"]["idcode"] == listed
+    (found,) = NETV2.probe(host, runner=Runner([(needle, (0, chain(0x13631093)))]))
+    run = Runner(flash=b"\0" * NETV2.flash_region["a7-100"])
+    report = NETV2.check(host, found, {"images": _install(tmp_path, NETV2)}, runner=run)
+    assert report["result"] == "pass" and report["jtag"]["result"] == "pass", report
+    assert (report["jtag"]["idcode"], found["idcode_scan"]["tool"]) == ("0x13631093", tool)
+
+
+def test_a_netv2_configured_as_the_other_variant_fails_on_its_idcode(tmp_path):
+    run = Runner(flash=b"\0" * NETV2.flash_region["a7-100"])
+    report = _check(NETV2, tmp_path, {**_netv2_found("0x13631093"), "variant": "a7-35"}, run, variant="a7-100")
+    assert report["jtag"]["result"] == "pass" and report["jtag"]["idcode_device"] == "XC7A100T"
+    report = _check(NETV2, tmp_path, _netv2_found("0x13631093"), run, variant="a7-35")
+    assert report["jtag"]["result"] == "fail" and "is an XC7A100T, not the a7-35's XC7A35T" in report["reason"]
 
 
 def test_a_failing_test_fails_the_check_and_keeps_its_output(tmp_path):
@@ -237,7 +420,7 @@ def test_a_flash_that_cannot_be_read_back_is_an_error(tmp_path):
 
 def test_a_netv2_on_a_pi3_loads_with_openocd_and_frees_its_uart(tmp_path):
     run = Runner(flash=b"\0" * NETV2.flash_region["a7-100"])
-    report = _check(NETV2, tmp_path, {"variant": "a7-100", "idcode": "0x13631093"}, run)
+    report = _check(NETV2, tmp_path, _netv2_found("0x13631093"), run)
     assert report["result"] == "pass", report
     loads = [c for c in run.calls if c[0] == "openocd"]
     assert f"pld load 0 {tmp_path}/images/uart-test-netv2-a7-100t/kosagi_netv2.bit" in loads[0][-1]
@@ -250,7 +433,7 @@ def test_a_netv2_on_a_pi3_loads_with_openocd_and_frees_its_uart(tmp_path):
 def test_the_netv2_spi_flash_test_listens_before_its_design_is_loaded(tmp_path):
     """Its firmware prints the JEDEC ID once, at start, onto ttyAMA0 (pi-sw1-p10, 2026-09-27): listen.py."""
     run = Runner(flash=b"\0" * NETV2.flash_region["a7-35"])
-    _check(NETV2, tmp_path, {"variant": "a7-35", "idcode": "0x0362d093"}, run)
+    _check(NETV2, tmp_path, _netv2_found("0x0362d093"), run)
     (argv,) = [c for c in run.calls if "fpgas_online_verify.listen" in c]
     assert argv[3] == "/dev/ttyAMA0"
     test, program = argv[5 : 5 + int(argv[4])], argv[5 + int(argv[4]) :]
@@ -281,7 +464,8 @@ def test_a_netv2_on_a_pi5_loads_with_rp1pio_and_muxes_its_uart(tmp_path):
     report = NETV2.check(_host(NETV2, PI5, None), {"variant": "a7-35"},
                          {"images": _install(tmp_path, NETV2)}, runner=run)  # fmt: skip
     assert report["result"] == "pass"
-    assert run.calls[1][:3] == ["pinctrl", "set", "14"]
+    assert run.calls[0][-3:] == ["--detect", "--verbose-level", "2"] and report["jtag"]["idcode_device"] == "XC7A35T"
+    assert run.calls[2][:3] == ["pinctrl", "set", "14"]
     assert any(c[:3] == ["openFPGALoader", "-c", "rp1pio"] and c[-1].endswith("kosagi_netv2.bit") for c in run.calls)
 
 
@@ -343,8 +527,39 @@ def test_a_test_board_says_when_each_test_starts_and_how_it_ended(tmp_path):
     events = []
     _check(FOMU, tmp_path, {"variant": "evt", "usb": "1-3", "serial": "fomu-7"}, Runner(),
            event=lambda stage, d: events.append((stage, d)))  # fmt: skip
-    assert events == [("fpga-test-started", {"test": "uart"}),
+    assert events == [("fpga-board-identified", {"board": "fomu", "kind": "fomu", "variant": "evt", "serial": "fomu-7",
+                                                 "usb": "1-3", "schema": "fpga-identity/1"}),
+                      ("fpga-test-started", {"test": "uart"}),
                       ("fpga-test-finished", {"test": "uart", "result": "pass", "reason": ""})]  # fmt: skip
+
+
+def test_an_arty_says_who_it_is_before_its_tests_with_its_whole_idcode(tmp_path):
+    events, kept = [], []
+    report = _check(ARTY, tmp_path, ARTY_FOUND, Runner(), board_key="arty",
+                    event=lambda stage, d: events.append((stage, d)), **{identity.KEEP: kept.append})  # fmt: skip
+    assert events[0][0] == "fpga-board-identified" and events[1][0] == "fpga-test-started"
+    assert kept == [report["identity"]]  # handed to the runner, so a crash after this keeps it
+    assert report["identity"] == {
+        "board": "arty", "kind": "arty", "variant": "a7-35", "serial": "210319B", "usb": "1-1",
+        "idcode": "0x0362d093", "idcode_version": 0, "idcode_part_number": "0x362d", "idcode_manufacturer_id": "0x049",
+        "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A35T",
+    }  # fmt: skip
+    assert events[0][1] == identity.details(report["identity"])
+
+
+def test_a_jtag_chain_with_nothing_on_it_is_an_idcode_error(tmp_path):
+    report = _check(ARTY, tmp_path, ARTY_FOUND, Runner([("--detect", (1, "JTAG init failed"))]))
+    assert report["identity"]["idcode_error"] == report["jtag"]["reason"]
+    assert "idcode" not in report["identity"]
+
+
+def test_a_board_whose_check_stops_before_its_tests_still_says_who_it_is(tmp_path):
+    events = []
+    report = _check(TT, tmp_path, {"variant": "tt-fpga", "usb": "1-2", "serial": "E661"}, Runner(), tests=["nope"],
+                    event=lambda stage, d: events.append((stage, d)))  # fmt: skip
+    assert report["result"] == "error"
+    assert events == [("fpga-board-identified", {"board": "tt", "kind": "tt", "variant": "tt-fpga", "serial": "E661",
+                                                 "usb": "1-2", "schema": "fpga-identity/1"})]  # fmt: skip
 
 
 # -- the commands and the debug tool ---------------------------------------------------------------------------

@@ -6,7 +6,9 @@ openocd's bcm2835gpio driver (fast; needs the SoC's peripheral base, from the de
 openFPGALoader's rp1pio cable, which only the fpgas.online builds of openFPGALoader have.
 
 The scan drives GPIO 4, 17 and 27, so fpgas-verify only scans when this board is configured, or, with
-`fpga-board = auto`, when no other board was found without driving anything.
+`fpga-board = auto`, when no other board was found without driving anything. The JTAG pins' state is read with
+pinctrl before the scan and put back after it (an output as an input: openocd and openFPGALoader leave theirs
+driven); without pinctrl to do that, the scan is not run.
 
 The flash readback uses openFPGALoader's SPI-over-JTAG bridge for the part (libgpiod on a Pi 3/4, rp1pio on a
 Pi 5). Debian bookworm's openfpgaloader has no bridge for the XC7A35T-FGG484 (trixie's has); the fpgas.online
@@ -14,29 +16,25 @@ builds have both.
 """
 
 import contextlib
-import re
 from typing import ClassVar
 
-from ..core import Problem, host_facts, is_pi, is_pi5, peripheral_base, run
+from .. import idcode
+from ..core import Problem, host_facts, is_pi, is_pi5, peripheral_base, pin_states, restore_pins, run, tail
 from ..testbench import TestBoard
 
 TCK, TMS, TDI, TDO = 4, 17, 27, 22
 PINS = f"{TDI}:{TDO}:{TCK}:{TMS}"  # openFPGALoader's order
-# Xilinx IDCODEs with the silicon revision nibble masked off.
+JTAG_GPIOS = (TCK, TMS, TDI, TDO)
+# Each part's Xilinx IDCODE at version 0; any version of the part is that variant.
 PARTS = {0x0362D093: "a7-35", 0x03631093: "a7-100"}
 FPGA_PART = {"a7-35": "xc7a35tfgg484", "a7-100": "xc7a100tfgg484"}
 
 
-def parse_idcodes(text):
-    """IDCODEs from openocd's `tap/device found: 0x...` or openFPGALoader's `idcode 0x...` lines."""
-    return [int(m, 16) for m in re.findall(r"(?:device found:|idcode)\s*(0x[0-9a-fA-F]{1,8})", text)]
-
-
 def part_of(idcodes):
-    """(variant or None, the first IDCODE seen or None)."""
+    """(variant or None, the first whole IDCODE seen or None)."""
     for code in idcodes:
-        if code & 0x0FFFFFFF in PARTS:
-            return PARTS[code & 0x0FFFFFFF], code
+        if idcode.masked(code) in PARTS:
+            return PARTS[idcode.masked(code)], code
     return None, (idcodes[0] if idcodes else None)
 
 
@@ -46,6 +44,8 @@ class NeTV2(TestBoard):
     doc = "netv2.md"
     probes = True
     variants: ClassVar[dict] = {"a7-35": "a7-35t", "a7-100": "a7-100t"}
+    idcodes: ClassVar[dict] = {variant: code for code, variant in PARTS.items()}
+    label_fields = ("idcode", "dna", "flash_jedec", "flash_uid")
     port = "/dev/ttyAMA0"
     flash_region: ClassVar[dict] = {
         "a7-35": 0x220000,
@@ -87,20 +87,38 @@ class NeTV2(TestBoard):
         )
         return ["openocd", "-c", adapter, "-f", "cpld/xilinx-xc7.cfg", "-c", commands]
 
+    def idcode_argv(self, host):
+        """openFPGALoader's raw scan on a Pi 5; OpenOCD prints the whole IDCODE as it is."""
+        if is_pi5(host["model"]):
+            return ["openFPGALoader", "-c", "rp1pio", "--pins", PINS, "--detect", *idcode.OPENFPGALOADER_RAW_ARGS]
+        return self.openocd_argv(host, "init; exit")
+
     def probe(self, host, runner=run):
         if not is_pi(host["model"]):
             return []  # no GPIO header to scan
-        if is_pi5(host["model"]):
-            argv = ["openFPGALoader", "-c", "rp1pio", "--pins", PINS, "--detect"]
-        else:
-            argv = self.openocd_argv(host, "init; exit")
-        _, text = runner(argv, 60)
-        variant, code = part_of(parse_idcodes(text))
+        try:
+            saved = pin_states(runner, JTAG_GPIOS)
+        except Problem as p:
+            raise Problem("error", "the NeTV2's JTAG was not scanned: the state of its pins could not be read, so "
+                                   f"it could not be put back: {p.reason}") from None  # fmt: skip
+        argv = self.idcode_argv(host)
+        try:
+            rc, text = runner(argv, 60)
+        finally:
+            faults = restore_pins(runner, saved, exact=False)
+        if faults:
+            raise Problem("error", f"after the NeTV2's JTAG scan: {'; '.join(faults)}")
+        codes = idcode.parse(text)
+        variant, code = part_of(codes)
         if code is None:
             return []
         if variant is None:
             raise Problem("error", f"the JTAG chain answers with IDCODE {code:#010x}, which is no NeTV2 part")
-        return [{"variant": variant, "idcode": f"{code:#010x}"}]
+        # The JTAG check (TestBoard.jtag) uses this scan: it fails it if the tool exited non-zero, and, with
+        # every IDCODE on the chain kept, if the chain has more than the one device, as for the other boards.
+        scan = {"tool": argv[0], "exit": rc, "output": idcode.scan_lines(text) if rc == 0 else tail(text, 6)}
+        return [{"variant": variant, "idcode": f"{code:#010x}", "idcodes": [f"{c:#010x}" for c in codes],
+                 "idcode_scan": scan}]  # fmt: skip
 
     def program_argv(self, bitstream, host, test):
         if is_pi5(host["model"]):
