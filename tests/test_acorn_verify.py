@@ -3,7 +3,7 @@
 The check never writes the flash and never reconfigures the FPGA. It runs every test it can and lists every
 fault: one result, pass or fail (docs/verify-goals.md). Its tests, in order:
 
-  pcie-link, pcie-bar0, jtag, flash, p2-uart, scratch, p2-gpio
+  pcie-link, pcie-bar0, rp1-pio, jtag, flash, ddr, p2-uart, p2-serial, scratch, p2-gpio
 
 The SoC is tests/acorn_fakes.py's FakeSoC (its flash side is tests/test_spi_flash.py's fake S25FL256S, so
 a read goes through the real spi_flash.Flash code path, STARTUPE2's swallowed clocks included), the Pi is
@@ -54,7 +54,9 @@ class Rig:
 
     def options(self, **extra):
         return {"images": self.images, "model": self.model, "open_bar": self.bar, "run": self.pi,
-                "gpiochip": lambda compatible: None, "uart_opener": self.uart.open, "settle": self.uart.settle,
+                "gpiochip": lambda compatible: None, "rp1_host": lambda: None,
+                "rp1_pio": lambda run: {"test": "rp1-pio", "result": "pass", "output": []},
+                "uart_opener": self.uart.open, "settle": self.uart.settle,
                 "sysfs_pci": self.root, "event": lambda stage, d: self.events.append((stage, d)),
                 "sleep": self.soc.sleep, "clock": self.soc.clock, **extra}  # fmt: skip
 
@@ -178,7 +180,7 @@ def test_a_board_on_sqrl_factory_image_still_has_its_link_and_jtag_checked(tmp_p
     """Its variant is known from the factory IDs, so its P1 JTAG and PCIe link are tested; nothing on BAR0."""
     rig = Rig(tmp_path, images, ids=fk.FACTORY)
     report = suite.check_board(rig.found(), rig.options(open_bar=fk.refuse))
-    assert _results(report) == {"pcie-link": "pass", "jtag": "pass"}
+    assert _results(report) == {"pcie-link": "pass", "rp1-pio": "pass", "jtag": "pass"}
     assert set(report["not_run"]) == {"pcie-bar0", "flash", "ddr", "p2-uart", "p2-serial", "scratch", "p2-gpio"}
     assert "unconverted" in report["not_run"]["flash"]
 
@@ -269,8 +271,8 @@ def test_the_events_say_each_test_as_it_goes_and_who_the_board_is(tmp_path, imag
     rig = Rig(tmp_path, images)
     rig.check()
     stages = [s for s, _ in rig.events]
-    assert stages[:6] == ["fpga-test-started", "fpga-test-finished"] * 3
-    assert stages[6] == "fpga-board-identified"  # once PCIe and JTAG have said who it is
+    assert stages[:8] == ["fpga-test-started", "fpga-test-finished"] * 4
+    assert stages[8] == "fpga-board-identified"  # once PCIe and JTAG have said who it is
     assert stages.count("fpga-test-finished") == len(suite.TESTS)
     finished = [d for s, d in rig.events if s == "fpga-test-finished"]
     assert finished[0] == {"test": "pcie-link", "result": "pass", "reason": ""}
@@ -611,7 +613,8 @@ def test_a_host_that_is_no_acorn_setup_is_an_error_but_the_pcie_side_is_still_ch
     report = Rig(tmp_path, images, model="Raspberry Pi 4 Model B Rev 1.4").check()
     assert report["result"] == "error"
     assert "is not an Acorn setup in wiring.toml" in report["reason"]
-    assert _results(report) == {"pcie-bar0": "pass", "flash": "pass", "ddr": "pass", "scratch": "pass"}
+    want = {"pcie-bar0": "pass", "rp1-pio": "pass", "flash": "pass", "ddr": "pass", "scratch": "pass"}
+    assert _results(report) == want
     assert set(report["not_run"]) >= {"pcie-link", "jtag", "p2-uart", "p2-gpio"}
 
 
