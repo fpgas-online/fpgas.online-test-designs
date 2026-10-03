@@ -24,86 +24,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
-# One job per board. The organisation's GitHub-hosted runners are shared by every repository (20 jobs at once
-# on GitHub Free), so each build workflow here holds at most two of them (fpgas.online-infra#182). Here that
-# means the Acorn boards' matrix first and the two NeTV2 jobs after it. The NeTV2 jobs stay separate jobs: they
-# are gated by a job-level `if`, which cannot see the matrix, and are skipped by name on pull requests.
-# The check names are the boards' names: Collect Bitstreams selects the jobs it waits for by them.
 jobs:
-  build-acorn:
-    name: ${{ matrix.name }}
-    runs-on: ubuntu-latest
-    container:
-      image: regymm/openxc7
-    strategy:
-      fail-fast: false
-      max-parallel: 2
-      matrix:
-        include:
-          - name: "Acorn CLE-215+"
-            variant: cle-215+
-            artifact: pcie-test-acorn-cle-215plus
-          - name: "NiteFury (CLE-215)"
-            variant: cle-215
-            artifact: pcie-test-acorn-cle-215
-          - name: "LiteFury (CLE-101)"
-            variant: cle-101
-            artifact: pcie-test-acorn-cle-101
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-
-      - name: Install cross compiler and Python tooling
-        run: |
-          apt-get update
-          apt-get install -y gcc-riscv64-unknown-elf curl git
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          echo "/prjxray/env/bin" >> $GITHUB_PATH
-
-      - name: Install Python dependencies
-        run: uv sync --python 3.12 --extra build
-
-      - name: Install FASM GTP fixup wrapper
-        run: |
-          [ -f /prjxray/env/bin/fasm2frames.real ] || mv /prjxray/env/bin/fasm2frames /prjxray/env/bin/fasm2frames.real
-          cp designs/_shared/fasm2frames_wrapper.py /prjxray/env/bin/fasm2frames
-          chmod +x /prjxray/env/bin/fasm2frames
-
-      - name: Build ${{ matrix.name }} bitstream
-        env:
-          CHIPDB: /chipdb
-          PRJXRAY_DB_DIR: /nextpnr-xilinx/xilinx/external/prjxray-db
-          NEXTPNR_XILINX_PYTHON_DIR: /nextpnr-xilinx/xilinx/python
-        run: |
-          uv run python designs/pcie-enumeration/gateware/pcie_soc_acorn.py \
-            --variant ${{ matrix.variant }} \
-            --toolchain openxc7 \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}
-          path: |
-            designs/pcie-enumeration/build/acorn/gateware/*.bit
-          if-no-files-found: error
-
   build-netv2-a7-35:
     name: "NeTV2 A7-35T PCIe endpoint"
     runs-on: ubuntu-latest
-    # nextpnr-xilinx in the regymm/openxc7 image rejects the RAM256X1S
-    # primitive Yosys emits for this design (regression vs the 2026-04-03
-    # main run that succeeded): issue #30. Non-blocking, and run only on
-    # main and by hand so PR check lists stay meaningful while main keeps
-    # tracking the upstream state. When #30 is closed, drop the main/dispatch
-    # condition from `if` (keep !cancelled()) and continue-on-error.
-    # needs: after the Acorn jobs, whatever their result, so that this
-    # workflow never holds more than two runners.
-    needs: build-acorn
-    if: ${{ !cancelled() && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') }}
-    continue-on-error: true
     container:
       image: regymm/openxc7
     steps:
@@ -152,17 +76,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pcie-enumeration-netv2-a7-35t
-          path: designs/pcie-enumeration/build/netv2/gateware/kosagi_netv2.bit
+          path: designs/pcie-enumeration/build/netv2-a7-35-yosys-nextpnr/gateware/kosagi_netv2.bit
 
   build-netv2-a7-100:
     name: "NeTV2 A7-100T PCIe endpoint"
     runs-on: ubuntu-latest
-    # Fails the same way as the A7-35T job above (RAM256X1S, issue #30);
-    # the earlier nextpnr-xilinx SIGSEGV on the A7-100T chipdb is no longer
-    # what stops it. Same gating and ordering as above.
-    needs: build-acorn
-    if: ${{ !cancelled() && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') }}
-    continue-on-error: true
     container:
       image: regymm/openxc7
     steps:
@@ -211,7 +129,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pcie-enumeration-netv2-a7-100t
-          path: designs/pcie-enumeration/build/netv2/gateware/kosagi_netv2.bit
+          path: designs/pcie-enumeration/build/netv2-a7-100-yosys-nextpnr/gateware/kosagi_netv2.bit
 
   lint:
     name: "Lint Python"
@@ -224,3 +142,141 @@ jobs:
 
       - name: Lint
         run: uv run --extra dev ruff check designs/pcie-enumeration/gateware/ designs/pcie-enumeration/host/
+
+  build-acorn-cle-215plus:
+    name: "Acorn CLE-215+"
+    runs-on: ubuntu-latest
+    container:
+      image: regymm/openxc7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install cross compiler and Python tooling
+        run: |
+          apt-get update
+          apt-get install -y gcc-riscv64-unknown-elf curl git
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          echo "/prjxray/env/bin" >> $GITHUB_PATH
+
+      - name: Install Python dependencies
+        run: uv sync --python 3.12 --extra build
+
+      - name: Install FASM GTP fixup wrapper
+        run: |
+          [ -f /prjxray/env/bin/fasm2frames.real ] || mv /prjxray/env/bin/fasm2frames /prjxray/env/bin/fasm2frames.real
+          cp designs/_shared/fasm2frames_wrapper.py /prjxray/env/bin/fasm2frames
+          chmod +x /prjxray/env/bin/fasm2frames
+
+      - name: Build Acorn CLE-215+ bitstream
+        env:
+          CHIPDB: /chipdb
+          PRJXRAY_DB_DIR: /nextpnr-xilinx/xilinx/external/prjxray-db
+          NEXTPNR_XILINX_PYTHON_DIR: /nextpnr-xilinx/xilinx/python
+        run: |
+          uv run python designs/pcie-enumeration/gateware/pcie_soc_acorn.py \
+            --variant cle-215+ \
+            --toolchain openxc7 \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: pcie-test-acorn-cle-215plus
+          path: |
+            designs/pcie-enumeration/build/acorn-cle-215p-yosys-nextpnr/gateware/*.bit
+          if-no-files-found: error
+
+  build-acorn-cle-215:
+    name: "NiteFury (CLE-215)"
+    runs-on: ubuntu-latest
+    container:
+      image: regymm/openxc7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install cross compiler and Python tooling
+        run: |
+          apt-get update
+          apt-get install -y gcc-riscv64-unknown-elf curl git
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          echo "/prjxray/env/bin" >> $GITHUB_PATH
+
+      - name: Install Python dependencies
+        run: uv sync --python 3.12 --extra build
+
+      - name: Install FASM GTP fixup wrapper
+        run: |
+          [ -f /prjxray/env/bin/fasm2frames.real ] || mv /prjxray/env/bin/fasm2frames /prjxray/env/bin/fasm2frames.real
+          cp designs/_shared/fasm2frames_wrapper.py /prjxray/env/bin/fasm2frames
+          chmod +x /prjxray/env/bin/fasm2frames
+
+      - name: Build NiteFury (CLE-215) bitstream
+        env:
+          CHIPDB: /chipdb
+          PRJXRAY_DB_DIR: /nextpnr-xilinx/xilinx/external/prjxray-db
+          NEXTPNR_XILINX_PYTHON_DIR: /nextpnr-xilinx/xilinx/python
+        run: |
+          uv run python designs/pcie-enumeration/gateware/pcie_soc_acorn.py \
+            --variant cle-215 \
+            --toolchain openxc7 \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: pcie-test-acorn-cle-215
+          path: |
+            designs/pcie-enumeration/build/acorn-cle-215-yosys-nextpnr/gateware/*.bit
+          if-no-files-found: error
+
+  build-acorn-cle-101:
+    name: "LiteFury (CLE-101)"
+    runs-on: ubuntu-latest
+    container:
+      image: regymm/openxc7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install cross compiler and Python tooling
+        run: |
+          apt-get update
+          apt-get install -y gcc-riscv64-unknown-elf curl git
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          echo "/prjxray/env/bin" >> $GITHUB_PATH
+
+      - name: Install Python dependencies
+        run: uv sync --python 3.12 --extra build
+
+      - name: Install FASM GTP fixup wrapper
+        run: |
+          [ -f /prjxray/env/bin/fasm2frames.real ] || mv /prjxray/env/bin/fasm2frames /prjxray/env/bin/fasm2frames.real
+          cp designs/_shared/fasm2frames_wrapper.py /prjxray/env/bin/fasm2frames
+          chmod +x /prjxray/env/bin/fasm2frames
+
+      - name: Build LiteFury (CLE-101) bitstream
+        env:
+          CHIPDB: /chipdb
+          PRJXRAY_DB_DIR: /nextpnr-xilinx/xilinx/external/prjxray-db
+          NEXTPNR_XILINX_PYTHON_DIR: /nextpnr-xilinx/xilinx/python
+        run: |
+          uv run python designs/pcie-enumeration/gateware/pcie_soc_acorn.py \
+            --variant cle-101 \
+            --toolchain openxc7 \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: pcie-test-acorn-cle-101
+          path: |
+            designs/pcie-enumeration/build/acorn-cle-101-yosys-nextpnr/gateware/*.bit
+          if-no-files-found: error

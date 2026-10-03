@@ -63,9 +63,9 @@ class NeTV2(TestBoard):
                      "listen": True},
         "ethernet": {"artifact": "ethernet-test-netv2-{v}/kosagi_netv2.bit", "script": "test_ethernet.py",
                      "args": ["--board", "netv2", "--uart-port", "{port}"]},
-        "pmod": {"artifact": "gpio-loopback-netv2-{v}/top.bit", "script": "test_pmod_loopback.py",
+        "pmod": {"artifact": "gpio-loopback-netv2-{v}/kosagi_netv2.bit", "script": "test_pmod_loopback.py",
                  "args": ["--board", "netv2"]},
-        "pin-id": {"artifact": "pmod-pin-id-netv2-{v}/top.bit", "script": "identify_pmod_pins.py", "args": []},
+        "pin-id": {"artifact": "pmod-pin-id-netv2-{v}/kosagi_netv2.bit", "script": "identify_pmod_pins.py", "args": []},
     }  # fmt: skip
 
     def facts(self, port=None):

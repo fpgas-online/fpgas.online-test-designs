@@ -23,40 +23,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # One job per board. The organisation's GitHub-hosted runners are shared by every repository (20 jobs at
-  # once on GitHub Free), so each build workflow here holds at most two of them (fpgas.online-infra#182).
-  # The check names are the boards' names: Collect Bitstreams selects the jobs it waits for by them.
-  build:
-    name: ${{ matrix.name }}
+  build-arty:
+    name: "Arty A7-35T (MII Ethernet)"
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      max-parallel: 2
-      matrix:
-        include:
-          - name: "Arty A7-35T (MII Ethernet)"
-            toolchain: openxc7
-            script: designs/ethernet-test/gateware/ethernet_soc_arty.py
-            args: "--variant a7-35 --toolchain openxc7"
-            artifact: ethernet-test-arty-a7-35t
-            path: designs/ethernet-test/build/arty/gateware/digilent_arty.bit
-          - name: "NeTV2 A7-35T (RMII Ethernet)"
-            toolchain: openxc7
-            script: designs/ethernet-test/gateware/ethernet_soc_netv2.py
-            args: "--variant a7-35 --toolchain openxc7"
-            artifact: ethernet-test-netv2-a7-35t
-            path: designs/ethernet-test/build/netv2/gateware/kosagi_netv2.bit
-          - name: "NeTV2 A7-100T (RMII Ethernet)"
-            toolchain: openxc7
-            script: designs/ethernet-test/gateware/ethernet_soc_netv2.py
-            args: "--variant a7-100 --toolchain openxc7"
-            artifact: ethernet-test-netv2-a7-100t
-            path: designs/ethernet-test/build/netv2/gateware/kosagi_netv2.bit
     steps:
       - uses: actions/checkout@v4
 
       - name: Install openXC7 toolchain and cross compiler
-        if: matrix.toolchain == 'openxc7'
         run: |
           sudo apt-get update
           sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
@@ -73,19 +46,99 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --extra build
 
-      - name: Build ${{ matrix.name }} Ethernet SoC
+      - name: Build Arty Ethernet SoC
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
         run: |
-          if [ "${{ matrix.toolchain }}" = openxc7 ]; then
-            export CHIPDB="${{ github.workspace }}/chipdb"
-            mkdir -p "$CHIPDB"
-          fi
-          uv run python ${{ matrix.script }} ${{ matrix.args }} --build
+          mkdir -p "$CHIPDB"
+          uv run python designs/ethernet-test/gateware/ethernet_soc_arty.py \
+            --variant a7-35 \
+            --toolchain openxc7 \
+            --build
 
       - name: Upload bitstream
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.path }}
+          name: ethernet-test-arty-a7-35t
+          path: designs/ethernet-test/build/arty-a7-35-yosys-nextpnr/gateware/digilent_arty.bit
+
+  build-netv2-a7-35:
+    name: "NeTV2 A7-35T (RMII Ethernet)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install openXC7 toolchain and cross compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
+          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
+          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
+          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
+          sudo snap alias openxc7.fasm2frames fasm2frames
+          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
+          sudo snap alias openxc7.bbasm bbasm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build NeTV2 A7-35T Ethernet SoC
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
+        run: |
+          mkdir -p "$CHIPDB"
+          uv run python designs/ethernet-test/gateware/ethernet_soc_netv2.py \
+            --variant a7-35 \
+            --toolchain openxc7 \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: ethernet-test-netv2-a7-35t
+          path: designs/ethernet-test/build/netv2-a7-35-yosys-nextpnr/gateware/kosagi_netv2.bit
+
+  build-netv2-a7-100:
+    name: "NeTV2 A7-100T (RMII Ethernet)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install openXC7 toolchain and cross compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
+          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
+          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
+          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
+          sudo snap alias openxc7.fasm2frames fasm2frames
+          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
+          sudo snap alias openxc7.bbasm bbasm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build NeTV2 A7-100T Ethernet SoC
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
+        run: |
+          mkdir -p "$CHIPDB"
+          uv run python designs/ethernet-test/gateware/ethernet_soc_netv2.py \
+            --variant a7-100 \
+            --toolchain openxc7 \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: ethernet-test-netv2-a7-100t
+          path: designs/ethernet-test/build/netv2-a7-100-yosys-nextpnr/gateware/kosagi_netv2.bit
 
   lint:
     name: "Lint Python"

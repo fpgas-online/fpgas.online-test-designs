@@ -24,78 +24,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # One job per board. The organisation's GitHub-hosted runners are shared by every repository (20 jobs at
-  # once on GitHub Free), so each build workflow here holds at most two of them (fpgas.online-infra#182).
-  # The check names are the boards' names: Collect Bitstreams selects the jobs it waits for by them.
-  build:
-    name: ${{ matrix.name }}
+  build-arty:
+    name: "Arty A7-35T"
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      max-parallel: 2
-      matrix:
-        include:
-          - name: "Arty A7-35T"
-            toolchain: openxc7
-            script: designs/uart/gateware/uart_soc_arty.py
-            args: "--toolchain openxc7"
-            artifact: uart-test-arty
-            path: designs/uart/build/arty/gateware/*.bit
-          - name: "NeTV2 A7-35T"
-            toolchain: openxc7
-            script: designs/uart/gateware/uart_soc_netv2.py
-            args: "--variant a7-35 --toolchain openxc7"
-            artifact: uart-test-netv2-a7-35t
-            path: designs/uart/build/netv2/gateware/*.bit
-          - name: "NeTV2 A7-100T"
-            toolchain: openxc7
-            script: designs/uart/gateware/uart_soc_netv2.py
-            args: "--variant a7-100 --toolchain openxc7"
-            artifact: uart-test-netv2-a7-100t
-            path: designs/uart/build/netv2/gateware/*.bit
-          - name: "Fomu EVT"
-            toolchain: ice40
-            script: designs/uart/gateware/uart_soc_fomu.py
-            args: ""
-            artifact: uart-test-fomu
-            path: designs/uart/build/fomu/gateware/*.bin
-          - name: "TT FPGA Demo Board"
-            toolchain: ice40
-            script: designs/uart/gateware/uart_soc_tt.py
-            args: ""
-            artifact: uart-test-tt-fpga
-            path: designs/uart/build/tt/gateware/*.bin
-          - name: "Acorn CLE-215+"
-            toolchain: openxc7
-            script: designs/uart/gateware/uart_soc_acorn.py
-            args: "--variant cle-215+ --toolchain openxc7"
-            artifact: uart-test-acorn-cle-215plus
-            path: designs/uart/build/acorn/gateware/*.bit
-          - name: "NiteFury (CLE-215)"
-            toolchain: openxc7
-            script: designs/uart/gateware/uart_soc_acorn.py
-            args: "--variant cle-215 --toolchain openxc7"
-            artifact: uart-test-acorn-cle-215
-            path: designs/uart/build/acorn/gateware/*.bit
-          - name: "LiteFury (CLE-101)"
-            toolchain: openxc7
-            script: designs/uart/gateware/uart_soc_acorn.py
-            args: "--variant cle-101 --toolchain openxc7 --sys-clk-freq 50000000"
-            # LiteFury also builds the PLL and BRAM-init diagnostic bitstreams and keeps more of its build.
-            diag: true
-            artifact: uart-test-acorn-cle-101
-            path: |
-              designs/uart/build/acorn/gateware/*.bit
-              designs/uart/build/acorn/gateware/*.fasm
-              designs/uart/build/acorn/gateware/*.init
-              designs/uart/build/acorn/software/bios/bios.bin
-              tmp/build/diag_pll/*.bit
-              tmp/build/diag_bram/*.bit
     steps:
       - uses: actions/checkout@v4
 
       - name: Install openXC7 toolchain and cross compiler
-        if: matrix.toolchain == 'openxc7'
         run: |
           sudo apt-get update
           sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
@@ -106,8 +41,119 @@ jobs:
           sudo snap alias openxc7.xc7frames2bit xc7frames2bit
           sudo snap alias openxc7.bbasm bbasm
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build Arty UART test bitstream
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
+        run: |
+          mkdir -p "$CHIPDB"
+          uv run python designs/uart/gateware/uart_soc_arty.py \
+            --variant a7-35 \
+            --toolchain openxc7 \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: uart-test-arty
+          path: |
+            designs/uart/build/arty-a7-35-yosys-nextpnr/gateware/*.bit
+          if-no-files-found: error
+
+  build-netv2-a7-35:
+    name: "NeTV2 A7-35T"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install openXC7 toolchain and cross compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
+          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
+          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
+          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
+          sudo snap alias openxc7.fasm2frames fasm2frames
+          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
+          sudo snap alias openxc7.bbasm bbasm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build NeTV2 A7-35T UART test bitstream
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
+        run: |
+          mkdir -p "$CHIPDB"
+          uv run python designs/uart/gateware/uart_soc_netv2.py \
+            --variant a7-35 \
+            --toolchain openxc7 \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: uart-test-netv2-a7-35t
+          path: |
+            designs/uart/build/netv2-a7-35-yosys-nextpnr/gateware/*.bit
+          if-no-files-found: error
+
+  build-netv2-a7-100:
+    name: "NeTV2 A7-100T"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install openXC7 toolchain and cross compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
+          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
+          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
+          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
+          sudo snap alias openxc7.fasm2frames fasm2frames
+          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
+          sudo snap alias openxc7.bbasm bbasm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build NeTV2 A7-100T UART test bitstream
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
+        run: |
+          mkdir -p "$CHIPDB"
+          uv run python designs/uart/gateware/uart_soc_netv2.py \
+            --variant a7-100 \
+            --toolchain openxc7 \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: uart-test-netv2-a7-100t
+          path: |
+            designs/uart/build/netv2-a7-100-yosys-nextpnr/gateware/*.bit
+          if-no-files-found: error
+
+  build-fomu:
+    name: "Fomu EVT"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Install iCE40 toolchain and cross compiler
-        if: matrix.toolchain == 'ice40'
         run: |
           sudo apt-get update
           sudo apt-get install -y yosys nextpnr-ice40 fpga-icestorm gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
@@ -118,42 +164,47 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --extra build
 
-      # CHIPDB is the openXC7 chipdb cache; the iCE40 builds never had it set.
-      - name: Build ${{ matrix.name }} UART test bitstream
+      - name: Build Fomu UART test bitstream
         run: |
-          if [ "${{ matrix.toolchain }}" = openxc7 ]; then
-            export CHIPDB="${{ github.workspace }}/chipdb"
-            mkdir -p "$CHIPDB"
-          fi
-          uv run python ${{ matrix.script }} ${{ matrix.args }} --build
-
-      - name: Build PLL diagnostic bitstream
-        if: matrix.diag
-        env:
-          CHIPDB: ${{ github.workspace }}/chipdb
-        run: |
-          mkdir -p "$CHIPDB"
-          uv run python tmp/diag_pll.py \
-            --variant cle-101 \
-            --toolchain openxc7 \
-            --build
-
-      - name: Build BRAM init diagnostic bitstream
-        if: matrix.diag
-        env:
-          CHIPDB: ${{ github.workspace }}/chipdb
-        run: |
-          mkdir -p "$CHIPDB"
-          uv run python tmp/diag_bram.py \
-            --variant cle-101 \
-            --toolchain openxc7 \
+          uv run python designs/uart/gateware/uart_soc_fomu.py \
             --build
 
       - name: Upload bitstream
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.path }}
+          name: uart-test-fomu
+          path: |
+            designs/uart/build/fomu-evt-yosys-nextpnr/gateware/*.bin
+          if-no-files-found: error
+
+  build-tt:
+    name: "TT FPGA Demo Board"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install iCE40 toolchain and cross compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys nextpnr-ice40 fpga-icestorm gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build TT FPGA UART test bitstream
+        run: |
+          uv run python designs/uart/gateware/uart_soc_tt.py \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: uart-test-tt-fpga
+          path: |
+            designs/uart/build/tt-fpga-yosys-nextpnr/gateware/*.bin
           if-no-files-found: error
 
   lint:
@@ -167,3 +218,152 @@ jobs:
 
       - name: Lint
         run: uv run --extra dev ruff check designs/uart/gateware/
+
+  build-acorn-cle-215plus:
+    name: "Acorn CLE-215+"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install openXC7 toolchain and cross compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
+          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
+          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
+          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
+          sudo snap alias openxc7.fasm2frames fasm2frames
+          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
+          sudo snap alias openxc7.bbasm bbasm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build Acorn CLE-215+ bitstream
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
+        run: |
+          mkdir -p "$CHIPDB"
+          uv run python designs/uart/gateware/uart_soc_acorn.py \
+            --variant cle-215+ \
+            --toolchain openxc7 \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: uart-test-acorn-cle-215plus
+          path: |
+            designs/uart/build/acorn-cle-215p-yosys-nextpnr/gateware/*.bit
+          if-no-files-found: error
+
+  build-acorn-cle-215:
+    name: "NiteFury (CLE-215)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install openXC7 toolchain and cross compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
+          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
+          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
+          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
+          sudo snap alias openxc7.fasm2frames fasm2frames
+          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
+          sudo snap alias openxc7.bbasm bbasm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build NiteFury (CLE-215) bitstream
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
+        run: |
+          mkdir -p "$CHIPDB"
+          uv run python designs/uart/gateware/uart_soc_acorn.py \
+            --variant cle-215 \
+            --toolchain openxc7 \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: uart-test-acorn-cle-215
+          path: |
+            designs/uart/build/acorn-cle-215-yosys-nextpnr/gateware/*.bit
+          if-no-files-found: error
+
+  build-acorn-cle-101:
+    name: "LiteFury (CLE-101)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install openXC7 toolchain and cross compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
+          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
+          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
+          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
+          sudo snap alias openxc7.fasm2frames fasm2frames
+          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
+          sudo snap alias openxc7.bbasm bbasm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Build LiteFury (CLE-101) bitstream
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
+        run: |
+          mkdir -p "$CHIPDB"
+          uv run python designs/uart/gateware/uart_soc_acorn.py \
+            --variant cle-101 \
+            --toolchain openxc7 \
+            --sys-clk-freq 50000000 \
+            --build
+
+      - name: Build PLL diagnostic bitstream
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
+        run: |
+          mkdir -p "$CHIPDB"
+          uv run python tmp/diag_pll.py \
+            --variant cle-101 \
+            --toolchain openxc7 \
+            --build
+
+      - name: Build BRAM init diagnostic bitstream
+        env:
+          CHIPDB: ${{ github.workspace }}/chipdb
+        run: |
+          mkdir -p "$CHIPDB"
+          uv run python tmp/diag_bram.py \
+            --variant cle-101 \
+            --toolchain openxc7 \
+            --build
+
+      - name: Upload bitstream and build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: uart-test-acorn-cle-101
+          path: |
+            designs/uart/build/acorn-cle-101-yosys-nextpnr/gateware/*.bit
+            designs/uart/build/acorn-cle-101-yosys-nextpnr/gateware/*.fasm
+            designs/uart/build/acorn-cle-101-yosys-nextpnr/gateware/*.init
+            designs/uart/build/acorn-cle-101-yosys-nextpnr/software/bios/bios.bin
+            tmp/build/diag_pll/*.bit
+            tmp/build/diag_bram/*.bit
+          if-no-files-found: error
