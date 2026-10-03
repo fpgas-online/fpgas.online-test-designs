@@ -25,6 +25,7 @@ READ_S = 0.2  # one read's timeout while waiting for a prompt
 ATTACH_STEP_S = 2.0  # how long a newline is given to bring a prompt before the next one is sent
 ATTACH_TIMEOUT_S = 30.0  # the BIOS waits a few seconds for a serial boot before its first prompt
 COMMAND_TIMEOUT_S = 10.0
+DRAIN_S = 5.0  # a port that never goes quiet (noise, a design printing without end) is drained this long
 
 
 class NoPrompt(Exception):
@@ -51,14 +52,16 @@ class BiosConsole:
         self.stale = ""  # what was waiting in the port when attach() started
 
     def _drain(self):
-        """Everything that arrives until the port is quiet."""
+        """Everything that arrives until the port is quiet, or for DRAIN_S at most."""
         self.ser.timeout = QUIET_S
+        deadline = self.clock() + DRAIN_S
         data = b""
-        while True:
+        while self.clock() < deadline:
             chunk = self.ser.read(4096)
             if not chunk:
-                return strip_ansi(data.decode("utf-8", errors="replace"))
+                break
             data += chunk
+        return strip_ansi(data.decode("utf-8", errors="replace"))
 
     def _until_prompt(self, timeout):
         """(text, whether it ends with the prompt): reads until the prompt is the last thing received."""

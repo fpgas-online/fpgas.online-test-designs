@@ -134,3 +134,15 @@ def test_a_prompt_that_arrives_a_byte_at_a_time_is_still_found():
     bios.attach()
     assert bios.command("mem_list") == ["Available memory regions:", "ROM  0x0 0x20000"]
     assert bios.ident() == IDENT
+
+
+def test_a_port_that_never_goes_quiet_is_not_drained_for_ever():
+    class Noisy(FakeBios):
+        def read(self, size=1):
+            self.now += 0.01
+            return b"\x00"
+
+    fake = Noisy(silent=True)
+    with pytest.raises(bios_console.NoPrompt):
+        console(fake).attach(timeout=10)
+    assert fake.now < 30

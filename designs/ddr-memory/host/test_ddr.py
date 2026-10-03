@@ -152,8 +152,8 @@ def run_ddr_test(bios, board, attach_timeout=ATTACH_TIMEOUT_S):
     faults = []
     memtests = []
     try:
-        found["ident"] = ident = bios.ident()
         found["commands"].append("ident")
+        found["ident"] = ident = bios.ident()
         name = BOARDS[board]["ident"]
         if not ident or DESIGN_IDENT not in ident or name not in ident:
             return failed(f"the design on the UART is {ident!r}, not the {DESIGN_IDENT} for the {name}")
@@ -262,6 +262,9 @@ def main(argv=None):
             found = run_ddr_test(bios_console.BiosConsole(ser, clock=time.monotonic), args.board, args.timeout)
         except OSError as e:  # the port went away before the BIOS answered
             found["reason"] = f"the UART failed: {e}"
+            print(f"FAIL: {found['reason']}")
+        except Exception as e:  # anything else still ends with the result line
+            found["reason"] = f"the test failed: {type(e).__name__}: {e}"
             print(f"FAIL: {found['reason']}")
         finally:
             close = getattr(ser, "close", None)

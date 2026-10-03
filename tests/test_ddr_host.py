@@ -224,3 +224,21 @@ def test_a_port_that_dies_before_the_prompt_still_ends_with_a_result(capsys, mon
     found = result_json(capsys.readouterr().out)
     assert found["result"] == "fail"
     assert "Input/output error" in found["reason"]
+
+
+def test_a_port_that_dies_on_the_first_command_still_ends_with_a_result(capsys, monkeypatch):
+    fake = FakeBios(ddr_replies("arty"))
+    read = fake.read
+
+    def dying_read(size=1):
+        if fake.commands[-1:] == ["ident"]:
+            raise OSError(5, "Input/output error")
+        return read(size)
+
+    fake.read = dying_read
+    monkeypatch.setattr(test_ddr, "open_port", lambda port, baud, timeout: fake)
+    monkeypatch.setattr(test_ddr.time, "monotonic", lambda: fake.now)
+    assert test_ddr.main(["--port", "/dev/ttyUSB1", "--board", "arty"]) == 1
+    found = result_json(capsys.readouterr().out)
+    assert found["result"] == "fail"
+    assert "during `ident`" in found["reason"]
