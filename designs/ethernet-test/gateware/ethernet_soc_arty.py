@@ -41,6 +41,19 @@ from designs._shared.build_helpers import default_build_dir
 from designs._shared.platform_fixups import require_litex_boards_timing
 from designs._shared.yosys_workarounds import apply_nodram_workaround, patch_yosys_template
 
+IDENT = "fpgas-online Ethernet Test SoC -- Arty A7"
+
+
+class EthernetTestSoC(BaseSoC):
+    """litex_boards' SoC with this design's ident.
+
+    The target gives SoCCore its own ident ("LiteX SoC on Arty A7"), which says nothing of the design:
+    the host test asks the BIOS for its ident to know the Ethernet test design is the one answering.
+    """
+
+    def add_identifier(self, name="identifier", identifier=IDENT, with_build_time=True):
+        BaseSoC.add_identifier(self, name, identifier=IDENT, with_build_time=True)
+
 
 def main():
     from litex.build.parser import LiteXArgumentParser
@@ -55,7 +68,7 @@ def main():
     soc_kwargs.pop("ident_version", None)
     soc_kwargs["uart_baudrate"] = 115200
 
-    soc = BaseSoC(
+    soc = EthernetTestSoC(
         variant       = args.variant,
         toolchain     = args.toolchain,
         sys_clk_freq  = int(args.sys_clk_freq),

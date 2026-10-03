@@ -7,6 +7,11 @@ functionality the host-side test scripts expect:
   - UART firmware: prints identification, then echoes all received bytes.
   - SPI Flash firmware: reads JEDEC ID via SPI, prints it, reports PASS/FAIL.
 
+Both end what they print with the BIOS's "litex> " prompt and answer a newline
+by printing it again (the SPI Flash firmware reads the ID again first), so the
+host tests ask for what they check instead of relying on output from start.
+tests/test_ice40_firmware.py runs both on a small RV32I machine.
+
 The firmware is returned as a list of 32-bit words suitable for passing to
 LiteX's ``integrated_rom_init`` parameter (with ``compile_software=False``).
 
@@ -157,10 +162,13 @@ def generate_uart_firmware(uart_base, ident):
     """Generate minimal UART echo firmware.
 
     The firmware:
-      1. Prints a banner line containing "LiteX" (required by test_uart.py).
-      2. Prints the *ident* string (board identification).
-      3. Prints "litex> " prompt (required by test_uart.py).
-      4. Enters an echo loop: every received byte is sent back.
+      1. Prints a banner line containing "LiteX".
+      2. Prints "Ident: " and the *ident* string (board identification).
+      3. Prints the "litex> " prompt.
+      4. Enters an echo loop: every received byte is sent back. After a
+         newline it goes back to step 2, so a host can ask at any time
+         (designs/_host/bios_console.py) and does not depend on having
+         seen the output at start.
 
     Parameters
     ----------
@@ -193,7 +201,8 @@ def generate_uart_firmware(uart_base, ident):
     i_banner_addi  = len(words); words.append(0)        # 3  (patch later)
     i_banner_jal   = len(words); words.append(0)        # 4  (patch later)
 
-    # Word 5-7: Print ident string.
+    # Word 5-7: Print ident string. A newline in the echo loop comes back here.
+    i_ident = len(words)
     i_ident_auipc = len(words); words.append(0)         # 5
     i_ident_addi  = len(words); words.append(0)         # 6
     i_ident_jal   = len(words); words.append(0)         # 7
@@ -227,6 +236,13 @@ def generate_uart_firmware(uart_base, ident):
     words.append(_bne(T0, ZERO, w(i_tx_wait) - w(i_tx_wait + 1)))
     words.append(_sw(A0, S0, 0))                        # UART_RXTX = a0 (echo)
 
+    # A newline is the host asking who this is: answer with the ident and the prompt again, as the
+    # LiteX BIOS's `ident` command does. A host that opens the UART after the design started has
+    # missed what was printed then (fpgas.online-test-designs#86).
+    words.append(_addi(T0, ZERO, 0x0A))                 # t0 = '\n'
+    i_newline_beq = len(words)
+    words.append(_beq(A0, T0, w(i_ident) - w(i_newline_beq)))
+
     i_echo_jal = len(words)
     words.append(_jal(ZERO, w(i_echo_loop) - w(i_echo_jal)))
 
@@ -252,7 +268,7 @@ def generate_uart_firmware(uart_base, ident):
 
     # --- String data --------------------------------------------------------
     banner_str = "\r\nLiteX custom firmware\r\n"
-    ident_str  = ident + "\r\n"
+    ident_str  = "Ident: " + ident + "\r\n"
     prompt_str = "litex> "
 
     i_banner_data = len(words)
@@ -292,12 +308,15 @@ def generate_spiflash_firmware(uart_base, spiflash_base, ident):
     """Generate SPI Flash JEDEC ID reader firmware.
 
     The firmware:
-      1. Prints a banner line containing "LiteX" (required by test scripts).
-      2. Prints the *ident* string (board identification).
+      1. Prints a banner line containing "LiteX".
+      2. Prints "Ident: " and the *ident* string (board identification).
       3. Reads the JEDEC ID (command 0x9F) via SPI bitbang.
       4. Prints "JEDEC_ID: 0xMM 0xTT 0xCC".
       5. Prints "SPI_FLASH_TEST: PASS" or "FAIL".
-      6. Prints "Test Complete" and halts.
+      6. Prints "Test Complete" and the "litex> " prompt.
+      7. Waits for a newline on the UART, then goes back to step 2: the
+         host asks for a fresh reading (designs/_host/bios_console.py)
+         and does not depend on having seen the one at start.
 
     PASS when the JEDEC ID is not all-zeros or all-0xFF.
 
@@ -349,7 +368,8 @@ def generate_spiflash_firmware(uart_base, spiflash_base, ident):
     i_banner_addi  = len(words); words.append(0)
     i_banner_jal   = len(words); words.append(0)
 
-    # Print ident string.
+    # Print ident string. A newline from the host comes back here: the flash is asked again.
+    i_ident = len(words)
     i_ident_auipc = len(words); words.append(0)
     i_ident_addi  = len(words); words.append(0)
     i_ident_jal   = len(words); words.append(0)
@@ -449,14 +469,30 @@ def generate_spiflash_firmware(uart_base, spiflash_base, ident):
     i_pass_addi  = len(words); words.append(0)
     i_pass_jal   = len(words); words.append(0)
 
-    # Done: print "Test Complete" and halt.
+    # Done: print "Test Complete" and the prompt.
     i_done = len(words)
     i_done_auipc = len(words); words.append(0)
     i_done_addi  = len(words); words.append(0)
     i_done_jal   = len(words); words.append(0)
 
-    _i_halt = len(words)  # documents the halt address
-    words.append(_jal(ZERO, 0))                                 # self-loop
+    i_prompt_auipc = len(words); words.append(0)
+    i_prompt_addi  = len(words); words.append(0)
+    i_prompt_jal   = len(words); words.append(0)
+
+    # Wait for a newline, then read the ID again. A host that opens the UART after the design started
+    # has missed the first reading (fpgas.online-test-designs#86), so it asks. Other bytes are dropped,
+    # not echoed. Writing bit 1 of UART_EV_PENDING takes the byte off the RX FIFO, as in the UART firmware.
+    i_wait = len(words)
+    words.append(_lw(T0, S0, 8))                                # t0 = UART_RXEMPTY
+    words.append(_bne(T0, ZERO, w(i_wait) - w(i_wait + 1)))
+    words.append(_lw(A0, S0, 0))                                # a0 = UART_RXTX (read)
+    words.append(_addi(T0, ZERO, 2))                            # t0 = EV_RX (bit 1)
+    words.append(_sw(T0, S0, 16))                               # UART_EV_PENDING = 2 (pop RX FIFO)
+    words.append(_addi(T0, ZERO, 0x0A))                         # t0 = '\n'
+    i_wait_bne = len(words)
+    words.append(_bne(A0, T0, w(i_wait) - w(i_wait_bne)))
+    i_again_jal = len(words)
+    words.append(_jal(ZERO, w(i_ident) - w(i_again_jal)))
 
     # === Subroutines ======================================================
 
@@ -545,7 +581,10 @@ def generate_spiflash_firmware(uart_base, spiflash_base, ident):
     _emit_string(words, "\r\nLiteX custom firmware\r\n")
 
     i_ident_data = len(words)
-    _emit_string(words, ident + "\r\n")
+    _emit_string(words, "Ident: " + ident + "\r\n")
+
+    i_prompt_data = len(words)
+    _emit_string(words, "litex> ")
 
     i_jedec_data = len(words)
     _emit_string(words, "JEDEC_ID: 0x")
@@ -588,6 +627,7 @@ def generate_spiflash_firmware(uart_base, spiflash_base, ident):
     _patch_print(i_pass_auipc,   i_pass_addi,   i_pass_jal,   i_pass_data)
     _patch_print(i_fail_auipc,   i_fail_addi,   i_fail_jal,   i_fail_data)
     _patch_print(i_done_auipc,   i_done_addi,   i_done_jal,   i_done_data)
+    _patch_print(i_prompt_auipc, i_prompt_addi, i_prompt_jal, i_prompt_data)
 
     # SPI xfer subroutine calls.
     words[i_send_jal] = _jal(RA, w(i_spi_xfer) - w(i_send_jal))

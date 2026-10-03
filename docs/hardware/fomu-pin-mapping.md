@@ -74,7 +74,7 @@ The FPGA's serial pins connect to the RPi's GPIO UART via the GPIO header. This 
 |-----------|-------|
 | RPi device | `/dev/serial0` → `/dev/ttyAMA0` |
 | Baud rate | 115200 |
-| Test args | `--port /dev/serial0 --board fomu --skip-banner` |
+| Test args | `--port /dev/serial0 --board fomu` |
 
 On pi17/pi21 (RPi 3), `hciuart` is inactive, so `/dev/ttyAMA0` (PL011) is available on GPIO14/15 for FPGA UART. `serial-getty` must be masked (not just stopped) to prevent it from consuming serial data.
 
