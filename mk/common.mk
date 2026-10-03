@@ -8,6 +8,11 @@
 #   - PATH setup to include toolchains
 #   - Targets: venv, install-litex, install-toolchains, setup, clean-venv
 
+# Use bash for recipes. Xilinx's /opt/Xilinx/*/Vivado/settings64.sh uses
+# bash `source` (not the POSIX `.`), so dash (Debian's /bin/sh) cannot
+# execute it. Forcing bash keeps the Vivado recipes portable.
+SHELL := /bin/bash
+
 # ---------------------------------------------------------------------------
 # Paths (relative to repo root)
 # ---------------------------------------------------------------------------

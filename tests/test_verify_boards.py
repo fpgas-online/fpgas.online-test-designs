@@ -89,8 +89,8 @@ def test_artifact_paths_match_the_collect_bitstreams_bundle():
     assert ARTY.artifact("uart", "a7-35") == "uart-test-arty/digilent_arty.bit"
     assert ARTY.artifact("ethernet", "a7-35") == "ethernet-test-arty-a7-35t/digilent_arty.bit"
     assert NETV2.artifact("ddr", "a7-100") == "ddr-test-netv2-a7-100t/kosagi_netv2.bit"
-    assert FOMU.artifact("pmod", "evt") == "gpio-loopback-fomu-evt/top.bin"
-    assert TT.artifact("pin-id", "tt-fpga") == "pmod-pin-id-tt-fpga/top.bin"
+    assert FOMU.artifact("pmod", "evt") == "gpio-loopback-fomu-evt/kosagi_fomu_evt.bin"
+    assert TT.artifact("pin-id", "tt-fpga") == "pmod-pin-id-tt-fpga/tt_fpga_platform.bin"
 
 
 def test_the_fomu_boot_check_runs_one_test_since_a_load_uses_up_the_bootloader():
@@ -484,7 +484,7 @@ def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_rea
     # so the last design left on the board is one with a single TX pin, not one driving every Pmod line
     assert [t["test"] for t in report["tests"]] == ["pin-id", "uart", "spiflash"]
     (load,) = [c for c in run.calls if "tt_fpga_program.py" in " ".join(c)]
-    assert load[3].endswith("pmod-pin-id-tt-fpga/top.bin") and load[4:] == ["--gpio-release"]
+    assert load[3].endswith("pmod-pin-id-tt-fpga/tt_fpga_platform.bin") and load[4:] == ["--gpio-release"]
     bridged = [c for c in run.calls if "tt_test_wrapper.py" in " ".join(c)]
     assert [c[3].rsplit("/", 2)[-2] for c in bridged] == ["uart-test-tt-fpga", "spiflash-test-tt-fpga"]
     assert bridged[0][2] == "/dev/ttyACM0" and bridged[0][5].endswith("test_uart.py")
@@ -646,7 +646,7 @@ def test_debug_list_shows_every_test_and_whether_the_boot_check_runs_it(tmp_path
 
 
 def test_debug_check_finds_a_damaged_bitstream(tmp_path, capsys):
-    images = _install(tmp_path, FOMU, corrupt="gpio-loopback-fomu-evt/top.bin")
+    images = _install(tmp_path, FOMU, corrupt="gpio-loopback-fomu-evt/kosagi_fomu_evt.bin")
     args = cli.argparse.Namespace(command="check", images=images, variant=None, port=None)
     assert debug.run(FOMU, args) == 1
     assert "BAD" in capsys.readouterr().out
@@ -662,7 +662,7 @@ def test_debug_test_loads_then_runs_with_extra_arguments(tmp_path, monkeypatch):
                                   variant=None, port=None)  # fmt: skip
     assert debug.run(ARTY, args) == 0
     assert ran[0] == ["rmmod", "spidev", "spi_bcm2835"]
-    assert ran[1] == ["openFPGALoader", "-b", "arty", str(images / "pmod-pin-id-arty-a7-35t/top.bit")]
+    assert ran[1] == ["openFPGALoader", "-b", "arty", str(images / "pmod-pin-id-arty-a7-35t/digilent_arty.bit")]
     # the extra arguments follow the boot check's; identify_pmod_pins.py lets --hat-port win over --board
     assert ran[2][1].endswith("identify_pmod_pins.py") and ran[2][2:] == ["--board", "arty", "--hat-port", "JA"]
 
