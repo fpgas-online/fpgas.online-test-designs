@@ -44,7 +44,9 @@ DESIGN_IDENT = "SPI Flash Test SoC"
 BOARDS = {
     "arty": {"ident": "Arty A7", "jedec": None},  # varies by board revision
     "netv2": {"ident": "NeTV2", "jedec": None},
-    "fomu": {"ident": "Fomu EVT", "jedec": (0x1F, 0x86, 0x01)},  # AT25SF161: Adesto/Renesas, 16 Mbit
+    # Winbond, 16 MiB: read on pi-sw1-p17's Fomu EVT, 2026-10-03. The AT25SF161 (1f8601) here before was the
+    # production Fomu's flash, never read on an EVT.
+    "fomu": {"ident": "Fomu EVT", "jedec": (0xEF, 0x70, 0x18)},
     "tt": {"ident": "TT FPGA", "jedec": None},
     "acorn": {"ident": "Acorn", "jedec": None},
 }

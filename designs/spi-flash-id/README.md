@@ -38,7 +38,7 @@ test does not use the reading printed at start. It runs:
 | Step | Checked |
 |------|---------|
 | a newline | the `litex> ` prompt comes back: the firmware is there and answers |
-| a newline, twice | each makes the firmware send `0x9F` to the flash again. The ident is the SPI flash test design for this board; the ID is not `000000` or `ffffff`; the firmware's verdict is PASS; both readings agree; the ID is the board's known one (the Fomu's `1f8601`) or the `--expected-jedec` given |
+| a newline, twice | each makes the firmware send `0x9F` to the flash again. The ident is the SPI flash test design for this board; the ID is not `000000` or `ffffff`; the firmware's verdict is PASS; both readings agree; the ID is the board's known one (the Fomu EVT's `ef7018`) or the `--expected-jedec` given |
 
 Its last line is the result for `fpgas-verify`:
 

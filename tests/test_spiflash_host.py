@@ -21,6 +21,7 @@ from .rv32_fakes import FirmwarePort, Machine, SpiFlash
 UART_BASE = 0xF0001800
 SPI_BASE = 0xF0002000
 AT25SF161 = (0x1F, 0x86, 0x01)
+FOMU_EVT = (0xEF, 0x70, 0x18)  # what pi-sw1-p17's Fomu EVT answers
 W25Q128 = (0xEF, 0x40, 0x18)
 IDENT = {
     "fomu": "fpgas-online SPI Flash Test SoC -- Fomu EVT",
@@ -60,8 +61,15 @@ def test_a_flash_read_on_a_port_opened_after_the_design_started_passes():
     assert fake.machine.flash.selects == selects + 4
 
 
-def test_the_fomu_s_known_flash_passes_and_has_no_capacity_claimed():
-    found = run(port("fomu", AT25SF161), "fomu")
+def test_the_fomu_s_known_flash_passes():
+    found = run(port("fomu", FOMU_EVT), "fomu")
+    assert found["result"] == "pass"
+    assert found["rdid"] == "ef7018"
+    assert found["capacity_bytes"] == 16 * 1024 * 1024
+
+
+def test_an_adesto_flash_has_no_capacity_claimed():
+    found = run(port("netv2", AT25SF161), "netv2", expected=AT25SF161)
     assert found["result"] == "pass"
     assert found["rdid"] == "1f8601"
     assert "capacity_bytes" not in found  # Adesto's third byte is not a log2 size
@@ -87,7 +95,7 @@ def test_no_flash_fails(jedec, rdid):
 def test_another_flash_than_the_board_s_fails():
     found = run(port("fomu", W25Q128), "fomu")
     assert found["result"] == "fail"
-    assert "ef4018, not the 1f8601 expected for the Fomu EVT" in found["reason"]
+    assert "ef4018, not the ef7018 expected for the Fomu EVT" in found["reason"]
 
 
 def test_an_expected_id_given_on_the_command_line_is_checked():
