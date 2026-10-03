@@ -83,7 +83,7 @@ What must not change (from the sessions that run the fleet's Acorn check):
 
 | # | Pull request | State |
 |---|---|---|
-| 1 | `designs/acorn-pcie` builds with openXC7 in CI | PR #95: stops at placement, on the XADC; see [unknowns](#unknowns) |
+| 1 | `designs/acorn-pcie` builds with openXC7 in CI | PR #95: stops at placement on the XADC; without it, misses timing; see [unknowns](#unknowns) |
 | 2 | PR #14 brought up to `main`; `designs/acorn-pcie` joins its three flows | not started; needs Tim to say #14 is wanted as it is |
 | 3 | `collect-bitstreams.yml` collects every board's builds and publishes them and the manifest on `build-<version>` | not started; after #92 |
 | 4 | The Vivado script uploads to `build-<version>`, covering the full test design and the manifest fields the Acorn check reads | not started |
@@ -100,8 +100,9 @@ The Acorn PCIe design (§2.3 and Phase 5) names most of these.
   variants, operational and golden): `ERROR: Unable to place cell 'XADC', no Bels remaining of type 'XADC'`.
   nextpnr-xilinx 0.8.2 has no XADC site, so no change to the design can fix it: either the open build leaves
   the XADC (the temperature readout) out, or nextpnr-xilinx gains it. Everything else passed synthesis and
-  packing: the PCIe hard block, the GTP, ICAP, DNA and the DDR3 I/O. Not known: whether it then routes and
-  meets timing, since no build got past placement.
+  packing: the PCIe hard block, the GTP, ICAP, DNA and the DDR3 I/O. Built without the XADC (a labelled
+  experiment only), it places and routes, and then misses timing on all five nextpnr seeds: the 80 MHz system
+  clock reaches 51-64 MHz, and the PCIe PIPE clock 210-224 MHz of the 250 MHz Gen2 needs (PR #95).
 - **Whether an openXC7 build of it works on a board.** Nobody has confirmed an openXC7 PCIe bitstream
   enumerating on hardware, and LiteDRAM built with openXC7 has never passed a memory test.
 - **The golden (multiboot) image.** openXC7 cannot set `NEXT_CONFIG_ADDR`, `TIMER_CFG` or `CONFIGFALLBACK`.
@@ -120,10 +121,11 @@ The Acorn PCIe design (§2.3 and Phase 5) names most of these.
    the approved one.
 2. **Which flow is golden?** I recommend: the open build wherever it has passed the check on a board; the
    Vivado build otherwise. For the Acorn that means Vivado until an openXC7 image has run on one.
-3. **The Acorn's full test design cannot be placed by openXC7 while it has the XADC.** Should the open
-   build leave the XADC out (the Vivado build keeps it, and the two images then differ in what the check can
-   read), or should its CI job be allowed to fail without blocking merges until nextpnr-xilinx supports it
-   (as the NeTV2 PCIe jobs are now, issue #30)?
+3. **The Acorn's full test design does not build with openXC7:** nextpnr-xilinx cannot place the XADC, and
+   without the XADC the design misses timing by 20-35 % on the system clock and 10-15 % on the PCIe PIPE
+   clock. Should its CI job be allowed to fail without blocking merges until that is solved (as the NeTV2 PCIe
+   jobs were, issue #30), or should the open build be a cut-down design (no XADC, a slower system clock) that
+   differs from the Vivado one in what the check can read?
 4. **Is PR #14 the Vivado side you want?** It needs bringing up to `main` before anything can build on it.
 5. **A release holds at most 1000 files.** One Vivado flow of every design was 148 files in April's release
    (each Acorn build is six: `.bit` and `.bin`, plain, `_fallback` and `_operational`). Three flows and the
