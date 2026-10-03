@@ -6,6 +6,7 @@ these helpers.
 """
 
 import os
+import shlex
 import sys
 from pathlib import Path
 
@@ -157,7 +158,7 @@ def patch_vivado_toolchain_for_yosys_edif():
         path = Path(script_file)
         content = path.read_text()
         fix_cmd = (
-            f"{sys.executable} {_FIX_EDIF_SCRIPT} "
+            f"{shlex.quote(sys.executable)} {shlex.quote(str(_FIX_EDIF_SCRIPT))} "
             f"{self._build_name}.edif\n"
         )
         marker = f"vivado -mode batch -source {self._build_name}.tcl"
