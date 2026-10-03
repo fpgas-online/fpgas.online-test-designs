@@ -634,6 +634,19 @@ def test_the_netv2_reads_its_dna_on_its_scans_pins_and_puts_them_back(tmp_path):
                                               ("4 ip pn", "17 ip pu", "22 ip pd", "27 a3 pn")]  # fmt: skip
 
 
+@pytest.mark.parametrize("problem", [core.Problem("fail", "openFPGALoader did not finish within 60 s: "),
+                                     core.Problem("error", "openFPGALoader is not installed")])  # fmt: skip
+def test_the_netv2_puts_its_pins_back_when_the_dna_read_itself_fails(tmp_path, problem):
+    run = Runner([("pinctrl get", (0, NETV2_PINS)), ("--read-dna", problem)],
+                 flash=b"\0" * NETV2.flash_region["a7-100"])  # fmt: skip
+    report = _check(NETV2, tmp_path, _netv2_found("0x13631093"), run)
+    read = run.calls.index(["openFPGALoader", "--cable", "libgpiod", "--pins", "27:22:4:17", "--read-dna"])
+    assert run.calls[read + 1 : read + 5] == [["pinctrl", "set", *g.split()] for g in
+                                              ("4 ip pn", "17 ip pu", "22 ip pd", "27 a3 pn")]  # fmt: skip
+    assert report["jtag"]["result"] == problem.result and problem.reason in report["identity"]["dna_error"]
+    assert "dna" not in report["state"]
+
+
 def test_the_netv2_dna_is_not_read_when_its_pins_cannot_be_put_back(tmp_path):
     run = Runner([("pinctrl get", core.Problem("error", "pinctrl is not installed"))],
                  flash=b"\0" * NETV2.flash_region["a7-100"])  # fmt: skip
