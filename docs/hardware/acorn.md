@@ -21,7 +21,18 @@ sudo apt install fpgas-online-acorn
 | `fpgas-online-acorn-bitstreams` | pinned release date + commit (e.g. `20260923+ge48a750c8303`) | `/usr/share/fpgas-online/acorn-pcie/images/`: `manifest.json`, and for each of `cle-215p` / `cle-101` the golden (`0x000000`) and operational (`0x400000`) flash images, the operational `.bit`, and the CSR maps |
 | `fpgas-online-verify` | `X.Y.postN` | `fpgas-verify` and its unit |
 
-The tools package depends on one exact bitstreams version. Which release that is comes from [`packaging/acorn-pcie/release.toml`](../../packaging/acorn-pcie/release.toml), and a new release reaches hosts only when a reviewed PR moves that pin. Every package is built, and its install rules are checked in clean Debian bookworm and trixie, by [`collect-bitstreams.yml`](../../.github/workflows/collect-bitstreams.yml).
+The tools package depends on one exact bitstreams version. Which release that is comes from [`packaging/acorn-pcie/release.toml`](../../packaging/acorn-pcie/release.toml), and a new release reaches hosts only when a reviewed PR moves that pin. Those images are Vivado builds.
+
+**The open-source (openXC7) build of the same SoC is not shipped.** CI builds it on every push to main
+([`acorn-pcie-build.yml`](../../.github/workflows/acorn-pcie-build.yml)), and it is expected to fail: nextpnr-xilinx
+cannot place the XADC, and without the XADC the design misses timing
+([#105](https://github.com/fpgas-online/fpgas.online-test-designs/issues/105)). Its jobs never fail a build and nothing
+waits for them. `collect-bitstreams.yml` leaves its artifacts out of the bundle, so no package carries them, and
+[`tests/test_unshipped_bitstreams.py`](../../tests/test_unshipped_bitstreams.py) fails CI if that changes. A job that
+unexpectedly passes is reported as an error, for someone to decide whether those bitstreams ship; none has run on a
+board.
+
+Every package is built, and its install rules are checked in clean Debian bookworm and trixie, by [`collect-bitstreams.yml`](../../.github/workflows/collect-bitstreams.yml).
 
 At boot the check finds the Acorn on PCI (Xilinx `10ee` or SQRL `1e24`), works out which setup the host is
 from its device-tree model, and runs these tests ([verify.md](../verify.md#what-each-boards-check-tests) has the

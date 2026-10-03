@@ -38,3 +38,21 @@ def apply_nodram_workaround(soc):
     """
     if hasattr(soc.platform.toolchain, "_synth_opts"):
         soc.platform.toolchain._synth_opts += " -nodram"
+
+
+def build_in_block_ram(soc, pattern):
+    """Have Yosys build the top module's memories whose names match *pattern* in block RAM.
+
+    nextpnr-xilinx in the openXC7 image packs no single-port distributed RAM (RAM32X1S to RAM256X1S:
+    "Cannot pack unsupported primitive"), and Yosys picks RAM256X1S for a small single-port memory such as
+    a grain of the LiteX L2 cache's data memory. `-nodram` avoids that but turns every memory with an
+    asynchronous read (each AsyncFIFO, say) into flip-flops; this moves only the named memories, which must
+    have a synchronous read, and leaves the rest as Yosys maps them.
+
+    LiteX reads the sources with -defer, so the top module is elaborated first: a memory does not exist to
+    carry the attribute until then.
+    """
+    soc.platform.toolchain._yosys_cmds += [
+        "hierarchy -top {build_name}",
+        'setattr -set ram_style "block" {build_name}/m:' + pattern,
+    ]

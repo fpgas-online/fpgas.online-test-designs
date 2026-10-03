@@ -33,9 +33,20 @@ ICAP, DNA/XADC, CPU and UART, but no DDR3, no BIST and no P2 GPIO or switch, so
 there is nothing in it that can fail calibration. Both images pin the shared CSRs to the same
 addresses (`csr_map`) so one kernel driver and one set of host tools serve both.
 
-Build:
+Build (Vivado, the default; what the fleet's flash carries):
     uv run --extra build python designs/acorn-pcie/gateware/acorn_pcie_soc.py \\
         --variant cle-215+ --build --driver
+
+Build with the open-source flow (openXC7: Yosys, nextpnr-xilinx, prjxray; no Vivado):
+    uv run --extra build python designs/acorn-pcie/gateware/acorn_pcie_soc.py \\
+        --variant cle-215+ --toolchain openxc7 --build
+
+`--toolchain openxc7` builds the same SoC from this file; each difference is under an `if openxc7:` below.
+The PCIe hard block is wrapped by the open pcie_7x core instead of the Xilinx IP
+(designs/_shared/open_pcie_7x.py), the system clock is 80 MHz, not 100, every clock is given its period and
+the build fails if one is missed, and the pull-ups are spelt the way nextpnr-xilinx reads them. The bitstream
+has none of Vivado's bitstream settings: no multiboot (NEXT_CONFIG_ADDR, the watchdog), no x4 SPI or faster
+configuration clock, no compression. No openXC7 build of this SoC has run on a board.
 
 Variants:
     cle-215+ : Acorn CLE-215+        (XC7A200T-3, 1 GiB)   Welland
@@ -71,9 +82,18 @@ import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
 from designs._shared.acorn_p2 import P2SerialSwitch, fleet_platform, spare_gpio_io
 from designs._shared.build_helpers import default_build_dir
 from designs._shared.dna_reader import DNAReader
+from designs._shared.fasm_io_fixups import add_openxc7_fasm_io_fixups
+from designs._shared.open_pcie_7x import use_open_pcie_7x
 from designs._shared.pin_check import check_build
+from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name, require_timing
 from designs._shared.s7pcie_clocking import feed_pclk_mux_from_mmcm
 from designs._shared.uartbone_break import BreakResetUARTBone, tuning_word
+from designs._shared.yosys_workarounds import build_in_block_ram, patch_yosys_template
+
+# The system clock each toolchain builds for, unless --sys-clk-freq says otherwise. nextpnr-xilinx does not
+# place LiteX SoCs on these parts at 100 MHz (designs/ddr-memory's Acorn SoC: 64.9 MHz when asked for 100), and
+# the DDR3 needs at least 75 MHz here: its clock is 4x the system clock and its DLL wants 300 MHz or more.
+SYS_CLK_FREQ = {"vivado": 100e6, "openxc7": 80e6}
 
 UART_RESET_BAUD = 1200
 UART_FAST_BAUD = 921600
@@ -185,6 +205,16 @@ class AcornPCIeSoC(SoCCore):
         platform.add_extension(_extension_io)
         platform.add_extension(spare_gpio_io())
         with_ddr = not golden
+        openxc7 = toolchain == "openxc7"
+        if openxc7:
+            fix_openxc7_device_name(platform)
+            # The helpers below queue Vivado Tcl (the GT's LOC, the PIPE clock mux's generated clocks) on
+            # this list. nextpnr-xilinx has no use for it: the GT follows its pins, and its clocks get
+            # their periods from require_timing() further down.
+            platform.toolchain.pre_placement_commands = []
+            if with_ddr:
+                # nextpnr-xilinx gives every SSTL bank 0.675 V; the platform (and Vivado) want 0.75 V for SSTL15.
+                add_openxc7_fasm_io_fixups(platform, vref_mv=750)
 
         # CRG --------------------------------------------------------------------------------------
         self.crg = _CRG(platform, sys_clk_freq, with_ddr=with_ddr)
@@ -232,6 +262,11 @@ class AcornPCIeSoC(SoCCore):
         # J2 floats whenever the host has GPIO14 as an input (and is TMS on a Compute Blade).
         # Every stray byte costs the bridge a timeout, so hold the line at idle.
         platform.add_platform_command("set_property PULLUP TRUE [get_ports {{serial_rx}}]")
+        if openxc7:
+            # nextpnr-xilinx reads PULLTYPE and ignores PULLUP, so the line above and PERST#'s
+            # Misc("PULLUP=TRUE") would both leave their pins floating.
+            for port in ("serial_rx", "pcie_x1_rst_n"):
+                platform.add_platform_command("set_property PULLTYPE PULLUP [get_ports {{" + port + "}}]")
 
         # XADC + DNA (R1) --------------------------------------------------------------------------
         self.xadc = XADC()
@@ -274,6 +309,10 @@ class AcornPCIeSoC(SoCCore):
                     "Subsystem_ID": f"{PCIE_SUBSYSTEM_ID[variant]:04X}",
                 }
             )
+        if openxc7:
+            # pcie_s7 is the open pcie_7x core, given the device ID, BAR0 size, link speed and the settings
+            # above that the Xilinx IP would get. After the last update_config(): it reads them.
+            use_open_pcie_7x(self.pcie_phy)
         # address_width=64: the BCM2712 root complex maps host RAM above 4 GiB on the
         # bus and litepcie.ko sets its DMA mask from this at probe.
         self.add_pcie(phy=self.pcie_phy, ndmas=1, address_width=64, with_dma_loopback=True)
@@ -290,6 +329,19 @@ class AcornPCIeSoC(SoCCore):
                 " -group [get_clocks -include_generated_clocks -of_objects"
                 " [get_pins -hierarchical -filter {{NAME =~ *gtpe2_channel_i/TXOUTCLK}}]]"
             )
+        # openXC7: nextpnr-xilinx derives no clock through a PLL, an MMCM or the GT, so each one is given its
+        # period here, and the build fails if one is missed. Vivado derives them all: this does nothing there.
+        clocks = {self.crg.cd_sys: sys_clk_freq}
+        if with_ddr:
+            clocks.update({self.crg.cd_sys4x: 4 * sys_clk_freq, self.crg.cd_sys4x_dqs: 4 * sys_clk_freq})
+            clocks.update({self.crg.cd_idelay: 200e6})
+        phy = self.pcie_phy
+        # pclk is the mux of clk125 and clk250, and runs at 250 MHz once the link is at 5.0 GT/s.
+        clocks.update({phy.cd_clk125: 125e6, phy.cd_clk250: 250e6, phy.cd_pclk: 250e6})
+        clocks.update({phy.cd_userclk1: 125e6, phy.cd_userclk2: 125e6, phy.cd_pcie: 125e6})
+        require_timing(platform, clocks)
+        if openxc7:
+            platform.add_period_constraint(phy.mmcm.clkin, 1e9 / phy.refclk_freq)  # the GT's TXOUTCLK
 
         # Flash + ICAP: gateware update over PCIe (R2) ---------------------------------------------
         self.icap = ICAP()
@@ -320,7 +372,12 @@ def main():
         choices=sorted(_DDR3_MODULE),
         help="Board variant: cle-215+ (Acorn, 1 GiB), cle-215 (NiteFury, 1 GiB), cle-101 (LiteFury, 512 MiB).",
     )
-    parser.add_target_argument("--sys-clk-freq", default=100e6, type=float, help="System clock frequency.")
+    parser.add_target_argument(
+        "--sys-clk-freq",
+        default=None,
+        type=float,
+        help="System clock frequency (default: 100 MHz with Vivado, 80 MHz with openXC7).",
+    )
     parser.add_target_argument("--golden", action="store_true", help="Build the minimal recovery image.")
     parser.add_target_argument("--driver", action="store_true", help="Generate the LitePCIe driver and tools.")
     args = parser.parse_args()
@@ -333,10 +390,18 @@ def main():
     soc = AcornPCIeSoC(
         variant=args.variant,
         toolchain=args.toolchain,
-        sys_clk_freq=args.sys_clk_freq,
+        sys_clk_freq=args.sys_clk_freq or SYS_CLK_FREQ.get(args.toolchain, 100e6),
         golden=args.golden,
         **soc_kwargs,
     )
+    if args.toolchain == "openxc7":
+        ensure_chipdb_symlink(soc.platform)
+        patch_yosys_template(soc)
+        if not args.golden:
+            # Yosys maps the 8 KiB L2 cache's data memory to 256 RAM256X1S, which the openXC7 image's
+            # nextpnr-xilinx cannot pack (#30). Block RAM for those 16 memories; not -nodram, which also
+            # turns the PCIe PHY's two 92-bit x 256 AsyncFIFOs into 47,000 flip-flops.
+            build_in_block_ram(soc, "data_mem_grain*")
 
     builder_kwargs = parser.builder_argdict
     board = f"acorn-{args.variant}{'-golden' if args.golden else ''}"
