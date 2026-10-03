@@ -98,7 +98,7 @@ Factory firmware characteristics:
 - BAR0: 128 KB — repeating mining parameter pattern, no LiteX CSRs
 - **Not a LiteX design** — `litepcie_util` cannot communicate with this firmware
 
-To enable PCIe→Flash programming, the factory firmware must be replaced with a **LiteX Acorn PCIe SoC** bitstream (vendor `10ee`) that includes PCIe+DMA, SPI Flash controller, and ICAP. This design (`designs/acorn-pcie`) is built with **Vivado** today. The part is not the reason: CI builds the single-function designs for the XC7A200T with openXC7 on every commit. The prebuilt release above already contains `pcie-enumeration_acorn-cle-215p_*_{fallback,operational}.bin`.
+To enable PCIe→Flash programming, the factory firmware must be replaced with a **LiteX Acorn PCIe SoC** bitstream (vendor `10ee`) that includes PCIe+DMA, SPI Flash controller, and ICAP. This design (`designs/acorn-pcie`) is built with **Vivado** today. The part is not the reason: CI builds the single-function designs for the XC7A200T with openXC7 on every push to main and every PR. The prebuilt release above already contains `pcie-enumeration_acorn-cle-215p_*_{fallback,operational}.bin`.
 
 Because the Pi root is `overlayroot=tmpfs`, anything built on a Pi is lost
 at reboot unless it is baked into the NFS root.

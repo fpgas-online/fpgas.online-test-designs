@@ -179,10 +179,11 @@ openFPGALoader -b arty \
 
 ### What differs between the flows
 
-- **System clock.** Five SoCs run slower when built with `--toolchain openxc7` than with Vivado
-  (`SYS_CLK_FREQ` in each script), because nextpnr-xilinx does not reach 100 MHz on them: `uart` and
-  `ddr-memory` on the Arty, and `uart` and `spi-flash-id` on the Acorn, at 75 MHz; `ddr-memory` on the Acorn
-  at 80 MHz. Vivado builds of all five run at 100 MHz. `--sys-clk-freq` overrides either.
+- **System clock.** Six SoCs run slower when built with `--toolchain openxc7` than with Vivado
+  (`SYS_CLK_FREQ` in each script), because nextpnr-xilinx does not reach 100 MHz on them: `uart`,
+  `ddr-memory` and `spi-flash-id` on the Arty, and `uart` and `spi-flash-id` on the Acorn, at 75 MHz;
+  `ddr-memory` on the Acorn at 80 MHz. Vivado builds of all six run at 100 MHz. `--sys-clk-freq` overrides
+  either.
 - **Timing.** The `yosys-nextpnr` builds fail if a clock misses timing (`require_timing()` in
   `designs/_shared/platform_fixups.py`, which also retries nextpnr with other seeds). That helper does nothing
   under Vivado, which derives the PLL clocks itself: read Vivado's timing summary in

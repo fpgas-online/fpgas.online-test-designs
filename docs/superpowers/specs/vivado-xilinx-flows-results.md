@@ -17,7 +17,9 @@ the variant as well:
 All 18 pure-Vivado bitstreams and 2 hybrid bitstreams still build
 successfully after the rename; the only difference is the output
 directory name. `make` targets follow the same pattern:
-`gateware-<board>-<variant>-<flow>`. See
+`gateware-<board>-<variant>-<flow>`. The Pmod designs later moved too:
+`build/<board>-<variant>-<flow>/top.bit` is now
+`build/<board>-<variant>-<flow>/gateware/<platform>.bit`. See
 `docs/toolchains/vivado.md` for the current target and path layout.
 
 ## Verification gate status
