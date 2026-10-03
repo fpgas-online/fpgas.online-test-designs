@@ -4,7 +4,19 @@ name: "Build: PCIe Enumeration"
 on:
   push:
     branches: [main]
+  # A pull request builds this design only when something it is built from changes: its own directory (the
+  # pcie_7x submodule is in it), .gitmodules, the shared gateware, the Python environment, or this file.
+  # main always builds.
   pull_request:
+    paths:
+      - "designs/pcie-enumeration/**"
+      - ".gitmodules"
+      - "designs/_shared/**"
+      # designs/_shared/build_helpers.py checks it exists at import
+      - "scripts/fix_yosys_edif_libref.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/pcie-enumeration-build.yml"
   workflow_dispatch:
 
 # A new push to a pull request cancels that pull request's older, now stale, run.
@@ -18,13 +30,6 @@ jobs:
   build-netv2-a7-35:
     name: "NeTV2 A7-35T PCIe endpoint"
     runs-on: ubuntu-latest
-    # nextpnr-xilinx in the regymm/openxc7 image rejects the RAM256X1S
-    # primitive Yosys emits for this design (regression vs the 2026-04-03
-    # main run that succeeded): issue #30. Non-blocking, and run only on
-    # main and by hand so PR check lists stay meaningful while main keeps
-    # tracking the upstream state. Drop both lines when #30 is closed.
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
-    continue-on-error: true
     container:
       image: regymm/openxc7
     steps:
@@ -73,16 +78,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pcie-enumeration-netv2-a7-35t
-          path: designs/pcie-enumeration/build/netv2/gateware/kosagi_netv2.bit
+          path: designs/pcie-enumeration/build/netv2-a7-35-yosys-nextpnr/gateware/kosagi_netv2.bit
 
   build-netv2-a7-100:
     name: "NeTV2 A7-100T PCIe endpoint"
     runs-on: ubuntu-latest
-    # Fails the same way as the A7-35T job above (RAM256X1S, issue #30);
-    # the earlier nextpnr-xilinx SIGSEGV on the A7-100T chipdb is no longer
-    # what stops it. Same gating as above; drop both lines when #30 is closed.
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
-    continue-on-error: true
     container:
       image: regymm/openxc7
     steps:
@@ -131,7 +131,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pcie-enumeration-netv2-a7-100t
-          path: designs/pcie-enumeration/build/netv2/gateware/kosagi_netv2.bit
+          path: designs/pcie-enumeration/build/netv2-a7-100-yosys-nextpnr/gateware/kosagi_netv2.bit
 
   lint:
     name: "Lint Python"
@@ -188,7 +188,7 @@ jobs:
         with:
           name: pcie-test-acorn-cle-215plus
           path: |
-            designs/pcie-enumeration/build/acorn/gateware/*.bit
+            designs/pcie-enumeration/build/acorn-cle-215p-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-acorn-cle-215:
@@ -234,7 +234,7 @@ jobs:
         with:
           name: pcie-test-acorn-cle-215
           path: |
-            designs/pcie-enumeration/build/acorn/gateware/*.bit
+            designs/pcie-enumeration/build/acorn-cle-215-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-acorn-cle-101:
@@ -280,5 +280,5 @@ jobs:
         with:
           name: pcie-test-acorn-cle-101
           path: |
-            designs/pcie-enumeration/build/acorn/gateware/*.bit
+            designs/pcie-enumeration/build/acorn-cle-101-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error

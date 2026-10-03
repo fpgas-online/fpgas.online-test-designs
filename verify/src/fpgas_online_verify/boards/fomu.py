@@ -26,10 +26,10 @@ class Fomu(TestBoard):
                  "args": ["--port", "{port}", "--board", "fomu", "--skip-banner"], "verify": True},
         "spiflash": {"artifact": "spiflash-test-fomu/kosagi_fomu_evt.bin", "script": "test_spiflash.py",
                      "args": ["--port", "{port}", "--board", "fomu"]},
-        "pmod": {"artifact": "gpio-loopback-fomu-{v}/top.bin", "script": "test_pmod_loopback.py",
+        "pmod": {"artifact": "gpio-loopback-fomu-{v}/kosagi_fomu_evt.bin", "script": "test_pmod_loopback.py",
                  "args": ["--board", "fomu"], "pre": PMOD_PRE},
-        "pin-id": {"artifact": "pmod-pin-id-fomu-{v}/top.bin", "script": "identify_pmod_pins.py", "args": [],
-                   "pre": PMOD_PRE},
+        "pin-id": {"artifact": "pmod-pin-id-fomu-{v}/kosagi_fomu_evt.bin", "script": "identify_pmod_pins.py",
+                   "args": [], "pre": PMOD_PRE},
     }  # fmt: skip
 
     def program_argv(self, bitstream, host, test):
