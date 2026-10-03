@@ -174,6 +174,24 @@ jobs:
           # shellcheck disable=SC2086
           uv run --no-project --python 3.12 --with pytest pytest $VERIFY_TESTS
 
+      # The runs above have no rpi-hwid, as fpgas-verify never needs it (a soft dependency), so the tests
+      # that check rpi-hwid accepts fpgas-verify's identity (tests/data/identity-v1-acorn-p48.json) skip
+      # there. Here rpi-hwid is installed from PyPI, and a skip is a failure.
+      - name: Tests with rpi-hwid installed (the identity contract)
+        run: |
+          set -euo pipefail
+          uv run --no-project --python 3.12 --with pytest --with 'rpi-hwid[labels]>=0.0.post454' \
+            pytest -v -rs tests/test_identity.py | tee "$RUNNER_TEMP/rpi-hwid-tests.log"
+          if grep -q SKIPPED "$RUNNER_TEMP/rpi-hwid-tests.log"; then
+            echo "::error::a test skipped with rpi-hwid installed"
+            exit 1
+          fi
+          passed=$(grep -c '_when_it_is_installed PASSED' "$RUNNER_TEMP/rpi-hwid-tests.log" || true)
+          if [ "$passed" -lt 2 ]; then
+            echo "::error::expected at least 2 rpi-hwid contract tests to pass, got $passed"
+            exit 1
+          fi
+
       - uses: actions/download-artifact@v4
         with:
           name: all-bitstreams
