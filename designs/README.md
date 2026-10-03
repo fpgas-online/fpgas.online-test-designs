@@ -15,6 +15,7 @@ hardware features and produces pass/fail results suitable for CI.
 | [pcie-enumeration](pcie-enumeration/) | SoC | PCIe link training and enumeration | NeTV2, Acorn (CLE-215+/215/101) |
 | [pmod-loopback](pmod-loopback/) | Gateware | GPIO loopback (directly wired pins) | Arty A7, NeTV2, TT FPGA |
 | [pmod-pin-id](pmod-pin-id/) | Gateware | UART TX pin identification | Arty A7, Fomu, TT FPGA, Acorn |
+| [acorn-pcie](acorn-pcie/) | SoC | The Acorn's full test design: PCIe with DMA, DDR3, UART and PCIe bridges, flash, DNA, XADC. The fleet's flash carries its Vivado build; its openXC7 build is expected to fail and is not shipped ([#105](https://github.com/fpgas-online/fpgas.online-test-designs/issues/105)) | Acorn (CLE-215+/215/101) |
 
 ## Shared Modules
 
