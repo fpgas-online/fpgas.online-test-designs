@@ -4,7 +4,15 @@ name: "Build: SPI Flash ID Test"
 on:
   push:
     branches: [main]
+  # A pull request builds this design only when something it is built from changes: its own directory, the
+  # shared gateware, the Python environment, or this file. main always builds.
   pull_request:
+    paths:
+      - "designs/spi-flash-id/**"
+      - "designs/_shared/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/build-spiflash-test.yml"
   workflow_dispatch:
 
 # A new push to a pull request cancels that pull request's older, now stale, run.
@@ -15,13 +23,70 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-arty:
-    name: "Arty A7-35T"
+  # One job per board. The organisation's GitHub-hosted runners are shared by every repository (20 jobs at
+  # once on GitHub Free), so each build workflow here holds at most two of them (fpgas.online-infra#182).
+  # The check names are the boards' names: Collect Bitstreams selects the jobs it waits for by them.
+  build:
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - name: "Arty A7-35T"
+            toolchain: openxc7
+            script: designs/spi-flash-id/gateware/spiflash_soc_arty.py
+            args: "--toolchain openxc7"
+            artifact: spiflash-test-arty
+            path: designs/spi-flash-id/build/arty/gateware/*.bit
+          - name: "NeTV2 A7-35T"
+            toolchain: openxc7
+            script: designs/spi-flash-id/gateware/spiflash_soc_netv2.py
+            args: "--variant a7-35 --toolchain openxc7"
+            artifact: spiflash-test-netv2-a7-35t
+            path: designs/spi-flash-id/build/netv2/gateware/*.bit
+          - name: "NeTV2 A7-100T"
+            toolchain: openxc7
+            script: designs/spi-flash-id/gateware/spiflash_soc_netv2.py
+            args: "--variant a7-100 --toolchain openxc7"
+            artifact: spiflash-test-netv2-a7-100t
+            path: designs/spi-flash-id/build/netv2/gateware/*.bit
+          - name: "Fomu EVT"
+            toolchain: ice40
+            script: designs/spi-flash-id/gateware/spiflash_soc_fomu.py
+            args: ""
+            artifact: spiflash-test-fomu
+            path: designs/spi-flash-id/build/fomu/gateware/*.bin
+          - name: "TT FPGA Demo Board"
+            toolchain: ice40
+            script: designs/spi-flash-id/gateware/spiflash_soc_tt.py
+            args: ""
+            artifact: spiflash-test-tt-fpga
+            path: designs/spi-flash-id/build/tt/gateware/*.bin
+          - name: "Acorn CLE-215+"
+            toolchain: openxc7
+            script: designs/spi-flash-id/gateware/spiflash_soc_acorn.py
+            args: "--variant cle-215+ --toolchain openxc7"
+            artifact: spiflash-test-acorn-cle-215plus
+            path: designs/spi-flash-id/build/acorn/gateware/*.bit
+          - name: "NiteFury (CLE-215)"
+            toolchain: openxc7
+            script: designs/spi-flash-id/gateware/spiflash_soc_acorn.py
+            args: "--variant cle-215 --toolchain openxc7"
+            artifact: spiflash-test-acorn-cle-215
+            path: designs/spi-flash-id/build/acorn/gateware/*.bit
+          - name: "LiteFury (CLE-101)"
+            toolchain: openxc7
+            script: designs/spi-flash-id/gateware/spiflash_soc_acorn.py
+            args: "--variant cle-101 --toolchain openxc7"
+            artifact: spiflash-test-acorn-cle-101
+            path: designs/spi-flash-id/build/acorn/gateware/*.bit
     steps:
       - uses: actions/checkout@v4
 
       - name: Install openXC7 toolchain and cross compiler
+        if: matrix.toolchain == 'openxc7'
         run: |
           sudo apt-get update
           sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
@@ -31,119 +96,9 @@ jobs:
           sudo snap alias openxc7.fasm2frames fasm2frames
           sudo snap alias openxc7.xc7frames2bit xc7frames2bit
           sudo snap alias openxc7.bbasm bbasm
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync --extra build
-
-      - name: Build Arty SPI Flash test bitstream
-        env:
-          CHIPDB: ${{ github.workspace }}/chipdb
-        run: |
-          mkdir -p "$CHIPDB"
-          uv run python designs/spi-flash-id/gateware/spiflash_soc_arty.py \
-            --toolchain openxc7 \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: spiflash-test-arty
-          path: |
-            designs/spi-flash-id/build/arty/gateware/*.bit
-          if-no-files-found: error
-
-  build-netv2-a7-35:
-    name: "NeTV2 A7-35T"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install openXC7 toolchain and cross compiler
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
-          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
-          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
-          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
-          sudo snap alias openxc7.fasm2frames fasm2frames
-          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
-          sudo snap alias openxc7.bbasm bbasm
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync --extra build
-
-      - name: Build NeTV2 A7-35T SPI Flash test bitstream
-        env:
-          CHIPDB: ${{ github.workspace }}/chipdb
-        run: |
-          mkdir -p "$CHIPDB"
-          uv run python designs/spi-flash-id/gateware/spiflash_soc_netv2.py \
-            --variant a7-35 \
-            --toolchain openxc7 \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: spiflash-test-netv2-a7-35t
-          path: |
-            designs/spi-flash-id/build/netv2/gateware/*.bit
-          if-no-files-found: error
-
-  build-netv2-a7-100:
-    name: "NeTV2 A7-100T"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install openXC7 toolchain and cross compiler
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
-          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
-          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
-          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
-          sudo snap alias openxc7.fasm2frames fasm2frames
-          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
-          sudo snap alias openxc7.bbasm bbasm
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync --extra build
-
-      - name: Build NeTV2 A7-100T SPI Flash test bitstream
-        env:
-          CHIPDB: ${{ github.workspace }}/chipdb
-        run: |
-          mkdir -p "$CHIPDB"
-          uv run python designs/spi-flash-id/gateware/spiflash_soc_netv2.py \
-            --variant a7-100 \
-            --toolchain openxc7 \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: spiflash-test-netv2-a7-100t
-          path: |
-            designs/spi-flash-id/build/netv2/gateware/*.bit
-          if-no-files-found: error
-
-  build-fomu:
-    name: "Fomu EVT"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
       - name: Install iCE40 toolchain and cross compiler
+        if: matrix.toolchain == 'ice40'
         run: |
           sudo apt-get update
           sudo apt-get install -y yosys nextpnr-ice40 fpga-icestorm gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
@@ -154,47 +109,20 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --extra build
 
-      - name: Build Fomu SPI Flash test bitstream
+      # CHIPDB is the openXC7 chipdb cache; the iCE40 builds never had it set.
+      - name: Build ${{ matrix.name }} SPI Flash test bitstream
         run: |
-          uv run python designs/spi-flash-id/gateware/spiflash_soc_fomu.py \
-            --build
+          if [ "${{ matrix.toolchain }}" = openxc7 ]; then
+            export CHIPDB="${{ github.workspace }}/chipdb"
+            mkdir -p "$CHIPDB"
+          fi
+          uv run python ${{ matrix.script }} ${{ matrix.args }} --build
 
       - name: Upload bitstream
         uses: actions/upload-artifact@v4
         with:
-          name: spiflash-test-fomu
-          path: |
-            designs/spi-flash-id/build/fomu/gateware/*.bin
-          if-no-files-found: error
-
-  build-tt:
-    name: "TT FPGA Demo Board"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install iCE40 toolchain and cross compiler
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yosys nextpnr-ice40 fpga-icestorm gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync --extra build
-
-      - name: Build TT FPGA SPI Flash test bitstream
-        run: |
-          uv run python designs/spi-flash-id/gateware/spiflash_soc_tt.py \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: spiflash-test-tt-fpga
-          path: |
-            designs/spi-flash-id/build/tt/gateware/*.bin
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.path }}
           if-no-files-found: error
 
   lint:
@@ -208,126 +136,3 @@ jobs:
 
       - name: Lint
         run: uv run --extra dev ruff check designs/spi-flash-id/gateware/
-
-  build-acorn-cle-215plus:
-    name: "Acorn CLE-215+"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install openXC7 toolchain and cross compiler
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
-          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
-          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
-          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
-          sudo snap alias openxc7.fasm2frames fasm2frames
-          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
-          sudo snap alias openxc7.bbasm bbasm
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync --extra build
-
-      - name: Build Acorn CLE-215+ bitstream
-        env:
-          CHIPDB: ${{ github.workspace }}/chipdb
-        run: |
-          mkdir -p "$CHIPDB"
-          uv run python designs/spi-flash-id/gateware/spiflash_soc_acorn.py \
-            --variant cle-215+ \
-            --toolchain openxc7 \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: spiflash-test-acorn-cle-215plus
-          path: |
-            designs/spi-flash-id/build/acorn/gateware/*.bit
-          if-no-files-found: error
-
-  build-acorn-cle-215:
-    name: "NiteFury (CLE-215)"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install openXC7 toolchain and cross compiler
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
-          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
-          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
-          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
-          sudo snap alias openxc7.fasm2frames fasm2frames
-          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
-          sudo snap alias openxc7.bbasm bbasm
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync --extra build
-
-      - name: Build NiteFury (CLE-215) bitstream
-        env:
-          CHIPDB: ${{ github.workspace }}/chipdb
-        run: |
-          mkdir -p "$CHIPDB"
-          uv run python designs/spi-flash-id/gateware/spiflash_soc_acorn.py \
-            --variant cle-215 \
-            --toolchain openxc7 \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: spiflash-test-acorn-cle-215
-          path: |
-            designs/spi-flash-id/build/acorn/gateware/*.bit
-          if-no-files-found: error
-
-  build-acorn-cle-101:
-    name: "LiteFury (CLE-101)"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install openXC7 toolchain and cross compiler
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
-          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
-          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
-          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
-          sudo snap alias openxc7.fasm2frames fasm2frames
-          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
-          sudo snap alias openxc7.bbasm bbasm
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync --extra build
-
-      - name: Build LiteFury (CLE-101) bitstream
-        env:
-          CHIPDB: ${{ github.workspace }}/chipdb
-        run: |
-          mkdir -p "$CHIPDB"
-          uv run python designs/spi-flash-id/gateware/spiflash_soc_acorn.py \
-            --variant cle-101 \
-            --toolchain openxc7 \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: spiflash-test-acorn-cle-101
-          path: |
-            designs/spi-flash-id/build/acorn/gateware/*.bit
-          if-no-files-found: error

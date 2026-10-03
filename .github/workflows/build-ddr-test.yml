@@ -4,7 +4,15 @@ name: "Build: DDR Memory Test"
 on:
   push:
     branches: [main]
+  # A pull request builds this design only when something it is built from changes: its own directory, the
+  # shared gateware, the Python environment, or this file. main always builds.
   pull_request:
+    paths:
+      - "designs/ddr-memory/**"
+      - "designs/_shared/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/build-ddr-test.yml"
   workflow_dispatch:
 
 # A new push to a pull request cancels that pull request's older, now stale, run.
@@ -15,13 +23,58 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-arty:
-    name: "Arty A7-35T (DDR3)"
+  # One job per board. The organisation's GitHub-hosted runners are shared by every repository (20 jobs at
+  # once on GitHub Free), so each build workflow here holds at most two of them (fpgas.online-infra#182).
+  # The check names are the boards' names: Collect Bitstreams selects the jobs it waits for by them.
+  build:
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - name: "Arty A7-35T (DDR3)"
+            toolchain: openxc7
+            script: designs/ddr-memory/gateware/ddr_soc_arty.py
+            args: "--toolchain openxc7"
+            artifact: ddr-test-arty
+            path: designs/ddr-memory/build/arty/gateware/*.bit
+          - name: "NeTV2 A7-35T (DDR3)"
+            toolchain: openxc7
+            script: designs/ddr-memory/gateware/ddr_soc_netv2.py
+            args: "--variant a7-35 --toolchain openxc7"
+            artifact: ddr-test-netv2-a7-35t
+            path: designs/ddr-memory/build/netv2/gateware/*.bit
+          - name: "NeTV2 A7-100T (DDR3)"
+            toolchain: openxc7
+            script: designs/ddr-memory/gateware/ddr_soc_netv2.py
+            args: "--variant a7-100 --toolchain openxc7"
+            artifact: ddr-test-netv2-a7-100t
+            path: designs/ddr-memory/build/netv2/gateware/*.bit
+          - name: "Acorn CLE-215+"
+            toolchain: openxc7
+            script: designs/ddr-memory/gateware/ddr_soc_acorn.py
+            args: "--variant cle-215+ --toolchain openxc7"
+            artifact: ddr-test-acorn-cle-215plus
+            path: designs/ddr-memory/build/acorn/gateware/*.bit
+          - name: "NiteFury (CLE-215)"
+            toolchain: openxc7
+            script: designs/ddr-memory/gateware/ddr_soc_acorn.py
+            args: "--variant cle-215 --toolchain openxc7"
+            artifact: ddr-test-acorn-cle-215
+            path: designs/ddr-memory/build/acorn/gateware/*.bit
+          - name: "LiteFury (CLE-101)"
+            toolchain: openxc7
+            script: designs/ddr-memory/gateware/ddr_soc_acorn.py
+            args: "--variant cle-101 --toolchain openxc7"
+            artifact: ddr-test-acorn-cle-101
+            path: designs/ddr-memory/build/acorn/gateware/*.bit
     steps:
       - uses: actions/checkout@v4
 
       - name: Install openXC7 toolchain and cross compiler
+        if: matrix.toolchain == 'openxc7'
         run: |
           sudo apt-get update
           sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
@@ -38,103 +91,19 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --extra build
 
-      - name: Build Arty DDR test bitstream
-        env:
-          CHIPDB: ${{ github.workspace }}/chipdb
+      - name: Build ${{ matrix.name }} DDR test bitstream
         run: |
-          mkdir -p "$CHIPDB"
-          uv run python designs/ddr-memory/gateware/ddr_soc_arty.py \
-            --toolchain openxc7 \
-            --build
+          if [ "${{ matrix.toolchain }}" = openxc7 ]; then
+            export CHIPDB="${{ github.workspace }}/chipdb"
+            mkdir -p "$CHIPDB"
+          fi
+          uv run python ${{ matrix.script }} ${{ matrix.args }} --build
 
       - name: Upload bitstream
         uses: actions/upload-artifact@v4
         with:
-          name: ddr-test-arty
-          path: |
-            designs/ddr-memory/build/arty/gateware/*.bit
-          if-no-files-found: error
-
-  build-netv2-a7-35:
-    name: "NeTV2 A7-35T (DDR3)"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install openXC7 toolchain and cross compiler
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
-          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
-          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
-          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
-          sudo snap alias openxc7.fasm2frames fasm2frames
-          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
-          sudo snap alias openxc7.bbasm bbasm
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync --extra build
-
-      - name: Build NeTV2 A7-35T DDR test bitstream
-        env:
-          CHIPDB: ${{ github.workspace }}/chipdb
-        run: |
-          mkdir -p "$CHIPDB"
-          uv run python designs/ddr-memory/gateware/ddr_soc_netv2.py \
-            --variant a7-35 \
-            --toolchain openxc7 \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: ddr-test-netv2-a7-35t
-          path: |
-            designs/ddr-memory/build/netv2/gateware/*.bit
-          if-no-files-found: error
-
-  build-netv2-a7-100:
-    name: "NeTV2 A7-100T (DDR3)"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install openXC7 toolchain and cross compiler
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
-          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
-          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
-          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
-          sudo snap alias openxc7.fasm2frames fasm2frames
-          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
-          sudo snap alias openxc7.bbasm bbasm
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync --extra build
-
-      - name: Build NeTV2 A7-100T DDR test bitstream
-        env:
-          CHIPDB: ${{ github.workspace }}/chipdb
-        run: |
-          mkdir -p "$CHIPDB"
-          uv run python designs/ddr-memory/gateware/ddr_soc_netv2.py \
-            --variant a7-100 \
-            --toolchain openxc7 \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: ddr-test-netv2-a7-100t
-          path: |
-            designs/ddr-memory/build/netv2/gateware/*.bit
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.path }}
           if-no-files-found: error
 
   lint:
@@ -148,126 +117,3 @@ jobs:
 
       - name: Lint
         run: uv run --extra dev ruff check designs/ddr-memory/gateware/
-
-  build-acorn-cle-215plus:
-    name: "Acorn CLE-215+"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install openXC7 toolchain and cross compiler
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
-          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
-          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
-          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
-          sudo snap alias openxc7.fasm2frames fasm2frames
-          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
-          sudo snap alias openxc7.bbasm bbasm
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync --extra build
-
-      - name: Build Acorn CLE-215+ bitstream
-        env:
-          CHIPDB: ${{ github.workspace }}/chipdb
-        run: |
-          mkdir -p "$CHIPDB"
-          uv run python designs/ddr-memory/gateware/ddr_soc_acorn.py \
-            --variant cle-215+ \
-            --toolchain openxc7 \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: ddr-test-acorn-cle-215plus
-          path: |
-            designs/ddr-memory/build/acorn/gateware/*.bit
-          if-no-files-found: error
-
-  build-acorn-cle-215:
-    name: "NiteFury (CLE-215)"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install openXC7 toolchain and cross compiler
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
-          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
-          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
-          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
-          sudo snap alias openxc7.fasm2frames fasm2frames
-          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
-          sudo snap alias openxc7.bbasm bbasm
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync --extra build
-
-      - name: Build NiteFury (CLE-215) bitstream
-        env:
-          CHIPDB: ${{ github.workspace }}/chipdb
-        run: |
-          mkdir -p "$CHIPDB"
-          uv run python designs/ddr-memory/gateware/ddr_soc_acorn.py \
-            --variant cle-215 \
-            --toolchain openxc7 \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: ddr-test-acorn-cle-215
-          path: |
-            designs/ddr-memory/build/acorn/gateware/*.bit
-          if-no-files-found: error
-
-  build-acorn-cle-101:
-    name: "LiteFury (CLE-101)"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install openXC7 toolchain and cross compiler
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yosys gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
-          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
-          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
-          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
-          sudo snap alias openxc7.fasm2frames fasm2frames
-          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
-          sudo snap alias openxc7.bbasm bbasm
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync --extra build
-
-      - name: Build LiteFury (CLE-101) bitstream
-        env:
-          CHIPDB: ${{ github.workspace }}/chipdb
-        run: |
-          mkdir -p "$CHIPDB"
-          uv run python designs/ddr-memory/gateware/ddr_soc_acorn.py \
-            --variant cle-101 \
-            --toolchain openxc7 \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: ddr-test-acorn-cle-101
-          path: |
-            designs/ddr-memory/build/acorn/gateware/*.bit
-          if-no-files-found: error

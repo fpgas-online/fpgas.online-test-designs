@@ -4,7 +4,15 @@ name: "Build: GPIO Loopback (PMOD)"
 on:
   push:
     branches: [main]
+  # A pull request builds this design only when something it is built from changes: its own directory, the
+  # shared gateware, the Python environment, or this file. main always builds.
   pull_request:
+    paths:
+      - "designs/pmod-loopback/**"
+      - "designs/_shared/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/pmod-loopback-build.yml"
   workflow_dispatch:
 
 # A new push to a pull request cancels that pull request's older, now stale, run.
@@ -15,13 +23,70 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-arty:
-    name: "Arty A7-35T"
+  # One job per board. The organisation's GitHub-hosted runners are shared by every repository (20 jobs at
+  # once on GitHub Free), so each build workflow here holds at most two of them (fpgas.online-infra#182).
+  # The check names are the boards' names: Collect Bitstreams selects the jobs it waits for by them.
+  build:
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - name: "Arty A7-35T"
+            toolchain: openxc7
+            script: designs/pmod-loopback/gateware/gpio_loopback_arty.py
+            args: "--toolchain openxc7"
+            artifact: gpio-loopback-arty-a7-35t
+            path: designs/pmod-loopback/build/arty/*.bit
+          - name: "NeTV2 A7-35T"
+            toolchain: openxc7
+            script: designs/pmod-loopback/gateware/gpio_loopback_netv2.py
+            args: "--variant a7-35 --toolchain openxc7"
+            artifact: gpio-loopback-netv2-a7-35t
+            path: designs/pmod-loopback/build/netv2/*.bit
+          - name: "NeTV2 A7-100T"
+            toolchain: openxc7
+            script: designs/pmod-loopback/gateware/gpio_loopback_netv2.py
+            args: "--variant a7-100 --toolchain openxc7"
+            artifact: gpio-loopback-netv2-a7-100t
+            path: designs/pmod-loopback/build/netv2/*.bit
+          - name: "Fomu EVT"
+            toolchain: ice40
+            script: designs/pmod-loopback/gateware/gpio_loopback_fomu.py
+            args: ""
+            artifact: gpio-loopback-fomu-evt
+            path: designs/pmod-loopback/build/fomu/*.bin
+          - name: "TT FPGA Demo Board"
+            toolchain: ice40
+            script: designs/pmod-loopback/gateware/gpio_loopback_tt.py
+            args: ""
+            artifact: gpio-loopback-tt-fpga
+            path: designs/pmod-loopback/build/tt/*.bin
+          - name: "Acorn CLE-215+"
+            toolchain: openxc7
+            script: designs/pmod-loopback/gateware/gpio_loopback_acorn.py
+            args: "--variant cle-215+ --toolchain openxc7"
+            artifact: gpio-loopback-acorn-cle-215plus
+            path: designs/pmod-loopback/build/acorn/*.bit
+          - name: "NiteFury (CLE-215)"
+            toolchain: openxc7
+            script: designs/pmod-loopback/gateware/gpio_loopback_acorn.py
+            args: "--variant cle-215 --toolchain openxc7"
+            artifact: gpio-loopback-acorn-cle-215
+            path: designs/pmod-loopback/build/acorn/*.bit
+          - name: "LiteFury (CLE-101)"
+            toolchain: openxc7
+            script: designs/pmod-loopback/gateware/gpio_loopback_acorn.py
+            args: "--variant cle-101 --toolchain openxc7"
+            artifact: gpio-loopback-acorn-cle-101
+            path: designs/pmod-loopback/build/acorn/*.bit
     steps:
       - uses: actions/checkout@v4
 
       - name: Install openXC7 toolchain
+        if: matrix.toolchain == 'openxc7'
         run: |
           sudo apt-get update
           sudo apt-get install -y yosys
@@ -31,119 +96,9 @@ jobs:
           sudo snap alias openxc7.fasm2frames fasm2frames
           sudo snap alias openxc7.xc7frames2bit xc7frames2bit
           sudo snap alias openxc7.bbasm bbasm
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync --extra build
-
-      - name: Build Arty GPIO Loopback
-        env:
-          CHIPDB: ${{ github.workspace }}/chipdb
-        run: |
-          mkdir -p "$CHIPDB"
-          uv run python designs/pmod-loopback/gateware/gpio_loopback_arty.py \
-            --toolchain openxc7 \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: gpio-loopback-arty-a7-35t
-          path: |
-            designs/pmod-loopback/build/arty/*.bit
-          if-no-files-found: error
-
-  build-netv2-a7-35:
-    name: "NeTV2 A7-35T"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install openXC7 toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yosys
-          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
-          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
-          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
-          sudo snap alias openxc7.fasm2frames fasm2frames
-          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
-          sudo snap alias openxc7.bbasm bbasm
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync --extra build
-
-      - name: Build NeTV2 A7-35T GPIO Loopback
-        env:
-          CHIPDB: ${{ github.workspace }}/chipdb
-        run: |
-          mkdir -p "$CHIPDB"
-          uv run python designs/pmod-loopback/gateware/gpio_loopback_netv2.py \
-            --variant a7-35 \
-            --toolchain openxc7 \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: gpio-loopback-netv2-a7-35t
-          path: |
-            designs/pmod-loopback/build/netv2/*.bit
-          if-no-files-found: error
-
-  build-netv2-a7-100:
-    name: "NeTV2 A7-100T"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install openXC7 toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yosys
-          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
-          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
-          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
-          sudo snap alias openxc7.fasm2frames fasm2frames
-          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
-          sudo snap alias openxc7.bbasm bbasm
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync --extra build
-
-      - name: Build NeTV2 A7-100T GPIO Loopback
-        env:
-          CHIPDB: ${{ github.workspace }}/chipdb
-        run: |
-          mkdir -p "$CHIPDB"
-          uv run python designs/pmod-loopback/gateware/gpio_loopback_netv2.py \
-            --variant a7-100 \
-            --toolchain openxc7 \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: gpio-loopback-netv2-a7-100t
-          path: |
-            designs/pmod-loopback/build/netv2/*.bit
-          if-no-files-found: error
-
-  build-fomu:
-    name: "Fomu EVT"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
       - name: Install iCE40 toolchain
+        if: matrix.toolchain == 'ice40'
         run: |
           sudo apt-get update
           sudo apt-get install -y yosys nextpnr-ice40 fpga-icestorm
@@ -154,168 +109,18 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --extra build
 
-      - name: Build Fomu GPIO Loopback
+      # CHIPDB is the openXC7 chipdb cache; the iCE40 builds never had it set.
+      - name: Build ${{ matrix.name }} GPIO Loopback
         run: |
-          uv run python designs/pmod-loopback/gateware/gpio_loopback_fomu.py \
-            --build
+          if [ "${{ matrix.toolchain }}" = openxc7 ]; then
+            export CHIPDB="${{ github.workspace }}/chipdb"
+            mkdir -p "$CHIPDB"
+          fi
+          uv run python ${{ matrix.script }} ${{ matrix.args }} --build
 
       - name: Upload bitstream
         uses: actions/upload-artifact@v4
         with:
-          name: gpio-loopback-fomu-evt
-          path: |
-            designs/pmod-loopback/build/fomu/*.bin
-          if-no-files-found: error
-
-  build-tt:
-    name: "TT FPGA Demo Board"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install iCE40 toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yosys nextpnr-ice40 fpga-icestorm
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync --extra build
-
-      - name: Build TT FPGA GPIO Loopback
-        run: |
-          uv run python designs/pmod-loopback/gateware/gpio_loopback_tt.py \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: gpio-loopback-tt-fpga
-          path: |
-            designs/pmod-loopback/build/tt/*.bin
-          if-no-files-found: error
-
-  build-acorn-cle-215plus:
-    name: "Acorn CLE-215+"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install openXC7 toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yosys
-          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
-          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
-          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
-          sudo snap alias openxc7.fasm2frames fasm2frames
-          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
-          sudo snap alias openxc7.bbasm bbasm
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync --extra build
-
-      - name: Build Acorn CLE-215+ bitstream
-        env:
-          CHIPDB: ${{ github.workspace }}/chipdb
-        run: |
-          mkdir -p "$CHIPDB"
-          uv run python designs/pmod-loopback/gateware/gpio_loopback_acorn.py \
-            --variant cle-215+ \
-            --toolchain openxc7 \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: gpio-loopback-acorn-cle-215plus
-          path: |
-            designs/pmod-loopback/build/acorn/*.bit
-          if-no-files-found: error
-
-  build-acorn-cle-215:
-    name: "NiteFury (CLE-215)"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install openXC7 toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yosys
-          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
-          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
-          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
-          sudo snap alias openxc7.fasm2frames fasm2frames
-          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
-          sudo snap alias openxc7.bbasm bbasm
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync --extra build
-
-      - name: Build NiteFury (CLE-215) bitstream
-        env:
-          CHIPDB: ${{ github.workspace }}/chipdb
-        run: |
-          mkdir -p "$CHIPDB"
-          uv run python designs/pmod-loopback/gateware/gpio_loopback_acorn.py \
-            --variant cle-215 \
-            --toolchain openxc7 \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: gpio-loopback-acorn-cle-215
-          path: |
-            designs/pmod-loopback/build/acorn/*.bit
-          if-no-files-found: error
-
-  build-acorn-cle-101:
-    name: "LiteFury (CLE-101)"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install openXC7 toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yosys
-          wget -q https://github.com/openXC7/openXC7-snap/releases/download/0.8.2/openxc7_0.8.2_amd64.snap
-          sudo snap install --classic --dangerous ./openxc7_0.8.2_amd64.snap
-          sudo snap alias openxc7.nextpnr-xilinx nextpnr-xilinx
-          sudo snap alias openxc7.fasm2frames fasm2frames
-          sudo snap alias openxc7.xc7frames2bit xc7frames2bit
-          sudo snap alias openxc7.bbasm bbasm
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync --extra build
-
-      - name: Build LiteFury (CLE-101) bitstream
-        env:
-          CHIPDB: ${{ github.workspace }}/chipdb
-        run: |
-          mkdir -p "$CHIPDB"
-          uv run python designs/pmod-loopback/gateware/gpio_loopback_acorn.py \
-            --variant cle-101 \
-            --toolchain openxc7 \
-            --build
-
-      - name: Upload bitstream
-        uses: actions/upload-artifact@v4
-        with:
-          name: gpio-loopback-acorn-cle-101
-          path: |
-            designs/pmod-loopback/build/acorn/*.bit
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.path }}
           if-no-files-found: error
