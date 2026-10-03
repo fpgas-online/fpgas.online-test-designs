@@ -83,7 +83,7 @@ What must not change (from the sessions that run the fleet's Acorn check):
 
 | # | Pull request | State |
 |---|---|---|
-| 1 | `designs/acorn-pcie` builds with openXC7 in CI | PR #95: stops at placement on the XADC; without it, misses timing; see [unknowns](#unknowns) |
+| 1 | `designs/acorn-pcie` built with openXC7 in CI | PR #95: an expected failure, not shipped (#105) |
 | 2 | PR #14 brought up to `main`; `designs/acorn-pcie` joins its three flows | not started; needs Tim to say #14 is wanted as it is |
 | 3 | `collect-bitstreams.yml` collects every board's builds and publishes them and the manifest on `build-<version>` | not started; after #92 |
 | 4 | The Vivado script uploads to `build-<version>`, covering the full test design and the manifest fields the Acorn check reads | not started |
@@ -121,11 +121,10 @@ The Acorn PCIe design (§2.3 and Phase 5) names most of these.
    the approved one.
 2. **Which flow is golden?** I recommend: the open build wherever it has passed the check on a board; the
    Vivado build otherwise. For the Acorn that means Vivado until an openXC7 image has run on one.
-3. **The Acorn's full test design does not build with openXC7:** nextpnr-xilinx cannot place the XADC, and
-   without the XADC the design misses timing by 20-35 % on the system clock and 10-15 % on the PCIe PIPE
-   clock. Should its CI job be allowed to fail without blocking merges until that is solved (as the NeTV2 PCIe
-   jobs were, issue #30), or should the open build be a cut-down design (no XADC, a slower system clock) that
-   differs from the Vivado one in what the check can read?
+3. **Decided (Tim, 2026-10-02): the Acorn's open build stays the full design, as an expected failure.** Its
+   CI jobs are green when it fails for a reason issue #105 records, never block anything, nothing waits for
+   them, and its bitstreams are not shipped; a test checks that no package can carry them (PR #95). #105 tracks
+   fixing the toolchain (the XADC in nextpnr-xilinx, then timing).
 4. **Is PR #14 the Vivado side you want?** It needs bringing up to `main` before anything can build on it.
 5. **A release holds at most 1000 files.** One Vivado flow of every design was 148 files in April's release
    (each Acorn build is six: `.bit` and `.bin`, plain, `_fallback` and `_operational`). Three flows and the
