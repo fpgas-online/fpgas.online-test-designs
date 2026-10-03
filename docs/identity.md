@@ -6,15 +6,17 @@ fpgas-verify describes each board it finds as one flat set of fields. The same f
 * the `fpga-board-identified` event, sent once for each board found;
 * the identity document (see [The document](#the-document)).
 
-The field names are [rpi-hwid](https://github.com/mithro/rpi-hwid)'s `FpgaBoard` fields, spelled the same, plus
-some fields only fpgas-verify has. The code is
+The field names are [rpi-hwid](https://github.com/mithro/rpi-hwid)'s `FpgaBoard` fields, spelled the same, a
+Tiny Tapeout board's `TinyTapeoutBoard` fields, and some fields only fpgas-verify has. The code is
 [`identity.py`](../verify/src/fpgas_online_verify/identity.py).
 
 ## Rules
 
-* **A missing field was not read.** A field is never present with an empty or null value.
+* **A missing field was not read.** A field is never present with an empty value. `null` means the field
+  was read and there is no value: only a [Tiny Tapeout field](#tiny-tapeout-fields) can be `null`.
 * **A read that was tried and failed** gives `<field>_error` instead, with the reason in words: `dna_error`,
-  `idcode_error`, `flash_error`, `flash_sfdp_error`.
+  `idcode_error`, `flash_error`, `flash_sfdp_error`, and `tinytapeout_error` for all the Tiny Tapeout
+  fields together.
 * **Hex identifiers** are lower case, start with `0x`, and have a fixed number of digits. The flash's unique ID
   is the exception: plain hex with no `0x`, as rpi-hwid writes it.
 * **Types.** In the report and the document, numbers are JSON numbers and true/false are JSON booleans. In the
@@ -61,6 +63,30 @@ fpgas-verify's own fields:
 | `flash_config` | string | the configuration register, 2 hex digits: `0x02` | the flash was not read |
 | `flash_quad` | boolean | the configuration register's QUAD bit | the flash was not read |
 | `flash_uid_opcode` | string | the command that read the unique ID: `0x4b` | as `flash_uid` |
+| `tinytapeout_note` | string | why the [Tiny Tapeout fields](#tiny-tapeout-fields) were not read: rpi-hwid is not installed | not a TT board, or rpi-hwid is installed |
+| `tinytapeout_error` | string | why rpi-hwid could not give the Tiny Tapeout fields: it failed, gave no usable answer, did not see the board, found no Tiny Tapeout SDK on it, gave an empty field, or could not read `mcu`, `chip`, `demoboard` or `sdk` | not a TT board, rpi-hwid gave the fields, or it is not installed |
+
+### Tiny Tapeout fields
+
+A TT board's fields are rpi-hwid's `TinyTapeoutBoard` fields, under its names. The site makes rpi-hwid's Tiny
+Tapeout label from them. Except `usb_serial`, they come from `rpi-hwid tinytapeout --json --no-stop-service`,
+which the boot check runs while it holds the board's port (see [verify.md](verify.md#tt-fpga-identity)).
+rpi-hwid gives `null` for a field it read and found no value for: the TT FPGA has no shuttle, for example.
+Every TT FPGA board has an `mcu`, `chip`, `demoboard` and `sdk`, so rpi-hwid giving `null` for one of those
+means its read failed: the identity then has `tinytapeout_error` instead of the Tiny Tapeout fields. A field
+rpi-hwid leaves out was not read, and is missing from the identity too.
+
+| Field | Type | Value | Missing when |
+|---|---|---|---|
+| `usb_serial` | string | the RP2350's USB serial number, the same as `serial`; the site drops a TT board without it | the board is not found on USB |
+| `mcu` | string | the demo board's microcontroller: `RP2350`, `RP2040` | rpi-hwid did not read the board (`tinytapeout_note` or `tinytapeout_error` says why), or did not give the field |
+| `shuttle` | string or null | the Tiny Tapeout shuttle of the chip, from its ROM: `tt06` | as `mcu` |
+| `chip` | string | `asic`, or `fpga` for the FPGA breakout | as `mcu` |
+| `repo` | string or null | the chip's repository, from its ROM | as `mcu` |
+| `commit` | string or null | the chip's commit, from its ROM | as `mcu` |
+| `demoboard` | string | the demo board as the SDK detected it: `TTDBv3 [3.2]` | as `mcu` |
+| `demoboard_version` | string or null | the demo board version that shipped with the shuttle's kit: `v2.0.1` | as `mcu` |
+| `sdk` | string | the Tiny Tapeout SDK release on the board | as `mcu` |
 
 ## SFDP
 
@@ -90,7 +116,7 @@ still stand.
 | Acorn | `board`, `kind`, `variant`, `soc_model`, `bdf`, `identifier`, `build`, `dna`, the IDCODE fields, and every flash field |
 | Arty | `board`, `kind`, `variant`, `serial`, `usb`, `dna`, the IDCODE fields |
 | NeTV2 | `board`, `kind`, `variant`, `dna`, the IDCODE fields |
-| TT | `board`, `kind`, `variant`, `serial`, `usb` |
+| TT | `board`, `kind`, `variant`, `serial`, `usb`, and the Tiny Tapeout fields (or `tinytapeout_note`, or `tinytapeout_error`) |
 | Fomu | `board`, `kind`, `variant`, `serial`, `usb` |
 
 ## The event

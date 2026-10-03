@@ -9,11 +9,12 @@
     that could not be looked for, its lock being busy, is in the document all the same, with every field
     missing for that reason, whatever else was found; so is one whose look failed (a JTAG scan that left a pin
     driven, or a lock that could not be opened), with the look's reason. Only one board's lock is held at a time.
-  * Anything only a loaded design can read (the Arty's and NeTV2's flash, through openFPGALoader's
-    SPI-over-JTAG bridge) comes from the boot report (runner.REPORT), when the board there is this one by a key
-    no other board has (its USB serial, PCI slot or device DNA); the board's dict lists those fields in
-    "from_report". An IDCODE names a part, not a board, so a board known only by its IDCODE (a NeTV2 whose DNA
-    could not be read) gets nothing from the report: those fields stay missing, for the reason NO_MATCH.
+  * Anything only the boot check reads (the Arty's and NeTV2's flash, which needs a design loaded for
+    openFPGALoader's SPI-over-JTAG bridge; the TT FPGA's fields from rpi-hwid, which need the board's port, held
+    by fpgas-tt.service outside the check) comes from the boot report (runner.REPORT), when the board there is
+    this one by a key no other board has (its USB serial, PCI slot or device DNA); the board's dict lists those
+    fields in "from_report". An IDCODE names a part, not a board, so a board known only by its IDCODE (a NeTV2
+    whose DNA could not be read) gets nothing from the report: those fields stay missing, for the reason NO_MATCH.
   * Inside fpgas-verify --label (FPGAS_VERIFY_IDENTITY names the document the outer run read), --identify
     prints that file unchanged and does nothing else: no lock, no board code, and never the hardware, even
     when the file is missing or bad (that is an error). Every other mode refuses, so the outer run's locks
@@ -38,9 +39,10 @@ from .core import BUSY, Busy, Problem, hold_lock, pci_devices, usb_devices
 
 ENV = "FPGAS_VERIFY_IDENTITY"
 LOCK_WAIT = 30  # seconds --identify waits for a board's lock before it says the board is busy
-# What says a board in the boot report is this one: keys no two boards share (USB serial, PCI slot, device
-# DNA). Never the IDCODE, which every board with the same part has.
-MATCH_KEYS = ("serial", "bdf", "dna")
+# What says a board in the boot report is this one: keys no two boards share (a Tiny Tapeout board's
+# usb_serial, USB serial, PCI slot, device DNA), the first the live read has. Never the IDCODE, which every
+# board with the same part has.
+MATCH_KEYS = ("usb_serial", "serial", "bdf", "dna")
 NO_MATCH = "no board-unique match in the boot report"
 NOT_IN_REPORT = "this board is not in the boot report"
 

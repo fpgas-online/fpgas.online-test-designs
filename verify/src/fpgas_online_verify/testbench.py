@@ -300,13 +300,20 @@ class TestBoard(Board):
     def identity(self, found):
         return {k: v for k, v in found.items() if k in ("variant", "serial", "idcode", "dna") and v is not None}
 
-    def identified(self, report, found, options):
-        """Who the board is (identity.py), from how it was found and its JTAG IDCODE and DNA: put in the report
-        and sent as fpga-board-identified, before any test runs."""
+    def port_facts(self, host, found, runner=run):
+        """Identity fields only the board's own port gives, read while `services` are stopped and before any
+        test (the TT FPGA's, from rpi-hwid): {} for a board with none. A read that was tried and failed is a
+        <field>_error, which makes the check an error."""
+        return {}
+
+    def identified(self, report, found, options, facts=None):
+        """Who the board is (identity.py), from how it was found, its JTAG IDCODE and DNA, and `facts`
+        (port_facts): put in the report and sent as fpga-board-identified, before any test runs."""
         out = identity.base(options.get("board_key", self.name), self.name, found, report["variant"])
         if "jtag" in report:
             out.update(identity.idcode_fields(report["jtag"]))
             out.update(identity.dna_fields(report["jtag"]))
+        out.update(facts or {})
         report["identity"] = out
         identity.keep(options, out)
         (options.get("event") or (lambda stage, details: None))("fpga-board-identified", identity.details(out))
@@ -347,9 +354,10 @@ class TestBoard(Board):
         report["bitstreams"] = manifest.get("version")
         if self.idcodes:
             report["jtag"] = self.jtag(host, found, variant, runner)
-        self.identified(report, found, options)
         event = options.get("event") or (lambda stage, details: None)
         with self.services_stopped(runner) as held:
+            facts = self.port_facts(host, found, runner)
+            self.identified(report, found, options, facts)
             for test in tests:
                 event("fpga-test-started", {"test": test})
                 report["tests"].append(self.run_test(test, variant, host, images, manifest, runner))
@@ -364,6 +372,9 @@ class TestBoard(Board):
         if jedec:
             state["flash_jedec"] = jedec
         results = [t["result"] for t in report["tests"]] + ([jtag["result"]] if jtag else [])
+        facts_failed = [f"{k}: {v}" for k, v in facts.items() if k.endswith(identity.ERROR_SUFFIX)]
+        if facts_failed:
+            results.append("error")
         try:
             flash = self.read_flash(host, variant, runner)
             if flash:
@@ -379,7 +390,7 @@ class TestBoard(Board):
         report["state"] = state
         report["result"] = worst(results)
         bad = [t for t in report["tests"] if t["result"] != "pass"]
-        reasons = [f"{t['test']} {t['result']}: {t.get('reason', '')}" for t in bad] + held["failed"]
+        reasons = [f"{t['test']} {t['result']}: {t.get('reason', '')}" for t in bad] + facts_failed + held["failed"]
         if jtag and jtag["result"] != "pass":
             reasons.insert(0, f"jtag {jtag['result']}: {jtag['reason']}")
         if reasons:

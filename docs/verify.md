@@ -126,6 +126,9 @@ the check, publishes anything or records any state.
   | NeTV2 | the JTAG IDCODE, from the scan that finds it, and the device DNA |
   | Fomu, TT FPGA | how the board was found (its USB serial) |
 
+  A TT board's [Tiny Tapeout fields](identity.md#tiny-tapeout-fields) are not read live: they come from the
+  boot report (see below).
+
 * Nothing is loaded into a board and no flash is written. Some reads do change state on the way, and each
   is put back:
   * Acorn, BAR0: memory decoding is switched on in the board's PCI COMMAND register for the read and
@@ -145,11 +148,14 @@ the check, publishes anything or records any state.
   then exits 1). `--identify` holds one board's lock at a time: the NeTV2's is let go after its scan and
   taken again for its read, so no two locks are ever taken in an order that could deadlock with rpi-hwid's
   (acorn < arty < netv2).
-* A field that needs a design loaded (the Arty's and NeTV2's flash, read through openFPGALoader's
-  SPI-over-JTAG bridge) comes from the boot report, `/run/fpgas-online/verify.json`, when the board there is
-  this one by a key no other board has: the Arty's USB serial, the Acorn's PCI slot, or the device DNA. Those
-  fields are listed in the board's `from_report`. An IDCODE names a part, not a board, so a board known only
-  by its IDCODE (a NeTV2 whose DNA could not be read) gets nothing from the report: the fields stay missing, for the reason
+* A field only the boot check reads comes from the boot report, `/run/fpgas-online/verify.json`, when the
+  board there is this one by a key no other board has: a TT board's `usb_serial`, the Arty's USB serial, the
+  Acorn's PCI slot, or the device DNA. These are the Arty's and NeTV2's flash fields, which need a design
+  loaded for openFPGALoader's SPI-over-JTAG bridge, and a TT board's Tiny Tapeout fields with
+  `tinytapeout_note` or `tinytapeout_error`, which need the port `fpgas-tt.service` holds. Those fields are
+  listed in the board's `from_report`. An IDCODE names a part, not a board, so a board known only by its
+  IDCODE (a NeTV2 whose DNA could not be read) gets nothing from the report: the fields stay missing, for
+  the reason
   `no board-unique match in the boot report`.
 * The exit status is 0 when every board's identity is whole (no field missing, no `<field>_error`), 1
   otherwise. Each missing field is printed on stderr with why. The document is printed either way; readers
@@ -157,6 +163,9 @@ the check, publishes anything or records any state.
 * For an Arty or a NeTV2, `--identify` always exits 1 for now: their labels need the flash's unique ID
   (`flash_uid`), and neither the boot check nor `--identify` reads it yet (see [Not done yet](#not-done-yet)).
   Their IDCODE and device DNA, and any flash fields the boot report has for them, are still in the document.
+* For a TT board, `--identify` exits 0 only when the boot report has the fields rpi-hwid's Tiny Tapeout label
+  needs (`mcu`, `chip`, `demoboard`, `demoboard_version`, `sdk`, besides `usb_serial`). So it exits 1 when
+  rpi-hwid was not installed at boot.
 
 `--label`:
 
@@ -522,10 +531,38 @@ Each test checks its bitstream's sha256 against the `-bitstreams` package's mani
   DNA is read over the same JTAG ([the device DNA](#the-device-dna)): one that cannot be read, or is all zeros
   or all ones, fails the board.
 * The Fomu runs only `uart` at boot: a DFU load replaces the bootloader until the next power cycle.
-* The TT FPGA's `fpgas-tt.service` is stopped for the tests and started again after.
+* The TT FPGA's `fpgas-tt.service` is stopped for the tests and started again after. While it is stopped, and
+  before the first test, rpi-hwid reads who the board is ([TT FPGA identity](#tt-fpga-identity)).
 * The NeTV2 has no USB, so finding it means driving the GPIO header. With `fpga-board = auto` the JTAG scan
   runs only if nothing was found on USB or PCI (or only a Xilinx PCIe design the Acorn check cannot name);
   `--no-probe` turns it off.
+
+#### TT FPGA identity
+
+The site makes [rpi-hwid](https://github.com/mithro/rpi-hwid)'s Tiny Tapeout label for a TT board from the
+[Tiny Tapeout fields](identity.md#tiny-tapeout-fields) in its identity. Only rpi-hwid reads them: it asks the
+Tiny Tapeout SDK on the board's RP2350 over its REPL, which needs the board's port, `/dev/ttyACM0`. Outside the
+check, `fpgas-tt.service` holds that port.
+
+So the boot check reads them while it holds the port: with `fpgas-tt.service` stopped (when it was running),
+and before the first test loads a design, it runs `rpi-hwid tinytapeout --json --no-stop-service`. It then
+starts `fpgas-tt.service` again after the tests, as it always does, whatever rpi-hwid did.
+`--no-stop-service` tells rpi-hwid to leave the service alone.
+
+* fpgas-verify does not depend on rpi-hwid. It looks for the `rpi-hwid` command on `PATH` and runs it; it
+  never imports it.
+* rpi-hwid lists every MicroPython RP2 board on USB. The check uses the one whose `usb_serial` is the board's
+  USB serial, and copies its fields into the identity under rpi-hwid's names.
+* Without rpi-hwid, the fields are left out and `tinytapeout_note` says why. The board does not fail for that.
+* When rpi-hwid is installed but cannot say who the board is, `tinytapeout_error` says why, and the check is
+  an `error`. That is the case when rpi-hwid fails, prints no JSON, does not list the board, finds no Tiny
+  Tapeout SDK on it, or gives `null` for `mcu`, `chip`, `demoboard` or `sdk`, which every TT FPGA board has.
+* A field rpi-hwid leaves out is left out of the identity too, so `--identify` says it is missing.
+* The identity always has `usb_serial` (the same as `serial`): the site drops a TT board without one.
+* A check that stops before its tests (no bitstreams installed, an unknown test) does not run rpi-hwid.
+
+`fpgas-verify --identify` does not take the port. It takes these fields from the boot report, matching the
+board there by `usb_serial`.
 
 #### Acorn
 
@@ -723,7 +760,8 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
   last run's, not checked against a golden full test design.
 * Only the Acorn's flash can be written with its golden images (`fpgas-acorn-flash write`).
 * The Arty's and NeTV2's flash IDs are not read, nor the flash IDs of the TT and Fomu; their
-  [identity](identity.md) has only what finding the board, its IDCODE and its device DNA give.
+  [identity](identity.md) has only what finding the board, its IDCODE and its device DNA give, and on the
+  TT FPGA what rpi-hwid reads.
 * Nothing is compared with the site's records.
 * rpi-hwid refuses the Arty's and NeTV2's labels until their flash IDs are read; `--identify` exits 1 for
   them meanwhile.
