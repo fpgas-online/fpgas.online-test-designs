@@ -11,7 +11,7 @@ script is the one-command workflow that:
      under the `vivado-vivado` and `yosys-vivado` flows (see mk/three-flows.mk
      and the top-level Makefile `build-all-xilinx-*` targets).
   3. Collects the resulting bitstreams into a staging directory, renaming
-     each to a canonical `<design>_<board>-<variant>_<flow>.<ext>` form.
+     each to a canonical `<design>_<board>-<variant>_<flow>_<name>.<ext>` form.
   4. Emits a `manifest.json` (schema-versioned, with SHA-256 per artifact)
      and a plain `SHA256SUMS` file next to the bitstreams.
   5. Publishes a GitHub Release tagged with the output of
@@ -250,13 +250,6 @@ def preflight(args: argparse.Namespace, repo_root: Path) -> None:
             "--allow-dirty to publish anyway (the release tag will carry a "
             f"-dirty suffix).\nStatus:\n{porcelain}")
     print(f"  git: {describe}")
-
-    # Informational only — building from other branches is allowed because
-    # the operator might be on a feature branch and know what they're doing.
-    branch = git_current_branch()
-    if branch != "vivado-xilinx-flows":
-        print(f"  WARNING: on branch '{branch}', not 'vivado-xilinx-flows'. "
-              "This branch may not have the required Makefile targets.")
 
 
 # ---------------------------------------------------------------------------
