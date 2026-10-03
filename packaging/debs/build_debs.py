@@ -56,7 +56,9 @@ TMPFILES = "/usr/lib/tmpfiles.d"
 RUN_DIR = "/run/fpgas-online"
 EXE = {"file_info": {"mode": 0o755}}
 DATA = {"file_info": {"mode": 0o644}}
-OPENFPGALOADER = "openfpgaloader-fpgasonline | openfpgaloader-fpgasonline-git | openfpgaloader"
+# Every board here reads the device DNA with --read-dna, which openFPGALoader has from 0.13.0 (Debian
+# bookworm's is 0.10.0); fpgas.online's builds have it.
+OPENFPGALOADER = "openfpgaloader-fpgasonline | openfpgaloader-fpgasonline-git | openfpgaloader (>= 0.13.0)"
 ETHERNET = ["iproute2", "iputils-ping", "iputils-arping | arping"]  # no sudo: the test asks to be run as root
 # What each board's verify needs, and nothing it does not. Every test the boot check runs needs its tools here,
 # not in -debug (only Suggested): the Arty's Ethernet test and the Arty's and TT's Pmod pin-ID scan (GPIO reads),
