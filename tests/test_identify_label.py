@@ -627,6 +627,7 @@ def test_the_acorn_writes_only_the_spi_master_and_chip_select_over_bar0(tmp_path
     rig.soc.write = lambda addr, value: written.append(addr) or write(addr, value)
     live = ACORN.identify({}, rig.found(), rig.options(board_key="acorn"))
     assert live["flash_jedec"] == "0x010219" and written  # the flash's RDID and OTPR were sent
+    assert live["flash_sfdp"] == "none" and 0x5A in rig.soc.flash.opcodes  # and Read SFDP, through the same writes
     assert set(written) <= check.IDENTIFY_WRITES
     assert fk.REGS["ctrl_scratch"] - 4 not in written  # ctrl_reset, the CSR before ctrl_scratch
 

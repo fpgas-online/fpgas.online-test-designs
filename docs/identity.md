@@ -14,7 +14,7 @@ some fields only fpgas-verify has. The code is
 
 * **A missing field was not read.** A field is never present with an empty or null value.
 * **A read that was tried and failed** gives `<field>_error` instead, with the reason in words: `dna_error`,
-  `idcode_error`, `flash_error`.
+  `idcode_error`, `flash_error`, `flash_sfdp_error`.
 * **Hex identifiers** are lower case, start with `0x`, and have a fixed number of digits. The flash's unique ID
   is the exception: plain hex with no `0x`, as rpi-hwid writes it.
 * **Types.** In the report and the document, numbers are JSON numbers and true/false are JSON booleans. In the
@@ -33,6 +33,7 @@ rpi-hwid's `FpgaBoard` fields:
 | `flash` | string | the flash part: `S25FL256S`, `S25FS256S`, told apart by RDID byte 6 (the family ID); the family's name, `S25Fx256S`, when byte 6 is not known | the flash was not read, or its part is not known |
 | `flash_jedec` | string | RDID bytes 1-3, 6 hex digits: `0x010219` | the flash was not read |
 | `flash_extended_id` | string | RDID bytes 4-6, 6 hex digits: `0x4d0180` | the flash was not read |
+| `flash_sfdp` | string | the SFDP revision the flash answered Read SFDP with, `major.minor`: `1.6`; or `none` when its answer has no SFDP signature, which is what an S25FL256S gives (see [SFDP](#sfdp)) | the flash was not read; `flash_sfdp_error` says why when the flash's IDs were read but Read SFDP failed |
 | `flash_uid` | string | the flash's factory unique ID, plain hex | the flash was not read |
 | `flash_uid_bits` | number | the unique ID's length in bits: `128` | as `flash_uid` |
 | `flash_uid_state` | string | `read`, or `blank` when every byte is `00` or `ff` | as `flash_uid` |
@@ -60,6 +61,27 @@ fpgas-verify's own fields:
 | `flash_config` | string | the configuration register, 2 hex digits: `0x02` | the flash was not read |
 | `flash_quad` | boolean | the configuration register's QUAD bit | the flash was not read |
 | `flash_uid_opcode` | string | the command that read the unique ID: `0x4b` | as `flash_uid` |
+
+## SFDP
+
+SFDP (Serial Flash Discoverable Parameters, JEDEC JESD216) is a table a flash keeps about itself, read with
+the Read SFDP command: opcode `5Ah`, a 3-byte address, then 8 dummy clocks. The Acorn reads the 8-byte header
+at address 0 through its SoC's SPI master, the same way as the flash's IDs: it is a read, writes nothing to
+the flash, and is part of `--identify`. In the header, bytes 0-3 are the signature, the ASCII letters `SFDP`;
+byte 4 is the minor revision and byte 5 the major revision. `flash_sfdp` is `major.minor`, or `none` when the
+first four bytes are not the signature. An answer shorter than 8 bytes is not a read, and gives no
+`flash_sfdp`.
+
+The Acorn's S25FL256S has no SFDP. Its datasheet (Infineon 002-19099 Rev. *D, S25FL128S/S25FL256S) has no
+`5Ah` in its command summary (section 13.1) and does not mention SFDP. The part describes itself only in its
+ID-CFI space, read with RDID (sections 7.3, 11.2.2 and 13.2). Read SFDP is not one of its commands, so its
+answer has no signature and `flash_sfdp` should be `none`. This comes from the datasheet; no board's answer
+has been recorded yet. The S25FS256S, the 1.8 V part of the same family, does answer Read SFDP. rpi-hwid
+uses `flash_sfdp` to tell an S25FL127S (which has SFDP) from an S25FL128S (which has not), parts that share
+their RDID bytes.
+
+A failed Read SFDP gives `flash_sfdp_error` and fails the Acorn's `pcie-bar0` test; the flash's other fields
+still stand.
 
 ## What each board has
 
@@ -108,8 +130,9 @@ The identity document holds the fields of every board found:
 `source` is always `live`. A run inside `fpgas-verify --label` prints the outer run's document byte for byte,
 so it says `live` too.
 
-[`tests/data/identity-v1-acorn-p48.json`](../tests/data/identity-v1-acorn-p48.json) is a complete example: the
-Acorn on pi-sw2-p48. rpi-hwid keeps a byte-identical copy and tests its reader on it.
+[`tests/data/identity-v1-acorn-p48.json`](../tests/data/identity-v1-acorn-p48.json) is an example: the
+Acorn on pi-sw2-p48. rpi-hwid keeps a byte-identical copy and tests its reader on it. It is exactly what
+that board printed, which did not include `flash_sfdp`.
 
 ## Versions
 

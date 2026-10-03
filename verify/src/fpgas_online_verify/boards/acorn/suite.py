@@ -214,6 +214,9 @@ class _Suite:
         except check.spi_flash.FlashError as e:
             self.flash_error = f"the flash did not identify itself: {e}"
             faults.append(self.flash_error)
+        sfdp_error = (self.report.get("flash") or {}).get("sfdp_error")
+        if sfdp_error:
+            faults.append(f"the flash's SFDP could not be read: {sfdp_error}")
         dna = check.read_dna(self.bus.read, self.csrs)
         self.bar0["dna"] = dna
         xadc = check.read_xadc(self.bus.read, self.csrs)
