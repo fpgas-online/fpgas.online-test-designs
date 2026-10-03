@@ -60,22 +60,42 @@ jobs:
       # wait-on-check-action fails outright if no check matches when it first looks. After a
       # push to a pull request cancels the older run (concurrency, above), the new build runs
       # can briefly have no jobs yet, so wait here until at least one build check exists.
+      # On a pull request the build workflows' paths filters can leave out every workflow
+      # with a board check (a docs-only change, or one that builds only Acorn boards), and
+      # then none ever appears: once every other run on the commit has finished with still
+      # no board check -- seen on two polls 20 s apart, so runs not yet created cannot end
+      # the wait early -- there is nothing to wait for, so skip the next step. Pull requests
+      # only: on main every build workflow runs, so main keeps waiting for its checks.
       - name: Wait for the build workflows to start
+        id: started
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          WORKFLOW: ${{ github.workflow }}
+          EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          for _ in $(seq 60); do
+          idle=0
+          for _ in $(seq 180); do
             n="$(gh api "repos/${REPO}/commits/${HEAD_SHA}/check-runs?per_page=100" \
-              --jq '[.check_runs[].name | select(test("^(Arty|NeTV2|Fomu|TT FPGA|netv2)"))] | length' || echo 0)"  # gh's jq has no lookahead; an API error just retries
-            if [ "$n" -gt 0 ]; then echo "$n build checks on ${HEAD_SHA}"; exit 0; fi
-            sleep 10
+              --jq '[.check_runs[].name | select(test("^(Arty|NeTV2|Fomu|TT FPGA|netv2|Acorn CLE|NiteFury|LiteFury)"))] | length' || echo 0)"  # gh's jq has no lookahead; an API error just retries
+            if [ "$n" -gt 0 ]; then echo "$n build checks on ${HEAD_SHA}"; echo "builds=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+            left="$(gh api "repos/${REPO}/actions/runs?head_sha=${HEAD_SHA}&per_page=100" \
+              --jq "[.workflow_runs[] | select(.status != \"completed\" and .id != ${RUN_ID} and .name != \"${WORKFLOW}\")] | length" || echo 1)"
+            if [ "$EVENT" = pull_request ] && [ "$left" -eq 0 ]; then idle=$((idle + 1)); else idle=0; fi
+            if [ "$idle" -ge 2 ]; then
+              echo "no board build ran on ${HEAD_SHA} (paths filters) and every other run has finished"
+              echo "builds=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 20
           done
-          echo "no build check appeared on ${HEAD_SHA} in 10 minutes" >&2
+          echo "no build check appeared on ${HEAD_SHA} in an hour" >&2
           exit 1
 
       - name: Wait for build workflows to complete
+        if: steps.started.outputs.builds == 'true'
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
           ref: ${{ env.HEAD_SHA }}
@@ -112,30 +132,53 @@ jobs:
           echo "runs on ${HEAD_SHA} still not finished after an hour: $left" >&2
           exit 1
 
+      # On a pull request a build workflow whose paths filter left it out has no run on this commit; its
+      # design did not change, so its bitstreams come from that workflow's newest successful run on main.
+      # The debs job below needs every test bitstream (build_debs.py fails on a missing one).
       - name: Download artifacts from all build workflows
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
         run: |
           mkdir -p bitstreams
+
+          download_run() {
+            # List artifacts for this run
+            artifacts=$(gh api "repos/${{ github.repository }}/actions/runs/$1/artifacts" \
+              --jq '.artifacts[] | "\(.id) \(.name)"')
+
+            while IFS=' ' read -r artifact_id artifact_name; do
+              [ -z "$artifact_id" ] && continue
+              echo "Downloading: ${artifact_name} (artifact ${artifact_id} from run $1)"
+              gh api "repos/${{ github.repository }}/actions/artifacts/${artifact_id}/zip" > "/tmp/${artifact_name}.zip"
+              mkdir -p "bitstreams/${artifact_name}"
+              unzip -o "/tmp/${artifact_name}.zip" -d "bitstreams/${artifact_name}"
+              rm "/tmp/${artifact_name}.zip"
+            done <<< "$artifacts"
+          }
 
           # List all workflow runs for this commit
           runs=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${HEAD_SHA}&status=completed&per_page=100" \
             --jq '.workflow_runs[] | select(.conclusion == "success") | .id')
 
           for run_id in $runs; do
-            # List artifacts for this run
-            artifacts=$(gh api "repos/${{ github.repository }}/actions/runs/${run_id}/artifacts" \
-              --jq '.artifacts[] | "\(.id) \(.name)"')
-
-            while IFS=' ' read -r artifact_id artifact_name; do
-              [ -z "$artifact_id" ] && continue
-              echo "Downloading: ${artifact_name} (artifact ${artifact_id} from run ${run_id})"
-              gh api "repos/${{ github.repository }}/actions/artifacts/${artifact_id}/zip" > "/tmp/${artifact_name}.zip"
-              mkdir -p "bitstreams/${artifact_name}"
-              unzip -o "/tmp/${artifact_name}.zip" -d "bitstreams/${artifact_name}"
-              rm "/tmp/${artifact_name}.zip"
-            done <<< "$artifacts"
+            download_run "$run_id"
           done
+
+          if [ "$EVENT" = pull_request ]; then
+            ran=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${HEAD_SHA}&per_page=100" \
+              --jq '.workflow_runs[].workflow_id')
+            for wf in $(gh api "repos/${{ github.repository }}/actions/workflows?per_page=100" \
+              --jq '.workflows[] | select(.state == "active" and (.name | startswith("Build: "))) | .id'); do
+              grep -qx "$wf" <<< "$ran" && continue
+              main_run=$(gh api "repos/${{ github.repository }}/actions/workflows/${wf}/runs?branch=main&event=push&status=success&per_page=1" \
+                --jq '.workflow_runs[0] | select(.) | "\(.id) \(.head_sha) \(.name)"')
+              [ -z "$main_run" ] && continue
+              read -r main_id main_sha main_name <<< "$main_run"
+              echo "::notice::${main_name} did not run on this pull request (paths filter): its artifacts are from main, run ${main_id} at ${main_sha}"
+              download_run "$main_id"
+            done
+          fi
 
       - name: List collected bitstreams
         run: find bitstreams -type f | sort
