@@ -28,7 +28,7 @@ from fpgas_online_verify.core import Problem
 from tests import acorn_fakes as fk
 from tests.test_acorn_verify import Rig
 from tests.test_spi_flash import sf
-from tests.test_verify_boards import ARTY, ARTY_FOUND, NETV2, Runner, _host
+from tests.test_verify_boards import ARTY, ARTY_FOUND, DNA, NETV2, Runner, _host
 from tests.test_verify_runner import Fake
 
 GOLDEN = pathlib.Path(__file__).parent / "data" / "identity-v1-acorn-p48.json"
@@ -518,6 +518,17 @@ def test_a_board_known_only_by_its_idcode_takes_nothing_from_the_boot_report(tmp
     assert gaps == ["netv2: flash_jedec: no board-unique match in the boot report"]
 
 
+def test_a_netv2_whose_dna_was_read_live_matches_the_boot_report_by_dna(tmp_path, locks):
+    netv2_boot = {"board": "netv2", "kind": "netv2", "idcode": "0x0362d093", "dna": DNA, "flash_jedec": "0xc22018"}
+    _boot_report(tmp_path, netv2_boot)
+    found = {"variant": "a7-35", "idcode": "0x0362d093"}
+    for dna, jedec in [(DNA, "0xc22018"), ("0x0011223344556677", None)]:  # this board, then another of the part
+        netv2 = Identified("netv2", seen=[found], read={"idcode": "0x0362d093", "dna": dna},
+                           label_fields=("idcode", "dna", "flash_jedec"), report_fields=("flash",))  # fmt: skip
+        (board,) = _read({"netv2": netv2}, tmp_path)[0]["boards"]
+        assert board.get("flash_jedec") == jedec
+
+
 def test_the_arty_matches_by_usb_serial_and_the_acorn_by_pci_slot(tmp_path, locks):
     _boot_report(tmp_path, {**ARTY_BOOT, "idcode": "0x0362d093"},
                  {"board": "acorn", "kind": "acorn", "bdf": "0001:01:00.0", "flash_uid": "aa"})  # fmt: skip
@@ -594,16 +605,29 @@ def test_no_boot_report_or_a_damaged_one_is_only_the_live_read(tmp_path, locks):
 # -- the boards' live reads ----------------------------------------------------------------------------------
 
 
-def test_the_arty_reads_only_its_idcode_and_loads_nothing(tmp_path):
+def test_the_arty_reads_only_its_idcode_and_dna_and_loads_nothing(tmp_path):
     run = Runner()
     out = ARTY.identify(_host(ARTY), ARTY_FOUND, {"board_key": "arty"}, runner=run)
-    assert [c[-3:] for c in run.calls] == [["--detect", "--verbose-level", "2"]]
+    assert run.calls == [["openFPGALoader", "-b", "arty", "--detect", "--verbose-level", "2"],
+                         ["openFPGALoader", "-b", "arty", "--read-dna"]]  # fmt: skip
     assert out == {
         "board": "arty", "kind": "arty", "variant": "a7-35", "serial": "210319B", "usb": "1-1",
         "idcode": "0x0362d093", "idcode_version": 0, "idcode_part_number": "0x362d",
         "idcode_manufacturer_id": "0x049", "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A35T",
+        "dna": DNA,
     }  # fmt: skip
     assert ARTY.report_fields == ("flash",)
+    # whole but for the flash, which only a loaded design can read
+    assert identify.missing(ARTY, out) == [("flash_jedec", "not read"), ("flash_uid", "not read")]
+
+
+def test_an_arty_whose_dna_cannot_be_read_says_why_in_dna_error(tmp_path):
+    run = Runner([("--read-dna", (1, "Error: Failed to claim FPGA device: unable to open ftdi device\n"))])
+    out = ARTY.identify(_host(ARTY), ARTY_FOUND, {"board_key": "arty"}, runner=run)
+    assert "dna" not in out and out["idcode"] == "0x0362d093"
+    assert out["dna_error"] == ("openFPGALoader --read-dna read no device DNA (exit 1): "
+                                "Error: Failed to claim FPGA device: unable to open ftdi device")  # fmt: skip
+    assert ("dna", out["dna_error"]) in identify.missing(ARTY, out)
 
 
 def test_an_arty_with_no_jtag_chain_is_an_idcode_error(tmp_path):
@@ -612,12 +636,16 @@ def test_an_arty_with_no_jtag_chain_is_an_idcode_error(tmp_path):
     assert "(exit 1)" in out["idcode_error"] and "idcode" not in out  # the check's own reason (testbench.jtag)
 
 
-def test_the_netv2_uses_the_idcode_its_scan_found_and_runs_nothing():
+def test_the_netv2_uses_the_idcode_its_scan_found_and_reads_only_its_dna():
     run = Runner()
     scan = {"tool": "openocd", "exit": 0, "output": ["tap/device found: 0x13631093"]}
     found = {"variant": "a7-100", "idcode": "0x13631093", "idcodes": ["0x13631093"], "idcode_scan": scan}
     out = NETV2.identify(_host(NETV2), found, {"board_key": "netv2"}, runner=run)
-    assert run.calls == [] and out["idcode"] == "0x13631093" and out["idcode_device"] == "XC7A100T"
+    assert out["idcode"] == "0x13631093" and out["idcode_device"] == "XC7A100T" and out["dna"] == DNA
+    # no second scan: only the DNA read, on the same pins, which go back as they were found
+    assert run.calls[0] == ["pinctrl", "get", "4,17,27,22"]
+    assert run.calls[1] == ["openFPGALoader", "--cable", "libgpiod", "--pins", "27:22:4:17", "--read-dna"]
+    assert [c[:3] for c in run.calls[2:]] == [["pinctrl", "set", g] for g in ("4", "17", "22", "27")]
 
 
 def test_the_acorn_reads_the_same_identity_as_its_check_without_reading_a_slot_or_writing(tmp_path, images,
@@ -644,6 +672,7 @@ def test_the_acorn_writes_only_the_spi_master_and_chip_select_over_bar0(tmp_path
     rig.soc.write = lambda addr, value: written.append(addr) or write(addr, value)
     live = ACORN.identify({}, rig.found(), rig.options(board_key="acorn"))
     assert live["flash_jedec"] == "0x010219" and written  # the flash's RDID and OTPR were sent
+    assert live["flash_sfdp"] == "none" and 0x5A in rig.soc.flash.opcodes  # and Read SFDP, through the same writes
     assert set(written) <= check.IDENTIFY_WRITES
     assert fk.REGS["ctrl_scratch"] - 4 not in written  # ctrl_reset, the CSR before ctrl_scratch
 

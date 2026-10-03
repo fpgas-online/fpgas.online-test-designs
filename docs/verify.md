@@ -30,7 +30,8 @@ curl -fsSL https://apt.fpgas.online/apt.gpg | sudo tee /etc/apt/keyrings/apt.gpg
 echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
   | sudo tee /etc/apt/sources.list.d/apt.list
 
-# Optional: fpgas.online's openFPGALoader. A NeTV2 on a Pi 5 needs it; add it before installing.
+# fpgas.online's openFPGALoader; add it before installing. A NeTV2 on a Pi 5 needs it. Elsewhere Debian's own
+# works from 0.13.0 on (trixie), but bookworm's (0.10.0) is too old: it cannot read the device DNA.
 curl -fsSL https://fpgas.online/fpgas.online-fpga-tools/fpgas.online-fpga-tools.gpg \
   | sudo tee /etc/apt/keyrings/fpgas.online-fpga-tools.gpg > /dev/null
 echo "deb [signed-by=/etc/apt/keyrings/fpgas.online-fpga-tools.gpg] https://fpgas.online/fpgas.online-fpga-tools/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
@@ -121,8 +122,8 @@ the check, publishes anything or records any state.
   | Board | Read live |
   |---|---|
   | Acorn | the running build, device DNA and flash identity over BAR0 (the check's `pcie-bar0`), and the IDCODE and DNA over P1 JTAG (`jtag`) |
-  | Arty | the JTAG IDCODE |
-  | NeTV2 | the JTAG IDCODE, from the scan that finds it |
+  | Arty | the JTAG IDCODE and the device DNA ([the device DNA](#the-device-dna)) |
+  | NeTV2 | the JTAG IDCODE, from the scan that finds it, and the device DNA |
   | Fomu, TT FPGA | how the board was found (its USB serial) |
 
   A TT board's [Tiny Tapeout fields](identity.md#tiny-tapeout-fields) are not read live: they come from the
@@ -132,12 +133,12 @@ the check, publishes anything or records any state.
   is put back:
   * Acorn, BAR0: memory decoding is switched on in the board's PCI COMMAND register for the read and
     switched off again if it was off. If a kernel driver (litepcie) is bound to the board, it is unbound for
-    the read and bound again afterwards. To read the flash's IDs (RDID and OTPR), the SoC's SPI master
-    registers and the flash's chip select are written. No other CSR of the SoC is written; `--identify`
-    refuses any other write, so the SoC is never reset through `ctrl_reset`.
+    the read and bound again afterwards. To read the flash's IDs (RDID and OTPR) and its SFDP header (Read
+    SFDP), the SoC's SPI master registers and the flash's chip select are written. No other CSR of the SoC
+    is written; `--identify` refuses any other write, so the SoC is never reset through `ctrl_reset`.
   * Acorn, P1 JTAG, and NeTV2: openFPGALoader (or openocd) drives the Pi's JTAG GPIOs. Their state is read
     with `pinctrl` first and put back afterwards; a pin that was an output goes back as an input. Without
-    `pinctrl` the scan is not run.
+    `pinctrl` neither the scan nor the DNA read is run.
   * A SIGTERM during the read (rpi-hwid sends one to a slow `--identify`, then SIGKILL) exits 143 after
     putting all of this back and letting go of the locks; a second SIGTERM meanwhile is ignored.
 * Each board is read under its lock, as a check is. `--identify` waits at most 30 s for it; a board still in
@@ -153,15 +154,15 @@ the check, publishes anything or records any state.
   loaded for openFPGALoader's SPI-over-JTAG bridge, and a TT board's Tiny Tapeout fields with
   `tinytapeout_note` or `tinytapeout_error`, which need the port `fpgas-tt.service` holds. Those fields are
   listed in the board's `from_report`. An IDCODE names a part, not a board, so a board known only by its
-  IDCODE (every NeTV2, for now) gets nothing from the report: the fields stay missing, for the reason
+  IDCODE (a NeTV2 whose DNA could not be read) gets nothing from the report: the fields stay missing, for
+  the reason
   `no board-unique match in the boot report`.
 * The exit status is 0 when every board's identity is whole (no field missing, no `<field>_error`), 1
   otherwise. Each missing field is printed on stderr with why. The document is printed either way; readers
   use it and ignore the exit status.
-* For an Arty or a NeTV2, `--identify` always exits 1 for now: their labels need the device DNA and the
-  flash's unique ID (`dna`, `flash_uid`), and neither the boot check nor `--identify` reads them yet (see
-  [Not done yet](#not-done-yet)). Their IDCODE, and any flash fields the boot report has for an Arty, are still in
-  the document.
+* For an Arty or a NeTV2, `--identify` always exits 1 for now: their labels need the flash's unique ID
+  (`flash_uid`), and neither the boot check nor `--identify` reads it yet (see [Not done yet](#not-done-yet)).
+  Their IDCODE and device DNA, and any flash fields the boot report has for them, are still in the document.
 * For a TT board, `--identify` exits 0 only when the boot report has the fields rpi-hwid's Tiny Tapeout label
   needs (`mcu`, `chip`, `demoboard`, `demoboard_version`, `sdk`, besides `usb_serial`). So it exits 1 when
   rpi-hwid was not installed at boot.
@@ -226,6 +227,7 @@ fpgas-verify: pass (mode auto, auto: USB/PCI IDs)
   acorn cle-215+: pass
     pcie-link  pass
     pcie-bar0  pass
+    rp1-pio    pass
     jtag       pass
     flash      pass
     ddr        pass
@@ -436,7 +438,7 @@ options:
   --no-publish   do not send the result to the fleet
 
 tests in the boot check:
-  pcie-link pcie-bar0 jtag flash ddr p2-uart p2-serial scratch p2-gpio
+  pcie-link pcie-bar0 rp1-pio jtag flash ddr p2-uart p2-serial scratch p2-gpio
 
 the result is pass (exit 0) or a fail named for its worst cause (exit 1):
   pass          every test passed, and the board and flash are as recorded
@@ -482,7 +484,7 @@ options:
   --uart PORT  use the UART bridge on PORT instead of PCIe
 
 commands:
-  id                print the flash's part, size and IDs as JSON
+  id                print the flash's part, size, IDs and SFDP revision as JSON
   dump FILE         read the whole flash into FILE
   verify FILE ADDR  compare the flash at ADDR with FILE
   write FILE ADDR   write FILE at ADDR, then read it back (needs --idcode)
@@ -517,15 +519,17 @@ Each test checks its bitstream's sha256 against the `-bitstreams` package's mani
 
 | Board | Found by | Loaded with | UART | Boot-check tests, in order | Only in `-debug` | Recorded state |
 |---|---|---|---|---|---|---|
-| Arty A7 | USB `0403:6010` | `openFPGALoader -b arty` | `/dev/ttyUSB1` | `uart`, `ddr`, `spiflash`, `ethernet`, `pin-id` | `pmod` | FTDI serial, IDCODE, flash JEDEC ID, sha256 of the flash's first 2.1 MiB |
-| NeTV2 | JTAG IDCODE over GPIO 4/17/27/22 | openocd (Pi 3/4), openFPGALoader `rp1pio` (Pi 5) | `/dev/ttyAMA0` | `uart`, `ddr`, `spiflash` | `ethernet`, `pmod`, `pin-id` | IDCODE, flash JEDEC ID, sha256 of the flash's boot image |
+| Arty A7 | USB `0403:6010` | `openFPGALoader -b arty` | `/dev/ttyUSB1` | `uart`, `ddr`, `spiflash`, `ethernet`, `pin-id` | `pmod` | FTDI serial, IDCODE, device DNA, flash JEDEC ID, sha256 of the flash's first 2.1 MiB |
+| NeTV2 | JTAG IDCODE over GPIO 4/17/27/22 | openocd (Pi 3/4), openFPGALoader `rp1pio` (Pi 5) | `/dev/ttyAMA0` | `uart`, `ddr`, `spiflash` | `ethernet`, `pmod`, `pin-id` | IDCODE, device DNA, flash JEDEC ID, sha256 of the flash's boot image |
 | Fomu EVT | USB `1209:5bf0` (DFU bootloader) | openFPGALoader over DFU | `/dev/serial0` | `uart` | `spiflash`, `pmod`, `pin-id` | USB serial |
 | TT FPGA | USB `2e8a:*` | `tt_fpga_program.py` over `mpremote` | `/dev/ttyACM0` | `pin-id`, `uart`, `spiflash` | `pmod` | USB serial |
 
 * The Arty and NeTV2 are left running openFPGALoader's SPI-over-JTAG bridge (used to read the flash back), the
   others the last test design. Each returns to its flash image at its next power cycle.
 * The Arty and NeTV2 have their whole JTAG IDCODE read and decoded before the tests
-  ([the JTAG IDCODE](#the-jtag-idcode)): a part that is not the variant's fails the board.
+  ([the JTAG IDCODE](#the-jtag-idcode)): a part that is not the variant's fails the board. Then their device
+  DNA is read over the same JTAG ([the device DNA](#the-device-dna)): one that cannot be read, or is all zeros
+  or all ones, fails the board.
 * The Fomu runs only `uart` at boot: a DFU load replaces the bootloader until the next power cycle.
 * The TT FPGA's `fpgas-tt.service` is stopped for the tests and started again after. While it is stopped, and
   before the first test, rpi-hwid reads who the board is ([TT FPGA identity](#tt-fpga-identity)).
@@ -579,7 +583,7 @@ flash:
 | PCI IDs | Is | Result |
 |---|---|---|
 | `10ee:7021`, subsystem `1e24:021f` (CLE-215+) or `1e24:0101` (CLE-101) | the fpgas.online Acorn SoC | tested |
-| `1e24:021f` or `1e24:0101` as vendor:device | an Acorn on SQRL's factory image | `fail`, `unconverted: …`; only `pcie-link` and `jtag` run |
+| `1e24:021f` or `1e24:0101` as vendor:device | an Acorn on SQRL's factory image | `fail`, `unconverted: …`; only `pcie-link`, `rp1-pio` and `jtag` run |
 | `10ee:7011` | the vendor XDMA sample (an Acorn or a NeTV2) | `fail`, `unconverted: …` |
 | `10ee:0666` | a PCIe Screamer running PCILeech | `fail`: fpgas.online has no test design for this board yet |
 | `10ee:7021`, subsystem `10ee:0007`, class `070001`, with a BAR2 | a stock Xilinx XDMA design (most likely a PicoEVB) | `fail`: fpgas.online has no test design for this board yet |
@@ -610,7 +614,8 @@ From a checkout, the check reads them from the repository.
 | Test | Over | Passes when |
 |---|---|---|
 | `pcie-link` | sysfs | `current_link_speed` and `current_link_width` are the setup's (5.0 GT/s, x1) |
-| `pcie-bar0` | BAR0 | the operational build runs (the golden build means the operational slot did not boot), the flash identifies itself, the device DNA is neither all zeros nor all ones, and the XADC temperature and VCCINT, VCCAUX and VCCBRAM are in range |
+| `pcie-bar0` | BAR0 | the operational build runs (the golden build means the operational slot did not boot), the flash identifies itself and its SFDP header can be read (a flash with no SFDP passes), the device DNA is neither all zeros nor all ones, and the XADC temperature and VCCINT, VCCAUX and VCCBRAM are in range |
+| `rp1-pio` | the Pi's kernel | Pi 5 / CM5 (BCM2712) only, not run elsewhere: `/dev/pio0` is a character device that opens read-write, which openfpgaloader-rp1pio needs. No bootloader or `config.txt` setting is read. When it does not, the test also says whether `rp1_fw` and `rp1_pio` are loaded, and the kernel's own `rp1-pio` / RP1 firmware lines say why, e.g. `failed to contact RP1 firmware` on a bootloader rp1_pio cannot talk to (pi-sw2-p47 and p48, bootloader 2024/11/05, 2026-10-03) |
 | `jtag` | P1 | `openFPGALoader --detect` finds one device, the variant's part in any silicon version ([the JTAG IDCODE](#the-jtag-idcode)), and `openFPGALoader --read-dna` reads a device DNA that is neither all zeros nor all ones. When BAR0's DNA is good, the two must match; otherwise the JTAG DNA is not compared. The IDCODE read does not use TDI; the DNA read does |
 | `flash` | BAR0 | both 4 MiB slots (golden at `0x000000`, operational at `0x400000`), read whole with read opcodes only, hold the release's images |
 | `ddr` | BAR0 | after the BIOS console is read out, the DRAM BIST makes two passes over the whole DRAM: no errors, and write and read bandwidth at least the variant's minimum |
@@ -710,6 +715,37 @@ Its `jtag` test entry:
  "output": ["- 0 -> 0x13636093", "- 1 -> 0xffffffff", "{\"dna\": \"0x0054b48664b04854\"}"], "result": "pass"}
 ```
 
+#### The device DNA
+
+The Acorn, Arty and NeTV2 have their FPGA's device DNA read: a 57-bit number fused into each chip, different on
+every one ([`dna.py`](../verify/src/fpgas_online_verify/dna.py)).
+
+| Board | Read with | In the report |
+|---|---|---|
+| Acorn | over BAR0, and `openFPGALoader --cable libgpiod --pins <setup's> --read-dna` over P1 | the `pcie-bar0` and `jtag` tests |
+| Arty A7 | `openFPGALoader -b arty --read-dna` over its FT2232H | the board's `jtag` |
+| NeTV2, Pi 5 | `openFPGALoader -c rp1pio --pins 27:22:4:17 --read-dna` | the board's `jtag` |
+| NeTV2, Pi 3/4 | `openFPGALoader --cable libgpiod --pins 27:22:4:17 --read-dna` (the flash readback's cable; the scan that finds the board is OpenOCD's) | the board's `jtag` |
+
+* The JTAG read runs only once the IDCODE scan has found the one FPGA expected. Otherwise it is not run, the
+  scan's fault is the reason, and `dna_error` says the DNA was not read.
+* `--read-dna` resets the TAP, shifts in the FUSE_DNA instruction (`0x32`) and shifts out 64 bits. It loads
+  nothing and never reconfigures the FPGA, so `--identify` reads it too. The board's lock is held throughout;
+  on the NeTV2 the JTAG pins are put back with `pinctrl` as after its scan.
+* The FUSE_DNA instruction goes in through TDI and the DNA comes out on TDO, so a good DNA also shows TDI
+  works; the IDCODE scan does not use TDI.
+* A read that exits with an error or prints no DNA fails the board; the reason ends with its last line of
+  output. A DNA of all zeros or all ones fails it too: the DNA port is not being read.
+* A good DNA is `dna` in the `jtag` entry, the [identity](identity.md) and the recorded state, as 16 hex digits
+  (`0x0054b48664b04854`). Otherwise the identity has `dna_error`, with why.
+
+openFPGALoader has `--read-dna` from 0.13.0:
+
+| openFPGALoader | `--read-dna` |
+|---|---|
+| Debian bookworm's (0.10.0) | no, so the board packages need 0.13.0 or later: on bookworm, fpgas.online's |
+| 0.13.0 and later, and fpgas.online's `openfpgaloader-fpgasonline` (1.1.1) and `openfpgaloader-fpgasonline-git` | yes, over any JTAG cable: the read is in openFPGALoader's Xilinx code (`Xilinx::fuse_dna_read` in `src/xilinx.cpp`), after the cable is open. That covers `-b arty` (its `digilent` FT2232 cable), `libgpiod`, and `rp1pio` (fpgas.online's builds only) |
+
 #### Not done yet
 
 What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
@@ -722,12 +758,12 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 * The Arty's and NeTV2's flash is fingerprinted (a sha256 of its boot image region) and compared only with the
   last run's, not checked against a golden full test design.
 * Only the Acorn's flash can be written with its golden images (`fpgas-acorn-flash write`).
-* The Arty's and NeTV2's device DNA and flash IDs are not read, nor the flash IDs of the TT and Fomu; their
-  [identity](identity.md) has only what finding the board and its IDCODE give, and on the TT FPGA what
-  rpi-hwid reads.
+* The Arty's and NeTV2's flash IDs are not read, nor the flash IDs of the TT and Fomu; their
+  [identity](identity.md) has only what finding the board, its IDCODE and its device DNA give, and on the
+  TT FPGA what rpi-hwid reads.
 * Nothing is compared with the site's records.
-* rpi-hwid refuses the Arty's and NeTV2's labels until their device DNA and flash IDs are read; `--identify`
-  exits 1 for them meanwhile.
+* rpi-hwid refuses the Arty's and NeTV2's labels until their flash IDs are read; `--identify` exits 1 for
+  them meanwhile.
 
 ### Common failures
 
@@ -754,6 +790,8 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 | `fail`: `… failed (exit N) before scanning the JTAG chain: …` | the scan tool exited with an error and printed no scan: the cable or gpiochip would not open, say. The reason ends with its last line of output; more is in the report's `output` |
 | `fail`: `… exited N reading the IDCODE` / `openFPGALoader --detect exited N …` | the IDCODE scan reported an error, even if it printed an IDCODE; its last lines are in the report's `output` |
 | `fail`: `device DNA over P1 JTAG reads 0x…: the DNA port is not being read` | the DNA read over JTAG is all zeros or all ones, which is no chip's DNA. The IDCODE read worked without TDI, so check the P1 TDI wire first; then run `openFPGALoader --read-dna` by hand |
+| `fail`: `device DNA over JTAG reads 0x…: the DNA port is not being read` | an Arty's or NeTV2's DNA read is all zeros or all ones. Its IDCODE scan works without TDI, so check TDI first (the NeTV2's GPIO27); then run `openFPGALoader --read-dna` by hand |
+| `fail`: `openFPGALoader --read-dna read no device DNA (exit N): …` | an Arty's or NeTV2's DNA read failed; the reason ends with its last line. An openFPGALoader older than 0.13.0 (Debian bookworm's) has no `--read-dna`: install fpgas.online's ([Installing](#installing)) |
 | `fail`: `device DNA over JTAG … is not the one over BAR0` | the P1 TDI wire does not carry, or the DNA readout is wrong. Only a good BAR0 DNA is compared: one of all zeros or all ones is pcie-bar0's own fault (`device DNA over BAR0 reads 0x0: the DNA port is not being read`) |
 | `fail`: `J5 -> GPIO3: the FPGA drove 0, the Pi read 1` (or the other way) | a P2 spare wire is cut or miswired |
 | `fail`: `K2 -> GPIO15: …` / `GPIO14 -> J2: …` | a P2 serial wire is cut or miswired |
@@ -770,7 +808,7 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
   | `result`, `reason` | the result, and why, when no board was checked |
   | `checked_at` | when (UTC, ISO 8601) |
   | `mode`, `configured_by`, `chosen_by` | `auto` or the board, the file (or "command line") that said so, and how the boards were found |
-  | `boards[]` | per board: `board`, `variant`, `found`, `result`, `reason` (every fault), `bitstreams`, `tests[]` (`test`, `result`, `reason`, `output`, and what the test read or measured), `identity` ([who the board is](identity.md)), `state`. The Arty's and NeTV2's also have `jtag`: `result`, `reason`, and the [IDCODE's fields](#the-jtag-idcode). The Acorn's also has `setup`, `running`, `flash`, `not_run`, and `driver` when one was unbound |
+  | `boards[]` | per board: `board`, `variant`, `found`, `result`, `reason` (every fault), `bitstreams`, `tests[]` (`test`, `result`, `reason`, `output`, and what the test read or measured), `identity` ([who the board is](identity.md)), `state`. The Arty's and NeTV2's also have `jtag`: `result`, `reason`, the [IDCODE's fields](#the-jtag-idcode), and `dna` or `dna_error` ([the device DNA](#the-device-dna)). The Acorn's also has `setup`, `running`, `flash`, `not_run`, and `driver` when one was unbound |
   | `state` | `file`, and `recorded` (`first run` or `--update`) or `changes` |
 
   ```bash
@@ -791,6 +829,10 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 * On a record with `schema_version` below 4, a flash part name that changed while its JEDEC ID and unique ID
   did not is a corrected name, taken quietly: the part is now named from RDID byte 6, so an S25FS256S is no
   longer called an S25FL256S. A different JEDEC ID or unique ID is still a change, and so is a rewritten flash.
+* A device DNA missing from a record with `schema_version` below 5 is added quietly, once: until then only the
+  Acorn's was read. This goes for every board, so an Acorn whose record has no DNA (neither BAR0 nor JTAG
+  read one that run) also gets its DNA added quietly. On a newer record a DNA not recorded before is a
+  change, as is another DNA.
 * A `--test` run neither records nor compares the state.
 
 ---
@@ -842,9 +884,11 @@ fpga-test-started {"board": "acorn", "test": "pcie-link"}
 fpga-test-finished {"board": "acorn", "test": "pcie-link", "result": "pass", "reason": ""}
 fpga-test-started {"board": "acorn", "test": "pcie-bar0"}
 fpga-test-finished {"board": "acorn", "test": "pcie-bar0", "result": "pass", "reason": ""}
+fpga-test-started {"board": "acorn", "test": "rp1-pio"}
+fpga-test-finished {"board": "acorn", "test": "rp1-pio", "result": "pass", "reason": ""}
 fpga-test-started {"board": "acorn", "test": "jtag"}
 fpga-test-finished {"board": "acorn", "test": "jtag", "result": "pass", "reason": ""}
-fpga-board-identified {"board": "acorn", "kind": "acorn", "variant": "cle-215+", "bdf": "0001:01:00.0", "soc_model": "cle-215+", "identifier": "fpgas-online Acorn PCIe SoC cle-215+ 2026-09-21 14:23:32", "build": "operational", "dna": "0x0054b48664b04854", "idcode": "0x13636093", "idcode_version": "1", "idcode_part_number": "0x3636", "idcode_manufacturer_id": "0x049", "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A200T", "flash_jedec": "0x010219", "flash_extended_id": "0x4d0180", "flash": "S25FL256S", "flash_size_bytes": "33554432", "flash_status": "0x00", "flash_config": "0x02", "flash_quad": "true", "flash_uid": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf", "flash_uid_bits": "128", "flash_uid_state": "read", "flash_uid_opcode": "0x4b", "flash_source": "pcie", "schema": "fpga-identity/1"}
+fpga-board-identified {"board": "acorn", "kind": "acorn", "variant": "cle-215+", "bdf": "0001:01:00.0", "soc_model": "cle-215+", "identifier": "fpgas-online Acorn PCIe SoC cle-215+ 2026-09-21 14:23:32", "build": "operational", "dna": "0x0054b48664b04854", "idcode": "0x13636093", "idcode_version": "1", "idcode_part_number": "0x3636", "idcode_manufacturer_id": "0x049", "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A200T", "flash_jedec": "0x010219", "flash_extended_id": "0x4d0180", "flash": "S25FL256S", "flash_size_bytes": "33554432", "flash_status": "0x00", "flash_config": "0x02", "flash_quad": "true", "flash_uid": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf", "flash_uid_bits": "128", "flash_uid_state": "read", "flash_uid_opcode": "0x4b", "flash_sfdp": "none", "flash_source": "pcie", "schema": "fpga-identity/1"}
 ```
 
 They come between `fpga-verifying` and `fpga-verified`.

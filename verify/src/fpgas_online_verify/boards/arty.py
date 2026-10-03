@@ -1,7 +1,8 @@
 """Digilent Arty A7 (XC7A35T): found by its FT2232H on USB (JTAG on interface 0, the UART on interface 1),
 loaded with openFPGALoader. The check reads its whole IDCODE over that JTAG first (openFPGALoader's raw scan),
-which must be an XC7A35T. Its flash (the boot image region) is read back with openFPGALoader's SPI-over-JTAG
-bridge, which openFPGALoader loads into SRAM for the purpose."""
+which must be an XC7A35T, then its device DNA (openFPGALoader --read-dna, over the same cable). Its flash (the
+boot image region) is read back with openFPGALoader's SPI-over-JTAG bridge, which openFPGALoader loads into SRAM
+for the purpose."""
 
 from typing import ClassVar
 
@@ -31,15 +32,18 @@ class Arty(TestBoard):
         # The Pi's USB Ethernet adapter cabled to the Arty's RJ45 (a Pi 4's own port is on-board, not USB).
         "ethernet": {"artifact": "ethernet-test-arty-{v}/digilent_arty.bit", "script": "test_ethernet.py",
                      "args": ["--board", "arty", "--uart-port", "{port}"], "verify": True},
-        "pmod": {"artifact": "gpio-loopback-arty-{v}/top.bit", "script": "test_pmod_loopback.py",
+        "pmod": {"artifact": "gpio-loopback-arty-{v}/digilent_arty.bit", "script": "test_pmod_loopback.py",
                  "args": ["--board", "arty"], "pre": PMOD_PRE},
         # The Pmod HAT cabling, against identify_pmod_pins.BOARDS["arty"] (HAT JA/JB/JC -> Arty JA/JB/JC).
-        "pin-id": {"artifact": "pmod-pin-id-arty-{v}/top.bit", "script": "identify_pmod_pins.py",
+        "pin-id": {"artifact": "pmod-pin-id-arty-{v}/digilent_arty.bit", "script": "identify_pmod_pins.py",
                    "args": ["--board", "arty"], "pre": PMOD_PRE, "verify": True},
     }  # fmt: skip
 
     def idcode_argv(self, host):
         return ["openFPGALoader", "-b", "arty", "--detect", *idcode.OPENFPGALOADER_RAW_ARGS]
+
+    def dna_argv(self, host):
+        return ["openFPGALoader", "-b", "arty", "--read-dna"]
 
     def program_argv(self, bitstream, host, test):
         return ["openFPGALoader", "-b", "arty", bitstream]

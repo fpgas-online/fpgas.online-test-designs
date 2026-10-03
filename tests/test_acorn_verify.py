@@ -3,7 +3,7 @@
 The check never writes the flash and never reconfigures the FPGA. It runs every test it can and lists every
 fault: one result, pass or fail (docs/verify-goals.md). Its tests, in order:
 
-  pcie-link, pcie-bar0, jtag, flash, p2-uart, scratch, p2-gpio
+  pcie-link, pcie-bar0, rp1-pio, jtag, flash, ddr, p2-uart, p2-serial, scratch, p2-gpio
 
 The SoC is tests/acorn_fakes.py's FakeSoC (its flash side is tests/test_spi_flash.py's fake S25FL256S, so
 a read goes through the real spi_flash.Flash code path, STARTUPE2's swallowed clocks included), the Pi is
@@ -54,7 +54,9 @@ class Rig:
 
     def options(self, **extra):
         return {"images": self.images, "model": self.model, "open_bar": self.bar, "run": self.pi,
-                "gpiochip": lambda compatible: None, "uart_opener": self.uart.open, "settle": self.uart.settle,
+                "gpiochip": lambda compatible: None, "rp1_host": lambda: None,
+                "rp1_pio": lambda run: {"test": "rp1-pio", "result": "pass", "output": []},
+                "uart_opener": self.uart.open, "settle": self.uart.settle,
                 "sysfs_pci": self.root, "event": lambda stage, d: self.events.append((stage, d)),
                 "sleep": self.soc.sleep, "clock": self.soc.clock, **extra}  # fmt: skip
 
@@ -178,7 +180,7 @@ def test_a_board_on_sqrl_factory_image_still_has_its_link_and_jtag_checked(tmp_p
     """Its variant is known from the factory IDs, so its P1 JTAG and PCIe link are tested; nothing on BAR0."""
     rig = Rig(tmp_path, images, ids=fk.FACTORY)
     report = suite.check_board(rig.found(), rig.options(open_bar=fk.refuse))
-    assert _results(report) == {"pcie-link": "pass", "jtag": "pass"}
+    assert _results(report) == {"pcie-link": "pass", "rp1-pio": "pass", "jtag": "pass"}
     assert set(report["not_run"]) == {"pcie-bar0", "flash", "ddr", "p2-uart", "p2-serial", "scratch", "p2-gpio"}
     assert "unconverted" in report["not_run"]["flash"]
 
@@ -230,7 +232,7 @@ def test_a_board_running_the_release_with_every_link_working_passes_every_test(t
         "flash": "S25FL256S", "flash_jedec": "0x010219", "flash_extended_id": "0x4d0180",
         "flash_size_bytes": 33554432, "flash_status": "0x00", "flash_config": "0x02", "flash_quad": True,
         "flash_uid": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf", "flash_uid_bits": 128, "flash_uid_state": "read",
-        "flash_uid_opcode": "0x4b", "flash_source": "pcie",
+        "flash_uid_opcode": "0x4b", "flash_sfdp": "none", "flash_source": "pcie",
     }  # fmt: skip
     assert report["state"]["dna"] == "0x0054b48664b04854"
     assert set(report["state"]["flash"]["slots"]) == {"0x000000", "0x400000"}
@@ -269,8 +271,8 @@ def test_the_events_say_each_test_as_it_goes_and_who_the_board_is(tmp_path, imag
     rig = Rig(tmp_path, images)
     rig.check()
     stages = [s for s, _ in rig.events]
-    assert stages[:6] == ["fpga-test-started", "fpga-test-finished"] * 3
-    assert stages[6] == "fpga-board-identified"  # once PCIe and JTAG have said who it is
+    assert stages[:8] == ["fpga-test-started", "fpga-test-finished"] * 4
+    assert stages[8] == "fpga-board-identified"  # once PCIe and JTAG have said who it is
     assert stages.count("fpga-test-finished") == len(suite.TESTS)
     finished = [d for s, d in rig.events if s == "fpga-test-finished"]
     assert finished[0] == {"test": "pcie-link", "result": "pass", "reason": ""}
@@ -419,14 +421,47 @@ def test_an_s25fs256s_is_named_by_its_extended_id(tmp_path, images, monkeypatch)
     assert (ident["flash"], ident["flash_jedec"], ident["flash_extended_id"]) == ("S25FS256S", "0x010219", "0x4d0181")
 
 
+def test_the_flash_sfdp_revision_is_in_the_identity(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    rig.soc.flash.sfdp = tsf.SFDP_1_6
+    report = rig.check()
+    assert report["identity"]["flash_sfdp"] == "1.6" and "flash_sfdp_error" not in report["identity"]
+    assert report["flash"]["sfdp_header"] == tsf.SFDP_1_6[:8].hex()
+    assert _results(report)["pcie-bar0"] == "pass"
+
+
+def test_an_s25fl256s_answers_without_sfdp_so_its_flash_sfdp_is_none(tmp_path, images):
+    report = Rig(tmp_path, images).check()
+    assert report["identity"]["flash_sfdp"] == "none"
+    assert identity.details(report["identity"])["flash_sfdp"] == "none"
+
+
+def test_an_sfdp_read_that_failed_is_a_flash_sfdp_error_and_fails_pcie_bar0(tmp_path, images, monkeypatch):
+    def broken(flash):
+        raise sf.FlashError("the SPI master never went idle")
+
+    monkeypatch.setattr(sf.Flash, "sfdp_header", broken)
+    report = Rig(tmp_path, images).check()
+    ident = report["identity"]
+    assert ident["flash_sfdp_error"] == "Read SFDP (0x5a) failed: the SPI master never went idle"
+    assert "flash_sfdp" not in ident and ident["flash_jedec"] == "0x010219"  # the IDs still stand
+    bar0 = next(t for t in report["tests"] if t["test"] == "pcie-bar0")
+    assert bar0["result"] == "fail"
+    assert bar0["reason"] == ("the flash's SFDP could not be read: Read SFDP (0x5a) failed: the SPI master never "
+                              "went idle")  # fmt: skip
+
+
 FIXTURE = pathlib.Path(__file__).parent / "data" / "identity-v1-acorn-p48.json"
 P48_FLASH_UID = "edcbeececb2b2a88b04f914d2e46af90"  # pi-sw2-p48's S25FL256S, read over BAR0 and by openFPGALoader
 
 
 def p48_document(tmp_path, images):
     """The golden fixture: the Acorn fakes' identity (pi-sw2-p48's DNA, IDCODE and RDID), with p48's flash
-    unique ID, as fpgas-verify --identify prints it."""
+    unique ID, as fpgas-verify --identify prints it. It has no flash_sfdp: p48's document was printed by a
+    fpgas-verify that did not read SFDP, and the fixture stays exactly what p48 printed (rpi-hwid keeps a
+    byte-identical copy). test_the_flash_sfdp_revision_is_in_the_identity and the tests after it cover SFDP."""
     board = {**Rig(tmp_path / "p48", images).check()["identity"], "flash_uid": P48_FLASH_UID}
+    del board["flash_sfdp"]
     doc = identity.document([board], tool="fpgas-online-verify 0.0.post808", read_at="2026-10-02T00:00:00+00:00")
     return json.dumps(doc, indent=1, sort_keys=True) + "\n"
 
@@ -578,7 +613,8 @@ def test_a_host_that_is_no_acorn_setup_is_an_error_but_the_pcie_side_is_still_ch
     report = Rig(tmp_path, images, model="Raspberry Pi 4 Model B Rev 1.4").check()
     assert report["result"] == "error"
     assert "is not an Acorn setup in wiring.toml" in report["reason"]
-    assert _results(report) == {"pcie-bar0": "pass", "flash": "pass", "ddr": "pass", "scratch": "pass"}
+    want = {"pcie-bar0": "pass", "rp1-pio": "pass", "flash": "pass", "ddr": "pass", "scratch": "pass"}
+    assert _results(report) == want
     assert set(report["not_run"]) >= {"pcie-link", "jtag", "p2-uart", "p2-gpio"}
 
 

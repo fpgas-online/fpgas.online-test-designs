@@ -1,9 +1,10 @@
 """fpgas-verify --identify: who this host's board (or boards) is, as one document (identity.document()).
 
-  * Live, the reads are the ones that disturb nothing: the JTAG IDCODE, the device DNA (over BAR0 or JTAG's
-    FUSE_DNA) and, on the Acorn, the flash's identity over BAR0. Each board is read under its own lock, so a
-    check or a debug session running on it finishes first; it waits at most LOCK_WAIT seconds for the lock,
-    and a board still busy then has its fields missing, for the reason "board busy". A board found only by
+  * Live, the reads are the ones that disturb nothing: the JTAG IDCODE, the device DNA (over BAR0, or JTAG's
+    FUSE_DNA on the Acorn, Arty and NeTV2) and, on the Acorn, the flash's identity over BAR0. Each board is
+    read under its own lock, so a check or a debug session running on it finishes first; it waits at most
+    LOCK_WAIT seconds for the lock, and a board still busy then has its fields missing, for the reason "board
+    busy". A board found only by
     driving its pins (the NeTV2's JTAG scan) is looked for under its lock too, never before it is held; one
     that could not be looked for, its lock being busy, is in the document all the same, with every field
     missing for that reason, whatever else was found; so is one whose look failed (a JTAG scan that left a pin
@@ -12,8 +13,8 @@
     openFPGALoader's SPI-over-JTAG bridge; the TT FPGA's fields from rpi-hwid, which need the board's port, held
     by fpgas-tt.service outside the check) comes from the boot report (runner.REPORT), when the board there is
     this one by a key no other board has (its USB serial, PCI slot or device DNA); the board's dict lists those
-    fields in "from_report". An IDCODE names a part, not a board, so a board known only by its IDCODE (every NeTV2, for
-    now) gets nothing from the report: those fields stay missing, for the reason NO_MATCH.
+    fields in "from_report". An IDCODE names a part, not a board, so a board known only by its IDCODE (a NeTV2
+    whose DNA could not be read) gets nothing from the report: those fields stay missing, for the reason NO_MATCH.
   * Inside fpgas-verify --label (FPGAS_VERIFY_IDENTITY names the document the outer run read), --identify
     prints that file unchanged and does nothing else: no lock, no board code, and never the hardware, even
     when the file is missing or bad (that is an error). Every other mode refuses, so the outer run's locks

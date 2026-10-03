@@ -892,6 +892,32 @@ def test_an_arty_idcode_on_a_record_from_before_it_is_added_quietly(opts):
     assert report["result"] == "pass" and report["state"]["added"]
 
 
+@pytest.mark.parametrize("name", ["arty", "netv2"])
+def test_an_arty_or_netv2_dna_on_a_record_from_before_it_is_added_quietly(opts, name):
+    """Before schema 5 only the Acorn read its DNA: the Arty's and NeTV2's first one is not a change."""
+    facts = {"variant": "a7-35", "idcode": "0x0362d093", **({"serial": "A"} if name == "arty" else {})}
+    _record(opts, {name: facts}, 4)
+    now = Seen(name, {**facts, "dna": "0x0054b48664b04854"})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and report["state"]["added"] and "changes" not in report["state"]
+    boards, version = state.load_record(opts["state"])
+    assert boards[name]["dna"] == "0x0054b48664b04854" and version == state.SCHEMA_VERSION
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))  # and stays so
+    assert report["result"] == "pass" and "added" not in report["state"]
+    other = Seen(name, {**facts, "dna": "0x0011223344556677"})  # then another board of the same part: changed
+    report = runner.verify(opts, _boards(other), usb=[], pci=[], mode=("auto", "test"))
+    assert report["state"]["changes"] == [f"{name}.dna: was '0x0054b48664b04854', now '0x0011223344556677'"]
+
+
+def test_a_dna_missing_from_a_record_of_this_version_is_a_change(opts):
+    """Recorded when the DNA could not be read; a DNA now may be a board swapped meanwhile."""
+    _record(opts, {"arty": {"variant": "a7-35", "serial": "A"}}, state.SCHEMA_VERSION)
+    now = Seen("arty", {"variant": "a7-35", "serial": "A", "dna": "0x0054b48664b04854"})
+    report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
+    assert report["result"] == "changed"
+    assert report["state"]["changes"] == ["arty.dna: not recorded before, now '0x0054b48664b04854'"]
+
+
 def test_a_dna_recorded_without_its_leading_zeros_is_respelled_quietly(opts):
     """Before schema 4 the Acorn's DNA was recorded as f"{dna:#x}"; identity.py writes all 16 digits."""
     _record(opts, {"acorn": {"bdf": "0001:01:00.0", "dna": "0x54b48664b04854"}}, 3)
@@ -899,7 +925,7 @@ def test_a_dna_recorded_without_its_leading_zeros_is_respelled_quietly(opts):
     report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
     assert report["result"] == "pass" and report["state"]["added"]
     boards, version = state.load_record(opts["state"])
-    assert boards["acorn"]["dna"] == "0x0054b48664b04854" and version == 4
+    assert boards["acorn"]["dna"] == "0x0054b48664b04854" and version == state.SCHEMA_VERSION
     report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
     assert report["result"] == "pass" and "added" not in report["state"]
 
@@ -922,7 +948,7 @@ def test_a_flash_part_renamed_with_the_same_ids_is_recorded_quietly(opts):
     report = runner.verify(opts, _boards(now), usb=[], pci=[], mode=("auto", "test"))
     assert report["result"] == "pass" and report["state"]["added"]
     boards, version = state.load_record(opts["state"])
-    assert boards["acorn"]["flash"] == S25FS and version == 4
+    assert boards["acorn"]["flash"] == S25FS and version == state.SCHEMA_VERSION
 
 
 @pytest.mark.parametrize(

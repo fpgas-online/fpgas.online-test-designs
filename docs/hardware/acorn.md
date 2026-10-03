@@ -32,6 +32,7 @@ the others:
 |---|---|
 | `pcie-link` | the link is 5.0 GT/s x1 ([`expected.toml`](../wiring/acorn/expected.toml)) |
 | `pcie-bar0` | over BAR0: the operational build of the installed release runs, the flash identifies itself, the device DNA reads, and the XADC temperature and voltages are in range |
+| `rp1-pio` | Pi 5 / CM5 only: `/dev/pio0` opens, for openfpgaloader-rp1pio; when it does not, the `rp1_fw` / `rp1_pio` modules and the kernel's reason are reported (`failed to contact RP1 firmware` on bootloader 2024/11/05) |
 | `jtag` | over P1: the whole IDCODE, decoded into `idcode_version`, `idcode_part_number`, `idcode_manufacturer_id`, `idcode_manufacturer` and `idcode_device`, must be the variant's part in any silicon version ([verify.md: the IDCODE](../verify.md#the-jtag-idcode)); and the device DNA, which must be BAR0's (this proves TDI) |
 | `flash` | both 4 MiB slots hold the release's images |
 | `ddr` | the BIOS console read out, then the DRAM BIST over the whole DRAM, two passes: no errors, and write and read at least 1100 MB/s ([`expected.toml`](../wiring/acorn/expected.toml)); p48 measures 1327 / 1350 MB/s |

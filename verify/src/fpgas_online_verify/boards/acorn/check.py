@@ -34,6 +34,7 @@ import hashlib
 import json
 import pathlib
 
+from ... import dna
 from ...core import Problem, pci_devices
 from . import spi_flash
 
@@ -87,7 +88,7 @@ NO_TEST_DESIGN = "fpgas.online has no test design for this board yet"
 
 XADC_TEMPERATURE = ("temperature_c", "xadc_temperature")
 XADC_VOLTAGES = (("vccint_v", "xadc_vccint"), ("vccaux_v", "xadc_vccaux"), ("vccbram_v", "xadc_vccbram"))
-DNA_BITS = 57
+dna_faults = dna.faults  # a DNA of all zeros or all ones is no DNA (dna.py)
 SCRATCH_PATTERNS = (0xA5A55A5A, 0x5A5AA5A5)
 
 
@@ -388,12 +389,6 @@ def read_dna(read, csrs):
     return value
 
 
-def dna_faults(dna, where):
-    if dna == 0 or dna == (1 << DNA_BITS) - 1:
-        return [f"device DNA over {where} reads {dna:#x}: the DNA port is not being read"]
-    return []
-
-
 def read_xadc(read, csrs):
     """XADC temperature (°C) and supply voltages (V), from the raw 12-bit readings (UG480 transfer functions)."""
     key, name = XADC_TEMPERATURE
@@ -431,8 +426,8 @@ def scratch_faults(read, write, csrs, where):
 # -- --identify's bus ----------------------------------------------------------------------------------
 
 # The only CSRs --identify writes: the SPI master's MOSI and control registers and the flash's chip select, which
-# the flash's RDID and OTPR reads need. Nothing else of the SoC is written; ctrl_reset in particular never is
-# (a SoC reset after DMA has wedged a Pi 5's PCIe root complex).
+# the flash's RDID, OTPR, status and SFDP reads need. Nothing else of the SoC is written; ctrl_reset in particular
+# never is (a SoC reset after DMA has wedged a Pi 5's PCIe root complex).
 IDENTIFY_WRITES = frozenset({spi_flash.SPI_MOSI_HI, spi_flash.SPI_MOSI_LO, spi_flash.SPI_CONTROL, spi_flash.FLASH_CS_N})
 
 
@@ -457,9 +452,9 @@ class IdentifyBus:
 
 def flash_identity(flash):
     """Everything the flash said about itself (spi_flash.Flash.identify()): all six RDID bytes, the part, its
-    size, the status and configuration registers, and the factory unique ID. openFPGALoader reads an
-    S25FL-S's unique id with the same OTPR (0x4B, 3 address + 1 dummy, 16 bytes from 0) that identify() sends;
-    on pi-sw2-p48 the two gave the same 128 bits in the same order.
+    size, the status and configuration registers, the factory unique ID, and its SFDP revision (or why that
+    read failed). openFPGALoader reads an S25FL-S's unique id with the same OTPR (0x4B, 3 address + 1 dummy,
+    16 bytes from 0) that identify() sends; on pi-sw2-p48 the two gave the same 128 bits in the same order.
 
     part, jedec and unique_id are what the recorded state has always had;
     identity.flash_fields() turns the whole read into the identity's flash fields."""
@@ -474,6 +469,7 @@ def flash_identity(flash):
         "config": ident["config"],
         "quad_enabled": ident["quad_enabled"],
         "unique_id_opcode": ident["unique_id_opcode"],
+        **{k: ident[k] for k in ("sfdp", "sfdp_header", "sfdp_error") if k in ident},
     }
 
 
