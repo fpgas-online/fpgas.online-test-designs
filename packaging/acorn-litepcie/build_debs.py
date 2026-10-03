@@ -282,6 +282,13 @@ def dkms_nfpm(version, tree, stage):
     }
 
 
+def modules_root(suite):
+    """Where the suite's kernels keep their modules: Raspberry Pi's trixie kernels ship /usr/lib/modules
+    (merged /usr), bookworm's /lib/modules. A package must use the same path as the kernel's own, or dpkg
+    sees two directories where there is one (DEP17)."""
+    return "/usr/lib/modules" if suite == "trixie" else "/lib/modules"
+
+
 def modules_nfpm(version, suite, kver, arch, module_dir, tree, stage):
     """The modules container.py built: `module_dir` holds them and modules.json (what they were built for)."""
     module_dir, stage = pathlib.Path(module_dir), pathlib.Path(stage)
@@ -316,7 +323,7 @@ def modules_nfpm(version, suite, kver, arch, module_dir, tree, stage):
             *(
                 {
                     "src": str(module_dir / f"{module}.ko"),
-                    "dst": f"/lib/modules/{kver}/updates/fpgas-online/{module}.ko",
+                    "dst": f"{modules_root(suite)}/{kver}/updates/fpgas-online/{module}.ko",
                     "file_info": {"mode": 0o644},
                 }
                 for module in MODULES

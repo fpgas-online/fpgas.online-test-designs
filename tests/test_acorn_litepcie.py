@@ -1257,6 +1257,14 @@ def test_the_modules_go_where_depmod_prefers_them_over_the_kernels_own(tree, bui
         assert entry["file_info"]["mode"] == 0o644
 
 
+def test_trixie_modules_go_under_usr_lib_modules_as_its_kernels_do(tree, built, tmp_path):
+    kver = "6.18.50+rpt-rpi-v8"  # linux-image-6.18.50+rpt-rpi-v8 (trixie) ships ./usr/lib/modules/<kver>/
+    (built / "modules.json").write_text(json.dumps({"kver": kver, "suite": "trixie", "arch": "arm64"}))
+    dst = _dst(_modules(tree, built, tmp_path, suite="trixie", kver=kver))
+    modules = sorted(d for d in dst if d.endswith(".ko"))
+    assert modules == [f"/usr/lib/modules/{kver}/updates/fpgas-online/{n}" for n in ("litepcie.ko", "liteuart.ko")]
+
+
 def test_the_modules_package_relationships_are_the_specs(tree, built, tmp_path):
     config = _modules(tree, built, tmp_path)
     assert config["depends"] == ["fpgas-online-acorn-litepcie-common", f"linux-image-{KVER}"]

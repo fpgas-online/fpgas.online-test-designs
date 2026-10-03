@@ -116,14 +116,14 @@ jobs:
 
       - name: Version (bookworm)
         id: bookworm
-        uses: mithro/apt-repo-action/deb-version@main
+        uses: mithro/apt-repo-action/deb-version@477b0f86f1ed4a22a7d2873aa478c457bf84bb14  # main, 2026-10-03
         with:
           suite: bookworm
           source-dir: dist/version-tree
 
       - name: Version (trixie)
         id: trixie
-        uses: mithro/apt-repo-action/deb-version@main
+        uses: mithro/apt-repo-action/deb-version@477b0f86f1ed4a22a7d2873aa478c457bf84bb14  # main, 2026-10-03
         with:
           suite: trixie
           source-dir: dist/version-tree
@@ -131,7 +131,7 @@ jobs:
       # sid carries no suite suffix: the meta package is one file for every suite.
       - name: Version (the meta package)
         id: sid
-        uses: mithro/apt-repo-action/deb-version@main
+        uses: mithro/apt-repo-action/deb-version@477b0f86f1ed4a22a7d2873aa478c457bf84bb14  # main, 2026-10-03
         with:
           suite: sid
           source-dir: dist/version-tree
