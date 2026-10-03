@@ -7,13 +7,19 @@ Generation elaborates the cle-215+ SoC and has LitePCIe write its software tree 
 the SoC's `csr.h`, `soc.h` and `mem.h`. No Vivado runs (`--build` is not given), and `--no-compile-software`
 keeps LiteX from building the BIOS, which needs a RISC-V toolchain the driver does not use.
 
-Then three one-line patches, each refused once upstream carries its fix, so it is dropped as soon as
-`uv.lock` moves to a litepcie that has it:
+Then four patches. Three fix upstream bugs, and each is refused once upstream carries its fix, so it is
+dropped as soon as `uv.lock` moves to a litepcie that has it:
 
   * `.compat_ioctl = compat_ptr_ioctl`: armhf tools on an arm64 kernel otherwise get ENOTTY (§3.3);
   * `MODULE_ALIAS("platform:liteuart")`: the stray space upstream stops udev ever loading liteuart (§3.4);
   * `dma_set_mask_and_coherent()`: with only the streaming mask set, the coherent mask stays 32-bit and every
     dmam_alloc_coherent fails with -ENOMEM on a Pi 5, whose RAM sits at bus address 0x10_0000_0000 (§3.5).
+
+The fourth is for this SoC, not an upstream bug:
+
+  * probe does not reset the SoC. It switches off what the driver owns instead (the MSI enables, and the DMA
+    channel's reader, writer and loopback). The SoC's reset stops the system clock under a running PCIe core,
+    and after DMA that sends the host broken TLPs which a Pi 5's root complex does not recover from (§3.7).
 
     uv run --extra build python packaging/acorn-litepcie/prepare_driver.py --out dist/driver
     uv run --no-project python packaging/acorn-litepcie/prepare_driver.py --out dist/driver --from-dir <tree>
@@ -70,6 +76,22 @@ PATCHES = (
         "\tret = dma_set_mask_and_coherent(&dev->dev, DMA_BIT_MASK(DMA_ADDR_WIDTH));\n",
         "dma_set_mask_and_coherent",
         "a 32-bit coherent mask fails every dmam_alloc_coherent on a Pi 5",
+    ),
+    Patch(
+        "kernel/main.c",
+        "\t/* Reset LitePCIe core */\n"
+        "#ifdef CSR_CTRL_RESET_ADDR\n"
+        "\tlitepcie_writel(litepcie_dev, CSR_CTRL_RESET_ADDR, 1);\n"
+        "\tmsleep(10);\n"
+        "#endif\n",
+        "\t/* fpgas.online: the SoC is not reset at probe (packaging/acorn-litepcie/prepare_driver.py).\n"
+        "\t * What an earlier user of the device may have left running is switched off instead. */\n"
+        "\tlitepcie_writel(litepcie_dev, CSR_PCIE_MSI_ENABLE_ADDR, 0);\n"
+        "\tlitepcie_writel(litepcie_dev, CSR_PCIE_DMA0_WRITER_ENABLE_ADDR, 0);\n"
+        "\tlitepcie_writel(litepcie_dev, CSR_PCIE_DMA0_READER_ENABLE_ADDR, 0);\n"
+        "\tlitepcie_writel(litepcie_dev, CSR_PCIE_DMA0_LOOPBACK_ENABLE_ADDR, 0);\n",
+        "the SoC is not reset at probe",
+        "the SoC's reset stops its clock under the PCIe core, and after DMA the host gets broken TLPs",
     ),
 )
 
