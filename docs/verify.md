@@ -130,8 +130,8 @@ the check, publishes anything or records any state.
   * Acorn, BAR0: memory decoding is switched on in the board's PCI COMMAND register for the read and
     switched off again if it was off. If a kernel driver (litepcie) is bound to the board, it is unbound for
     the read and bound again afterwards. To read the flash's IDs (RDID and OTPR) and its SFDP header (Read
-    SFDP), the SoC's SPI master registers and the flash's chip select are written. No other CSR of the SoC is written; `--identify`
-    refuses any other write, so the SoC is never reset through `ctrl_reset`.
+    SFDP), the SoC's SPI master registers and the flash's chip select are written. No other CSR of the SoC
+    is written; `--identify` refuses any other write, so the SoC is never reset through `ctrl_reset`.
   * Acorn, P1 JTAG, and NeTV2: openFPGALoader (or openocd) drives the Pi's JTAG GPIOs. Their state is read
     with `pinctrl` first and put back afterwards; a pin that was an output goes back as an input. Without
     `pinctrl` the scan is not run.
