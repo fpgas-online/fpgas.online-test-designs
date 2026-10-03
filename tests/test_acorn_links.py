@@ -358,3 +358,75 @@ def test_scratch_over_p2_leaves_the_link_at_the_reset_rate():
     far = fk.SoCLink(fk.FakeSoC())
     assert links.uart_scratch(PI5, _builds(), far.open, far.settle) == []
     assert uartbone_link.FAST_BAUD in far.opened_at and far.baud == uartbone_link.RESET_BAUD
+
+
+# -- the Pi 5's RP1 PIO ----------------------------------------------------------------------------------
+
+# pi-sw2-p47's kernel journal (bootloader 2024/11/05 3c4fc886, 2026-10-02): rp1_pio loaded, no /dev/pio0.
+P47_KERNEL = (
+    "sdhci-brcmstb 1000fff000.mmc: Got CD GPIO\n"
+    "rp1-pio 1f00178000.pio: failed to contact RP1 firmware\n"
+    "rp1-pio 1f00178000.pio: probe with driver rp1-pio failed with error -2\n"
+)
+
+
+def _modules(tmp_path, names=links.RP1_PIO_MODULES):
+    for name in names:
+        (tmp_path / "module" / name).mkdir(parents=True)
+    return str(tmp_path / "module")
+
+
+def _journal(text, rc=0):
+    calls = []
+
+    def run(argv, timeout):
+        calls.append(argv)
+        return rc, text
+
+    return run, calls
+
+
+def test_rp1_pio_passes_with_both_modules_and_a_device_that_opens(tmp_path):
+    run, calls = _journal(P47_KERNEL)
+    entry = links.rp1_pio(run, sysfs_module=_modules(tmp_path), dev="/dev/null")  # a character device anyone opens
+    assert entry["result"] == "pass" and entry["test"] == "rp1-pio"
+    assert calls == []  # the journal is only read to explain a failure
+
+
+def test_a_missing_pio0_fails_with_the_kernels_reason(tmp_path):
+    run, _ = _journal(P47_KERNEL)
+    entry = links.rp1_pio(run, sysfs_module=_modules(tmp_path), dev=str(tmp_path / "pio0"))
+    assert entry["result"] == "fail"
+    assert f"{tmp_path / 'pio0'}: No such file or directory" in entry["reason"]
+    assert "kernel: rp1-pio 1f00178000.pio: probe with driver rp1-pio failed with error -2" in entry["reason"]
+    assert entry["output"] == [line for line in P47_KERNEL.splitlines() if "rp1-pio" in line]
+
+
+def test_an_unloaded_module_is_named(tmp_path):
+    run, _ = _journal("")
+    entry = links.rp1_pio(run, sysfs_module=_modules(tmp_path, ("rp1_fw",)), dev="/dev/null")
+    assert entry["result"] == "fail" and entry["reason"] == "kernel module rp1_pio is not loaded"
+
+
+def test_a_pio0_that_is_not_a_character_device_fails(tmp_path):
+    (tmp_path / "pio0").write_text("")
+    run, _ = _journal("", rc=1)  # and a journal that cannot be read adds nothing
+    entry = links.rp1_pio(run, sysfs_module=_modules(tmp_path), dev=str(tmp_path / "pio0"))
+    assert entry["result"] == "fail" and entry["reason"] == f"{tmp_path / 'pio0'} is not a character device"
+
+
+@pytest.mark.parametrize(
+    ("compatible", "why"),
+    [
+        (b"raspberrypi,5-model-b\0brcm,bcm2712\0", None),
+        (b"raspberrypi,5-compute-module\0brcm,bcm2712\0", None),
+        (b"raspberrypi,4-model-b\0brcm,bcm2711\0", "not a BCM2712 (Pi 5 / CM5): no RP1 PIO"),
+    ],
+)
+def test_rp1_pio_runs_only_on_a_bcm2712(tmp_path, compatible, why):
+    (tmp_path / "compatible").write_bytes(compatible)
+    assert links.not_rp1_host(str(tmp_path / "compatible")) == why
+
+
+def test_a_host_without_a_device_tree_skips_rp1_pio(tmp_path):
+    assert links.not_rp1_host(str(tmp_path / "none")).startswith("cannot read ")
