@@ -18,7 +18,8 @@ Requirements:
 
 Usage:
     sudo uv run python host/test_pcie_enumeration.py
-    sudo uv run python host/test_pcie_enumeration.py --program --bitstream build/netv2/gateware/kosagi_netv2.bit
+    sudo uv run python host/test_pcie_enumeration.py --program \
+        --bitstream build/netv2-a7-35-yosys-nextpnr/gateware/kosagi_netv2.bit
 """
 
 import argparse

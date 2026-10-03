@@ -41,7 +41,9 @@ uv sync --extra build
 uv run python designs/<design>/gateware/<script>.py --toolchain openxc7 --build
 ```
 
-Bitstreams are written to `designs/<design>/build/<board>/gateware/`.
+Bitstreams are written to `designs/<design>/build/<board>-<variant>-<flow>/gateware/`, for example
+`designs/uart/build/arty-a7-35-yosys-nextpnr/gateware/digilent_arty.bit`. The flow is `yosys-nextpnr` (openXC7
+and iCE40), `yosys-vivado` or `vivado-vivado`: see [docs/toolchains/vivado.md](../docs/toolchains/vivado.md).
 
 ## Supported Boards
 
