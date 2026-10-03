@@ -3,17 +3,36 @@
 # The Acorn PCIe SoC (designs/acorn-pcie/gateware/acorn_pcie_soc.py), built with the open-source flow
 # (openXC7: Yosys, nextpnr-xilinx, prjxray) for every variant, as the operational and the golden image.
 #
+# EXPECTED TO FAIL, AND NOT SHIPPED (issue #105). openXC7 cannot build this SoC yet: nextpnr-xilinx has no
+# XADC site, and without the XADC the design misses timing (80 MHz system clock, 250 MHz PCIe PIPE clock).
+# Tim, 2026-10-02: keep building it in CI, never let it block anything, and do not ship its bitstreams.
+#   * Each job is green when the build fails for a reason #105 records, red when it fails for any other
+#     reason or when it unexpectedly passes (scripts/openxc7_expected_failure.py). It never fails the workflow
+#     (continue-on-error), and no other workflow waits for it.
+#   * collect-bitstreams.yml neither waits for this workflow nor bundles its artifacts, so no package carries
+#     them; tests/test_unshipped_bitstreams.py fails CI if that changes.
+#   * What the fleet's flash carries is the Vivado build of the same source, published by
+#     designs/acorn-pcie/tools/publish_release.py. No openXC7 build of this SoC has run on a board.
+#
 # A build that misses timing fails: the SoC gives nextpnr-xilinx every clock's period and runs it in strict
 # mode (designs/_shared/platform_fixups.py require_timing), trying up to five seeds.
-#
-# These bitstreams have not run on a board. What the fleet's flash carries is the Vivado build of the same
-# source, published by designs/acorn-pcie/tools/publish_release.py.
 name: "Build: Acorn PCIe SoC"
 
+# Six builds of up to an hour each, on a runner pool every workflow shares: on a pull request only when the
+# change can affect them.
 on:
   push:
     branches: [main]
   pull_request:
+    paths:
+      - designs/acorn-pcie/**
+      - designs/_shared/**
+      - designs/pcie-enumeration/gateware/pcie_7x/**
+      - scripts/openxc7_build_report.py
+      - scripts/openxc7_expected_failure.py
+      - pyproject.toml
+      - uv.lock
+      - .github/workflows/acorn-pcie-build.yml
   workflow_dispatch:
 
 # A new push to a pull request cancels that pull request's older, now stale, run.
@@ -28,8 +47,10 @@ permissions:
 
 jobs:
   build:
-    name: "${{ matrix.board }} (${{ matrix.image }} image)"
+    name: "${{ matrix.board }} (${{ matrix.image }} image, expected to fail: #105)"
     runs-on: ubuntu-latest
+    continue-on-error: true # never fails the workflow, whatever the result: see the header
+    timeout-minutes: 150
     container:
       image: regymm/openxc7
     strategy:
@@ -73,6 +94,9 @@ jobs:
           nextpnr-xilinx --version
 
       - name: Build ${{ matrix.board }} ${{ matrix.image }} bitstream
+        id: build
+        continue-on-error: true # judged by the next step
+        shell: bash
         env:
           CHIPDB: /chipdb
           PRJXRAY_DB_DIR: /nextpnr-xilinx/xilinx/external/prjxray-db
@@ -80,20 +104,29 @@ jobs:
           VARIANT: ${{ matrix.variant }}
           FLAGS: ${{ matrix.flags }}
         run: |
+          set -o pipefail
           uv run python designs/acorn-pcie/gateware/acorn_pcie_soc.py \
             --variant "$VARIANT" \
             --toolchain openxc7 \
             $FLAGS \
-            --build
+            --build 2>&1 | tee build.log
+
+      - name: Expected failure (#105)?
+        env:
+          OUTCOME: ${{ steps.build.outcome }}
+        run: uv run --no-project python scripts/openxc7_expected_failure.py --outcome "$OUTCOME" --log build.log
 
       - name: Timing, utilisation and placement report
+        if: always() && steps.build.outcome == 'success' # also after an unexpected pass
         run: |
           uv run python scripts/openxc7_build_report.py "$BUILD_DIR/gateware" sqrl_acorn \
             > "$BUILD_DIR/gateware/sqrl_acorn_report.md"
           cat "$BUILD_DIR/gateware/sqrl_acorn_report.md"
           cat "$BUILD_DIR/gateware/sqrl_acorn_report.md" >> "$GITHUB_STEP_SUMMARY"
 
+      # Never bundled or shipped: collect-bitstreams.yml leaves out every acorn-pcie-soc-openxc7-* artifact.
       - name: Upload bitstream, CSR map and reports
+        if: always() && steps.build.outcome == 'success' # also after an unexpected pass
         uses: actions/upload-artifact@v4
         with:
           name: acorn-pcie-soc-openxc7-${{ matrix.slug }}-${{ matrix.image }}
@@ -108,7 +141,7 @@ jobs:
 
       # What a failed build leaves behind, to find out why without running it again.
       - name: Upload logs of a failed build
-        if: failure()
+        if: always() && steps.build.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: acorn-pcie-soc-openxc7-${{ matrix.slug }}-${{ matrix.image }}-failed-logs
