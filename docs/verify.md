@@ -30,8 +30,8 @@ curl -fsSL https://apt.fpgas.online/apt.gpg | sudo tee /etc/apt/keyrings/apt.gpg
 echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
   | sudo tee /etc/apt/sources.list.d/apt.list
 
-# Optional: fpgas.online's openFPGALoader; add it before installing. A NeTV2 on a Pi 5 needs it, and so
-# does reading an Arty's or NeTV2's device DNA on bookworm, whose openFPGALoader has no --read-dna.
+# fpgas.online's openFPGALoader; add it before installing. A NeTV2 on a Pi 5 needs it. Elsewhere Debian's own
+# works from 0.13.0 on (trixie), but bookworm's (0.10.0) is too old: it cannot read the device DNA.
 curl -fsSL https://fpgas.online/fpgas.online-fpga-tools/fpgas.online-fpga-tools.gpg \
   | sudo tee /etc/apt/keyrings/fpgas.online-fpga-tools.gpg > /dev/null
 echo "deb [signed-by=/etc/apt/keyrings/fpgas.online-fpga-tools.gpg] https://fpgas.online/fpgas.online-fpga-tools/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
@@ -694,7 +694,8 @@ every one ([`dna.py`](../verify/src/fpgas_online_verify/dna.py)).
 * `--read-dna` resets the TAP, shifts in the FUSE_DNA instruction (`0x32`) and shifts out 64 bits. It loads
   nothing and never reconfigures the FPGA, so `--identify` reads it too. The board's lock is held throughout;
   on the NeTV2 the JTAG pins are put back with `pinctrl` as after its scan.
-* The DNA goes in through TDI, so a good DNA also shows TDI works; the IDCODE scan does not use TDI.
+* The FUSE_DNA instruction goes in through TDI and the DNA comes out on TDO, so a good DNA also shows TDI
+  works; the IDCODE scan does not use TDI.
 * A read that exits with an error or prints no DNA fails the board; the reason ends with its last line of
   output. A DNA of all zeros or all ones fails it too: the DNA port is not being read.
 * A good DNA is `dna` in the `jtag` entry, the [identity](identity.md) and the recorded state, as 16 hex digits
@@ -704,7 +705,7 @@ openFPGALoader has `--read-dna` from 0.13.0:
 
 | openFPGALoader | `--read-dna` |
 |---|---|
-| Debian bookworm's (0.10.0) | no: the read exits with an error, so the board fails |
+| Debian bookworm's (0.10.0) | no, so the board packages need 0.13.0 or later: on bookworm, fpgas.online's |
 | 0.13.0 and later, and fpgas.online's `openfpgaloader-fpgasonline` (1.1.1) and `openfpgaloader-fpgasonline-git` | yes, over any JTAG cable: the read is in openFPGALoader's Xilinx code (`Xilinx::fuse_dna_read` in `src/xilinx.cpp`), after the cable is open. That covers `-b arty` (its `digilent` FT2232 cable), `libgpiod`, and `rp1pio` (fpgas.online's builds only) |
 
 #### Not done yet
@@ -789,8 +790,10 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 * On a record with `schema_version` below 4, a flash part name that changed while its JEDEC ID and unique ID
   did not is a corrected name, taken quietly: the part is now named from RDID byte 6, so an S25FS256S is no
   longer called an S25FL256S. A different JEDEC ID or unique ID is still a change, and so is a rewritten flash.
-* A device DNA missing from a record with `schema_version` below 5 is added quietly: until then only the
-  Acorn's was read. On a newer record a DNA not recorded before is a change, as is another DNA.
+* A device DNA missing from a record with `schema_version` below 5 is added quietly, once: until then only the
+  Acorn's was read. This goes for every board, so an Acorn whose record has no DNA (neither BAR0 nor JTAG
+  read one that run) also gets its DNA added quietly. On a newer record a DNA not recorded before is a
+  change, as is another DNA.
 * A `--test` run neither records nor compares the state.
 
 ---
