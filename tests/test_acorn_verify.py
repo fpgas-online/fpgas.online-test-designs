@@ -3,7 +3,7 @@
 The check never writes the flash and never reconfigures the FPGA. It runs every test it can and lists every
 fault: one result, pass or fail (docs/verify-goals.md). Its tests, in order:
 
-  pcie-link, pcie-bar0, jtag, flash, p2-uart, scratch, p2-gpio
+  pcie-link, pcie-bar0, rp1-pio, jtag, flash, ddr, p2-uart, p2-serial, scratch, p2-gpio
 
 The SoC is tests/acorn_fakes.py's FakeSoC (its flash side is tests/test_spi_flash.py's fake S25FL256S, so
 a read goes through the real spi_flash.Flash code path, STARTUPE2's swallowed clocks included), the Pi is
