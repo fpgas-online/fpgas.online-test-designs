@@ -232,7 +232,9 @@ def test_an_s25fl256s_has_no_sfdp_signature_so_its_sfdp_is_none(bus, chip):
     (b"\xff" * 8, "none"),
     (b"\x00" * 8, "none"),
     (b"SFDX" + bytes([0x06, 0x01, 0x01, 0xFF]), "none"),
-    (b"SFDP", "none"),  # a header cut short says no revision
+    (b"SFDP", None),  # a header cut short is not a read, as rpi-hwid's sfdp_summary() has it
+    (b"\xff" * 7, None),
+    (b"", None),
 ])  # fmt: skip
 def test_the_sfdp_revision_is_major_dot_minor_or_none(header, revision):
     assert sf.sfdp_revision(header) == revision
@@ -263,6 +265,13 @@ def test_a_failed_sfdp_read_is_an_sfdp_error_and_the_ids_stand(chip):
     info = sf.Flash(SfdpFails(chip)).identify()
     assert info["sfdp_error"] == "Read SFDP (0x5a) failed: the link stopped answering"
     assert "sfdp" not in info and info["rdid"] == RDID.hex() and info["part"] == "S25FL256S"
+
+
+def test_a_header_cut_short_is_an_sfdp_error_and_the_ids_stand(bus, monkeypatch):
+    monkeypatch.setattr(sf.Flash, "sfdp_header", lambda flash: b"SFDP")
+    info = sf.Flash(bus).identify()
+    assert info["sfdp_error"] == "Read SFDP (0x5a) gave 4 bytes, not 8"
+    assert "sfdp" not in info and info["sfdp_header"] == b"SFDP".hex() and info["part"] == "S25FL256S"
 
 
 def test_read_sfdp_is_a_read_opcode():

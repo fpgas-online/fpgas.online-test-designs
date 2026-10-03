@@ -113,9 +113,12 @@ def part(rdid):
 
 
 def sfdp_revision(header):
-    """The SFDP revision a JESD216 header gives, "major.minor" (as rpi-hwid writes it, "1.6"), or "none" when
-    the bytes do not start with the signature: the part answered Read SFDP without one."""
-    if bytes(header[:4]) != SFDP_SIGNATURE or len(header) < SFDP_HEADER_BYTES:
+    """The SFDP revision a JESD216 header gives, "major.minor" (as rpi-hwid writes it, "1.6"); "none" when
+    the bytes do not start with the signature: the part answered Read SFDP without one; None when there are
+    fewer than SFDP_HEADER_BYTES, which is not a read. rpi-hwid's sfdp_summary() decides the same way."""
+    if len(header) < SFDP_HEADER_BYTES:
+        return None
+    if bytes(header[:4]) != SFDP_SIGNATURE:
         return "none"
     return f"{header[5]}.{header[4]}"
 
@@ -245,8 +248,12 @@ class Flash:
         except (FlashError, OSError) as e:
             info["sfdp_error"] = f"Read SFDP (0x5a) failed: {str(e) or type(e).__name__}"
         else:
-            info["sfdp"] = sfdp_revision(header)
             info["sfdp_header"] = header.hex()
+            revision = sfdp_revision(header)
+            if revision is None:
+                info["sfdp_error"] = f"Read SFDP (0x5a) gave {len(header)} bytes, not {SFDP_HEADER_BYTES}"
+            else:
+                info["sfdp"] = revision
         return info
 
     def read(self, addr, length):
