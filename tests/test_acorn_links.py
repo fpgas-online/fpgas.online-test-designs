@@ -402,10 +402,39 @@ def test_a_missing_pio0_fails_with_the_kernels_reason(tmp_path):
     assert entry["output"] == [line for line in P47_KERNEL.splitlines() if "rp1-pio" in line]
 
 
-def test_an_unloaded_module_is_named(tmp_path):
+def test_an_unloaded_module_is_named_when_pio0_is_missing(tmp_path):
     run, _ = _journal("")
-    entry = links.rp1_pio(run, sysfs_module=_modules(tmp_path, ("rp1_fw",)), dev="/dev/null")
-    assert entry["result"] == "fail" and entry["reason"] == "kernel module rp1_pio is not loaded"
+    entry = links.rp1_pio(run, sysfs_module=_modules(tmp_path, ("rp1_fw",)), dev=str(tmp_path / "pio0"))
+    assert entry["result"] == "fail"
+    assert entry["reason"] == f"{tmp_path / 'pio0'}: No such file or directory; kernel module rp1_pio is not loaded"
+
+
+def test_a_built_in_driver_with_a_working_pio0_passes(tmp_path):
+    run, _ = _journal("")
+    entry = links.rp1_pio(run, sysfs_module=_modules(tmp_path, ()), dev="/dev/null")  # no /sys/module entries
+    assert entry["result"] == "pass"
+
+
+def test_a_pio0_that_will_not_open_says_why(tmp_path, monkeypatch):
+    def refuse(path, flags):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(links.os, "open", refuse)
+    run, _ = _journal("")
+    entry = links.rp1_pio(run, sysfs_module=_modules(tmp_path), dev="/dev/null")
+    assert entry["result"] == "fail" and entry["reason"] == "cannot open /dev/null: Permission denied"
+
+
+@pytest.mark.parametrize("journal", ["exits", "raises"])
+def test_a_journal_that_cannot_be_read_leaves_the_failure_as_it_is(tmp_path, journal):
+    def run(argv, timeout):
+        if journal == "raises":
+            raise Problem("error", "journalctl is not installed")
+        return 1, P47_KERNEL
+
+    entry = links.rp1_pio(run, sysfs_module=_modules(tmp_path), dev=str(tmp_path / "pio0"))
+    assert entry["result"] == "fail" and entry["reason"] == f"{tmp_path / 'pio0'}: No such file or directory"
+    assert entry["output"] == []
 
 
 def test_a_pio0_that_is_not_a_character_device_fails(tmp_path):

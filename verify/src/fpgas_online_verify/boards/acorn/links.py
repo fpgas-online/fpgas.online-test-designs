@@ -2,9 +2,9 @@
 
 The pins, the cable and the GPIO chip come from the host's setup (setup.py, from wiring.toml).
 
-  rp1-pio  On a Pi 5 / CM5 (BCM2712): rp1_fw and rp1_pio loaded, /dev/pio0 a character device that opens
-           read-write, for openfpgaloader-rp1pio. No bootloader setting is read; when the device is
-           missing the kernel's rp1-pio / RP1 firmware lines say why. Not run on other hosts.
+  rp1-pio  On a Pi 5 / CM5 (BCM2712): /dev/pio0 a character device that opens read-write, for
+           openfpgaloader-rp1pio. No bootloader setting is read; when it fails, whether rp1_fw and rp1_pio
+           are loaded and the kernel's rp1-pio / RP1 firmware lines say why. Not run on other hosts.
   jtag     `openFPGALoader --detect` over the P1 cable must find one device, the variant's part (any silicon
            version: the whole IDCODE is read from openFPGALoader's raw scan and decoded, idcode.py), and
            `openFPGALoader --read-dna` must read the device DNA the SoC reports over BAR0. An IDCODE read
@@ -102,11 +102,11 @@ def not_rp1_host(compatible=DT_COMPATIBLE):
 
 
 def rp1_pio(run, sysfs_module=SYSFS_MODULE, dev=PIO_DEV):
-    """openfpgaloader-rp1pio drives JTAG through /dev/pio0: the modules must be loaded and the device there and
-    openable. On a failure the kernel's own words come with it: a bootloader whose firmware rp1_pio cannot talk
-    to logs "failed to contact RP1 firmware" and never creates /dev/pio0."""
-    faults = [("fail", f"kernel module {m} is not loaded") for m in RP1_PIO_MODULES
-              if not os.path.isdir(f"{sysfs_module}/{m}")]  # fmt: skip
+    """openfpgaloader-rp1pio drives JTAG through /dev/pio0: it must be there and open. Only when it does not are
+    the modules looked at (a built-in driver has no /sys/module entry) and the kernel's own words added: a
+    bootloader whose firmware rp1_pio cannot talk to logs "failed to contact RP1 firmware" and never creates
+    /dev/pio0. The journal only explains a failure; a journal that cannot be read changes nothing."""
+    faults = []
     try:
         is_char = stat.S_ISCHR(os.stat(dev).st_mode)
     except OSError as e:
@@ -121,7 +121,12 @@ def rp1_pio(run, sysfs_module=SYSFS_MODULE, dev=PIO_DEV):
                 faults.append(("fail", f"cannot open {dev}: {e.strerror}"))
     output = []
     if faults:
-        rc, text = run(["journalctl", "-k", "-b", "--no-pager", "-o", "cat"], 30)
+        faults += [("fail", f"kernel module {m} is not loaded") for m in RP1_PIO_MODULES
+                   if not os.path.isdir(f"{sysfs_module}/{m}")]  # fmt: skip
+        try:
+            rc, text = run(["journalctl", "-k", "-b", "--no-pager", "-o", "cat"], 30)
+        except Problem:
+            rc, text = 1, ""
         output = [line for line in text.splitlines() if RP1_KERNEL_RE.search(line)] if rc == 0 else []
         if output:
             faults.append(("fail", f"kernel: {output[-1].strip()}"))
