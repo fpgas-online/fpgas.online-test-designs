@@ -211,8 +211,7 @@ FIXTURE = pathlib.Path(__file__).parent / "data" / "identity-v1-acorn-p48.json"
 # The golden fixture's board: every key, with its JSON type. A change here is a change to identity version 1.
 FIXTURE_BOARD_TYPES = {
     "bdf": str, "board": str, "build": str, "dna": str, "flash": str, "flash_config": str, "flash_extended_id": str,
-    "flash_jedec": str, "flash_quad": bool, "flash_sfdp": str, "flash_size_bytes": int, "flash_source": str,
-    "flash_status": str,
+    "flash_jedec": str, "flash_quad": bool, "flash_size_bytes": int, "flash_source": str, "flash_status": str,
     "flash_uid": str, "flash_uid_bits": int, "flash_uid_opcode": str, "flash_uid_state": str, "idcode": str,
     "idcode_device": str, "idcode_manufacturer": str, "idcode_manufacturer_id": str, "idcode_part_number": str,
     "idcode_version": int, "identifier": str, "kind": str, "soc_model": str, "variant": str,
@@ -230,7 +229,6 @@ def test_the_golden_fixture_has_exactly_its_keys_types_and_version():
         "0x0054b48664b04854", "0x13636093", "0x010219", "0x4d0180")  # fmt: skip
     assert (board["flash"], board["flash_uid"], board["flash_size_bytes"], board["kind"], board["variant"]) == (
         "S25FL256S", "edcbeececb2b2a88b04f914d2e46af90", 33554432, "acorn", "cle-215+")  # fmt: skip
-    assert board["flash_sfdp"] == "none"  # the S25FL256S has no SFDP
 
 
 def test_rpi_hwid_takes_the_golden_fixture_as_an_fpgaboard_when_it_is_installed():
@@ -238,7 +236,6 @@ def test_rpi_hwid_takes_the_golden_fixture_as_an_fpgaboard_when_it_is_installed(
     (board,) = json.loads(FIXTURE.read_text())["boards"]
     fpga = model.FpgaBoard(**{k: v for k, v in board.items() if k in identity.FPGABOARD_FIELDS})
     assert fpga.kind == "acorn" and fpga.dna == "0x0054b48664b04854" and fpga.flash_uid_bits == 128
-    assert fpga.flash_sfdp == "none"
 
 
 def test_rpi_hwid_takes_the_dict_as_an_fpgaboard_when_it_is_installed():
@@ -247,3 +244,10 @@ def test_rpi_hwid_takes_the_dict_as_an_fpgaboard_when_it_is_installed():
     board = {"kind": "acorn", "dna": "0x0054b48664b04854", **identity.flash_fields(P48_FLASH, "pcie")}
     fpga = model.FpgaBoard(**{k: v for k, v in board.items() if k in identity.FPGABOARD_FIELDS})
     assert fpga.flash_extended_id == "0x4d0180" and fpga.identity == "0x0054b48664b04854"
+
+
+def test_rpi_hwid_takes_flash_sfdp_as_an_fpgaboard_field_when_it_is_installed():
+    model = pytest.importorskip("rpi_hwid.model")
+    board = {"kind": "acorn", **identity.flash_fields({**P48_FLASH, "sfdp": "none"}, "pcie")}
+    fpga = model.FpgaBoard(**{k: v for k, v in board.items() if k in identity.FPGABOARD_FIELDS})
+    assert fpga.flash_sfdp == "none"

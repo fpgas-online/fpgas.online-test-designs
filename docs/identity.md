@@ -67,17 +67,18 @@ fpgas-verify's own fields:
 SFDP (Serial Flash Discoverable Parameters, JEDEC JESD216) is a table a flash keeps about itself, read with
 the Read SFDP command: opcode `5Ah`, a 3-byte address, then 8 dummy clocks. The Acorn reads the 8-byte header
 at address 0 through its SoC's SPI master, the same way as the flash's IDs: it is a read, writes nothing to
-the flash, and is part of `--identify`. In the header, bytes 0-3 are the signature, the ASCII letters `SFDP`; byte 4 is the minor
-revision and byte 5 the major revision. `flash_sfdp` is `major.minor`, or `none` when the first four bytes are
-not the signature.
+the flash, and is part of `--identify`. In the header, bytes 0-3 are the signature, the ASCII letters `SFDP`;
+byte 4 is the minor revision and byte 5 the major revision. `flash_sfdp` is `major.minor`, or `none` when the
+first four bytes are not the signature. An answer shorter than 8 bytes is not a read, and gives no
+`flash_sfdp`.
 
 The Acorn's S25FL256S has no SFDP. Its datasheet (Infineon 002-19099 Rev. *D, S25FL128S/S25FL256S) has no
 `5Ah` in its command summary (section 13.1) and does not mention SFDP. The part describes itself only in its
 ID-CFI space, read with RDID (sections 7.3, 11.2.2 and 13.2). Read SFDP is not one of its commands, so its
-answer has no signature and `flash_sfdp` is `none`. That is what the datasheet says to expect; it has not yet
-been read from a board. Its 1.8 V relative the S25FS256S does answer Read SFDP. rpi-hwid uses
-`flash_sfdp` to tell an S25FL127S (which has SFDP) from an S25FL128S (which has not), parts that share their
-RDID bytes.
+answer has no signature and `flash_sfdp` should be `none`. This comes from the datasheet; no board's answer
+has been recorded yet. The S25FS256S, the 1.8 V part of the same family, does answer Read SFDP. rpi-hwid
+uses `flash_sfdp` to tell an S25FL127S (which has SFDP) from an S25FL128S (which has not), parts that share
+their RDID bytes.
 
 A failed Read SFDP gives `flash_sfdp_error` and fails the Acorn's `pcie-bar0` test; the flash's other fields
 still stand.
@@ -129,8 +130,9 @@ The identity document holds the fields of every board found:
 `source` is always `live`. A run inside `fpgas-verify --label` prints the outer run's document byte for byte,
 so it says `live` too.
 
-[`tests/data/identity-v1-acorn-p48.json`](../tests/data/identity-v1-acorn-p48.json) is a complete example: the
-Acorn on pi-sw2-p48. rpi-hwid keeps a byte-identical copy and tests its reader on it.
+[`tests/data/identity-v1-acorn-p48.json`](../tests/data/identity-v1-acorn-p48.json) is an example: the
+Acorn on pi-sw2-p48. rpi-hwid keeps a byte-identical copy and tests its reader on it. It is exactly what
+that board printed, which did not include `flash_sfdp`.
 
 ## Versions
 
