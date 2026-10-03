@@ -75,7 +75,9 @@ def tinytapeout_fields(usb_serial, runner=run):
         return {"tinytapeout_error": f"{command} did not see the board with USB serial {usb_serial}"}
     if board.get("kind") != "tinytapeout":  # a MicroPython RP2 whose REPL did not answer as the SDK does
         return {"tinytapeout_error": f"{command}: not a Tiny Tapeout board: {board.get('how') or board.get('kind')}"}
-    out = {k: board.get(k) for k in RPI_HWID_FIELDS}
+    # Only the fields rpi-hwid gave: one it left out was not read, so it stays out (never null, which is "read,
+    # and there is none"), and --identify says it is missing.
+    out = {k: board[k] for k in RPI_HWID_FIELDS if k in board}
     bad = [k for k, v in out.items() if v is not None and not isinstance(v, str)]
     if bad:
         return {"tinytapeout_error": f"{command}: not text: {', '.join(f'{k}={out[k]!r}' for k in bad)}"}

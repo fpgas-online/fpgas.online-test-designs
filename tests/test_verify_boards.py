@@ -10,7 +10,7 @@ import struct
 import sys
 
 import pytest
-from fpgas_online_verify import cli, core, debug, host_tests, idcode, identity, testbench
+from fpgas_online_verify import cli, core, debug, host_tests, idcode, identify, identity, testbench
 from fpgas_online_verify.boards import arty, fomu, netv2, tt_fpga
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
 
@@ -575,6 +575,15 @@ def test_rpi_hwid_reads_the_tt_board_while_the_check_holds_its_port_and_before_a
     shown = (details["mcu"], details["chip"], details["shuttle"], details["usb_serial"])
     assert shown == ("RP2350", "fpga", "-", "E661")  # None: read, and there is none
     assert report["state"] == {"variant": "tt-fpga", "serial": "E661"}  # what `changed` compares is unchanged
+
+
+def test_a_field_rpi_hwid_left_out_stays_out_and_leaves_the_tt_identity_not_whole(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    run = Runner([_rpi_hwid({k: v for k, v in TT_BOARD.items() if k != "sdk"})])
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    assert "sdk" not in report["identity"]  # not read: never null, which would be "read, and there is none"
+    assert all(report["identity"][k] == v for k, v in TT_FIELDS.items() if k != "sdk")
+    assert identify.missing(TT, report["identity"]) == [("sdk", "not read")]
 
 
 def test_without_rpi_hwid_the_tt_fields_are_not_read_and_the_board_does_not_fail(tmp_path):
