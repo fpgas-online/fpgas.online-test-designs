@@ -80,12 +80,13 @@ jobs:
         with:
           ref: ${{ env.HEAD_SHA }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          # Match all build job names (but not Lint or this workflow),
-          # including the Acorn/NiteFury/LiteFury jobs added when the CI
-          # matrix was expanded to every board variant. The NeTV2 PCIe
-          # endpoint jobs are ordinary jobs again (issue #30), so they
-          # gate like every other build.
-          check-regexp: "^(Arty|NeTV2|Fomu|TT FPGA|netv2|Acorn|NiteFury|LiteFury)"
+          # Match all build job names (but not Lint, this workflow, or
+          # "Acorn wiring: ..." in wiring.yml, hence "Acorn CLE"), including
+          # the Acorn/NiteFury/LiteFury jobs added when the CI matrix was
+          # expanded to every board variant. The NeTV2 PCIe endpoint jobs
+          # are ordinary jobs again (issue #30), so they gate like every
+          # other build.
+          check-regexp: "^(Arty|NeTV2|Fomu|TT FPGA|netv2|Acorn CLE|NiteFury|LiteFury)"
           wait-interval: 30
           allowed-conclusions: success
 
