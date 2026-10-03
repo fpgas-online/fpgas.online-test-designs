@@ -539,6 +539,51 @@ def test_a_live_read_is_never_replaced_by_the_report(tmp_path, locks):
     assert board["flash_jedec"] == "0xef4018" and "flash_jedec" not in board["from_report"]
 
 
+TT_USB = [{"vendor": "2e8a", "product": "0005", "serial": "E661", "path": "1-2"}]
+TT_BOOT = {"board": "tt", "kind": "tt", "variant": "tt-fpga", "serial": "E661", "usb": "1-2", "usb_serial": "E661",
+           "mcu": "RP2350", "shuttle": None, "chip": "fpga", "repo": None, "commit": None,
+           "demoboard": "TTDBv3 [3.2]", "demoboard_version": None, "sdk": "v3.1.0"}  # fmt: skip
+TT_REPORT_FIELDS = ["chip", "commit", "demoboard", "demoboard_version", "mcu", "repo", "sdk", "shuttle"]
+
+
+def _read_tt(tmp_path, usb=TT_USB):
+    from fpgas_online_verify.boards.tt_fpga import BOARD as TT
+
+    return identify.read({"board": "tt", "boot_report": tmp_path / "verify.json"}, {"tt": TT}, usb=usb, pci=[])
+
+
+def test_the_tt_boards_rpi_hwid_fields_come_from_the_boot_report_by_its_usb_serial(tmp_path, locks):
+    _boot_report(tmp_path, {**TT_BOOT, "usb_serial": "OTHER", "serial": "OTHER", "mcu": "RP2040"}, TT_BOOT)
+    doc, gaps = _read_tt(tmp_path)
+    (board,) = doc["boards"]
+    assert board == {**TT_BOOT, "from_report": TT_REPORT_FIELDS} and gaps == []
+    assert locks.taken == ["/run/fpgas-online/tt-fpga.lock"]  # the board's lock: nothing else is run
+
+
+def test_a_tt_board_whose_boot_check_had_no_rpi_hwid_says_so_and_is_not_whole(tmp_path, locks):
+    from fpgas_online_verify.boards import tt_fpga
+
+    note = {"tinytapeout_note": tt_fpga.NOT_INSTALLED}
+    _boot_report(tmp_path, {k: v for k, v in TT_BOOT.items() if k not in TT_REPORT_FIELDS} | note)
+    doc, gaps = _read_tt(tmp_path)
+    (board,) = doc["boards"]
+    assert board["tinytapeout_note"] == tt_fpga.NOT_INSTALLED and board["from_report"] == ["tinytapeout_note"]
+    assert board["usb_serial"] == "E661"  # read live: the site drops a TT board without one
+    assert gaps == [f"tt: {f}: not read" for f in ("mcu", "chip", "demoboard", "demoboard_version", "sdk")]
+
+
+def test_a_tt_board_whose_boot_read_failed_or_another_tt_board_in_the_report(tmp_path, locks):
+    failed = {"tinytapeout_error": "rpi-hwid tinytapeout --json --no-stop-service exited 1: boom"}
+    _boot_report(tmp_path, {k: v for k, v in TT_BOOT.items() if k not in TT_REPORT_FIELDS} | failed)
+    doc, gaps = _read_tt(tmp_path)
+    assert doc["boards"][0]["tinytapeout_error"] == failed["tinytapeout_error"]
+    assert gaps[-1] == f"tt: tinytapeout: {failed['tinytapeout_error']}"
+    _boot_report(tmp_path, {**TT_BOOT, "usb_serial": "OTHER", "serial": "OTHER"})
+    doc, gaps = _read_tt(tmp_path)
+    assert "mcu" not in doc["boards"][0] and "from_report" not in doc["boards"][0]
+    assert gaps[0] == "tt: mcu: this board is not in the boot report"
+
+
 def test_no_boot_report_or_a_damaged_one_is_only_the_live_read(tmp_path, locks):
     arty = Identified("arty", seen=[ARTY_FOUND], report_fields=("flash",))
     assert "from_report" not in _read({"arty": arty}, tmp_path)[0]["boards"][0]

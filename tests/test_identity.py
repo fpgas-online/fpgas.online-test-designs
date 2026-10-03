@@ -18,6 +18,12 @@ RPI_HWID_FPGABOARD_FIELDS = (
     "flash_uid_state", "flash_uid_note", "flash_error", "flash_extended_id", "flash_sfdp", "flash_source",
 )  # fmt: skip
 
+# rpi-hwid's src/rpi_hwid/model.py TinyTapeoutBoard fields, in order, at mithro/rpi-hwid origin/main 310cd23
+# (2026-10-03).
+RPI_HWID_TINYTAPEOUTBOARD_FIELDS = (
+    "usb_serial", "mcu", "shuttle", "chip", "repo", "commit", "demoboard", "demoboard_version", "sdk",
+)  # fmt: skip
+
 P48_FLASH = {
     "rdid": "0102194d0180", "part": "S25FL256S", "size_bytes": 32 << 20,
     "unique_id": "EDCBEECECB2B2A88B04F914D2E46AF90", "status": "00", "config": "02", "quad_enabled": True,
@@ -32,6 +38,11 @@ def test_the_fpgaboard_field_list_is_rpi_hwids():
 def test_the_fields_used_are_fpgaboards_and_the_extras_never_clash_with_them():
     assert set(identity.FIELDS) <= set(identity.FPGABOARD_FIELDS)
     assert not set(identity.EXTRA_FIELDS) & set(identity.FPGABOARD_FIELDS)
+
+
+def test_the_tiny_tapeout_field_list_is_rpi_hwids_and_clashes_with_no_other():
+    assert identity.TINYTAPEOUT_FIELDS == RPI_HWID_TINYTAPEOUTBOARD_FIELDS
+    assert not set(identity.TINYTAPEOUT_FIELDS) & (set(identity.FPGABOARD_FIELDS) | set(identity.EXTRA_FIELDS))
 
 
 def test_the_dna_is_16_digits_as_rpi_hwid_normalises_it():
@@ -193,6 +204,9 @@ def test_the_document_is_versioned_and_holds_every_board():
 def test_every_key_a_board_can_have_is_known():
     assert all(identity.known(k) for k in ("dna", "dna_error", "flash_error", "idcode_error", "board", "usb"))
     assert not identity.known("flash_part") and not identity.known("flash_unique_id")
+    tt = ("usb_serial", "mcu", "sdk", "demoboard_version", "tinytapeout_error", "tinytapeout_note")
+    assert all(identity.known(k) for k in tt)
+    assert not identity.known("tinytapeout") and not identity.known("chip_url")
 
 
 FIXTURE = pathlib.Path(__file__).parent / "data" / "identity-v1-acorn-p48.json"
@@ -232,3 +246,12 @@ def test_rpi_hwid_takes_the_dict_as_an_fpgaboard_when_it_is_installed():
     board = {"kind": "acorn", "dna": "0x0054b48664b04854", **identity.flash_fields(P48_FLASH, "pcie")}
     fpga = model.FpgaBoard(**{k: v for k, v in board.items() if k in identity.FPGABOARD_FIELDS})
     assert fpga.flash_extended_id == "0x4d0180" and fpga.identity == "0x0054b48664b04854"
+
+
+def test_rpi_hwid_takes_a_tt_boards_fields_as_a_tinytapeoutboard_when_it_is_installed():
+    model = pytest.importorskip("rpi_hwid.model")
+    assert tuple(f.name for f in dataclasses.fields(model.TinyTapeoutBoard)) == RPI_HWID_TINYTAPEOUTBOARD_FIELDS
+    board = {**identity.base("tt", "tt", {"variant": "tt-fpga", "usb": "1-2", "serial": "E661"}),
+             "mcu": "RP2350", "chip": "fpga", "shuttle": None, "sdk": "v3.1.0"}  # fmt: skip
+    tt = model.TinyTapeoutBoard(**{k: v for k, v in board.items() if k in identity.TINYTAPEOUT_FIELDS})
+    assert tt.identity == "E661" and tt.mcu == "RP2350"
