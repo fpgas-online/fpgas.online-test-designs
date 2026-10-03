@@ -87,9 +87,9 @@ PATCHES = (
         "\t/* fpgas.online: the SoC is not reset at probe (packaging/acorn-litepcie/prepare_driver.py).\n"
         "\t * What an earlier user of the device may have left running is switched off instead. */\n"
         "\tlitepcie_writel(litepcie_dev, CSR_PCIE_MSI_ENABLE_ADDR, 0);\n"
-        "\tlitepcie_writel(litepcie_dev, CSR_PCIE_DMA0_BASE + PCIE_DMA_WRITER_ENABLE_OFFSET, 0);\n"
-        "\tlitepcie_writel(litepcie_dev, CSR_PCIE_DMA0_BASE + PCIE_DMA_READER_ENABLE_OFFSET, 0);\n"
-        "\tlitepcie_writel(litepcie_dev, CSR_PCIE_DMA0_BASE + PCIE_DMA_LOOPBACK_ENABLE_OFFSET, 0);\n",
+        "\tlitepcie_writel(litepcie_dev, CSR_PCIE_DMA0_WRITER_ENABLE_ADDR, 0);\n"
+        "\tlitepcie_writel(litepcie_dev, CSR_PCIE_DMA0_READER_ENABLE_ADDR, 0);\n"
+        "\tlitepcie_writel(litepcie_dev, CSR_PCIE_DMA0_LOOPBACK_ENABLE_ADDR, 0);\n",
         "the SoC is not reset at probe",
         "the SoC's reset stops its clock under the PCIe core, and after DMA the host gets broken TLPs",
     ),

@@ -123,7 +123,7 @@ Presence matters as much as value. The sources compile different code depending 
 | `CSR_FLASH_BPI_CONTROL_ADDR`, `CSR_FLASH_SPI_CONTROL_ADDR` | `user/liblitepcie/litepcie_flash.c` | ...uses the BPI or the SPI flash path |
 | `CSR_PCIE_DMA1_BASE` … `CSR_PCIE_DMA7_BASE` | `kernel/main.c` | ...sets up that DMA channel |
 | `CSR_PCIE_MSI_PBA_ADDR` | `kernel/main.c` | ...asks for MSI-X instead of MSI |
-| `CSR_PCIE_MSI_CLEAR_ADDR`, `CSR_CTRL_RESET_ADDR`, `CSR_UART_XOVER_RXTX_ADDR`, `CSR_ICAP_BASE`, `CSR_FLASH_SPI_CONTROL_ADDR` | `kernel/main.c` | ...turns on MSI clearing, the reset at probe, the liteuart device, ICAP, SPI flash |
+| `CSR_PCIE_MSI_CLEAR_ADDR`, `CSR_UART_XOVER_RXTX_ADDR`, `CSR_ICAP_BASE`, `CSR_FLASH_SPI_CONTROL_ADDR` | `kernel/main.c` | ...turns on MSI clearing, the liteuart device, ICAP, SPI flash (`CSR_CTRL_RESET_ADDR`'s reset at probe is patched out, §3.7) |
 
 A driver built from headers where one of these is present, run on an image where it is absent (or the other
 way round), does the wrong thing without any error. Today every image agrees: none has `pcie_msi_pba`,
@@ -521,7 +521,8 @@ the Pis keep one source for test-design packages) or run a separate archive.
     then, a bound driver makes the check report `driver-bound` (§3.7).
   - Whether the kernel would police `resource0` is already answered: it does not (`CONFIG_STRICT_DEVMEM`
     unset).
-  - The reset on probe (§3.7) means the driver must load before, not during, anything that uses the SoC.
+  - Probe no longer resets the SoC (§3.7), but it does switch off MSI, the DMA engines and the DMA loopback,
+    so the driver must still load before, not during, anything that uses DMA.
 - **The CI trigger.** This repository used to build every pull request twice (push and pull_request). #41
   already fixed that: `push` is limited to main and a concurrency group cancels stale runs. The new workflow
   follows the same pattern.
