@@ -10,6 +10,7 @@
    "flash_extended_id": "0x4d0180",
    "flash_jedec": "0x010219",
    "flash_quad": true,
+   "flash_sfdp": "none",
    "flash_size_bytes": 33554432,
    "flash_source": "pcie",
    "flash_status": "0x00",

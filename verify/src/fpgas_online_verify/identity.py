@@ -118,7 +118,8 @@ def idcode_fields(entry):
 
 def flash_fields(ident, source):
     """The flash fields from what spi_flash.Flash.identify() read: all six RDID bytes, the part, its size, the
-    status and configuration registers, and the factory unique ID with how it was read."""
+    status and configuration registers, the factory unique ID with how it was read, and the SFDP revision
+    ("1.6", or "none" when the part answered without the signature) or why it could not be read."""
     rdid = bytes.fromhex(ident["rdid"])
     out = {"flash_jedec": hex_id(int.from_bytes(rdid[:3], "big"), RDID_DIGITS)}
     if len(rdid) >= 6:
@@ -140,6 +141,10 @@ def flash_fields(ident, source):
         out["flash_uid_state"] = "blank" if set(uid) <= {"0"} or set(uid) <= {"f"} else "read"
         if ident.get("unique_id_opcode") is not None:
             out["flash_uid_opcode"] = hex_id(ident["unique_id_opcode"], REGISTER_DIGITS)
+    if ident.get("sfdp"):
+        out["flash_sfdp"] = ident["sfdp"]
+    elif ident.get("sfdp_error"):
+        out["flash_sfdp_error"] = ident["sfdp_error"]
     out["flash_source"] = source
     return out
 

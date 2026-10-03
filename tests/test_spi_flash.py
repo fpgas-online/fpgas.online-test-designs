@@ -12,7 +12,9 @@ writer go wrong on the real part:
   * programming can only clear bits;
   * the first 128 KiB is overlaid by 4 KiB parameter sectors, which a 64 KiB
     sector erase does not touch;
-  * nothing is written without WREN, and WIP stays set for a few status reads.
+  * nothing is written without WREN, and WIP stays set for a few status reads;
+  * it has no SFDP: Read SFDP (5Ah) is not one of its commands, so it answers all ones. `sfdp` set to some
+    bytes makes it a part that has, answering from them.
 
 Fault switches (`erase_fails_at`, `program_flips_at`, `p_err_at`) exist because
 a flash that always works tests none of the checking code.
@@ -37,6 +39,7 @@ class FakeS25FL:
         self.erase_fails_at = None
         self.program_flips_at = None
         self.p_err_at = None
+        self.sfdp = None
         self._rx = bytearray()
         self._tx = []
 
@@ -74,6 +77,9 @@ class FakeS25FL:
             return self.mem[(int.from_bytes(self._rx[1:5], "big") + index - 5) % SIZE]
         if op == 0x4B and index >= 5:
             return 0xA0 + (index - 5) if index - 5 < 16 else 0xFF
+        if op == 0x5A and index >= 5 and self.sfdp is not None:  # 3 address bytes, then 8 dummy clocks
+            addr = int.from_bytes(self._rx[1:4], "big") + index - 5
+            return self.sfdp[addr] if addr < len(self.sfdp) else 0xFF
         return 0xFF
 
     # -- commands that act when CS rises ---------------------------------------------------------
@@ -198,6 +204,69 @@ def test_identify_works_straight_after_configuration(bus):
     assert info["quad_enabled"] is True
     assert info["unique_id_opcode"] == 0x4B
     assert bus.cs_n == 1
+
+
+# An SFDP header as JESD216 lays it out: "SFDP", minor 6, major 1, two parameter headers (NPH 1), access
+# protocol FFh; then the first parameter header (the basic table, ID 00h, revision 1.6, 16 DWORDs at 30h).
+SFDP_1_6 = b"SFDP" + bytes([0x06, 0x01, 0x01, 0xFF]) + bytes([0x00, 0x06, 0x01, 0x10, 0x30, 0x00, 0x00, 0xFF])
+
+
+def test_identify_reads_the_sfdp_revision_from_its_header(bus, chip):
+    chip.sfdp = SFDP_1_6
+    info = sf.Flash(bus).identify()
+    assert info["sfdp"] == "1.6"
+    assert info["sfdp_header"] == SFDP_1_6[:8].hex()
+    assert "sfdp_error" not in info
+    assert 0x5A in chip.opcodes
+
+
+def test_an_s25fl256s_has_no_sfdp_signature_so_its_sfdp_is_none(bus, chip):
+    info = sf.Flash(bus).identify()  # the fake S25FL256S answers 5Ah with all ones, as the part does
+    assert info["sfdp"] == "none" and info["sfdp_header"] == "ff" * 8
+
+
+@pytest.mark.parametrize(("header", "revision"), [
+    (SFDP_1_6, "1.6"),
+    (b"SFDP" + bytes([0x00, 0x01, 0x00, 0xFF]), "1.0"),
+    (b"SFDP" + bytes([0x08, 0x01, 0x02, 0xFF]), "1.8"),
+    (b"\xff" * 8, "none"),
+    (b"\x00" * 8, "none"),
+    (b"SFDX" + bytes([0x06, 0x01, 0x01, 0xFF]), "none"),
+    (b"SFDP", "none"),  # a header cut short says no revision
+])  # fmt: skip
+def test_the_sfdp_revision_is_major_dot_minor_or_none(header, revision):
+    assert sf.sfdp_revision(header) == revision
+
+
+def test_read_sfdp_sends_a_3_byte_address_and_8_dummy_clocks(bus, chip):
+    sent = []
+    exchange = chip.exchange
+    chip.exchange = lambda byte: sent.append(byte) or exchange(byte)
+    chip.sfdp = SFDP_1_6
+    flash = sf.Flash(bus)
+    flash._wake()
+    sent.clear()
+    assert flash.sfdp_header() == SFDP_1_6[:8]
+    assert sent[:5] == [0x5A, 0, 0, 0, 0] and len(sent) == 5 + 8
+
+
+class SfdpFails(FakeBus):
+    """A bus whose SPI master stops answering during Read SFDP (as a UART link that drops would)."""
+
+    def write(self, addr, value):
+        super().write(addr, value)
+        if addr == sf.SPI_CONTROL and self.flash.opcodes and self.flash.opcodes[-1] == 0x5A:
+            raise OSError("the link stopped answering")
+
+
+def test_a_failed_sfdp_read_is_an_sfdp_error_and_the_ids_stand(chip):
+    info = sf.Flash(SfdpFails(chip)).identify()
+    assert info["sfdp_error"] == "Read SFDP (0x5a) failed: the link stopped answering"
+    assert "sfdp" not in info and info["rdid"] == RDID.hex() and info["part"] == "S25FL256S"
+
+
+def test_read_sfdp_is_a_read_opcode():
+    assert sf.RSFDP == 0x5A and sf.RSFDP in sf.READ_OPCODES and sf.RSFDP not in sf.WRITE_OPCODES
 
 
 @pytest.mark.parametrize(

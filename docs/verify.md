@@ -129,8 +129,8 @@ the check, publishes anything or records any state.
   is put back:
   * Acorn, BAR0: memory decoding is switched on in the board's PCI COMMAND register for the read and
     switched off again if it was off. If a kernel driver (litepcie) is bound to the board, it is unbound for
-    the read and bound again afterwards. To read the flash's IDs (RDID and OTPR), the SoC's SPI master
-    registers and the flash's chip select are written. No other CSR of the SoC is written; `--identify`
+    the read and bound again afterwards. To read the flash's IDs (RDID and OTPR) and its SFDP header (Read
+    SFDP), the SoC's SPI master registers and the flash's chip select are written. No other CSR of the SoC is written; `--identify`
     refuses any other write, so the SoC is never reset through `ctrl_reset`.
   * Acorn, P1 JTAG, and NeTV2: openFPGALoader (or openocd) drives the Pi's JTAG GPIOs. Their state is read
     with `pinctrl` first and put back afterwards; a pin that was an output goes back as an input. Without
@@ -474,7 +474,7 @@ options:
   --uart PORT  use the UART bridge on PORT instead of PCIe
 
 commands:
-  id                print the flash's part, size and IDs as JSON
+  id                print the flash's part, size, IDs and SFDP revision as JSON
   dump FILE         read the whole flash into FILE
   verify FILE ADDR  compare the flash at ADDR with FILE
   write FILE ADDR   write FILE at ADDR, then read it back (needs --idcode)
@@ -575,7 +575,7 @@ From a checkout, the check reads them from the repository.
 | Test | Over | Passes when |
 |---|---|---|
 | `pcie-link` | sysfs | `current_link_speed` and `current_link_width` are the setup's (5.0 GT/s, x1) |
-| `pcie-bar0` | BAR0 | the operational build runs (the golden build means the operational slot did not boot), the flash identifies itself, the device DNA is neither all zeros nor all ones, and the XADC temperature and VCCINT, VCCAUX and VCCBRAM are in range |
+| `pcie-bar0` | BAR0 | the operational build runs (the golden build means the operational slot did not boot), the flash identifies itself and its SFDP header can be read (a flash with no SFDP passes), the device DNA is neither all zeros nor all ones, and the XADC temperature and VCCINT, VCCAUX and VCCBRAM are in range |
 | `jtag` | P1 | `openFPGALoader --detect` finds one device, the variant's part in any silicon version ([the JTAG IDCODE](#the-jtag-idcode)), and `openFPGALoader --read-dna` reads a device DNA that is neither all zeros nor all ones. When BAR0's DNA is good, the two must match; otherwise the JTAG DNA is not compared. The IDCODE read does not use TDI; the DNA read does |
 | `flash` | BAR0 | both 4 MiB slots (golden at `0x000000`, operational at `0x400000`), read whole with read opcodes only, hold the release's images |
 | `ddr` | BAR0 | after the BIOS console is read out, the DRAM BIST makes two passes over the whole DRAM: no errors, and write and read bandwidth at least the variant's minimum |
@@ -808,7 +808,7 @@ fpga-test-started {"board": "acorn", "test": "pcie-bar0"}
 fpga-test-finished {"board": "acorn", "test": "pcie-bar0", "result": "pass", "reason": ""}
 fpga-test-started {"board": "acorn", "test": "jtag"}
 fpga-test-finished {"board": "acorn", "test": "jtag", "result": "pass", "reason": ""}
-fpga-board-identified {"board": "acorn", "kind": "acorn", "variant": "cle-215+", "bdf": "0001:01:00.0", "soc_model": "cle-215+", "identifier": "fpgas-online Acorn PCIe SoC cle-215+ 2026-09-21 14:23:32", "build": "operational", "dna": "0x0054b48664b04854", "idcode": "0x13636093", "idcode_version": "1", "idcode_part_number": "0x3636", "idcode_manufacturer_id": "0x049", "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A200T", "flash_jedec": "0x010219", "flash_extended_id": "0x4d0180", "flash": "S25FL256S", "flash_size_bytes": "33554432", "flash_status": "0x00", "flash_config": "0x02", "flash_quad": "true", "flash_uid": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf", "flash_uid_bits": "128", "flash_uid_state": "read", "flash_uid_opcode": "0x4b", "flash_source": "pcie", "schema": "fpga-identity/1"}
+fpga-board-identified {"board": "acorn", "kind": "acorn", "variant": "cle-215+", "bdf": "0001:01:00.0", "soc_model": "cle-215+", "identifier": "fpgas-online Acorn PCIe SoC cle-215+ 2026-09-21 14:23:32", "build": "operational", "dna": "0x0054b48664b04854", "idcode": "0x13636093", "idcode_version": "1", "idcode_part_number": "0x3636", "idcode_manufacturer_id": "0x049", "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A200T", "flash_jedec": "0x010219", "flash_extended_id": "0x4d0180", "flash": "S25FL256S", "flash_size_bytes": "33554432", "flash_status": "0x00", "flash_config": "0x02", "flash_quad": "true", "flash_uid": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf", "flash_uid_bits": "128", "flash_uid_state": "read", "flash_uid_opcode": "0x4b", "flash_sfdp": "none", "flash_source": "pcie", "schema": "fpga-identity/1"}
 ```
 
 They come between `fpga-verifying` and `fpga-verified`.
