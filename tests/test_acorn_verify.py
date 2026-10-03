@@ -230,7 +230,7 @@ def test_a_board_running_the_release_with_every_link_working_passes_every_test(t
         "flash": "S25FL256S", "flash_jedec": "0x010219", "flash_extended_id": "0x4d0180",
         "flash_size_bytes": 33554432, "flash_status": "0x00", "flash_config": "0x02", "flash_quad": True,
         "flash_uid": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf", "flash_uid_bits": 128, "flash_uid_state": "read",
-        "flash_uid_opcode": "0x4b", "flash_source": "pcie",
+        "flash_uid_opcode": "0x4b", "flash_sfdp": "none", "flash_source": "pcie",
     }  # fmt: skip
     assert report["state"]["dna"] == "0x0054b48664b04854"
     assert set(report["state"]["flash"]["slots"]) == {"0x000000", "0x400000"}
@@ -419,14 +419,47 @@ def test_an_s25fs256s_is_named_by_its_extended_id(tmp_path, images, monkeypatch)
     assert (ident["flash"], ident["flash_jedec"], ident["flash_extended_id"]) == ("S25FS256S", "0x010219", "0x4d0181")
 
 
+def test_the_flash_sfdp_revision_is_in_the_identity(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    rig.soc.flash.sfdp = tsf.SFDP_1_6
+    report = rig.check()
+    assert report["identity"]["flash_sfdp"] == "1.6" and "flash_sfdp_error" not in report["identity"]
+    assert report["flash"]["sfdp_header"] == tsf.SFDP_1_6[:8].hex()
+    assert _results(report)["pcie-bar0"] == "pass"
+
+
+def test_an_s25fl256s_answers_without_sfdp_so_its_flash_sfdp_is_none(tmp_path, images):
+    report = Rig(tmp_path, images).check()
+    assert report["identity"]["flash_sfdp"] == "none"
+    assert identity.details(report["identity"])["flash_sfdp"] == "none"
+
+
+def test_an_sfdp_read_that_failed_is_a_flash_sfdp_error_and_fails_pcie_bar0(tmp_path, images, monkeypatch):
+    def broken(flash):
+        raise sf.FlashError("the SPI master never went idle")
+
+    monkeypatch.setattr(sf.Flash, "sfdp_header", broken)
+    report = Rig(tmp_path, images).check()
+    ident = report["identity"]
+    assert ident["flash_sfdp_error"] == "Read SFDP (0x5a) failed: the SPI master never went idle"
+    assert "flash_sfdp" not in ident and ident["flash_jedec"] == "0x010219"  # the IDs still stand
+    bar0 = next(t for t in report["tests"] if t["test"] == "pcie-bar0")
+    assert bar0["result"] == "fail"
+    assert bar0["reason"] == ("the flash's SFDP could not be read: Read SFDP (0x5a) failed: the SPI master never "
+                              "went idle")  # fmt: skip
+
+
 FIXTURE = pathlib.Path(__file__).parent / "data" / "identity-v1-acorn-p48.json"
 P48_FLASH_UID = "edcbeececb2b2a88b04f914d2e46af90"  # pi-sw2-p48's S25FL256S, read over BAR0 and by openFPGALoader
 
 
 def p48_document(tmp_path, images):
     """The golden fixture: the Acorn fakes' identity (pi-sw2-p48's DNA, IDCODE and RDID), with p48's flash
-    unique ID, as fpgas-verify --identify prints it."""
+    unique ID, as fpgas-verify --identify prints it. It has no flash_sfdp: p48's document was printed by a
+    fpgas-verify that did not read SFDP, and the fixture stays exactly what p48 printed (rpi-hwid keeps a
+    byte-identical copy). test_the_flash_sfdp_revision_is_in_the_identity and the tests after it cover SFDP."""
     board = {**Rig(tmp_path / "p48", images).check()["identity"], "flash_uid": P48_FLASH_UID}
+    del board["flash_sfdp"]
     doc = identity.document([board], tool="fpgas-online-verify 0.0.post808", read_at="2026-10-02T00:00:00+00:00")
     return json.dumps(doc, indent=1, sort_keys=True) + "\n"
 

@@ -11,7 +11,7 @@ Build command (from repo root):
 
 Requires environment variables CHIPDB and PRJXRAY_DB_DIR pointing to the
 openxc7 toolchain directories. The bitstream is written to:
-    designs/uart/build/arty/gateware/digilent_arty.bit
+    designs/uart/build/arty-<variant>-<flow>/gateware/digilent_arty.bit
 """
 
 import pathlib
@@ -26,7 +26,7 @@ from litex_boards.platforms import digilent_arty
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-from designs._shared.build_helpers import build_soc, default_soc_kwargs
+from designs._shared.build_helpers import board_dir, build_soc, default_soc_kwargs
 from designs._shared.platform_fixups import require_timing
 from designs._shared.yosys_workarounds import patch_yosys_template
 
@@ -88,7 +88,8 @@ def main():
     )
 
     patch_yosys_template(soc)
-    build_soc(soc, parser, board_name="arty", gateware_file=__file__, args=args)
+    build_soc(soc, parser, board_name=board_dir("arty", args.variant),
+              gateware_file=__file__, args=args)
 
 
 if __name__ == "__main__":

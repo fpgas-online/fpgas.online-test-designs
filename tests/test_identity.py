@@ -88,6 +88,18 @@ def test_the_flash_keeps_every_rdid_byte_and_register():
     }  # fmt: skip
 
 
+@pytest.mark.parametrize(("read", "fields"), [
+    ({"sfdp": "1.6"}, {"flash_sfdp": "1.6"}),
+    ({"sfdp": "none"}, {"flash_sfdp": "none"}),
+    ({"sfdp_error": "Read SFDP (0x5a) failed: timed out"}, {"flash_sfdp_error": "Read SFDP (0x5a) failed: timed out"}),
+    ({}, {}),  # not read: neither field
+])  # fmt: skip
+def test_the_sfdp_revision_is_rpi_hwids_flash_sfdp(read, fields):
+    out = identity.flash_fields({**P48_FLASH, **read}, "pcie")
+    assert {k: v for k, v in out.items() if k.startswith("flash_sfdp")} == fields
+    assert all(identity.known(k) for k in out)
+
+
 @pytest.mark.parametrize("uid", ["00" * 16, "ff" * 16])
 def test_a_unique_id_of_all_zeros_or_all_ones_is_blank(uid):
     assert identity.flash_fields({**P48_FLASH, "unique_id": uid}, "pcie")["flash_uid_state"] == "blank"
@@ -232,3 +244,10 @@ def test_rpi_hwid_takes_the_dict_as_an_fpgaboard_when_it_is_installed():
     board = {"kind": "acorn", "dna": "0x0054b48664b04854", **identity.flash_fields(P48_FLASH, "pcie")}
     fpga = model.FpgaBoard(**{k: v for k, v in board.items() if k in identity.FPGABOARD_FIELDS})
     assert fpga.flash_extended_id == "0x4d0180" and fpga.identity == "0x0054b48664b04854"
+
+
+def test_rpi_hwid_takes_flash_sfdp_as_an_fpgaboard_field_when_it_is_installed():
+    model = pytest.importorskip("rpi_hwid.model")
+    board = {"kind": "acorn", **identity.flash_fields({**P48_FLASH, "sfdp": "none"}, "pcie")}
+    fpga = model.FpgaBoard(**{k: v for k, v in board.items() if k in identity.FPGABOARD_FIELDS})
+    assert fpga.flash_sfdp == "none"
