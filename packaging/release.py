@@ -14,6 +14,9 @@ repository and pulls each `<package>_<version>_<arch>.deb` it does not have yet.
     that already pulled a (package, version) must not find other bytes under the same name. So a package
     that did not change with this push (its version comes from something else: a pinned release, the last
     commit that changed the driver) stays on the release that first carried it.
+  * Two runs of different commits are not serialised, so each checks again just before each upload, and
+    after it: if an older release also has the file (the other run uploaded it meanwhile), the copy just
+    uploaded is deleted. Both runs apply the same rule, so the copy on the oldest release is the one kept.
   * An asset is named as GitHub will store it: every character but letters, digits and `. _ + -` becomes a
     dot (`~` in a version does), so the names compared here are the names GitHub lists.
 
@@ -90,6 +93,13 @@ def published(gh=gh):
     return set(gh("api", "repos/{owner}/{repo}/releases", "--paginate", "--jq", ".[].assets[].name").split())
 
 
+def carriers(name, gh=gh):
+    """The tags of the releases carrying `name`, oldest first. `name` is a stored name: no quotes in it."""
+    out = gh("api", "repos/{owner}/{repo}/releases", "--paginate", "--jq",
+             f'.[] | select(any(.assets[]; .name == "{name}")) | "\\(.created_at) \\(.tag_name)"')  # fmt: skip
+    return [tag for _, tag in sorted(tuple(line.split()) for line in out.splitlines() if line.strip())]
+
+
 def _exists(tag, gh):
     try:
         gh("release", "view", tag, "--json", "tagName")
@@ -114,7 +124,7 @@ def ensure_release(tag, version, commit, gh=gh):
 
 
 def publish(debs, version, commit, gh=gh):
-    """Upload what no release has yet to `build-<version>`. Returns the names uploaded."""
+    """Upload what no release has yet to `build-<version>`. Returns the names this build's release keeps."""
     tag = f"build-{version}"
     files = named(debs)
     have = published(gh)
@@ -125,8 +135,12 @@ def publish(debs, version, commit, gh=gh):
         print(f"nothing new for {tag}")
         return []
     ensure_release(tag, version, commit, gh)
+    kept = []
     with tempfile.TemporaryDirectory() as tmp:
         for name, path in sorted(new.items()):
+            if name in published(gh):  # another run, of this commit or another, got there first
+                print(f"published meanwhile by another run: {name}")
+                continue
             upload = pathlib.Path(tmp) / name  # under the stored name, so GitHub renames nothing
             shutil.copyfile(path, upload)
             try:
@@ -136,7 +150,14 @@ def publish(debs, version, commit, gh=gh):
                 if name not in published(gh):
                     raise
                 print(f"uploaded meanwhile by another run: {name}")
-    return sorted(new)
+                continue
+            oldest = carriers(name, gh)[0]
+            if oldest != tag:  # another run put it on an older release in the meantime: keep that one
+                gh("release", "delete-asset", tag, name, "--yes")
+                print(f"{name} is also on {oldest}: deleted the copy on {tag}")
+                continue
+            kept.append(name)
+    return kept
 
 
 def main(argv=None):

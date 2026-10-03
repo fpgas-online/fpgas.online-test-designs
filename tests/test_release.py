@@ -29,14 +29,21 @@ COMMIT = "0123456789abcdef0123456789abcdef01234567"
 
 
 class FakeGh:
-    """GitHub's releases: {tag: asset names}. `race`: assets another run uploads just before ours."""
+    """GitHub's releases: {tag: asset names}, oldest first. `race`: assets another run uploads to the same
+    release just before ours. `elsewhere`: {asset: tag}, assets another run puts on that (older) release while
+    ours is being uploaded."""
 
-    def __init__(self, releases=None, race=(), create_race=False):
+    def __init__(self, releases=None, race=(), create_race=False, elsewhere=None):
         self.releases = {tag: set(assets) for tag, assets in (releases or {}).items()}
         self.race, self.create_race, self.calls = set(race), create_race, []
+        self.elsewhere = dict(elsewhere or {})
 
     def __call__(self, *args):
         self.calls.append(args)
+        if args[0] == "api" and "select(" in args[-1]:  # carriers(): the releases with one asset, created_at order
+            name = args[-1].split('.name == "')[1].split('"')[0]
+            return "\n".join(f"2026-10-03T00:00:{i:02d}Z {tag}" for i, (tag, a) in enumerate(self.releases.items())
+                             if name in a)  # fmt: skip
         if args[0] == "api":
             return "\n".join(sorted(name for assets in self.releases.values() for name in assets))
         if args[:2] == ("release", "view"):
@@ -49,8 +56,13 @@ class FakeGh:
                 raise rel.ReleaseError("gh release create: HTTP 422: Validation Failed (already_exists)")
             self.releases[args[2]] = set()
             return ""
+        if args[:2] == ("release", "delete-asset"):
+            self.releases[args[2]].remove(args[3])
+            return ""
         if args[:2] == ("release", "upload"):
             name = pathlib.Path(args[3]).name
+            if name in self.elsewhere:
+                self.releases[self.elsewhere.pop(name)].add(name)
             if name in self.race:
                 self.releases[args[2]].add(name)
                 raise rel.ReleaseError(f"gh release upload: asset {name} already exists")
@@ -128,6 +140,28 @@ def test_a_create_the_tag_ruleset_refuses_is_a_failure(tmp_path):
 def test_an_upload_another_run_made_meanwhile_is_not_a_failure(tmp_path):
     gh = FakeGh(race={"x_0.0.post7_all.deb"})
     rel.publish([_deb(tmp_path, "x_0.0.post7_all.deb")], "0.0.post7", COMMIT, gh=gh)
+
+
+def test_a_file_another_commit_s_run_put_on_an_older_release_meanwhile_is_kept_there_only(tmp_path):
+    # Runs of different commits are not serialised: the other one's upload lands between our check and ours.
+    gh = FakeGh({"build-0.0.post6": set()}, elsewhere={"x_0.0.post5_all.deb": "build-0.0.post6"})
+    deb = _deb(tmp_path, "x_0.0.post5_all.deb")
+    assert rel.publish([deb], "0.0.post7", COMMIT, gh=gh) == []
+    assert gh.releases == {"build-0.0.post6": {"x_0.0.post5_all.deb"}, "build-0.0.post7": set()}
+
+
+def test_a_file_published_while_earlier_files_uploaded_is_not_uploaded_again(tmp_path):
+    gh = FakeGh({"build-0.0.post6": set()})
+    a, b = _deb(tmp_path, "a_0.0.post7_all.deb"), _deb(tmp_path, "b_0.0.post5_all.deb")
+    real = gh.__call__
+
+    def other_run_publishes_b(*args):
+        if args[:2] == ("release", "upload") and args[3].endswith("a_0.0.post7_all.deb"):
+            gh.releases["build-0.0.post6"].add("b_0.0.post5_all.deb")
+        return real(*args)
+
+    assert rel.publish([a, b], "0.0.post7", COMMIT, gh=other_run_publishes_b) == ["a_0.0.post7_all.deb"]
+    assert gh.releases["build-0.0.post7"] == {"a_0.0.post7_all.deb"}
 
 
 def test_an_upload_that_really_failed_is_a_failure(tmp_path):
