@@ -22,9 +22,10 @@ import json
 import pathlib
 
 STATE = pathlib.Path("/var/lib/fpgas-online/verify-state.json")
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 # The facts of a board's state that each version of the record introduced: {version: (key, ...)}.
-NEW_FACTS = {2: ("dna",), 3: ("idcode",)}  # 2: the Acorn's device DNA; 3: the Arty's IDCODE
+# 2: the Acorn's device DNA; 3: the Arty's IDCODE; 5: the Arty's and NeTV2's device DNA.
+NEW_FACTS = {2: ("dna",), 3: ("idcode",), 5: ("dna",)}
 
 
 def _idcode_widened(old, new):
