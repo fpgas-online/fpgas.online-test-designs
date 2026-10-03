@@ -116,6 +116,11 @@ def idcode_fields(entry):
     return {}
 
 
+def dna_fields(entry):
+    """The device DNA from a JTAG entry (testbench.TestBoard.jtag): dna, or dna_error saying why there is none."""
+    return {key: entry[key] for key in ("dna", "dna_error") if key in entry}
+
+
 def flash_fields(ident, source):
     """The flash fields from what spi_flash.Flash.identify() read: all six RDID bytes, the part, its size, the
     status and configuration registers, and the factory unique ID with how it was read."""

@@ -10,7 +10,7 @@ import struct
 import sys
 
 import pytest
-from fpgas_online_verify import cli, core, debug, host_tests, idcode, identity
+from fpgas_online_verify import cli, core, debug, host_tests, idcode, identity, testbench
 from fpgas_online_verify.boards import arty, fomu, netv2, tt_fpga
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
 
@@ -60,6 +60,8 @@ class Runner:
                 return answer
         if "--detect" in argv:  # the Arty's JTAG scan
             return 0, ARTY_SCAN
+        if "--read-dna" in argv:
+            return 0, DNA_LINE
         if argv[:2] == ["pinctrl", "get"]:  # every pin an input, pulled down
             return 0, "".join(f"{g}: ip    pd | lo // GPIO{g} = input\n" for g in argv[2].split(","))
         return 0, "ok"
@@ -72,6 +74,8 @@ def _scan(*codes):
 
 
 ARTY_SCAN = _scan(0x0362D093) + "index 0:\n\tidcode 0x362d093\n\tmanufacturer xilinx\n\tfamily artix a7 35t\n"
+DNA = "0x0054b48664b04854"
+DNA_LINE = '{"dna": "0x0054b48664b04854"}\n'  # openFPGALoader --read-dna's output
 
 
 # -- what the boards are ---------------------------------------------------------------------------------
@@ -241,13 +245,15 @@ def test_an_arty_that_passes_loads_each_test_runs_it_and_records_its_flash(tmp_p
     assert [t["test"] for t in report["tests"]] == ["uart", "ddr", "spiflash", "ethernet", "pin-id"]
     images = tmp_path / "images"
     assert run.calls[0] == ["openFPGALoader", "-b", "arty", "--detect", "--verbose-level", "2"]
-    assert run.calls[2] == ["openFPGALoader", "-b", "arty", str(images / "uart-test-arty/digilent_arty.bit")]
+    assert run.calls[1] == ["openFPGALoader", "-b", "arty", "--read-dna"]  # same cable, before anything loads
+    assert run.calls[3] == ["openFPGALoader", "-b", "arty", str(images / "uart-test-arty/digilent_arty.bit")]
     assert run.calls[-1][:5] == ["openFPGALoader", "-b", "arty", "--dump-flash", "--file-size"]
     assert {k: v for k, v in report["jtag"].items() if k != "output"} == {
         "result": "pass", "idcode": "0x0362d093", "idcode_version": 0, "idcode_part_number": "0x362d",
-        "idcode_manufacturer_id": "0x049", "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A35T"}  # fmt: skip
+        "idcode_manufacturer_id": "0x049", "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A35T",
+        "dna": DNA}  # fmt: skip
     sha = hashlib.sha256(flash).hexdigest()
-    assert report["state"] == {"variant": "a7-35", "serial": "210319B", "idcode": "0x0362d093",
+    assert report["state"] == {"variant": "a7-35", "serial": "210319B", "idcode": "0x0362d093", "dna": DNA,
                                "flash_jedec": "0x20ba18",
                                "flash": {"region_bytes": 0x220000, "sha256": sha}}  # fmt: skip
 
@@ -465,7 +471,9 @@ def test_a_netv2_on_a_pi5_loads_with_rp1pio_and_muxes_its_uart(tmp_path):
                          {"images": _install(tmp_path, NETV2)}, runner=run)  # fmt: skip
     assert report["result"] == "pass"
     assert run.calls[0][-3:] == ["--detect", "--verbose-level", "2"] and report["jtag"]["idcode_device"] == "XC7A35T"
-    assert run.calls[2][:3] == ["pinctrl", "set", "14"]
+    assert run.calls[2] == ["openFPGALoader", "-c", "rp1pio", "--pins", "27:22:4:17", "--read-dna"]
+    assert report["jtag"]["dna"] == DNA
+    assert ["pinctrl", "set", "14", "a4"] in run.calls
     assert any(c[:3] == ["openFPGALoader", "-c", "rp1pio"] and c[-1].endswith("kosagi_netv2.bit") for c in run.calls)
 
 
@@ -542,7 +550,7 @@ def test_an_arty_says_who_it_is_before_its_tests_with_its_whole_idcode(tmp_path)
     assert report["identity"] == {
         "board": "arty", "kind": "arty", "variant": "a7-35", "serial": "210319B", "usb": "1-1",
         "idcode": "0x0362d093", "idcode_version": 0, "idcode_part_number": "0x362d", "idcode_manufacturer_id": "0x049",
-        "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A35T",
+        "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A35T", "dna": DNA,
     }  # fmt: skip
     assert events[0][1] == identity.details(report["identity"])
 
@@ -551,6 +559,91 @@ def test_a_jtag_chain_with_nothing_on_it_is_an_idcode_error(tmp_path):
     report = _check(ARTY, tmp_path, ARTY_FOUND, Runner([("--detect", (1, "JTAG init failed"))]))
     assert report["identity"]["idcode_error"] == report["jtag"]["reason"]
     assert "idcode" not in report["identity"]
+
+
+# -- the device DNA --------------------------------------------------------------------------------------------
+
+
+def test_an_arty_with_a_good_dna_has_it_in_its_identity_event_and_state(tmp_path):
+    events = []
+    run = Runner([("--read-dna", (0, 'Jtag frequency : requested 6.00MHz\n{"dna": "0x54b48664b04854"}\n'))],
+                 flash=b"\0" * ARTY.flash_region["a7-35"])  # fmt: skip
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run, event=lambda stage, d: events.append((stage, d)))
+    assert report["result"] == "pass" and report["jtag"]["result"] == "pass"
+    assert report["jtag"]["dna"] == report["identity"]["dna"] == report["state"]["dna"] == DNA  # 16 digits
+    assert events[0] == ("fpga-board-identified", identity.details(report["identity"]))
+    assert events[0][1]["dna"] == DNA and "dna_error" not in report["identity"]
+    assert [c for c in run.calls if "--read-dna" in c] == [["openFPGALoader", "-b", "arty", "--read-dna"]]
+
+
+@pytest.mark.parametrize("stuck", ["0x0000000000000000", "0x01ffffffffffffff"])
+def test_a_dna_of_all_zeros_or_all_ones_is_no_dna_and_fails_the_board(tmp_path, stuck):
+    run = Runner([("--read-dna", (0, f'{{"dna": "{stuck}"}}\n'))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    reason = f"device DNA over JTAG reads {int(stuck, 16):#x}: the DNA port is not being read"
+    assert report["result"] == "fail" and report["jtag"]["result"] == "fail"
+    assert report["jtag"]["reason"] == report["identity"]["dna_error"] == reason
+    assert report["reason"].startswith(f"jtag fail: {reason}")
+    assert "dna" not in report["identity"] and "dna" not in report["state"]
+    assert report["identity"]["idcode"] == "0x0362d093"  # the IDCODE was read all the same
+
+
+def test_a_dna_read_that_exits_non_zero_fails_the_board_and_says_why(tmp_path):
+    text = "Error: Failed to claim FPGA device: read_dna only supported for 7-series style Xilinx FPGA\n"
+    run = Runner([("--read-dna", (1, text))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    reason = f"openFPGALoader --read-dna read no device DNA (exit 1): {text.strip()}"
+    assert report["result"] == "fail" and report["jtag"]["reason"] == report["identity"]["dna_error"] == reason
+    assert "dna" not in report["state"]
+    # a DNA printed by a run that failed is not trusted, and a run that printed no DNA read none
+    for rc, text in [(1, DNA_LINE), (0, "Jtag frequency : requested 6.00MHz\n")]:
+        run = Runner([("--read-dna", (rc, text))], flash=b"\0" * ARTY.flash_region["a7-35"])
+        report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+        assert report["result"] == "fail" and "dna" not in report["identity"], report["jtag"]
+        assert report["identity"]["dna_error"].startswith(f"openFPGALoader --read-dna read no device DNA (exit {rc})")
+
+
+def test_a_dna_read_that_cannot_run_is_its_problems_result(tmp_path):
+    run = Runner([("--read-dna", core.Problem("error", "openFPGALoader is not installed"))],
+                 flash=b"\0" * ARTY.flash_region["a7-35"])  # fmt: skip
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    assert report["result"] == "error" and report["jtag"]["result"] == "error"
+    assert report["identity"]["dna_error"] == "the device DNA could not be read: openFPGALoader is not installed"
+
+
+@pytest.mark.parametrize(
+    "scan",
+    [(1, "JTAG init failed"), (2, ARTY_SCAN), (0, _scan(0x13631093)), (0, _scan(0x0362D093, 0x0362D093))],
+    ids=["no-chain", "scan-exit", "wrong-part", "two-devices"],
+)
+def test_the_dna_is_not_read_unless_the_scan_found_the_one_fpga_expected(tmp_path, scan):
+    run = Runner([("--detect", scan)], flash=b"\0" * ARTY.flash_region["a7-35"])
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    assert not any("--read-dna" in c for c in run.calls)
+    assert report["jtag"]["result"] == "fail" and report["identity"]["dna_error"] == testbench.DNA_SKIPPED
+    assert "dna" not in report["state"] and "--read-dna" not in report["jtag"]["reason"]  # the scan's reason only
+
+
+def test_the_netv2_reads_its_dna_on_its_scans_pins_and_puts_them_back(tmp_path):
+    run = Runner([("pinctrl get", (0, NETV2_PINS))], flash=b"\0" * NETV2.flash_region["a7-100"])
+    report = _check(NETV2, tmp_path, _netv2_found("0x13631093"), run)
+    assert report["result"] == "pass" and report["identity"]["dna"] == report["state"]["dna"] == DNA
+    read = run.calls.index(["openFPGALoader", "--cable", "libgpiod", "--pins", "27:22:4:17", "--read-dna"])
+    assert run.calls[read - 1] == ["pinctrl", "get", "4,17,27,22"]
+    assert run.calls[read + 1 : read + 5] == [["pinctrl", "set", *g.split()] for g in
+                                              ("4 ip pn", "17 ip pu", "22 ip pd", "27 a3 pn")]  # fmt: skip
+
+
+def test_the_netv2_dna_is_not_read_when_its_pins_cannot_be_put_back(tmp_path):
+    run = Runner([("pinctrl get", core.Problem("error", "pinctrl is not installed"))],
+                 flash=b"\0" * NETV2.flash_region["a7-100"])  # fmt: skip
+    report = _check(NETV2, tmp_path, _netv2_found("0x13631093"), run)
+    assert not any("--read-dna" in c for c in run.calls)  # nothing driven
+    assert report["jtag"]["result"] == "error" and "pinctrl is not installed" in report["identity"]["dna_error"]
+    run = Runner([("pinctrl set 4", (1, "no such pin"))], flash=b"\0" * NETV2.flash_region["a7-100"])
+    report = _check(NETV2, tmp_path, _netv2_found("0x13631093"), run)
+    assert report["identity"]["dna"] == DNA  # read, but a pin left driven is still an error
+    assert report["jtag"]["result"] == "error" and "could not put GPIO4 back" in report["jtag"]["reason"]
 
 
 def test_a_board_whose_check_stops_before_its_tests_still_says_who_it_is(tmp_path):
