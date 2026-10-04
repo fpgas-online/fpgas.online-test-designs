@@ -4,7 +4,18 @@ name: "Build: UART Test"
 on:
   push:
     branches: [main]
+  # A pull request builds this design only when something it is built from changes: its own directory, the
+  # shared gateware, the Python environment, the diagnostic builds in tmp/, or this file. main always builds.
   pull_request:
+    paths:
+      - "designs/uart/**"
+      - "designs/_shared/**"
+      # designs/_shared/build_helpers.py checks it exists at import
+      - "scripts/fix_yosys_edif_libref.py"
+      - "tmp/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/build-uart-test.yml"
   workflow_dispatch:
 
 # A new push to a pull request cancels that pull request's older, now stale, run.

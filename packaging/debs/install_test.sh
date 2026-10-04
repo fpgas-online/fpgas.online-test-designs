@@ -23,6 +23,20 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 installed() { dpkg-query -W -f='${db:Status-Status}' "$1" 2>&1 | grep -qx installed; }
 enabled() { [ -L /etc/systemd/system/multi-user.target.wants/fpgas-verify.service ]; }
 
+# The boards need an openFPGALoader that has --read-dna: fpgas.online's build, or Debian's own from 0.13.0 on.
+# Bookworm's own is 0.10.0, so there a board is refused until apt.fpgas.online's build is available; this
+# repository has none, so an empty stand-in named like it (pulling in Debian's binary) takes its place.
+if [ "$VERSION_CODENAME" = bookworm ]; then
+  echo "--- bookworm without fpgas.online's openFPGALoader: fpgas-online-arty refused"
+  if apt-get install -qq fpgas-online-arty >/dev/null; then fail "fpgas-online-arty installed with openFPGALoader 0.10.0"; fi
+  mkdir -p /standin/DEBIAN
+  printf 'Package: openfpgaloader-fpgasonline\nVersion: 0.0-standin\nArchitecture: all\nDepends: openfpgaloader\nMaintainer: install test <noreply@fpgas.online>\nDescription: stand-in for the install test\n' \
+    > /standin/DEBIAN/control
+  dpkg-deb --build /standin /repo/openfpgaloader-fpgasonline_0.0-standin_all.deb >/dev/null
+  (cd /repo && dpkg-scanpackages --multiversion . > Packages)
+  apt-get update -qq
+fi
+
 echo "--- one board: fpgas-online-arty"
 apt-get install -qq fpgas-online-arty >/dev/null
 # The boot check also runs the Arty's Ethernet test and PMOD HAT pin-ID scan, so their tools come with it.

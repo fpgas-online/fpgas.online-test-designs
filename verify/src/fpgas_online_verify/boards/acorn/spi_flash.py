@@ -61,9 +61,9 @@ GOLDEN_ADDR = 0x000000
 OPERATIONAL_ADDR = 0x400000
 SLOT_SIZE = 4 << 20
 
-RDID, RDSR1, RDCR, READ4, OTPR = 0x9F, 0x05, 0x35, 0x13, 0x4B
+RDID, RDSR1, RDCR, READ4, OTPR, RSFDP = 0x9F, 0x05, 0x35, 0x13, 0x4B, 0x5A
 WREN, CLSR, PP4, P4E4, SE4 = 0x06, 0x30, 0x12, 0x21, 0xDC
-READ_OPCODES = {RDID, RDSR1, RDCR, READ4, OTPR}
+READ_OPCODES = {RDID, RDSR1, RDCR, READ4, OTPR, RSFDP}
 WRITE_OPCODES = {WREN, CLSR, PP4, P4E4, SE4}
 
 SR_WIP, SR_E_ERR, SR_P_ERR = 0x01, 0x20, 0x40
@@ -82,6 +82,16 @@ PARTS = {0x010219: "S25Fx256S", 0x010220: "S25FL512S", 0x012018: "S25FL128S"}
 # drivers/mtd/spi-nor/spansion.c tells s25fl256s0/1 and s25fs256s0/1 apart the same way.
 PARTS_BY_FAMILY = {0x010219: {0x80: "S25FL256S", 0x81: "S25FS256S"}}
 UNIQUE_ID_BYTES = 16  # OTPR from 0: the 128-bit random number Spansion programs at the factory
+# Serial Flash Discoverable Parameters, JEDEC JESD216. Read SFDP is opcode 5Ah, a 3-byte address and 8 dummy
+# clocks, single-bit. The SFDP header is its first two DWORDs, from address 0: bytes 0-3 are the signature,
+# "SFDP" in that byte order (the DWORD 50444653h, least significant byte first), byte 4 the minor and byte 5
+# the major revision, byte 6 the number of parameter headers less one, byte 7 the access protocol.
+# The S25FL128S/S25FL256S has no SFDP: its datasheet (Infineon 002-19099 Rev. *D) lists no 5Ah in its command
+# summary (13.1) and never mentions SFDP; the part describes itself only in its ID-CFI space, read with RDID
+# (7.3, 11.2.2, 13.2). Read SFDP is not one of its commands, so its answer has no signature: "none".
+# The S25FS256S does answer it.
+SFDP_SIGNATURE = b"SFDP"
+SFDP_HEADER_BYTES = 8
 
 SYNC = bytes.fromhex("aa995566")
 REG_CMD, REG_IDCODE, REG_WBSTAR, REG_TIMER, REG_FDRI = 0x04, 0x0C, 0x10, 0x11, 0x02
@@ -100,6 +110,17 @@ def part(rdid):
     jedec = int.from_bytes(rdid[:3], "big")
     family = rdid[5] if len(rdid) >= 6 else None
     return PARTS_BY_FAMILY.get(jedec, {}).get(family) or PARTS.get(jedec, "unknown")
+
+
+def sfdp_revision(header):
+    """The SFDP revision a JESD216 header gives, "major.minor" (as rpi-hwid writes it, "1.6"); "none" when
+    the bytes do not start with the signature: the part answered Read SFDP without one; None when there are
+    fewer than SFDP_HEADER_BYTES, which is not a read. rpi-hwid's sfdp_summary() decides the same way."""
+    if len(header) < SFDP_HEADER_BYTES:
+        return None
+    if bytes(header[:4]) != SFDP_SIGNATURE:
+        return "none"
+    return f"{header[5]}.{header[4]}"
 
 
 def image_info(data):
@@ -202,11 +223,16 @@ class Flash:
 
     # -- reading -----------------------------------------------------------------------------------
 
+    def sfdp_header(self):
+        """The first SFDP_HEADER_BYTES of the SFDP space: Read SFDP from address 0, then one byte (8 clocks)
+        of dummy."""
+        return self.transaction([RSFDP, 0, 0, 0, 0], SFDP_HEADER_BYTES)
+
     def identify(self):
         rdid = self.transaction([RDID], 6)
         capacity = rdid[2]
         otp = self.transaction([OTPR, 0, 0, 0, 0], UNIQUE_ID_BYTES)
-        return {
+        info = {
             "rdid": rdid.hex(),
             "part": part(rdid),
             "size_bytes": 1 << capacity if 0x10 <= capacity <= 0x20 else None,
@@ -216,6 +242,19 @@ class Flash:
             "config": self.transaction([RDCR], 1).hex(),
             "quad_enabled": bool(self.transaction([RDCR], 1)[0] & 0x02),
         }
+        # A failed SFDP read loses only the SFDP: the IDs above stand, and sfdp_error says why.
+        try:
+            header = self.sfdp_header()
+        except (FlashError, OSError) as e:
+            info["sfdp_error"] = f"Read SFDP (0x5a) failed: {str(e) or type(e).__name__}"
+        else:
+            info["sfdp_header"] = header.hex()
+            revision = sfdp_revision(header)
+            if revision is None:
+                info["sfdp_error"] = f"Read SFDP (0x5a) gave {len(header)} bytes, not {SFDP_HEADER_BYTES}"
+            else:
+                info["sfdp"] = revision
+        return info
 
     def read(self, addr, length):
         out = bytearray()
@@ -361,7 +400,7 @@ def bound_driver(bdf, sysfs=None):
 
 def litepcie_bound_anywhere(sysfs=None):
     """The first PCI device litepcie.ko is bound to, or None. For the UART path, which has no BDF: the bridge
-    reaches the same SPI master the driver's flash ioctl drives, and loading the driver resets the SoC."""
+    reaches the same SPI master the driver's flash ioctl drives."""
     root = pathlib.Path(sysfs or SYSFS_PCI)
     if not root.is_dir():
         return None
@@ -436,7 +475,7 @@ def main(argv=None):
         "running on it. Prints RESULT: PASS or RESULT: FAIL last.",
         epilog=f"""\
 commands:
-  id                print the flash's part, size and IDs as JSON
+  id                print the flash's part, size, IDs and SFDP revision as JSON
   dump FILE         read the whole flash into FILE
   verify FILE ADDR  compare the flash at ADDR with FILE
   write FILE ADDR   write FILE at ADDR, then read it back (needs --idcode)

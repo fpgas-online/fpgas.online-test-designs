@@ -10,13 +10,19 @@ import struct
 import sys
 
 import pytest
-from fpgas_online_verify import cli, core, debug, host_tests, idcode, identity
+from fpgas_online_verify import cli, core, debug, host_tests, idcode, identify, identity, testbench
 from fpgas_online_verify.boards import arty, fomu, netv2, tt_fpga
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
 
 PI3 = "Raspberry Pi 3 Model B Plus Rev 1.3"
 PI5 = "Raspberry Pi 5 Model B Rev 1.0"
 ARTY, NETV2, FOMU, TT = arty.BOARD, netv2.BOARD, fomu.BOARD, tt_fpga.BOARD
+
+
+@pytest.fixture(autouse=True)
+def no_rpi_hwid(monkeypatch):
+    """rpi-hwid is not installed unless a test says it is, whatever this machine has on PATH."""
+    monkeypatch.setattr(tt_fpga, "which", lambda name: None)
 
 
 def _host(board, model=PI3, base=0x3F000000):
@@ -60,6 +66,8 @@ class Runner:
                 return answer
         if "--detect" in argv:  # the Arty's JTAG scan
             return 0, ARTY_SCAN
+        if "--read-dna" in argv:
+            return 0, DNA_LINE
         if argv[:2] == ["pinctrl", "get"]:  # every pin an input, pulled down
             return 0, "".join(f"{g}: ip    pd | lo // GPIO{g} = input\n" for g in argv[2].split(","))
         return 0, "ok"
@@ -72,6 +80,8 @@ def _scan(*codes):
 
 
 ARTY_SCAN = _scan(0x0362D093) + "index 0:\n\tidcode 0x362d093\n\tmanufacturer xilinx\n\tfamily artix a7 35t\n"
+DNA = "0x0054b48664b04854"
+DNA_LINE = '{"dna": "0x0054b48664b04854"}\n'  # openFPGALoader --read-dna's output
 
 
 # -- what the boards are ---------------------------------------------------------------------------------
@@ -241,13 +251,15 @@ def test_an_arty_that_passes_loads_each_test_runs_it_and_records_its_flash(tmp_p
     assert [t["test"] for t in report["tests"]] == ["uart", "ddr", "spiflash", "ethernet", "pin-id"]
     images = tmp_path / "images"
     assert run.calls[0] == ["openFPGALoader", "-b", "arty", "--detect", "--verbose-level", "2"]
-    assert run.calls[2] == ["openFPGALoader", "-b", "arty", str(images / "uart-test-arty/digilent_arty.bit")]
+    assert run.calls[1] == ["openFPGALoader", "-b", "arty", "--read-dna"]  # same cable, before anything loads
+    assert run.calls[3] == ["openFPGALoader", "-b", "arty", str(images / "uart-test-arty/digilent_arty.bit")]
     assert run.calls[-1][:5] == ["openFPGALoader", "-b", "arty", "--dump-flash", "--file-size"]
     assert {k: v for k, v in report["jtag"].items() if k != "output"} == {
         "result": "pass", "idcode": "0x0362d093", "idcode_version": 0, "idcode_part_number": "0x362d",
-        "idcode_manufacturer_id": "0x049", "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A35T"}  # fmt: skip
+        "idcode_manufacturer_id": "0x049", "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A35T",
+        "dna": DNA}  # fmt: skip
     sha = hashlib.sha256(flash).hexdigest()
-    assert report["state"] == {"variant": "a7-35", "serial": "210319B", "idcode": "0x0362d093",
+    assert report["state"] == {"variant": "a7-35", "serial": "210319B", "idcode": "0x0362d093", "dna": DNA,
                                "flash_jedec": "0x20ba18",
                                "flash": {"region_bytes": 0x220000, "sha256": sha}}  # fmt: skip
 
@@ -465,7 +477,9 @@ def test_a_netv2_on_a_pi5_loads_with_rp1pio_and_muxes_its_uart(tmp_path):
                          {"images": _install(tmp_path, NETV2)}, runner=run)  # fmt: skip
     assert report["result"] == "pass"
     assert run.calls[0][-3:] == ["--detect", "--verbose-level", "2"] and report["jtag"]["idcode_device"] == "XC7A35T"
-    assert run.calls[2][:3] == ["pinctrl", "set", "14"]
+    assert run.calls[2] == ["openFPGALoader", "-c", "rp1pio", "--pins", "27:22:4:17", "--read-dna"]
+    assert report["jtag"]["dna"] == DNA
+    assert ["pinctrl", "set", "14", "a4"] in run.calls
     assert any(c[:3] == ["openFPGALoader", "-c", "rp1pio"] and c[-1].endswith("kosagi_netv2.bit") for c in run.calls)
 
 
@@ -513,6 +527,134 @@ def test_a_bridge_that_will_not_stop_or_restart_makes_the_check_an_error(tmp_pat
     assert report["services_failed"] == ["fpgas-tt.service was not started again: Unit fpgas-tt.service not found."]
 
 
+# -- the TT FPGA's identity, from rpi-hwid ---------------------------------------------------------------------
+
+TT_FOUND = {"variant": "tt-fpga", "usb": "1-2", "serial": "E661"}
+RPI_HWID_TT = ["/usr/bin/rpi-hwid", "tinytapeout", "--json", "--no-stop-service"]
+# A board as rpi-hwid's tinytapeout_verdict() describes it (src/rpi_hwid/tinytapeout.py, origin/main 310cd23):
+# the TT FPGA demo board, SDK 3.1.0, whose ROM says "FPGA", so chip fpga and no shuttle.
+TT_BOARD = {
+    "kind": "tinytapeout", "usb": "1-2", "usb_serial": "E661", "tty": "/dev/ttyACM0", "shuttle": None,
+    "chip": "fpga", "repo": None, "commit": None, "demoboard": "TTDBv3 [3.2]", "demoboard_version": None,
+    "sdk": "v3.1.0", "machine": "Raspberry Pi Pico2 with RP2350", "mcu": "RP2350", "chip_url": None,
+    "how": "Tiny Tapeout SDK v3.1.0 on Raspberry Pi Pico2 with RP2350 (USB 1-2); chip ROM shuttle=FPGA",
+}  # fmt: skip
+TT_FIELDS = {"mcu": "RP2350", "shuttle": None, "chip": "fpga", "repo": None, "commit": None,
+             "demoboard": "TTDBv3 [3.2]", "demoboard_version": None, "sdk": "v3.1.0"}  # fmt: skip
+
+
+def _rpi_hwid(*boards, rc=0, stderr=""):
+    """`rpi-hwid tinytapeout --json`'s answer: its document (indent 1), then whatever it said on stderr."""
+    doc = {"usb": [], "repl": {}, "boards": list(boards), "summary": []}
+    return "tinytapeout", (rc, json.dumps(doc, indent=1) + "\n" + stderr)
+
+
+def _installed(monkeypatch):
+    monkeypatch.setattr(tt_fpga, "which", lambda name: "/usr/bin/" + name)
+
+
+def _restarted_last(run):
+    stop = run.calls.index(["systemctl", "stop", "fpgas-tt.service"])
+    return stop < len(run.calls) - 1 and run.calls[-1] == ["systemctl", "start", "--no-block", "fpgas-tt.service"]
+
+
+def test_rpi_hwid_reads_the_tt_board_while_the_check_holds_its_port_and_before_any_test(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    events = []
+    run = Runner([_rpi_hwid({**TT_BOARD, "usb_serial": "OTHER", "mcu": "RP2040"}, TT_BOARD,
+                            stderr="warning: something\n")])  # fmt: skip
+    report = _check(TT, tmp_path, TT_FOUND, run, event=lambda stage, d: events.append((stage, d)))
+    assert report["result"] == "pass"
+    # after fpgas-tt.service is stopped, before the first design is loaded; it is started again at the end
+    assert run.calls[2] == RPI_HWID_TT and _restarted_last(run)
+    assert all("rpi-hwid" not in " ".join(c) for c in run.calls[3:])  # once
+    assert report["identity"] == {"board": "tt", "kind": "tt", "variant": "tt-fpga", "serial": "E661", "usb": "1-2",
+                                  "usb_serial": "E661", **TT_FIELDS}  # fmt: skip
+    stage, details = events[0]
+    assert stage == "fpga-board-identified" and details == identity.details(report["identity"])
+    shown = (details["mcu"], details["chip"], details["shuttle"], details["usb_serial"])
+    assert shown == ("RP2350", "fpga", "-", "E661")  # None: read, and there is none
+    assert report["state"] == {"variant": "tt-fpga", "serial": "E661"}  # what `changed` compares is unchanged
+
+
+def test_a_field_rpi_hwid_left_out_stays_out_and_leaves_the_tt_identity_not_whole(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    run = Runner([_rpi_hwid({k: v for k, v in TT_BOARD.items() if k != "sdk"})])
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    assert "sdk" not in report["identity"]  # not read: never null, which would be "read, and there is none"
+    assert all(report["identity"][k] == v for k, v in TT_FIELDS.items() if k != "sdk")
+    assert identify.missing(TT, report["identity"]) == [("sdk", "not read")]
+
+
+def test_without_rpi_hwid_the_tt_fields_are_not_read_and_the_board_does_not_fail(tmp_path):
+    run = Runner()
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    assert report["result"] == "pass" and "reason" not in report
+    assert not any("rpi-hwid" in " ".join(c) for c in run.calls) and _restarted_last(run)
+    assert report["identity"] == {"board": "tt", "kind": "tt", "variant": "tt-fpga", "serial": "E661", "usb": "1-2",
+                                  "usb_serial": "E661", "tinytapeout_note": tt_fpga.NOT_INSTALLED}  # fmt: skip
+    assert tt_fpga.NOT_INSTALLED.startswith("not read: rpi-hwid is not installed")
+
+
+@pytest.mark.parametrize(
+    ("answer", "why"),
+    [
+        ((1, "Traceback (most recent call last):\nOSError: boom\n"), "exited 1: Traceback (most recent call"),
+        (core.Problem("fail", "rpi-hwid did not finish within 60 s: "), "did not finish within 60 s"),
+        ((0, "usage: rpi-hwid\n"), "no JSON document in its output"),
+        ((0, "{not json\n"), "rpi-hwid tinytapeout --json --no-stop-service: "),
+        ((0, '{"boards": "none"}\n'), "its document has no list of boards"),
+        (_rpi_hwid()[1], "did not see the board with USB serial E661"),
+        (_rpi_hwid({**TT_BOARD, "usb_serial": "OTHER"})[1], "did not see the board with USB serial E661"),
+        (_rpi_hwid({"kind": "rp2-micropython", "usb_serial": "E661", "how": "MicroPython RP2; REPL: no answer"})[1],
+         "not a Tiny Tapeout board: MicroPython RP2; REPL: no answer"),
+        (_rpi_hwid({**TT_BOARD, "sdk": 3})[1], "not text: sdk=3"),
+        # null in a field every TT FPGA board has is a read that failed, never "there is none"
+        (_rpi_hwid({**TT_BOARD, "mcu": None})[1], ": rpi-hwid could not read mcu"),
+        (_rpi_hwid({**TT_BOARD, "chip": None, "how": "chip ROM not cached on the board"})[1],
+         ": rpi-hwid could not read chip"),
+        (_rpi_hwid({**TT_BOARD, "demoboard": None})[1], ": rpi-hwid could not read demoboard"),
+        (_rpi_hwid({**TT_BOARD, "sdk": None})[1], ": rpi-hwid could not read sdk"),
+        (_rpi_hwid({**TT_BOARD, "mcu": None, "sdk": None})[1], ": rpi-hwid could not read mcu, sdk"),
+        # an identity field is never present and empty, nullable or not
+        (_rpi_hwid({**TT_BOARD, "sdk": ""})[1], ": empty: sdk"),
+        (_rpi_hwid({**TT_BOARD, "repo": "", "commit": ""})[1], ": empty: repo, commit"),
+    ],
+)  # fmt: skip
+def test_rpi_hwid_that_cannot_say_who_the_tt_board_is_makes_the_check_an_error(tmp_path, monkeypatch, answer, why):
+    _installed(monkeypatch)
+    run = Runner([("tinytapeout", answer)])
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    error = report["identity"]["tinytapeout_error"]
+    assert why in error and error.startswith("rpi-hwid tinytapeout --json --no-stop-service")
+    assert not set(TT_FIELDS) & set(report["identity"]) and report["identity"]["usb_serial"] == "E661"
+    assert report["result"] == "error" and f"tinytapeout_error: {error}" in report["reason"]
+    assert [t["result"] for t in report["tests"]] == ["pass", "pass", "pass"]  # the tests still ran
+    assert _restarted_last(run)
+
+
+def test_rpi_hwid_runs_even_when_the_bridge_would_not_stop_and_a_failing_read_still_restarts_it(tmp_path,
+                                                                                              monkeypatch):  # fmt: skip
+    _installed(monkeypatch)
+    held = "REPL: fpgas-tt.service holds /dev/ttyACM0 and --no-stop-service was given"
+    stuck = Runner([("systemctl stop", (1, "Access denied")),
+                    _rpi_hwid({"kind": "rp2-micropython", "usb_serial": "E661", "how": held})])  # fmt: skip
+    report = _check(TT, tmp_path, TT_FOUND, stuck)
+    assert report["result"] == "error" and "would not stop" in report["reason"]
+    assert "--no-stop-service was given" in report["identity"]["tinytapeout_error"]
+    assert not any(c[:2] == ["systemctl", "start"] for c in stuck.calls)  # never stopped, so never started
+    crashing = Runner([("tinytapeout", core.Problem("error", "rpi-hwid is not installed"))])
+    report = _check(TT, tmp_path, TT_FOUND, crashing)
+    assert report["result"] == "error" and _restarted_last(crashing)
+
+
+def test_the_tt_board_has_usb_serial_whenever_it_has_a_usb_serial():
+    assert identity.base("tt", "tt", TT_FOUND)["usb_serial"] == "E661"
+    assert "usb_serial" not in identity.base("tt", "tt", {"variant": "tt-fpga", "usb": "1-2"})
+    assert "usb_serial" not in identity.base("arty", "arty", ARTY_FOUND)  # only a Tiny Tapeout board's
+    assert TT.port_facts(_host(TT), {"variant": "tt-fpga"}, Runner()) == {}  # nothing to match rpi-hwid's by
+
+
 def test_only_an_acorn_claim_on_a_design_it_cannot_name_is_weak():
     assert all(ACORN.weak({"kind": k}) for k in ("litex-other", "vendor-xdma", "pcileech", "xilinx-xdma", "unknown"))
     assert not ACORN.weak({"kind": "fpgas-online"}) and not ACORN.weak({"kind": "sqrl-factory"})
@@ -542,7 +684,7 @@ def test_an_arty_says_who_it_is_before_its_tests_with_its_whole_idcode(tmp_path)
     assert report["identity"] == {
         "board": "arty", "kind": "arty", "variant": "a7-35", "serial": "210319B", "usb": "1-1",
         "idcode": "0x0362d093", "idcode_version": 0, "idcode_part_number": "0x362d", "idcode_manufacturer_id": "0x049",
-        "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A35T",
+        "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A35T", "dna": DNA,
     }  # fmt: skip
     assert events[0][1] == identity.details(report["identity"])
 
@@ -553,13 +695,114 @@ def test_a_jtag_chain_with_nothing_on_it_is_an_idcode_error(tmp_path):
     assert "idcode" not in report["identity"]
 
 
-def test_a_board_whose_check_stops_before_its_tests_still_says_who_it_is(tmp_path):
+# -- the device DNA --------------------------------------------------------------------------------------------
+
+
+def test_an_arty_with_a_good_dna_has_it_in_its_identity_event_and_state(tmp_path):
     events = []
-    report = _check(TT, tmp_path, {"variant": "tt-fpga", "usb": "1-2", "serial": "E661"}, Runner(), tests=["nope"],
+    run = Runner([("--read-dna", (0, 'Jtag frequency : requested 6.00MHz\n{"dna": "0x54b48664b04854"}\n'))],
+                 flash=b"\0" * ARTY.flash_region["a7-35"])  # fmt: skip
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run, event=lambda stage, d: events.append((stage, d)))
+    assert report["result"] == "pass" and report["jtag"]["result"] == "pass"
+    assert report["jtag"]["dna"] == report["identity"]["dna"] == report["state"]["dna"] == DNA  # 16 digits
+    assert events[0] == ("fpga-board-identified", identity.details(report["identity"]))
+    assert events[0][1]["dna"] == DNA and "dna_error" not in report["identity"]
+    assert [c for c in run.calls if "--read-dna" in c] == [["openFPGALoader", "-b", "arty", "--read-dna"]]
+
+
+@pytest.mark.parametrize("stuck", ["0x0000000000000000", "0x01ffffffffffffff"])
+def test_a_dna_of_all_zeros_or_all_ones_is_no_dna_and_fails_the_board(tmp_path, stuck):
+    run = Runner([("--read-dna", (0, f'{{"dna": "{stuck}"}}\n'))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    reason = f"device DNA over JTAG reads {int(stuck, 16):#x}: the DNA port is not being read"
+    assert report["result"] == "fail" and report["jtag"]["result"] == "fail"
+    assert report["jtag"]["reason"] == report["identity"]["dna_error"] == reason
+    assert report["reason"].startswith(f"jtag fail: {reason}")
+    assert "dna" not in report["identity"] and "dna" not in report["state"]
+    assert report["identity"]["idcode"] == "0x0362d093"  # the IDCODE was read all the same
+
+
+def test_a_dna_read_that_exits_non_zero_fails_the_board_and_says_why(tmp_path):
+    text = "Error: Failed to claim FPGA device: read_dna only supported for 7-series style Xilinx FPGA\n"
+    run = Runner([("--read-dna", (1, text))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    reason = f"openFPGALoader --read-dna read no device DNA (exit 1): {text.strip()}"
+    assert report["result"] == "fail" and report["jtag"]["reason"] == report["identity"]["dna_error"] == reason
+    assert "dna" not in report["state"]
+    # a DNA printed by a run that failed is not trusted, and a run that printed no DNA read none
+    for rc, text in [(1, DNA_LINE), (0, "Jtag frequency : requested 6.00MHz\n")]:
+        run = Runner([("--read-dna", (rc, text))], flash=b"\0" * ARTY.flash_region["a7-35"])
+        report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+        assert report["result"] == "fail" and "dna" not in report["identity"], report["jtag"]
+        assert report["identity"]["dna_error"].startswith(f"openFPGALoader --read-dna read no device DNA (exit {rc})")
+
+
+def test_a_dna_read_that_cannot_run_is_its_problems_result(tmp_path):
+    run = Runner([("--read-dna", core.Problem("error", "openFPGALoader is not installed"))],
+                 flash=b"\0" * ARTY.flash_region["a7-35"])  # fmt: skip
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    assert report["result"] == "error" and report["jtag"]["result"] == "error"
+    assert report["identity"]["dna_error"] == "the device DNA could not be read: openFPGALoader is not installed"
+
+
+@pytest.mark.parametrize(
+    "scan",
+    [(1, "JTAG init failed"), (2, ARTY_SCAN), (0, _scan(0x13631093)), (0, _scan(0x0362D093, 0x0362D093))],
+    ids=["no-chain", "scan-exit", "wrong-part", "two-devices"],
+)
+def test_the_dna_is_not_read_unless_the_scan_found_the_one_fpga_expected(tmp_path, scan):
+    run = Runner([("--detect", scan)], flash=b"\0" * ARTY.flash_region["a7-35"])
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    assert not any("--read-dna" in c for c in run.calls)
+    assert report["jtag"]["result"] == "fail" and report["identity"]["dna_error"] == testbench.DNA_SKIPPED
+    assert "dna" not in report["state"] and "--read-dna" not in report["jtag"]["reason"]  # the scan's reason only
+
+
+def test_the_netv2_reads_its_dna_on_its_scans_pins_and_puts_them_back(tmp_path):
+    run = Runner([("pinctrl get", (0, NETV2_PINS))], flash=b"\0" * NETV2.flash_region["a7-100"])
+    report = _check(NETV2, tmp_path, _netv2_found("0x13631093"), run)
+    assert report["result"] == "pass" and report["identity"]["dna"] == report["state"]["dna"] == DNA
+    read = run.calls.index(["openFPGALoader", "--cable", "libgpiod", "--pins", "27:22:4:17", "--read-dna"])
+    assert run.calls[read - 1] == ["pinctrl", "get", "4,17,27,22"]
+    assert run.calls[read + 1 : read + 5] == [["pinctrl", "set", *g.split()] for g in
+                                              ("4 ip pn", "17 ip pu", "22 ip pd", "27 a3 pn")]  # fmt: skip
+
+
+@pytest.mark.parametrize("problem", [core.Problem("fail", "openFPGALoader did not finish within 60 s: "),
+                                     core.Problem("error", "openFPGALoader is not installed")])  # fmt: skip
+def test_the_netv2_puts_its_pins_back_when_the_dna_read_itself_fails(tmp_path, problem):
+    run = Runner([("pinctrl get", (0, NETV2_PINS)), ("--read-dna", problem)],
+                 flash=b"\0" * NETV2.flash_region["a7-100"])  # fmt: skip
+    report = _check(NETV2, tmp_path, _netv2_found("0x13631093"), run)
+    read = run.calls.index(["openFPGALoader", "--cable", "libgpiod", "--pins", "27:22:4:17", "--read-dna"])
+    assert run.calls[read + 1 : read + 5] == [["pinctrl", "set", *g.split()] for g in
+                                              ("4 ip pn", "17 ip pu", "22 ip pd", "27 a3 pn")]  # fmt: skip
+    assert report["jtag"]["result"] == problem.result and problem.reason in report["identity"]["dna_error"]
+    assert "dna" not in report["state"]
+
+
+def test_the_netv2_dna_is_not_read_when_its_pins_cannot_be_put_back(tmp_path):
+    run = Runner([("pinctrl get", core.Problem("error", "pinctrl is not installed"))],
+                 flash=b"\0" * NETV2.flash_region["a7-100"])  # fmt: skip
+    report = _check(NETV2, tmp_path, _netv2_found("0x13631093"), run)
+    assert not any("--read-dna" in c for c in run.calls)  # nothing driven
+    assert report["jtag"]["result"] == "error" and "pinctrl is not installed" in report["identity"]["dna_error"]
+    run = Runner([("pinctrl set 4", (1, "no such pin"))], flash=b"\0" * NETV2.flash_region["a7-100"])
+    report = _check(NETV2, tmp_path, _netv2_found("0x13631093"), run)
+    assert report["identity"]["dna"] == DNA  # read, but a pin left driven is still an error
+    assert report["jtag"]["result"] == "error" and "could not put GPIO4 back" in report["jtag"]["reason"]
+
+
+def test_a_board_whose_check_stops_before_its_tests_still_says_who_it_is(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    events, run = [], Runner()
+    report = _check(TT, tmp_path, {"variant": "tt-fpga", "usb": "1-2", "serial": "E661"}, run, tests=["nope"],
                     event=lambda stage, d: events.append((stage, d)))  # fmt: skip
     assert report["result"] == "error"
     assert events == [("fpga-board-identified", {"board": "tt", "kind": "tt", "variant": "tt-fpga", "serial": "E661",
-                                                 "usb": "1-2", "schema": "fpga-identity/1"})]  # fmt: skip
+                                                 "usb": "1-2", "usb_serial": "E661",
+                                                 "schema": "fpga-identity/1"})]  # fmt: skip
+    assert run.calls == []  # the port was never taken, so rpi-hwid was not run either
 
 
 # -- the commands and the debug tool ---------------------------------------------------------------------------

@@ -4,7 +4,17 @@ name: "Build: DDR Memory Test"
 on:
   push:
     branches: [main]
+  # A pull request builds this design only when something it is built from changes: its own directory, the
+  # shared gateware, the Python environment, or this file. main always builds.
   pull_request:
+    paths:
+      - "designs/ddr-memory/**"
+      - "designs/_shared/**"
+      # designs/_shared/build_helpers.py checks it exists at import
+      - "scripts/fix_yosys_edif_libref.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/build-ddr-test.yml"
   workflow_dispatch:
 
 # A new push to a pull request cancels that pull request's older, now stale, run.

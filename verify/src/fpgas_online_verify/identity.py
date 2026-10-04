@@ -42,7 +42,12 @@ FIELDS = (
 EXTRA_FIELDS = (
     "board", "variant", "bdf", "usb", "identifier", "build", "flash_size_bytes", "flash_status", "flash_config",
     "flash_quad", "flash_uid_opcode", "idcode_version", "idcode_part_number", "idcode_manufacturer_id",
-    "idcode_manufacturer", "idcode_device",
+    "idcode_manufacturer", "idcode_device", "tinytapeout_error", "tinytapeout_note",
+)  # fmt: skip
+# rpi-hwid's src/rpi_hwid/model.py TinyTapeoutBoard, in its order: a Tiny Tapeout board's fields, as `rpi-hwid
+# tinytapeout --json` reads them (boards/tt_fpga.py). tests/test_identity.py pins this list.
+TINYTAPEOUT_FIELDS = (
+    "usb_serial", "mcu", "shuttle", "chip", "repo", "commit", "demoboard", "demoboard_version", "sdk",
 )  # fmt: skip
 ERROR_SUFFIX = "_error"
 # idcode.decode()'s fields, in this order.
@@ -71,8 +76,8 @@ def dna(value):
 
 def known(key):
     """True for a key the dict may have: a field, or a field's _error."""
-    base = key[: -len(ERROR_SUFFIX)] if key.endswith(ERROR_SUFFIX) and key != "flash_error" else key
-    return base in FIELDS or base in EXTRA_FIELDS
+    fields = (*FIELDS, *EXTRA_FIELDS, *TINYTAPEOUT_FIELDS)
+    return key in fields or (key.endswith(ERROR_SUFFIX) and key[: -len(ERROR_SUFFIX)] in fields)
 
 
 def kind(board_name, found):
@@ -84,7 +89,8 @@ def kind(board_name, found):
 
 def base(board_key, board_name, found, variant=None):
     """What every board's dict starts with: board (the state key), kind, variant, and how it was found,
-    including the IDCODE when finding the board read it (the NeTV2's scan)."""
+    including the IDCODE when finding the board read it (the NeTV2's scan). A Tiny Tapeout board's USB serial is
+    also its usb_serial, the key rpi-hwid and the site know it by."""
     out = {"board": board_key, "kind": kind(board_name, found)}
     variant = variant or found.get("variant")
     if variant:
@@ -92,6 +98,8 @@ def base(board_key, board_name, found, variant=None):
     for key in ("serial", "usb", "bdf"):
         if found.get(key):
             out[key] = found[key]
+    if out["kind"] == "tt" and found.get("serial"):  # rpi-hwid's name for a Tiny Tapeout board's USB serial
+        out["usb_serial"] = found["serial"]
     if found.get("idcode"):
         codes = found.get("idcodes") or [found["idcode"]]
         entry = idcode.decode(int(codes[0], 16)) if len(codes) == 1 else {"idcode": ", ".join(codes)}
@@ -116,9 +124,15 @@ def idcode_fields(entry):
     return {}
 
 
+def dna_fields(entry):
+    """The device DNA from a JTAG entry (testbench.TestBoard.jtag): dna, or dna_error saying why there is none."""
+    return {key: entry[key] for key in ("dna", "dna_error") if key in entry}
+
+
 def flash_fields(ident, source):
     """The flash fields from what spi_flash.Flash.identify() read: all six RDID bytes, the part, its size, the
-    status and configuration registers, and the factory unique ID with how it was read."""
+    status and configuration registers, the factory unique ID with how it was read, and the SFDP revision
+    ("1.6", or "none" when the part answered without the signature) or why it could not be read."""
     rdid = bytes.fromhex(ident["rdid"])
     out = {"flash_jedec": hex_id(int.from_bytes(rdid[:3], "big"), RDID_DIGITS)}
     if len(rdid) >= 6:
@@ -140,6 +154,10 @@ def flash_fields(ident, source):
         out["flash_uid_state"] = "blank" if set(uid) <= {"0"} or set(uid) <= {"f"} else "read"
         if ident.get("unique_id_opcode") is not None:
             out["flash_uid_opcode"] = hex_id(ident["unique_id_opcode"], REGISTER_DIGITS)
+    if ident.get("sfdp"):
+        out["flash_sfdp"] = ident["sfdp"]
+    elif ident.get("sfdp_error"):
+        out["flash_sfdp_error"] = ident["sfdp_error"]
     out["flash_source"] = source
     return out
 
