@@ -70,7 +70,7 @@ printf '#!/bin/sh\necho "$@" >> /tmp/fleet-events\n' > /usr/local/bin/fleet-even
 set +e; fpgas-verify --report /tmp/r3.json 2>/tmp/err3; set -e
 [ ! -e /tmp/fleet-events ] || fail "a host with only the packages published: $(cat /tmp/fleet-events)"
 if grep -q 'could not publish' /tmp/err3; then fail "a host with only the packages tried to publish: $(cat /tmp/err3)"; fi
-grep -q '^  not published: no file in /etc/fpgas-verify says `publish = on`' /tmp/err3 \
+grep -q '^  not published: no file says `publish = on`' /tmp/err3 \
   || fail "the summary does not say nothing was published: $(cat /tmp/err3)"
 python3 -c 'import json; r = json.load(open("/tmp/r3.json")); assert r["publish"]["on"] is False and "no file" in r["publish"]["why"], r'
 mkdir -p /etc/fpgas-verify

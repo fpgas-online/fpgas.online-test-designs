@@ -87,7 +87,7 @@ sudo fpgas-acorn-debug identify            # the same as fpgas-acorn-verify --id
 * Run them with `sudo`; `--help`, `--list` and `fpgas-<board>-debug list` do not need it.
 * Nothing is sent anywhere unless a file says `[verify] publish = on` (next to `fpga-board`, below). A host that
   only has the packages installed publishes nothing, at boot or by hand; its summary says so in one line
-  (`not published: no file in /etc/fpgas-verify says ...`), and there is no error. The
+  (`not published: no file says ...`), and there is no error. The
   fpgas.online Pi root sets it in `/etc/fpgas-verify/fleet.ini`, so a fleet Pi tells its site how the check
   went; there, `--no-publish` is how a run by hand stays private. The transcripts below were taken on fleet
   Pis, which is why they carry it.
@@ -948,7 +948,6 @@ The check tells the site what it is doing as it goes. `fleet-event` (from
 * A failure to send is reported on stderr and does not change the result; the report stays in
   `/run/fpgas-online/verify.json`.
 * Nothing is sent without `publish = on` (above). With it, `--test` runs and `--no-publish` still send nothing.
-* A failure to send can only happen where publishing is on.
 
 The progress events of an Acorn passing every test, in order, with their details (the check run against the
 tests' fake Acorn, [`tests/acorn_fakes.py`](../tests/acorn_fakes.py); the last 12 are cut):

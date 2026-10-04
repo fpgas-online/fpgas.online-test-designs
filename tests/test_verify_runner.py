@@ -630,7 +630,10 @@ def test_a_host_that_only_has_the_packages_publishes_nothing(opts, tmp_path, mon
     assert rc == 0 and report["result"] == "pass" and sent == []
     assert report["publish"] == {"on": False, "why": runner.NO_FILE}
     err = capsys.readouterr().err
-    assert "  not published: no file in /etc/fpgas-verify says `publish = on`" in err and "could not" not in err
+    assert (
+        "  not published: no file says `publish = on` (the fpgas.online Pi root has /etc/" in err
+        and "could not" not in err
+    )
 
 
 def test_the_fleets_root_turns_publishing_on(opts, tmp_path, monkeypatch):
@@ -650,6 +653,21 @@ def test_a_publish_setting_that_is_neither_on_nor_off_fails_loudly_and_sends_not
     assert rc == 1 and report["result"] == "error" and sent == []
     assert "publish is 'maybe'; it is `on` or `off`" in report["reason"]
     assert report["publish"] == {"on": False, "why": "the setting could not be read"}
+
+
+def test_no_publish_does_not_read_the_setting_so_a_bad_one_does_not_stop_a_private_run(opts, tmp_path, monkeypatch):
+    monkeypatch.setattr(runner, "installed", lambda: _boards(Fake("arty", seen=[{"variant": "a7-35"}])))
+    monkeypatch.setattr(runner, "usb_devices", lambda: [])
+    monkeypatch.setattr(runner, "pci_devices", lambda: [])
+    sent = []
+    monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append(stage) or True)
+    admin = tmp_path / "etc"
+    admin.mkdir()
+    (admin / "fleet.ini").write_text("[verify]\npublish = maybe\n")
+    out = tmp_path / "r.json"
+    asked = {**opts, "board": "arty", "report": str(out), "admin_dir": admin, "mode_dir": tmp_path / "none"}
+    assert runner.run(asked) == 0 and sent == []
+    assert json.loads(out.read_text())["publish"] == {"on": False, "why": "--no-publish"}
 
 
 INFRA_FLEET_INI = pathlib.Path(__file__).parent / "data" / "infra-fleet.ini"

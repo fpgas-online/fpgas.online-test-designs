@@ -408,7 +408,8 @@ def start_services(units):
     return failed
 
 
-NO_FILE = f"no file in {config.ADMIN_DIR} says `{config.PUBLISH} = on` (the fpgas.online Pi root has one)"
+# Which directories were read is the caller's business (config.publish); the fleet's file is named as the example.
+NO_FILE = f"no file says `{config.PUBLISH} = on` (the fpgas.online Pi root has {config.ADMIN_DIR}/fleet.ini)"
 
 
 def run(options, prog="fpgas-verify"):
