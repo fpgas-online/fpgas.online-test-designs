@@ -238,11 +238,15 @@ def test_a_straight_through_arty_passes_and_welland_p12_as_cabled_fails():
     assert not any(r["ok"] for r in rows)
 
 
-def test_a_tt_cabled_as_documented_passes_and_welland_as_cabled_fails():
-    assert ident.evaluate_board("tt", _decoded("tt"))[0]
-    # pi-sw2-p33/p35/p36, 2026-09-29: ui_in on HAT JA and uo_out on HAT JC (the doc has them the other way).
+def test_a_tt_cabled_as_the_fleet_passes_and_ja_jc_swapped_fails():
+    # pi-sw2-p33/p35/p36, 2026-09-29 and 2026-10-04: ui_in on HAT JA, uio on JB, uo_out on JC.
     welland = {8: "13", 19: "23", 21: "25", 20: "26", 18: "27", 7: "2", 26: "9", 13: "10", 3: "11", 2: "12",
                16: "38", 14: "42", 15: "43", 17: "44", 4: "45", 12: "46", 5: "47", 6: "48"}  # fmt: skip
-    all_ok, rows = ident.evaluate_board("tt", welland)
+    assert welland == _decoded("tt")
+    assert ident.evaluate_board("tt", welland)[0]
+    # The JA and JC ribbons swapped (uo_out on JA, ui_in on JC): only uio on JB still matches.
+    swapped = {8: "38", 19: "45", 21: "46", 20: "47", 18: "48", 7: "2", 26: "9", 13: "10", 3: "11", 2: "12",
+               16: "13", 14: "19", 15: "18", 17: "21", 4: "23", 12: "25", 5: "26", 6: "27"}  # fmt: skip
+    all_ok, rows = ident.evaluate_board("tt", swapped)
     assert not all_ok
-    assert [r["gpio"] for r in rows if r["ok"]] == [7, 26, 13, 3, 2]  # uio on JB matches
+    assert [r["gpio"] for r in rows if r["ok"]] == [7, 26, 13, 3, 2]

@@ -117,7 +117,7 @@ class TTFPGA(TestBoard):
     # Run in this order, and the board is left with the last design loaded (testbench.py): the pin-ID scan
     # comes first, so a UART-bridge design (one TX pin) is what stays, not one driving every Pmod line.
     tests: ClassVar[dict] = {
-        # The Pmod HAT cabling, against identify_pmod_pins.BOARDS["tt"] (uo_out on HAT JA, uio JB, ui_in JC).
+        # The Pmod HAT cabling, against identify_pmod_pins.BOARDS["tt"] (ui_in on HAT JA, uio JB, uo_out JC).
         "pin-id": {"artifact": "pmod-pin-id-{v}/tt_fpga_platform.bin", "script": "identify_pmod_pins.py",
                    "args": ["--board", "tt"], "pre": PMOD_PRE, "program_args": ["--gpio-release"],
                    "verify": True},
