@@ -26,7 +26,7 @@ read; and the FPGA is never reconfigured.
 
 Opt-in (`power-cycle-check = on`, config.py; off outside the fpgas.online fleet), after pcie-bar0:
 
-  power-cycle  the FPGA was configured since the last check (check.power_cycle_verdict): the ctrl scratch
+  power-cycle  the FPGA restarted since the last check (check.power_cycle_verdict): the ctrl scratch
                register holds its reset value, or this boot's marker. The marker is written at the end of
                the check, the only write that is not put back.
 
@@ -269,7 +269,7 @@ class _Suite:
                              self.options.get("settle"))  # fmt: skip
 
     def power_cycle(self):
-        """Opt-in: the FPGA was configured since the last check (check.power_cycle_verdict). Read only; the
+        """Opt-in: the FPGA restarted since the last check (check.power_cycle_verdict). Read only; the
         marker is written at the end of the check (_mark), after the scratch test has put the register back."""
         marker = check.boot_marker(self.options.get("boot_id") or check.boot_id())
         fault, found = check.power_cycle_verdict(self.bus.read(self.csrs.addr("ctrl_scratch")), marker)
@@ -392,7 +392,9 @@ class _Suite:
 
     def check(self):
         unknown = [t for t in self.wanted if t not in self.tests]
-        if POWER_CYCLE in unknown:  # asked for by name with the setting off: say how to switch it on
+        opt_in = POWER_CYCLE in unknown  # asked for by name with the setting off: say how to switch it on
+        unknown = [t for t in unknown if t != POWER_CYCLE]
+        if opt_in and not unknown:
             raise Problem("error", OPT_IN)
         if unknown:
             raise Problem("error", f"the Acorn has no test {', '.join(unknown)} (it has {', '.join(self.tests)})")

@@ -641,7 +641,7 @@ From a checkout, the check reads them from the repository.
 | `p2-serial` | BAR0 and the Pi's GPIO | J2/K2, borrowed from the UART by the `p2_serial` switch, carry 0 and 1 both ways; the switch goes back to serial by itself; the UARTBone then answers with BAR0's identifier |
 | `scratch` | BAR0 and P2 | the `ctrl` scratch register holds two patterns written over each bridge; its value is put back |
 | `p2-gpio` | BAR0 and the Pi's GPIO | Pi 5 setup only: J5/H5 carry 0 and 1 both ways, FPGA to Pi and Pi to FPGA |
-| `power-cycle` (opt-in, after `pcie-bar0`) | BAR0 | the FPGA was configured since the last check: see below |
+| `power-cycle` (opt-in, after `pcie-bar0`) | BAR0 | the FPGA restarted since the last check: see below |
 
 #### The Acorn's power-cycle check (opt-in)
 
@@ -650,8 +650,8 @@ A board is to be tested as its flash configures it. If the FPGA kept its configu
 before, a visitor's design included. With `power-cycle-check = on` the board fails in that case:
 
 ```text
-power-cycle fail: the FPGA has not been configured since an earlier boot's check (scratch is 0x…, neither its
-value after configuration nor this boot's marker): it was not power-cycled with the Pi. Power-cycle the Pi
+power-cycle fail: the FPGA has not restarted since an earlier boot's check (scratch is 0x…, neither its
+value after configuration nor this boot's marker): it did not restart with the Pi. Power-cycle the Pi
 ```
 
 How it tells, on the SoC the boards run (it has no uptime counter): the `ctrl` scratch register holds
@@ -660,20 +660,20 @@ ends by leaving a marker there, 32 bits of a hash of the kernel's boot id. At th
 
 | Scratch holds | Means | Result |
 |---|---|---|
-| `0x12345678` | the FPGA was configured since the last check | pass |
+| `0x12345678` | the FPGA was configured, or its SoC reset, since the last check | pass |
 | this boot's marker | the check already ran in this boot (an operator running it again) | pass |
 | anything else | the card kept its configuration across the Pi's restart, or something else wrote the register | fail |
 
-A board that fails is left as it was found, so it fails again until it is power-cycled. `--test scratch` on its
-own leaves no marker. The report says when the check was on: `"power_cycle_check": {"on": true, "configured_by":
+A board that fails is left as it was found, so it fails again until the card restarts (a power cycle does it).
+`--test scratch` on its own leaves no marker; `--test power-cycle`, when it passes, does leave it. The report says when the check was on: `"power_cycle_check": {"on": true, "configured_by":
 "/etc/fpgas-verify/…ini"}`.
 
 **What a restart of the Pi does to the card depends on the setup, so the check is opt-in.** Measured on
 5 Oct 2026 on a Pi 5 with the PCIe HAT (the Acorn with DNA `0x0054b48664b04854`): after a plain `systemctl
-reboot` the scratch register was back at `0x12345678`, so the FPGA had returned to its configured state and the
-check passed, as it does after a PoE power cycle. The Compute Module setup has not been measured. Switch the
-check on only for a setup where a restart of the Pi is known to do that; where it does not, every board fails
-after a restart. Outside the fleet nothing says how a host is restarted, which is why it is off by default.
+reboot` the scratch register read `0x12345678` again and the check passed, and the same after a PoE power cycle.
+That is one board; whether the soft reboot reloads the FPGA from its flash or only resets the SoC was not
+established, and the Compute Module setup has not been measured. Where a restart of the Pi does not reach the
+card, every board fails after a restart, so switch the check on only for a setup that has been measured. Outside the fleet nothing says how a host is restarted, which is why it is off by default.
 
 Two limits. A reset of the SoC (a write to `ctrl_reset`) also returns the register to `0x12345678`, and the
 check cannot tell that from configuration. And anyone with root on the Pi can write the register; the check is
@@ -831,7 +831,7 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 | `missing`: `none of the installed boards … was found` | nothing attached. Expected on a Pi with no FPGA, and still a fail |
 | `error`: `… is not installed` | a tool is missing: `mpremote` (bookworm: bookworm-backports), openocd, openFPGALoader |
 | `error`: `no FPGA board is configured` / `conflicting fpga-board settings` | install one board's package, or fix `/etc/fpgas-verify/*.ini` |
-| `fail`: `power-cycle fail: the FPGA has not been configured since an earlier boot's check` | the Acorn kept its configuration across the Pi's restart: power-cycle the Pi (PoE), do not reboot it. [The power-cycle check](#the-acorns-power-cycle-check-opt-in) |
+| `fail`: `power-cycle fail: the FPGA has not restarted since an earlier boot's check` | the Acorn kept its configuration across the Pi's restart (not seen after a soft reboot on the one Pi 5 measured): power-cycle the Pi (PoE). [The power-cycle check](#the-acorns-power-cycle-check-opt-in) |
 | `error`: `power-cycle-check is '…'; it is on or off` / `conflicting power-cycle-check settings` | fix `/etc/fpgas-verify/*.ini` |
 | `error`: `… does not match its manifest` / `manifest.json is missing` | `sudo apt install --reinstall fpgas-online-<board>-bitstreams` |
 | `fail`: `loading it failed (exit N)` | the programmer could not load the design: JTAG wiring, cable, or programmer support |

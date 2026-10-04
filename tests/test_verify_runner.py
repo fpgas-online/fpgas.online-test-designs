@@ -16,6 +16,8 @@ import subprocess
 import pytest
 from fpgas_online_verify import config, core, identity, runner, state
 from fpgas_online_verify.board import Board, installed
+from fpgas_online_verify.boards.acorn import BOARD as ACORN
+from fpgas_online_verify.boards.acorn import suite as acorn_suite
 from fpgas_online_verify.core import Problem
 
 
@@ -512,6 +514,30 @@ def test_a_board_named_on_the_command_line_still_gets_the_setting(opts, tmp_path
     (admin / "fleet.ini").write_text("[verify]\npower-cycle-check = on\n")
     board = _Asked("arty", seen=[{"variant": "a7-35", "serial": "1"}])
     runner.verify({**opts, "board": "arty", "mode_dir": mode, "admin_dir": admin}, _boards(board), usb=[], pci=[])
+    assert board.options["power_cycle_check"] is True
+
+
+class _OptIn(WithTests):
+    """Like the Acorn: lists its opt-in test with the others, and its check refuses it while the setting is off."""
+
+    def check(self, host, found, options):
+        if "power-cycle" in (options.get("tests") or ()) and not options.get("power_cycle_check"):
+            raise Problem("error", acorn_suite.OPT_IN)
+        return super().check(host, found, options)
+
+
+@pytest.mark.parametrize("named", [{}, {"board": "acorn"}])  # found by `fpga-board = auto`, or named
+def test_the_opt_in_test_can_be_asked_for_by_name_and_is_an_error_while_the_setting_is_off(opts, tmp_path, named):
+    mode, admin = _dirs(tmp_path)
+    assert "power-cycle" in ACORN.tests
+    board = _OptIn("acorn", ACORN.tests, seen=[{"variant": "cle-215+", "serial": "1"}])
+    asked = {**opts, **named, "tests": ["power-cycle"], "mode_dir": mode, "admin_dir": admin}
+    report = runner.verify(asked, _boards(board), usb=[], pci=[])
+    assert report["result"] == "error" and core.exit_code(report["result"]) == 1
+    assert "opt-in: set `power-cycle-check = on`" in json.dumps(report) and board.options is None
+    (admin / "fleet.ini").write_text("[verify]\npower-cycle-check = on\n")
+    report = runner.verify(asked, _boards(board), usb=[], pci=[])
+    assert report["result"] == "pass" and board.options["tests"] == ["power-cycle"]
     assert board.options["power_cycle_check"] is True
 
 

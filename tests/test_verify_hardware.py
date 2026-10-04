@@ -12,15 +12,9 @@ _spec.loader.exec_module(vh)
 def test_gateway_host_uses_proxyjump_and_login_user():
     cmd = vh._build_ssh_cmd("welland-sw2-p29", "echo ok", as_root=False)
     assert cmd == [
-        "ssh",
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        "ConnectTimeout=15",
-        "-o",
-        "ProxyJump=pi@tweed.welland.mithis.com",
-        "pi@10.21.2.29",
-        "echo ok",
+        "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15",
+        "-o", "ProxyJump=pi@tweed.welland.mithis.com",
+        "pi@10.21.2.29", "echo ok",
     ]
 
 
@@ -51,14 +45,8 @@ def test_remote_home_follows_login_user():
 def test_poe_snmp_cmd_builds_admin_enable_write():
     off = vh.poe_snmp_cmd("welland-sw2-p29", enable=False, community="secret")
     assert off == [
-        "snmpset",
-        "-v2c",
-        "-c",
-        "secret",
-        "10.1.5.11",
-        "1.3.6.1.2.1.105.1.1.1.3.1.29",
-        "i",
-        "2",
+        "snmpset", "-v2c", "-c", "secret", "10.1.5.11",
+        "1.3.6.1.2.1.105.1.1.1.3.1.29", "i", "2",
     ]
     on = vh.poe_snmp_cmd("welland-sw2-p29", enable=True, community="secret")
     assert on[-1] == "1"
@@ -66,7 +54,6 @@ def test_poe_snmp_cmd_builds_admin_enable_write():
 
 def test_poe_snmp_cmd_rejects_host_without_poe_info():
     import pytest
-
     with pytest.raises(KeyError):
         vh.poe_snmp_cmd("welland-pi3", enable=False, community="secret")
 
@@ -116,7 +103,6 @@ def test_arty_artifacts_match_ci_upload_names():
 
 def test_cli_repeat_and_dry_run_flags_exist():
     import argparse
-
     parser = vh.build_arg_parser()
     assert isinstance(parser, argparse.ArgumentParser)
     args = parser.parse_args(["--repeat", "3", "--dry-run", "--host", "welland-sw2-p46"])

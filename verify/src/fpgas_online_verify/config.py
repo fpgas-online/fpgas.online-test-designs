@@ -56,9 +56,9 @@ def power_cycle_check(mode_dir=MODE_DIR, admin_dir=ADMIN_DIR):
     """(whether the opt-in power-cycle check is on, the file that says so or None): `[verify] power-cycle-check
     = on|off` in the same files as `fpga-board`, the admin's directory first. Off when no file says.
 
-    The check fails a board whose FPGA was not configured since the last check, that is, one that was not
-    power-cycled with its Pi. That only makes sense where every restart of the host is a power cycle, as on the
-    fpgas.online fleet, whose root turns it on in /etc/fpgas-verify; elsewhere it stays off."""
+    The check fails a board whose FPGA has not restarted since the last check, that is, one that did not
+    restart with its Pi. That only makes sense where a restart of the host is known to restart the card, as on
+    the fpgas.online fleet, whose root turns it on in /etc/fpgas-verify; elsewhere it stays off."""
     for directory in (admin_dir, mode_dir):
         value, path = _setting(directory, POWER_CYCLE_CHECK)
         if value is None:

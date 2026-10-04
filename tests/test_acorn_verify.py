@@ -930,14 +930,14 @@ def test_a_second_check_in_the_same_boot_passes(tmp_path, images):
 
 
 def test_a_card_that_kept_its_configuration_across_the_pis_restart_fails(tmp_path, images):
-    """The Pi restarted (a new boot id) and the FPGA did not: a soft reboot, power from another source, or a
-    power-off too short to drop the card. Whatever a visitor left in it is still there."""
+    """The Pi restarted (a new boot id) and the FPGA did not: power from another source, a restart that does
+    not reach the card, or a power-off too short to drop it. Whatever a visitor left in it is still there."""
     rig = Rig(tmp_path, images)
     _power(rig, BOOT_A)
     report = _power(rig, BOOT_B)
     assert report["result"] == "fail" and _results(report)["power-cycle"] == "fail"
-    assert "the FPGA has not been configured since an earlier boot's check" in report["reason"]
-    assert "not power-cycled with the Pi" in report["reason"]
+    assert "the FPGA has not restarted since an earlier boot's check" in report["reason"]
+    assert "did not restart with the Pi" in report["reason"]
     assert rig.soc.scratch == av.boot_marker(BOOT_A)  # left as found: the next check fails too, until a power cycle
 
 
@@ -993,6 +993,8 @@ def test_power_cycle_can_be_asked_for_by_name_when_it_is_on_and_says_so_when_it_
     assert _results(report) == {"power-cycle": "pass"} and rig.soc.scratch == av.boot_marker(BOOT_A)
     with pytest.raises(core.Problem, match="opt-in: set `power-cycle-check = on`"):
         Rig(tmp_path / "off", images).check(tests=["power-cycle"])
+    with pytest.raises(core.Problem, match="the Acorn has no test bogus"):  # a wrong name is named first
+        Rig(tmp_path / "bogus", images).check(tests=["power-cycle", "bogus"])
 
 
 def test_identify_never_runs_or_marks_the_power_cycle_check(tmp_path, images):

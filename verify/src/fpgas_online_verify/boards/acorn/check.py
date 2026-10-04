@@ -413,11 +413,11 @@ def xadc_faults(xadc, ranges, where):
 #
 # On the fleet a board is to be tested as its flash configures it, so a card that kept its configuration while
 # its Pi restarted (power from another source, a restart that does not reach the card) fails. Whether a restart
-# reaches the card depends on the setup: on a Pi 5 with the PCIe HAT a soft reboot was seen to bring the FPGA
-# back to its configured state (2026-10-05, the board with DNA 0x0054b48664b04854), so there the check passes
+# reaches the card depends on the setup: on a Pi 5 with the PCIe HAT the scratch register read its reset value
+# after a soft reboot (2026-10-05, the one board measured, DNA 0x0054b48664b04854), so there the check passes
 # after a soft reboot as after a power cycle. The deployed SoC has no uptime counter, so the check uses the ctrl
-# scratch register: it is SCRATCH_RESET after configuration (and after a reset of the SoC, which the check
-# cannot tell from configuration), and the check leaves this boot's marker there when it has run.
+# scratch register: it is SCRATCH_RESET after configuration and after a reset of the SoC (the check cannot tell
+# the two apart: either way the card restarted), and the check leaves this boot's marker there when it has run.
 
 
 def boot_id(path=BOOT_ID):
@@ -440,12 +440,12 @@ def power_cycle_verdict(value, marker):
     if value == SCRATCH_RESET:
         return (
             None,
-            f"scratch is {value:#010x}, its value after configuration: the FPGA was configured since the last check",
+            f"scratch is {value:#010x}, its value after configuration: the FPGA restarted since the last check",
         )
     if value == marker:
         return None, f"scratch is {value:#010x}, this boot's marker: already checked in this boot"
-    return (f"the FPGA has not been configured since an earlier boot's check (scratch is {value:#010x}, neither "
-            f"its value after configuration nor this boot's marker): it was not power-cycled with the Pi. "
+    return (f"the FPGA has not restarted since an earlier boot's check (scratch is {value:#010x}, neither its "
+            f"value after configuration nor this boot's marker): it did not restart with the Pi. "
             "Power-cycle the Pi"), None  # fmt: skip
 
 
