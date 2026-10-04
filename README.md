@@ -76,7 +76,7 @@ and the current results on the Welland Pis.
 | [Ethernet](docs/tests/ethernet.md) | Yes | Yes | — | — | — | — | — |
 | [PCIe Enumeration](docs/tests/pcie-enumeration.md) | — | Yes | — | — | Yes | — | — |
 | [DDR Memory](docs/tests/ddr-memory.md) | Yes | Yes | — | — | Yes | — | — |
-| [SPI Flash ID](docs/tests/spi-flash-id.md) | Yes | Yes | Yes | Yes | Yes | — | — |
+| [SPI Flash ID](docs/tests/spi-flash-id.md) | Yes | Yes | Yes | — | Yes | — | — |
 
 See [docs/tests/](docs/tests/) for detailed test specifications.
 

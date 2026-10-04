@@ -525,16 +525,17 @@ def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_rea
     ]
     assert run.calls[-1] == ["systemctl", "start", "--no-block", "fpgas-tt.service"]
     assert report["services_stopped"] == ["fpgas-tt.service"]
-    # the pin-ID scan loads its design itself and runs first; the bridge loads the UART and SPI-flash designs,
+    # the pin-ID scan loads its design itself and runs first; the bridge loads the UART design,
     # so the last design left on the board is one with a single TX pin, not one driving every Pmod line
-    assert [t["test"] for t in report["tests"]] == ["pin-id", "uart", "spiflash"]
+    assert [t["test"] for t in report["tests"]] == ["pin-id", "uart"]
     (load,) = [c for c in run.calls if "tt_fpga_program.py" in " ".join(c)]
     assert load[3].endswith("pmod-pin-id-tt-fpga/tt_fpga_platform.bin") and load[4:] == ["--gpio-release"]
     bridged = [c for c in run.calls if "tt_test_wrapper.py" in " ".join(c)]
-    assert [c[3].rsplit("/", 2)[-2] for c in bridged] == ["uart-test-tt-fpga", "spiflash-test-tt-fpga"]
+    assert [c[3].rsplit("/", 2)[-2] for c in bridged] == ["uart-test-tt-fpga"]
     assert bridged[0][2] == "/dev/ttyACM0" and bridged[0][5].endswith("test_uart.py")
     assert run.calls.index(load) < run.calls.index(bridged[0])
-    assert report["state"] == {"variant": "tt-fpga", "serial": "E6"} and "rewrites" in report["flash_note"]
+    assert report["state"] == {"variant": "tt-fpga", "serial": "E6"}
+    assert report["flash_note"].startswith("none: the FPGA breakout has no SPI flash")
 
 
 def test_a_stopped_bridge_is_left_stopped_and_a_failed_test_still_restarts_a_running_one(tmp_path):
@@ -660,7 +661,7 @@ def test_rpi_hwid_that_cannot_say_who_the_tt_board_is_makes_the_check_an_error(t
     assert why in error and error.startswith("rpi-hwid tinytapeout --json --no-stop-service")
     assert not set(TT_FIELDS) & set(report["identity"]) and report["identity"]["usb_serial"] == "E661"
     assert report["result"] == "error" and f"tinytapeout_error: {error}" in report["reason"]
-    assert [t["result"] for t in report["tests"]] == ["pass", "pass", "pass"]  # the tests still ran
+    assert [t["result"] for t in report["tests"]] == ["pass", "pass"]  # the tests still ran
     assert _restarted_last(run)
 
 
