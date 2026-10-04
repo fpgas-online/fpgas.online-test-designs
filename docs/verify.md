@@ -86,7 +86,8 @@ sudo fpgas-acorn-debug identify            # the same as fpgas-acorn-verify --id
 
 * Run them with `sudo`; `--help`, `--list` and `fpgas-<board>-debug list` do not need it.
 * Nothing is sent anywhere unless a file says `[verify] publish = on` (next to `fpga-board`, below). A host that
-  only has the packages installed publishes nothing, at boot or by hand, and says nothing about it. The
+  only has the packages installed publishes nothing, at boot or by hand; its summary says so in one line
+  (`not published: no file in /etc/fpgas-verify says ...`), and there is no error. The
   fpgas.online Pi root sets it in `/etc/fpgas-verify/fleet.ini`, so a fleet Pi tells its site how the check
   went; there, `--no-publish` is how a run by hand stays private. The transcripts below were taken on fleet
   Pis, which is why they carry it.
@@ -104,8 +105,11 @@ sudo fpgas-acorn-debug identify            # the same as fpgas-acorn-verify --id
   package puts one in `/usr/share/fpgas-online/verify/mode.d/`; one in `/etc/fpgas-verify/` overrides it.
 * `[verify] publish = on` in the same files makes the check tell the fleet how it went ([events](#events)). It
   is off unless a file says so; a value that is neither `on` nor `off`, or two files that disagree, is an
-  error and nothing is sent. The report says when it was on: `"publish": {"on": true, "configured_by":
-  "/etc/fpgas-verify/fleet.ini"}`.
+  error and nothing is sent. Accepted values are `on`, `yes`, `true`, `1` and `off`, `no`, `false`, `0`, as for `power-cycle-check`.
+  Every report and summary says whether the run was published and why: `"publish": {"on": true,
+  "configured_by": "/etc/fpgas-verify/fleet.ini"}` and `published to the fleet: ...`, or `"publish": {"on":
+  false, "why": "..."}` and `not published: ...`. On a fleet Pi, `not published: no file ...` in
+  `journalctl -b -u fpgas-verify` means the root lost its `fleet.ini`.
 * `[verify] power-cycle-check = on` in the same files switches on the Acorn's [power-cycle
   check](#the-acorns-power-cycle-check-opt-in). It is off unless a file says so: the fpgas.online Pi root sets it
   in `/etc/fpgas-verify/`; elsewhere it stays off.

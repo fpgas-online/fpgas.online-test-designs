@@ -10,6 +10,7 @@
 
 import json
 import os
+import pathlib
 import stat
 import subprocess
 
@@ -626,8 +627,10 @@ def _run_arty(opts, tmp_path, monkeypatch, admin_text=None, mode_text=None):
 def test_a_host_that_only_has_the_packages_publishes_nothing(opts, tmp_path, monkeypatch, capsys):
     """No file says `publish = on`: nothing is sent, at boot or by hand, and nothing is said about it."""
     rc, report, sent = _run_arty(opts, tmp_path, monkeypatch)
-    assert rc == 0 and report["result"] == "pass" and sent == [] and "publish" not in report
-    assert "publish" not in capsys.readouterr().err
+    assert rc == 0 and report["result"] == "pass" and sent == []
+    assert report["publish"] == {"on": False, "why": runner.NO_FILE}
+    err = capsys.readouterr().err
+    assert "  not published: no file in /etc/fpgas-verify says `publish = on`" in err and "could not" not in err
 
 
 def test_the_fleets_root_turns_publishing_on(opts, tmp_path, monkeypatch):
@@ -638,13 +641,35 @@ def test_the_fleets_root_turns_publishing_on(opts, tmp_path, monkeypatch):
 
 def test_etc_can_turn_publishing_off_again(opts, tmp_path, monkeypatch):
     rc, report, sent = _run_arty(opts, tmp_path, monkeypatch, admin_text="publish = off\n", mode_text="publish = on\n")
-    assert rc == 0 and sent == [] and "publish" not in report
+    assert rc == 0 and sent == []
+    assert report["publish"] == {"on": False, "configured_by": str(tmp_path / "etc" / "fleet.ini")}
 
 
 def test_a_publish_setting_that_is_neither_on_nor_off_fails_loudly_and_sends_nothing(opts, tmp_path, monkeypatch):
     rc, report, sent = _run_arty(opts, tmp_path, monkeypatch, admin_text="publish = maybe\n")
     assert rc == 1 and report["result"] == "error" and sent == []
     assert "publish is 'maybe'; it is `on` or `off`" in report["reason"]
+    assert report["publish"] == {"on": False, "why": "the setting could not be read"}
+
+
+INFRA_FLEET_INI = pathlib.Path(__file__).parent / "data" / "infra-fleet.ini"
+
+
+def test_the_file_the_fleets_root_carries_turns_publishing_on(opts, tmp_path, monkeypatch, capsys):
+    """tests/data/infra-fleet.ini is a copy of what fpgas.online-infra writes to /etc/fpgas-verify/fleet.ini in
+    the Pi root: ansible/roles/onpi/files/etc/fpgas-verify/fleet.ini, copied by roles/onpi/tasks/fpga_verify.yml
+    (infra PR #225). The section, the key and its value are an agreement between the two repositories: rename
+    one here and this fails, instead of every board on the fleet going quiet. Change both together."""
+    text = INFRA_FLEET_INI.read_text()
+    assert "[verify]" in text and "publish = on" in text.splitlines()
+    admin = tmp_path / "root-etc"
+    admin.mkdir()
+    (admin / "fleet.ini").write_text(text)
+    assert config.publish(tmp_path / "no-mode.d", admin) == (True, admin / "fleet.ini")
+    assert config.PUBLISH == "publish" and "on" in config.ON
+    rc, report, sent = _run_arty(opts, tmp_path, monkeypatch, admin_text=text.split("[verify]\n", 1)[1])
+    assert rc == 0 and sent[0] == "fpga-verifying" and sent[-1] == "fpga-verified" and report["publish"]["on"]
+    assert "  published to the fleet: `publish = on` in " in capsys.readouterr().err
 
 
 def test_the_publish_setting_reads_like_the_others(tmp_path):

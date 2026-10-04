@@ -316,6 +316,10 @@ def summary(report):
     lines.append(f"fpgas-verify: {report['result']} (mode {report.get('mode', '-')}, {report.get('chosen_by', '-')})")
     if "reason" in report:
         lines.append(f"  {report['reason']}")
+    if "publish" in report:
+        pub = report["publish"]
+        by = f"`{config.PUBLISH} = {'on' if pub['on'] else 'off'}` in {pub.get('configured_by')}"
+        lines.append(f"  published to the fleet: {by}" if pub["on"] else f"  not published: {pub.get('why') or by}")
     if report.get("not_checked"):
         lines.append(f"  not checked (none of the tests asked for): {', '.join(report['not_checked'])}")
     for b in report["boards"]:
@@ -404,6 +408,9 @@ def start_services(units):
     return failed
 
 
+NO_FILE = f"no file in {config.ADMIN_DIR} says `{config.PUBLISH} = on` (the fpgas.online Pi root has one)"
+
+
 def run(options, prog="fpgas-verify"):
     if options.get("tests"):
         # Part of the check is not the board's verified result: never published (the site would offer a board
@@ -412,13 +419,19 @@ def run(options, prog="fpgas-verify"):
     kept_in = options.get("report") or str(REPORT)
     # Nothing is sent unless a file says `publish = on` (config.py: the fleet's Pi root does); --no-publish and
     # --test send nothing even then. A setting that cannot be read is the run's result, and is not published.
-    publishing, said_by, unreadable = False, None, None
-    if not options.get("no_publish"):
+    # Every report and summary says which, and why: a fleet root that lost its file shows in one look at a board.
+    publishing, unreadable = False, None
+    if options.get("tests"):
+        published = {"on": False, "why": "--test runs part of the check"}
+    elif options.get("no_publish"):
+        published = {"on": False, "why": "--no-publish"}
+    else:
         try:
             publishing, said_by = config.publish(options.get("mode_dir", config.MODE_DIR),
                                                  options.get("admin_dir", config.ADMIN_DIR))  # fmt: skip
+            published = {"on": publishing, "configured_by": str(said_by)} if said_by else {"on": False, "why": NO_FILE}
         except Problem as p:
-            unreadable = p
+            unreadable, published = p, {"on": False, "why": "the setting could not be read"}
     if publishing:
         # The site hears the check has started, and says the board is being verified until the result follows.
         working = publish("fpga-verifying", {"started_at": _now()}, prog=prog, timeout=EVENT_TIMEOUT)
@@ -438,8 +451,7 @@ def run(options, prog="fpgas-verify"):
         except Exception as e:  # whatever went wrong, the site still hears a result, and the report says why
             report = {"schema_version": SCHEMA_VERSION, "result": "error", "checked_at": _now(), "boards": [],
                       "reason": f"fpgas-verify crashed: {type(e).__name__}: {e}"}  # fmt: skip
-        if publishing:
-            report["publish"] = {"on": True, "configured_by": str(said_by)}
+        report["publish"] = published
         if not to_stdout:
             kept_in = write(report, kept_in)
     finally:
