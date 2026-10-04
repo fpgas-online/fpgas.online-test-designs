@@ -104,3 +104,44 @@ def test_anyone_else_is_asked_to_rerun_it_as_root():
 
 def test_nothing_is_run_through_sudo():
     assert '"sudo"' not in (_HOST / "test_ethernet.py").read_text()
+
+
+# -- waiting for the link ---------------------------------------------------------------------------------------
+
+
+class _Clock:
+    """A clock that only sleep() moves, and a carrier file that reads "1" from `up_at` seconds on."""
+
+    def __init__(self, sysfs, iface, up_at):
+        self.now, self.up_at, self.carrier = 0.0, up_at, sysfs / iface / "carrier"
+        self.carrier.parent.mkdir(parents=True)
+        self.carrier.write_text("0\n")
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+        if self.up_at is not None and self.now >= self.up_at:
+            self.carrier.write_text("1\n")
+
+
+def test_a_link_that_takes_its_time_is_waited_for(tmp_path):
+    """pi-sw2-p15, 2026-10-04: its AX88179A brought the link up about 18 s after the design loaded. The test
+    waited 4 s, went on without a link, and reported it as "ARP request got no response"."""
+    clock = _Clock(tmp_path, "eth1", up_at=18)
+    took = te.wait_for_link("eth1", 60, sysfs=tmp_path, clock=clock)
+    assert took is not None and 18 <= took < 19
+
+
+def test_no_link_is_said_not_passed_over(tmp_path):
+    clock = _Clock(tmp_path, "eth1", up_at=None)
+    assert te.wait_for_link("eth1", 60, sysfs=tmp_path, clock=clock) is None
+    assert 60 <= clock.now < 61  # it waited the whole time, and no longer
+
+
+def test_a_carrier_that_cannot_be_read_is_no_link(tmp_path):
+    """An interface that is down gives EINVAL for carrier; one that left gives ENOENT."""
+    clock = _Clock(tmp_path, "eth1", up_at=None)
+    clock.carrier.unlink()
+    assert te.wait_for_link("eth1", 5, sysfs=tmp_path, clock=clock) is None

@@ -9,8 +9,9 @@ Steps:
   1. Detect the USB Ethernet adapter connected to the FPGA
   2. Configure the adapter with static IP 192.168.1.100/24
   3. Read MAC address from LiteX BIOS UART output
-  4. Send ARP request and verify response
-  5. Send ICMP ping and verify response
+  4. Wait for the adapter to have a link
+  5. Send ARP request and verify response
+  6. Send ICMP ping and verify response
 
 Usage:
     sudo python3 host/test_ethernet.py --board arty --uart-port /dev/ttyUSB1
@@ -36,6 +37,7 @@ FPGA_IP = "192.168.1.50"
 HOST_IP = "192.168.1.100"
 NETMASK = "255.255.255.0"
 BIOS_TIMEOUT = 30  # seconds to wait for BIOS boot
+LINK_TIMEOUT = 60  # seconds to wait for the adapter to have a link once the design is loaded
 
 # -- Network interface detection -----------------------------------------------
 
@@ -110,16 +112,27 @@ def configure_interface(iface, ip, netmask):
     subprocess.run(["ip", "addr", "flush", "dev", iface], check=True)
     subprocess.run(["ip", "addr", "add", f"{ip}/{prefix_len}", "dev", iface], check=True)
     subprocess.run(["ip", "link", "set", iface, "up"], check=True)
-    # Poll for link to come up (carrier detect)
-    for _ in range(40):
+    print(f"  {iface} configured: {ip}/{prefix_len}")
+
+
+def wait_for_link(iface, timeout, sysfs="/sys/class/net", clock=time):
+    """Seconds until `iface` has a link (its carrier reads 1), or None if it has none after `timeout` seconds.
+
+    The FPGA's PHY starts negotiating only once the design is loaded, and how long the adapter then takes is
+    the adapter's own business: an RTL8153 a second or two, an AX88179A about 18 s (pi-sw2-p15, 2026-10-04).
+    A carrier that cannot be read (the interface is down, or gone) is no link.
+    """
+    start = clock.monotonic()
+    while True:
         try:
-            with open(f"/sys/class/net/{iface}/carrier") as f:
+            with open(f"{sysfs}/{iface}/carrier") as f:
                 if f.read().strip() == "1":
-                    break
+                    return clock.monotonic() - start
         except OSError:
             pass
-        time.sleep(0.1)
-    print(f"  {iface} configured: {ip}/{prefix_len}")
+        if clock.monotonic() - start >= timeout:
+            return None
+        clock.sleep(0.25)
 
 
 # -- UART MAC address parsing ---------------------------------------------------
@@ -275,28 +288,40 @@ def run_test(board, uart_port, baud, eth_interface=None):
         # but does print "Local IP: x.x.x.x" which confirms Ethernet init.
         print("  INFO: MAC address not found in BIOS output (Ethernet init confirmed via IP)")
 
-    # Step 4: ARP test
+    # Step 4: the link. Without one neither test below can pass, and "no ARP reply" would hide why.
     print()
-    total_tests += 1
-    arp_ok, arp_mac = test_arp(FPGA_IP, iface)
-    if arp_ok:
-        print(f"  ARP: PASS (MAC={arp_mac})")
-        # Cross-check MAC if we got it from BIOS too
-        if mac_address and arp_mac and mac_address != arp_mac:
-            print(f"  WARNING: BIOS MAC ({mac_address}) != ARP MAC ({arp_mac})")
+    print(f"Waiting up to {LINK_TIMEOUT}s for a link on {iface}...")
+    took = wait_for_link(iface, LINK_TIMEOUT)
+    if took is None:
+        print(f"  Link: FAIL (no carrier on {iface} after {LINK_TIMEOUT}s)")
+        total_tests += 2
+        failures.append(f"ARP not tried: no link on {iface} after {LINK_TIMEOUT}s")
+        failures.append(f"ICMP ping not tried: no link on {iface} after {LINK_TIMEOUT}s")
     else:
-        print("  ARP: FAIL")
-        failures.append("ARP request got no response")
+        print(f"  Link: up after {took:.1f}s")
 
-    # Step 5: ICMP ping test
-    print()
-    total_tests += 1
-    ping_ok, ping_stats = test_ping(FPGA_IP, iface)
-    if ping_ok:
-        print(f"  Ping: PASS ({ping_stats})")
-    else:
-        print("  Ping: FAIL")
-        failures.append("ICMP ping failed")
+        # Step 5: ARP test
+        print()
+        total_tests += 1
+        arp_ok, arp_mac = test_arp(FPGA_IP, iface)
+        if arp_ok:
+            print(f"  ARP: PASS (MAC={arp_mac})")
+            # Cross-check MAC if we got it from BIOS too
+            if mac_address and arp_mac and mac_address != arp_mac:
+                print(f"  WARNING: BIOS MAC ({mac_address}) != ARP MAC ({arp_mac})")
+        else:
+            print("  ARP: FAIL")
+            failures.append("ARP request got no response")
+
+        # Step 6: ICMP ping test
+        print()
+        total_tests += 1
+        ping_ok, ping_stats = test_ping(FPGA_IP, iface)
+        if ping_ok:
+            print(f"  Ping: PASS ({ping_stats})")
+        else:
+            print("  Ping: FAIL")
+            failures.append("ICMP ping failed")
 
     # Results
     print()
