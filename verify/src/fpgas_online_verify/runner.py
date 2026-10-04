@@ -183,6 +183,12 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
             mode_value, path = config.configured(options.get("mode_dir", config.MODE_DIR),
                                                  options.get("admin_dir", config.ADMIN_DIR))  # fmt: skip
             report["mode"], report["configured_by"] = mode_value, str(path)
+        if "power_cycle_check" not in options:  # opt-in, whichever way the board was chosen (config.py)
+            on, path = config.power_cycle_check(options.get("mode_dir", config.MODE_DIR),
+                                                options.get("admin_dir", config.ADMIN_DIR))  # fmt: skip
+            if on:
+                options = {**options, "power_cycle_check": True}
+                report["power_cycle_check"] = {"on": True, "configured_by": str(path)}
         usb = usb_devices() if usb is None else usb
         pci = pci_devices() if pci is None else pci
         targets, report["chosen_by"] = find(boards, report["mode"], options, usb, pci)
