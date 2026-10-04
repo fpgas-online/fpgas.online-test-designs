@@ -89,7 +89,7 @@ The `HOSTS` dict maps host names to their properties:
 
 `ssh_upload()` pipes file contents through SSH stdin to `cat > <remote_path>`. This avoids `scp` shell-escaping issues with double-hop SSH. The file data is read locally and sent as raw bytes.
 
-For TT FPGA boards, `EXTRA_UPLOADS` sends additional helper scripts from `designs/_host/` (`tt_fpga_program.py`, `tt_test_wrapper.py`, `tt_pmod_wrapper.py`) that handle RP2350 programming and GPIO release.
+For TT FPGA boards, `EXTRA_UPLOADS` sends additional helper scripts from `designs/_host/` (`tt_fpga_program.py`, `tt_test_wrapper.py`) that handle RP2350 programming and GPIO release.
 
 ## Pre-Test Commands
 
@@ -134,7 +134,7 @@ finding recorded in [acorn-pinmap.md](hardware/acorn-pinmap.md):
 4. `echo 1 > /sys/bus/pci/rescan` — brings the endpoint back (the flash
    design's, or the newly loaded design's if it has PCIe).
 
-**TT FPGA**: `python3 ~/tt_fpga_program.py /dev/ttyACM0 <bitstream>` — Programming goes through the RP2350 microcontroller via USB CDC (`/dev/ttyACM0`). The script uses `mpremote` to upload the bitstream to the RP2350's filesystem, then executes a MicroPython script that programs the iCE40 via PIO-accelerated SPI and starts the 50 MHz clock. After programming, the RP2350 releases all shared GPIO pins to high-impedance so the RPi can communicate with the FPGA directly through the PMOD HAT.
+**TT FPGA**: `python3 ~/tt_fpga_program.py /dev/ttyACM0 <bitstream>` — Programming goes through the RP2350 microcontroller via USB CDC (`/dev/ttyACM0`). The script uses `mpremote mount` to show the RP2350 a copy of the bitstream on the Pi (nothing is written to the RP2350's filesystem), then executes a MicroPython script that reads it from there, programs the iCE40 via PIO-accelerated SPI and starts the 50 MHz clock. After programming, the RP2350 releases all shared GPIO pins to high-impedance so the RPi can communicate with the FPGA directly through the PMOD HAT.
 
 ### Programming Success Detection
 
@@ -183,7 +183,7 @@ The RPi connects to the FPGA through the same PMOD HAT used for all other boards
 
 ### Programming Flow (tt_fpga_program.py / tt_pmod_wrapper.py)
 
-1. **Upload bitstream** to RP2350 filesystem via `mpremote` over USB CDC (`/dev/ttyACM0`). Includes `reset_rp2350()` (Ctrl-C to break any stuck MicroPython script) and USB power cycle retry.
+1. **Mount a copy of the bitstream** on the RP2350 with `mpremote mount` over USB CDC (`/dev/ttyACM0`); nothing is written to the RP2350's filesystem. Includes `reset_rp2350()` (Ctrl-C to break any stuck MicroPython script) and USB power cycle retry.
 2. **Program FPGA** via MicroPython raw REPL: PIO SPI to the iCE40, then start the 50 MHz PWM clock on GPIO16.
 3. **Release RP2350 GPIOs to high-Z** — all ui_in, uo_out, and uio pins are set to `Pin.IN` (input mode). This is critical: the RP2350 shares the same physical traces as the PMOD headers. Without releasing, the RP2350's output drivers would contend with the RPi's GPIO signals coming through the PMOD HAT.
 

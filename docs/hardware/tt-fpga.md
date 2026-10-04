@@ -167,13 +167,13 @@ python3 designs/_host/tt_fpga_program.py /dev/ttyACM0 bitstream.bin
 
 **Programming workflow:**
 
-1. `mpremote mount` shows the bitstream's directory on the Pi to the RP2350 as `/remote`, served over the
-   serial link. **Nothing is written to the demo board's filesystem**: no file is copied to it and no directory
+1. `mpremote mount` shows a temporary directory on the Pi, holding a copy of the bitstream and nothing else, to
+   the RP2350 as `/remote`, served over the serial link. **Nothing is written to the demo board's filesystem**: no file is copied to it and no directory
    is made on it.
 2. A MicroPython script, run in the raw REPL, reads the bitstream from `/remote` and:
    - Asserts `CRESET` (GPIO1) to reset the FPGA
    - Transfers the bitstream over SPI (SCK=GPIO6, MOSI=GPIO3, SS=GPIO5)
-   - Releases `CRESET` and waits for FPGA `CDONE`
+   - Releases `CRESET` (`CDONE` is not read: the tests that follow are what show the design is running)
    - Starts the 50 MHz clock on GPIO16
 3. For PMOD tests: release all GPIO pins to high-Z (`--gpio-release`)
 
@@ -257,7 +257,7 @@ bridging. Three host-side wrapper scripts handle the RP2040 interaction:
 
 | Script                                                              | Purpose                                          |
 |---------------------------------------------------------------------|--------------------------------------------------|
-| [`tt_fpga_program.py`](../../designs/_host/tt_fpga_program.py)      | Upload and program bitstream via mpremote         |
+| [`tt_fpga_program.py`](../../designs/_host/tt_fpga_program.py)      | Program the iCE40 from the Pi via mpremote        |
 | [`tt_test_wrapper.py`](../../designs/_host/tt_test_wrapper.py)      | Program + UART bridge (PTY) + run test            |
 | [`tt_pmod_wrapper.py`](../../designs/_host/tt_pmod_wrapper.py)      | Program + release GPIOs + hand off to RPi GPIO test |
 
@@ -303,7 +303,7 @@ The board's `main.py` is the Tiny Tapeout SDK's. It builds the `tt` object when 
 the SDK), and the public site and the `fpgas-tt` daemon expect the SDK to be there.
 
 **Nothing replaces `main.py`.** Until 2026-10, `tt_test_wrapper.py` overwrote it with a no-op ("TT FPGA board
-ready") after every bitstream upload, as a workaround for the stock `ttdbv3` firmware hanging in `DemoBoard()`.
+ready") after every load, as a workaround for the stock `ttdbv3` firmware hanging in `DemoBoard()`.
 SDK 3.1.0 boots cleanly, and with the no-op the SDK never started, so the boot check could not identify the
 board ([#117](https://github.com/fpgas-online/fpgas.online-test-designs/issues/117)). The wrapper no longer
 touches it.
@@ -315,10 +315,18 @@ run `main.py`, so after any load the `tt` object is gone until the next start. A
 start the SDK fails the check with that reason.
 
 **No code of ours writes to a demo board.** The boot check and the debug tools change no file on it: not
-`main.py`, and no bitstream (see [Programming](#programming)); `tests/test_tt_host_scripts.py` holds them to
-that. A board whose `main.py` was overwritten before this change keeps failing its check, with the reason, until
+`main.py`, and no bitstream (see [Programming](#programming)); `tests/test_tt_host_scripts.py` holds every
+string the host scripts send to a board, or give to `mpremote`, to that. The one file that does change is not
+ours: the SDK's own `main.py` rewrites its `boot.log` every time it starts, at power-on and at the check's
+soft reset alike. A board whose `main.py` was overwritten before this change keeps failing its check, with the reason, until
 the SDK's own `main.py` (`src/main.py` of the SDK release the board runs) has been put back on it by hand. That
 is a deliberate one-off per board, not something the tooling does.
+
+Boards the old loader ran on still hold a `/bitstreams/custom.bin`: the last test bitstream it copied there.
+Nothing reads it, nothing removes it, and it is not the design that is loaded.
+
+After a check the board is at the raw-REPL's state again (the loads soft-reset it from the raw REPL), so the
+`tt` object is gone until the next friendly-REPL soft reset: the Commander makes one when it connects.
 
 If a board does hang in `DemoBoard()` (the stock `ttdbv3` build does), a power cycle of its Pi resets it; the
 RP2's mass-storage bootloader path stalls on Pi 3B+ hosts, so reflashing from a Pi 3B+ needs the PICOBOOT path

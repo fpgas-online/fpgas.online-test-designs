@@ -49,7 +49,8 @@ The iCE40 is programmed via the RP2350 over USB CDC, not directly from the RPi.
 
 ### Programming Flow
 
-1. Upload bitstream to RP2350 filesystem via `mpremote`
+1. Show the RP2350 a copy of the bitstream on the Pi (`mpremote mount`, served over the serial link; nothing is
+   written to the RP2350's filesystem)
 2. Execute MicroPython script via raw REPL:
    - Assert CRESET_B low, then high (reset iCE40 into config mode)
    - Stream bitstream via PIO SPI at 1 MHz
