@@ -410,7 +410,16 @@ def run(options, prog="fpgas-verify"):
         # on a partial pass), and never written over the boot's report unless --report says where.
         options = {**options, "no_publish": True, "report": options.get("report") or "-"}
     kept_in = options.get("report") or str(REPORT)
+    # Nothing is sent unless a file says `publish = on` (config.py: the fleet's Pi root does); --no-publish and
+    # --test send nothing even then. A setting that cannot be read is the run's result, and is not published.
+    publishing, said_by, unreadable = False, None, None
     if not options.get("no_publish"):
+        try:
+            publishing, said_by = config.publish(options.get("mode_dir", config.MODE_DIR),
+                                                 options.get("admin_dir", config.ADMIN_DIR))  # fmt: skip
+        except Problem as p:
+            unreadable = p
+    if publishing:
         # The site hears the check has started, and says the board is being verified until the result follows.
         working = publish("fpga-verifying", {"started_at": _now()}, prog=prog, timeout=EVENT_TIMEOUT)
         options = {**options, "event": _Progress(prog, working)}
@@ -421,10 +430,16 @@ def run(options, prog="fpgas-verify"):
     to_stdout = kept_in == "-"
     try:
         try:
-            report = verify(options)
+            if unreadable:
+                report = {"schema_version": SCHEMA_VERSION, "result": unreadable.result, "checked_at": _now(),
+                          "boards": [], "reason": unreadable.reason}  # fmt: skip
+            else:
+                report = verify(options)
         except Exception as e:  # whatever went wrong, the site still hears a result, and the report says why
             report = {"schema_version": SCHEMA_VERSION, "result": "error", "checked_at": _now(), "boards": [],
                       "reason": f"fpgas-verify crashed: {type(e).__name__}: {e}"}  # fmt: skip
+        if publishing:
+            report["publish"] = {"on": True, "configured_by": str(said_by)}
         if not to_stdout:
             kept_in = write(report, kept_in)
     finally:
@@ -437,6 +452,6 @@ def run(options, prog="fpgas-verify"):
     if to_stdout or not_started:  # stdout gets one document, after the starts: nothing reads it as a file
         kept_in = write(report, kept_in)
     print(summary(report), file=sys.stderr)
-    if not options.get("no_publish"):
+    if publishing:
         publish("fpga-verified", details(report), kept_in, prog)
     return 0 if report["result"] == "pass" else 1
