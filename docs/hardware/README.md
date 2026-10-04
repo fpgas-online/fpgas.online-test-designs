@@ -39,6 +39,7 @@ ports 3–8 and 33–36 (`pi-sw2-p<port>`); see [site-welland.md](site-welland.m
 
 - [pmod.md](pmod.md) — PMOD interface specification (standard Digilent types 1–6 + I2C extension)
 - [rpi-hat-pmod.md](rpi-hat-pmod.md) — Digilent PMOD HAT adapter for Raspberry Pi (RPi GPIO ↔ PMOD pinmap, type conformance)
+- [tt-pmod-wiring-fleet.md](tt-pmod-wiring-fleet.md) — measured PMOD HAT ↔ Tiny Tapeout ribbon wiring of every TT host (2026-09-04), incl. the miswired TT04 host
 - [pmod-tt.md](pmod-tt.md) — TinyTapeout PMOD connector standards (TT-specific layouts, RP2040/RP2350 GPIO mapping, community PMOD boards)
 
 ## Wiring Guides

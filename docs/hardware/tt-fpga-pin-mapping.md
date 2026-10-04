@@ -71,6 +71,19 @@ Direct programming of the iCE40 via openFPGALoader (bypassing the MicroPython RE
 
 ## TinyTapeout I/O Signals
 
+> **2026-09-04 update — the ribbons are the other way round now.** The
+> [TT PMOD wiring test](../tests/tt-pmod-wiring.md) measured all four FPGA
+> hosts with the iCE40 held in reset: HAT **JA** carries `ui_in`
+> (`ui_in[k]` → JA pin k, i.e. RPi GPIO 8, 10, 9, 11, 19, 21, 20, 18) and
+> HAT **JB** carries `uio` (RPi GPIO 7, 10, 9, 11, 26, 13, 3, 2), which is
+> the same `asic` cabling profile as the TT ASIC hosts; `uo_out` is
+> therefore on **JC** (not measured: it needs a loopback design). The
+> tables below are the earlier measurement and describe the `fpga` profile;
+> the per-host measured tables are in
+> [tt-pmod-wiring-fleet.md](tt-pmod-wiring-fleet.md). The `tt` entry in
+> `designs/pmod-loopback/host/test_pmod_loopback.py` still encodes the old
+> permutation.
+
 ### ui_in (User Inputs)
 
 8-bit input bus. The RPi drives these through the PMOD HAT; the FPGA reads them.

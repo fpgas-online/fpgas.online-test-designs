@@ -1,5 +1,9 @@
 """Simulation tests for the UART break detector (designs/_shared/uart_break.py)."""
 
+import pytest
+
+pytest.importorskip("migen")
+
 from migen import run_simulation
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer

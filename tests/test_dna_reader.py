@@ -1,5 +1,9 @@
 """Simulation tests for the slow DNA reader (designs/_shared/dna_reader.py), against a model of DNA_PORT."""
 
+import pytest
+
+pytest.importorskip("migen")
+
 from migen import run_simulation
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
