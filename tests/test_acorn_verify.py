@@ -889,3 +889,97 @@ def test_a_run_in_which_nothing_asked_for_ran_fails(tmp_path, images):
     report = rig.check(tests=["p2-gpio"])
     assert report["tests"] == [] and report["result"] == "fail"
     assert report["reason"] == "none of the tests asked for ran (p2-gpio)"
+
+
+# -- the power-cycle check (opt-in): was the FPGA configured since the last check? ----------------------------
+
+BOOT_A, BOOT_B = "11111111-2222-3333-4444-555555555555", "99999999-8888-7777-6666-555555555555"
+
+
+def _power(rig, boot_id, **extra):
+    return rig.check(power_cycle_check=True, boot_id=boot_id, **extra)
+
+
+def test_the_power_cycle_check_is_off_unless_asked_for(tmp_path, images):
+    """Outside the fpgas.online fleet nothing says how a host is restarted, so the check is opt-in: by default
+    it is not in the report and the scratch register is left as it was found."""
+    rig = Rig(tmp_path, images)
+    report = rig.check()
+    assert report["result"] == "pass" and "power-cycle" not in _results(report)
+    assert "power-cycle" not in report.get("not_run", {})
+    assert rig.soc.scratch == av.SCRATCH_RESET
+
+
+def test_an_fpga_configured_since_the_last_check_passes_and_is_marked(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    report = _power(rig, BOOT_A)
+    assert report["result"] == "pass" and _results(report)["power-cycle"] == "pass"
+    # the scratch test ran after it and put the register back; the marker is what is left at the end
+    assert rig.soc.scratch == av.boot_marker(BOOT_A) != av.SCRATCH_RESET
+
+
+def test_a_second_check_in_the_same_boot_passes(tmp_path, images):
+    """An operator running fpgas-verify again must not fail the board: the marker is this boot's own."""
+    rig = Rig(tmp_path, images)
+    _power(rig, BOOT_A)
+    report = _power(rig, BOOT_A)
+    assert report["result"] == "pass"
+    (entry,) = [t for t in report["tests"] if t["test"] == "power-cycle"]
+    assert "already checked in this boot" in " ".join(entry["output"])
+
+
+def test_a_card_that_kept_its_configuration_across_the_pis_restart_fails(tmp_path, images):
+    """The Pi restarted (a new boot id) and the FPGA did not: a soft reboot, power from another source, or a
+    power-off too short to drop the card. Whatever a visitor left in it is still there."""
+    rig = Rig(tmp_path, images)
+    _power(rig, BOOT_A)
+    report = _power(rig, BOOT_B)
+    assert report["result"] == "fail" and _results(report)["power-cycle"] == "fail"
+    assert "the FPGA has not been configured since an earlier boot's check" in report["reason"]
+    assert "not power-cycled with the Pi" in report["reason"]
+    assert rig.soc.scratch == av.boot_marker(BOOT_A)  # left as found: the next check fails too, until a power cycle
+
+
+def test_a_power_cycle_makes_it_pass_again(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    _power(rig, BOOT_A)
+    rig.soc.scratch = av.SCRATCH_RESET  # the FPGA reconfigured from its flash
+    report = _power(rig, BOOT_B)
+    assert report["result"] == "pass" and rig.soc.scratch == av.boot_marker(BOOT_B)
+
+
+def test_a_scratch_value_nobody_of_ours_wrote_fails(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    rig.soc.scratch = 0xDEADBEEF
+    report = _power(rig, BOOT_A)
+    assert _results(report)["power-cycle"] == "fail" and "0xdeadbeef" in report["reason"]
+    assert rig.soc.scratch == 0xDEADBEEF
+
+
+def test_no_bar0_means_the_power_cycle_check_is_not_run_and_says_why(tmp_path, images):
+    rig = Rig(tmp_path, images, identifier="fpgas-online Acorn PCIe SoC cle-215+ 2026-10-01 09:00:00")
+    report = _power(rig, BOOT_A)  # a build that is not in the release: nothing past the identifier is read
+    assert report["result"] != "pass" and "power-cycle" in report["not_run"]
+    assert rig.soc.scratch == av.SCRATCH_RESET
+
+
+def test_only_a_run_of_the_power_cycle_test_leaves_the_marker(tmp_path, images):
+    """`--test scratch` alone is a debugging run: it must not make the next boot's check think it was checked."""
+    rig = Rig(tmp_path, images)
+    rig.check(power_cycle_check=True, boot_id=BOOT_A, tests=["scratch"])
+    assert rig.soc.scratch == av.SCRATCH_RESET
+
+
+def test_the_marker_is_never_the_reset_value_or_a_test_pattern():
+    assert av.boot_marker(BOOT_A) != av.boot_marker(BOOT_B)
+    taken = {av.SCRATCH_RESET, *av.SCRATCH_PATTERNS}
+
+    class Digest:  # a boot id whose hash lands on each taken value
+        def __init__(self, value):
+            self.value = value
+
+        def digest(self):
+            return self.value.to_bytes(4, "big") + bytes(28)
+
+    for value in taken:
+        assert av.boot_marker("x", sha256=lambda data, v=value: Digest(v)) not in taken
