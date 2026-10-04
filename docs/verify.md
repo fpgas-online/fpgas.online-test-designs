@@ -550,10 +550,12 @@ Tiny Tapeout SDK on the board's RP2350 over its REPL, which needs the board's po
 check, `fpgas-tt.service` holds that port.
 
 So the boot check reads them while it holds the port: with `fpgas-tt.service` stopped (when it was running),
-and before the first test loads a design, it starts the board's SDK (`tt_sdk_start.py`: a soft reset from the
+and before the first test loads a design, it first checks that the board's `main.py` is still the SDK's own
+(`tt_main_py.py`: a read of its SHA-256, compared with the one recorded for the SDK release the board runs;
+visitors have the board's Python prompt and can change it; this step does not need rpi-hwid), then starts the board's SDK (`tt_sdk_start.py`: a soft reset from the
 friendly REPL, which runs the board's `main.py`; rpi-hwid reads only what the SDK built at start-up) and then
-runs `rpi-hwid tinytapeout --json --no-stop-service`. A board whose SDK does not start is an `error` with that
-reason, and rpi-hwid is not run. It then
+runs `rpi-hwid tinytapeout --json --no-stop-service`. A board whose `main.py` is not the SDK's own, or whose SDK does not start, is an
+`error` with that reason, and rpi-hwid is not run. It then
 starts `fpgas-tt.service` again after the tests, as it always does, whatever rpi-hwid did.
 `--no-stop-service` tells rpi-hwid to leave the service alone.
 

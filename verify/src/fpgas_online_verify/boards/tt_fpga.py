@@ -37,6 +37,8 @@ NOT_INSTALLED = "not read: rpi-hwid is not installed (python3-rpi-hwid, or `uv t
 # tt_sdk_start.py soft-resets the board from the friendly REPL and waits for the SDK's last boot line: its own
 # limit is 45 s, and the SDK takes a few seconds.
 SDK_START_TIMEOUT = 75
+# tt_main_py.py reads two files on the board through mpremote; its own limit is 60 s.
+MAIN_PY_TIMEOUT = 90
 # The identity fields rpi-hwid gives: TinyTapeoutBoard's, less usb_serial, which finding the board gives.
 RPI_HWID_FIELDS = tuple(f for f in identity.TINYTAPEOUT_FIELDS if f != "usb_serial")
 # The fields every TT FPGA board has a value for: its RP2350, its chip (the FPGA), the demo board it sits on and
@@ -62,6 +64,21 @@ def _json_document(text):
     if not isinstance(doc, dict):
         raise ValueError("its output is not a JSON object")
     return doc
+
+
+def main_py_changed(port, runner=run):
+    """None when the board's main.py is the SDK's own (tt_main_py.py: a read of its SHA-256), else why not.
+
+    Visitors have the board's Python prompt, so a visitor can replace or edit main.py; nothing of ours writes
+    to the board. A changed main.py is said as that, before anything relies on it. Never raises."""
+    try:
+        rc, text = runner([sys.executable, host_tests.path("tt_main_py.py"), port], MAIN_PY_TIMEOUT)
+    except Problem as p:
+        return f"the demo board's main.py is not known to be the SDK's own: it could not be checked: {p.reason}"
+    if rc == 0:
+        return None
+    said = [line for line in text.splitlines() if line.startswith("MAIN_PY:")] or tail(text, 2)
+    return f"the demo board's main.py is not known to be the SDK's own: {' '.join(said)}"
 
 
 def sdk_start(port, runner=run):
@@ -155,7 +172,11 @@ class TTFPGA(TestBoard):
     def port_facts(self, host, found, runner=run):
         if not found.get("serial"):
             return {}
-        if which(RPI_HWID) is None:  # nothing would read the board: it is left as it is
+        # Whether main.py is still the SDK's own needs only the port, so it is said with or without rpi-hwid.
+        why_not = main_py_changed(host["port"], runner)
+        if why_not:
+            return {"tinytapeout_error": why_not}
+        if which(RPI_HWID) is None:  # nothing would ask the board who it is: its SDK is not started
             return {"tinytapeout_note": NOT_INSTALLED}
         why_not = sdk_start(host["port"], runner)
         if why_not:

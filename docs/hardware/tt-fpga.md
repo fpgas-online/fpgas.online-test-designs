@@ -23,7 +23,7 @@ sudo apt install fpgas-online-tt-fpga
 
 The check finds the board by its Raspberry Pi microcontroller on USB (vendor `2e8a`). It first loads the PMOD pin identification design and checks the PMOD HAT cabling against the expected map (ui_in on HAT JA, uio on JB, uo_out on JC, [tt-fpga-pin-mapping.md](tt-fpga-pin-mapping.md)); a miswired HAT fails the board. It then loads the UART test design through that microcontroller (`tt_fpga_program.py`, over `mpremote`), and runs its host test through the UART bridge on `/dev/ttyACM0`. There is no SPI flash test: the breakout has no flash (see [Programming](#programming)). Nothing is written to the demo board: for every load the microcontroller reads the bitstream from the Pi over the serial link (see [Programming](#programming)). The board has no flash to compare, so what `changed` compares is its USB serial number. `mpremote` is `micropython-mpremote` in trixie, but only in bookworm-backports for bookworm: without it the check reports an `error`. Only the PMOD loopback test is left to `fpgas-tt-fpga-debug`.
 
-Before the first test, while it holds `/dev/ttyACM0`, the check starts the board's SDK (`tt_sdk_start.py`, see [The SDK's main.py](#the-sdks-mainpy)) and then runs `rpi-hwid tinytapeout --json --no-stop-service`, both only when [rpi-hwid](https://github.com/mithro/rpi-hwid) is installed (`python3-rpi-hwid`, which `fpgas-online-verify` suggests). rpi-hwid asks the Tiny Tapeout SDK on the RP2350 which microcontroller, chip, demo board and SDK release this is. The answer goes into the board's identity, for rpi-hwid's Tiny Tapeout label ([TT FPGA identity](../verify.md#tt-fpga-identity), [Tiny Tapeout fields](../identity.md#tiny-tapeout-fields)). Without rpi-hwid those fields are not read, and the board does not fail for it.
+Before the first test, while it holds `/dev/ttyACM0`, the check reads whether the board's `main.py` is still the SDK's own (`tt_main_py.py`, with or without rpi-hwid; a changed one is an `error`). It then starts the board's SDK (`tt_sdk_start.py`, see [The SDK's main.py](#the-sdks-mainpy)) and then runs `rpi-hwid tinytapeout --json --no-stop-service`, both only when [rpi-hwid](https://github.com/mithro/rpi-hwid) is installed (`python3-rpi-hwid`, which `fpgas-online-verify` suggests). rpi-hwid asks the Tiny Tapeout SDK on the RP2350 which microcontroller, chip, demo board and SDK release this is. The answer goes into the board's identity, for rpi-hwid's Tiny Tapeout label ([TT FPGA identity](../verify.md#tt-fpga-identity), [Tiny Tapeout fields](../identity.md#tiny-tapeout-fields)). Without rpi-hwid those fields are not read, and the board does not fail for it.
 
 It runs at every boot of the Welland TT FPGA boards: [current results](../verify.md#current-results).
 
@@ -313,6 +313,13 @@ friendly REPL, which runs `main.py`, and waits for the SDK's last boot line (`tt
 needed even with the right `main.py`: a soft reset from the raw REPL, which is what `mpremote` does, does not
 run `main.py`, so after any load the `tt` object is gone until the next start. A board whose `main.py` does not
 start the SDK fails the check with that reason.
+
+**A visitor can change the board; the check says so.** The Commander on tinytapeout.fpgas.online gives every
+visitor the board's Python prompt, and with it the board's files (Tim, 2026-10-05: the prompt stays). So the
+boot check first reads the SHA-256 of the board's `main.py` (`tt_main_py.py`) and compares it with the one
+recorded for the SDK release the board runs: a `main.py` that was replaced or edited is an `error` with that
+reason, not a pass. A board upgraded to an SDK release with no recorded `main.py` fails the same way until
+the release is added to `tt_main_py.py`.
 
 **No code of ours writes to a demo board.** The boot check and the debug tools change no file on it: not
 `main.py`, and no bitstream (see [Programming](#programming)); `tests/test_tt_host_scripts.py` holds every
