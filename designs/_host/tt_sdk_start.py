@@ -10,14 +10,15 @@ soft-resets it from the friendly REPL, which runs boot.py and main.py again,
 and waits for the SDK's last boot line.
 
 Exit 0: the SDK started. Exit 1, with the reason: main.py is not the SDK's,
-the SDK's main.py raised or did not finish, or
-nothing conclusive was seen in time. What the board printed is shown either way.
+the SDK's main.py raised or did not finish, the port is held by another
+process, or nothing conclusive was seen in time. What the board printed is shown either way.
 
 Usage (on the Pi, with fpgas-tt.service stopped):
     python3 tt_sdk_start.py /dev/ttyACM0 [--timeout 45]
 """
 
 import argparse
+import fcntl
 import os
 import re
 import select
@@ -28,6 +29,8 @@ import tty
 STARTED = re.compile(r"^tt\.sdk_version=\S+\r?$", re.M)  # the SDK main.py's last boot line, once complete
 SDK_BOOT = "BOOT: Tiny Tapeout SDK"  # its first (tt-micropython-firmware src/main.py)
 REBOOTED = "soft reboot"  # MicroPython's own line on a friendly-REPL Ctrl-D
+RAW_REPL = "raw REPL; CTRL-B to exit"  # what follows a soft reset made in the raw REPL, which runs no main.py
+PROMPT = re.compile(r"(?:^|\n)>>> ?$")  # the friendly prompt, on a line of its own, with nothing after it
 RESTORE = 'see "The SDK\'s main.py" in docs/hardware/tt-fpga.md'
 
 
@@ -40,7 +43,9 @@ def verdict(text):
     line = STARTED.search(whole_lines)
     if line:
         return True, "the SDK started: " + line.group().strip()
-    if not after.rstrip().endswith(">>>"):  # main.py is still running
+    if RAW_REPL in after:
+        return False, "the board soft-reset in the raw REPL, which does not run main.py"
+    if not PROMPT.search(after.replace("\r", "")):  # main.py is still running
         return None, "the SDK is still starting"
     if "Traceback" in after:
         raised = [ln.strip() for ln in after.partition("Traceback")[2].splitlines()[1:] if ln[:1] not in (" ", "")]
@@ -63,14 +68,27 @@ def read_some(fd, seconds):
     return out
 
 
+def drain(fd, quiet=0.3, limit=5.0):
+    """Read and drop what the board is still sending, until it has been quiet for `quiet` s (or `limit` s)."""
+    end = time.monotonic() + limit
+    while time.monotonic() < end:
+        ready, _, _ = select.select([fd], [], [], quiet)
+        if not ready or not os.read(fd, 4096):
+            return
+
+
 def start(port, timeout):
     fd = os.open(port, os.O_RDWR | os.O_NOCTTY)
     try:
+        try:  # pyserial and mpremote hold the same lock: two readers would split the board's output
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as e:
+            raise OSError("the port is held by another process") from e
         tty.setraw(fd)
         os.write(fd, b"\r\x03\x03")  # stop whatever is running
-        read_some(fd, 0.5)
+        drain(fd)
         os.write(fd, b"\x02")  # leave the raw REPL, if it was in it
-        read_some(fd, 0.5)
+        drain(fd)  # nothing printed before the reset is left to be taken for the SDK's start
         os.write(fd, b"\x04")  # friendly REPL, empty line: soft reset, which runs main.py
         text = ""
         end = time.monotonic() + timeout
@@ -80,7 +98,7 @@ def start(port, timeout):
             if started is not None:
                 text += read_some(fd, 1.0).decode("utf-8", "replace")  # let main.py reach the prompt
                 return started, reason, text
-        return False, f"{verdict(text)[1]} after {timeout} s", text
+        return False, f"{verdict(text)[1]} after {timeout:g} s", text
     finally:
         os.close(fd)
 

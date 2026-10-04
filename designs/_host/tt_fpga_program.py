@@ -6,9 +6,10 @@ SDK, which includes the 'fabricfox' module for programming the iCE40 FPGA via
 SPI (either PIO-accelerated or bitbang).
 
 This host-side script uses 'mpremote' to:
-  1. Mount the bitstream's directory on the Pi as /remote on the RP2350
-     (`mpremote mount`: served over the serial link, nothing is stored on
-     the board)
+  1. Mount a temporary directory on the Pi, holding a copy of the bitstream,
+     as /remote on the RP2350 (`mpremote mount`: served over the serial
+     link, nothing is stored on the board, and the board is given nothing
+     else of the Pi's)
   2. Run a script on the RP2350 that reads the bitstream from /remote and
      clocks it into the iCE40
 
@@ -21,12 +22,18 @@ Usage:
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 
 # Where `mpremote mount` shows the Pi's directory on the board (mpremote's own, fixed, name).
 REMOTE_MOUNT = "/remote"
+# The bitstream's name in the mounted directory.
+MOUNTED_NAME = "design.bin"
+# One load. Measured on a demo board, 2026-10-05: about 10 s for a 104090-byte bitstream, clock and GPIO
+# release included. Two loads (tt_test_wrapper retries once) and a test fit in the check's 300 s.
+PROGRAM_TIMEOUT = 60
 
 # Run last on the board: mpremote's mount also made /remote the working directory, and it is unmounted when
 # mpremote leaves.
@@ -219,7 +226,7 @@ def run_mpremote(port, args, timeout=60):
     return result.returncode, result.stdout, result.stderr
 
 
-def board_script(method, bitstream_name, gpio_release):
+def board_script(method, gpio_release, bitstream_name=MOUNTED_NAME):
     """The MicroPython script that programs the iCE40 from `bitstream_name` in the mounted directory."""
     script = PROGRAM_SCRIPT_PIO if method == "pio" else PROGRAM_SCRIPT_BITBANG
     script = script.replace("__BITSTREAM_PATH__", f"{REMOTE_MOUNT}/{bitstream_name}")
@@ -228,18 +235,29 @@ def board_script(method, bitstream_name, gpio_release):
     return script + LEAVE_MOUNT
 
 
-def program(port, bitstream, method="pio", gpio_release=False, timeout=180):
+def program(port, bitstream, method="pio", gpio_release=False, timeout=PROGRAM_TIMEOUT):
     """Program the iCE40 with the bitstream file `bitstream` on this host; (returncode, stdout, stderr).
 
-    One mpremote run: mount the bitstream's directory on the board (over the serial link; nothing is stored on
-    the board), run the programming script, leave. The script it runs is kept in a temporary directory here."""
-    bitstream = os.path.abspath(bitstream)
-    script = board_script(method, os.path.basename(bitstream), gpio_release)
-    with tempfile.TemporaryDirectory(prefix="tt_program_") as tmp:
-        script_path = os.path.join(tmp, "program.py")
+    One mpremote run: mount a temporary directory of this host on the board (over the serial link; nothing is
+    stored on the board), run the programming script, leave. The directory holds a copy of the bitstream and
+    nothing else the board could read or change, and is removed afterwards. mpremote not finishing in time is
+    returncode 124, mpremote not being installed 127: both with the reason as stderr, neither an exception."""
+    script = board_script(method, gpio_release)
+    with (
+        tempfile.TemporaryDirectory(prefix="tt_program_") as tmp,
+        tempfile.TemporaryDirectory(prefix="tt_program_script_") as script_dir,
+    ):
+        shutil.copyfile(os.path.realpath(bitstream), os.path.join(tmp, MOUNTED_NAME))
+        script_path = os.path.join(script_dir, "program.py")
         with open(script_path, "w") as f:
             f.write(script)
-        return run_mpremote(port, ["mount", os.path.dirname(bitstream), "run", script_path], timeout=timeout)
+        try:
+            return run_mpremote(port, ["mount", tmp, "run", script_path], timeout=timeout)
+        except subprocess.TimeoutExpired as e:
+            out = e.stdout.decode("utf-8", "replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
+            return 124, out, f"mpremote did not finish within {timeout} s"
+        except FileNotFoundError:
+            return 127, "", "mpremote is not installed"
 
 
 def main():
@@ -300,8 +318,9 @@ def main():
     if err.strip():
         print(err, file=sys.stderr)
 
-    if "PROGRAM_OK" not in out:
-        print("ERROR: FPGA programming may have failed (no PROGRAM_OK marker).", file=sys.stderr)
+    if rc != 0 or "PROGRAM_OK" not in out:
+        marker = "with" if "PROGRAM_OK" in out else "no"
+        print(f"ERROR: FPGA programming failed (mpremote exit {rc}, {marker} PROGRAM_OK marker).", file=sys.stderr)
         return 1
 
     if args.gpio_release:
