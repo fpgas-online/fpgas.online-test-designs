@@ -215,34 +215,6 @@ def usb_power_cycle(port):
             break
 
 
-def _install_safe_main(port):
-    """Replace the ttboard main.py with a minimal version.
-
-    The stock ttboard main.py calls DemoBoard() which probes I2C and
-    can hang permanently, making the RP2350 unrecoverable without a
-    physical reset.  Replace it with a no-op so the REPL always starts.
-    """
-    try:
-        result = subprocess.run(
-            [
-                "mpremote",
-                "connect",
-                port,
-                "exec",
-                "f = open('main.py', 'w')\n"
-                "f.write('# Safe main.py for FPGA test automation\\n')\n"
-                "f.write('print(\"TT FPGA board ready\")\\n')\n"
-                "f.close()",
-            ],
-            timeout=30,
-            capture_output=True,
-        )
-        if result.returncode != 0:
-            print("Warning: safe main.py install failed (non-critical)", file=sys.stderr)
-    except subprocess.TimeoutExpired:
-        print("Warning: safe main.py install timed out (non-critical)", file=sys.stderr)
-
-
 def upload_bitstream(port, local_path):
     """Upload bitstream to RP2350 filesystem via mpremote."""
     # Break any stuck MicroPython script before mpremote tries raw REPL.
@@ -269,9 +241,8 @@ def upload_bitstream(port, local_path):
             ["mpremote", "connect", port, "cp", local_path, ":" + BITSTREAM_DEVICE_PATH],
             timeout=120,
         )
-    if rc == 0:
-        # Install safe main.py to prevent DemoBoard() hangs on reboot
-        _install_safe_main(port)
+    # The board's main.py is left alone: it is the SDK's, and the SDK starting is how the board says what it
+    # is (rpi-hwid) and what the TT site's bridge relies on. See docs/hardware/tt-fpga.md, "The SDK's main.py".
     return rc == 0
 
 
