@@ -59,7 +59,12 @@ def test_each_board_tools_package_has_its_module_and_only_its_own_tooling(tmp_pa
     # setups' wiring is TOML (tomllib: Python 3.11)
     assert acorn["depends"] == [f"fpgas-online-verify (= {V})", f"fpgas-online-acorn-bitstreams (= {ACORN_BITS})",
                                 "python3 (>= 3.11)", bd.OPENFPGALOADER, "python3-serial"]  # fmt: skip
-    assert acorn["recommends"] == ["raspi-utils-core"]
+    # pinctrl; and for the `dma` test the driver (DKMS unless a prebuilt module is installed) and modprobe/rmmod
+    assert acorn["recommends"] == [
+        "raspi-utils-core",
+        "fpgas-online-acorn-litepcie-dkms | fpgas-online-acorn-litepcie-module",
+        "kmod",
+    ]
     modules = ("__init__", "check", "links", "setup", "spi_flash", "suite", "uartbone_link")
     assert {f"{bd.DIST}/boards/acorn/{m}.py" for m in modules} <= set(_dst(acorn))
     # the wiring and the expected figures, from docs/wiring/acorn/, where setup.py looks for them
