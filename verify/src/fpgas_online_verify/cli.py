@@ -33,6 +33,7 @@ def _files(board):
     ]
     if board is None:
         rows.append(f"  {str(config.ADMIN_DIR) + '/*.ini':<40} fpga-board = BOARD or auto")
+        rows.append(f"  {'':<40} power-cycle-check = on or off")
     return "files:\n" + "\n".join(rows)
 
 

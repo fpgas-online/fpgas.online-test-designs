@@ -24,6 +24,12 @@ read; and the FPGA is never reconfigured.
   scratch    the ctrl scratch register written and read back over BAR0 and over the P2 UART
   p2-gpio    J5/H5 in both directions (links.py), on a setup whose cable carries them
 
+Opt-in (`power-cycle-check = on`, config.py; off outside the fpgas.online fleet), after pcie-bar0:
+
+  power-cycle  the FPGA was configured since the last check (check.power_cycle_verdict): the ctrl scratch
+               register holds its reset value, or this boot's marker. The marker is written at the end of
+               the check, the only write that is not put back.
+
 The golden image has no DRAM and no P2 switch or spare GPIO: on it `ddr`, `p2-serial` and `p2-gpio` are
 not run, and running it is already a fault (`pcie-bar0`).
 

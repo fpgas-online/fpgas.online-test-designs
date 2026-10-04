@@ -40,6 +40,7 @@ the others:
 | `p2-serial` | both setups: J2 and K2 borrowed with `p2_serial` and tested both ways, the switch's own timeout, and the UARTBone answering again |
 | `scratch` | the `ctrl` scratch register written and read back over BAR0 and over P2 |
 | `p2-gpio` | Pi 5 setup only: J5 and H5 driven from the FPGA and read on GPIO3/GPIO4, then driven from the Pi and read on the FPGA |
+| `power-cycle` (opt-in: `power-cycle-check = on`, set on the fpgas.online fleet) | the FPGA was configured since the last check, that is, it was power-cycled with the Pi and is running what its flash configures ([verify.md](../verify.md#the-acorns-power-cycle-check-opt-in)) |
 
 | Setup | JTAG `--pins` | openFPGALoader cable | J2 / K2 | J5 / H5 |
 |---|---|---|---|
