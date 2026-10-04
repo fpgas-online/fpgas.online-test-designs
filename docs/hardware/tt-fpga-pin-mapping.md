@@ -73,37 +73,37 @@ Direct programming of the iCE40 via openFPGALoader (bypassing the MicroPython RE
 
 ### ui_in (User Inputs)
 
-8-bit input bus. The RPi drives these through the PMOD HAT; the FPGA reads them.
+8-bit input bus. The RPi drives these through the PMOD HAT; the FPGA reads them. Cabled to PMOD HAT port JA.
 
 | Bit      | iCE40 Pin | RP2350 GPIO | PMOD HAT Pin | RPi GPIO | Verified |
 | -------- | --------- | ----------- | ------------ | -------- | -------- |
-| ui_in[0] | 13        | 17          | JC1          | 16       | pin-id   |
-| ui_in[1] | 19        | 18          | JC2          | 14       | pin-id   |
-| ui_in[2] | 18        | 19          | JC3          | 15       | pin-id   |
-| ui_in[3] | 21        | 20          | JC4          | 17       | pin-id   |
-| ui_in[4] | 23        | 21          | JC7          | 4        | pin-id   |
-| ui_in[5] | 25        | 22          | JC8          | 12       | (*)      |
-| ui_in[6] | 26        | 23          | JC9          | 5        | (*)      |
-| ui_in[7] | 27        | 24          | JC10         | 6        | pin-id   |
+| ui_in[0] | 13        | 17          | JA1          | 8        | pin-id   |
+| ui_in[1] | 19        | 18          | JA2          | 10       | (*)      |
+| ui_in[2] | 18        | 19          | JA3          | 9        | (*)      |
+| ui_in[3] | 21        | 20          | JA4          | 11       | (*)      |
+| ui_in[4] | 23        | 21          | JA7          | 19       | pin-id   |
+| ui_in[5] | 25        | 22          | JA8          | 21       | pin-id   |
+| ui_in[6] | 26        | 23          | JA9          | 20       | pin-id   |
+| ui_in[7] | 27        | 24          | JA10         | 18       | pin-id   |
 
-(\*) ui_in[5] and ui_in[6] were not decoded (initial=0, decoder sync issue). Positions inferred from the pattern — the JC connector pin numbering matches the TT bit ordering straight through (bit 0→pin 1, bit 7→pin 10).
+(\*) ui_in[1:3] are on JA pins 2-4, which share RPi GPIOs with JB pins 2-4. The pin-id decode on these GPIOs is corrupted because ui_in and uio both drive them. Positions inferred from the pattern: the JA connector pin numbering matches the TT bit ordering straight through (bit 0→pin 1, bit 7→pin 10).
 
 ### uo_out (User Outputs)
 
-8-bit output bus. The FPGA drives these; the RPi reads them through the PMOD HAT.
+8-bit output bus. The FPGA drives these; the RPi reads them through the PMOD HAT. Cabled to PMOD HAT port JC.
 
 | Bit       | iCE40 Pin | RP2350 GPIO | PMOD HAT Pin | RPi GPIO | Verified |
 | --------- | --------- | ----------- | ------------ | -------- | -------- |
-| uo_out[0] | 38        | 33          | JA1          | 8        | pin-id   |
-| uo_out[1] | 42        | 34          | JA2          | 10       | (**)     |
-| uo_out[2] | 43        | 35          | JA3          | 9        | (**)     |
-| uo_out[3] | 44        | 36          | JA4          | 11       | (**)     |
-| uo_out[4] | 45        | 37          | JA7          | 19       | pin-id   |
-| uo_out[5] | 46        | 38          | JA8          | 21       | pin-id   |
-| uo_out[6] | 47        | 39          | JA9          | 20       | pin-id   |
-| uo_out[7] | 48        | 40          | JA10         | 18       | pin-id   |
+| uo_out[0] | 38        | 33          | JC1          | 16       | pin-id   |
+| uo_out[1] | 42        | 34          | JC2          | 14       | pin-id   |
+| uo_out[2] | 43        | 35          | JC3          | 15       | pin-id   |
+| uo_out[3] | 44        | 36          | JC4          | 17       | pin-id   |
+| uo_out[4] | 45        | 37          | JC7          | 4        | pin-id   |
+| uo_out[5] | 46        | 38          | JC8          | 12       | pin-id   |
+| uo_out[6] | 47        | 39          | JC9          | 5        | pin-id   |
+| uo_out[7] | 48        | 40          | JC10         | 6        | pin-id   |
 
-(\*\*) uo_out[1:3] are on JA pins 2-4 which share RPi GPIOs with JB pins 2-4. The pin-id decode on these GPIOs is corrupted by JA/JB contention. Positions inferred from the pattern — the JA connector pin numbering matches the TT bit ordering straight through (bit 0→pin 1, bit 7→pin 10).
+Measured with the pin-id design on pi-sw2-p33, p35 and p36 on 2026-09-29 and again by `fpgas-verify` on 2026-10-04: every Welland host is cabled ui_in → JA, uio → JB, uo_out → JC. Earlier versions of this page had JA and JC the other way round ([issue #58](https://github.com/fpgas-online/fpgas.online-test-designs/issues/58)).
 
 ### uio (Bidirectional I/O)
 
@@ -122,18 +122,19 @@ Direct programming of the iCE40 via openFPGALoader (bypassing the MicroPython RE
 
 RP2350 GPIO numbers follow the sequential pattern (ui_in=17-24, uio=25-32, uo_out=33-40).
 
-**WARNING — JA/JB pin sharing conflict**: HAT JB pins 2-4 and HAT JA pins 2-4 are the [same RPi GPIO lines](rpi-hat-pmod.md) (GPIO10, GPIO9, GPIO11 — the shared SPI0 bus). This means 3 uo_out signals and 3 uio signals are electrically connected at the RPi side:
+**WARNING — JA/JB pin sharing conflict**: HAT JB pins 2-4 and HAT JA pins 2-4 are the [same RPi GPIO lines](rpi-hat-pmod.md) (GPIO10, GPIO9, GPIO11 — the shared SPI0 bus). This means 3 ui_in signals and 3 uio signals are electrically connected at the RPi side:
 
-| RPi GPIO | HAT JA Pin | TT Signal (uo_out) | HAT JB Pin | TT Signal (uio) | Conflict |
-| -------- | ---------- | ------------------ | ---------- | --------------- | -------- |
-| GPIO10   | JA2        | uo_out[1]          | JB2        | uio[1]          | Shorted  |
-| GPIO9    | JA3        | uo_out[2]          | JB3        | uio[2]          | Shorted  |
-| GPIO11   | JA4        | uo_out[3]          | JB4        | uio[3]          | Shorted  |
+| RPi GPIO | HAT JA Pin | TT Signal (ui_in) | HAT JB Pin | TT Signal (uio) | Conflict |
+| -------- | ---------- | ----------------- | ---------- | --------------- | -------- |
+| GPIO10   | JA2        | ui_in[1]          | JB2        | uio[1]          | Shorted  |
+| GPIO9    | JA3        | ui_in[2]          | JB3        | uio[2]          | Shorted  |
+| GPIO11   | JA4        | ui_in[3]          | JB4        | uio[3]          | Shorted  |
 
-When the FPGA drives uo_out[1,2,3] and uio[1,2,3] simultaneously with different values, the two FPGA outputs will fight each other through the shared RPi GPIO. This has several consequences:
+ui_in is an input to the design, so the short does not make two FPGA outputs fight. It does mean:
 
-- **GPIO loopback test**: Works because the test only drives ui_in (JC) and reads uo_out (JA). The uio pins (JB) are not driven during this test, so no conflict occurs.
-- **Bidirectional I/O test**: Cannot independently test uio[1,2,3] because they are shorted to uo_out[1,2,3] respectively. If the FPGA drives both buses, the conflicting outputs may cause contention or incorrect readings.
+- **A design that drives uio[1,2,3]** also drives ui_in[1,2,3], and the RPi must leave GPIO10/9/11 as inputs or it fights the FPGA.
+- **The RPi driving ui_in[1,2,3]** also drives uio[1,2,3], so those uio bits must be inputs in the design.
+- **Bidirectional I/O test**: cannot test uio[1,2,3] independently of ui_in[1,2,3].
 - **SPI kernel modules**: Must be unloaded (`rmmod spidev spi_bcm2835`) since GPIO7-11 overlap with HAT JA pins 1-4 and JB pins 1-4.
 
 The 5 unaffected uio bits (uio[0], uio[4:7]) on JB pins 1 and 7-10 use unique RPi GPIOs and work correctly.
@@ -146,14 +147,14 @@ The TT standard UART uses ui_in[3] (RX) and uo_out[4] (TX), following the [TinyT
 
 | Signal                    | iCE40 Pin | TT Signal | RP2350 GPIO | PMOD HAT Pin | RPi GPIO |
 | ------------------------- | --------- | --------- | ----------- | ------------ | -------- |
-| Serial RX (FPGA receives) | 21        | ui_in[3]  | GPIO20      | JC9          | 5        |
-| Serial TX (FPGA sends)    | 45        | uo_out[4] | GPIO37      | JA4          | 11       |
+| Serial RX (FPGA receives) | 21        | ui_in[3]  | GPIO20      | JA4          | 11       |
+| Serial TX (FPGA sends)    | 45        | uo_out[4] | GPIO37      | JC7          | 4        |
 
 ### Access via RP2350 USB bridge (recommended)
 
 The RP2350 connects to the same FPGA pins via GPIO20/GPIO37 and can bridge UART data to the USB CDC serial port (`/dev/ttyACM0`). This is the recommended approach since:
 
-- RPi GPIO5/11 are **not hardware UART pins** — the BCM2711 has no UART peripheral assignable to this GPIO pair.
+- RPi GPIO11 (to the FPGA's RX) and GPIO4 (from the FPGA's TX) are **not a hardware UART pair** — the BCM2711 has no UART peripheral assignable to them in these directions.
 - The NFS boot image has no device tree overlay files, and the root filesystem is read-only.
 - Software bit-bang UART at 115200 baud is unreliable under a non-RT Linux kernel.
 - The RP2350 has hardware UART peripherals that can be configured for these pins.
@@ -167,18 +168,19 @@ The RP2350 connects to the same FPGA pins via GPIO20/GPIO37 and can bridge UART 
 
 ### Access via RPi GPIO (not currently feasible)
 
-RPi GPIO5 and GPIO11 are not assignable to any BCM2711 hardware UART as a pair. The BCM2711 UART3 uses GPIO4/5 (TX/RX), and no UART uses GPIO11 for TX. Without hardware UART support, these pins cannot reliably serve as a serial port at 115200 baud.
+The RPi would have to transmit on GPIO11 and receive on GPIO4. On the BCM2711, GPIO4's UART function is UART3 TX (the wrong direction) and GPIO11's is UART4 RTS, so no hardware UART fits. Without hardware UART support, these pins cannot reliably serve as a serial port at 115200 baud.
 
 ## PMOD Loopback
 
-The GPIO loopback test uses all 8 ui_in pins (drive) and all 8 uo_out pins (read). The FPGA computes `uo_out = ~ui_in`.
+The GPIO loopback design computes `uo_out = ~ui_in`: the RPi drives the 8 ui_in pins (HAT JA) and reads the 8 uo_out pins (HAT JC). See the ui_in and uo_out tables above for the mapping.
 
-All 8 pairs are **empirically confirmed** (4-transition verification on pi33). See the ui_in and uo_out tables above for the full mapping.
+The GPIO lists in `test_pmod_loopback.py`'s `tt` config predate the measured cabling and have not been re-run against it ([issue #19](https://github.com/fpgas-online/fpgas.online-test-designs/issues/19)). The loopback is not one of the tests `fpgas-verify` runs at boot.
 
 ### Pre-test Requirements
 
-- `rmmod spidev spi_bcm2835` — SPI kernel modules claim GPIO7-11 (overlap with HAT JA pins 1-4 and JB pin 1, used by uo_out[2], uo_out[4], uo_out[6], uo_out[7])
+- `rmmod spidev spi_bcm2835` — SPI kernel modules claim GPIO7-11 (HAT JA pins 1-4 and JB pin 1, used by ui_in[0:3] and uio[0])
 - RP2350 GPIOs must be released to high-Z after FPGA programming (the programming wrapper handles this automatically)
+- Driving ui_in[1:3] also drives uio[1:3] (see the warning above); the loopback design does not use uio
 
 ## SPI Flash
 

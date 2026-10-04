@@ -121,31 +121,31 @@ BOARDS = {
             (6, "U13", "HAT JC.10 <- Arty JC.10"),
         ],
     },
-    # TT FPGA demo board on a Digilent Pmod HAT: uo_out on HAT JA, uio on JB,
-    # ui_in on JC (docs/hardware/tt-fpga-pin-mapping.md). The iCE40 transmits
-    # its package pin numbers. GPIO10/9/11 are left out, as for the Arty: uo_out
-    # and uio both drive them, and they decode as garbage.
+    # TT FPGA demo board on a Digilent Pmod HAT, as every Welland host is cabled:
+    # ui_in on HAT JA, uio on JB, uo_out on JC (docs/hardware/tt-fpga-pin-mapping.md).
+    # The iCE40 transmits its package pin numbers. GPIO10/9/11 are left out, as
+    # for the Arty: ui_in and uio both drive them, and they decode as garbage.
     "tt": {
         "description": "TT FPGA demo board Pmods -> Digilent Pmod HAT JA/JB/JC",
         "pins": [
-            (8, "38", "HAT JA.1 <- uo_out[0]"),
-            (19, "45", "HAT JA.7 <- uo_out[4]"),
-            (21, "46", "HAT JA.8 <- uo_out[5]"),
-            (20, "47", "HAT JA.9 <- uo_out[6]"),
-            (18, "48", "HAT JA.10 <- uo_out[7]"),
+            (8, "13", "HAT JA.1 <- ui_in[0]"),
+            (19, "23", "HAT JA.7 <- ui_in[4]"),
+            (21, "25", "HAT JA.8 <- ui_in[5]"),
+            (20, "26", "HAT JA.9 <- ui_in[6]"),
+            (18, "27", "HAT JA.10 <- ui_in[7]"),
             (7, "2", "HAT JB.1 <- uio[0]"),
             (26, "9", "HAT JB.7 <- uio[4]"),
             (13, "10", "HAT JB.8 <- uio[5]"),
             (3, "11", "HAT JB.9 <- uio[6]"),
             (2, "12", "HAT JB.10 <- uio[7]"),
-            (16, "13", "HAT JC.1 <- ui_in[0]"),
-            (14, "19", "HAT JC.2 <- ui_in[1]"),
-            (15, "18", "HAT JC.3 <- ui_in[2]"),
-            (17, "21", "HAT JC.4 <- ui_in[3]"),
-            (4, "23", "HAT JC.7 <- ui_in[4]"),
-            (12, "25", "HAT JC.8 <- ui_in[5]"),
-            (5, "26", "HAT JC.9 <- ui_in[6]"),
-            (6, "27", "HAT JC.10 <- ui_in[7]"),
+            (16, "38", "HAT JC.1 <- uo_out[0]"),
+            (14, "42", "HAT JC.2 <- uo_out[1]"),
+            (15, "43", "HAT JC.3 <- uo_out[2]"),
+            (17, "44", "HAT JC.4 <- uo_out[3]"),
+            (4, "45", "HAT JC.7 <- uo_out[4]"),
+            (12, "46", "HAT JC.8 <- uo_out[5]"),
+            (5, "47", "HAT JC.9 <- uo_out[6]"),
+            (6, "48", "HAT JC.10 <- uo_out[7]"),
         ],
     },
 }
