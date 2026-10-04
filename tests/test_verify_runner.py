@@ -9,6 +9,8 @@
 """
 
 import json
+import os
+import stat
 import subprocess
 
 import pytest
@@ -1147,7 +1149,7 @@ class Stops(Fake):
         return super().check(host, found, options)
 
 
-def _stopping_run(monkeypatch, start=(0, "")):
+def _stopping_run(monkeypatch, start=(0, ""), on_start=None):
     monkeypatch.setattr(runner, "installed", lambda: _boards(Stops("tt", seen=[{"variant": "tt-fpga"}])))
     monkeypatch.setattr(runner, "usb_devices", lambda: [])
     monkeypatch.setattr(runner, "pci_devices", lambda: [])
@@ -1160,6 +1162,8 @@ def _stopping_run(monkeypatch, start=(0, "")):
 
     def command(argv, timeout):
         order.append(("run", argv))
+        if on_start:
+            on_start()
         return start
 
     monkeypatch.setattr(runner, "write", write)
@@ -1198,3 +1202,66 @@ def test_a_board_that_stops_nothing_starts_nothing(opts, tmp_path, monkeypatch):
     monkeypatch.setattr(runner, "installed", lambda: _boards(Fake("arty", seen=[{"variant": "a7-35"}])))
     assert runner.run({**opts, "board": "arty", "report": str(tmp_path / "r.json")}) == 0
     assert order == [("write", "pass")]
+
+
+def test_the_report_on_disk_is_whole_when_the_service_is_started(opts, tmp_path, monkeypatch):
+    out = tmp_path / "verify.json"
+    seen = []
+    _stopping_run(monkeypatch, on_start=lambda: seen.append(json.loads(out.read_text())["result"]))
+    assert runner.run({**opts, "board": "tt", "report": str(out)}) == 0
+    assert seen == ["pass"]  # what a service reading the report as it starts finds
+
+
+def test_a_report_that_cannot_be_written_still_starts_the_service_and_is_loud(opts, tmp_path, monkeypatch):
+    order = _stopping_run(monkeypatch)
+
+    def full(report, where):
+        raise OSError("No space left on device")
+
+    monkeypatch.setattr(runner, "write", full)
+    with pytest.raises(OSError):
+        runner.run({**opts, "board": "tt", "report": str(tmp_path / "verify.json")})
+    assert order == [("run", ["systemctl", "start", "--no-block", "fpgas-tt.service"])]
+
+
+def test_an_interrupted_check_still_starts_the_service(opts, tmp_path, monkeypatch):
+    order = _stopping_run(monkeypatch)
+
+    def interrupted(options, *a, **k):
+        options["restart_later"].append("fpgas-tt.service")
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(runner, "verify", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        runner.run({**opts, "board": "tt", "report": str(tmp_path / "verify.json")})
+    assert order == [("run", ["systemctl", "start", "--no-block", "fpgas-tt.service"])]
+
+
+def test_a_report_path_that_is_not_a_plain_file_is_written_through_not_replaced(tmp_path):
+    """As root, renaming a file over /dev/null or /dev/stdout would replace the device for everyone."""
+    real = tmp_path / "real.json"
+    real.write_text("old")
+    link = tmp_path / "link.json"
+    link.symlink_to(real)
+    assert runner.write({"result": "pass"}, str(link)) == str(link)
+    assert link.is_symlink() and json.loads(real.read_text()) == {"result": "pass"}
+    fifo = tmp_path / "pipe"
+    os.mkfifo(fifo)
+    reader = os.open(fifo, os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        runner.write({"result": "fail"}, str(fifo))
+        assert json.loads(os.read(reader, 4096)) == {"result": "fail"}
+    finally:
+        os.close(reader)
+    assert stat.S_ISFIFO(fifo.stat().st_mode)  # still the pipe, not a file renamed over it
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["link.json", "pipe", "real.json"]
+
+
+def test_a_temporary_file_is_not_left_when_the_report_cannot_be_made_readable(tmp_path, monkeypatch):
+    def refuse(path, mode):
+        raise PermissionError("chmod")
+
+    monkeypatch.setattr(runner.os, "chmod", refuse)
+    with pytest.raises(PermissionError):
+        runner.write({"result": "pass"}, str(tmp_path / "verify.json"))
+    assert list(tmp_path.iterdir()) == []

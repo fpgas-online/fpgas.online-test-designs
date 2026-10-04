@@ -362,6 +362,11 @@ def write(report, where):
         return "stdout"
     out = pathlib.Path(where)
     out.parent.mkdir(parents=True, exist_ok=True)
+    if out.is_symlink() or (out.exists() and not out.is_file()):
+        # A symlink, a device or a pipe (--report /dev/stdout, /dev/null): written through, as it always was.
+        # Renaming a file over it would replace the link or, as root, the device node itself.
+        out.write_text(text)
+        return str(out)
     # Written beside the report and renamed over it: whoever reads the report (the site's bridge, a person)
     # sees the old one or the new one, never half of either.
     fd, tmp = tempfile.mkstemp(dir=out.parent, prefix=out.name + ".", suffix=".tmp")
@@ -407,15 +412,18 @@ def run(options, prog="fpgas-verify"):
     # when it starts (the TT site's bridge) must find this run's, not the one before.
     stopped = []
     options = {**options, "restart_later": stopped}
-    try:
-        report = verify(options)
-    except Exception as e:  # whatever went wrong, the site still hears a result, and the report says why
-        report = {"schema_version": SCHEMA_VERSION, "result": "error", "checked_at": _now(), "boards": [],
-                  "reason": f"fpgas-verify crashed: {type(e).__name__}: {e}"}  # fmt: skip
     to_stdout = kept_in == "-"
-    if not to_stdout:
-        kept_in = write(report, kept_in)
-    not_started = start_services(stopped)
+    try:
+        try:
+            report = verify(options)
+        except Exception as e:  # whatever went wrong, the site still hears a result, and the report says why
+            report = {"schema_version": SCHEMA_VERSION, "result": "error", "checked_at": _now(), "boards": [],
+                      "reason": f"fpgas-verify crashed: {type(e).__name__}: {e}"}  # fmt: skip
+        if not to_stdout:
+            kept_in = write(report, kept_in)
+    finally:
+        # However the check or the write ended (an interrupt, a full disk), a stopped service is not left down.
+        not_started = start_services(stopped)
     if not_started:  # the service may be left down: the result says so, and a report file is written again
         report["services_failed"] = not_started
         report["result"] = worst([report["result"], "error"])

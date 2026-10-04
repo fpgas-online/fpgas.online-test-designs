@@ -218,7 +218,8 @@ There is one result: **pass** or **fail**. A fail is named for its worst cause:
 * The summary goes to stderr; at boot, to the journal (`journalctl -b -u fpgas-verify`). A failed test's last
   8 output lines are shown.
 * The JSON report is in `/run/fpgas-online/verify.json`. It is replaced whole (written beside itself and
-  renamed), so a reader sees the old report or the new one, never part of one.
+  renamed), so a reader sees the old report or the new one, never part of one. A `--report` path that is a
+  symlink, a device or a pipe is written through instead, not replaced.
 
 **pass**: an Acorn on the Pi 5 setup (pi-sw2-p47, 2026-10-02T03:56:17Z; the summary its report gives):
 
@@ -534,7 +535,9 @@ Each test checks its bitstream's sha256 against the `-bitstreams` package's mani
 * The Fomu runs only `uart` at boot: a DFU load replaces the bootloader until the next power cycle.
 * The TT FPGA's `fpgas-tt.service` is stopped for the tests and started again once the report is written, so
   it never starts against the report of the run before. If it cannot be started again the result is `error`
-  and the report says so. While it is stopped, and before the first test, rpi-hwid reads who the board is ([TT FPGA identity](#tt-fpga-identity)).
+  and the report says so, in `services_failed` at the top of the report: the board's own entry keeps the
+  result of its tests, and the state recorded for it stands, since the board itself was read. The service is
+  started even when the check is interrupted or the report cannot be written. While it is stopped, and before the first test, rpi-hwid reads who the board is ([TT FPGA identity](#tt-fpga-identity)).
 * The NeTV2 has no USB, so finding it means driving the GPIO header. With `fpga-board = auto` the JTAG scan
   runs only if nothing was found on USB or PCI (or only a Xilinx PCIe design the Acorn check cannot name);
   `--no-probe` turns it off.
