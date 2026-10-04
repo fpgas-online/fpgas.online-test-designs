@@ -168,6 +168,12 @@ def test_a_bitstream_reached_through_a_symlink_is_loaded(tmp_path, monkeypatch):
     assert program.program("/dev/ttyACM0", str(link))[0] == 0 and seen == [False]
 
 
+def test_a_bitstream_that_cannot_be_copied_is_a_result_with_the_reason(tmp_path, monkeypatch):
+    monkeypatch.setattr(program, "run_mpremote", lambda *a, **k: pytest.fail("mpremote was run"))
+    rc, out, err = program.program("/dev/ttyACM0", str(tmp_path / "gone.bin"))
+    assert (rc, out) == (1, "") and err.startswith("the bitstream could not be copied for the board to read: ")
+
+
 def test_mpremote_not_finishing_or_not_installed_is_a_result_not_an_exception(tmp_path, monkeypatch):
     bitstream = _bitstream(tmp_path)
 
@@ -228,12 +234,15 @@ BOARD_WRITE = re.compile(
     r"""open\([^)]*,\s*(?:mode\s*=\s*)?["'][^"']*[wax+]"""  # open(path, "w"), open(path, mode="ab")
     r"""|open\([^),]*,\s*(?:mode\s*=\s*)?[A-Za-z_]"""  # open(path, mode): a mode that is not written out
     r"""|\bu?os\.(?:mkdir|remove|rename|rmdir|unlink|sync|mount|umount|VfsLfs2|VfsFat)\b"""
-    r"""|\bfrom\s+u?os\s+import\b"""
+    r"""|\bfrom\s+u?os\s+import\b|\bimport\s+u?os\s+as\b|__import__|\b(?:mip|vfs)\."""
+    r"""|open\([^)]*,\s*(?:mode\s*=\s*)?["'][^"']*\{"""  # a mode filled in by formatting
     r"""|\.write_(?:text|bytes)\(|\bFlash\(|\bwriteblocks\b|\bmkfs\b|\bioctl\("""
 )
 # The mpremote subcommands that change it, as an argument of their own or inside a command line.
+# This errs on the eager side: a Pi-side ["rm", "-f", path] or a message that happens to read like one of
+# these is flagged too. Reword it, or build it outside these files; do not loosen the guard for it.
 MPREMOTE_WRITE_WORD = re.compile(r"^(?:cp|fs|mkdir|rm|rmdir|touch|edit|mip|romfs)$")
-MPREMOTE_WRITE_LINE = re.compile(r"\bmpremote\b.*\s(?:cp|fs|mkdir|rm|rmdir|touch|edit|mip|romfs)\s", re.S)
+MPREMOTE_WRITE_LINE = re.compile(r"\bmpremote\b.*\s(?:cp|fs|mkdir|rm|rmdir|touch|edit|mip|romfs)(?:\s|$)", re.S)
 GUARDED = [
     *sorted(_HOST.glob("*.py")),
     _HOST.parent.parent / "verify" / "src" / "fpgas_online_verify" / "boards" / "tt_fpga.py",
@@ -251,7 +260,8 @@ def board_writes(text):
 
 
 def strings_of(source):
-    """Every string constant in Python `source`, docstrings left out (they describe, they are not sent)."""
+    """Every string and bytes constant in Python `source`, as text; docstrings left out (they describe, they
+    are not sent)."""
     tree = ast.parse(source)
     docstrings = {
         id(node.body[0].value)
@@ -263,8 +273,12 @@ def strings_of(source):
     fstrings = [n for n in ast.walk(tree) if isinstance(n, ast.JoinedStr)]
     parts = {id(v) for f in fstrings for v in f.values}
     joined = ["".join(v.value if isinstance(v, ast.Constant) else "{}" for v in f.values) for f in fstrings]
-    return joined + [n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)
-                     and id(n) not in docstrings and id(n) not in parts]  # fmt: skip
+    return joined + [
+        n.value if isinstance(n.value, str) else n.value.decode("latin-1")  # raw serial writes are bytes
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Constant) and isinstance(n.value, (str, bytes))
+        and id(n) not in docstrings and id(n) not in parts
+    ]  # fmt: skip
 
 
 @pytest.mark.parametrize("path", GUARDED, ids=lambda p: p.name)
@@ -300,6 +314,14 @@ def _install_safe_main(port):
     'run_mpremote(port, ["exec", "m = \'w\'; open(\'main.py\', m)"])',
     'run_mpremote(port, ["exec", "import rp2; rp2.Flash().writeblocks(0, b\'\')"])',
     'SCRIPT = "with open(\\"/bitstreams/custom.bin\\", \\"wb\\") as f: pass"',
+    """os.write(fd, b"f = open('main.py', 'w'); f.write('x')\\x04")""",
+    'subprocess.run([b"mpremote", b"cp", b"a", b":b"])',
+    'run_mpremote(port, ["exec", "import os as o; o.remove(\'main.py\')"])',
+    'run_mpremote(port, ["exec", "__import__(\'os\').remove(\'main.py\')"])',
+    'run_mpremote(port, ["exec", "import mip; mip.install(\'x\')"])',
+    'run_mpremote(port, ["exec", "import vfs; vfs.mount(bdev, \'/x\')"])',
+    'run_mpremote(port, ["exec", "open(\'main.py\', \'{}\')".format("w")])',
+    'subprocess.run("mpremote connect p fs".split() + ["rm", ":main.py"])',
 ])  # fmt: skip
 def test_the_guard_sees_a_board_write_however_it_is_written(source):
     assert [text for text in strings_of(source) if board_writes(text)], source

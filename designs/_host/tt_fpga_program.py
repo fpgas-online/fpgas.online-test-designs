@@ -32,7 +32,8 @@ REMOTE_MOUNT = "/remote"
 # The bitstream's name in the mounted directory.
 MOUNTED_NAME = "design.bin"
 # One load. Measured on a demo board, 2026-10-05: about 10 s for a 104090-byte bitstream, clock and GPIO
-# release included. Two loads (tt_test_wrapper retries once) and a test fit in the check's 300 s.
+# release included. At that speed two loads (tt_test_wrapper retries once), the bridge and a test fit in
+# the check's 300 s; if every step took its own limit they would not, and the check would say it ran out of time.
 PROGRAM_TIMEOUT = 60
 
 # Run last on the board: mpremote's mount also made /remote the working directory, and it is unmounted when
@@ -241,13 +242,17 @@ def program(port, bitstream, method="pio", gpio_release=False, timeout=PROGRAM_T
     One mpremote run: mount a temporary directory of this host on the board (over the serial link; nothing is
     stored on the board), run the programming script, leave. The directory holds a copy of the bitstream and
     nothing else the board could read or change, and is removed afterwards. mpremote not finishing in time is
-    returncode 124, mpremote not being installed 127: both with the reason as stderr, neither an exception."""
+    returncode 124, mpremote not being installed 127, a bitstream that cannot be copied 1: each with the reason
+    as stderr, none an exception."""
     script = board_script(method, gpio_release)
     with (
         tempfile.TemporaryDirectory(prefix="tt_program_") as tmp,
         tempfile.TemporaryDirectory(prefix="tt_program_script_") as script_dir,
     ):
-        shutil.copyfile(os.path.realpath(bitstream), os.path.join(tmp, MOUNTED_NAME))
+        try:
+            shutil.copyfile(os.path.realpath(bitstream), os.path.join(tmp, MOUNTED_NAME))
+        except OSError as e:
+            return 1, "", f"the bitstream could not be copied for the board to read: {e}"
         script_path = os.path.join(script_dir, "program.py")
         with open(script_path, "w") as f:
             f.write(script)
