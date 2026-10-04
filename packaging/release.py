@@ -88,14 +88,19 @@ def named(debs):
     return out
 
 
+# Every listing reads every release, and each push to main adds one: the largest page keeps a listing to the
+# fewest requests against GITHUB_TOKEN's hourly limit.
+RELEASES = "repos/{owner}/{repo}/releases?per_page=100"
+
+
 def published(gh=gh):
     """The name of every asset on every release of this repository."""
-    return set(gh("api", "repos/{owner}/{repo}/releases", "--paginate", "--jq", ".[].assets[].name").split())
+    return set(gh("api", RELEASES, "--paginate", "--jq", ".[].assets[].name").split())
 
 
 def carriers(name, gh=gh):
     """The tags of the releases carrying `name`, oldest first. `name` is a stored name: no quotes in it."""
-    out = gh("api", "repos/{owner}/{repo}/releases", "--paginate", "--jq",
+    out = gh("api", RELEASES, "--paginate", "--jq",
              f'.[] | select(any(.assets[]; .name == "{name}")) | "\\(.created_at) \\(.tag_name)"')  # fmt: skip
     return [tag for _, tag in sorted(tuple(line.split()) for line in out.splitlines() if line.strip())]
 
@@ -151,7 +156,10 @@ def publish(debs, version, commit, gh=gh):
                     raise
                 print(f"uploaded meanwhile by another run: {name}")
                 continue
-            oldest = carriers(name, gh)[0]
+            on = carriers(name, gh)
+            if not on:
+                raise ReleaseError(f"{name} was uploaded to {tag}, but no release lists it")
+            oldest = on[0]
             if oldest != tag:  # another run put it on an older release in the meantime: keep that one
                 gh("release", "delete-asset", tag, name, "--yes")
                 print(f"{name} is also on {oldest}: deleted the copy on {tag}")
