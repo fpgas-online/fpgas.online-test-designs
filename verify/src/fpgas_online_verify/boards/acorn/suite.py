@@ -24,6 +24,12 @@ read; and the FPGA is never reconfigured.
   scratch    the ctrl scratch register written and read back over BAR0 and over the P2 UART
   p2-gpio    J5/H5 in both directions (links.py), on a setup whose cable carries them
 
+Opt-in (`power-cycle-check = on`, config.py; off outside the fpgas.online fleet), after pcie-bar0:
+
+  power-cycle  the FPGA restarted since the last check (check.power_cycle_verdict): the ctrl scratch
+               register holds its reset value, or this boot's marker. The marker is written at the end of
+               the check, the only write that is not put back.
+
 The golden image has no DRAM and no P2 switch or spare GPIO: on it `ddr`, `p2-serial` and `p2-gpio` are
 not run, and running it is already a fault (`pcie-bar0`).
 
@@ -43,10 +49,14 @@ from . import bist, check, links
 from . import setup as setups
 
 TESTS = ("pcie-link", "pcie-bar0", "rp1-pio", "jtag", "flash", "ddr", "p2-uart", "p2-serial", "scratch", "p2-gpio")
+# Opt-in (options["power_cycle_check"], the `power-cycle-check` setting): not in the check unless switched on.
+POWER_CYCLE = "power-cycle"
+SELECTABLE = (*TESTS[:2], POWER_CYCLE, *TESTS[2:])  # what --test can name (the board's `tests`), in running order
+OPT_IN = f"the {POWER_CYCLE} test is opt-in: set `power-cycle-check = on` in /etc/fpgas-verify/*.ini to run it"
 # The tests fpgas-verify --identify runs: they only read (BAR0's identifier, DNA, XADC and the flash's identity;
 # IDCODE and DNA over P1 JTAG).
 IDENTIFY_TESTS = ("pcie-bar0", "jtag")
-NEEDS_BAR0 = ("pcie-bar0", "flash", "ddr", "p2-serial", "scratch", "p2-gpio")
+NEEDS_BAR0 = ("pcie-bar0", POWER_CYCLE, "flash", "ddr", "p2-serial", "scratch", "p2-gpio")
 CONSOLE_TAIL = 8  # BIOS console lines kept in the ddr test's output
 GOLDEN = "running the golden image: the operational slot did not boot"
 
@@ -71,7 +81,10 @@ class _Suite:
         self._send = options.get("event") or _quiet
         self._held = []  # events held while a driver is unbound
         self.run = options.get("run", run)
-        self.wanted = list(options.get("tests") or TESTS)
+        self.power_cycle_check = bool(options.get("power_cycle_check"))
+        self.tests = SELECTABLE if self.power_cycle_check else TESTS
+        self.wanted = list(options.get("tests") or self.tests)
+        self.marker = None  # this boot's scratch marker, once the power-cycle test has passed
         self.report = {"board": "acorn", "found": found, "variant": found["variant"], "tests": []}
         self.faults = []  # (result, reason) that belong to no one test
         self.not_run = {}
@@ -255,6 +268,33 @@ class _Suite:
         return links.p2_uart(self.setup, self.uart_builds, self.figures, bar0, self.options.get("uart_opener"),
                              self.options.get("settle"))  # fmt: skip
 
+    def power_cycle(self):
+        """Opt-in: the FPGA restarted since the last check (check.power_cycle_verdict). Read only; the
+        marker is written at the end of the check (_mark), after the scratch test has put the register back."""
+        marker = check.boot_marker(self.options.get("boot_id") or check.boot_id())
+        fault, found = check.power_cycle_verdict(self.bus.read(self.csrs.addr("ctrl_scratch")), marker)
+        if fault:
+            return {"test": POWER_CYCLE, "result": "fail", "reason": fault}
+        self.marker = marker
+        return {"test": POWER_CYCLE, "result": "pass", "output": [found]}
+
+    def _mark(self):
+        """Leave this boot's marker in the scratch register, so the next boot's check can tell whether the
+        FPGA was configured in between. Only after the power-cycle test passed: a board that failed it is
+        left as it was found, and fails again until it is power-cycled."""
+        if self.marker is None or self.bus is None:
+            return
+        try:
+            addr = self.csrs.addr("ctrl_scratch")
+            self.bus.write(addr, self.marker)
+            got = self.bus.read(addr)
+            if got != self.marker:
+                self.faults.append(
+                    ("fail", f"power-cycle: wrote the marker {self.marker:#010x} to scratch, read {got:#010x}")
+                )
+        except Exception as e:  # the check's own fault: say so
+            self.faults.append(("error", f"power-cycle: the marker could not be written: {type(e).__name__}: {e}"))
+
     def scratch(self):
         faults, done = [], []
         if self.bus is not None:
@@ -351,9 +391,13 @@ class _Suite:
         self.event("fpga-board-identified", identity.details(self.report["identity"]))
 
     def check(self):
-        unknown = [t for t in self.wanted if t not in TESTS]
+        unknown = [t for t in self.wanted if t not in self.tests]
+        opt_in = POWER_CYCLE in unknown  # asked for by name with the setting off: say how to switch it on
+        unknown = [t for t in unknown if t != POWER_CYCLE]
+        if opt_in and not unknown:
+            raise Problem("error", OPT_IN)
         if unknown:
-            raise Problem("error", f"the Acorn has no test {', '.join(unknown)} (it has {', '.join(TESTS)})")
+            raise Problem("error", f"the Acorn has no test {', '.join(unknown)} (it has {', '.join(self.tests)})")
         reason = check.not_ours(self.found)
         if reason:
             self.faults.append(("fail", reason))
@@ -368,6 +412,8 @@ class _Suite:
             no_uart = self._needs_setup() or (None if self.uart_builds else "the board does not run a known build")
             self.test("pcie-link", self._needs_setup(), self.pcie_link)
             self.test("pcie-bar0", None if self.gate_problem else no_bar0, self.pcie_bar0)
+            if self.power_cycle_check:
+                self.test(POWER_CYCLE, no_bar0, self.power_cycle)
             self.test("rp1-pio", self.options.get("rp1_host", links.not_rp1_host)(), self.rp1_pio)
             self.test("jtag", self._needs_setup() or no_variant, self.jtag)
             self.identified()
@@ -387,6 +433,7 @@ class _Suite:
                 None if self.setup.p2_gpio else f"J5 and H5 are not wired on the {self.setup.name} setup"
             )
             self.test("p2-gpio", no_gpio or no_bar0 or (golden and golden.format("P2 spare GPIO")), self.p2_gpio)
+            self._mark()
         self._flush()
         if self.driver:
             self.report["driver"] = self.driver
@@ -400,7 +447,7 @@ class _Suite:
             self.identified()
         if self.not_run:
             r["not_run"] = self.not_run
-        asked = [t for t in self.wanted if t in TESTS]
+        asked = [t for t in self.wanted if t in self.tests]
         if check.is_acorn(self.found) and asked and not r["tests"]:
             # a check that tested nothing has not shown the board works, whatever else it found
             self.faults.append(("fail", f"none of the tests asked for ran ({', '.join(asked)})"))

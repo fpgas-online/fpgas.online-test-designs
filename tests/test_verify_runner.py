@@ -16,6 +16,8 @@ import subprocess
 import pytest
 from fpgas_online_verify import config, core, identity, runner, state
 from fpgas_online_verify.board import Board, installed
+from fpgas_online_verify.boards.acorn import BOARD as ACORN
+from fpgas_online_verify.boards.acorn import suite as acorn_suite
 from fpgas_online_verify.core import Problem
 
 
@@ -442,6 +444,109 @@ def test_two_mode_files_that_disagree_are_an_error(tmp_path):
     (tmp_path / "b.ini").write_text("[verify]\nfpga-board = fomu\n")
     with pytest.raises(Problem, match="conflicting"):
         config.configured(tmp_path, tmp_path / "none")
+
+
+# -- the power-cycle check: opt-in, by the same files ------------------------------------------------------
+
+
+def _dirs(tmp_path):
+    mode, admin = tmp_path / "mode.d", tmp_path / "etc"
+    mode.mkdir()
+    admin.mkdir()
+    (mode / "fpgas-online-multi-board.ini").write_text("[verify]\nfpga-board = auto\n")
+    return mode, admin
+
+
+def test_the_power_cycle_check_is_off_unless_a_file_turns_it_on(tmp_path):
+    mode, admin = _dirs(tmp_path)
+    assert config.power_cycle_check(mode, admin) == (False, None)
+    assert config.power_cycle_check(tmp_path / "none", tmp_path / "nor-this") == (False, None)
+
+
+@pytest.mark.parametrize(("text", "on"), [("on", True), ("yes", True), ("true", True), ("1", True), ("On", True),
+                                          ("off", False), ("no", False), ("false", False), ("0", False)])  # fmt: skip
+def test_the_fleets_root_turns_the_power_cycle_check_on_in_etc(tmp_path, text, on):
+    mode, admin = _dirs(tmp_path)
+    (admin / "fleet.ini").write_text(f"[verify]\npower-cycle-check = {text}\n")
+    assert config.power_cycle_check(mode, admin) == (on, admin / "fleet.ini")
+    assert config.configured(mode, admin)[0] == "auto"  # a file that says only this leaves the board setting alone
+
+
+def test_the_admin_can_turn_off_what_a_package_turned_on(tmp_path):
+    mode, admin = _dirs(tmp_path)
+    (mode / "fpgas-online-multi-board.ini").write_text("[verify]\nfpga-board = auto\npower-cycle-check = on\n")
+    (admin / "local.ini").write_text("[verify]\npower-cycle-check = off\n")
+    assert config.power_cycle_check(mode, admin) == (False, admin / "local.ini")
+
+
+def test_a_power_cycle_setting_that_is_neither_on_nor_off_is_an_error(tmp_path):
+    mode, admin = _dirs(tmp_path)
+    (admin / "fleet.ini").write_text("[verify]\npower-cycle-check = maybe\n")
+    with pytest.raises(Problem, match=r"power-cycle-check.*maybe"):
+        config.power_cycle_check(mode, admin)
+    (admin / "fleet.ini").write_text("[verify]\npower-cycle-check = on\n")
+    (admin / "other.ini").write_text("[verify]\npower-cycle-check = off\n")
+    with pytest.raises(Problem, match="conflicting"):
+        config.power_cycle_check(mode, admin)
+
+
+class _Asked(Fake):
+    """Records the options its check was given."""
+
+    def check(self, host, found, options):
+        self.options = options
+        return super().check(host, found, options)
+
+
+def test_the_setting_reaches_the_boards_check_and_the_report_says_it_was_on(opts, tmp_path):
+    mode, admin = _dirs(tmp_path)
+    board = _Asked("arty", seen=[{"variant": "a7-35", "serial": "1"}])
+    report = runner.verify({**opts, "mode_dir": mode, "admin_dir": admin}, _boards(board), usb=[], pci=[])
+    assert not board.options.get("power_cycle_check") and "power_cycle_check" not in report
+    (admin / "fleet.ini").write_text("[verify]\npower-cycle-check = on\n")
+    report = runner.verify({**opts, "mode_dir": mode, "admin_dir": admin}, _boards(board), usb=[], pci=[])
+    assert board.options["power_cycle_check"] is True
+    assert report["power_cycle_check"] == {"on": True, "configured_by": str(admin / "fleet.ini")}
+
+
+def test_a_board_named_on_the_command_line_still_gets_the_setting(opts, tmp_path):
+    mode, admin = _dirs(tmp_path)
+    (admin / "fleet.ini").write_text("[verify]\npower-cycle-check = on\n")
+    board = _Asked("arty", seen=[{"variant": "a7-35", "serial": "1"}])
+    runner.verify({**opts, "board": "arty", "mode_dir": mode, "admin_dir": admin}, _boards(board), usb=[], pci=[])
+    assert board.options["power_cycle_check"] is True
+
+
+class _OptIn(WithTests):
+    """Like the Acorn: lists its opt-in test with the others, and its check refuses it while the setting is off."""
+
+    def check(self, host, found, options):
+        if "power-cycle" in (options.get("tests") or ()) and not options.get("power_cycle_check"):
+            raise Problem("error", acorn_suite.OPT_IN)
+        return super().check(host, found, options)
+
+
+@pytest.mark.parametrize("named", [{}, {"board": "acorn"}])  # found by `fpga-board = auto`, or named
+def test_the_opt_in_test_can_be_asked_for_by_name_and_is_an_error_while_the_setting_is_off(opts, tmp_path, named):
+    mode, admin = _dirs(tmp_path)
+    assert "power-cycle" in ACORN.tests
+    board = _OptIn("acorn", ACORN.tests, seen=[{"variant": "cle-215+", "serial": "1"}])
+    asked = {**opts, **named, "tests": ["power-cycle"], "mode_dir": mode, "admin_dir": admin}
+    report = runner.verify(asked, _boards(board), usb=[], pci=[])
+    assert report["result"] == "error" and core.exit_code(report["result"]) == 1
+    assert "opt-in: set `power-cycle-check = on`" in json.dumps(report) and board.options is None
+    (admin / "fleet.ini").write_text("[verify]\npower-cycle-check = on\n")
+    report = runner.verify(asked, _boards(board), usb=[], pci=[])
+    assert report["result"] == "pass" and board.options["tests"] == ["power-cycle"]
+    assert board.options["power_cycle_check"] is True
+
+
+def test_a_bad_power_cycle_setting_makes_fpgas_verify_fail_loudly(opts, tmp_path):
+    mode, admin = _dirs(tmp_path)
+    (admin / "fleet.ini").write_text("[verify]\npower-cycle-check = maybe\n")
+    board = _Asked("arty", seen=[{"variant": "a7-35", "serial": "1"}])
+    report = runner.verify({**opts, "mode_dir": mode, "admin_dir": admin}, _boards(board), usb=[], pci=[])
+    assert report["result"] == "error" and "power-cycle-check" in report["reason"]
 
 
 def test_no_configuration_makes_fpgas_verify_fail_loudly(opts, tmp_path):

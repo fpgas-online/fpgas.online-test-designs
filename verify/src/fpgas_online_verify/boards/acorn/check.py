@@ -90,6 +90,8 @@ XADC_TEMPERATURE = ("temperature_c", "xadc_temperature")
 XADC_VOLTAGES = (("vccint_v", "xadc_vccint"), ("vccaux_v", "xadc_vccaux"), ("vccbram_v", "xadc_vccbram"))
 dna_faults = dna.faults  # a DNA of all zeros or all ones is no DNA (dna.py)
 SCRATCH_PATTERNS = (0xA5A55A5A, 0x5A5AA5A5)
+SCRATCH_RESET = 0x12345678  # LiteX's ctrl scratch after configuration: nothing but a write changes it
+BOOT_ID = "/proc/sys/kernel/random/boot_id"
 
 
 # -- PCI IDs -------------------------------------------------------------------------------------------
@@ -405,6 +407,46 @@ def xadc_faults(xadc, ranges, where):
         if low is not None and not low <= value <= high:
             faults.append(f"XADC {key} over {where} is {value}, outside {low} to {high}")
     return faults
+
+
+# -- the power-cycle check (opt-in): was the FPGA configured since the last check? -----------------------------
+#
+# On the fleet a board is to be tested as its flash configures it, so a card that kept its configuration while
+# its Pi restarted (power from another source, a restart that does not reach the card) fails. Whether a restart
+# reaches the card depends on the setup: on a Pi 5 with the PCIe HAT the scratch register read its reset value
+# after a soft reboot (2026-10-05, the one board measured, DNA 0x0054b48664b04854), so there the check passes
+# after a soft reboot as after a power cycle. The deployed SoC has no uptime counter, so the check uses the ctrl
+# scratch register: it is SCRATCH_RESET after configuration and after a reset of the SoC (the check cannot tell
+# the two apart: either way the card restarted), and the check leaves this boot's marker there when it has run.
+
+
+def boot_id(path=BOOT_ID):
+    """The kernel's id of this boot: a new one at every start of the Pi."""
+    with open(path) as f:
+        return f.read().strip()
+
+
+def boot_marker(boot, sha256=hashlib.sha256):
+    """What the check leaves in the scratch register for the boot `boot`: 32 bits of its hash, never the
+    register's reset value or a pattern the scratch test writes."""
+    value = int.from_bytes(sha256(boot.encode()).digest()[:4], "big")
+    while value in (SCRATCH_RESET, *SCRATCH_PATTERNS):
+        value = (value + 1) & 0xFFFFFFFF
+    return value
+
+
+def power_cycle_verdict(value, marker):
+    """(fault or None, what was found), from the scratch register's value at the start of the check."""
+    if value == SCRATCH_RESET:
+        return (
+            None,
+            f"scratch is {value:#010x}, its value after configuration: the FPGA restarted since the last check",
+        )
+    if value == marker:
+        return None, f"scratch is {value:#010x}, this boot's marker: already checked in this boot"
+    return (f"the FPGA has not restarted since an earlier boot's check (scratch is {value:#010x}, neither its "
+            f"value after configuration nor this boot's marker): it did not restart with the Pi. "
+            "Power-cycle the Pi"), None  # fmt: skip
 
 
 def scratch_faults(read, write, csrs, where):

@@ -23,7 +23,8 @@ class Acorn(Board):
     title = "Sqrl Acorn"
     doc = "acorn.md"
     lock = str(check.LOCK)  # shared with fpgas-acorn-flash (spi_flash.py)
-    tests = suite.TESTS  # each can be run on its own with --test
+    tests = suite.SELECTABLE  # each can be run on its own with --test (power-cycle only when switched on)
+    opt_in = ((suite.POWER_CYCLE, "power-cycle-check = on"),)  # not run, or selectable, without the setting
     label_fields = ("dna", "idcode", "flash", "flash_jedec", "flash_uid", "identifier")
 
     def spot(self, host, usb, pci):

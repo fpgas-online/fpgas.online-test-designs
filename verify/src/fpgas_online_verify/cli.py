@@ -31,8 +31,12 @@ def _files(board):
         f"  {runner.REPORT!s:<40} the report (--report)",
         f"  {state.STATE!s:<40} the recorded state (--state)",
     ]
+    ini = f"  {str(config.ADMIN_DIR) + '/*.ini':<40} "
     if board is None:
-        rows.append(f"  {str(config.ADMIN_DIR) + '/*.ini':<40} fpga-board = BOARD or auto")
+        rows.append(f"{ini}fpga-board = BOARD or auto")
+        rows.append(f"  {'':<40} power-cycle-check = on or off")
+    elif getattr(board, "opt_in", None):  # the Acorn: its own command reads the same setting
+        rows.append(f"{ini}power-cycle-check = on or off")
     return "files:\n" + "\n".join(rows)
 
 
@@ -44,7 +48,10 @@ def _tests_epilog(board):
     # A board that loads test designs marks which are in the boot check; the Acorn's are all in it.
     boot = [t for t, v in tests.items() if v.get("verify")] if isinstance(board, TestBoard) else list(tests)
     other = [t for t in tests if t not in boot]
-    out = _listed("tests in the boot check", boot)
+    opt_in = dict(getattr(board, "opt_in", ()))  # in the boot check only where a setting switches them on
+    out = _listed("tests in the boot check", [t for t in boot if t not in opt_in])
+    for test, setting in opt_in.items():
+        out += "\n" + _listed(f"in the boot check only with `{setting}`", [test])
     return out + ("\n" + _listed(f"tests only fpgas-{board.slug}-debug runs", other) if other else "")
 
 
