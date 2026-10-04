@@ -86,7 +86,7 @@ Direct programming of the iCE40 via openFPGALoader (bypassing the MicroPython RE
 | ui_in[6] | 26        | 23          | JA9          | 20       | pin-id   |
 | ui_in[7] | 27        | 24          | JA10         | 18       | pin-id   |
 
-(\*) ui_in[1:3] are on JA pins 2-4, which share RPi GPIOs with JB pins 2-4. The pin-id decode on these GPIOs is corrupted because ui_in and uio both drive them. Positions inferred from the pattern: the JA connector pin numbering matches the TT bit ordering straight through (bit 0→pin 1, bit 7→pin 10).
+(\*) ui_in[1:3] are on JA pins 2-4, which share RPi GPIOs with JB pins 2-4. The pin-id design drives every pin as an output, so on these GPIOs the ui_in and uio labels collide and the decode is garbage. Positions inferred from the pattern: the JA connector pin numbering matches the TT bit ordering straight through (bit 0→pin 1, bit 7→pin 10).
 
 ### uo_out (User Outputs)
 
@@ -103,7 +103,7 @@ Direct programming of the iCE40 via openFPGALoader (bypassing the MicroPython RE
 | uo_out[6] | 47        | 39          | JC9          | 5        | pin-id   |
 | uo_out[7] | 48        | 40          | JC10         | 6        | pin-id   |
 
-Measured with the pin-id design on pi-sw2-p33, p35 and p36 on 2026-09-29 and again by `fpgas-verify` on 2026-10-04: every Welland host is cabled ui_in → JA, uio → JB, uo_out → JC. Earlier versions of this page had JA and JC the other way round ([issue #58](https://github.com/fpgas-online/fpgas.online-test-designs/issues/58)).
+Measured with the pin-id design on pi-sw2-p33, p35 and p36 on 2026-09-29 and again by `fpgas-verify` on 2026-10-04: all three are cabled ui_in → JA, uio → JB, uo_out → JC (pi-sw2-p34 was not powered for either measurement). Earlier versions of this page had JA and JC the other way round ([issue #58](https://github.com/fpgas-online/fpgas.online-test-designs/issues/58)).
 
 ### uio (Bidirectional I/O)
 
@@ -130,7 +130,7 @@ RP2350 GPIO numbers follow the sequential pattern (ui_in=17-24, uio=25-32, uo_ou
 | GPIO9    | JA3        | ui_in[2]          | JB3        | uio[2]          | Shorted  |
 | GPIO11   | JA4        | ui_in[3]          | JB4        | uio[3]          | Shorted  |
 
-ui_in is an input to the design, so the short does not make two FPGA outputs fight. It does mean:
+In a normal design ui_in is an input, so the short does not make two FPGA outputs fight (the pin-id design, which drives everything, is the exception). It does mean:
 
 - **A design that drives uio[1,2,3]** also drives ui_in[1,2,3], and the RPi must leave GPIO10/9/11 as inputs or it fights the FPGA.
 - **The RPi driving ui_in[1,2,3]** also drives uio[1,2,3], so those uio bits must be inputs in the design.
@@ -168,13 +168,13 @@ The RP2350 connects to the same FPGA pins via GPIO20/GPIO37 and can bridge UART 
 
 ### Access via RPi GPIO (not currently feasible)
 
-The RPi would have to transmit on GPIO11 and receive on GPIO4. On the BCM2711, GPIO4's UART function is UART3 TX (the wrong direction) and GPIO11's is UART4 RTS, so no hardware UART fits. Without hardware UART support, these pins cannot reliably serve as a serial port at 115200 baud.
+The RPi would have to transmit on GPIO11 and receive on GPIO4. On the BCM2711, UART3 has its TX, not its RX, on GPIO4, and no UART has its TX on GPIO11, so no hardware UART fits. Without hardware UART support, these pins cannot reliably serve as a serial port at 115200 baud.
 
 ## PMOD Loopback
 
 The GPIO loopback design computes `uo_out = ~ui_in`: the RPi drives the 8 ui_in pins (HAT JA) and reads the 8 uo_out pins (HAT JC). See the ui_in and uo_out tables above for the mapping.
 
-The GPIO lists in `test_pmod_loopback.py`'s `tt` config predate the measured cabling and have not been re-run against it ([issue #19](https://github.com/fpgas-online/fpgas.online-test-designs/issues/19)). The loopback is not one of the tests `fpgas-verify` runs at boot.
+`test_pmod_loopback.py`'s `tt` config follows these tables: bit i is driven on JA and read on JC. It replaces GPIO lists that predated the measured cabling ([issue #19](https://github.com/fpgas-online/fpgas.online-test-designs/issues/19)). The loopback is not one of the tests `fpgas-verify` runs at boot; it is the `pmod` test of `fpgas-tt-fpga-debug`.
 
 ### Pre-test Requirements
 

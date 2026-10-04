@@ -121,7 +121,7 @@ BOARDS = {
             (6, "U13", "HAT JC.10 <- Arty JC.10"),
         ],
     },
-    # TT FPGA demo board on a Digilent Pmod HAT, as every Welland host is cabled:
+    # TT FPGA demo board on a Digilent Pmod HAT, as the Welland hosts are cabled:
     # ui_in on HAT JA, uio on JB, uo_out on JC (docs/hardware/tt-fpga-pin-mapping.md).
     # The iCE40 transmits its package pin numbers. GPIO10/9/11 are left out, as
     # for the Arty: ui_in and uio both drive them, and they decode as garbage.

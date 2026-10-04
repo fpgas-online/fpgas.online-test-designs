@@ -193,7 +193,7 @@ After step 3, the RPi has clean access to the FPGA through the PMOD HAT, and tes
 
 The TT Demo Board's PMOD headers carry TinyTapeout I/O signals to/from the iCE40. PMOD cables connect these to the RPi's PMOD HAT ports (JA, JB, JC), mapping each signal to a specific RPi GPIO.
 
-Every Welland host is cabled ui_in → HAT JA, uio → HAT JB, uo_out → HAT JC. The per-bit tables (iCE40 pin, HAT pin, RPi GPIO) are in [tt-fpga-pin-mapping.md](hardware/tt-fpga-pin-mapping.md#tinytapeout-io-signals).
+The Welland hosts are cabled ui_in → HAT JA, uio → HAT JB, uo_out → HAT JC. The per-bit tables (iCE40 pin, HAT pin, RPi GPIO) are in [tt-fpga-pin-mapping.md](hardware/tt-fpga-pin-mapping.md#tinytapeout-io-signals).
 
 The UART design uses ui_in[3] (iCE40 pin 21) for serial RX and uo_out[4] (iCE40 pin 45) for serial TX; it is reached through the RP2350's USB bridge, not the RPi GPIOs.
 
