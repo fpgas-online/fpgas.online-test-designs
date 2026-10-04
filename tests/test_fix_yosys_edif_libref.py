@@ -32,6 +32,7 @@ def _cells_xtra(tmp_path, monkeypatch):
     path.write_text(CELLS_XTRA)
     monkeypatch.setenv("YOSYS_CELLS_XTRA", str(path))
 
+
 # ---------------------------------------------------------------------------
 # Minimal EDIF fixture mirroring the real bug
 # ---------------------------------------------------------------------------
@@ -107,6 +108,7 @@ MINIMAL_BROKEN_EDIF = """(edif top
 # find_duplicated_cells — the auto-detection of stuck-in-LIB user modules
 # ---------------------------------------------------------------------------
 
+
 def test_find_duplicated_cells_identifies_user_modules():
     # VexRiscv and DataCache appear in both LIB and DESIGN — the fixer
     # must pick exactly these, and NOT BUFG (only in LIB) or top (only in
@@ -143,6 +145,7 @@ def test_find_duplicated_cells_empty_when_no_overlap():
 # ---------------------------------------------------------------------------
 # fix_edif — core rewrite
 # ---------------------------------------------------------------------------
+
 
 def test_fix_rewrites_instance_references_for_duplicated_cells():
     fixed, n = fixer.fix_edif(MINIMAL_BROKEN_EDIF)
@@ -352,6 +355,7 @@ def test_fix_rewrites_mixed_plain_and_rename_cells():
 # CLI entry — files in, files out
 # ---------------------------------------------------------------------------
 
+
 def test_cli_reads_and_writes_files(tmp_path):
     src = tmp_path / "top.edif"
     src.write_text(MINIMAL_BROKEN_EDIF)
@@ -491,10 +495,8 @@ def test_remove_unused_iopads_leaves_primitives_alone():
         "$iopadmap$top.clk200_p",
         "$iopadmap$top.clk200_p",
     ).replace(
-        "(cellRef IBUF (libraryRef LIB)))\n"
-        "            (property keep (integer 1))",
-        "(cellRef BUFG (libraryRef LIB)))\n"
-        "            (property keep (integer 1))",
+        "(cellRef IBUF (libraryRef LIB)))\n            (property keep (integer 1))",
+        "(cellRef BUFG (libraryRef LIB)))\n            (property keep (integer 1))",
         1,
     )
     unused = fixer.find_unused_iopads(non_iopad)
@@ -674,14 +676,14 @@ def test_binary_params_are_read_per_primitive_with_their_width():
 def test_binarize_properties_writes_sized_binary_strings():
     fixed, n = fixer.binarize_properties(BINARY_PARAM_EDIF, fixer.binary_params(CELLS_XTRA))
     assert n == 3
-    assert "(property ALIGN_COMMA_ENABLE (string \"10'b1111111111\"))" in fixed
-    assert "(property CFOK_CFG2 (string \"6'b100000\"))" in fixed
+    assert '(property ALIGN_COMMA_ENABLE (string "10\'b1111111111"))' in fixed
+    assert '(property CFOK_CFG2 (string "6\'b100000"))' in fixed
     # Same parameter, other primitive, other width.
-    assert "(property CFOK_CFG2 (string \"7'b0100000\"))" in fixed
+    assert '(property CFOK_CFG2 (string "7\'b0100000"))' in fixed
     # Left alone: hex-declared, integer-typed, and already-string properties, and the closing parens.
     assert "(property PMA_RSV (integer 819))" in fixed
     assert "(property RXOUT_DIV (integer 2))" in fixed
-    assert "(property RXCDR_CFG (string \"83'h0000107fe406001041010\"))" in fixed
+    assert '(property RXCDR_CFG (string "83\'h0000107fe406001041010"))' in fixed
     assert '(property src (string "pipe_wrapper.v:979.7-1269.7")))' in fixed
 
 
@@ -701,6 +703,7 @@ def test_binarize_properties_refuses_a_value_wider_than_the_parameter():
 # ---------------------------------------------------------------------------
 # Malformed-EDIF error paths — must raise loudly, not silently no-op
 # ---------------------------------------------------------------------------
+
 
 def test_find_duplicated_cells_raises_on_missing_lib_block():
     # If a future Yosys template change drops the `(external LIB ...)`

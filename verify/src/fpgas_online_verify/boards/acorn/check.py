@@ -411,11 +411,13 @@ def xadc_faults(xadc, ranges, where):
 
 # -- the power-cycle check (opt-in): was the FPGA configured since the last check? -----------------------------
 #
-# A restart of the Pi does not reconfigure the FPGA: only a power cycle (or a JTAG reset) makes it load its
-# flash again. On the fleet a board is to be tested as its flash configures it, so a Pi that restarted while
-# the card kept its configuration (a soft reboot, power from another source, a power-off too short to drop
-# the card) fails. The deployed SoC has no uptime counter, so the check uses the ctrl scratch register: it is
-# SCRATCH_RESET after configuration, and the check leaves this boot's marker there when it has run.
+# On the fleet a board is to be tested as its flash configures it, so a card that kept its configuration while
+# its Pi restarted (power from another source, a restart that does not reach the card) fails. Whether a restart
+# reaches the card depends on the setup: on a Pi 5 with the PCIe HAT a soft reboot was seen to bring the FPGA
+# back to its configured state (2026-10-05, the board with DNA 0x0054b48664b04854), so there the check passes
+# after a soft reboot as after a power cycle. The deployed SoC has no uptime counter, so the check uses the ctrl
+# scratch register: it is SCRATCH_RESET after configuration (and after a reset of the SoC, which the check
+# cannot tell from configuration), and the check leaves this boot's marker there when it has run.
 
 
 def boot_id(path=BOOT_ID):

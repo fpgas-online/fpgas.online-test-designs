@@ -49,8 +49,10 @@ from . import bist, check, links
 from . import setup as setups
 
 TESTS = ("pcie-link", "pcie-bar0", "rp1-pio", "jtag", "flash", "ddr", "p2-uart", "p2-serial", "scratch", "p2-gpio")
-# Opt-in (options["power_cycle_check"], the `power-cycle-check` setting): not a test at all unless switched on.
+# Opt-in (options["power_cycle_check"], the `power-cycle-check` setting): not in the check unless switched on.
 POWER_CYCLE = "power-cycle"
+SELECTABLE = (*TESTS[:2], POWER_CYCLE, *TESTS[2:])  # what --test can name (the board's `tests`), in running order
+OPT_IN = f"the {POWER_CYCLE} test is opt-in: set `power-cycle-check = on` in /etc/fpgas-verify/*.ini to run it"
 # The tests fpgas-verify --identify runs: they only read (BAR0's identifier, DNA, XADC and the flash's identity;
 # IDCODE and DNA over P1 JTAG).
 IDENTIFY_TESTS = ("pcie-bar0", "jtag")
@@ -80,7 +82,7 @@ class _Suite:
         self._held = []  # events held while a driver is unbound
         self.run = options.get("run", run)
         self.power_cycle_check = bool(options.get("power_cycle_check"))
-        self.tests = (*TESTS[:2], POWER_CYCLE, *TESTS[2:]) if self.power_cycle_check else TESTS
+        self.tests = SELECTABLE if self.power_cycle_check else TESTS
         self.wanted = list(options.get("tests") or self.tests)
         self.marker = None  # this boot's scratch marker, once the power-cycle test has passed
         self.report = {"board": "acorn", "found": found, "variant": found["variant"], "tests": []}
@@ -390,6 +392,8 @@ class _Suite:
 
     def check(self):
         unknown = [t for t in self.wanted if t not in self.tests]
+        if POWER_CYCLE in unknown:  # asked for by name with the setting off: say how to switch it on
+            raise Problem("error", OPT_IN)
         if unknown:
             raise Problem("error", f"the Acorn has no test {', '.join(unknown)} (it has {', '.join(self.tests)})")
         reason = check.not_ours(self.found)

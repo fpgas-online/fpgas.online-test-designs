@@ -445,6 +445,8 @@ options:
 
 tests in the boot check:
   pcie-link pcie-bar0 rp1-pio jtag flash ddr p2-uart p2-serial scratch p2-gpio
+in the boot check only with `power-cycle-check = on`:
+  power-cycle
 
 the result is pass (exit 0) or a fail named for its worst cause (exit 1):
   pass          every test passed, and the board and flash are as recorded
@@ -456,6 +458,7 @@ the result is pass (exit 0) or a fail named for its worst cause (exit 1):
 files:
   /run/fpgas-online/verify.json            the report (--report)
   /var/lib/fpgas-online/verify-state.json  the recorded state (--state)
+  /etc/fpgas-verify/*.ini                  power-cycle-check = on or off
 ```
 
 ```text
@@ -642,10 +645,9 @@ From a checkout, the check reads them from the repository.
 
 #### The Acorn's power-cycle check (opt-in)
 
-A restart of the Pi does not reconfigure the FPGA: the Acorn loads its flash again only when it is power-cycled
-(or reset over JTAG). So after a soft reboot, or when the card is fed from somewhere else or the power was off
-too briefly, the FPGA still holds whatever was in it before, a visitor's design included, and the check would be
-testing that, not what the flash configures. With `power-cycle-check = on` the board fails in that case:
+A board is to be tested as its flash configures it. If the FPGA kept its configuration while its Pi restarted
+(the card fed from somewhere else, a restart that does not reach the card), it still holds whatever was in it
+before, a visitor's design included. With `power-cycle-check = on` the board fails in that case:
 
 ```text
 power-cycle fail: the FPGA has not been configured since an earlier boot's check (scratch is 0x…, neither its
@@ -666,10 +668,19 @@ A board that fails is left as it was found, so it fails again until it is power-
 own leaves no marker. The report says when the check was on: `"power_cycle_check": {"on": true, "configured_by":
 "/etc/fpgas-verify/…ini"}`.
 
-**Only switch it on where every restart of the Pi is a power cycle.** On the fpgas.online fleet that means the
-root-update reboot wave and the stale-root watchdog power-cycle Acorn hosts through PoE rather than rebooting
-them; with the check on and a soft reboot, every Acorn fails. Outside the fleet nothing says how a host is
-restarted, which is why it is off by default.
+**What a restart of the Pi does to the card depends on the setup, so the check is opt-in.** Measured on
+5 Oct 2026 on a Pi 5 with the PCIe HAT (the Acorn with DNA `0x0054b48664b04854`): after a plain `systemctl
+reboot` the scratch register was back at `0x12345678`, so the FPGA had returned to its configured state and the
+check passed, as it does after a PoE power cycle. The Compute Module setup has not been measured. Switch the
+check on only for a setup where a restart of the Pi is known to do that; where it does not, every board fails
+after a restart. Outside the fleet nothing says how a host is restarted, which is why it is off by default.
+
+Two limits. A reset of the SoC (a write to `ctrl_reset`) also returns the register to `0x12345678`, and the
+check cannot tell that from configuration. And anyone with root on the Pi can write the register; the check is
+there to catch a card that did not restart with its Pi, not a visitor who sets out to hide it.
+
+`fpgas-verify --test power-cycle` runs it alone, when the setting is on; with the setting off it is an error
+that says how to switch it on.
 
 * `ddr` in detail ([`bist.py`](../verify/src/fpgas_online_verify/boards/acorn/bist.py), the same code
   [`selftest.py`](../designs/acorn-pcie/host/selftest.py) runs):

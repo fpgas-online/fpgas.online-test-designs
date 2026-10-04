@@ -967,7 +967,12 @@ def test_the_acorn_commands_offer_only_the_options_its_check_uses(monkeypatch, c
             cli.board_main(option, prog="fpgas-acorn-verify")
     with pytest.raises(SystemExit):
         cli.board_main(["--help"], prog="fpgas-acorn-verify")
-    assert f"tests in the boot check:\n  {' '.join(ACORN.tests)}\n" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    always = " ".join(t for t in ACORN.tests if t != "power-cycle")
+    assert f"tests in the boot check:\n  {always}\n" in out
+    assert "in the boot check only with `power-cycle-check = on`:\n  power-cycle\n" in out
+    assert "/etc/fpgas-verify/*.ini" in out and "power-cycle-check = on or off" in out
+    assert all(len(line) <= 80 for line in out.splitlines())
     with pytest.raises(SystemExit):  # the debug tool has no per-test commands for the Acorn
         cli.board_main(["--help"], prog="fpgas-acorn-debug")
     out = capsys.readouterr().out

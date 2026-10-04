@@ -658,7 +658,8 @@ def test_a_test_the_acorn_does_not_have_is_an_error(tmp_path, images):
 
 
 def test_the_board_module_lists_the_tests():
-    assert ACORN.tests == suite.TESTS
+    assert ACORN.tests == suite.SELECTABLE and set(ACORN.tests) - set(suite.TESTS) == {"power-cycle"}
+    assert ACORN.opt_in == (("power-cycle", "power-cycle-check = on"),)
 
 
 # -- BAR0 ---------------------------------------------------------------------------------------------
@@ -983,3 +984,18 @@ def test_the_marker_is_never_the_reset_value_or_a_test_pattern():
 
     for value in taken:
         assert av.boot_marker("x", sha256=lambda data, v=value: Digest(v)) not in taken
+
+
+def test_power_cycle_can_be_asked_for_by_name_when_it_is_on_and_says_so_when_it_is_off(tmp_path, images):
+    assert "power-cycle" in ACORN.tests  # so `--test power-cycle` is not filtered out with fpga-board = auto
+    rig = Rig(tmp_path, images)
+    report = rig.check(power_cycle_check=True, boot_id=BOOT_A, tests=["power-cycle"])
+    assert _results(report) == {"power-cycle": "pass"} and rig.soc.scratch == av.boot_marker(BOOT_A)
+    with pytest.raises(core.Problem, match="opt-in: set `power-cycle-check = on`"):
+        Rig(tmp_path / "off", images).check(tests=["power-cycle"])
+
+
+def test_identify_never_runs_or_marks_the_power_cycle_check(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    ACORN.identify({}, rig.found(), rig.options(power_cycle_check=True, boot_id=BOOT_A))
+    assert rig.soc.scratch == av.SCRATCH_RESET
