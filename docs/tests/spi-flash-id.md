@@ -102,7 +102,6 @@ These values must be confirmed against the actual flash chips on each board:
 | Arty A7 | Micron or Spansion | TBD — varies by board revision | Check silkscreen on flash chip |
 | NeTV2 | TBD | TBD | To be determined |
 | Fomu EVT | TBD | TBD | To be determined |
-| TT FPGA | TBD | TBD | To be determined |
 | ULX3S | TBD | TBD | To be determined |
 | ButterStick | TBD | TBD | To be determined |
 

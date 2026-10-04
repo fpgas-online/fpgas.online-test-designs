@@ -9,7 +9,7 @@ FPGA on TT boards.
 | Script | Purpose |
 |--------|---------|
 | `tt_fpga_program.py` | Program the TT FPGA via the RP2350 USB CDC interface |
-| `tt_test_wrapper.py` | Combined program + bridge + test runner for UART and SPI Flash tests |
+| `tt_test_wrapper.py` | Combined program + bridge + test runner for UART tests |
 | `tt_pmod_wrapper.py` | Program FPGA via RP2350, then hand off to RPi GPIO for PMOD tests |
 
 ## Usage
