@@ -21,7 +21,7 @@ sudo apt install fpgas-online-tt-fpga
 
 `fpgas-online-tt` is a different package: the TT site's own.
 
-The check finds the board by its Raspberry Pi microcontroller on USB (vendor `2e8a`). It first loads the PMOD pin identification design and checks the PMOD HAT cabling against the expected map (ui_in on HAT JA, uio on JB, uo_out on JC, [tt-fpga-pin-mapping.md](tt-fpga-pin-mapping.md)); a miswired HAT fails the board. It then loads the UART and SPI flash test designs through that microcontroller (`tt_fpga_program.py`, over `mpremote`), and runs each design's host test through its UART bridge on `/dev/ttyACM0`. Every load writes the bitstream to the microcontroller's filesystem, so its flash is not part of what `changed` compares; its USB serial number is. `mpremote` is `micropython-mpremote` in trixie, but only in bookworm-backports for bookworm: without it the check reports an `error`. Only the PMOD loopback test is left to `fpgas-tt-fpga-debug`.
+The check finds the board by its Raspberry Pi microcontroller on USB (vendor `2e8a`). It first loads the PMOD pin identification design and checks the PMOD HAT cabling against the expected map (ui_in on HAT JA, uio on JB, uo_out on JC, [tt-fpga-pin-mapping.md](tt-fpga-pin-mapping.md)); a miswired HAT fails the board. It then loads the UART test design through that microcontroller (`tt_fpga_program.py`, over `mpremote`), and runs its host test through the UART bridge on `/dev/ttyACM0`. There is no SPI flash test: the breakout has no flash (see [Programming](#programming)). Every load writes the bitstream to the microcontroller's filesystem, so its flash is not part of what `changed` compares; its USB serial number is. `mpremote` is `micropython-mpremote` in trixie, but only in bookworm-backports for bookworm: without it the check reports an `error`. Only the PMOD loopback test is left to `fpgas-tt-fpga-debug`.
 
 Before the first test, while it holds `/dev/ttyACM0`, the check runs `rpi-hwid tinytapeout --json --no-stop-service` when [rpi-hwid](https://github.com/mithro/rpi-hwid) is installed (`python3-rpi-hwid`, which `fpgas-online-verify` suggests). rpi-hwid asks the Tiny Tapeout SDK on the RP2350 which microcontroller, chip, demo board and SDK release this is. The answer goes into the board's identity, for rpi-hwid's Tiny Tapeout label ([TT FPGA identity](../verify.md#tt-fpga-identity), [Tiny Tapeout fields](../identity.md#tiny-tapeout-fields)). Without rpi-hwid those fields are not read, and the board does not fail for it.
 
@@ -31,7 +31,7 @@ It runs at every boot of the Welland TT FPGA boards: [current results](../verify
 
 ```bash
 sudo fpgas-tt-fpga-verify --no-publish --report -  # this board only, the JSON report on stdout
-sudo fpgas-tt-fpga-debug test spiflash             # load one test's design and run its test
+sudo fpgas-tt-fpga-debug test uart                 # load one test's design and run its test
 ```
 
 What the results mean, the report, `changed` and `--update`, the debug tool and common failures: [verify.md](../verify.md#reading-the-result).
@@ -60,12 +60,12 @@ The TT FPGA Demo Board consists of two PCBs:
 
 1. **TinyTapeout Demo PCB** (bottom): Contains the RP2040 microcontroller, USB-C connector, 7-segment display, DIP switches, and PMOD headers. This PCB is designed to interface with TinyTapeout ASICs but also accepts the FPGA breakout board.
 
-2. **FPGA Breakout Board** (top): Contains the iCE40UP5K FPGA and SPI flash. It plugs into the demo PCB's chip socket, presenting the same interface as a TinyTapeout ASIC.
+2. **FPGA Breakout Board** (top): Contains the iCE40UP5K FPGA; it has no SPI flash. It plugs into the demo PCB's chip socket, presenting the same interface as a TinyTapeout ASIC.
 
 ```
 ┌──────────────────────────────┐
 │    FPGA Breakout Board       │
-│    (iCE40UP5K + SPI Flash)   │
+│    (iCE40UP5K)               │
 │                              │
 │    ┌────────────────────┐    │
 │    │  Pin headers down  │    │
@@ -175,9 +175,12 @@ python3 designs/_host/tt_fpga_program.py /dev/ttyACM0 bitstream.bin
    - Starts the 50 MHz clock on GPIO16
 3. For PMOD tests: release all GPIO pins to high-Z (`--gpio-release`)
 
-**SPI Flash:** The breakout board also has SPI flash (CS_N=pin 16, CLK=pin 15,
-MOSI=pin 14, MISO=pin 17) for persistent bitstream storage, used by
-the SPI Flash ID test.
+**No SPI flash:** the breakout has no flash. In its published design
+([TinyTapeout/breakout-pcb, `ASIC-simulator/ttdbv3-fpga-ICE40UP5k`](https://github.com/TinyTapeout/breakout-pcb/tree/6e3725f7fc5707d0cbe7632c39b867da740d10d7/ASIC-simulator/ttdbv3-fpga-ICE40UP5k),
+checked 2026-10-04) the iCE40's configuration SPI (SPI_SS=pin 16, SPI_SCK=pin 15,
+SPI_SO=pin 14, SPI_SI=pin 17) goes only to the demo board's microcontroller, which
+loads the bitstream at every power-up. So there is no SPI Flash ID test for
+this board ([#52](https://github.com/fpgas-online/fpgas.online-test-designs/issues/52)).
 
 ## LiteX Integration
 
@@ -261,7 +264,6 @@ bridging. Three host-side wrapper scripts handle the RP2040 interaction:
 | Test           | Bitstream                                                                            | Wrapper                                                            | What it verifies                     |
 |----------------|--------------------------------------------------------------------------------------|--------------------------------------------------------------------|--------------------------------------|
 | UART echo      | [`uart/.../tt_fpga_platform.bin`](../../designs/uart/build/tt-fpga-yosys-nextpnr/gateware/)              | [`tt_test_wrapper.py`](../../designs/_host/tt_test_wrapper.py)     | Serial TX/RX via RP2040 bridge       |
-| SPI Flash ID   | [`spi-flash-id/.../tt_fpga_platform.bin`](../../designs/spi-flash-id/build/tt-fpga-yosys-nextpnr/gateware/) | [`tt_test_wrapper.py`](../../designs/_host/tt_test_wrapper.py) | JEDEC ID readback from on-board flash |
 | PMOD loopback  | [`pmod-loopback/.../tt_fpga_platform.bin`](../../designs/pmod-loopback/build/tt-fpga-yosys-nextpnr/gateware/) | [`tt_pmod_wrapper.py`](../../designs/_host/tt_pmod_wrapper.py)     | GPIO inversion across wired pin pairs |
 | PMOD pin ID    | [`pmod-pin-id/.../tt_fpga_platform.bin`](../../designs/pmod-pin-id/build/tt-fpga-yosys-nextpnr/gateware/) | [`tt_pmod_wrapper.py`](../../designs/_host/tt_pmod_wrapper.py)     | UART TX on each GPIO pin             |
 

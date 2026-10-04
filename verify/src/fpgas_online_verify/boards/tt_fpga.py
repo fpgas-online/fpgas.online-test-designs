@@ -1,6 +1,7 @@
 """TT FPGA Demo Board (iCE40UP5K behind an RP2350): found by the RP2350 on USB, loaded through it (tt_fpga_program.py,
-over mpremote). The FPGA's UART reaches the Pi only through the RP2350, so the UART and SPI-flash tests run
-through tt_test_wrapper.py's bridge, which loads the design too.
+over mpremote). The FPGA's UART reaches the Pi only through the RP2350, so the UART test runs
+through tt_test_wrapper.py's bridge, which loads the design too. There is no SPI-flash test: the breakout has
+no flash (docs/hardware/tt-fpga.md).
 
 Every load writes the bitstream to the RP2350's filesystem, so the flash cannot be part of the state; the state
 is the RP2350's USB serial number. Loading needs mpremote (micropython-mpremote: in trixie, and only
@@ -112,7 +113,7 @@ class TTFPGA(TestBoard):
     report_fields = (*RPI_HWID_FIELDS, "tinytapeout_")
     port = "/dev/ttyACM0"
     services = ("fpgas-tt.service",)  # the TT site's bridge keeps the RP2350's port open while it runs
-    flash_note = "not read: every verify rewrites the bitstream on the RP2350"
+    flash_note = "none: the FPGA breakout has no SPI flash; the RP2350 loads the bitstream and every verify rewrites it"
     # Run in this order, and the board is left with the last design loaded (testbench.py): the pin-ID scan
     # comes first, so a UART-bridge design (one TX pin) is what stays, not one driving every Pmod line.
     tests: ClassVar[dict] = {
@@ -123,8 +124,6 @@ class TTFPGA(TestBoard):
         "uart": {"artifact": "uart-test-tt-fpga/tt_fpga_platform.bin", "script": "test_uart.py",
                  "args": ["--port", "{port}", "--board", "tt", "--skip-banner"], "verify": True,
                  "runner": "tt-bridge"},
-        "spiflash": {"artifact": "spiflash-test-tt-fpga/tt_fpga_platform.bin", "script": "test_spiflash.py",
-                     "args": ["--port", "{port}", "--board", "tt"], "verify": True, "runner": "tt-bridge"},
         "pmod": {"artifact": "gpio-loopback-{v}/tt_fpga_platform.bin", "script": "test_pmod_loopback.py",
                  "args": ["--board", "tt"], "pre": PMOD_PRE, "program_args": ["--gpio-release"]},
     }  # fmt: skip

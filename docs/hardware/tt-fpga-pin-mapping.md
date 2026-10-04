@@ -8,7 +8,7 @@ Pin mapping for the TinyTapeout FPGA Demo Board v3 (TTDBv3) as connected in the 
 
 The TTDBv3 consists of two boards:
 
-- **FPGA Breakout Board**: iCE40UP5K + SPI flash + clock oscillator
+- **FPGA Breakout Board**: iCE40UP5K + clock oscillator (no SPI flash)
 - **TT Demo PCB**: RP2350B controller, PMOD headers, 7-segment display, DIP switches
 
 The RP2350 programs the iCE40 via SPI and provides a 50 MHz clock. After programming, the RP2350 releases its GPIO pins to high-impedance so the RPi can communicate with the FPGA directly through the PMOD HAT.
@@ -182,16 +182,16 @@ The GPIO loopback design computes `uo_out = ~ui_in`: the RPi drives the 8 ui_in 
 - RP2350 GPIOs must be released to high-Z after FPGA programming (the programming wrapper handles this automatically)
 - Driving ui_in[1:3] also drives uio[1:3] (see the warning above); the loopback design does not use uio
 
-## SPI Flash
+## Configuration SPI
 
-Dedicated iCE40 SPI pins on the FPGA breakout board (not shared with PMOD).
+The iCE40's dedicated SPI pins on the FPGA breakout board (not shared with PMOD). They go only to the demo board's microcontroller, which loads the bitstream over them; the breakout has no SPI flash ([tt-fpga.md](tt-fpga.md#programming)).
 
-| Signal | iCE40 Pin |
-| ------ | --------- |
-| CS_N   | 16        |
-| CLK    | 15        |
-| MISO   | 17        |
-| MOSI   | 14        |
+| iCE40 pin function | iCE40 Pin |
+| ------------------ | --------- |
+| SPI_SS             | 16        |
+| SPI_SCK            | 15        |
+| SPI_SI             | 17        |
+| SPI_SO             | 14        |
 
 ## 7-Segment Display
 

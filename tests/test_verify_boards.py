@@ -196,6 +196,37 @@ def test_the_netv2_scan_puts_its_jtag_pins_back_as_they_were():
                              ["pinctrl", "set", "22", "ip", "pd"], ["pinctrl", "set", "27", "a3", "pn"]]  # fmt: skip
 
 
+# A Pi 3's SoC cannot read a pin's pull back, so pinctrl prints "--" for it (pi-sw1-p10, 2026-10-04).
+PI3_PINS = "4: ip    -- | hi // GPIO4 = input\n17: ip    -- | hi // GPIO17 = input\n" \
+           "22: ip    -- | hi // GPIO22 = input\n27: op -- -- | lo // GPIO27 = output\n"  # fmt: skip
+
+
+def test_the_netv2_is_scanned_on_a_pi_whose_pulls_cannot_be_read():
+    """The pull pinctrl could not read is not set when the pin goes back: nothing here changes a pull."""
+    run = Runner([("pinctrl get", (0, PI3_PINS)), ("init; exit", (0, "tap/device found: 0x0362d093"))])
+    assert NETV2.probe(_host(NETV2), runner=run)[0]["variant"] == "a7-35"
+    assert core.pin_states(Runner([("pinctrl get", (0, PI3_PINS))]), [4, 17, 22, 27]) == {
+        4: ("ip", "--", "hi"), 17: ("ip", "--", "hi"), 22: ("ip", "--", "hi"), 27: ("op", "--", "lo")}  # fmt: skip
+    assert run.calls[2:] == [["pinctrl", "set", "4", "ip"], ["pinctrl", "set", "17", "ip"],
+                             ["pinctrl", "set", "22", "ip"], ["pinctrl", "set", "27", "ip"]]  # fmt: skip
+
+
+def test_an_output_is_read_where_its_drive_cannot_be():
+    """Only a Pi 5 (RP1) reads an output's drive back; a Pi 3 and a Pi 4 print "--" for it (pinctrl.c prints
+    the drive, then the pull). The level column says what the pin is at."""
+    pi4 = "8: op -- pd | lo // GPIO8 = output\n7: op -- pu | hi // GPIO7 = output\n"
+    assert core.pin_states(Runner([("pinctrl get", (0, pi4))]), [8, 7]) == {
+        8: ("op", "pd", "lo"), 7: ("op", "pu", "hi")}  # fmt: skip
+    pi5 = "8: op dl pd | lo // GPIO8 = output\n"
+    assert core.pin_states(Runner([("pinctrl get", (0, pi5))]), [8]) == {8: ("op", "pd", "lo")}
+
+
+def test_an_output_whose_pull_cannot_be_read_goes_back_at_its_level():
+    run = Runner()
+    assert core.restore_pins(run, {27: ("op", "--", "lo"), 4: ("a0", "--", "hi")}) == []
+    assert run.calls == [["pinctrl", "set", "4", "a0"], ["pinctrl", "set", "27", "op", "dl"]]
+
+
 def test_the_netv2_pins_go_back_even_when_the_scan_fails():
     run = Runner([("pinctrl get", (0, NETV2_PINS)), ("init; exit", core.Problem("fail", "openocd hung"))])
     with pytest.raises(core.Problem, match="openocd hung"):
@@ -494,16 +525,17 @@ def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_rea
     ]
     assert run.calls[-1] == ["systemctl", "start", "--no-block", "fpgas-tt.service"]
     assert report["services_stopped"] == ["fpgas-tt.service"]
-    # the pin-ID scan loads its design itself and runs first; the bridge loads the UART and SPI-flash designs,
+    # the pin-ID scan loads its design itself and runs first; the bridge loads the UART design,
     # so the last design left on the board is one with a single TX pin, not one driving every Pmod line
-    assert [t["test"] for t in report["tests"]] == ["pin-id", "uart", "spiflash"]
+    assert [t["test"] for t in report["tests"]] == ["pin-id", "uart"]
     (load,) = [c for c in run.calls if "tt_fpga_program.py" in " ".join(c)]
     assert load[3].endswith("pmod-pin-id-tt-fpga/tt_fpga_platform.bin") and load[4:] == ["--gpio-release"]
     bridged = [c for c in run.calls if "tt_test_wrapper.py" in " ".join(c)]
-    assert [c[3].rsplit("/", 2)[-2] for c in bridged] == ["uart-test-tt-fpga", "spiflash-test-tt-fpga"]
+    assert [c[3].rsplit("/", 2)[-2] for c in bridged] == ["uart-test-tt-fpga"]
     assert bridged[0][2] == "/dev/ttyACM0" and bridged[0][5].endswith("test_uart.py")
     assert run.calls.index(load) < run.calls.index(bridged[0])
-    assert report["state"] == {"variant": "tt-fpga", "serial": "E6"} and "rewrites" in report["flash_note"]
+    assert report["state"] == {"variant": "tt-fpga", "serial": "E6"}
+    assert report["flash_note"].startswith("none: the FPGA breakout has no SPI flash")
 
 
 def test_a_stopped_bridge_is_left_stopped_and_a_failed_test_still_restarts_a_running_one(tmp_path):
@@ -629,7 +661,7 @@ def test_rpi_hwid_that_cannot_say_who_the_tt_board_is_makes_the_check_an_error(t
     assert why in error and error.startswith("rpi-hwid tinytapeout --json --no-stop-service")
     assert not set(TT_FIELDS) & set(report["identity"]) and report["identity"]["usb_serial"] == "E661"
     assert report["result"] == "error" and f"tinytapeout_error: {error}" in report["reason"]
-    assert [t["result"] for t in report["tests"]] == ["pass", "pass", "pass"]  # the tests still ran
+    assert [t["result"] for t in report["tests"]] == ["pass", "pass"]  # the tests still ran
     assert _restarted_last(run)
 
 
