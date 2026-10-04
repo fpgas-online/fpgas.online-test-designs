@@ -151,12 +151,14 @@ def pci_devices(root=SYSFS_PCI):
 
 # -- the Pi's pins -------------------------------------------------------------------------------------------
 
-# pinctrl get: "14: a4    pn | hi // GPIO14 = TXD0", "8: op dl pd | lo // GPIO8 = output"
-PIN_RE = re.compile(r"^\s*(\d+):\s+(\w+)(?:\s+d[hl])?\s+(p[udn])\s*\|\s*(\w+|--)", re.MULTILINE)
+# pinctrl get: "14: a4    pn | hi // GPIO14 = TXD0", "8: op dl pd | lo // GPIO8 = output". A Pi 3's SoC (and
+# every one before the BCM2711) cannot read a pull back, and pinctrl prints "--" for it: "4: ip    -- | hi".
+PIN_RE = re.compile(r"^\s*(\d+):\s+(\w+)(?:\s+d[hl])?\s+(p[udn]|--)\s*\|\s*(\w+|--)", re.MULTILINE)
+UNREAD_PULL = "--"
 
 
 def pin_states(run, gpios):
-    """{gpio: (function, pull, level)} from pinctrl."""
+    """{gpio: (function, pull, level)} from pinctrl. The pull is UNREAD_PULL where the SoC cannot read it."""
     rc, out = run(["pinctrl", "get", ",".join(str(g) for g in gpios)], 10)
     found = {int(m[0]): (m[1], m[2], m[3]) for m in PIN_RE.findall(out)}
     if rc != 0 or set(found) != set(gpios):
@@ -166,12 +168,14 @@ def pin_states(run, gpios):
 
 def restore_pins(run, saved, exact=True):
     """Put each pin back as it was found. `exact`: an output goes back to an output at the level it had;
-    otherwise to an input. Returns the faults."""
+    otherwise to an input. A pull that could not be read is not set: it is left as it is, and nothing that
+    uses this (a JTAG scan, a pin walk) changes a pull. Returns the faults."""
     faults = []
     for gpio, (func, pull, level) in sorted(saved.items()):
-        args = [func, pull]
+        pulls = [] if pull == UNREAD_PULL else [pull]
+        args = [func, *pulls]
         if func == "op":
-            args = [func, pull, "dh" if level == "hi" else "dl"] if exact else ["ip", pull]
+            args = [func, *pulls, "dh" if level == "hi" else "dl"] if exact else ["ip", *pulls]
         try:
             rc, out = run(["pinctrl", "set", str(gpio), *args], 10)
         except Problem as p:
