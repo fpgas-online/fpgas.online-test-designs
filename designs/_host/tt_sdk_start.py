@@ -9,9 +9,9 @@ does not run main.py), so before asking the board who it is, this script
 soft-resets it from the friendly REPL, which runs boot.py and main.py again,
 and waits for the SDK's last boot line.
 
-Exit 0: the SDK started. Exit 1: main.py ran to the prompt without starting
-the SDK (it is not the SDK's main.py: see tt_restore_sdk_main.py), or nothing
-conclusive was seen in time. What the board printed is shown either way.
+Exit 0: the SDK started. Exit 1, with the reason: main.py is not the SDK's
+(see tt_restore_sdk_main.py), the SDK's main.py raised or did not finish, or
+nothing conclusive was seen in time. What the board printed is shown either way.
 
 Usage (on the Pi, with fpgas-tt.service stopped):
     python3 tt_sdk_start.py /dev/ttyACM0 [--timeout 45]
@@ -19,28 +19,35 @@ Usage (on the Pi, with fpgas-tt.service stopped):
 
 import argparse
 import os
+import re
 import select
 import sys
 import time
 import tty
 
-STARTED = "tt.sdk_version="  # the SDK main.py's last boot line (tt-micropython-firmware src/main.py)
+STARTED = re.compile(r"^tt\.sdk_version=\S+\r?$", re.M)  # the SDK main.py's last boot line, once complete
+SDK_BOOT = "BOOT: Tiny Tapeout SDK"  # its first (tt-micropython-firmware src/main.py)
 REBOOTED = "soft reboot"  # MicroPython's own line on a friendly-REPL Ctrl-D
-PROMPT = ">>> "
+RESTORE = "restore it with tt_restore_sdk_main.py"
 
 
 def verdict(text):
     """(started, reason) from what the board printed after the soft reset; (None, reason) while undecided."""
-    after = text.rpartition(REBOOTED)[2] if REBOOTED in text else None
-    if after is None:
+    if REBOOTED not in text:
         return None, "the board has not soft-reset yet"
-    for line in after.splitlines():
-        if line.startswith(STARTED):
-            return True, "the SDK started: " + line.strip()
-    if after.rstrip(" ").endswith(PROMPT.rstrip(" ")) or PROMPT in after:
-        return False, ("main.py ran to the prompt without starting the Tiny Tapeout SDK: "
-                       "it is not the SDK's main.py (restore it with tt_restore_sdk_main.py)")  # fmt: skip
-    return None, "the SDK is still starting"
+    after = text.rpartition(REBOOTED)[2]
+    whole_lines = after[: after.rfind("\n") + 1]  # a line still arriving is not judged
+    line = STARTED.search(whole_lines)
+    if line:
+        return True, "the SDK started: " + line.group().strip()
+    if not after.rstrip().endswith(">>>"):  # main.py is still running
+        return None, "the SDK is still starting"
+    if "Traceback" in after:
+        raised = [ln.strip() for ln in after.partition("Traceback")[2].splitlines()[1:] if ln[:1] not in (" ", "")]
+        return False, f"the board's main.py raised: {raised[0] if raised else 'an exception'}"
+    if SDK_BOOT in after:
+        return False, "the SDK's main.py ran to the prompt without finishing its start-up"
+    return False, f"main.py ran to the prompt without starting the Tiny Tapeout SDK: it is not the SDK's ({RESTORE})"
 
 
 def read_some(fd, seconds):
@@ -71,6 +78,7 @@ def start(port, timeout):
             text += read_some(fd, 0.5).decode("utf-8", "replace")
             started, reason = verdict(text)
             if started is not None:
+                text += read_some(fd, 1.0).decode("utf-8", "replace")  # let main.py reach the prompt
                 return started, reason, text
         return False, f"{verdict(text)[1]} after {timeout} s", text
     finally:
@@ -85,7 +93,7 @@ def main(argv=None):
     try:
         started, reason, text = start(args.port, args.timeout)
     except OSError as e:
-        print(f"SDK_START: FAIL: cannot open {args.port}: {e}")
+        print(f"SDK_START: FAIL: {args.port} could not be opened or stopped answering: {e}")
         return 1
     for line in text.splitlines()[-12:]:
         print("  board: " + line.rstrip())

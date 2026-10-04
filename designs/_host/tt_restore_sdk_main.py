@@ -14,7 +14,7 @@ Steps, each printed:
   1. read the SDK release from the board (`ttboard.VERSION`)
   2. check the given file's SHA-256 against MAIN_PY_SHA256 for that release
   3. show the main.py now on the board
-  4. copy the file to the board as main.py (the only write)
+  4. copy the file to the board as main.py (the only write) and read it back
   5. start the SDK (tt_sdk_start.py) and report whether it came up
 
 Usage (on the Pi, as root, with fpgas-tt.service stopped):
@@ -34,6 +34,10 @@ MAIN_PY_SHA256 = {
     "3.1.0": "9ebe551a54715dd730261201ff4f21ad8ecbcd518b4809aa81675cca161e0cb4",
 }
 HERE = pathlib.Path(__file__).resolve().parent
+# Run on the board: the SHA-256 of the main.py now on it.
+READ_BACK = (
+    "import hashlib, binascii\nprint(binascii.hexlify(hashlib.sha256(open('main.py', 'rb').read()).digest()).decode())"
+)
 
 
 def mpremote(port, *args, timeout=60):
@@ -44,7 +48,7 @@ def mpremote(port, *args, timeout=60):
 def release(text):
     """The SDK release in what `print(ttboard.VERSION)` printed, without a leading "v"; None if there is none."""
     lines = [line.strip() for line in text.splitlines() if line.strip()]
-    return lines[-1].lstrip("v") if lines else None
+    return lines[-1].removeprefix("v") if lines else None
 
 
 def check_file(path, sdk):
@@ -88,9 +92,16 @@ def main(argv=None):
 
     rc, out, err = mpremote(args.port, "cp", args.main_py, ":main.py", timeout=120)
     if rc != 0:
-        print(f"RESTORE: FAIL: copying main.py to the board failed: {(out + err).strip()[-300:]}")
+        print(f"RESTORE: FAIL: copying main.py to the board failed, and main.py there may now be incomplete: "
+              f"{(out + err).strip()[-300:]}")  # fmt: skip
         return 1
-    print("main.py written")
+    rc, out, err = mpremote(args.port, "exec", READ_BACK)
+    on_board = out.strip().splitlines()[-1] if rc == 0 and out.strip() else None
+    if on_board != MAIN_PY_SHA256[sdk]:
+        print(f"RESTORE: FAIL: main.py on the board does not read back as written (SHA-256 {on_board}): "
+              f"run this again before the board is restarted {err.strip()[-200:]}")  # fmt: skip
+        return 1
+    print("main.py written and read back")
 
     started = subprocess.run([sys.executable, str(HERE / "tt_sdk_start.py"), args.port], check=False).returncode
     print(
