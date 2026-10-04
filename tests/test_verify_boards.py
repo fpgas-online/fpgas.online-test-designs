@@ -627,7 +627,7 @@ def test_a_board_whose_sdk_does_not_start_is_an_error_and_is_not_asked_who_it_is
     _installed(monkeypatch)
     said = (
         "  board: TT FPGA board ready\nSDK_START: FAIL: main.py ran to the prompt without starting the "
-        "Tiny Tapeout SDK: it is not the SDK's (restore it with tt_restore_sdk_main.py)\n"
+        "Tiny Tapeout SDK: it is not the SDK's (see \"The SDK's main.py\" in docs/hardware/tt-fpga.md)\n"
     )
     run = Runner([(SDK_START, (1, said)), _rpi_hwid(TT_BOARD)])
     report = _check(TT, tmp_path, TT_FOUND, run)
@@ -635,7 +635,7 @@ def test_a_board_whose_sdk_does_not_start_is_an_error_and_is_not_asked_who_it_is
     assert not any("rpi-hwid" in " ".join(c) for c in run.calls)
     why = report["identity"]["tinytapeout_error"]
     assert why.startswith("the Tiny Tapeout SDK did not start on the demo board: SDK_START: FAIL: main.py ran")
-    assert "tt_restore_sdk_main.py" in why and why in report["reason"]
+    assert "docs/hardware/tt-fpga.md" in why and why in report["reason"]
     assert [t["result"] for t in report["tests"]] == ["pass", "pass"]  # the tests still ran
 
 

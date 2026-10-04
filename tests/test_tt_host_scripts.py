@@ -1,9 +1,9 @@
-"""The Tiny Tapeout host scripts fpgas-verify ships (designs/_host): starting the demo board's SDK, putting the
-SDK's main.py back, and the test wrapper leaving that main.py alone (issue #117)."""
+"""The Tiny Tapeout host scripts fpgas-verify ships (designs/_host): starting the demo board's SDK (issue #117),
+and loading the FPGA without writing any file to the demo board."""
 
-import hashlib
 import importlib.util
 import pathlib
+import re
 import sys
 
 import pytest
@@ -20,8 +20,9 @@ def _load(name):
 
 
 sdk_start = _load("tt_sdk_start")
-restore = _load("tt_restore_sdk_main")
+program = _load("tt_fpga_program")
 wrapper = _load("tt_test_wrapper")
+_load("tt_pmod_wrapper")
 
 # What a demo board prints on a soft reset from the friendly REPL: with the SDK's main.py (its first and last
 # boot lines, tt-micropython-firmware src/main.py), and with the no-op the test wrapper used to install.
@@ -46,7 +47,7 @@ def test_the_sdks_last_boot_line_means_it_started():
 def test_a_main_py_that_reaches_the_prompt_without_the_sdk_did_not_start_it():
     started, reason = sdk_start.verdict(NO_OP_BOOT)
     assert started is False
-    assert "it is not the SDK's" in reason and "tt_restore_sdk_main.py" in reason
+    assert "it is not the SDK's" in reason and "docs/hardware/tt-fpga.md" in reason
 
 
 def test_the_sdks_main_py_raising_is_said_as_that_not_as_a_wrong_file():
@@ -95,105 +96,74 @@ def test_a_port_that_cannot_be_opened_fails_and_says_so(tmp_path, capsys):
     assert "SDK_START: FAIL: " in capsys.readouterr().out
 
 
-def test_the_release_is_read_without_its_v():
-    assert restore.release("3.1.0\r\n") == "3.1.0" and restore.release("v3.1.0\n") == "3.1.0"
-    assert restore.release("") is None
+# -- nothing is written to the demo board -------------------------------------------------------------------
 
 
-def test_only_the_recorded_main_py_of_the_boards_release_is_accepted(tmp_path, monkeypatch):
-    good = tmp_path / "main.py"
-    good.write_bytes(b"print('BOOT: Tiny Tapeout SDK')\n")
-    monkeypatch.setitem(restore.MAIN_PY_SHA256, "9.9.9", hashlib.sha256(good.read_bytes()).hexdigest())
-    assert restore.check_file(good, "9.9.9") is None
-    other = tmp_path / "other.py"
-    other.write_bytes(b"print('TT FPGA board ready')\n")
-    assert "is not SDK 9.9.9's main.py" in restore.check_file(other, "9.9.9")
-    assert "no main.py is recorded for SDK release '1.2.2'" in restore.check_file(good, "1.2.2")
-
-
-def _board(monkeypatch, read_back=None, cp_rc=0):
-    """A demo board on SDK 9.9.9 behind a fake mpremote; returns the mpremote calls made."""
+def test_programming_is_one_mpremote_run_that_mounts_the_bitstreams_directory(tmp_path, monkeypatch):
+    bitstream = tmp_path / "uart-test-tt-fpga" / "tt_fpga_platform.bin"
+    bitstream.parent.mkdir()
+    bitstream.write_bytes(b"\xff" * 16)
     calls = []
 
-    def mpremote(port, *args, timeout=60):
-        calls.append(args)
-        if args[0] == "cp":
-            return cp_rc, "", "" if cp_rc == 0 else "OSError: 28"
-        if args[1] == restore.READ_BACK:
-            return 0, (read_back or "") + "\n", ""
-        if "VERSION" in args[1]:
-            return 0, "v9.9.9\n", ""
-        return 0, "print('TT FPGA board ready')\n", ""
+    def run_mpremote(port, args, timeout=60):
+        calls.append((port, args, pathlib.Path(args[3]).read_text()))  # the script exists while mpremote runs
+        return 0, "PROGRAM_OK\n", ""
 
-    monkeypatch.setattr(restore, "mpremote", mpremote)
-    return calls
+    monkeypatch.setattr(program, "run_mpremote", run_mpremote)
+    assert program.program("/dev/ttyACM0", str(bitstream)) == (0, "PROGRAM_OK\n", "")
+    ((port, args, script),) = calls
+    assert port == "/dev/ttyACM0" and args[:2] == ["mount", str(bitstream.parent)] and args[2] == "run"
+    assert 'open("/remote/tt_fpga_platform.bin", "rb")' in script
+    assert not pathlib.Path(args[3]).exists()  # the script on the Pi is temporary
 
 
-def _sdk_file(tmp_path, monkeypatch):
-    good = tmp_path / "main.py"
-    good.write_bytes(b"print('BOOT: Tiny Tapeout SDK')\n")
-    digest = hashlib.sha256(good.read_bytes()).hexdigest()
-    monkeypatch.setitem(restore.MAIN_PY_SHA256, "9.9.9", digest)
-    return good, digest
+@pytest.mark.parametrize("method, release", [("pio", False), ("pio", True), ("bitbang", False)])
+def test_the_script_run_on_the_board_reads_the_mount_and_writes_no_file(method, release):
+    script = program.board_script(method, "design.bin", release)
+    assert 'open("/remote/design.bin", "rb")' in script and script.rstrip().endswith('os.chdir("/")')
+    assert ("GPIO_RELEASED" in script) is release
+    assert not BOARD_WRITE.search(script)
 
 
-def test_a_dry_run_checks_everything_and_writes_nothing(tmp_path, monkeypatch, capsys):
-    good, _ = _sdk_file(tmp_path, monkeypatch)
-    calls = _board(monkeypatch)
-    assert restore.main(["/dev/ttyACM0", str(good), "--dry-run"]) == 0
-    assert "dry run, nothing written" in capsys.readouterr().out
-    assert [a[0] for a in calls] == ["exec", "exec"]  # the release and the current main.py: no cp
+# What a script run on the board would use to change the board's filesystem.
+BOARD_WRITE = re.compile(
+    r"""open\([^)]*,\s*["'][^"']*[wax+]|\bos\.(mkdir|remove|rename|rmdir|unlink)\b|\.write_(text|bytes)\("""
+)
+# The mpremote subcommands that change it: none may appear as an argument in the host scripts.
+MPREMOTE_WRITES = re.compile(r"""["'](cp|fs|mkdir|rm|rmdir|touch|edit|mip|romfs)["']""")
 
 
-def test_the_file_is_copied_read_back_and_the_sdk_started(tmp_path, monkeypatch, capsys):
-    good, digest = _sdk_file(tmp_path, monkeypatch)
-    calls = _board(monkeypatch, read_back=digest)
-    started = []
+@pytest.mark.parametrize("name", ["tt_fpga_program", "tt_test_wrapper", "tt_pmod_wrapper", "tt_sdk_start"])
+def test_no_tiny_tapeout_host_script_can_change_a_file_on_the_board(name):
+    """Tim, 2026-10-05: no code modifies files on the Tiny Tapeout boards. The check used to copy each bitstream
+    to /bitstreams/custom.bin and to overwrite main.py."""
+    source = (_HOST / f"{name}.py").read_text()
+    assert not MPREMOTE_WRITES.search(source), MPREMOTE_WRITES.search(source)
+    board_scripts = [value for value in vars(_load(name)).values() if isinstance(value, str) and "machine" in value]
+    for script in board_scripts:
+        assert not BOARD_WRITE.search(script), BOARD_WRITE.search(script)
+    assert "/bitstreams/custom.bin" not in source
+
+
+def test_the_uart_wrapper_programs_through_the_programmer_and_then_only_bridges(monkeypatch):
+    calls = []
+    monkeypatch.setattr(wrapper, "reset_rp2350", lambda port: calls.append(("reset", port)))
     monkeypatch.setattr(
-        restore.subprocess, "run", lambda argv, **kw: started.append(argv) or type("P", (), {"returncode": 0})
+        wrapper.tt_fpga_program,
+        "program",
+        lambda port, path: calls.append(("program", port, path)) or (0, "PROGRAM_OK", ""),
     )
-    assert restore.main(["/dev/ttyACM0", str(good)]) == 0
-    assert [a[0] for a in calls] == ["exec", "exec", "cp", "exec"] and calls[2][1:] == (str(good), ":main.py")
-    assert started[0][1].endswith("tt_sdk_start.py") and started[0][2] == "/dev/ttyACM0"
-    assert "RESTORE: OK: the SDK starts" in capsys.readouterr().out
+    assert wrapper.program_fpga("/dev/ttyACM0", "design.bin") is True
+    assert calls == [("reset", "/dev/ttyACM0"), ("program", "/dev/ttyACM0", "design.bin")]
+    assert "open(" not in wrapper.BRIDGE_SCRIPT and "UART(1, 115200" in wrapper.BRIDGE_SCRIPT
 
 
-def test_a_copy_that_does_not_read_back_is_a_failure_and_the_sdk_is_not_started(tmp_path, monkeypatch, capsys):
-    good, _ = _sdk_file(tmp_path, monkeypatch)
-    _board(monkeypatch, read_back="0" * 64)
-    monkeypatch.setattr(restore.subprocess, "run", lambda argv, **kw: pytest.fail("the SDK was started"))
-    assert restore.main(["/dev/ttyACM0", str(good)]) == 1
-    assert "does not read back as written" in capsys.readouterr().out
-
-
-def test_a_failed_copy_says_the_file_on_the_board_may_be_incomplete(tmp_path, monkeypatch, capsys):
-    good, _ = _sdk_file(tmp_path, monkeypatch)
-    _board(monkeypatch, cp_rc=1)
-    assert restore.main(["/dev/ttyACM0", str(good)]) == 1
-    assert "may now be incomplete" in capsys.readouterr().out
-
-
-def test_a_wrong_file_is_refused_before_anything_is_written(tmp_path, monkeypatch, capsys):
-    calls = []
-
-    def mpremote(port, *args, timeout=60):
-        calls.append(args)
-        return 0, "3.1.0\n", ""
-
-    monkeypatch.setattr(restore, "mpremote", mpremote)
-    wrong = tmp_path / "main.py"
-    wrong.write_text("print('TT FPGA board ready')\n")
-    assert restore.main(["/dev/ttyACM0", str(wrong)]) == 1
-    assert "RESTORE: FAIL" in capsys.readouterr().out
-    assert not any(a[0] == "cp" for a in calls)  # nothing was copied to the board
-
-
-def test_uploading_a_bitstream_leaves_the_boards_main_py_alone(monkeypatch):
-    """The wrapper used to overwrite main.py with a no-op after every upload, so the SDK never started again."""
-    commands = []
+def test_a_failed_program_is_retried_once_after_a_usb_power_cycle(monkeypatch):
+    answers = [(1, "", "could not enter raw repl"), (0, "PROGRAM_OK", "")]
+    cycled = []
     monkeypatch.setattr(wrapper, "reset_rp2350", lambda port: None)
-    monkeypatch.setattr(wrapper.subprocess, "call", lambda argv, **kw: commands.append(argv) or 0)
-    monkeypatch.setattr(wrapper.subprocess, "run", lambda argv, **kw: commands.append(argv))
-    assert wrapper.upload_bitstream("/dev/ttyACM0", "design.bin") is True
-    assert commands and not any("main.py" in " ".join(map(str, argv)) for argv in commands)
-    assert [argv[3] for argv in commands] == ["exec", "cp"]  # make /bitstreams, copy the bitstream: nothing else
+    monkeypatch.setattr(wrapper, "usb_power_cycle", lambda port: cycled.append(port))
+    monkeypatch.setattr(wrapper.tt_fpga_program, "program", lambda port, path: answers.pop(0))
+    assert wrapper.program_fpga("/dev/ttyACM0", "design.bin") is True and cycled == ["/dev/ttyACM0"]
+    answers[:] = [(1, "", "x"), (1, "", "x")]
+    assert wrapper.program_fpga("/dev/ttyACM0", "design.bin") is False

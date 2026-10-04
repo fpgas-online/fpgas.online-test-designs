@@ -41,7 +41,8 @@ env:
     designs/acorn-pcie/host/pcie_match_mps.py tests/test_pcie_match_mps.py
     designs/acorn-pcie/host/selftest.py tests/test_acorn_bist.py tests/test_acorn_selftest.py tests/test_jtag_idcode.py
     tests/test_identity.py tests/test_identify_label.py
-    designs/_host/tt_sdk_start.py designs/_host/tt_restore_sdk_main.py tests/test_tt_host_scripts.py
+    designs/_host/tt_sdk_start.py designs/_host/tt_fpga_program.py designs/_host/tt_test_wrapper.py
+    designs/_host/tt_pmod_wrapper.py tests/test_tt_host_scripts.py
     packaging/release.py tests/test_release.py
 
 jobs:

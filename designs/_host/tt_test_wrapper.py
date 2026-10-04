@@ -9,9 +9,11 @@ This wrapper sets up a transparent UART bridge on the RP2350 so test
 scripts can communicate with the FPGA as if connected directly.
 
 Flow:
-  1. Upload bitstream to RP2350 filesystem (via mpremote)
-  2. Open raw serial to RP2350, enter MicroPython raw REPL
-  3. Execute combined script: set up UART0, program FPGA, enter bridge mode
+  1. Program the FPGA (tt_fpga_program.py: the RP2350 reads the bitstream from
+     this host over the serial link; nothing is written to the board)
+  2. Open raw serial to RP2350, enter MicroPython raw REPL (no reset: the
+     FPGA stays programmed)
+  3. Execute the bridge script: set up the UART, start the clock, bridge
   4. Create PTY pair -- test script connects to the PTY slave
   5. Relay data between serial (USB CDC / bridge) and PTY
   6. Run test script, report results, clean up
@@ -35,76 +37,16 @@ import threading
 import time
 import tty
 
-BITSTREAM_DEVICE_PATH = "/bitstreams/custom.bin"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import tt_fpga_program
 
-# MicroPython script that runs on the RP2350.
-# 1. Programs the iCE40 via PIO SPI
-# 2. Sets up UART1 on correct TTDBv3 GPIO pins
-# 3. Starts 50 MHz clock with deinit/recreate PWM fix
-# 4. Enters transparent UART <-> USB CDC bridge
-PROGRAM_AND_BRIDGE_SCRIPT = """\
+# MicroPython script that runs on the RP2350 once tt_fpga_program.py has programmed the iCE40:
+# 1. Sets up UART1 on correct TTDBv3 GPIO pins
+# 2. Starts 50 MHz clock with deinit/recreate PWM fix
+# 3. Enters transparent UART <-> USB CDC bridge
+BRIDGE_SCRIPT = """\
 from machine import UART, Pin
 import sys, utime
-
-try:  # TT SDK 3.x renamed it fabricfoxv2 (same API); 2.x has fabricfox
-    from ttboard.fpga.fabricfoxv2 import DoDummyClocks, spi_write
-except ImportError:
-    from ttboard.fpga.fabricfox import DoDummyClocks, spi_write
-from rp2 import StateMachine
-
-# TTDBv3 SPI programming pins (hardcoded to bypass GPIOMap firmware bug:
-# all boards load GPIOMapTT04 instead of GPIOMapTTDBv3, so pin_indices()
-# returns wrong GPIO numbers).
-sck_pin = Pin(6, Pin.OUT)    # MNG03
-mosi_pin = Pin(3, Pin.OUT)   # MNG00
-ss_pin = Pin(5, Pin.OUT)     # MNG02
-reset_pin = Pin(1, Pin.OUT)  # CTRL_SEL_nRST (CRESET_B)
-
-reset_pin.low()
-ss_pin.low()
-utime.sleep_us(15000)
-reset_pin.high()
-utime.sleep_us(15000)
-
-freq = 1_000_000
-sm = StateMachine(0, spi_write, freq=freq*2*8,
-                  sideset_base=Pin(6),
-                  out_base=Pin(3))
-sm.restart()
-sm.active(1)
-try:
-    with open("__BITSTREAM_PATH__", "rb") as f:
-        if DoDummyClocks:
-            ss_pin.high()
-            utime.sleep_us(2000)
-            sm.put(0)
-            utime.sleep_us(20)
-            while sm.tx_fifo() != 0:
-                utime.sleep_us(2)
-            ss_pin.low()
-            utime.sleep_us(2000)
-        bc = 0
-        while True:
-            data = f.read(128)
-            if not data:
-                for _ in range(6):
-                    while sm.tx_fifo() != 0:
-                        utime.sleep_us(1)
-                    sm.put(0)
-                break
-            for b in data:
-                sm.put(b & 0xff, 24)
-                while sm.tx_fifo() != 0:
-                    utime.sleep_us(1)
-                bc += 1
-        while sm.tx_fifo():
-            utime.sleep_us(10)
-finally:
-    sm.active(0)
-    ss_pin.high()
-    sm.restart()
-
-sys.stdout.write('PROGRAM_OK\\n')
 
 # Set up UART1 on correct TTDBv3 pins BEFORE starting the clock,
 # so it captures the firmware boot banner.
@@ -162,7 +104,7 @@ while True:
             d = si.read(1)
             if d:
                 uart.write(d)
-""".replace("__BITSTREAM_PATH__", BITSTREAM_DEVICE_PATH)
+"""
 
 
 def reset_rp2350(port):
@@ -215,35 +157,22 @@ def usb_power_cycle(port):
             break
 
 
-def upload_bitstream(port, local_path):
-    """Upload bitstream to RP2350 filesystem via mpremote."""
+def program_fpga(port, local_path):
+    """Program the iCE40 with the bitstream `local_path` on this host. Nothing is written to the board."""
     # Break any stuck MicroPython script before mpremote tries raw REPL.
     reset_rp2350(port)
-
-    subprocess.call(
-        ["mpremote", "connect", port, "exec", "import os\ntry:\n os.mkdir('/bitstreams')\nexcept OSError:\n pass"],
-        timeout=30,
-    )
-    rc = subprocess.call(
-        ["mpremote", "connect", port, "cp", local_path, ":" + BITSTREAM_DEVICE_PATH],
-        timeout=120,
-    )
-    if rc != 0:
+    rc, out, err = tt_fpga_program.program(port, local_path)
+    if rc != 0 or "PROGRAM_OK" not in out:
         # mpremote failed — try USB power cycle and retry once
-        print("mpremote failed, trying USB power cycle recovery...")
+        print("programming failed, trying USB power cycle recovery...")
+        print((out + err).strip()[-500:])
         usb_power_cycle(port)
         reset_rp2350(port)
-        subprocess.call(
-            ["mpremote", "connect", port, "exec", "import os\ntry:\n os.mkdir('/bitstreams')\nexcept OSError:\n pass"],
-            timeout=30,
-        )
-        rc = subprocess.call(
-            ["mpremote", "connect", port, "cp", local_path, ":" + BITSTREAM_DEVICE_PATH],
-            timeout=120,
-        )
-    # The board's main.py is left alone: it is the SDK's, and the SDK starting is how the board says what it
-    # is (rpi-hwid) and what the TT site's bridge relies on. See docs/hardware/tt-fpga.md, "The SDK's main.py".
-    return rc == 0
+        rc, out, err = tt_fpga_program.program(port, local_path)
+    print(out.strip())
+    if err.strip():
+        print(err.strip(), file=sys.stderr)
+    return rc == 0 and "PROGRAM_OK" in out
 
 
 def open_raw_serial(port):
@@ -335,24 +264,24 @@ def main():
     bitstream = sys.argv[2]
     test_cmd = sys.argv[3:]
 
-    # Step 1: Upload bitstream to RP2350
-    print("Uploading bitstream to RP2350...")
-    if not upload_bitstream(port, bitstream):
-        print("ERROR: Failed to upload bitstream", file=sys.stderr)
+    # Step 1: Program the FPGA; the RP2350 reads the bitstream from this host
+    print("Programming FPGA...")
+    if not program_fpga(port, bitstream):
+        print("ERROR: Failed to program the FPGA", file=sys.stderr)
         return 1
-    print("Upload complete.")
+    print("FPGA programmed.")
 
-    # Step 2: Open raw serial and program + bridge
+    # Step 2: Open raw serial and start the bridge
     print("Opening raw serial to RP2350...")
     serial_fd = open_raw_serial(port)
 
     print("Entering raw REPL...")
     enter_raw_repl(serial_fd)
 
-    print("Programming FPGA and starting UART bridge...")
+    print("Starting UART bridge...")
     ok, extra_data = execute_raw_repl(
         serial_fd,
-        PROGRAM_AND_BRIDGE_SCRIPT,
+        BRIDGE_SCRIPT,
         marker=b"BRIDGE_ACTIVE",
         timeout=60,
     )
@@ -362,7 +291,7 @@ def main():
         os.close(serial_fd)
         return 1
 
-    print("FPGA programmed, UART bridge active.")
+    print("UART bridge active.")
     print(f"Extra data after marker ({len(extra_data)} bytes): {extra_data[:200]!r}")
 
     # Step 3: Create PTY pair

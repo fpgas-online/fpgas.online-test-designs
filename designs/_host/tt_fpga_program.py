@@ -6,8 +6,14 @@ SDK, which includes the 'fabricfox' module for programming the iCE40 FPGA via
 SPI (either PIO-accelerated or bitbang).
 
 This host-side script uses 'mpremote' to:
-  1. Upload the bitstream file to the RP2350's filesystem
-  2. Run fabricfox.spi_transferPIO() to program the iCE40
+  1. Mount the bitstream's directory on the Pi as /remote on the RP2350
+     (`mpremote mount`: served over the serial link, nothing is stored on
+     the board)
+  2. Run a script on the RP2350 that reads the bitstream from /remote and
+     clocks it into the iCE40
+
+Nothing is written to the demo board's filesystem: no file is copied to it,
+no directory is made on it.
 
 Usage:
     python3 tt_fpga_program.py /dev/ttyACM0 bitstream.bin [--method bitbang]
@@ -19,7 +25,15 @@ import subprocess
 import sys
 import tempfile
 
-BITSTREAM_DEVICE_PATH = "/bitstreams/custom.bin"
+# Where `mpremote mount` shows the Pi's directory on the board (mpremote's own, fixed, name).
+REMOTE_MOUNT = "/remote"
+
+# Run last on the board: mpremote's mount also made /remote the working directory, and it is unmounted when
+# mpremote leaves.
+LEAVE_MOUNT = """
+import os
+os.chdir("/")
+"""
 
 # Appended to the programming script when --gpio-release is used.
 # Starts the 50 MHz clock and releases all ui_in/uo_out/uio GPIOs
@@ -128,7 +142,7 @@ finally:
     sm.restart()
 
 print("PROGRAM_OK")
-""".replace("__BITSTREAM_PATH__", BITSTREAM_DEVICE_PATH)
+"""
 
 PROGRAM_SCRIPT_BITBANG = """\
 from machine import Pin
@@ -190,7 +204,7 @@ with open("__BITSTREAM_PATH__", "rb") as f:
 
 ss_pin.high()
 print("PROGRAM_OK")
-""".replace("__BITSTREAM_PATH__", BITSTREAM_DEVICE_PATH)
+"""
 
 
 def run_mpremote(port, args, timeout=60):
@@ -203,6 +217,29 @@ def run_mpremote(port, args, timeout=60):
         timeout=timeout,
     )
     return result.returncode, result.stdout, result.stderr
+
+
+def board_script(method, bitstream_name, gpio_release):
+    """The MicroPython script that programs the iCE40 from `bitstream_name` in the mounted directory."""
+    script = PROGRAM_SCRIPT_PIO if method == "pio" else PROGRAM_SCRIPT_BITBANG
+    script = script.replace("__BITSTREAM_PATH__", f"{REMOTE_MOUNT}/{bitstream_name}")
+    if gpio_release:
+        script += GPIO_RELEASE_SNIPPET
+    return script + LEAVE_MOUNT
+
+
+def program(port, bitstream, method="pio", gpio_release=False, timeout=180):
+    """Program the iCE40 with the bitstream file `bitstream` on this host; (returncode, stdout, stderr).
+
+    One mpremote run: mount the bitstream's directory on the board (over the serial link; nothing is stored on
+    the board), run the programming script, leave. The script it runs is kept in a temporary directory here."""
+    bitstream = os.path.abspath(bitstream)
+    script = board_script(method, os.path.basename(bitstream), gpio_release)
+    with tempfile.TemporaryDirectory(prefix="tt_program_") as tmp:
+        script_path = os.path.join(tmp, "program.py")
+        with open(script_path, "w") as f:
+            f.write(script)
+        return run_mpremote(port, ["mount", os.path.dirname(bitstream), "run", script_path], timeout=timeout)
 
 
 def main():
@@ -256,73 +293,8 @@ def main():
             print(err, file=sys.stderr)
         return rc
 
-    # Step 1: Ensure /bitstreams/ directory exists on device
-    print("Creating /bitstreams/ directory on device...")
-    rc, out, err = run_mpremote(
-        args.port,
-        [
-            "exec",
-            "import os\n"
-            "try:\n"
-            "    os.mkdir('/bitstreams')\n"
-            "    print('Created /bitstreams/')\n"
-            "except OSError:\n"
-            "    print('/bitstreams/ already exists')\n",
-        ],
-    )
-    print(out.strip())
-    if rc != 0:
-        print(f"ERROR: Failed to create directory: {err}", file=sys.stderr)
-        return 1
-
-    # Step 2: Upload bitstream to device
-    print(f"Uploading bitstream to device:{BITSTREAM_DEVICE_PATH}...")
-    rc, out, err = run_mpremote(
-        args.port,
-        [
-            "cp",
-            args.bitstream,
-            ":" + BITSTREAM_DEVICE_PATH,
-        ],
-        timeout=120,
-    )
-    if rc != 0:
-        print("ERROR: Failed to upload bitstream", file=sys.stderr)
-        print(out)
-        print(err, file=sys.stderr)
-        return 1
-    print("Upload complete.")
-
-    # Step 3: Program the FPGA (and optionally start clock + release GPIOs)
-    script = PROGRAM_SCRIPT_PIO if args.method == "pio" else PROGRAM_SCRIPT_BITBANG
-    if args.gpio_release:
-        script += GPIO_RELEASE_SNIPPET
-    print(f"Programming FPGA via {args.method} method...")
-
-    # Write script to a temporary file for mpremote run.
-    # Use the directory containing this script (not /tmp/) for the temp file.
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        suffix=".py",
-        prefix="tt_program_",
-        dir=script_dir,
-        delete=False,
-    ) as f:
-        f.write(script)
-        script_path = f.name
-
-    try:
-        rc, out, err = run_mpremote(
-            args.port,
-            [
-                "run",
-                script_path,
-            ],
-            timeout=120,
-        )
-    finally:
-        os.unlink(script_path)
+    print(f"Programming FPGA via {args.method} method, reading the bitstream from the Pi...")
+    rc, out, err = program(args.port, args.bitstream, args.method, args.gpio_release)
 
     print(out)
     if err.strip():

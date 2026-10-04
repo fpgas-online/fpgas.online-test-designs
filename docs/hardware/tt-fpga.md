@@ -21,7 +21,7 @@ sudo apt install fpgas-online-tt-fpga
 
 `fpgas-online-tt` is a different package: the TT site's own.
 
-The check finds the board by its Raspberry Pi microcontroller on USB (vendor `2e8a`). It first loads the PMOD pin identification design and checks the PMOD HAT cabling against the expected map (ui_in on HAT JA, uio on JB, uo_out on JC, [tt-fpga-pin-mapping.md](tt-fpga-pin-mapping.md)); a miswired HAT fails the board. It then loads the UART test design through that microcontroller (`tt_fpga_program.py`, over `mpremote`), and runs its host test through the UART bridge on `/dev/ttyACM0`. There is no SPI flash test: the breakout has no flash (see [Programming](#programming)). Every load writes the bitstream to the microcontroller's filesystem, so its flash is not part of what `changed` compares; its USB serial number is. `mpremote` is `micropython-mpremote` in trixie, but only in bookworm-backports for bookworm: without it the check reports an `error`. Only the PMOD loopback test is left to `fpgas-tt-fpga-debug`.
+The check finds the board by its Raspberry Pi microcontroller on USB (vendor `2e8a`). It first loads the PMOD pin identification design and checks the PMOD HAT cabling against the expected map (ui_in on HAT JA, uio on JB, uo_out on JC, [tt-fpga-pin-mapping.md](tt-fpga-pin-mapping.md)); a miswired HAT fails the board. It then loads the UART test design through that microcontroller (`tt_fpga_program.py`, over `mpremote`), and runs its host test through the UART bridge on `/dev/ttyACM0`. There is no SPI flash test: the breakout has no flash (see [Programming](#programming)). Nothing is written to the demo board: for every load the microcontroller reads the bitstream from the Pi over the serial link (see [Programming](#programming)). The board has no flash to compare, so what `changed` compares is its USB serial number. `mpremote` is `micropython-mpremote` in trixie, but only in bookworm-backports for bookworm: without it the check reports an `error`. Only the PMOD loopback test is left to `fpgas-tt-fpga-debug`.
 
 Before the first test, while it holds `/dev/ttyACM0`, the check starts the board's SDK (`tt_sdk_start.py`, see [The SDK's main.py](#the-sdks-mainpy)) and then runs `rpi-hwid tinytapeout --json --no-stop-service`, both only when [rpi-hwid](https://github.com/mithro/rpi-hwid) is installed (`python3-rpi-hwid`, which `fpgas-online-verify` suggests). rpi-hwid asks the Tiny Tapeout SDK on the RP2350 which microcontroller, chip, demo board and SDK release this is. The answer goes into the board's identity, for rpi-hwid's Tiny Tapeout label ([TT FPGA identity](../verify.md#tt-fpga-identity), [Tiny Tapeout fields](../identity.md#tiny-tapeout-fields)). Without rpi-hwid those fields are not read, and the board does not fail for it.
 
@@ -167,8 +167,10 @@ python3 designs/_host/tt_fpga_program.py /dev/ttyACM0 bitstream.bin
 
 **Programming workflow:**
 
-1. Upload `.bin` to `/bitstreams/custom.bin` on the RP2040 via `mpremote`
-2. Enter raw REPL and execute a MicroPython script that:
+1. `mpremote mount` shows the bitstream's directory on the Pi to the RP2350 as `/remote`, served over the
+   serial link. **Nothing is written to the demo board's filesystem**: no file is copied to it and no directory
+   is made on it.
+2. A MicroPython script, run in the raw REPL, reads the bitstream from `/remote` and:
    - Asserts `CRESET` (GPIO1) to reset the FPGA
    - Transfers the bitstream over SPI (SCK=GPIO6, MOSI=GPIO3, SS=GPIO5)
    - Releases `CRESET` and waits for FPGA `CDONE`
@@ -312,18 +314,11 @@ needed even with the right `main.py`: a soft reset from the raw REPL, which is w
 run `main.py`, so after any load the `tt` object is gone until the next start. A board whose `main.py` does not
 start the SDK fails the check with that reason.
 
-**Restoring `main.py` on a board whose file was overwritten** (as root on its Pi):
-
-```bash
-systemctl stop fpgas-tt.service
-python3 /usr/lib/python3/dist-packages/fpgas_online_verify/scripts/tt_restore_sdk_main.py \
-    /dev/ttyACM0 /path/to/main.py          # add --dry-run to check without writing
-systemctl start fpgas-tt.service
-```
-
-`/path/to/main.py` is `src/main.py` from the source of the SDK release the board runs (for 3.1.0, the `v3.1.0`
-tag of tt-micropython-firmware). The tool reads the release from the board, refuses a file whose SHA-256 is not
-the one it records for that release, copies it to the board, and then starts the SDK to show it comes up.
+**No code of ours writes to a demo board.** The boot check and the debug tools change no file on it: not
+`main.py`, and no bitstream (see [Programming](#programming)); `tests/test_tt_host_scripts.py` holds them to
+that. A board whose `main.py` was overwritten before this change keeps failing its check, with the reason, until
+the SDK's own `main.py` (`src/main.py` of the SDK release the board runs) has been put back on it by hand. That
+is a deliberate one-off per board, not something the tooling does.
 
 If a board does hang in `DemoBoard()` (the stock `ttdbv3` build does), a power cycle of its Pi resets it; the
 RP2's mass-storage bootloader path stalls on Pi 3B+ hosts, so reflashing from a Pi 3B+ needs the PICOBOOT path

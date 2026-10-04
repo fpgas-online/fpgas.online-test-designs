@@ -3,8 +3,9 @@ over mpremote). The FPGA's UART reaches the Pi only through the RP2350, so the U
 through tt_test_wrapper.py's bridge, which loads the design too. There is no SPI-flash test: the breakout has
 no flash (docs/hardware/tt-fpga.md).
 
-Every load writes the bitstream to the RP2350's filesystem, so the flash cannot be part of the state; the state
-is the RP2350's USB serial number. Loading needs mpremote (micropython-mpremote: in trixie, and only
+Nothing is written to the demo board: for every load the RP2350 reads the bitstream from the Pi over the serial
+link (tt_fpga_program.py, `mpremote mount`). The board has no flash of its own to compare, so the state is the
+RP2350's USB serial number. Loading needs mpremote (micropython-mpremote: in trixie, and only
 bookworm-backports for bookworm).
 
 Who the board is, for rpi-hwid's Tiny Tapeout label, comes from `rpi-hwid tinytapeout --json --no-stop-service`,
@@ -136,7 +137,7 @@ class TTFPGA(TestBoard):
     report_fields = (*RPI_HWID_FIELDS, "tinytapeout_")
     port = "/dev/ttyACM0"
     services = ("fpgas-tt.service",)  # the TT site's bridge keeps the RP2350's port open while it runs
-    flash_note = "none: the FPGA breakout has no SPI flash; the RP2350 loads the bitstream and every verify rewrites it"
+    flash_note = "none: the FPGA breakout has no SPI flash; the RP2350 loads each bitstream from the Pi"
     # Run in this order, and the board is left with the last design loaded (testbench.py): the pin-ID scan
     # comes first, so a UART-bridge design (one TX pin) is what stays, not one driving every Pmod line.
     tests: ClassVar[dict] = {

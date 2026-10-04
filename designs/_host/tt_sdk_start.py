@@ -9,8 +9,8 @@ does not run main.py), so before asking the board who it is, this script
 soft-resets it from the friendly REPL, which runs boot.py and main.py again,
 and waits for the SDK's last boot line.
 
-Exit 0: the SDK started. Exit 1, with the reason: main.py is not the SDK's
-(see tt_restore_sdk_main.py), the SDK's main.py raised or did not finish, or
+Exit 0: the SDK started. Exit 1, with the reason: main.py is not the SDK's,
+the SDK's main.py raised or did not finish, or
 nothing conclusive was seen in time. What the board printed is shown either way.
 
 Usage (on the Pi, with fpgas-tt.service stopped):
@@ -28,7 +28,7 @@ import tty
 STARTED = re.compile(r"^tt\.sdk_version=\S+\r?$", re.M)  # the SDK main.py's last boot line, once complete
 SDK_BOOT = "BOOT: Tiny Tapeout SDK"  # its first (tt-micropython-firmware src/main.py)
 REBOOTED = "soft reboot"  # MicroPython's own line on a friendly-REPL Ctrl-D
-RESTORE = "restore it with tt_restore_sdk_main.py"
+RESTORE = 'see "The SDK\'s main.py" in docs/hardware/tt-fpga.md'
 
 
 def verdict(text):
