@@ -503,7 +503,8 @@ def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_rea
     assert [c[3].rsplit("/", 2)[-2] for c in bridged] == ["uart-test-tt-fpga"]
     assert bridged[0][2] == "/dev/ttyACM0" and bridged[0][5].endswith("test_uart.py")
     assert run.calls.index(load) < run.calls.index(bridged[0])
-    assert report["state"] == {"variant": "tt-fpga", "serial": "E6"} and "rewrites" in report["flash_note"]
+    assert report["state"] == {"variant": "tt-fpga", "serial": "E6"}
+    assert report["flash_note"].startswith("none: the FPGA breakout has no SPI flash")
 
 
 def test_a_stopped_bridge_is_left_stopped_and_a_failed_test_still_restarts_a_running_one(tmp_path):

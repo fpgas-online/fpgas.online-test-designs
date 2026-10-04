@@ -113,7 +113,7 @@ class TTFPGA(TestBoard):
     report_fields = (*RPI_HWID_FIELDS, "tinytapeout_")
     port = "/dev/ttyACM0"
     services = ("fpgas-tt.service",)  # the TT site's bridge keeps the RP2350's port open while it runs
-    flash_note = "not read: every verify rewrites the bitstream on the RP2350"
+    flash_note = "none: the FPGA breakout has no SPI flash; the RP2350 loads the bitstream and every verify rewrites it"
     # Run in this order, and the board is left with the last design loaded (testbench.py): the pin-ID scan
     # comes first, so a UART-bridge design (one TX pin) is what stays, not one driving every Pmod line.
     tests: ClassVar[dict] = {
