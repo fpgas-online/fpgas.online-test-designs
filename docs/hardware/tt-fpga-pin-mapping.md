@@ -184,12 +184,12 @@ All 8 pairs are **empirically confirmed** (4-transition verification on pi33). S
 
 The iCE40's dedicated SPI pins on the FPGA breakout board (not shared with PMOD). They go only to the demo board's microcontroller, which loads the bitstream over them; the breakout has no SPI flash ([tt-fpga.md](tt-fpga.md#programming)).
 
-| Signal | iCE40 Pin |
-| ------ | --------- |
-| CS_N   | 16        |
-| CLK    | 15        |
-| MISO   | 17        |
-| MOSI   | 14        |
+| iCE40 pin function | iCE40 Pin |
+| ------------------ | --------- |
+| SPI_SS             | 16        |
+| SPI_SCK            | 15        |
+| SPI_SI             | 17        |
+| SPI_SO             | 14        |
 
 ## 7-Segment Display
 

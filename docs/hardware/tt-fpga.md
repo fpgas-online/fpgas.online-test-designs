@@ -177,8 +177,8 @@ python3 designs/_host/tt_fpga_program.py /dev/ttyACM0 bitstream.bin
 
 **No SPI flash:** the breakout has no flash. In its published design
 ([TinyTapeout/breakout-pcb, `ASIC-simulator/ttdbv3-fpga-ICE40UP5k`](https://github.com/TinyTapeout/breakout-pcb/tree/6e3725f7fc5707d0cbe7632c39b867da740d10d7/ASIC-simulator/ttdbv3-fpga-ICE40UP5k),
-checked 2026-10-04) the iCE40's configuration SPI (CS_N=pin 16, CLK=pin 15,
-MOSI=pin 14, MISO=pin 17) goes only to the demo board's microcontroller, which
+checked 2026-10-04) the iCE40's configuration SPI (SPI_SS=pin 16, SPI_SCK=pin 15,
+SPI_SO=pin 14, SPI_SI=pin 17) goes only to the demo board's microcontroller, which
 loads the bitstream at every power-up. So there is no SPI Flash ID test for
 this board ([#52](https://github.com/fpgas-online/fpgas.online-test-designs/issues/52)).
 

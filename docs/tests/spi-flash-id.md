@@ -11,7 +11,6 @@ Verify that the FPGA can communicate with its SPI configuration flash memory by 
 | [Digilent Arty A7](../hardware/arty-a7.md) | Micron/Spansion (board-specific) | To be verified | Active |
 | [Kosagi NeTV2](../hardware/netv2.md) | TBD | To be verified | Active |
 | [Fomu EVT](../hardware/fomu-evt.md) | TBD | To be verified | Active |
-| [TT FPGA Demo Board](../hardware/tt-fpga.md) | TBD | To be verified | Active |
 | [Sqrl Acorn CLE-215+](../hardware/acorn.md) | Spansion S25FL256S | 0x010219 | Active |
 | [LiteFury](../hardware/acorn.md) | Spansion S25FL256S | 0x010219 | Active |
 
