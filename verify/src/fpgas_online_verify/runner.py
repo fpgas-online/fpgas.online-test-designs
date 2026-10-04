@@ -24,7 +24,8 @@ import tempfile
 
 from . import config, identity, state
 from .board import installed
-from .core import Problem, flatten, hold_lock, pci_devices, publish, usb_devices, worst
+from .core import Problem, flatten, hold_lock, pci_devices, publish, tail, usb_devices, worst
+from .core import run as run_command
 
 SCHEMA_VERSION = 2
 REPORT = pathlib.Path("/run/fpgas-online/verify.json")
@@ -376,6 +377,22 @@ def write(report, where):
     return str(out)
 
 
+def start_services(units):
+    """Start the units the boards' checks stopped (testbench.services_stopped); what could not be queued.
+
+    --no-block, as there: from inside fpgas-verify.service a blocking start of a unit ordered after it would
+    wait on the verify's own start job."""
+    failed = []
+    for unit in units:
+        try:
+            rc, text = run_command(["systemctl", "start", "--no-block", unit], 60)
+        except Problem as p:
+            rc, text = 1, p.reason
+        if rc != 0:
+            failed.append(f"{unit} was not started again: {' '.join(tail(text, 2))}")
+    return failed
+
+
 def run(options, prog="fpgas-verify"):
     if options.get("tests"):
         # Part of the check is not the board's verified result: never published (the site would offer a board
@@ -386,12 +403,25 @@ def run(options, prog="fpgas-verify"):
         # The site hears the check has started, and says the board is being verified until the result follows.
         working = publish("fpga-verifying", {"started_at": _now()}, prog=prog, timeout=EVENT_TIMEOUT)
         options = {**options, "event": _Progress(prog, working)}
+    # The services the checks stop are started here, after the report is written: one that reads the report
+    # when it starts (the TT site's bridge) must find this run's, not the one before.
+    stopped = []
+    options = {**options, "restart_later": stopped}
     try:
         report = verify(options)
     except Exception as e:  # whatever went wrong, the site still hears a result, and the report says why
         report = {"schema_version": SCHEMA_VERSION, "result": "error", "checked_at": _now(), "boards": [],
                   "reason": f"fpgas-verify crashed: {type(e).__name__}: {e}"}  # fmt: skip
-    kept_in = write(report, kept_in)
+    to_stdout = kept_in == "-"
+    if not to_stdout:
+        kept_in = write(report, kept_in)
+    not_started = start_services(stopped)
+    if not_started:  # the service may be left down: the result says so, and a report file is written again
+        report["services_failed"] = not_started
+        report["result"] = worst([report["result"], "error"])
+        report["reason"] = "; ".join([*([report["reason"]] if report.get("reason") else []), *not_started])
+    if to_stdout or not_started:  # stdout gets one document, after the starts: nothing reads it as a file
+        kept_in = write(report, kept_in)
     print(summary(report), file=sys.stderr)
     if not options.get("no_publish"):
         publish("fpga-verified", details(report), kept_in, prog)

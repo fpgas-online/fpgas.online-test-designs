@@ -1134,3 +1134,67 @@ def test_a_report_that_cannot_be_finished_leaves_the_old_one_untouched(tmp_path,
         runner.write({"result": "fail"}, str(out))
     assert json.loads(out.read_text()) == {"result": "pass"}  # a reader never sees half a report
     assert [p.name for p in tmp_path.iterdir()] == ["verify.json"]
+
+
+# -- the services a check stops -------------------------------------------------------------------------------
+
+
+class Stops(Fake):
+    """A board whose check stops a service, as the TT FPGA's does, and leaves the start to the runner."""
+
+    def check(self, host, found, options):
+        options["restart_later"].append("fpgas-tt.service")
+        return super().check(host, found, options)
+
+
+def _stopping_run(monkeypatch, start=(0, "")):
+    monkeypatch.setattr(runner, "installed", lambda: _boards(Stops("tt", seen=[{"variant": "tt-fpga"}])))
+    monkeypatch.setattr(runner, "usb_devices", lambda: [])
+    monkeypatch.setattr(runner, "pci_devices", lambda: [])
+    order = []
+    real_write = runner.write
+
+    def write(report, where):
+        order.append(("write", report["result"]))
+        return real_write(report, where)
+
+    def command(argv, timeout):
+        order.append(("run", argv))
+        return start
+
+    monkeypatch.setattr(runner, "write", write)
+    monkeypatch.setattr(runner, "run_command", command)
+    return order
+
+
+def test_a_stopped_service_is_started_only_after_the_report_is_written(opts, tmp_path, monkeypatch):
+    order = _stopping_run(monkeypatch)
+    out = tmp_path / "verify.json"
+    assert runner.run({**opts, "board": "tt", "report": str(out)}) == 0
+    assert order == [("write", "pass"), ("run", ["systemctl", "start", "--no-block", "fpgas-tt.service"])]
+    assert "services_failed" not in json.loads(out.read_text())
+
+
+def test_a_service_that_cannot_be_started_again_is_an_error_in_the_report(opts, tmp_path, monkeypatch):
+    order = _stopping_run(monkeypatch, start=(5, "Unit fpgas-tt.service not found."))
+    out = tmp_path / "verify.json"
+    assert runner.run({**opts, "board": "tt", "report": str(out)}) == 1
+    assert [o[0] for o in order] == ["write", "run", "write"] and order[-1] == ("write", "error")
+    report = json.loads(out.read_text())
+    assert report["result"] == "error"
+    assert report["services_failed"] == ["fpgas-tt.service was not started again: Unit fpgas-tt.service not found."]
+    assert "fpgas-tt.service was not started again" in report["reason"]
+
+
+def test_a_report_on_stdout_is_one_document_printed_after_the_start(opts, monkeypatch, capsys):
+    order = _stopping_run(monkeypatch, start=(5, "Unit fpgas-tt.service not found."))
+    assert runner.run({**opts, "board": "tt", "report": "-"}) == 1
+    assert [o[0] for o in order] == ["run", "write"]
+    assert json.loads(capsys.readouterr().out)["result"] == "error"  # one JSON document, not two
+
+
+def test_a_board_that_stops_nothing_starts_nothing(opts, tmp_path, monkeypatch):
+    order = _stopping_run(monkeypatch)
+    monkeypatch.setattr(runner, "installed", lambda: _boards(Fake("arty", seen=[{"variant": "a7-35"}])))
+    assert runner.run({**opts, "board": "arty", "report": str(tmp_path / "r.json")}) == 0
+    assert order == [("write", "pass")]

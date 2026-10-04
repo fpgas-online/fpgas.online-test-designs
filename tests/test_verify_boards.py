@@ -516,6 +516,15 @@ def test_a_stopped_bridge_is_left_stopped_and_a_failed_test_still_restarts_a_run
     assert report["result"] == "fail" and failing.calls[-1] == ["systemctl", "start", "--no-block", "fpgas-tt.service"]
 
 
+def test_a_check_told_to_leave_the_start_to_its_caller_only_says_what_it_stopped(tmp_path):
+    later = []
+    run = Runner([])
+    report = _check(TT, tmp_path, {"variant": "tt-fpga", "usb": "1-2", "serial": "E6"}, run, restart_later=later)
+    assert later == ["fpgas-tt.service"] and report["services_stopped"] == ["fpgas-tt.service"]
+    assert ["systemctl", "stop", "fpgas-tt.service"] in run.calls
+    assert not any(c[:2] == ["systemctl", "start"] for c in run.calls)  # runner.run starts it, after the report
+
+
 def test_a_bridge_that_will_not_stop_or_restart_makes_the_check_an_error(tmp_path):
     stuck = Runner([("systemctl stop", (1, "Failed to stop fpgas-tt.service: Access denied"))])
     report = _check(TT, tmp_path, {"variant": "tt-fpga", "usb": "1-2", "serial": "E6"}, stuck)

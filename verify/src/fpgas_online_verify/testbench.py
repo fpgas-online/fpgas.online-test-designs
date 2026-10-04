@@ -85,8 +85,12 @@ class TestBoard(Board):
     services: ClassVar[tuple] = ()
 
     @contextlib.contextmanager
-    def services_stopped(self, runner=run):
+    def services_stopped(self, runner=run, later=None):
         """Stop whichever of `services` are running; start them again on the way out, whatever happened.
+
+        With `later` (a list), the units stopped are added to it instead of being started: the caller starts
+        them once it has written its report (runner.run), so a service that reads the report when it starts
+        never reads the one before.
 
         Yields {"stopped": [...], "failed": [...]}: a unit that would not stop, or whose start could not be
         queued, is in "failed" (the check makes that an error: the service may be left down). The start is
@@ -109,7 +113,9 @@ class TestBoard(Board):
         try:
             yield held
         finally:
-            for unit in held["stopped"]:
+            if later is not None:
+                later.extend(unit for unit in held["stopped"] if unit not in later)
+            for unit in held["stopped"] if later is None else ():
                 try:
                     rc, text = runner(["systemctl", "start", "--no-block", unit], 60)
                 except Problem as p:
@@ -355,7 +361,7 @@ class TestBoard(Board):
         if self.idcodes:
             report["jtag"] = self.jtag(host, found, variant, runner)
         event = options.get("event") or (lambda stage, details: None)
-        with self.services_stopped(runner) as held:
+        with self.services_stopped(runner, options.get("restart_later")) as held:
             facts = self.port_facts(host, found, runner)
             self.identified(report, found, options, facts)
             for test in tests:
