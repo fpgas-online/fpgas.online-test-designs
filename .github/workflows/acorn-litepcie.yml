@@ -11,7 +11,8 @@
 #   fleet-module  litepcie.ko and liteuart.ko for the fleet kernel (kernels.toml), as a workflow artifact
 #                 only: the netbooted fleet cannot use DKMS, and Part B packages modules per kernel
 #   dkms          a DKMS build in the shape DKMS is for: an arm64 bookworm root with rpi-v8 headers
-#   publish       on main: the debs to the rolling series release that fpgas-online/apt pulls from
+#   publish       on main: the debs no release has yet, to this build's own release, build-<version>
+#                 (packaging/release.py). fpgas-online/apt pulls from every release
 #
 # Pull requests build and test everything and publish nothing. The daily run is here for Part B, which adds
 # new Raspberry Pi kernels as they appear; until then it rebuilds what main has and uploads nothing new.
@@ -43,7 +44,6 @@ env:
   PY: >-
     packaging/acorn-litepcie/build_debs.py packaging/acorn-litepcie/prepare_driver.py
     packaging/acorn-litepcie/csr_check.py packaging/acorn-litepcie/container.py
-    packaging/acorn-litepcie/publish.py
     verify/src/fpgas_online_verify/boards/acorn/check.py verify/src/fpgas_online_verify/boards/acorn/spi_flash.py
     tests/test_acorn_litepcie.py tests/test_acorn_verify.py tests/test_spi_flash.py
   TESTS: >-
@@ -231,14 +231,16 @@ jobs:
           dkms-test dist/debs/fpgas-online-acorn-litepcie-common_*.deb dist/debs/fpgas-online-acorn-litepcie-dkms_*.deb
 
   publish:
-    name: "Publish to the series release"
+    name: "Publish to this build's release"
     needs: [test, driver, utils, fleet-module, dkms]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write # create the build's release and its build-<version> tag, upload the debs
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the release is named by the repository's version: git describe
 
       - uses: actions/download-artifact@v4
         with:
@@ -246,9 +248,9 @@ jobs:
           path: dist
           merge-multiple: true
 
-      # Only files the release lacks go up, to the version's own vX.Y series: see publish.py.
-      - name: Upload the versions the series release does not have yet
+      # The packages' version moves only when the driver's inputs do, so most pushes have nothing new here:
+      # release.py uploads only the files no release of this repository carries yet.
+      - name: Upload the versions no release has yet to build-<version>
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.driver.outputs.version }}
-        run: python3 packaging/acorn-litepcie/publish.py --version "$VERSION" dist/*.deb
+        run: python3 packaging/release.py dist/*.deb
