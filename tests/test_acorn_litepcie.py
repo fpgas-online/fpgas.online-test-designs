@@ -6,6 +6,7 @@ Design: docs/plans/2026-09-25-acorn-litepcie-packages-design.md. What must hold:
   * the fleet kernel the CI module is built for is named in one place, above the kernel floor (§3.6, §4.3).
 """
 
+import hashlib
 import importlib.util
 import json
 import pathlib
@@ -726,8 +727,24 @@ def test_a_runner_that_cannot_run_armhf_gets_qemu_for_it():
     assert probe[:2] == ["sudo", "docker"] and probe[-2:] == ["debian:trixie", "true"]
     assert probe[probe.index("--platform") + 1] == "linux/arm/v7"
     binfmt = ct.binfmt_argv("linux/arm/v7")
-    assert binfmt == ["docker", "run", "--privileged", "--rm", "tonistiigi/binfmt", "--install", "arm"]
+    assert binfmt == ["docker", "run", "--privileged", "--rm", ct.BINFMT, "--install", "arm"]
     assert set(ct.QEMU) == set(ct.PLATFORMS.values())
+
+
+def test_the_privileged_image_is_named_by_digest():
+    name, _, digest = ct.BINFMT.partition("@sha256:")
+    assert name == "tonistiigi/binfmt" and len(digest) == 64 and int(digest, 16)
+
+
+def test_the_archive_key_is_the_one_committed():
+    """The key every headers package is trusted by cannot change without this test changing."""
+    assert hashlib.sha256(ct.RPI_KEY.read_bytes()).hexdigest() == ct.RPI_KEY_SHA256
+
+
+def test_a_failed_command_says_what_it_printed():
+    with pytest.raises(ct.ContainerError, match=r"exited 3: .*no such module"):
+        ct.out("sh", "-c", "echo no such module >&2; exit 3")
+    assert ct.out("sh", "-c", "echo fine") == "fine\n"
 
 
 def test_a_module_is_built_in_its_suites_own_image():

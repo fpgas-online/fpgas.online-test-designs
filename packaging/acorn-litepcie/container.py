@@ -47,6 +47,11 @@ REPO = HERE.parents[1]
 IN_CONTAINER = "packaging/acorn-litepcie/container.py"
 PLATFORMS = {"arm64": "linux/arm64", "armhf": "linux/arm/v7", "amd64": "linux/amd64"}
 QEMU = {"linux/arm64": "arm64", "linux/arm/v7": "arm", "linux/amd64": "amd64"}  # tonistiigi/binfmt's names
+# It runs --privileged in the jobs whose debs are published, so by digest, never by tag: `latest` on 2026-10-04
+# (docker buildx imagetools inspect tonistiigi/binfmt:latest).
+BINFMT = "tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0"
+# The committed archive key (RPI_KEY below) is what every headers package is trusted by: its sha256.
+RPI_KEY_SHA256 = "3a29901549ae65a910de13a32551e6eea7f45ba1fd70f0cb67e5c70d98488071"
 SUITES = ("bookworm", "trixie")  # the Debian images
 RPI_ARCHIVE = "https://archive.raspberrypi.com/debian"
 # The archive's signing key, CF8A1AF502A2AA2D763BAE7E82B129927FA3303E, as raspberrypi-archive-keyring
@@ -144,7 +149,7 @@ def probe_argv(platform, suite, docker=("docker",)):
 
 def binfmt_argv(platform, docker=("docker",)):
     """Register QEMU user emulation for `platform` with the kernel, as mithro/apt-repo-action's build-deb does."""
-    return [*docker, "run", "--privileged", "--rm", "tonistiigi/binfmt", "--install", QEMU[platform]]
+    return [*docker, "run", "--privileged", "--rm", BINFMT, "--install", QEMU[platform]]
 
 
 # -- in the container ----------------------------------------------------------------------------------------
@@ -156,7 +161,14 @@ def sh(*argv, **kw):
 
 
 def out(*argv, **kw):
-    return subprocess.run([str(a) for a in argv], check=True, capture_output=True, text=True, **kw).stdout
+    """The command's stdout. One that fails is a ContainerError carrying what it printed: its stderr was
+    captured, so nothing else would show it."""
+    argv = [str(a) for a in argv]
+    run = subprocess.run(argv, check=False, capture_output=True, text=True, **kw)
+    if run.returncode != 0:
+        said = (run.stderr + run.stdout).strip() or "it printed nothing"
+        raise ContainerError(f"{shlex.join(argv)} exited {run.returncode}: {said}")
+    return run.stdout
 
 
 def apt_install(*packages):
@@ -252,8 +264,11 @@ def flat_repository(debs):
 
 def installed(name):
     """`<architecture> <version>` of an installed package, or None."""
-    run = subprocess.run(["dpkg-query", "-W", "-f", "${db:Status-Status} ${Architecture} ${Version}", name],
-                         capture_output=True, text=True)  # fmt: skip
+    run = subprocess.run(
+        ["dpkg-query", "-W", "-f", "${db:Status-Status} ${Architecture} ${Version}", name],
+        stdout=subprocess.PIPE,
+        text=True,
+    )  # its stderr (why it is not there) goes to the log
     status, _, rest = run.stdout.partition(" ")
     return rest.strip() if run.returncode == 0 and status == "installed" else None
 
