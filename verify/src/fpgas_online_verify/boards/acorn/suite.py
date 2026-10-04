@@ -13,6 +13,7 @@ read; and the FPGA is never reconfigured.
   pcie-link  the link speed and width in sysfs, against the setup's expected figures (expected.toml)
   pcie-bar0  over BAR0: which build runs (golden is a fault: the operational slot did not boot), the
              flash's identity, the device DNA and the XADC temperature and voltages
+  rp1-pio    on a Pi 5 / CM5: the RP1 PIO openfpgaloader-rp1pio uses, /dev/pio0 there and openable (links.py)
   jtag       IDCODE and device DNA over P1 (links.py); the DNA must be BAR0's
   flash      both flash slots read whole and compared with the release's images
   ddr        the BIOS console read out (it lets the BIOS finish DRAM set-up, #47), then the DRAM BIST over
@@ -41,7 +42,7 @@ from ...core import Problem, pi_model, run, worst
 from . import bist, check, links
 from . import setup as setups
 
-TESTS = ("pcie-link", "pcie-bar0", "jtag", "flash", "ddr", "p2-uart", "p2-serial", "scratch", "p2-gpio")
+TESTS = ("pcie-link", "pcie-bar0", "rp1-pio", "jtag", "flash", "ddr", "p2-uart", "p2-serial", "scratch", "p2-gpio")
 # The tests fpgas-verify --identify runs: they only read (BAR0's identifier, DNA, XADC and the flash's identity;
 # IDCODE and DNA over P1 JTAG).
 IDENTIFY_TESTS = ("pcie-bar0", "jtag")
@@ -214,6 +215,9 @@ class _Suite:
         except check.spi_flash.FlashError as e:
             self.flash_error = f"the flash did not identify itself: {e}"
             faults.append(self.flash_error)
+        sfdp_error = (self.report.get("flash") or {}).get("sfdp_error")
+        if sfdp_error:
+            faults.append(f"the flash's SFDP could not be read: {sfdp_error}")
         dna = check.read_dna(self.bus.read, self.csrs)
         self.bar0["dna"] = dna
         xadc = check.read_xadc(self.bus.read, self.csrs)
@@ -221,6 +225,9 @@ class _Suite:
         faults += check.dna_faults(dna, "BAR0")
         faults += check.xadc_faults(xadc, self.figures.get("xadc", {}), "BAR0")
         return {**entry, "result": "fail", "reason": "; ".join(faults)} if faults else {**entry, "result": "pass"}
+
+    def rp1_pio(self):
+        return self.options.get("rp1_pio", links.rp1_pio)(self.run)
 
     def jtag(self):
         return links.jtag(self.setup, self.found["variant"], self.run, self._good_bar0_dna(),
@@ -361,6 +368,7 @@ class _Suite:
             no_uart = self._needs_setup() or (None if self.uart_builds else "the board does not run a known build")
             self.test("pcie-link", self._needs_setup(), self.pcie_link)
             self.test("pcie-bar0", None if self.gate_problem else no_bar0, self.pcie_bar0)
+            self.test("rp1-pio", self.options.get("rp1_host", links.not_rp1_host)(), self.rp1_pio)
             self.test("jtag", self._needs_setup() or no_variant, self.jtag)
             self.identified()
             golden = "the golden image has no {}" if self.bar0.get("build") == "golden" else None

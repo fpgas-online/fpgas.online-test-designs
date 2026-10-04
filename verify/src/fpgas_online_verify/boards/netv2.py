@@ -10,6 +10,9 @@ The scan drives GPIO 4, 17 and 27, so fpgas-verify only scans when this board is
 pinctrl before the scan and put back after it (an output as an input: openocd and openFPGALoader leave theirs
 driven); without pinctrl to do that, the scan is not run.
 
+The device DNA is read with `openFPGALoader --read-dna` on the same pins (rp1pio on a Pi 5, libgpiod on a Pi 3/4,
+as the flash readback), its pins put back the same way.
+
 The flash readback uses openFPGALoader's SPI-over-JTAG bridge for the part (libgpiod on a Pi 3/4, rp1pio on a
 Pi 5). Debian bookworm's openfpgaloader has no bridge for the XC7A35T-FGG484 (trixie's has); the fpgas.online
 builds have both.
@@ -63,9 +66,9 @@ class NeTV2(TestBoard):
                      "listen": True},
         "ethernet": {"artifact": "ethernet-test-netv2-{v}/kosagi_netv2.bit", "script": "test_ethernet.py",
                      "args": ["--board", "netv2", "--uart-port", "{port}"]},
-        "pmod": {"artifact": "gpio-loopback-netv2-{v}/top.bit", "script": "test_pmod_loopback.py",
+        "pmod": {"artifact": "gpio-loopback-netv2-{v}/kosagi_netv2.bit", "script": "test_pmod_loopback.py",
                  "args": ["--board", "netv2"]},
-        "pin-id": {"artifact": "pmod-pin-id-netv2-{v}/top.bit", "script": "identify_pmod_pins.py", "args": []},
+        "pin-id": {"artifact": "pmod-pin-id-netv2-{v}/kosagi_netv2.bit", "script": "identify_pmod_pins.py", "args": []},
     }  # fmt: skip
 
     def facts(self, port=None):
@@ -120,14 +123,35 @@ class NeTV2(TestBoard):
         return [{"variant": variant, "idcode": f"{code:#010x}", "idcodes": [f"{c:#010x}" for c in codes],
                  "idcode_scan": scan}]  # fmt: skip
 
+    def openfpgaloader_cable(self, host):
+        """openFPGALoader's cable for the header's JTAG: rp1pio on a Pi 5, libgpiod on a Pi 3/4."""
+        cable = ["-c", "rp1pio"] if is_pi5(host["model"]) else ["--cable", "libgpiod"]
+        return ["openFPGALoader", *cable, "--pins", PINS]
+
+    def dna_argv(self, host):
+        return [*self.openfpgaloader_cable(host), "--read-dna"]
+
+    @contextlib.contextmanager
+    def jtag_driven(self, runner, faults):
+        """The JTAG pins as pinctrl found them, put back after (an output as an input, as after the scan). Without
+        their state, nothing is driven: a Problem."""
+        try:
+            saved = pin_states(runner, JTAG_GPIOS)
+        except Problem as p:
+            raise Problem("error", "the JTAG pins' state could not be read, so it could not be put back: "
+                                   f"{p.reason}") from None  # fmt: skip
+        try:
+            yield
+        finally:
+            faults += restore_pins(runner, saved, exact=False)
+
     def program_argv(self, bitstream, host, test):
         if is_pi5(host["model"]):
             return ["openFPGALoader", "-c", "rp1pio", "--pins", PINS, bitstream]
         return self.openocd_argv(host, f"init; pld load 0 {bitstream}; exit")
 
     def flash_dump_argv(self, host, variant, size, out):
-        cable = ["-c", "rp1pio"] if is_pi5(host["model"]) else ["--cable", "libgpiod"]
-        return ["openFPGALoader", *cable, "--pins", PINS, "--fpga-part", FPGA_PART[variant],
+        return [*self.openfpgaloader_cable(host), "--fpga-part", FPGA_PART[variant],
                 "--dump-flash", "--file-size", str(size), out]  # fmt: skip
 
     def uart_pre(self, host):

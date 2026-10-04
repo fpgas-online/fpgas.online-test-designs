@@ -7,19 +7,25 @@
 #       and Python dependencies.
 
 include ../../mk/common.mk
+include ../../mk/three-flows.mk
+
+ARTY_VARIANTS  := a7-35 a7-100
+NETV2_VARIANTS := a7-35 a7-100
+ACORN_VARIANTS := cle-101 cle-215 cle-215+
 
 # --------------------------------------------------------------------------- #
 # UART Test
 # --------------------------------------------------------------------------- #
 
+$(eval $(call flow_rules,arty,uart_soc_arty.py,$(ARTY_VARIANTS)))
+$(eval $(call flow_rules,netv2,uart_soc_netv2.py,$(NETV2_VARIANTS)))
+$(eval $(call flow_rules,acorn,uart_soc_acorn.py,$(ACORN_VARIANTS)))
+
 .PHONY: uart-arty uart-netv2 uart-fomu uart-all
 
-uart-arty:
-	$(PYTHON) gateware/uart_soc_arty.py --toolchain openxc7 --build
-
-uart-netv2:
-	$(PYTHON) gateware/uart_soc_netv2.py --toolchain openxc7 --build
-
+# Legacy aliases — pick the default variant for each board.
+uart-arty: gateware-arty-a7-35-yosys-nextpnr
+uart-netv2: gateware-netv2-a7-35-yosys-nextpnr
 uart-fomu:
 	$(PYTHON) gateware/uart_soc_fomu.py --build
 
@@ -43,17 +49,22 @@ test-uart-fomu:
 # --------------------------------------------------------------------------- #
 # Programming (run on RPi with FPGA attached)
 # --------------------------------------------------------------------------- #
+#
+# program-* targets default to the Yosys→nextpnr (openxc7) flow of the
+# default a7-35 variant. Override PROGRAM_FLOW to program a different
+# flow, or invoke openFPGALoader / openocd directly to target a
+# different variant (e.g. a7-100).
 
 .PHONY: program-arty program-netv2 program-fomu
 
 program-arty:
-	openFPGALoader -b arty build/arty/gateware/digilent_arty.bit
+	openFPGALoader -b arty build/arty-a7-35-$(PROGRAM_FLOW)/gateware/digilent_arty.bit
 
 program-netv2:
-	openocd -f alphamax-rpi.cfg -c "pld load 0 build/netv2/gateware/kosagi_netv2.bit; exit"
+	openocd -f alphamax-rpi.cfg -c "pld load 0 build/netv2-a7-35-$(PROGRAM_FLOW)/gateware/kosagi_netv2.bit; exit"
 
 program-fomu:
-	openFPGALoader -b fomu_evt build/fomu/gateware/kosagi_fomu_evt.bit
+	openFPGALoader -b fomu_evt build/fomu-evt-yosys-nextpnr/gateware/kosagi_fomu_evt.bin
 
 # --------------------------------------------------------------------------- #
 # Utilities

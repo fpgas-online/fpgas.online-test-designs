@@ -2,6 +2,9 @@
 
 The pins, the cable and the GPIO chip come from the host's setup (setup.py, from wiring.toml).
 
+  rp1-pio  On a Pi 5 / CM5 (BCM2712): /dev/pio0 a character device that opens read-write, for
+           openfpgaloader-rp1pio. No bootloader setting is read; when it fails, whether rp1_fw and rp1_pio
+           are loaded and the kernel's rp1-pio / RP1 firmware lines say why. Not run on other hosts.
   jtag     `openFPGALoader --detect` over the P1 cable must find one device, the variant's part (any silicon
            version: the whole IDCODE is read from openFPGALoader's raw scan and decoded, idcode.py), and
            `openFPGALoader --read-dna` must read the device DNA the SoC reports over BAR0. An IDCODE read
@@ -29,7 +32,9 @@ Each gives a test entry in the board's report: {test, result, reason, output, ..
 import contextlib
 import os
 import re
+import stat
 
+from ... import dna as device_dna
 from ... import idcode
 from ...core import Problem
 from . import bist, check, uartbone_link
@@ -37,7 +42,6 @@ from . import bist, check, uartbone_link
 JTAG_TIMEOUT = 60
 # The IDCODE of each variant's FPGA at version 0 (check.py's variants); compared without the version.
 IDCODES = {"cle-215+": 0x03636093, "cle-215": 0x03636093, "cle-101": 0x03631093}
-DNA_RE = re.compile(r"\bdna\"?\s*[:=]\s*\"?(0x[0-9a-fA-F]+)", re.IGNORECASE)
 # openFPGALoader's libgpiod cable opens /dev/gpiochip0. The header's chip is found by its device-tree
 # compatible (wiring.toml), not by number: a Pi 5 can have gpiochip11-15, 15 the RP1.
 GPIOCHIP = "/dev/gpiochip0"
@@ -75,6 +79,58 @@ def header_gpiochip(compatible, gpiochip=GPIOCHIP, sysfs=SYSFS_GPIO, dev="/dev")
         os.symlink(header, gpiochip)
     elif os.path.realpath(gpiochip) != os.path.realpath(header):
         raise Problem("error", f"{gpiochip} is not the header's GPIO chip ({header}): P1 JTAG not probed")
+
+
+# -- The Pi 5's RP1 PIO, for openfpgaloader-rp1pio ---------------------------------------------------------
+
+DT_COMPATIBLE = "/proc/device-tree/compatible"
+SYSFS_MODULE = "/sys/module"
+PIO_DEV = "/dev/pio0"
+RP1_PIO_MODULES = ("rp1_fw", "rp1_pio")  # rp1_pio talks to the RP1 through rp1_fw, not a device-tree pio node
+RP1_KERNEL_RE = re.compile(r"rp1-pio|rp1_firmware|rp1-firmware|RP1 Firmware")
+
+
+def not_rp1_host(compatible=DT_COMPATIBLE):
+    """Why the rp1-pio test does not apply here (not a BCM2712, so no RP1 PIO), or None if it does."""
+    try:
+        with open(compatible, "rb") as f:
+            if b"brcm,bcm2712" in f.read().split(b"\0"):
+                return None
+    except OSError as e:
+        return f"cannot read {compatible}: {e.strerror}"
+    return "not a BCM2712 (Pi 5 / CM5): no RP1 PIO"
+
+
+def rp1_pio(run, sysfs_module=SYSFS_MODULE, dev=PIO_DEV):
+    """openfpgaloader-rp1pio drives JTAG through /dev/pio0: it must be there and open. Only when it does not are
+    the modules looked at (a built-in driver has no /sys/module entry) and the kernel's own words added: a
+    bootloader whose firmware rp1_pio cannot talk to logs "failed to contact RP1 firmware" and never creates
+    /dev/pio0. The journal only explains a failure; a journal that cannot be read changes nothing."""
+    faults = []
+    try:
+        is_char = stat.S_ISCHR(os.stat(dev).st_mode)
+    except OSError as e:
+        faults.append(("fail", f"{dev}: {e.strerror}"))
+    else:
+        if not is_char:
+            faults.append(("fail", f"{dev} is not a character device"))
+        else:
+            try:
+                os.close(os.open(dev, os.O_RDWR))
+            except OSError as e:
+                faults.append(("fail", f"cannot open {dev}: {e.strerror}"))
+    output = []
+    if faults:
+        faults += [("fail", f"kernel module {m} is not loaded") for m in RP1_PIO_MODULES
+                   if not os.path.isdir(f"{sysfs_module}/{m}")]  # fmt: skip
+        try:
+            rc, text = run(["journalctl", "-k", "-b", "--no-pager", "-o", "cat"], 30)
+        except Problem:
+            rc, text = 1, ""
+        output = [line for line in text.splitlines() if RP1_KERNEL_RE.search(line)] if rc == 0 else []
+        if output:
+            faults.append(("fail", f"kernel: {output[-1].strip()}"))
+    return _entry("rp1-pio", faults, output)
 
 
 def _entry(test, faults, output=(), **seen):
@@ -133,12 +189,11 @@ def jtag(setup, variant, run, bar0_dna=None, gpiochip=None):
         elif chain_ok:
             rc, out = run([*base, "--read-dna"], JTAG_TIMEOUT)
             output += out.strip().splitlines()[-4:]
-            m = DNA_RE.search(out)
-            if rc != 0 or not m:
+            dna = device_dna.parse(out)
+            if rc != 0 or dna is None:
                 faults.append(("fail", "openFPGALoader --read-dna read no device DNA over P1 JTAG"))
                 dna_error = f"openFPGALoader --read-dna read no device DNA over P1 JTAG (exit status {rc})"
             else:
-                dna = int(m.group(1), 16)
                 stuck = check.dna_faults(dna, "P1 JTAG")
                 if stuck:  # a DNA port not being read, so not the board's DNA (identity uses dna_error instead)
                     faults += [("fail", f) for f in stuck]

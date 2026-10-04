@@ -21,8 +21,8 @@ class Board:
     title = ""
     probes = False  # True when finding it means driving something (a JTAG scan over the GPIO header)
     # fpgas-verify --identify (identify.py): the fields a whole identity has (any missing makes it exit 1), and
-    # the prefixes of the fields only the boot check can read (they need a design loaded), which --identify
-    # takes from the boot report instead.
+    # the prefixes of the fields only the boot check can read (they need a design loaded, or a port only the
+    # check holds), which --identify takes from the boot report instead.
     label_fields = ()
     report_fields = ()
 

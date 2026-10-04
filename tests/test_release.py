@@ -241,3 +241,30 @@ def test_no_series_tag_is_an_error_not_a_guess(tmp_path):
     _git(tmp_path, "commit", "-q", "--allow-empty", "-m", "root")
     with pytest.raises(rel.ReleaseError, match="shallow clone"):
         rel.repo_version(tmp_path)
+
+
+def test_listings_ask_for_the_largest_page():
+    """Every listing reads every release, and there is one more per push: 100 a page is the fewest requests."""
+    calls = []
+
+    def gh(*args):
+        calls.append(args)
+        return ""
+
+    rel.published(gh)
+    rel.carriers("x_0.0.post7_all.deb", gh)
+    assert [c[1] for c in calls] == ["repos/{owner}/{repo}/releases?per_page=100"] * 2
+    assert all("--paginate" in c for c in calls)
+
+
+def test_an_upload_no_release_lists_is_an_error(tmp_path):
+    class Unlisted(FakeGh):
+        def __call__(self, *args):
+            if args[0] == "api" and "select(" in args[-1]:
+                return ""
+            return super().__call__(*args)
+
+    deb = tmp_path / "x_0.0.post7_all.deb"
+    deb.write_bytes(b"deb")
+    with pytest.raises(rel.ReleaseError, match="no release lists it"):
+        rel.publish([deb], "0.0.post7", COMMIT, Unlisted())

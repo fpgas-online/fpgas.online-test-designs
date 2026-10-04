@@ -147,7 +147,7 @@ Presence matters as much as value. The sources compile different code depending 
 | `CSR_FLASH_BPI_CONTROL_ADDR`, `CSR_FLASH_SPI_CONTROL_ADDR` | `user/liblitepcie/litepcie_flash.c` | ...uses the BPI or the SPI flash path |
 | `CSR_PCIE_DMA1_BASE` … `CSR_PCIE_DMA7_BASE` | `kernel/main.c` | ...sets up that DMA channel |
 | `CSR_PCIE_MSI_PBA_ADDR` | `kernel/main.c` | ...asks for MSI-X instead of MSI |
-| `CSR_PCIE_MSI_CLEAR_ADDR`, `CSR_CTRL_RESET_ADDR`, `CSR_UART_XOVER_RXTX_ADDR`, `CSR_ICAP_BASE`, `CSR_FLASH_SPI_CONTROL_ADDR` | `kernel/main.c` | ...turns on MSI clearing, the reset at probe, the liteuart device, ICAP, SPI flash |
+| `CSR_PCIE_MSI_CLEAR_ADDR`, `CSR_UART_XOVER_RXTX_ADDR`, `CSR_ICAP_BASE`, `CSR_FLASH_SPI_CONTROL_ADDR` | `kernel/main.c` | ...turns on MSI clearing, the liteuart device, ICAP, SPI flash (`CSR_CTRL_RESET_ADDR`'s reset at probe is patched out, §3.7) |
 
 A driver built from headers where one of these is present, run on an image where it is absent (or the other
 way round), does the wrong thing without any error. Today every image agrees: none has `pcie_msi_pba`,
@@ -312,8 +312,20 @@ Nothing changes on a running host until an operator loads the module.
   `blacklist litepcie` stops that alias autoload, while `modprobe litepcie` still loads it on purpose.
   Without the blacklist, installing the packages would silently turn on boot-time loading, which §7 keeps out
   of scope.
-- **Loading resets the SoC.** Probe writes `CSR_CTRL_RESET_ADDR`, so `modprobe litepcie` resets the SoC's
-  CPU and logic. DDR3 recalibrates, and anything an operator had running on the SoC is lost.
+- **Loading does not reset the SoC.** Upstream's probe writes `CSR_CTRL_RESET_ADDR`. The packaging removes
+  that write (the fourth patch) and has probe switch off what the driver owns instead: the MSI enables and the
+  DMA channel's reader, writer and loopback.
+  - *Why*: this SoC's reset goes to the clock PLL, so the system clock stops while the PCIe core's own clock
+    runs on. After DMA has been used, the first thing the SoC sends the host after such a reset can be a
+    broken TLP. Seen on pi-sw2-p48 (2026-10-02): the root port logged BadTLP and MalfTLP, the endpoint stopped
+    answering (BAR0 and configuration space read as all ones), and after a few rounds the Pi's root complex
+    no longer found the endpoint even once the FPGA had been reloaded: it took a reboot. Thirty resets with
+    no DMA in between did no harm; with a transfer in between, the fault came within one to seven resets.
+  - *What it buys besides*: loading the driver no longer re-runs the BIOS, so DDR3 is not recalibrated and
+    whatever an operator had running on the SoC keeps running.
+  - *What still resets the SoC*: a write of 1 to `ctrl_reset`, by anyone, over BAR0 or the P2 UART. Nothing
+    in this repository's host tools does that. The hazard itself is the gateware's and is tracked separately.
+  - The patch is ours, not an upstream bug fix, so unlike the other three it does not go upstream as it is.
 - **One user at a time, enforced by the tools, because the kernel does not.**
   - *What collides*: probe claims BAR0 (`pcim_iomap_regions`). `fpgas-acorn-verify` and `fpgas-acorn-flash`
     (spi_flash.py) drive BAR0 directly through sysfs `resource0`, and serialise only with each other
@@ -394,7 +406,7 @@ CI, on every pull request:
 
 - the driver generation (§3.1) and the CSR cross-check (§3.2);
 - the struct-layout asserts, compiled for armhf and arm64 (§3.3);
-- the compat, liteuart-alias and coherent-mask patches apply, and none is already present upstream;
+- the compat, liteuart-alias, coherent-mask and no-reset patches apply, and none is already present;
 - the `driver-bound` refusal in `fpgas-acorn-verify` and `fpgas-acorn-flash` (fake-sysfs unit tests);
 - builds of `-common`, `-dkms` and `-utils` (armhf, arm64, amd64) for each suite, each `-utils` with an
   install test in its suite's image, and the fleet-kernel module artifact with its vermagic check;
@@ -651,7 +663,8 @@ What these packages need of fpgas-online/apt:
     then, a bound driver makes the check report `driver-bound` (§3.7).
   - Whether the kernel would police `resource0` is already answered: it does not (`CONFIG_STRICT_DEVMEM`
     unset).
-  - The reset on probe (§3.7) means the driver must load before, not during, anything that uses the SoC.
+  - Probe no longer resets the SoC (§3.7), but it does switch off MSI, the DMA engines and the DMA loopback,
+    so the driver must still load before, not during, anything that uses DMA.
 - **The CI trigger.** This repository used to build every pull request twice (push and pull_request). #41
   already fixed that: `push` is limited to main and a concurrency group cancels stale runs. The new workflow
   follows the same pattern.

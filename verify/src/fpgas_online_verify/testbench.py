@@ -1,7 +1,9 @@
 """The check shared by the boards verified with the LiteX test designs: the Arty A7, NeTV2, Fomu EVT and TT FPGA.
 
 On a board with JTAG (the Arty and the NeTV2) its whole IDCODE is read first and decoded (idcode.py): a part
-that is not the variant's fails the board, whatever its silicon version. For each of the board's boot-check
+that is not the variant's fails the board, whatever its silicon version. Once that scan has found the one FPGA
+expected, its device DNA is read over the same JTAG (`openFPGALoader --read-dna`, dna.py), which loads nothing:
+a DNA that cannot be read, or reads all zeros or all ones, fails the board too. For each of the board's boot-check
 tests (UART, DDR, SPI flash): check its bitstream against the manifest of fpgas-online-<board>-bitstreams,
 load it (into SRAM, except the Fomu's DFU), run its host test script and keep the tail of its output. Then,
 where the board can, read back the region of its flash that holds the boot image, for the state (state.py):
@@ -27,7 +29,7 @@ import sys
 import tempfile
 from typing import ClassVar
 
-from . import bitstreams, host_tests, idcode, identity
+from . import bitstreams, dna, host_tests, idcode, identity
 from .board import Board
 from .core import Problem, host_facts, run, tail, usb_matching, worst
 
@@ -35,6 +37,8 @@ PROGRAM_TIMEOUT = 300
 TEST_TIMEOUT = 300
 DUMP_TIMEOUT = 900
 JTAG_TIMEOUT = 60
+# Why the device DNA was not read when the IDCODE scan did not pass.
+DNA_SKIPPED = "not read: --read-dna runs only once the JTAG scan has found the one FPGA expected"
 JEDEC_RE = re.compile(r"JEDEC ID: 0x([0-9A-Fa-f]{2}) 0x([0-9A-Fa-f]{2}) 0x([0-9A-Fa-f]{2})")
 
 
@@ -63,6 +67,16 @@ class TestBoard(Board):
     def idcode_argv(self, host):
         """The command that scans the board's JTAG chain and prints whole IDCODEs (idcode.parse)."""
         raise NotImplementedError
+
+    def dna_argv(self, host):
+        """openFPGALoader --read-dna over the board's JTAG: the same cable and pins as the IDCODE scan."""
+        raise NotImplementedError
+
+    @contextlib.contextmanager
+    def jtag_driven(self, runner, faults):
+        """Held around a JTAG read that drives the Pi's own pins (the NeTV2's), so they are put back afterwards;
+        what goes wrong putting them back is added to `faults`. A board on USB drives none of the Pi's pins."""
+        yield
 
     flash_region: ClassVar[dict] = {}  # variant -> bytes of flash holding the boot image (a whole .bit for that part)
     flash_note = ""  # when there is no readback: why the flash is not part of the state
@@ -185,6 +199,11 @@ class TestBoard(Board):
     # -- JTAG ------------------------------------------------------------------------------------------------
 
     def jtag(self, host, found, variant, runner=run):
+        """The board's IDCODE, decoded, against its variant's part, and then its device DNA:
+        {result, reason?, idcode, idcode_version, ..., dna or dna_error}."""
+        return self.read_dna(host, self.read_idcode(host, found, variant, runner), runner)
+
+    def read_idcode(self, host, found, variant, runner=run):
         """The board's IDCODE, decoded, against its variant's part: {result, reason?, idcode, idcode_version, ...}."""
         want = self.idcodes[variant]
         output, scan_faults = [], []
@@ -223,6 +242,38 @@ class TestBoard(Board):
         faults += scan_faults
         return {**entry, "result": "fail", "reason": "; ".join(faults)} if faults else {**entry, "result": "pass"}
 
+    def read_dna(self, host, entry, runner=run):
+        """The JTAG entry with the device DNA added (dna, 16 hex digits), or dna_error saying why there is none.
+        It is read only once the IDCODE scan passed (one device, the variant's part); FUSE_DNA reconfigures
+        nothing. A DNA that cannot be read, or that reads all zeros or all ones (dna.faults), fails the entry."""
+        if entry["result"] != "pass":
+            return {**entry, "dna_error": DNA_SKIPPED}
+        argv = self.dna_argv(host)
+        faults, driven = [], []  # driven: what went wrong putting the Pi's JTAG pins back
+        text = ""
+        try:
+            with self.jtag_driven(runner, driven):
+                rc, text = runner(argv, JTAG_TIMEOUT)
+        except Problem as p:
+            faults.append((p.result, f"the device DNA could not be read: {p.reason}"))
+        else:
+            value = dna.parse(text) if rc == 0 else None
+            if value is None:
+                last = (tail(text, 1) or ["no output"])[0].strip()
+                faults.append(("fail", f"openFPGALoader --read-dna read no device DNA (exit {rc}): {last}"))
+            else:
+                faults += [("fail", f) for f in dna.faults(value, "JTAG")]
+        out = {**entry, "output": [*entry.get("output", []), *tail(text, 4)]}
+        if faults:
+            out["dna_error"] = "; ".join(reason for _, reason in faults)
+        else:
+            out["dna"] = identity.dna(value)
+        faults += [("error", f) for f in driven]
+        if not faults:
+            return out
+        result = "error" if all(r == "error" for r, _ in faults) else "fail"
+        return {**out, "result": result, "reason": "; ".join(reason for _, reason in faults)}
+
     # -- the flash -----------------------------------------------------------------------------------------
 
     def read_flash(self, host, variant, runner=run):
@@ -247,14 +298,22 @@ class TestBoard(Board):
     # -- the check -----------------------------------------------------------------------------------------
 
     def identity(self, found):
-        return {k: v for k, v in found.items() if k in ("variant", "serial", "idcode") and v is not None}
+        return {k: v for k, v in found.items() if k in ("variant", "serial", "idcode", "dna") and v is not None}
 
-    def identified(self, report, found, options):
-        """Who the board is (identity.py), from how it was found and its JTAG IDCODE: put in the report and sent
-        as fpga-board-identified, before any test runs."""
+    def port_facts(self, host, found, runner=run):
+        """Identity fields only the board's own port gives, read while `services` are stopped and before any
+        test (the TT FPGA's, from rpi-hwid): {} for a board with none. A read that was tried and failed is a
+        <field>_error, which makes the check an error."""
+        return {}
+
+    def identified(self, report, found, options, facts=None):
+        """Who the board is (identity.py), from how it was found, its JTAG IDCODE and DNA, and `facts`
+        (port_facts): put in the report and sent as fpga-board-identified, before any test runs."""
         out = identity.base(options.get("board_key", self.name), self.name, found, report["variant"])
         if "jtag" in report:
             out.update(identity.idcode_fields(report["jtag"]))
+            out.update(identity.dna_fields(report["jtag"]))
+        out.update(facts or {})
         report["identity"] = out
         identity.keep(options, out)
         (options.get("event") or (lambda stage, details: None))("fpga-board-identified", identity.details(out))
@@ -264,11 +323,14 @@ class TestBoard(Board):
     report_fields = ("flash",)
 
     def identify(self, host, found, options, runner=run):
-        """How the board was found, and its IDCODE over JTAG on a board with JTAG: nothing is loaded."""
+        """How the board was found, and its IDCODE and device DNA over JTAG on a board with JTAG: nothing is
+        loaded and nothing is reconfigured."""
         variant = options.get("variant") or found["variant"]
         out = identity.base(options.get("board_key", self.name), self.name, found, variant)
         if self.idcodes and variant in self.idcodes:
-            out.update(identity.idcode_fields(self.jtag(host, found, variant, runner)))
+            jtag = self.jtag(host, found, variant, runner)
+            out.update(identity.idcode_fields(jtag))
+            out.update(identity.dna_fields(jtag))
         return out
 
     def check(self, host, found, options, runner=run):
@@ -292,9 +354,10 @@ class TestBoard(Board):
         report["bitstreams"] = manifest.get("version")
         if self.idcodes:
             report["jtag"] = self.jtag(host, found, variant, runner)
-        self.identified(report, found, options)
         event = options.get("event") or (lambda stage, details: None)
         with self.services_stopped(runner) as held:
+            facts = self.port_facts(host, found, runner)
+            self.identified(report, found, options, facts)
             for test in tests:
                 event("fpga-test-started", {"test": test})
                 report["tests"].append(self.run_test(test, variant, host, images, manifest, runner))
@@ -303,11 +366,15 @@ class TestBoard(Board):
         if held["stopped"]:
             report["services_stopped"] = held["stopped"]
         jtag = report.get("jtag", {})
-        state = self.identity({**found, "variant": variant, "idcode": jtag.get("idcode") or found.get("idcode")})
+        state = self.identity({**found, "variant": variant, "idcode": jtag.get("idcode") or found.get("idcode"),
+                               "dna": jtag.get("dna")})  # fmt: skip
         jedec = next((t["flash_jedec"] for t in report["tests"] if "flash_jedec" in t), None)
         if jedec:
             state["flash_jedec"] = jedec
         results = [t["result"] for t in report["tests"]] + ([jtag["result"]] if jtag else [])
+        facts_failed = [f"{k}: {v}" for k, v in facts.items() if k.endswith(identity.ERROR_SUFFIX)]
+        if facts_failed:
+            results.append("error")
         try:
             flash = self.read_flash(host, variant, runner)
             if flash:
@@ -323,7 +390,7 @@ class TestBoard(Board):
         report["state"] = state
         report["result"] = worst(results)
         bad = [t for t in report["tests"] if t["result"] != "pass"]
-        reasons = [f"{t['test']} {t['result']}: {t.get('reason', '')}" for t in bad] + held["failed"]
+        reasons = [f"{t['test']} {t['result']}: {t.get('reason', '')}" for t in bad] + facts_failed + held["failed"]
         if jtag and jtag["result"] != "pass":
             reasons.insert(0, f"jtag {jtag['result']}: {jtag['reason']}")
         if reasons:

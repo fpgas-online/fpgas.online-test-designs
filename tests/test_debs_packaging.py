@@ -46,6 +46,13 @@ def test_the_core_has_every_module_but_the_boards_and_every_host_script(tmp_path
             assert pathlib.Path(c["src"]).is_file(), c["src"]
 
 
+def test_debians_own_openfpgaloader_must_be_new_enough_to_read_the_device_dna():
+    """--read-dna is in openFPGALoader from 0.13.0; Debian bookworm's 0.10.0 lacks it, so the Arty and NeTV2
+    checks would fail every board."""
+    assert bd.OPENFPGALOADER.split(" | ") == [
+        "openfpgaloader-fpgasonline", "openfpgaloader-fpgasonline-git", "openfpgaloader (>= 0.13.0)"]  # fmt: skip
+
+
 def test_each_board_tools_package_has_its_module_and_only_its_own_tooling(tmp_path):
     arty = bd.tools_nfpm(B["arty"], V, V, tmp_path)
     assert arty["name"] == "fpgas-online-arty-tools"
