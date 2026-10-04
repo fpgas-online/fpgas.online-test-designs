@@ -27,6 +27,7 @@ sdk_start = _load("tt_sdk_start")
 program = _load("tt_fpga_program")
 wrapper = _load("tt_test_wrapper")
 _load("tt_pmod_wrapper")
+main_py = _load("tt_main_py")
 
 # What a demo board prints on a soft reset from the friendly REPL: with the SDK's main.py (its first and last
 # boot lines, tt-micropython-firmware src/main.py), and with the no-op the test wrapper used to install.
@@ -123,6 +124,67 @@ def test_a_prompt_that_ends_a_line_of_output_is_not_the_end():
     """A read can stop anywhere: only the prompt on a line of its own is the board back at the prompt."""
     text = ">>> \r\nMPY: soft reboot\r\nBOOT: Tiny Tapeout SDK\r\nat the prompt, type >>>"
     assert sdk_start.verdict(text) == (None, "the SDK is still starting")
+
+
+# -- is the board's main.py still the SDK's own ---------------------------------------------------------------
+
+SDK_SHA = main_py.MAIN_PY_SHA256["3.1.0"]
+
+
+@pytest.mark.parametrize("release", ["3.1.0", "v3.1.0"])
+def test_the_sdks_own_main_py_is_ok(release):
+    out = f"SDK_RELEASE {release}\r\nMAIN_SHA256 {SDK_SHA}\r\n"
+    assert main_py.verdict(0, out, "") == (True, "main.py is SDK 3.1.0's own")
+
+
+def test_a_main_py_that_was_changed_is_said_with_its_hash():
+    ok, why = main_py.verdict(0, "SDK_RELEASE 3.1.0\nMAIN_SHA256 " + "ab" * 32 + "\n", "")
+    assert not ok and why.startswith("the board's main.py is not SDK 3.1.0's own (its SHA-256 is abab")
+    assert "docs/hardware/tt-fpga.md" in why
+
+
+def test_a_release_with_no_recorded_main_py_fails_and_says_what_to_do():
+    ok, why = main_py.verdict(0, f"SDK_RELEASE 9.9.9\nMAIN_SHA256 {SDK_SHA}\n", "")
+    assert not ok and why == (
+        "no main.py is recorded for SDK release 9.9.9 (recorded: 3.1.0): add it to tt_main_py.py")  # fmt: skip
+
+
+@pytest.mark.parametrize("rc, out, err, part", [
+    (1, "", "Traceback (most recent call last):\nOSError: [Errno 2] ENOENT\n", "OSError: [Errno 2] ENOENT"),
+    (0, "SDK_RELEASE 3.1.0\n", "", "could not be read (exit 0)"),  # half an answer is no answer
+    (0, "", "", "it printed nothing"),
+    (124, "", "mpremote did not finish within 60 s", "mpremote did not finish within 60 s"),
+    (127, "", "mpremote is not installed", "mpremote is not installed"),
+])  # fmt: skip
+def test_a_board_that_could_not_be_read_fails_with_what_was_seen(rc, out, err, part):
+    ok, why = main_py.verdict(rc, out, err)
+    assert not ok and part in why
+
+
+def test_reading_main_py_is_one_mpremote_exec_and_a_hang_or_no_mpremote_is_a_result(monkeypatch, capsys):
+    calls = []
+
+    def run(argv, **kw):
+        calls.append(argv)
+        return subprocess.CompletedProcess(argv, 0, f"SDK_RELEASE 3.1.0\nMAIN_SHA256 {SDK_SHA}\n", "")
+
+    monkeypatch.setattr(main_py.subprocess, "run", run)
+    assert main_py.main(["/dev/ttyACM0"]) == 0
+    assert calls == [["mpremote", "connect", "/dev/ttyACM0", "exec", main_py.READ]]
+    assert capsys.readouterr().out == "MAIN_PY: OK: main.py is SDK 3.1.0's own\n"
+
+    def hangs(argv, timeout=None, **kw):
+        raise subprocess.TimeoutExpired(argv, timeout)
+
+    monkeypatch.setattr(main_py.subprocess, "run", hangs)
+    assert main_py.read_board("/dev/ttyACM0", timeout=3) == (124, "", "mpremote did not finish within 3 s")
+
+    def absent(argv, **kw):
+        raise FileNotFoundError("mpremote")
+
+    monkeypatch.setattr(main_py.subprocess, "run", absent)
+    assert main_py.read_board("/dev/ttyACM0") == (127, "", "mpremote is not installed")
+    assert main_py.main(["/dev/ttyACM0"]) == 1
 
 
 # -- nothing is written to the demo board -------------------------------------------------------------------
@@ -289,9 +351,14 @@ def test_no_tiny_tapeout_host_script_can_change_a_file_on_the_board(path):
 
 
 def test_the_guard_covers_every_tiny_tapeout_host_script():
-    assert {"tt_fpga_program.py", "tt_test_wrapper.py", "tt_pmod_wrapper.py", "tt_sdk_start.py", "tt_fpga.py"} <= {
-        p.name for p in GUARDED
-    }
+    assert {
+        "tt_fpga_program.py",
+        "tt_test_wrapper.py",
+        "tt_pmod_wrapper.py",
+        "tt_sdk_start.py",
+        "tt_main_py.py",
+        "tt_fpga.py",
+    } <= {p.name for p in GUARDED}
 
 
 # What the scripts did before, and other ways of doing the same: the guard has to see each of them.

@@ -314,6 +314,13 @@ needed even with the right `main.py`: a soft reset from the raw REPL, which is w
 run `main.py`, so after any load the `tt` object is gone until the next start. A board whose `main.py` does not
 start the SDK fails the check with that reason.
 
+**A visitor can change the board; the check says so.** The Commander on tinytapeout.fpgas.online gives every
+visitor the board's Python prompt, and with it the board's files (Tim, 2026-10-05: the prompt stays). So the
+boot check first reads the SHA-256 of the board's `main.py` (`tt_main_py.py`) and compares it with the one
+recorded for the SDK release the board runs: a `main.py` that was replaced or edited is an `error` with that
+reason, not a pass. A board upgraded to an SDK release with no recorded `main.py` fails the same way until
+the release is added to `tt_main_py.py`.
+
 **No code of ours writes to a demo board.** The boot check and the debug tools change no file on it: not
 `main.py`, and no bitstream (see [Programming](#programming)); `tests/test_tt_host_scripts.py` holds every
 string the host scripts send to a board, or give to `mpremote`, to that. The one file that does change is not

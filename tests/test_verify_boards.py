@@ -573,6 +573,7 @@ def test_a_bridge_that_will_not_stop_or_restart_makes_the_check_an_error(tmp_pat
 TT_FOUND = {"variant": "tt-fpga", "usb": "1-2", "serial": "E661"}
 RPI_HWID_TT = ["/usr/bin/rpi-hwid", "tinytapeout", "--json", "--no-stop-service"]
 SDK_START = "tt_sdk_start.py"
+MAIN_PY = "tt_main_py.py"
 # A board as rpi-hwid's tinytapeout_verdict() describes it (src/rpi_hwid/tinytapeout.py, origin/main 310cd23):
 # the TT FPGA demo board, SDK 3.1.0, whose ROM says "FPGA", so chip fpga and no shuttle.
 TT_BOARD = {
@@ -607,12 +608,14 @@ def test_rpi_hwid_reads_the_tt_board_while_the_check_holds_its_port_and_before_a
                             stderr="warning: something\n")])  # fmt: skip
     report = _check(TT, tmp_path, TT_FOUND, run, event=lambda stage, d: events.append((stage, d)))
     assert report["result"] == "pass"
-    # after fpgas-tt.service is stopped, the board's SDK is started, and then rpi-hwid asks it who it is, all
-    # before the first design is loaded; the service is started again at the end
-    assert run.calls[2][1].endswith(SDK_START) and run.calls[2][2] == "/dev/ttyACM0"
-    assert run.calls[3] == RPI_HWID_TT and _restarted_last(run)
+    # after fpgas-tt.service is stopped, the board's main.py is checked, its SDK is started, and then rpi-hwid
+    # asks it who it is, all before the first design is loaded; the service is started again at the end
+    assert run.calls[2][1].endswith(MAIN_PY) and run.calls[2][2] == "/dev/ttyACM0"
+    assert run.calls[3][1].endswith(SDK_START) and run.calls[3][2] == "/dev/ttyACM0"
+    assert run.calls[4] == RPI_HWID_TT and _restarted_last(run)
     assert sum(SDK_START in " ".join(c) for c in run.calls) == 1
-    assert all("rpi-hwid" not in " ".join(c) for c in run.calls[4:])  # once
+    assert sum(MAIN_PY in " ".join(c) for c in run.calls) == 1
+    assert all("rpi-hwid" not in " ".join(c) for c in run.calls[5:])  # once
     assert report["identity"] == {"board": "tt", "kind": "tt", "variant": "tt-fpga", "serial": "E661", "usb": "1-2",
                                   "usb_serial": "E661", **TT_FIELDS}  # fmt: skip
     stage, details = events[0]
@@ -639,10 +642,27 @@ def test_a_board_whose_sdk_does_not_start_is_an_error_and_is_not_asked_who_it_is
     assert [t["result"] for t in report["tests"]] == ["pass", "pass"]  # the tests still ran
 
 
+def test_a_board_whose_main_py_a_visitor_changed_is_an_error_with_that_reason(tmp_path, monkeypatch):
+    """Visitors have the board's Python prompt (Tim, 2026-10-05: it stays), so the check reads main.py's hash."""
+    _installed(monkeypatch)
+    said = (
+        "MAIN_PY: FAIL: the board's main.py is not SDK 3.1.0's own (its SHA-256 is 00ff): "
+        'see "The SDK\'s main.py" in docs/hardware/tt-fpga.md\n'
+    )
+    run = Runner([(MAIN_PY, (1, said)), _rpi_hwid(TT_BOARD)])
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    assert report["result"] == "error" and _restarted_last(run)
+    assert not any(SDK_START in " ".join(c) or "rpi-hwid" in " ".join(c) for c in run.calls)
+    why = report["identity"]["tinytapeout_error"]
+    assert why.startswith("the demo board's main.py is not known to be the SDK's own: MAIN_PY: FAIL: the board's")
+    assert why in report["reason"]
+    assert [t["result"] for t in report["tests"]] == ["pass", "pass"]  # the tests still ran
+
+
 def test_without_rpi_hwid_the_board_is_not_soft_reset(tmp_path):
     run = Runner()
     _check(TT, tmp_path, TT_FOUND, run)
-    assert not any(SDK_START in " ".join(c) for c in run.calls)
+    assert not any(SDK_START in " ".join(c) or MAIN_PY in " ".join(c) for c in run.calls)
 
 
 def test_a_field_rpi_hwid_left_out_stays_out_and_leaves_the_tt_identity_not_whole(tmp_path, monkeypatch):
