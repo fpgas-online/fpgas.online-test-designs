@@ -897,7 +897,7 @@ They come between `fpga-verifying` and `fpga-verified`.
 ### How a deploy picks up new packages
 
 1. A commit lands on `main`. When CI is green, [`collect-bitstreams.yml`](../.github/workflows/collect-bitstreams.yml)
-   uploads the packages to this repository's `v0.0` release.
+   uploads the packages to that build's own release, `build-<version>` (for example `build-0.0.post795`).
 2. [fpgas-online/apt](https://github.com/fpgas-online/apt) pulls them into <https://apt.fpgas.online> within 15 minutes.
 3. Infra CI (`nfsroot-build.yml`) builds the NFS root image with the latest packages, as
    `ghcr.io/fpgas-online/nfsroot:ci-<run>`; on infra `main` it moves `bookworm-armhf` once a virtual Pi has
