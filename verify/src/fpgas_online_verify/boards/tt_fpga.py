@@ -3,8 +3,9 @@ over mpremote). The FPGA's UART reaches the Pi only through the RP2350, so the U
 through tt_test_wrapper.py's bridge, which loads the design too. There is no SPI-flash test: the breakout has
 no flash (docs/hardware/tt-fpga.md).
 
-Every load writes the bitstream to the RP2350's filesystem, so the flash cannot be part of the state; the state
-is the RP2350's USB serial number. Loading needs mpremote (micropython-mpremote: in trixie, and only
+Nothing is written to the demo board: for every load the RP2350 reads the bitstream from the Pi over the serial
+link (tt_fpga_program.py, `mpremote mount`). The board has no flash of its own to compare, so the state is the
+RP2350's USB serial number. Loading needs mpremote (micropython-mpremote: in trixie, and only
 bookworm-backports for bookworm).
 
 Who the board is, for rpi-hwid's Tiny Tapeout label, comes from `rpi-hwid tinytapeout --json --no-stop-service`,
@@ -12,7 +13,11 @@ run while the check holds the RP2350's port (fpgas-tt.service stopped) and befor
 asks the Tiny Tapeout SDK on the RP2350 over its REPL. rpi-hwid is optional: it is found on PATH and run, never
 imported. Without it those fields are not read and the identity says so in tinytapeout_note; the board does not
 fail for it. When rpi-hwid is there but cannot say who the board is, the identity has tinytapeout_error and the
-check is an error."""
+check is an error.
+
+rpi-hwid reads only what the SDK built when the board started, so the board's SDK is started first
+(tt_sdk_start.py: a soft reset from the friendly REPL, which runs the board's main.py). A board whose main.py is
+not the SDK's does not start it, and that is an error with its own reason."""
 
 import json
 import shutil
@@ -29,6 +34,9 @@ RPI_HWID_TIMEOUT = 60
 # --no-stop-service: the check has already stopped fpgas-tt.service, and starts it again itself.
 RPI_HWID_ARGS = ("tinytapeout", "--json", "--no-stop-service")
 NOT_INSTALLED = "not read: rpi-hwid is not installed (python3-rpi-hwid, or `uv tool install rpi-hwid`)"
+# tt_sdk_start.py soft-resets the board from the friendly REPL and waits for the SDK's last boot line: its own
+# limit is 45 s, and the SDK takes a few seconds.
+SDK_START_TIMEOUT = 75
 # The identity fields rpi-hwid gives: TinyTapeoutBoard's, less usb_serial, which finding the board gives.
 RPI_HWID_FIELDS = tuple(f for f in identity.TINYTAPEOUT_FIELDS if f != "usb_serial")
 # The fields every TT FPGA board has a value for: its RP2350, its chip (the FPGA), the demo board it sits on and
@@ -54,6 +62,22 @@ def _json_document(text):
     if not isinstance(doc, dict):
         raise ValueError("its output is not a JSON object")
     return doc
+
+
+def sdk_start(port, runner=run):
+    """Start the Tiny Tapeout SDK on the board at `port` (tt_sdk_start.py); None when it came up, else why not.
+
+    rpi-hwid only reads what the SDK built when the board started (its `tt` object, the chip ROM it cached, the
+    demo board it detected), and that is gone after any raw-REPL soft reset, which is how the last check left the
+    board. So the board is started again before it is asked who it is. Never raises."""
+    try:
+        rc, text = runner([sys.executable, host_tests.path("tt_sdk_start.py"), port], SDK_START_TIMEOUT)
+    except Problem as p:
+        return f"the Tiny Tapeout SDK could not be started on the demo board: {p.reason}"
+    if rc == 0:
+        return None
+    said = [line for line in text.splitlines() if line.startswith("SDK_START:")] or tail(text, 2)
+    return f"the Tiny Tapeout SDK did not start on the demo board: {' '.join(said)}"
 
 
 def tinytapeout_fields(usb_serial, runner=run):
@@ -113,7 +137,7 @@ class TTFPGA(TestBoard):
     report_fields = (*RPI_HWID_FIELDS, "tinytapeout_")
     port = "/dev/ttyACM0"
     services = ("fpgas-tt.service",)  # the TT site's bridge keeps the RP2350's port open while it runs
-    flash_note = "none: the FPGA breakout has no SPI flash; the RP2350 loads the bitstream and every verify rewrites it"
+    flash_note = "none: the FPGA breakout has no SPI flash; the RP2350 loads each bitstream from the Pi"
     # Run in this order, and the board is left with the last design loaded (testbench.py): the pin-ID scan
     # comes first, so a UART-bridge design (one TX pin) is what stays, not one driving every Pmod line.
     tests: ClassVar[dict] = {
@@ -129,7 +153,14 @@ class TTFPGA(TestBoard):
     }  # fmt: skip
 
     def port_facts(self, host, found, runner=run):
-        return tinytapeout_fields(found.get("serial"), runner) if found.get("serial") else {}
+        if not found.get("serial"):
+            return {}
+        if which(RPI_HWID) is None:  # nothing would read the board: it is left as it is
+            return {"tinytapeout_note": NOT_INSTALLED}
+        why_not = sdk_start(host["port"], runner)
+        if why_not:
+            return {"tinytapeout_error": why_not}
+        return tinytapeout_fields(found["serial"], runner)
 
     def program_argv(self, bitstream, host, test):
         extra = self.tests.get(test, {}).get("program_args", [])

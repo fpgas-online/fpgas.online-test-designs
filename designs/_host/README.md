@@ -10,6 +10,7 @@ FPGA on TT boards.
 |--------|---------|
 | `tt_fpga_program.py` | Program the TT FPGA via the RP2350 USB CDC interface |
 | `tt_test_wrapper.py` | Combined program + bridge + test runner for UART tests |
+| `tt_sdk_start.py` | Starts the demo board's Tiny Tapeout SDK (a soft reset from the friendly REPL) and says whether it came up; the boot check runs it before asking the board who it is |
 | `tt_pmod_wrapper.py` | Program FPGA via RP2350, then hand off to RPi GPIO for PMOD tests |
 
 ## Usage

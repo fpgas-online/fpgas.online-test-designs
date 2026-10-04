@@ -14,6 +14,7 @@ SCRIPTS = {
     "identify_pmod_pins.py": "designs/pmod-pin-id/host/identify_pmod_pins.py",
     "tt_fpga_program.py": "designs/_host/tt_fpga_program.py",
     "tt_test_wrapper.py": "designs/_host/tt_test_wrapper.py",
+    "tt_sdk_start.py": "designs/_host/tt_sdk_start.py",
 }
 PACKAGED = pathlib.Path(__file__).resolve().parent / "scripts"
 REPO = pathlib.Path(__file__).resolve().parents[3]
