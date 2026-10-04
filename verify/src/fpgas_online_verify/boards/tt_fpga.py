@@ -1,6 +1,7 @@
 """TT FPGA Demo Board (iCE40UP5K behind an RP2350): found by the RP2350 on USB, loaded through it (tt_fpga_program.py,
-over mpremote). The FPGA's UART reaches the Pi only through the RP2350, so the UART and SPI-flash tests run
-through tt_test_wrapper.py's bridge, which loads the design too.
+over mpremote). The FPGA's UART reaches the Pi only through the RP2350, so the UART test runs
+through tt_test_wrapper.py's bridge, which loads the design too. There is no SPI-flash test: the breakout has
+no flash (docs/hardware/tt-fpga.md).
 
 Every load writes the bitstream to the RP2350's filesystem, so the flash cannot be part of the state; the state
 is the RP2350's USB serial number. Loading needs mpremote (micropython-mpremote: in trixie, and only
@@ -123,8 +124,6 @@ class TTFPGA(TestBoard):
         "uart": {"artifact": "uart-test-tt-fpga/tt_fpga_platform.bin", "script": "test_uart.py",
                  "args": ["--port", "{port}", "--board", "tt", "--skip-banner"], "verify": True,
                  "runner": "tt-bridge"},
-        "spiflash": {"artifact": "spiflash-test-tt-fpga/tt_fpga_platform.bin", "script": "test_spiflash.py",
-                     "args": ["--port", "{port}", "--board", "tt"], "verify": True, "runner": "tt-bridge"},
         "pmod": {"artifact": "gpio-loopback-{v}/tt_fpga_platform.bin", "script": "test_pmod_loopback.py",
                  "args": ["--board", "tt"], "pre": PMOD_PRE, "program_args": ["--gpio-release"]},
     }  # fmt: skip

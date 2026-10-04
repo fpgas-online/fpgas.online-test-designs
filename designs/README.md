@@ -10,7 +10,7 @@ hardware features and produces pass/fail results suitable for CI.
 |--------|------|-------|--------|
 | [uart](uart/) | SoC | UART TX/RX echo via LiteX BIOS | Arty A7, NeTV2, Acorn, Fomu, TT FPGA |
 | [ddr-memory](ddr-memory/) | SoC | DDR3 calibration and memtest | Arty A7, NeTV2, Acorn |
-| [spi-flash-id](spi-flash-id/) | SoC | SPI Flash JEDEC ID readback | Arty A7, NeTV2, Acorn, Fomu, TT FPGA |
+| [spi-flash-id](spi-flash-id/) | SoC | SPI Flash JEDEC ID readback | Arty A7, NeTV2, Acorn, Fomu |
 | [ethernet-test](ethernet-test/) | SoC | Ethernet MAC/PHY link and ping | Arty A7 (MII), NeTV2 (RMII) |
 | [pcie-enumeration](pcie-enumeration/) | SoC | PCIe link training and enumeration | NeTV2, Acorn (CLE-215+/215/101) |
 | [pmod-loopback](pmod-loopback/) | Gateware | GPIO loopback (directly wired pins) | Arty A7, NeTV2, TT FPGA |
