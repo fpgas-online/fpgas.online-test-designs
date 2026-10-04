@@ -17,8 +17,10 @@ found or no board, a board identified, each test started and finished, and the f
 import contextlib
 import datetime
 import json
+import os
 import pathlib
 import sys
+import tempfile
 
 from . import config, identity, state
 from .board import installed
@@ -359,7 +361,18 @@ def write(report, where):
         return "stdout"
     out = pathlib.Path(where)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(text)
+    # Written beside the report and renamed over it: whoever reads the report (the site's bridge, a person)
+    # sees the old one or the new one, never half of either.
+    fd, tmp = tempfile.mkstemp(dir=out.parent, prefix=out.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(text)
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, out)
+    except BaseException:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(tmp)
+        raise
     return str(out)
 
 

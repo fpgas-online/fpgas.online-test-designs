@@ -1107,3 +1107,30 @@ def test_hold_lock_flock_works_on_the_read_only_descriptor(tmp_path):
     lock = tmp_path / "board.lock"
     with core.hold_lock(lock, "board"), open(lock) as other, pytest.raises(BlockingIOError):
         fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+# -- the report file -----------------------------------------------------------------------------------------
+
+
+def test_the_report_replaces_the_old_one_whole_and_stays_readable_by_everyone(tmp_path):
+    out = tmp_path / "run" / "verify.json"
+    assert runner.write({"result": "pass"}, str(out)) == str(out)
+    assert json.loads(out.read_text()) == {"result": "pass"}
+    runner.write({"result": "fail"}, str(out))
+    assert json.loads(out.read_text()) == {"result": "fail"}
+    assert out.stat().st_mode & 0o777 == 0o644  # fpgas-tt and the pi user read it
+    assert [p.name for p in out.parent.iterdir()] == ["verify.json"]  # nothing left beside it
+
+
+def test_a_report_that_cannot_be_finished_leaves_the_old_one_untouched(tmp_path, monkeypatch):
+    out = tmp_path / "verify.json"
+    runner.write({"result": "pass"}, str(out))
+
+    def refuse(src, dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(runner.os, "replace", refuse)
+    with pytest.raises(OSError):
+        runner.write({"result": "fail"}, str(out))
+    assert json.loads(out.read_text()) == {"result": "pass"}  # a reader never sees half a report
+    assert [p.name for p in tmp_path.iterdir()] == ["verify.json"]
