@@ -152,6 +152,9 @@ def test_a_release_with_no_recorded_main_py_fails_and_says_what_to_do():
 @pytest.mark.parametrize("rc, out, err, part", [
     (1, "", "Traceback (most recent call last):\nOSError: [Errno 2] ENOENT\n", "OSError: [Errno 2] ENOENT"),
     (0, "SDK_RELEASE 3.1.0\n", "", "could not be read (exit 0)"),  # half an answer is no answer
+    (0, f"SDK_RELEASE \r\nMAIN_SHA256 {SDK_SHA}\r\n", "", "could not be read (exit 0)"),  # a key with no value
+    (0, "SDK_RELEASE 3.1.0\nMAIN_SHA256 \r\n", "", "could not be read (exit 0)"),
+    (0, "SDK_RELEASE\nMAIN_SHA256\n", "", "could not be read (exit 0)"),
     (0, "", "", "it printed nothing"),
     (124, "", "mpremote did not finish within 60 s", "mpremote did not finish within 60 s"),
     (127, "", "mpremote is not installed", "mpremote is not installed"),

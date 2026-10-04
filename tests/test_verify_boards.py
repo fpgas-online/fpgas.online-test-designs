@@ -659,10 +659,35 @@ def test_a_board_whose_main_py_a_visitor_changed_is_an_error_with_that_reason(tm
     assert [t["result"] for t in report["tests"]] == ["pass", "pass"]  # the tests still ran
 
 
-def test_without_rpi_hwid_the_board_is_not_soft_reset(tmp_path):
+def test_without_rpi_hwid_main_py_is_still_checked_but_the_sdk_is_not_started(tmp_path):
     run = Runner()
-    _check(TT, tmp_path, TT_FOUND, run)
-    assert not any(SDK_START in " ".join(c) or MAIN_PY in " ".join(c) for c in run.calls)
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    assert sum(MAIN_PY in " ".join(c) for c in run.calls) == 1
+    assert not any(SDK_START in " ".join(c) for c in run.calls)
+    assert report["result"] == "pass" and "tinytapeout_note" in report["identity"]
+
+
+def test_without_rpi_hwid_a_changed_main_py_is_still_an_error(tmp_path):
+    run = Runner([(MAIN_PY, (1, "MAIN_PY: FAIL: the board's main.py is not SDK 3.1.0's own (its SHA-256 is 00ff)\n"))])
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    assert report["result"] == "error" and "is not SDK 3.1.0's own" in report["identity"]["tinytapeout_error"]
+    assert "tinytapeout_note" not in report["identity"]
+
+
+def test_a_main_py_check_that_could_not_run_is_an_error_and_the_tests_still_run(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+
+    def run(argv, timeout):
+        if MAIN_PY in " ".join(map(str, argv)):
+            raise core.Problem("error", "tt_main_py.py did not finish within 90 s")
+        return 0, ""
+
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    why = report["identity"]["tinytapeout_error"]
+    assert report["result"] == "error" and why.endswith(
+        "it could not be checked: tt_main_py.py did not finish within 90 s"
+    )
+    assert [t["result"] for t in report["tests"]] == ["pass", "pass"]
 
 
 def test_a_field_rpi_hwid_left_out_stays_out_and_leaves_the_tt_identity_not_whole(tmp_path, monkeypatch):

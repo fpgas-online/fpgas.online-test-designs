@@ -27,7 +27,9 @@ MAIN_PY_SHA256 = {
     "3.1.0": "9ebe551a54715dd730261201ff4f21ad8ecbcd518b4809aa81675cca161e0cb4",
 }
 RESTORE = 'see "The SDK\'s main.py" in docs/hardware/tt-fpga.md'
-# Run on the board. It reads two files and writes none.
+# Run on the board. It reads two files and writes none: importing `ttboard` only reads /VERSION (the SDK's
+# src/ttboard/__init__.py sets VERSION from that file's `version=` line; it does not build the board object),
+# and main.py is read for its hash. On a demo board on 2026-10-05 `ttboard.VERSION` printed 3.1.0.
 READ = (
     "import hashlib, binascii, ttboard\n"
     "print('SDK_RELEASE', ttboard.VERSION)\n"
@@ -49,11 +51,15 @@ def read_board(port, timeout=TIMEOUT):
 
 def verdict(rc, out, err):
     """(ok, reason) from what the read gave."""
-    said = dict(line.split(None, 1) for line in out.splitlines() if line.startswith(("SDK_RELEASE ", "MAIN_SHA256 ")))
+    said = {}
+    for line in out.splitlines():
+        key, _, value = line.strip().partition(" ")
+        if key in ("SDK_RELEASE", "MAIN_SHA256") and value.strip():  # a key with nothing after it is no answer
+            said[key] = value.strip()
     if rc != 0 or set(said) != {"SDK_RELEASE", "MAIN_SHA256"}:
         why = " ".join((err.strip() or out.strip()).splitlines()[-2:]) or "it printed nothing"
         return False, f"the board's SDK release and main.py could not be read (exit {rc}): {why}"
-    release, digest = said["SDK_RELEASE"].strip().lstrip("v"), said["MAIN_SHA256"].strip()
+    release, digest = said["SDK_RELEASE"].lstrip("v"), said["MAIN_SHA256"]
     if release not in MAIN_PY_SHA256:
         known = ", ".join(sorted(MAIN_PY_SHA256))
         return False, f"no main.py is recorded for SDK release {release} (recorded: {known}): add it to tt_main_py.py"
