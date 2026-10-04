@@ -1,9 +1,10 @@
 # Installed by fpgas-online-verify; turned on by fpgas-online-<board> (or fpgas-online-multi-board
 # and so fpgas-online-all-boards). Runs fpgas-verify once per boot: check the board (or boards) the host is set
 # up for, with the fpgas.online test bitstreams, and compare it with the state recorded last time. The board
-# is left running a test design. It publishes the fleet-event stage `fpga-verifying` as it starts; the result is
-# in /run/fpgas-online/verify.json and is published as the stage `fpga-verified`; anything but "pass" leaves
-# this unit failed.
+# is left running a test design. The result is in /run/fpgas-online/verify.json; anything but "pass" leaves
+# this unit failed. Nothing is sent anywhere unless /etc/fpgas-verify/*.ini says `[verify] publish = on`, as the
+# fpgas.online Pi root does: then it publishes the fleet-event stage `fpga-verifying` as it starts and the
+# result as the stage `fpga-verified`.
 # To accept a board flashed or swapped on purpose: sudo fpgas-verify --update.
 # Options (for example --no-probe): FPGAS_VERIFY_ARGS in /etc/default/fpgas-verify.
 [Unit]

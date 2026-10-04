@@ -63,6 +63,29 @@ set +e; fpgas-arty-verify --no-publish --report /tmp/r2.json 2>/tmp/err2; rc=$?;
 [ $rc -ne 0 ] || fail "fpgas-arty-verify passed with no Arty"
 [ ! -e /var/lib/fpgas-online/verify-state.json ] || fail "state recorded for a board that is not there"
 fpgas-verify --list
+
+echo "--- publishing: nothing is sent unless /etc/fpgas-verify says so (the fpgas.online Pi root does)"
+# A stand-in fleet-event that records how it was called, where the fleet's own would be.
+printf '#!/bin/sh\necho "$@" >> /tmp/fleet-events\n' > /usr/local/bin/fleet-event && chmod +x /usr/local/bin/fleet-event
+set +e; fpgas-verify --report /tmp/r3.json 2>/tmp/err3; set -e
+[ ! -e /tmp/fleet-events ] || fail "a host with only the packages published: $(cat /tmp/fleet-events)"
+if grep -qi publish /tmp/err3; then fail "a host with only the packages was told about publishing: $(cat /tmp/err3)"; fi
+python3 -c 'import json; r = json.load(open("/tmp/r3.json")); assert "publish" not in r, r'
+mkdir -p /etc/fpgas-verify
+printf '[verify]\npublish = on\n' > /etc/fpgas-verify/fleet.ini
+set +e; fpgas-verify --report /tmp/r4.json 2>/tmp/err4; set -e
+grep -q '^fpga-verifying ' /tmp/fleet-events || fail "the fleet's file did not turn publishing on: $(cat /tmp/err4)"
+grep -q '^fpga-verified .*result=missing' /tmp/fleet-events || fail "no fpga-verified: $(cat /tmp/fleet-events)"
+python3 -c 'import json; r = json.load(open("/tmp/r4.json")); assert r["publish"] == {"on": True, "configured_by": "/etc/fpgas-verify/fleet.ini"}, r'
+rm /tmp/fleet-events
+set +e; fpgas-verify --no-publish --report /tmp/r5.json 2>/tmp/err5; set -e
+[ ! -e /tmp/fleet-events ] || fail "--no-publish published: $(cat /tmp/fleet-events)"
+printf '[verify]\npublish = sometimes\n' > /etc/fpgas-verify/fleet.ini
+set +e; fpgas-verify --report /tmp/r6.json 2>/tmp/err6; rc=$?; set -e
+[ $rc -ne 0 ] || fail "a bad publish setting was not an error"
+[ ! -e /tmp/fleet-events ] || fail "a bad publish setting still published: $(cat /tmp/fleet-events)"
+python3 -c 'import json; r = json.load(open("/tmp/r6.json")); assert r["result"] == "error" and "publish is" in r["reason"], r'
+rm -r /etc/fpgas-verify /usr/local/bin/fleet-event
 find /usr/lib/python3/dist-packages/fpgas_online_verify -name __pycache__ | grep -q . && fail "bytecode left in dist-packages"
 
 echo "--- swapping to fpgas-online-fomu removes fpgas-online-arty (the boards' packages conflict)"
