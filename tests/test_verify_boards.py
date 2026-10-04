@@ -196,6 +196,37 @@ def test_the_netv2_scan_puts_its_jtag_pins_back_as_they_were():
                              ["pinctrl", "set", "22", "ip", "pd"], ["pinctrl", "set", "27", "a3", "pn"]]  # fmt: skip
 
 
+# A Pi 3's SoC cannot read a pin's pull back, so pinctrl prints "--" for it (pi-sw1-p10, 2026-10-04).
+PI3_PINS = "4: ip    -- | hi // GPIO4 = input\n17: ip    -- | hi // GPIO17 = input\n" \
+           "22: ip    -- | hi // GPIO22 = input\n27: op -- -- | lo // GPIO27 = output\n"  # fmt: skip
+
+
+def test_the_netv2_is_scanned_on_a_pi_whose_pulls_cannot_be_read():
+    """The pull pinctrl could not read is not set when the pin goes back: nothing here changes a pull."""
+    run = Runner([("pinctrl get", (0, PI3_PINS)), ("init; exit", (0, "tap/device found: 0x0362d093"))])
+    assert NETV2.probe(_host(NETV2), runner=run)[0]["variant"] == "a7-35"
+    assert core.pin_states(Runner([("pinctrl get", (0, PI3_PINS))]), [4, 17, 22, 27]) == {
+        4: ("ip", "--", "hi"), 17: ("ip", "--", "hi"), 22: ("ip", "--", "hi"), 27: ("op", "--", "lo")}  # fmt: skip
+    assert run.calls[2:] == [["pinctrl", "set", "4", "ip"], ["pinctrl", "set", "17", "ip"],
+                             ["pinctrl", "set", "22", "ip"], ["pinctrl", "set", "27", "ip"]]  # fmt: skip
+
+
+def test_an_output_is_read_where_its_drive_cannot_be():
+    """Only a Pi 5 (RP1) reads an output's drive back; a Pi 3 and a Pi 4 print "--" for it (pinctrl.c prints
+    the drive, then the pull). The level column says what the pin is at."""
+    pi4 = "8: op -- pd | lo // GPIO8 = output\n7: op -- pu | hi // GPIO7 = output\n"
+    assert core.pin_states(Runner([("pinctrl get", (0, pi4))]), [8, 7]) == {
+        8: ("op", "pd", "lo"), 7: ("op", "pu", "hi")}  # fmt: skip
+    pi5 = "8: op dl pd | lo // GPIO8 = output\n"
+    assert core.pin_states(Runner([("pinctrl get", (0, pi5))]), [8]) == {8: ("op", "pd", "lo")}
+
+
+def test_an_output_whose_pull_cannot_be_read_goes_back_at_its_level():
+    run = Runner()
+    assert core.restore_pins(run, {27: ("op", "--", "lo"), 4: ("a0", "--", "hi")}) == []
+    assert run.calls == [["pinctrl", "set", "4", "a0"], ["pinctrl", "set", "27", "op", "dl"]]
+
+
 def test_the_netv2_pins_go_back_even_when_the_scan_fails():
     run = Runner([("pinctrl get", (0, NETV2_PINS)), ("init; exit", core.Problem("fail", "openocd hung"))])
     with pytest.raises(core.Problem, match="openocd hung"):
