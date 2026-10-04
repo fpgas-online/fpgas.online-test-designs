@@ -12,6 +12,7 @@ SCRIPTS = {
     "test_ethernet.py": "designs/ethernet-test/host/test_ethernet.py",
     "test_pmod_loopback.py": "designs/pmod-loopback/host/test_pmod_loopback.py",
     "identify_pmod_pins.py": "designs/pmod-pin-id/host/identify_pmod_pins.py",
+    "bios_console.py": "designs/_host/bios_console.py",  # imported by the test scripts, from beside them
     "tt_fpga_program.py": "designs/_host/tt_fpga_program.py",
     "tt_test_wrapper.py": "designs/_host/tt_test_wrapper.py",
 }

@@ -1,8 +1,8 @@
 # DDR3 Memory Test
 
 LiteX SoC with DDR3 SDRAM controller. The LiteX BIOS performs PHY
-calibration on boot and provides `memtest` and `memspeed` commands for
-verifying memory integrity and bandwidth.
+calibration on boot and provides `sdram_init`, `sdram_test`, `mem_test`
+and `mem_speed` commands for verifying memory integrity and bandwidth.
 
 ## Boards
 
@@ -40,13 +40,35 @@ The openXC7 flow (yosys + nextpnr-xilinx) needs three things the Vivado flow doe
 ## Testing
 
 ```sh
-uv run python designs/ddr-memory/host/test_ddr.py --port /dev/ttyUSB1
+uv run python designs/ddr-memory/host/test_ddr.py --port /dev/ttyUSB1                # Arty
+uv run python designs/ddr-memory/host/test_ddr.py --port /dev/ttyAMA0 --board netv2
 ```
+
+The test does not read the BIOS's boot output. It finds the BIOS prompt, checks `ident` is this design
+for the board, then runs:
+
+| Command | Checked |
+|---------|---------|
+| `mem_list` | the design has a `MAIN_RAM` region (its size is reported) |
+| `sdram_init` | read leveling reports each of the board's byte lanes, with a window on every one; the BIOS's 2 MiB memtest passes; write and read speed are reported |
+| `sdram_test` | a memtest passes, over at least 1/32 of the DRAM (8 MiB on the Arty, 32 MiB on the NeTV2) |
+
+Its last line is the result for `fpgas-verify`:
+
+```text
+RESULT_JSON {"test": "ddr", "board": "netv2", "result": "pass", "ident": "...", "commands": [...],
+             "main_ram_base": 1073741824, "main_ram_bytes": 1073741824, "leveling": {"m0": "b01 14+-14", ...},
+             "bytes_tested": 33554432, "errors": 0, "write_mib_per_s": 27.2, "read_mib_per_s": 30.9}
+```
+
+A failure adds `"reason"`; `leveling` has `null` for a lane with no window, and `errors` is the worst
+memtest's bus, address and data errors together. A port that cannot be opened, or that fails during the
+test, is a `fail` with that `reason`: the line is always printed. The speeds are the BIOS's, in MiB/s over 2 MiB.
 
 ## Directory Structure
 
 ```
 ddr-memory/
   gateware/     Board-specific LiteX SoC build scripts
-  host/         test_ddr.py — host-side DDR3 memtest verification
+  host/         test_ddr.py — asks the BIOS to calibrate and test the DDR3, and judges that run
 ```

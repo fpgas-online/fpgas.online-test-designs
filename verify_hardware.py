@@ -359,6 +359,21 @@ DESIGNS = {
     },
 }
 
+# Uploaded beside every test script (same directory as test["remote_script"]): the test scripts that talk to a
+# LiteX BIOS import it.
+COMMON_UPLOADS = ["designs/_host/bios_console.py"]
+
+
+def upload_common(test):
+    """Upload COMMON_UPLOADS beside the test script. False, with the reason printed, if one failed."""
+    remote_dir = os.path.dirname(test["remote_script"])
+    for local_rel in COMMON_UPLOADS:
+        remote = f"{remote_dir}/{os.path.basename(local_rel)}"
+        if not ssh_upload(test["host"], os.path.join(REPO_DIR, local_rel), remote):
+            print(f"  FAIL: Could not upload {local_rel} to {remote}")
+            return False
+    return True
+
 # Extra files that certain boards need uploaded
 EXTRA_UPLOADS = {
     "acorn": [
@@ -626,6 +641,9 @@ def run_single_test(test, skip_upload=False):
             print("  FAIL: Could not upload test script")
             return False
 
+        if not upload_common(test):
+            return False
+
         # Upload extra files if needed
         for local_rel, remote in EXTRA_UPLOADS.get(test["board"], []):
             local_path = os.path.join(REPO_DIR, local_rel)
@@ -675,6 +693,8 @@ def run_single_test(test, skip_upload=False):
                 ssh_upload(test["host"], bitstream_path, test["remote_bitstream"])
                 script_path = os.path.join(REPO_DIR, test["test_script"])
                 ssh_upload(test["host"], script_path, test["remote_script"])
+                if not upload_common(test):
+                    return False
                 # Re-run pre_test (e.g. stop serial-getty, lost on reboot)
                 if test.get("pre_test"):
                     ssh_run(test["host"], test["pre_test"], timeout=30)

@@ -152,3 +152,19 @@ def test_acorn_program_cmd_matches_mps_after_the_rescan():
 
 def test_acorn_uploads_the_mps_helper():
     assert ("designs/acorn-pcie/host/pcie_match_mps.py", "~/pcie_match_mps.py") in vh.EXTRA_UPLOADS["acorn"]
+
+
+def test_every_board_gets_the_bios_helper_beside_its_test_script(monkeypatch):
+    # test_ddr.py imports bios_console from its own directory: it goes where the script goes.
+    assert "designs/_host/bios_console.py" in vh.COMMON_UPLOADS
+    for local in vh.COMMON_UPLOADS:
+        assert (pathlib.Path(vh.REPO_DIR) / local).is_file()
+    sent = []
+    monkeypatch.setattr(vh, "ssh_upload", lambda host, local, remote: sent.append(remote) or True)
+    assert vh.upload_common({"host": "h", "remote_script": "/home/pi/test_ddr.py"})
+    assert sent == ["/home/pi/bios_console.py"]
+
+
+def test_a_failed_helper_upload_stops_the_test(monkeypatch):
+    monkeypatch.setattr(vh, "ssh_upload", lambda host, local, remote: False)
+    assert not vh.upload_common({"host": "h", "remote_script": "/home/pi/test_ddr.py"})

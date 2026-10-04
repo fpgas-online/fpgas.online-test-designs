@@ -3,8 +3,8 @@
 LiteX SoC target for DDR memory test on Digilent Arty A7.
 
 Builds a SoC with CPU + BIOS + UART + SDRAM (LiteDRAM). The BIOS
-automatically runs DRAM calibration and memtest on boot. The host
-just needs to parse the UART output for "Memtest OK" or "Memtest KO".
+runs DRAM calibration and a memtest on boot; the host test (host/test_ddr.py)
+attaches to the BIOS prompt and asks for both again (`sdram_init`, `sdram_test`).
 
 Arty A7 DRAM: Micron MT41K128M16JT-125, 256 MB, 16-bit DDR3.
 

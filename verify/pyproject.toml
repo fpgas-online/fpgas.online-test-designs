@@ -58,5 +58,6 @@ packages = ["src/fpgas_online_verify"]
 "../designs/ethernet-test/host/test_ethernet.py" = "fpgas_online_verify/scripts/test_ethernet.py"
 "../designs/pmod-loopback/host/test_pmod_loopback.py" = "fpgas_online_verify/scripts/test_pmod_loopback.py"
 "../designs/pmod-pin-id/host/identify_pmod_pins.py" = "fpgas_online_verify/scripts/identify_pmod_pins.py"
+"../designs/_host/bios_console.py" = "fpgas_online_verify/scripts/bios_console.py"
 "../designs/_host/tt_fpga_program.py" = "fpgas_online_verify/scripts/tt_fpga_program.py"
 "../designs/_host/tt_test_wrapper.py" = "fpgas_online_verify/scripts/tt_test_wrapper.py"
