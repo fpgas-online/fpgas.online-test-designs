@@ -151,9 +151,11 @@ def pci_devices(root=SYSFS_PCI):
 
 # -- the Pi's pins -------------------------------------------------------------------------------------------
 
-# pinctrl get: "14: a4    pn | hi // GPIO14 = TXD0", "8: op dl pd | lo // GPIO8 = output". A Pi 3's SoC (and
-# every one before the BCM2711) cannot read a pull back, and pinctrl prints "--" for it: "4: ip    -- | hi".
-PIN_RE = re.compile(r"^\s*(\d+):\s+(\w+)(?:\s+d[hl])?\s+(p[udn]|--)\s*\|\s*(\w+|--)", re.MULTILINE)
+# pinctrl get: "14: a4    pn | hi // GPIO14 = TXD0", "8: op dl pd | lo // GPIO8 = output": the function, an
+# output's drive, the pull, the level. What the SoC cannot read back, pinctrl prints as "--": the pull on a
+# Pi 3 and every one before the BCM2711 ("4: ip    -- | hi"), and an output's drive on all but a Pi 5
+# ("8: op -- pd | lo"; "27: op -- -- | lo" on a Pi 3).
+PIN_RE = re.compile(r"^\s*(\d+):\s+(\w+)(?:\s+(?:d[hl]|--))?\s+(p[udn]|--)\s*\|\s*(\w+|--)", re.MULTILINE)
 UNREAD_PULL = "--"
 
 
