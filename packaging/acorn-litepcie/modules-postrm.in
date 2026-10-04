@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+# @PACKAGE@: forget the removed modules. Only while the kernel's own modules are still installed: depmod
+# would otherwise leave index files behind in a directory nothing owns any more.
+
+if [ "$1" = remove ] && [ -d /lib/modules/@KVER@/kernel ]; then
+    depmod -a @KVER@
+fi

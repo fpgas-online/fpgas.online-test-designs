@@ -193,33 +193,9 @@ After step 3, the RPi has clean access to the FPGA through the PMOD HAT, and tes
 
 The TT Demo Board's PMOD headers carry TinyTapeout I/O signals to/from the iCE40. PMOD cables connect these to the RPi's PMOD HAT ports (JA, JB, JC), mapping each signal to a specific RPi GPIO.
 
-**Inputs (RPi drives → FPGA receives):**
+The Welland hosts are cabled ui_in → HAT JA, uio → HAT JB, uo_out → HAT JC. The per-bit tables (iCE40 pin, HAT pin, RPi GPIO) are in [tt-fpga-pin-mapping.md](hardware/tt-fpga-pin-mapping.md#tinytapeout-io-signals).
 
-| TT Signal | iCE40 Pin | PMOD HAT | RPi GPIO |
-|-----------|-----------|----------|----------|
-| ui_in[0] | 13 | JA1 | 6 |
-| ui_in[1] | 19 | JA7 | 12 |
-| ui_in[2] | 18 | JA8 | 16 |
-| ui_in[3] | 21 | JB1 | 5 |
-| ui_in[4] | 23 | JC1 | 17 |
-| ui_in[5] | 25 | JC3 | 4 |
-| ui_in[6] | 26 | JC4 | 14 |
-| ui_in[7] | 27 | JC9 | 15 |
-
-**Outputs (FPGA drives → RPi reads):**
-
-| TT Signal | iCE40 Pin | PMOD HAT | RPi GPIO |
-|-----------|-----------|----------|----------|
-| uo_out[0] | 38 | JC2 | 18 |
-| uo_out[1] | 42 | JA10 | 21 |
-| uo_out[2] | 43 | JB8 | 8 |
-| uo_out[3] | 44 | JA9 | 20 |
-| uo_out[4] | 45 | JB2 | 11 |
-| uo_out[5] | 46 | JA3 | 19 |
-| uo_out[6] | 47 | JB4 | 10 |
-| uo_out[7] | 48 | JB3 | 9 |
-
-The UART design uses ui_in[3] (iCE40 pin 21, RPi GPIO 5) for serial RX and uo_out[4] (iCE40 pin 45, RPi GPIO 11) for serial TX.
+The UART design uses ui_in[3] (iCE40 pin 21) for serial RX and uo_out[4] (iCE40 pin 45) for serial TX; it is reached through the RP2350's USB bridge, not the RPi GPIOs.
 
 ## Test Execution and Result Detection
 

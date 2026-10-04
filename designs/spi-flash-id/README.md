@@ -12,7 +12,6 @@ read the SPI Flash ID register and report it over UART.
 | `gateware/spiflash_soc_netv2.py` | Kosagi NeTV2 | XC7A35T / XC7A100T | 50 MHz |
 | `gateware/spiflash_soc_acorn.py` | SQRL Acorn (CLE-215+/215/101) | XC7A200T / XC7A100T | 75 MHz with openXC7, 100 MHz with Vivado |
 | `gateware/spiflash_soc_fomu.py` | Fomu EVT | iCE40UP5K | 12 MHz |
-| `gateware/spiflash_soc_tt.py` | TT FPGA Demo Board | iCE40UP5K | 12 MHz |
 
 nextpnr-xilinx cannot place the Arty and Acorn SoCs at 100 MHz on most seeds, so openXC7 builds run
 them at 75 MHz. Nothing in the test depends on the clock: the UART divisor follows it, and the

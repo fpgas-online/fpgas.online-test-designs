@@ -286,10 +286,6 @@ DESIGNS = {
                     " true"
                 ),
             },
-            "tt": {
-                "artifact": "spiflash-test-tt-fpga/tt_fpga_platform.bin",
-                "test_args": "--port /dev/ttyACM0 --board tt",
-            },
             "acorn": {
                 "artifact": "spiflash-test-acorn-cle-215plus/sqrl_acorn.bit",
                 "test_args": "--port /dev/ttyAMA0 --board acorn",
@@ -640,9 +636,9 @@ def run_single_test(test, skip_upload=False):
         ssh_run(test["host"], test["pre_test"], timeout=30)
 
     # TT FPGA boards: RP2350 sits between RPi and FPGA.
-    # UART/spiflash: combined program + bridge + test (UART goes through RP2350).
+    # UART: combined program + bridge + test (UART goes through RP2350).
     # PMOD: program via RP2350 wrapper (handles reset/retry), then test via RPi GPIO.
-    if test["board"] == "tt" and test["test_type"] in ("uart", "spiflash"):
+    if test["board"] == "tt" and test["test_type"] == "uart":
         wrapper_cmd = "python3 ~/tt_test_wrapper.py /dev/ttyACM0 {} {}".format(
             test["remote_bitstream"], test["test_cmd"]
         )
