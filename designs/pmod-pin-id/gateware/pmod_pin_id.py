@@ -8,6 +8,12 @@ Usage:
     self.submodules += UARTTxIdentifier(pin, "JA01\\r\\n", sys_clk_freq, baud=1200)
 
 This module is board-agnostic. Board-specific scripts instantiate one per pin.
+
+Two pins that end on the same wire (the Digilent Pmod HAT joins JA pins 2-4 and JB pins 2-4 on three Raspberry
+Pi GPIOs) cannot both send all the time: they would collide. For those, `run` says when the instance may start
+a label, and `sending` is high from a label's first start bit to its last stop bit: the board script drives the
+pin only while `sending` (high impedance otherwise), and gives the two instances their turns. A label once
+started is always finished, so the listener only ever sees whole labels.
 """
 
 from migen import *
@@ -26,9 +32,17 @@ class UARTTxIdentifier(Module):
         System clock frequency in Hz.
     baud : int
         Baud rate (default 1200).
+    run : Signal(1) or None
+        When given: a new label is started only while it is high. None: always (the default).
+
+    Attributes
+    ----------
+    sending : Signal(1)
+        High from the first start bit of a label to the last stop bit of that label.
     """
-    def __init__(self, pin, label, sys_clk_freq, baud=1200):
+    def __init__(self, pin, label, sys_clk_freq, baud=1200, run=None):
         assert len(label) > 0, "Label must be non-empty"
+        self.sending = Signal()
 
         divisor = int(sys_clk_freq // baud)
         label_bytes = [ord(c) for c in label]
@@ -69,16 +83,25 @@ class UARTTxIdentifier(Module):
         cases = {i: shift_reg.eq(Cat(C(0, 1), C(b, 8), C(1, 1)))
                  for i, b in enumerate(label_bytes)}
 
+        # A label is started only when allowed; its later characters always follow.
+        may_load = Signal()
+        self.comb += [
+            may_load.eq((char_idx != 0) | (1 if run is None else run)),
+            self.sending.eq((bit_count != 0) | (char_idx != 0)),
+        ]
+
         self.sync += [
             If(baud_tick,
                 If(bit_count == 0,
-                    # Load next character frame: [start=0, data[7:0], stop=1]
-                    Case(char_idx, cases),
-                    bit_count.eq(10),
-                    If(char_idx == num_chars - 1,
-                        char_idx.eq(0),
-                    ).Else(
-                        char_idx.eq(char_idx + 1),
+                    If(may_load,
+                        # Load next character frame: [start=0, data[7:0], stop=1]
+                        Case(char_idx, cases),
+                        bit_count.eq(10),
+                        If(char_idx == num_chars - 1,
+                            char_idx.eq(0),
+                        ).Else(
+                            char_idx.eq(char_idx + 1),
+                        )
                     )
                 ).Else(
                     # Shift out next bit
