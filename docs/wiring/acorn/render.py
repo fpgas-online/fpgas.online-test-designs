@@ -42,7 +42,7 @@ try:
             raise SystemExit(f"{svg.name}: no whole-number width and height on its root element")
         w, h = (int(m.group(1)) for m in size)
         png = svg.with_suffix(".png")
-        subprocess.run(
+        run = subprocess.run(
             [
                 browser,
                 "--headless",
@@ -54,11 +54,13 @@ try:
                 f"--window-size={w},{h + SPARE}",
                 svg.as_uri(),
             ],
-            check=True,
             capture_output=True,
+            text=True,
             env=env,
             timeout=600,
         )
+        if run.returncode:
+            raise SystemExit(f"{svg.name}: {browser} exited {run.returncode}:\n{run.stderr}")
         shot = Image.open(png)
         if shot.width != SCALE * w or shot.height < SCALE * h:
             raise SystemExit(f"{png.name}: the screenshot is {shot.size}, too small for an SVG of {w} x {h}")
