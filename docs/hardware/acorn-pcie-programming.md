@@ -457,11 +457,16 @@ The steps are the same, with these differences (pins from
 | PCIe address (`D=`, and `--bdf` for `fpgas-acorn-flash`) | `0001:01:00.0` | the one `lspci -D` shows (`0000:01:00.0` on a CM4) |
 | Pins after openFPGALoader | `8 9 10 11` to `ip pd` | `2 3 4` to `ip pd`. `14` is shared with the P2 UART (J2, through 470 Ω), so put it back to its UART function: `pinctrl set 14 a0` on a CM4, `a4` on a CM5 |
 
-Step 5 does not pass on a Blade yet. The boot check's JTAG test only knows the
-Pi 5 setup: it uses pins `10:9:11:8` and needs an RP1 GPIO chip. So on a CM4
-it reports `error`, and on a CM5 it probes the wrong pins (and sets GPIO 8–11
-to inputs). The Blade is supported once that test reads its pins per setup
-from `wiring.toml`.
+**Not yet run by us on this hardware**: nobody has converted a card on a
+Compute Blade with these steps. Two things are known to stand in the way:
+
+- Steps 1 and 4 need JTAG, and on a CM5 with kernel 6.18 JTAG cannot have its
+  TMS pin (GPIO14) while the header's serial port is on
+  ([Checking an Acorn's wiring: on a Compute Blade](../verify.md#on-a-compute-blade)).
+  Check that the pin is free before step 1.
+- The boot check reads each setup's pins from `wiring.toml`, so on a Blade it
+  probes `2:3:4:14`; but no Compute Blade has passed the whole check yet, so
+  what step 5 prints there for a good board is not known.
 
 `fpgas-acorn-flash --uart PORT` reaches the flash over the P2 UART bridge
 instead of PCIe. It works, but slowly.

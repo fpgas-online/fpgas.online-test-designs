@@ -976,7 +976,8 @@ sudo fpgas-acorn-verify --no-publish
 
 * The check never writes the card's flash and never loads a design into the FPGA. It does drive the P1 and P2
   wires, which is how it tests them, and puts the Pi's pins back as it found them; on a converted card it
-  writes the design's scratch register and puts the old value back; and it records what it found on this host
+  writes the design's scratch register and puts the old value back (with the opt-in power-cycle check on, it
+  leaves a marker there); and it records what it found on this host
   (`/var/lib/fpgas-online/verify-state.json`).
 * It exits 0 only for a pass. The summary is on the terminal; the same as JSON is in
   `/run/fpgas-online/verify.json`.
@@ -989,7 +990,7 @@ sudo fpgas-acorn-verify --no-publish
 |---|---|---|---|
 | `pcie-link` | the M.2 slot | the card is seated and the PCIe link is at the setup's speed and width | yes |
 | `jtag` | P1: TCK, TMS, TDO for the IDCODE read; TDI as well for the device DNA read | all four JTAG wires, and that the FPGA is the variant's part | yes |
-| `pcie-bar0` | the M.2 slot | the fpgas.online design is running and answers over PCIe | no: the board gets `fault: unconverted: …`, and this test and those below are listed as `not run` |
+| `pcie-bar0` | the M.2 slot | the fpgas.online design is running and answers over PCIe | no: the board gets `fault: unconverted: …`; this test, `p2-uart`, `p2-serial`, `p2-gpio`, `flash`, `ddr` and `scratch` are listed as `not run` (`pcie-link`, `jtag` and `rp1-pio` still run) |
 | `p2-uart` | P2: K2 (FPGA transmit) to the Pi's RXD (GPIO15), J2 (FPGA receive) from the Pi's TXD (GPIO14) | the serial pair, in the right direction | no |
 | `p2-serial` | the same two wires, driven and read as plain pins in both directions | each of J2 and K2 on its own, so a crossed pair or one open wire is told apart | no |
 | `p2-gpio` | P2: J5 to GPIO3, H5 to GPIO4, in both directions | the two spare wires | no; and never on a Compute Blade, whose cable does not carry them |
@@ -1011,7 +1012,7 @@ only be tested once the card runs the fpgas.online design
 | `jtag fail: … GPIO14 (TMS) is held by … (uart0): the kernel does not hand out a pin that is held …` | not a wire: on a Compute Blade the serial port has the TMS pin ([below](#on-a-compute-blade)) |
 | `p2-uart fail: no UARTBone reply on /dev/ttyAMA0 (P2 K2/J2)` | the serial pair: open, or crossed; `p2-serial` says which |
 | `p2-serial fail: J2 -> GPIO14: the FPGA drove 1, the Pi read 0; K2 -> GPIO15: the FPGA drove 0, the Pi read 1; …` with the `01` and `10` lines swapped and `00` and `11` right | J2 and K2 are **crossed**: swap the two wires at the Pi end (on a Compute Blade the J2 wire carries the 470 Ω resistor: the resistor stays with J2) |
-| `p2-serial` or `p2-gpio` naming one ball only | that one wire is **open**, or on the wrong pin. Before the FPGA drives, the test sets the Pi's pull against the level to come, so an open wire reads the opposite of what was driven; GPIO2 and GPIO3 have a pull-up of their own on the Pi, so an open wire there reads 1 whatever is driven |
+| `p2-serial` or `p2-gpio` naming one ball only | that one wire is **open**, or on the wrong pin. Before the FPGA drives, the test sets the Pi's pull against the level to come, so an open wire reads the opposite of what was driven; GPIO3 (the Pi 5's J5) has a 1.8 kΩ pull-up of its own on the Pi, so an open J5 wire reads 1 whatever is driven |
 | `p2-gpio fail: J5 -> GPIO3: …; H5 -> GPIO4: …` with the `01` and `10` lines swapped and `00` and `11` right | J5 and H5 are crossed |
 
 `p2-serial` and `p2-gpio` print what was driven and what was read, eight lines for two wires. The two digits
@@ -1073,7 +1074,8 @@ kernel keeps GPIO14 for it. The configuration we expect to work for JTAG, and wi
 is the header's serial port off at boot. **Not yet run by us on this hardware**, and Raspberry Pi's
 documentation does not say that it frees GPIO14 on a Compute Module 5:
 
-* in `config.txt`, the line `enable_uart=0`, written out (it is 1 when left unset on these boards); and if the
+* in `config.txt`, the line `enable_uart=0`, written out (Raspberry Pi's documentation gives the default as 1
+  when the primary serial port is a PL011; we have not seen it left unset on a Compute Blade); and if the
   port is switched on by a `dtoverlay=uart0…` or `dtparam=uart0` line, that line has to go instead;
 * in `cmdline.txt`, the word `console=serial0,115200` deleted from the one line, if it is there.
 
