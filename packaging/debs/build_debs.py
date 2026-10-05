@@ -294,17 +294,15 @@ def stage_test_bitstreams(board, bundle, root, version, commit):
     """Copy a test board's bitstreams out of the CI bundle under `root`, with a manifest; returns the dir."""
     images = pathlib.Path(root) / "usr/share/fpgas-online" / board.slug / "bitstreams"
     files = []
-    for test in board.tests:
-        for variant in board.variants:
-            path = board.artifact(test, variant)
-            src = pathlib.Path(bundle) / path
-            if not src.is_file():
-                raise BuildError(f"{path} is not in {bundle}: the {test} build for {board.name} {variant} is missing")
-            data = src.read_bytes()
-            (images / path).parent.mkdir(parents=True, exist_ok=True)
-            (images / path).write_bytes(data)
-            files.append({"path": path, "test": test, "variant": variant, "size": len(data),
-                          "sha256": hashlib.sha256(data).hexdigest()})  # fmt: skip
+    for test, variant, path in board.artifacts():  # the tests' designs, and one the check leaves running
+        src = pathlib.Path(bundle) / path
+        if not src.is_file():
+            raise BuildError(f"{path} is not in {bundle}: the {test} build for {board.name} {variant} is missing")
+        data = src.read_bytes()
+        (images / path).parent.mkdir(parents=True, exist_ok=True)
+        (images / path).write_bytes(data)
+        files.append({"path": path, "test": test, "variant": variant, "size": len(data),
+                      "sha256": hashlib.sha256(data).hexdigest()})  # fmt: skip
     manifest = {"board": board.name, "version": version, "commit": commit, "files": files}
     (images / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     for path in [images, *images.rglob("*")]:  # nfpm keeps the modes files have on disk

@@ -307,6 +307,10 @@ def details(report):
             out[f"board{i}_tests"] = " ".join(f"{t['test']}={t['result']}" for t in b["tests"])
         if b.get("not_run"):
             out[f"board{i}_not_run"] = ", ".join(b["not_run"])
+        if b.get("left_running"):
+            out[f"board{i}_left_running"] = b["left_running"]["design"]
+        if b.get("warnings"):
+            out[f"board{i}_warnings"] = "; ".join(b["warnings"])
         if b.get("bitstreams"):
             out[f"board{i}_bitstreams"] = str(b["bitstreams"])
         flatten(f"board{i}_state", b.get("state", {}), out)
@@ -352,6 +356,10 @@ def summary(report, kept_in=None):
                 lines += [f"        {line}" for line in t.get("output", [])[-8:]]
         for test, why in (b.get("not_run") or {}).items():
             lines.append(f"    {test:<10} not run: {why}")
+        left = b.get("left_running")
+        if left:
+            lines.append(f"    left running: the {left['design']} design ({left['bitstream']})")
+        lines += [f"    WARNING: {w}" for w in b.get("warnings", [])]
         for s in b.get("flash", {}).get("slots", []) if isinstance(b.get("flash"), dict) else []:
             lines.append(
                 f"    flash {s['slot']} {s['result']}"

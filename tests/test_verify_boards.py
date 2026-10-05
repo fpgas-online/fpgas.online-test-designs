@@ -10,7 +10,18 @@ import struct
 import sys
 
 import pytest
-from fpgas_online_verify import cli, core, debug, host_tests, idcode, identify, identity, runner, testbench
+from fpgas_online_verify import (
+    cli,
+    conclusion,
+    core,
+    debug,
+    host_tests,
+    idcode,
+    identify,
+    identity,
+    runner,
+    testbench,
+)
 from fpgas_online_verify.boards import arty, fomu, netv2, tt_fpga
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
 
@@ -33,14 +44,12 @@ def _install(tmp_path, board, corrupt=None):
     """Installed bitstreams for every test and variant, as fpgas-online-<board>-bitstreams has them."""
     images = tmp_path / "images"
     files = []
-    for test in board.tests:
-        for variant in board.variants:
-            path = board.artifact(test, variant)
-            data = path.encode()
-            (images / path).parent.mkdir(parents=True, exist_ok=True)
-            (images / path).write_bytes(b"tampered" if path == corrupt else data)
-            files.append({"path": path, "test": test, "variant": variant, "size": len(data),
-                          "sha256": hashlib.sha256(data).hexdigest()})  # fmt: skip
+    for test, variant, path in board.artifacts():
+        data = path.encode()
+        (images / path).parent.mkdir(parents=True, exist_ok=True)
+        (images / path).write_bytes(b"tampered" if path == corrupt else data)
+        files.append({"path": path, "test": test, "variant": variant, "size": len(data),
+                      "sha256": hashlib.sha256(data).hexdigest()})  # fmt: skip
     (images / "manifest.json").write_text(json.dumps({"board": board.name, "version": "0.0.post9", "files": files}))
     return images
 
@@ -533,7 +542,7 @@ def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_rea
     # first of all the board's own word is judged (sdk), which loads nothing
     assert [t["test"] for t in report["tests"]] == ["sdk", "pin-id", "uart"]
     assert "bitstream" not in report["tests"][0] and "not_run" not in report
-    (load,) = [c for c in run.calls if "tt_fpga_program.py" in " ".join(c)]
+    load, _display = [c for c in run.calls if "tt_fpga_program.py" in " ".join(c)]
     assert load[3].endswith("pmod-pin-id-tt-fpga/tt_fpga_platform.bin") and load[4:] == ["--gpio-release"]
     bridged = [c for c in run.calls if "tt_test_wrapper.py" in " ".join(c)]
     assert [c[3].rsplit("/", 2)[-2] for c in bridged] == ["uart-test-tt-fpga"]
@@ -1087,15 +1096,20 @@ def test_a_board_that_says_it_is_an_fpga_board_is_a_tt_fpga_and_only_then_is_a_d
     assert loads and min(loads) > asked  # the board is asked first
 
 
-def test_a_healthy_board_with_a_tiny_tapeout_chip_passes_on_its_own_word_and_nothing_is_loaded(tmp_path, monkeypatch):
-    """#132: the chip board's check is the `sdk` test; its cabling is said to be not tested, which fails nothing."""
+def test_a_healthy_board_with_a_tiny_tapeout_chip_fails_until_its_wiring_is_tested_and_nothing_is_loaded(
+    tmp_path, monkeypatch
+):
+    """#132, and Tim on 2026-10-05: "Fail until wiring is tested". The `sdk` test runs and passes, the report
+    shows a healthy board, and the result is `fail` because its cabling to the Pi was not tested."""
     _installed(monkeypatch)
     events = []
     run = Runner([_rpi_hwid(TT_CHIP_BOARD)])
     report = _check(TT, tmp_path, TT_FOUND, run, event=lambda stage, d: events.append((stage, d)))
     assert report["variant"] == "tt-asic" and report["identity"]["variant"] == "tt-asic"
     assert report["identity"]["chip"] == "asic" and report["identity"]["shuttle"] == "tt06"
-    assert report["result"] == "pass" and "reason" not in report
+    why = tt_fpga.PENDING["tt-asic"]["wiring"]
+    assert report["result"] == "fail" and report["reason"] == f"wiring not run: {why}"
+    assert why.startswith("the Pmod wiring test is not yet part of the boot check")
     (sdk,) = report["tests"]
     assert (sdk["test"], sdk["result"]) == ("sdk", "pass") and "reason" not in sdk
     assert sdk["output"][-1] == "SDK 2.0.x on an RP2040 supports a tt06 chip"
@@ -1106,19 +1120,40 @@ def test_a_healthy_board_with_a_tiny_tapeout_chip_passes_on_its_own_word_and_not
     assert report["state"] == {"variant": "tt-asic", "serial": "E661"}
     # no bitstreams need be installed for it: the package's designs are the FPGA board's
     bare = TT.check(_host(TT), TT_FOUND, {"images": tmp_path / "none"}, runner=Runner([_rpi_hwid(TT_CHIP_BOARD)]))
-    assert bare["result"] == "pass"
+    assert bare["result"] == "fail" and bare["reason"] == report["reason"]
+
+
+def test_a_chip_board_with_another_fault_says_both_and_an_fpga_board_is_not_held_to_the_wiring_test(
+    tmp_path, monkeypatch
+):
+    _installed(monkeypatch)
+    report = _check(TT, tmp_path, TT_FOUND, Runner([_rpi_hwid({**TT_CHIP_BOARD, "sdk": "1.2.2"})]))
+    assert report["result"] == "fail"
+    assert (
+        report["reason"].startswith("sdk fail: a tt06 chip needs SDK 2.0.x")
+        and "; wiring not run: " in report["reason"]
+    )
+    # the FPGA board's wiring test is pin-id, which it has: nothing is pending for it
+    fpga = _check(TT, tmp_path / "fpga", TT_FOUND, Runner([_rpi_hwid(TT_BOARD)]))
+    assert fpga["result"] == "pass" and "not_run" not in fpga and "tt-fpga" not in TT.pending
 
 
 def test_the_report_of_a_chip_board_reads_plainly_and_its_event_says_what_was_not_run(tmp_path, monkeypatch):
     _installed(monkeypatch)
     board = _check(TT, tmp_path, TT_FOUND, Runner([_rpi_hwid(TT_CHIP_BOARD)]))
-    report = {"result": "pass", "mode": "tt", "boards": [board]}
+    report = {"result": "fail", "mode": "tt", "boards": [board]}
     shown = runner.summary(report)
-    assert "  tt tt-asic: pass" in shown and "    sdk        pass" in shown
-    assert "    wiring     not run: the Pmod cabling between the demo board and the Pi is not tested" in shown
+    assert "  tt tt-asic: fail" in shown and "    sdk        pass" in shown
+    assert "    wiring     not run: the Pmod wiring test is not yet part of the boot check" in shown
+    # the closing lines say it once, as what was not run, and what it means
+    closing = conclusion.lines(report)
+    assert "  tt tt-asic: fail (1 test passed, 0 failed, 1 not run)" in closing
+    assert sum("Pmod wiring test is not yet part of the boot check" in line for line in closing) == 1
+    assert not any(line.startswith("    fault:") for line in closing)
+    assert any("Nothing is known to be" in line for line in closing)
     sent = runner.details(report)
-    assert sent["board0"] == "tt tt-asic pass" and sent["board0_tests"] == "sdk=pass"
-    assert sent["board0_not_run"] == "wiring"
+    assert sent["board0"] == "tt tt-asic fail" and sent["board0_tests"] == "sdk=pass"
+    assert sent["board0_not_run"] == "wiring" and sent["board0_reason"].startswith("wiring not run: ")
 
 
 @pytest.mark.parametrize("said, variant, why", [
@@ -1167,7 +1202,8 @@ def test_single_tests_asked_of_a_chip_board_are_refused_and_nothing_is_loaded(tm
     assert report["tests"] == [] and "not_run" not in report
     # an empty list names no test: nothing is refused, and the board is not passed unchecked
     none = _check(TT, tmp_path / "none", TT_FOUND, Runner([_rpi_hwid(TT_CHIP_BOARD)]), tests=[])
-    assert [t["test"] for t in none["tests"]] == ["sdk"] and none["result"] == "pass"
+    assert [t["test"] for t in none["tests"]] == ["sdk"] and none["result"] == "fail"
+    assert none["reason"].startswith("wiring not run: ")
 
 
 def test_an_fpga_board_whose_sdk_test_fails_still_has_its_designs_loaded_and_tested(tmp_path, monkeypatch):
@@ -1227,6 +1263,99 @@ def test_only_an_rp2_that_can_be_a_demo_board_is_a_tiny_tapeout_board(tmp_path):
     found = TT.spot(_host(TT), usb, [])
     assert [(f["usb"], f["usb_id"], f["variant"]) for f in found] == [
         ("1-2", "2e8a:000f", None), ("1-3", "2e8a:0003", None), ("1-4", "2e8a:0005", None)]  # fmt: skip
+
+
+# -- what the check leaves running (#139) ------------------------------------------------------------------
+
+DISPLAY = "tt-display-tt-fpga/tt_fpga_platform.bin"
+
+
+def _loads(run):
+    """The designs that went to the board, in order: by the programmer, or by the UART test's bridge."""
+    return [c[3].rsplit("/", 2)[-2] for c in run.calls
+            if "tt_fpga_program.py" in " ".join(c) or "tt_test_wrapper.py" in " ".join(c)]  # fmt: skip
+
+
+def test_the_check_of_an_fpga_board_ends_by_leaving_the_display_design_running(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    run = Runner([_rpi_hwid(TT_BOARD)])
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    assert report["result"] == "pass" and "warnings" not in report
+    assert report["left_running"] == {"design": "display", "bitstream": DISPLAY}
+    # it is the last thing sent to the board: after every test, and nothing follows it but the bridge's start
+    assert _loads(run) == ["pmod-pin-id-tt-fpga", "uart-test-tt-fpga", "tt-display-tt-fpga"]
+    last = run.calls[-2]
+    assert last[1].endswith("tt_fpga_program.py") and last[2] == "/dev/ttyACM0" and last[3].endswith(DISPLAY)
+    assert last[4:] == ["--gpio-release"] and _restarted_last(run)
+    # it is no test: not in the tests, and nothing is run to read it
+    assert [t["test"] for t in report["tests"]] == ["sdk", "pin-id", "uart"] and "display" not in TT.tests
+    shown = runner.summary({"result": "pass", "mode": "tt", "boards": [report]})
+    assert f"    left running: the display design ({DISPLAY})" in shown and "WARNING" not in shown
+    sent = runner.details({"result": "pass", "mode": "tt", "boards": [report]})
+    assert sent["board0_left_running"] == "display" and "board0_warnings" not in sent
+
+
+def test_a_display_design_that_cannot_be_loaded_is_a_warning_and_the_board_still_passes(tmp_path, monkeypatch):
+    """The board was tested before it; the design is for the camera. But it is said, in the report and the event."""
+    _installed(monkeypatch)
+    run = Runner([(DISPLAY, (1, "mpremote: no device found\nPROGRAM_FAILED")), _rpi_hwid(TT_BOARD)])
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    assert report["result"] == "pass" and "reason" not in report and "left_running" not in report
+    assert report["warnings"] == [
+        "the display design, which the check leaves running, could not be loaded (loading it failed (exit 1): "
+        "mpremote: no device found PROGRAM_FAILED): the board is left as its last test left it"]  # fmt: skip
+    assert [t["result"] for t in report["tests"]] == ["pass", "pass", "pass"] and _restarted_last(run)
+    whole = {"result": "pass", "mode": "tt", "boards": [report]}
+    assert "    WARNING: the display design, which the check leaves running, could not" in runner.summary(whole)
+    assert runner.details(whole)["board0_warnings"] == report["warnings"][0]
+    # a damaged or absent file is the same warning, and nothing is sent to the board for it
+    images = _install(tmp_path / "damaged", TT, corrupt=DISPLAY)
+    run = Runner([_rpi_hwid(TT_BOARD)])
+    report = TT.check(_host(TT), TT_FOUND, {"images": images}, runner=run)
+    assert report["result"] == "pass" and "does not match its manifest" in report["warnings"][0]
+    assert _loads(run) == ["pmod-pin-id-tt-fpga", "uart-test-tt-fpga"]
+
+
+def test_the_display_design_is_left_after_single_tests_and_after_a_failed_test_too(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    run = Runner([_rpi_hwid(TT_BOARD)])
+    report = _check(TT, tmp_path, TT_FOUND, run, tests=["pin-id"])
+    assert _loads(run) == ["pmod-pin-id-tt-fpga", "tt-display-tt-fpga"]
+    assert report["left_running"]["design"] == "display"
+    run = Runner([("tt_test_wrapper.py", (1, "could not enter raw repl")), _rpi_hwid(TT_BOARD)])
+    report = _check(TT, tmp_path / "failed", TT_FOUND, run)
+    assert report["result"] == "fail" and report["left_running"]["design"] == "display"
+    assert _loads(run)[-1] == "tt-display-tt-fpga"
+
+
+def test_a_load_that_times_out_is_a_warning_and_a_failing_boards_closing_lines_keep_it_apart(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    run = Runner([(DISPLAY, core.Problem("error", "tt_fpga_program.py did not finish within 300 s")),
+                  ("tt_test_wrapper.py", (1, "could not enter raw repl")), _rpi_hwid(TT_BOARD)])  # fmt: skip
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    assert report["result"] == "fail" and "did not finish within 300 s" in report["warnings"][0]
+    assert "did not finish" not in report["reason"]  # the warning is not a reason the board failed
+    closing = conclusion.lines({"result": "fail", "mode": "tt", "boards": [report]})
+    assert sum(line.startswith("    warning (not why it did not pass): the display design") for line in closing) == 1
+
+
+def test_nothing_is_left_running_on_a_board_that_did_not_say_it_is_an_fpga_board(tmp_path, monkeypatch):
+    """The display design is an FPGA bitstream: it goes only to a board that said it carries the FPGA."""
+    _installed(monkeypatch)
+    for said in (TT_CHIP_BOARD, {**TT_CHIP_BOARD, "shuttle": None}):
+        run = Runner([_rpi_hwid(said)])
+        report = _check(TT, tmp_path / str(said["shuttle"]), TT_FOUND, run)
+        assert _loads(run) == [] and "left_running" not in report and "warnings" not in report
+    assert set(TT.left_running) == {"tt-fpga"} and not any(b.left_running for b in (ARTY, NETV2, FOMU))
+
+
+def test_the_bitstreams_package_holds_the_display_design_and_the_debug_listing_shows_it(tmp_path, capsys):
+    assert ("display", "tt-fpga", DISPLAY) in TT.artifacts()
+    assert len(TT.artifacts()) == len(TT.tests) + 1 and len(ARTY.artifacts()) == len(ARTY.tests) * len(ARTY.variants)
+    images = _install(tmp_path, TT)
+    args = cli.argparse.Namespace(command="list", images=images, variant=None, port=None)
+    assert debug.run(TT, args) == 0
+    assert f"display    tt-fpga  left running {DISPLAY}" in capsys.readouterr().out
 
 
 def test_two_demo_boards_on_one_pi_are_both_an_error_and_neither_is_touched(tmp_path, monkeypatch):

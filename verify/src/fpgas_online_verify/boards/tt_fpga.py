@@ -20,8 +20,10 @@ The `sdk` test (sdk_check) loads nothing and asks the board nothing more: it jud
 said. Chip, shuttle, microcontroller and SDK release must be a combination the SDK's releases support
 (SDK_SUPPORTED), since an SDK that does not know the board's chip cannot select a project on it. That, with
 the board's main.py being that release's own (below), is the whole check of a board with a Tiny Tapeout chip
-today (#132). Its Pmod cabling is not tested yet: the report says so in `not_run` (PENDING), which fails
-nothing.
+today (#132). Its Pmod cabling is not tested yet, and until it is, such a board does not pass: the report
+says so in `not_run` (PENDING) and the board's result is `fail` with that reason, however healthy it is (Tim,
+2026-10-05: "Fail until wiring is tested and prioritize landing the setup which properly tests the wiring").
+The FPGA board is not affected: `pin-id` is its wiring test.
 
 Nothing is written to the demo board: for every load the RP2350 reads the bitstream from the Pi over the serial
 link (tt_fpga_program.py, `mpremote mount`). The board has no flash of its own to compare, so the state is the
@@ -174,11 +176,12 @@ SDK_SUPPORTED = (
     ("asic", ("tt03p5",), "RP2040", "1.2"),
     ("asic", ("tt04", "tt05", "tt06", "tt07", "tt08"), "RP2040", "2.0"),
 )
-# What the boot check of a board with a Tiny Tapeout chip does not do yet.
+# What the boot check of a board with a Tiny Tapeout chip must do and does not yet: the board fails until it
+# does. The entry goes when the wiring test (fpgas.online-test-designs PR #15) is a test of this check.
 PENDING = {
     "tt-asic": {
-        "wiring": "the Pmod cabling between the demo board and the Pi is not tested on a board with a Tiny "
-                  "Tapeout chip yet (the wiring test is not part of the boot check)",
+        "wiring": "the Pmod wiring test is not yet part of the boot check, so the cabling between the demo board "
+                  "and the Pi was not tested, and a board with a Tiny Tapeout chip is not passed until it is",
     },
 }  # fmt: skip
 
@@ -246,8 +249,8 @@ class TTFPGA(TestBoard):
     services = ("fpgas-tt.service",)  # the TT site's bridge keeps the RP2350's port open while it runs
     flash_note = ("none: nothing on the demo board is read back; the FPGA breakout has no SPI flash, and its "
                   "RP2350 loads each bitstream from the Pi")  # fmt: skip
-    # Run in this order, and the board is left with the last design loaded (testbench.py): the pin-ID scan
-    # comes first, so a UART-bridge design (one TX pin) is what stays, not one driving every Pmod line.
+    # Run in this order: the pin-ID scan comes first, so the UART-bridge design (one TX pin) is the last test
+    # design, not one driving every Pmod line. What the board is left running is `left_running`, below.
     tests: ClassVar[dict] = {
         # The Pmod HAT cabling, against identify_pmod_pins.BOARDS["tt"] (ui_in on HAT JA, uio JB, uo_out JC).
         "pin-id": {"artifact": "pmod-pin-id-{v}/tt_fpga_platform.bin", "script": "identify_pmod_pins.py",
@@ -258,6 +261,17 @@ class TTFPGA(TestBoard):
                  "runner": "tt-bridge"},
         "pmod": {"artifact": "gpio-loopback-{v}/tt_fpga_platform.bin", "script": "test_pmod_loopback.py",
                  "args": ["--board", "tt"], "pre": PMOD_PRE, "program_args": ["--gpio-release"]},
+    }  # fmt: skip
+
+    # #139: the check ends by streaming a design that moves the seven-segment display, so the board looks
+    # alive on its camera until a visitor loads a design (designs/tt-display: clocked by the iCE40's own
+    # oscillator, it needs nothing of the RP2350 afterwards and drives only uo_out). --gpio-release: the
+    # RP2350's own pins on ui_in, uo_out and uio are left as inputs, so nothing but the FPGA drives the display.
+    # It lasts until the board's SDK next starts (a visitor's Commander, the site's Run), which puts the SDK's
+    # own default project into the FPGA.
+    left_running: ClassVar[dict] = {
+        "tt-fpga": {"design": "display", "artifact": "tt-display-tt-fpga/tt_fpga_platform.bin",
+                    "program_args": ["--gpio-release"]},
     }  # fmt: skip
 
     def spot(self, host, usb, pci):

@@ -322,9 +322,37 @@ class TestBoard(Board):
     # They run first, in the whole boot check only (not when single tests were asked for), and are the whole
     # check of a variant that no bitstream here is for (a demo board with a Tiny Tapeout chip).
     fact_tests: ClassVar[dict] = {}
-    # variant -> {test: why}: a test that variant is to have and the boot check does not run yet. It goes in the
-    # report's `not_run`, said and failing nothing.
+    # variant -> {test: why}: a test that variant must have and the boot check does not run yet. It goes in the
+    # report's `not_run`, and the board FAILS with that reason: a board is not passed on a check that leaves
+    # out a test it needs (Tim, 2026-10-05: "Fail until wiring is tested"). Its other tests still run and are
+    # reported, so the report shows what is known of the board.
     pending: ClassVar[dict] = {}
+
+    # variant -> a design the check loads last and leaves running, which is no test: nothing reads it (the TT
+    # FPGA's moving display, #139): {"design": its name, "artifact": as a test's, "program_args": as a test's}.
+    # It is in the board's bitstreams package beside the tests' designs. A load that fails is a warning in the
+    # report, never the board's result: the board was tested before it, and is left as its last test left it.
+    left_running: ClassVar[dict] = {}
+
+    def artifacts(self):
+        """[(test or design name, variant, artifact path)]: every bitstream the bitstreams package holds."""
+        out = [(test, variant, self.artifact(test, variant)) for test in self.tests for variant in self.variants]
+        return out + [(spec["design"], variant, spec["artifact"]) for variant, spec in self.left_running.items()]
+
+    def leave_running(self, variant, host, images, manifest, runner=run):
+        """Load the variant's left_running design: (what the report says was left running, None), or
+        (None, why it could not be loaded). Never raises."""
+        spec = self.left_running[variant]
+        try:
+            entry = bitstreams.entry_for(manifest, spec["artifact"], self.bitstreams_package)
+            bitstream = bitstreams.checked(images, entry)[0]
+            argv = [*self.program_argv(bitstream, host, None), *spec.get("program_args", [])]
+            rc, text = runner(argv, PROGRAM_TIMEOUT)
+        except Problem as p:
+            return None, p.reason
+        if rc != 0:
+            return None, f"loading it failed (exit {rc}): {' '.join(tail(text, 2))}"
+        return {"design": spec["design"], "bitstream": spec["artifact"]}, None
 
     def settle(self, asked, found, facts):
         """The variant of a board with variant_from_board, from `facts`; `asked` is --variant, or None. It is one
@@ -422,6 +450,14 @@ class TestBoard(Board):
                 report["tests"].append(self.run_test(test, variant, host, images, manifest, runner))
                 done = report["tests"][-1]
                 event("fpga-test-finished", {"test": test, "result": done["result"], "reason": done.get("reason", "")})
+            if not refused and manifest is not None and variant in self.left_running:  # last: nothing follows it
+                left, why_not = self.leave_running(variant, host, images, manifest, runner)
+                if left:
+                    report["left_running"] = left
+                else:
+                    name = self.left_running[variant]["design"]
+                    report["warnings"] = [f"the {name} design, which the check leaves running, could not be loaded "
+                                          f"({why_not}): the board is left as its last test left it"]  # fmt: skip
         if held["stopped"]:
             report["services_stopped"] = held["stopped"]
         jtag = report.get("jtag", {})
@@ -449,9 +485,13 @@ class TestBoard(Board):
         if refused:
             results.append(refused.result)
         report["state"] = state
+        untested = [f"{test} not run: {why}" for test, why in report.get("not_run", {}).items()]
+        if untested:
+            results.append("fail")
         report["result"] = worst(results)
         bad = [t for t in report["tests"] if t["result"] != "pass"]
-        reasons = [f"{t['test']} {t['result']}: {t.get('reason', '')}" for t in bad] + facts_failed + held["failed"]
+        reasons = [f"{t['test']} {t['result']}: {t.get('reason', '')}" for t in bad] + untested + facts_failed
+        reasons += held["failed"]
         if refused:
             reasons.insert(0, refused.reason)
         if jtag and jtag["result"] != "pass":
