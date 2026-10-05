@@ -5,7 +5,8 @@
 # in /run/fpgas-online/verify.json and is published as the stage `fpga-verified`; anything but "pass" leaves
 # this unit failed.
 # To accept a board flashed or swapped on purpose: sudo fpgas-verify --update.
-# Options (for example --no-probe): FPGAS_VERIFY_ARGS in /etc/default/fpgas-verify.
+# Options for this run (for example --no-probe): FPGAS_VERIFY_ARGS in /etc/default/fpgas-verify, which the
+# package installs with every line a comment.
 [Unit]
 Description=Verify this Pi's FPGA board with the fpgas.online test bitstreams
 Documentation=https://github.com/fpgas-online/fpgas.online-test-designs/blob/main/docs/verify.md https://github.com/fpgas-online/fpgas.online-test-designs/blob/main/docs/plans/2026-09-26-fpgas-online-verify-design.md
