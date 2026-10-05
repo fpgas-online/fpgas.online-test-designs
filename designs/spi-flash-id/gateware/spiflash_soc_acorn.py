@@ -29,12 +29,17 @@ from litex_boards.platforms.sqrl_acorn import Platform
 from migen import *
 
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
-from designs._shared.build_helpers import default_build_dir
-from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name
+from designs._shared.acorn_p2 import fleet_platform
+from designs._shared.build_helpers import board_dir, default_build_dir, flow_suffix
+from designs._shared.platform_fixups import ensure_chipdb_symlink, fix_openxc7_device_name, require_timing
 from designs._shared.yosys_workarounds import patch_yosys_template
 
 kB = 1024
 
+
+# nextpnr-xilinx places this SoC at 87-94 MHz on the CLE-215 (NiteFury), short of 100 MHz on every seed;
+# Vivado makes 100 MHz.
+SYS_CLK_FREQ = {"openxc7": 75e6}
 
 # CRG (Clock Reset Generator) ---------------------------------------------------------------------
 
@@ -55,6 +60,7 @@ class _CRG(LiteXModule):
         pll.register_clkin(clk200, 200e6)
         pll.create_clkout(self.cd_sys, sys_clk_freq)
         platform.add_false_path_constraints(self.cd_sys.clk, pll.clkin)
+        require_timing(platform, {self.cd_sys: sys_clk_freq})
 
 
 # BaseSoC -----------------------------------------------------------------------------------------
@@ -62,7 +68,7 @@ class _CRG(LiteXModule):
 
 class BaseSoC(SoCCore):
     def __init__(self, variant="cle-215+", toolchain="openxc7", sys_clk_freq=100e6, **kwargs):
-        platform = Platform(variant=variant, toolchain=toolchain)
+        platform = fleet_platform(variant, toolchain)
 
         if toolchain == "openxc7":
             fix_openxc7_device_name(platform)
@@ -100,7 +106,8 @@ def main():
     target_group = parser.target_group
     target_group.add_argument("--variant", default="cle-215+", choices=["cle-215+", "cle-215", "cle-101"],
                               help="Board variant: cle-215+ (Acorn), cle-215 (NiteFury), cle-101 (LiteFury).")
-    target_group.add_argument("--sys-clk-freq", default=100e6, type=float, help="System clock frequency.")
+    target_group.add_argument("--sys-clk-freq", default=None, type=float,
+        help="System clock frequency (default: 75 MHz with openXC7, 100 MHz with Vivado).")
     parser.set_defaults(
         ident="fpgas-online SPI Flash Test SoC -- Acorn/LiteFury",
         uart_baudrate=115200,
@@ -111,14 +118,17 @@ def main():
     soc = BaseSoC(
         variant=args.variant,
         toolchain=args.toolchain,
-        sys_clk_freq=int(args.sys_clk_freq),
+        sys_clk_freq=int(args.sys_clk_freq or SYS_CLK_FREQ.get(args.toolchain, 100e6)),
         **parser.soc_argdict,
     )
 
     ensure_chipdb_symlink(soc.platform)
     patch_yosys_template(soc)
 
+    board_name = board_dir("acorn", args.variant) + flow_suffix(
+        parser._toolchain, parser.toolchain_argdict.get("synth_mode"))
     builder_args = dict(parser.builder_argdict)
+    builder_args["output_dir"] = default_build_dir(__file__, board_name)
     builder_args["compile_software"] = False
     builder = Builder(soc, **builder_args)
 
@@ -127,7 +137,7 @@ def main():
     ident = "fpgas-online SPI Flash Test SoC -- Acorn/LiteFury"
     install_spiflash_firmware(soc, ident)
 
-    builder.build(run=args.build)
+    builder.build(run=args.build, **parser.toolchain_argdict)
 
 
 if __name__ == "__main__":

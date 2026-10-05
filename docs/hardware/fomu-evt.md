@@ -4,6 +4,34 @@
 
 The Fomu is a tiny FPGA board that fits inside a USB port, designed by Sean Cross (xobs) and Tim Ansell. The EVT (Engineering Validation Test) revision is used in the fpgas.online test infrastructure. It uses a Lattice iCE40UP5K FPGA with native USB connectivity.
 
+## Installing the Fomu Packages
+
+Add the fpgas.online APT repository first ([verify.md: Installing](../verify.md#installing)), then on the Fomu's Pi:
+
+```bash
+sudo apt install fpgas-online-fomu
+```
+
+| Package | Installs |
+|---------|----------|
+| `fpgas-online-fomu` | installs everything below to check a Fomu, and turns the boot check (`fpgas-verify.service`) on for it |
+| `fpgas-online-fomu-tools` | the Fomu's module of `fpgas_online_verify`, and `fpgas-fomu-verify`; with `python3-serial` and openFPGALoader |
+| `fpgas-online-fomu-bitstreams` | the test bitstreams built by the same commit's CI, in `/usr/share/fpgas-online/fomu/bitstreams/` |
+| `fpgas-online-verify` | `fpgas-verify`, the unit, and the host test scripts |
+
+The check finds the Fomu by its foboot DFU bootloader on USB (`1209:5bf0`), which is there from power-up until a design is loaded. It loads the UART test design with openFPGALoader over DFU and runs its host test on `/dev/serial0`. That is the only test at boot: a DFU load replaces the bootloader until the next power cycle, and it writes the design into the flash's user image. So the Fomu's flash is not part of what `changed` compares; its USB serial number is. `fpgas-fomu-debug` runs the SPI flash, PMOD loopback and pin identification tests, one per power cycle.
+
+Welland's Fomu (pi-sw1-p17) does not enumerate, so that Pi reports `missing` ([current results](../verify.md#current-results)).
+
+**Check the board now**, or run one test with its output live (`fpgas-fomu-debug` is in `fpgas-online-fomu-debug`):
+
+```bash
+sudo fpgas-fomu-verify --no-publish --report -  # this board only, the JSON report on stdout
+sudo fpgas-fomu-debug test spiflash             # load one test's design and run its test
+```
+
+What the results mean, the report, `changed` and `--update`, the debug tool and common failures: [verify.md](../verify.md#reading-the-result).
+
 ## Key Specifications
 
 | Parameter | Value |
@@ -181,25 +209,11 @@ iceprog design.bin
 Source: [Fomu Workshop](https://workshop.fomu.im)
 
 ## Test Infrastructure Hosts
-
-The Fomu EVT boards are hosted on RPi 3B+ systems on the tweed network. Each host also has a USB protocol analyzer inline for capturing and analyzing the Fomu's USB traffic.
-
-| Host | IP          | Fomu USB VID:PID | DFU Version | USB Analyzer                  |
-|------|-------------|------------------|-------------|-------------------------------|
-| [pi17](https://welland.fpgas.online/fpgas/pi17.html) | 10.21.0.117 | 1209:5bf0        | v2.0.4      | OpenVizsla (VID:PID 1d50:607c) |
-| [pi21](https://welland.fpgas.online/fpgas/pi21.html) | 10.21.0.121 | 1209:5bf0        | v2.0.4      | Cythion/LUNA (VID:PID 16d0:05a5) |
-
-### OpenVizsla (pi17)
-
-The [OpenVizsla](https://github.com/openvizsla/ov_ftdi) is an open-source USB protocol analyzer. It captures USB traffic between the Fomu and the RPi host for debugging and test verification.
-
-### Cythion/LUNA (pi21)
-
-The [Cythion](https://greatscottgadgets.com/cythion/) (from Great Scott Gadgets) is a USB multitool running the [LUNA](https://github.com/greatscottgadgets/luna) USB framework. It provides USB protocol analysis, traffic capture, and can also act as a USB host or device for testing. Connected inline between the Fomu and the RPi host.
-
-Both analyzers allow monitoring the Fomu's native USB communication (DFU programming, CDC-ACM serial, custom USB protocols) without modifying the FPGA design or host software.
-
-Source: dnsmasq pibs.conf on tweed, verified 2026-03-17.
+Welland's Fomu EVT is on pi-sw1-p17, an RPi 3B+, with an
+[OpenVizsla](https://github.com/openvizsla/ov_ftdi) USB protocol analyzer
+(`1d50:607c`) inline to capture the Fomu's USB traffic (DFU programming,
+CDC-ACM serial, custom USB protocols) without changing the FPGA design or host
+software. Its state is in the [current verify results](../verify.md#current-results).
 
 ## LiteX Integration
 

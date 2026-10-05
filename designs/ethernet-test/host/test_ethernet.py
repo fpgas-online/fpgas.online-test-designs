@@ -13,10 +13,11 @@ Steps:
   5. Send ICMP ping and verify response
 
 Usage:
-    uv run python host/test_ethernet.py --board arty --uart-port /dev/ttyUSB1
-    uv run python host/test_ethernet.py --board netv2 --uart-port /dev/ttyAMA0
+    sudo python3 host/test_ethernet.py --board arty --uart-port /dev/ttyUSB1
+    sudo python3 host/test_ethernet.py --board netv2 --uart-port /dev/ttyAMA0
 
-Requires root (sudo) for network interface configuration and arping.
+Needs root, to configure the adapter and to send ARP: it asks to be rerun as root rather than calling sudo
+itself (the boot check, fpgas-verify.service, runs as root already).
 """
 
 import argparse
@@ -39,77 +40,76 @@ BIOS_TIMEOUT = 30  # seconds to wait for BIOS boot
 # -- Network interface detection -----------------------------------------------
 
 
-def find_usb_ethernet_interface():
-    """Find the network interface name of the USB Ethernet adapter.
+def pick_test_interface(usb_ifaces, in_use):
+    """The one USB Ethernet adapter that is free for the test, or None with the reason.
 
-    Returns the interface name (e.g., 'eth1', 'enx60e0...') or None.
-    We identify USB Ethernet adapters by checking sysfs for USB bus paths.
+    An interface the Pi itself uses (it carries the default route or an address of its own) is never a
+    candidate, whatever bus it is on: a Pi 3B+'s only Ethernet port is itself on USB (smsc95xx/lan78xx), and
+    readdressing it takes the NFS root away and hangs the Pi (pi-sw1-p10, 2026-09-29). Two free adapters are
+    refused rather than guessed between.
     """
-    result = subprocess.run(
-        ["ip", "-o", "link", "show"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    interfaces = []
-    for line in result.stdout.strip().split("\n"):
-        # Format: "2: eth1: <BROADCAST,MULTICAST> mtu 1500 ..."
-        match = re.match(r"\d+:\s+(\S+):", line)
-        if not match:
-            continue
-        iface = match.group(1)
+    free = sorted(i for i in usb_ifaces if i not in in_use)
+    if len(free) == 1:
+        return free[0], None
+    if not free:
+        busy = ", ".join(sorted(set(usb_ifaces) & set(in_use)))
+        return None, "no USB Ethernet adapter free for the test" + (f" ({busy}: the Pi's own link)" if busy else "")
+    return None, f"more than one free USB Ethernet adapter ({', '.join(free)}): pass --interface"
+
+
+def interfaces_in_use(default_routes, ipv4_addrs):
+    """The interfaces the Pi itself uses, from `ip -o route show default` and `ip -o -4 addr show`.
+
+    Any interface named by a default route (multipath `nexthop ... dev X` included), and any holding an IPv4
+    address other than the test's own 192.168.1.100 or an IPv4 link-local 169.254/16 (which an idle adapter
+    can pick up by itself at boot).
+    """
+    in_use = set(re.findall(r"\bdev\s+(\S+)", default_routes))
+    for m in re.finditer(r"^\d+:\s+(\S+)\s+inet\s+(\S+)", ipv4_addrs, re.M):
+        if not m.group(2).startswith((f"{HOST_IP}/", "169.254.")):
+            in_use.add(m.group(1))
+    return in_use
+
+
+def find_usb_ethernet_interface(sysfs="/sys/class/net", ip=None):
+    """(interface, None) for the USB Ethernet adapter cabled to the FPGA, or (None, reason).
+
+    USB adapters are found by their sysfs device path. The Pi's own interfaces are those interfaces_in_use()
+    names, plus any enslaved to another interface (a bridge, bond or VLAN's lower device: `master` or
+    `upper_*` in sysfs), whose address sits on the upper interface.
+    """
+    ip = ip or (lambda *args: subprocess.run(["ip", *args], capture_output=True, text=True, check=True).stdout)
+    usb, enslaved = [], set()
+    for iface in sorted(os.listdir(sysfs)):
         if iface == "lo":
             continue
-        # Check if this is a USB device by looking at sysfs
-        try:
-            sysfs_path = f"/sys/class/net/{iface}/device"
-            real_path = os.path.realpath(sysfs_path)
-            if "/usb" in real_path:
-                interfaces.append(iface)
-        except (OSError, FileNotFoundError):
-            continue
+        if "/usb" in os.path.realpath(f"{sysfs}/{iface}/device"):
+            usb.append(iface)
+        if os.path.lexists(f"{sysfs}/{iface}/master") or any(
+            n.startswith("upper_") for n in os.listdir(f"{sysfs}/{iface}")
+        ):
+            enslaved.add(iface)
+    in_use = interfaces_in_use(ip("-o", "route", "show", "default"), ip("-o", "-4", "addr", "show")) | enslaved
+    return pick_test_interface(usb, in_use)
 
-    if len(interfaces) == 0:
+
+def not_root_reason(iface, euid=None):
+    """None when running as root; otherwise what to tell the user, who has to rerun the test as root."""
+    if (os.geteuid() if euid is None else euid) == 0:
         return None
-    if len(interfaces) == 1:
-        return interfaces[0]
-
-    # Multiple USB Ethernet adapters -- try to pick the one that isn't the
-    # RPi's main connection (skip the one with a default route)
-    result = subprocess.run(
-        ["ip", "route", "show", "default"],
-        capture_output=True,
-        text=True,
-        check=True,
+    return (
+        f"FAIL - not running as root: configuring {iface} and sending ARP need root. "
+        "Rerun this test as root (e.g. with sudo)."
     )
-    default_iface = None
-    match = re.search(r"dev\s+(\S+)", result.stdout)
-    if match:
-        default_iface = match.group(1)
-
-    for iface in interfaces:
-        if iface != default_iface:
-            return iface
-
-    return interfaces[0]
 
 
 def configure_interface(iface, ip, netmask):
     """Configure network interface with static IP."""
     prefix_len = ipaddress.IPv4Network(f"0.0.0.0/{netmask}").prefixlen
     print(f"Configuring {iface} with {ip}/{prefix_len}...")
-    subprocess.run(
-        ["sudo", "ip", "addr", "flush", "dev", iface],
-        check=True,
-    )
-    subprocess.run(
-        ["sudo", "ip", "addr", "add", f"{ip}/{prefix_len}", "dev", iface],
-        check=True,
-    )
-    subprocess.run(
-        ["sudo", "ip", "link", "set", iface, "up"],
-        check=True,
-    )
+    subprocess.run(["ip", "addr", "flush", "dev", iface], check=True)
+    subprocess.run(["ip", "addr", "add", f"{ip}/{prefix_len}", "dev", iface], check=True)
+    subprocess.run(["ip", "link", "set", iface, "up"], check=True)
     # Poll for link to come up (carrier detect)
     for _ in range(40):
         try:
@@ -180,16 +180,12 @@ def test_arp(fpga_ip, interface, timeout=10):
     print(f"ARP test: arping {fpga_ip} on {interface}...")
     try:
         result = subprocess.run(
-            ["sudo", "arping", "-c", "5", "-w", str(timeout), "-I", interface, fpga_ip],
+            ["arping", "-c", "5", "-w", str(timeout), "-I", interface, fpga_ip],
             capture_output=True,
             text=True,
         )
     except FileNotFoundError:
-        print("  FAIL: 'arping' not found. Install it with: sudo apt install arping")
-        return False, None
-    # When sudo wraps a missing command, it returns exit code 1 with stderr
-    if "not found" in result.stderr or "No such file" in result.stderr:
-        print("  FAIL: 'arping' not found. Install it with: sudo apt install arping")
+        print("  FAIL: 'arping' not found: install iputils-arping (or arping)")
         return False, None
     print(f"  stdout: {result.stdout.strip()}")
 
@@ -250,13 +246,17 @@ def run_test(board, uart_port, baud, eth_interface=None):
         iface = eth_interface
     else:
         print("Detecting USB Ethernet adapter...", end=" ", flush=True)
-        iface = find_usb_ethernet_interface()
+        iface, why = find_usb_ethernet_interface()
         if not iface:
-            print("FAIL - no USB Ethernet adapter found")
+            print(f"FAIL - {why}")
             return False
         print(f"found: {iface}")
 
-    # Step 2: Configure interface
+    # Step 2: Configure interface (from here on, root: `ip addr` and arping)
+    why = not_root_reason(iface)
+    if why:
+        print(why, file=sys.stderr)
+        return False
     configure_interface(iface, HOST_IP, NETMASK)
 
     # Step 3: Read MAC from BIOS UART

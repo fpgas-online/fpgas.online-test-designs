@@ -55,14 +55,17 @@ BOARD_CONFIGS = {
         "width": 1,
     },
     "tt": {
-        # Empirically confirmed: TT FPGA Demo Board v3 via PMOD HAT.
-        # Cables: HAT JC → TT ui_in, HAT JA → TT uo_out.
+        # TT FPGA Demo Board v3 via PMOD HAT, as the Welland hosts are cabled:
+        # HAT JA → TT ui_in, HAT JC → TT uo_out (docs/hardware/tt-fpga-pin-mapping.md,
+        # measured with the pin-id design). Bit i is header pin 1-4, 7-10 in order.
         # FPGA does: uo_out = ~ui_in (per-bit inversion, 8-bit).
         # RP2350 GPIOs must be released to input (high-Z) first.
-        #   ui_in[0:7] drive GPIOs: JC10, JC8, JC1, JC9, JC4, JC7, JC2, JC3
-        #   uo_out[0:7] read GPIOs: JA10, JA8, JA1, JA9, JA4, JA7, JA2, JA3
-        "drive_pins": [6, 12, 16, 5, 17, 4, 14, 15],
-        "read_pins": [18, 21, 8, 20, 11, 19, 10, 9],
+        # GPIO10/9/11 (JA2-4) are also HAT JB2-4, so driving ui_in[1:3] drives
+        # uio[1:3] too; the loopback design does not use uio.
+        #   ui_in[0:7] drive GPIOs: JA1, JA2, JA3, JA4, JA7, JA8, JA9, JA10
+        #   uo_out[0:7] read GPIOs: JC1, JC2, JC3, JC4, JC7, JC8, JC9, JC10
+        "drive_pins": [8, 10, 9, 11, 19, 21, 20, 18],
+        "read_pins": [16, 14, 15, 17, 4, 12, 5, 6],
         "width": 8,
     },
 }
@@ -160,14 +163,22 @@ class PmodHatGpio:
             self._read_lines.append(line)
 
     def close(self):
+        """Release every line, turning the driven ones back into inputs first: a released line keeps its
+        direction on a Pi, so the drive pins would go on fighting whatever design the FPGA loads next
+        (pi-sw2-p12 and p33 were left with six and eight HAT GPIOs driven, 2026-09-30)."""
         if _GPIOD_V2:
             if self._drive_request:
+                self._drive_request.reconfigure_lines(
+                    config={tuple(self.drive_pins): gpiod.LineSettings(direction=gpiod.line.Direction.INPUT)}
+                )
                 self._drive_request.release()
                 self._drive_request = None
             if self._read_request:
                 self._read_request.release()
                 self._read_request = None
         else:
+            for line in self._drive_lines:
+                line.set_direction_input()
             for line in self._drive_lines + self._read_lines:
                 line.release()
             self._drive_lines.clear()

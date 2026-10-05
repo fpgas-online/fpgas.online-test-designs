@@ -6,6 +6,24 @@ Automated hardware verification designs for the [fpgas.online](https://fpgas.onl
 
 This repository contains LiteX-based FPGA test designs that run automatically during Raspberry Pi boot to verify that FPGA boards connected to the fpgas.online infrastructure are functioning correctly. Each test produces a clear pass/fail result over UART or other interfaces, enabling fully automated hardware health checks.
 
+## Installing the Packages
+
+Every green commit on `main` publishes the board check, `fpgas-verify`, and its test bitstreams as Debian
+packages at <https://apt.fpgas.online>. On a Pi with, say, an Arty:
+
+```bash
+sudo install -d -m0755 /etc/apt/keyrings
+curl -fsSL https://apt.fpgas.online/apt.gpg | sudo tee /etc/apt/keyrings/apt.gpg > /dev/null
+echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
+  | sudo tee /etc/apt/sources.list.d/apt.list
+sudo apt update
+sudo apt install fpgas-online-arty     # or -acorn, -netv2, -fomu, -tt-fpga; -all-boards for any of them
+sudo fpgas-verify                      # check the board now; it also runs at every boot
+```
+
+**[docs/verify.md](docs/verify.md)**: installing, running and reading `fpgas-verify`, how fpgas.online uses it,
+and the current results on the Welland Pis.
+
 ## Architecture
 
 ```
@@ -59,12 +77,13 @@ This repository contains LiteX-based FPGA test designs that run automatically du
 | [Ethernet](docs/tests/ethernet.md) | Yes | Yes | — | — | — | — | — |
 | [PCIe Enumeration](docs/tests/pcie-enumeration.md) | — | Yes | — | — | Yes | — | — |
 | [DDR Memory](docs/tests/ddr-memory.md) | Yes | Yes | — | — | Yes | — | — |
-| [SPI Flash ID](docs/tests/spi-flash-id.md) | Yes | Yes | Yes | Yes | Yes | — | — |
+| [SPI Flash ID](docs/tests/spi-flash-id.md) | Yes | Yes | Yes | — | Yes | — | — |
 
 See [docs/tests/](docs/tests/) for detailed test specifications.
 
 ## Documentation
 
+- **[fpgas-verify](docs/verify.md)** — The boot-time board check: installing and using it, and how fpgas.online runs it, with the current results
 - **[Hardware Reference](docs/hardware/)** — Board specs, pin mappings, host connections
   - [Welland Site](docs/hardware/site-welland.md) — Private test lab (Arty, NeTV2, Fomu, TT ASIC + TT FPGA on [tinytapeout.fpgas.online](https://tinytapeout.fpgas.online), 6× Acorn CLE-215+ on Pi 5)
   - [PS1 Site](docs/hardware/site-ps1.md) — Public fpgas.online service (Arty A7 boards)

@@ -335,6 +335,15 @@ def generate_spiflash_firmware(uart_base, spiflash_base, ident):
     words.append(_lui(S1, spi_upper))
     words.append(_addi(S1, S1, spi_lower))
 
+    # Hold TX idle (high) for a while before the first character. Everything below is sent back to back,
+    # with no idle long enough for a receiver to find the start bit again, so a receiver that locked onto
+    # the edge the TX pin makes while the FPGA configures stays misframed for the whole output: on a NeTV2
+    # every character reached the Pi rotated by two bits (fpgas.online-test-designs#51). The BIOS-based
+    # UART test pauses before printing and never showed it. 0x40000 turns: ~20 ms at 50 MHz, ~0.1 s at 12.
+    words.append(_lui(T0, 0x40))                  # t0 = 0x40000
+    words.append(_addi(T0, T0, -1))               # loop: t0 -= 1
+    words.append(_bne(T0, ZERO, -4))              #   until t0 == 0
+
     # Print banner string.
     i_banner_auipc = len(words); words.append(0)
     i_banner_addi  = len(words); words.append(0)
@@ -344,6 +353,19 @@ def generate_spiflash_firmware(uart_base, spiflash_base, ident):
     i_ident_auipc = len(words); words.append(0)
     i_ident_addi  = len(words); words.append(0)
     i_ident_jal   = len(words); words.append(0)
+
+    # --- SPI: 8 clocks with CS deasserted --------------------------------
+    # On 7-series parts the clock reaches the flash through STARTUPE2, and the first three USRCCLKO cycles
+    # after configuration only switch CCLK over to it (UG470): they never reach the flash. Sent inside the
+    # 0x9F command they cost it its first bits, and the NeTV2 read 0xFF 0xFF 0xFF
+    # (fpgas.online-test-designs#51). With CS_N high the flash ignores them, on every board.
+    words.append(_addi(T2, ZERO, 8))
+    words.append(_addi(T0, ZERO, 6))              # loop: CS_N=1, CLK=1
+    words.append(_sw(T0, S1, 0))
+    words.append(_addi(T0, ZERO, 4))              #       CS_N=1, CLK=0
+    words.append(_sw(T0, S1, 0))
+    words.append(_addi(T2, T2, -1))
+    words.append(_bne(T2, ZERO, -20))             #   8 times
 
     # --- SPI: Read JEDEC ID (command 0x9F) --------------------------------
     # Assert CS (active low): MOSI=0, CLK=0, CS_N=0.

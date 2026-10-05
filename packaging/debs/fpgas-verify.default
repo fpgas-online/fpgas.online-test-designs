@@ -1,0 +1,10 @@
+# Options for the fpgas-verify run at boot (fpgas-verify.service). Installed by fpgas-online-verify; yours to
+# edit, and kept across upgrades. Nothing needs to be set here: with every line a comment, the boot check runs
+# as `fpgas-verify` with no options.
+#
+# FPGAS_VERIFY_ARGS is added to the command line of the boot run. `fpgas-verify --help` lists the options.
+# For example, to keep the check from driving anything to find out which board is attached:
+#FPGAS_VERIFY_ARGS="--no-probe"
+#
+# Which board the host has, and the other settings, are not here: they are in /etc/fpgas-verify/*.ini
+# (https://docs.fpgas.online/en/latest/verify/fpgas-verify.html#running-it).

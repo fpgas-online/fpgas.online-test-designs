@@ -3,8 +3,27 @@ name: "Build: UART Test"
 
 on:
   push:
+    branches: [main]
+  # A pull request builds this design only when something it is built from changes: its own directory, the
+  # shared gateware, the Python environment, the diagnostic builds in tmp/, or this file. main always builds.
   pull_request:
+    paths:
+      - "designs/uart/**"
+      - "designs/_shared/**"
+      # designs/_shared/build_helpers.py checks it exists at import
+      - "scripts/fix_yosys_edif_libref.py"
+      - "tmp/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/build-uart-test.yml"
   workflow_dispatch:
+
+# A new push to a pull request cancels that pull request's older, now stale, run.
+# Anything else (main, workflow_dispatch) is grouped by commit, so it never waits
+# behind or cancels another run: every merge builds, exactly as before.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   build-arty:
@@ -36,6 +55,7 @@ jobs:
         run: |
           mkdir -p "$CHIPDB"
           uv run python designs/uart/gateware/uart_soc_arty.py \
+            --variant a7-35 \
             --toolchain openxc7 \
             --build
 
@@ -44,7 +64,7 @@ jobs:
         with:
           name: uart-test-arty
           path: |
-            designs/uart/build/arty/gateware/*.bit
+            designs/uart/build/arty-a7-35-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-netv2-a7-35:
@@ -85,7 +105,7 @@ jobs:
         with:
           name: uart-test-netv2-a7-35t
           path: |
-            designs/uart/build/netv2/gateware/*.bit
+            designs/uart/build/netv2-a7-35-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-netv2-a7-100:
@@ -126,7 +146,7 @@ jobs:
         with:
           name: uart-test-netv2-a7-100t
           path: |
-            designs/uart/build/netv2/gateware/*.bit
+            designs/uart/build/netv2-a7-100-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-fomu:
@@ -156,7 +176,7 @@ jobs:
         with:
           name: uart-test-fomu
           path: |
-            designs/uart/build/fomu/gateware/*.bin
+            designs/uart/build/fomu-evt-yosys-nextpnr/gateware/*.bin
           if-no-files-found: error
 
   build-tt:
@@ -186,7 +206,7 @@ jobs:
         with:
           name: uart-test-tt-fpga
           path: |
-            designs/uart/build/tt/gateware/*.bin
+            designs/uart/build/tt-fpga-yosys-nextpnr/gateware/*.bin
           if-no-files-found: error
 
   lint:
@@ -239,7 +259,7 @@ jobs:
         with:
           name: uart-test-acorn-cle-215plus
           path: |
-            designs/uart/build/acorn/gateware/*.bit
+            designs/uart/build/acorn-cle-215p-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-acorn-cle-215:
@@ -280,7 +300,7 @@ jobs:
         with:
           name: uart-test-acorn-cle-215
           path: |
-            designs/uart/build/acorn/gateware/*.bit
+            designs/uart/build/acorn-cle-215-yosys-nextpnr/gateware/*.bit
           if-no-files-found: error
 
   build-acorn-cle-101:
@@ -342,10 +362,10 @@ jobs:
         with:
           name: uart-test-acorn-cle-101
           path: |
-            designs/uart/build/acorn/gateware/*.bit
-            designs/uart/build/acorn/gateware/*.fasm
-            designs/uart/build/acorn/gateware/*.init
-            designs/uart/build/acorn/software/bios/bios.bin
+            designs/uart/build/acorn-cle-101-yosys-nextpnr/gateware/*.bit
+            designs/uart/build/acorn-cle-101-yosys-nextpnr/gateware/*.fasm
+            designs/uart/build/acorn-cle-101-yosys-nextpnr/gateware/*.init
+            designs/uart/build/acorn-cle-101-yosys-nextpnr/software/bios/bios.bin
             tmp/build/diag_pll/*.bit
             tmp/build/diag_bram/*.bit
           if-no-files-found: error

@@ -144,3 +144,109 @@ def test_labels_from_frames_returns_garbled_marker_without_valid_label():
 
 def test_labels_from_frames_none_when_silent():
     assert ident.label_from_frames([]) is None
+
+
+# -- main(): --board versus an explicit pin selection -----------------------------
+
+
+def _main(monkeypatch, argv, decoded):
+    scanned = []
+    monkeypatch.setattr(ident.sys, "argv", ["identify_pmod_pins.py", *argv])
+    monkeypatch.setattr(ident, "release_kernel_gpio_drivers", lambda: None)
+    monkeypatch.setattr(ident, "detect_gpio_chip", lambda: "/dev/gpiochip0")
+    monkeypatch.setattr(ident, "alt_functions", lambda gpios: {})
+    monkeypatch.setattr(ident, "scan_gpios", lambda gpios, chip: scanned.extend(gpios) or dict(decoded))
+    try:
+        ident.main()
+        code = 0
+    except SystemExit as e:
+        code = e.code
+    return code, scanned
+
+
+class _Run:
+    """subprocess.run for pinctrl: `get` answers as pi-sw1-p10 did (2026-09-30); `set` is recorded."""
+
+    GET = ("14: a0    -- | hi // GPIO14 = TXD0\n15: a0    -- | hi // GPIO15 = RXD0\n"
+           " 8: ip    pu | hi // GPIO8 = input\n 2: a0    pu | hi // GPIO2 = SDA1\n")  # fmt: skip
+
+    def __init__(self):
+        self.sets = []
+
+    def __call__(self, argv, **kw):
+        if argv[1] == "set":
+            self.sets.append(argv[2:])
+        return type("R", (), {"stdout": self.GET if argv[1] == "get" else "", "returncode": 0})()
+
+
+def test_the_scan_puts_back_the_uart_and_i2c_functions_it_takes_away():
+    run = _Run()
+    functions = ident.alt_functions([14, 15, 8, 2], run=run)
+    assert functions == {14: "a0", 15: "a0", 2: "a0"}  # GPIO8 was a plain input: nothing to put back
+    ident.restore_alt_functions(functions, run=run)
+    assert run.sets == [["2", "a0"], ["14", "a0"], ["15", "a0"]]
+
+
+def test_no_pinctrl_means_nothing_to_restore():
+    def missing(argv, **kw):
+        raise FileNotFoundError("pinctrl")
+
+    assert ident.alt_functions([14, 15], run=missing) == {}
+
+
+def test_board_mode_fails_a_miswired_board(monkeypatch):
+    code, scanned = _main(monkeypatch, ["--board", "tt"], {8: "13"})
+    assert code == 1 and scanned == [gpio for gpio, _b, _l in ident.BOARDS["tt"]["pins"]]
+
+
+def test_an_explicit_hat_port_after_board_is_a_discovery_scan(monkeypatch):
+    """fpgas-<board>-debug test pin-id -- --hat-port JA appends to the boot check's --board arguments."""
+    code, scanned = _main(monkeypatch, ["--board", "arty", "--hat-port", "JA"], {8: "G13"})
+    assert scanned == ident.PMOD_HAT_PORTS["JA"] and code in (0, None)
+
+
+# -- iCE40 pin numbers, and the Arty / TT HAT maps -------------------------------
+
+
+def test_ice40_package_pin_numbers_are_valid_labels():
+    """The TT FPGA and Fomu designs send "13", "45", ...: all TT pins used to read as garbled."""
+    frames = [(b, True) for b in b"13\r\n13\r\n13\r\n"]
+    assert ident.label_from_frames(frames) == "13"
+    assert ident.is_valid_label("2") and ident.is_valid_label("48")
+    assert not ident.is_valid_label("0") and not ident.is_valid_label("100")
+
+
+def test_the_shared_hat_gpios_are_not_part_of_a_wiring_check():
+    """GPIO10/9/11 are HAT JA pins 2-4 and JB pins 2-4 at once: two cables drive them."""
+    for board in ("arty", "tt"):
+        gpios = [gpio for gpio, _ball, _label in ident.BOARDS[board]["pins"]]
+        assert not {9, 10, 11} & set(gpios), board
+        assert len(gpios) == len(set(gpios)) == 18, board
+
+
+def _decoded(board):
+    return {gpio: ball for gpio, ball, _label in ident.BOARDS[board]["pins"]}
+
+
+def test_a_straight_through_arty_passes_and_welland_p12_as_cabled_fails():
+    assert ident.evaluate_board("arty", _decoded("arty"))[0]
+    # pi-sw2-p12, 2026-09-29: HAT JA <- Arty JC, JB <- Arty JD, JC <- Arty JB; Arty JA not cabled.
+    p12 = {8: "V12", 19: "U14", 21: "V14", 20: "T13", 18: "U13", 7: "D4", 26: "E2", 13: "D2", 3: "H2", 2: "G2",
+           16: "E15", 14: "E16", 15: "D15", 17: "C15", 4: "J17", 12: "J18", 5: "K15", 6: "J15"}  # fmt: skip
+    all_ok, rows = ident.evaluate_board("arty", p12)
+    assert not all_ok
+    assert not any(r["ok"] for r in rows)
+
+
+def test_a_tt_cabled_as_the_fleet_passes_and_ja_jc_swapped_fails():
+    # pi-sw2-p33/p35/p36, 2026-09-29 and 2026-10-04: ui_in on HAT JA, uio on JB, uo_out on JC.
+    welland = {8: "13", 19: "23", 21: "25", 20: "26", 18: "27", 7: "2", 26: "9", 13: "10", 3: "11", 2: "12",
+               16: "38", 14: "42", 15: "43", 17: "44", 4: "45", 12: "46", 5: "47", 6: "48"}  # fmt: skip
+    assert welland == _decoded("tt")
+    assert ident.evaluate_board("tt", welland)[0]
+    # The JA and JC ribbons swapped (uo_out on JA, ui_in on JC): only uio on JB still matches.
+    swapped = {8: "38", 19: "45", 21: "46", 20: "47", 18: "48", 7: "2", 26: "9", 13: "10", 3: "11", 2: "12",
+               16: "13", 14: "19", 15: "18", 17: "21", 4: "23", 12: "25", 5: "26", 6: "27"}  # fmt: skip
+    all_ok, rows = ident.evaluate_board("tt", swapped)
+    assert not all_ok
+    assert [r["gpio"] for r in rows if r["ok"]] == [7, 26, 13, 3, 2]

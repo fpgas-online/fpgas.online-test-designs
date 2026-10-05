@@ -164,13 +164,19 @@ PROGRAM_CMD = {
     #  3. libgpiod bit-bang JTAG, pin order TDI:TDO:TCK:TMS (~16 s);
     #  4. rescan so the flash-resident endpoint (or the new design's) is back,
     #     but exit with openFPGALoader's status so a failed load (e.g. an
-    #     empty JTAG chain) is not masked by the rescan's 0.
+    #     empty JTAG chain) is not masked by the rescan's 0;
+    #  5. match the endpoint's Max_Payload_Size to the root port's: under the
+    #     Pi 5's pci=pcie_bus_safe the kernel only does that at boot, and a
+    #     rescanned endpoint left at 128 bytes under a 512-byte root port
+    #     flags the root port's completions as malformed, so DMA never runs
+    #     (p48, 2026-09-26). A no-op when the design has no PCIe endpoint.
     "acorn": (
         "if [ -e /sys/bus/pci/devices/0001:01:00.0 ]; then"
         " echo 1 > /sys/bus/pci/devices/0001:01:00.0/remove; fi;"
         " ln -sfn /dev/gpiochip15 /dev/gpiochip0;"
         " openFPGALoader --cable libgpiod --pins 10:9:11:8 {bitstream}; rc=$?;"
-        " echo 1 > /sys/bus/pci/rescan; exit $rc"
+        " echo 1 > /sys/bus/pci/rescan;"
+        " python3 {home}/pcie_match_mps.py 0001:01:00.0 || [ $rc -ne 0 ] || rc=1; exit $rc"
     ),
     # NeTV2 varies by host — handled per-host below
 }
@@ -197,7 +203,10 @@ DESIGNS = {
     "uart": {
         "test_script": "designs/uart/host/test_uart.py",
         "boards": {
-            "arty": {"artifact": "uart-test-arty/digilent_arty.bit", "test_args": "--port /dev/ttyUSB1 --board arty"},
+            "arty": {
+                "artifact": "uart-test-arty/digilent_arty.bit",
+                "test_args": "--port /dev/ttyUSB1 --board arty",
+            },
             "netv2": {
                 "artifact": "uart-test-netv2/kosagi_netv2.bit",
                 "test_args": "--port /dev/ttyAMA0 --board netv2 --skip-banner",
@@ -237,7 +246,10 @@ DESIGNS = {
     "ddr": {
         "test_script": "designs/ddr-memory/host/test_ddr.py",
         "boards": {
-            "arty": {"artifact": "ddr-test-arty/digilent_arty.bit", "test_args": "--port /dev/ttyUSB1 --board arty"},
+            "arty": {
+                "artifact": "ddr-test-arty/digilent_arty.bit",
+                "test_args": "--port /dev/ttyUSB1 --board arty",
+            },
             "netv2": {
                 "artifact": "ddr-test-netv2/kosagi_netv2.bit",
                 "test_args": "--port /dev/ttyAMA0 --board netv2",
@@ -252,6 +264,7 @@ DESIGNS = {
     },
     "ethernet": {
         "test_script": "designs/ethernet-test/host/test_ethernet.py",
+        "needs_root": True,  # it configures the adapter and sends ARP, and asks to be rerun as root otherwise
         "boards": {
             "arty": {
                 "artifact": "ethernet-test-arty-a7-35t/digilent_arty.bit",
@@ -287,10 +300,6 @@ DESIGNS = {
                     " true"
                 ),
             },
-            "tt": {
-                "artifact": "spiflash-test-tt-fpga/tt_fpga_platform.bin",
-                "test_args": "--port /dev/ttyACM0 --board tt",
-            },
             "acorn": {
                 "artifact": "spiflash-test-acorn-cle-215plus/sqrl_acorn.bit",
                 "test_args": "--port /dev/ttyAMA0 --board acorn",
@@ -302,18 +311,21 @@ DESIGNS = {
         "test_script": "designs/pmod-loopback/host/test_pmod_loopback.py",
         "boards": {
             "arty": {
-                "artifact": "gpio-loopback-arty-a7-35t/top.bit",
+                "artifact": "gpio-loopback-arty-a7-35t/digilent_arty.bit",
                 "test_args": "--board arty",
                 "pre_test": "rmmod spidev spi_bcm2835 2>&1; true",
             },
-            "netv2": {"artifact": "gpio-loopback-netv2/top.bit", "test_args": "--board netv2"},
+            "netv2": {
+                "artifact": "gpio-loopback-netv2-a7-35t/kosagi_netv2.bit",
+                "test_args": "--board netv2",
+            },
             "fomu": {
-                "artifact": "gpio-loopback-fomu-evt/top.bin",
+                "artifact": "gpio-loopback-fomu-evt/kosagi_fomu_evt.bin",
                 "test_args": "--board fomu",
                 "pre_test": "rmmod spidev spi_bcm2835 2>&1; true",
             },
             "tt": {
-                "artifact": "gpio-loopback-tt-fpga/top.bin",
+                "artifact": "gpio-loopback-tt-fpga/tt_fpga_platform.bin",
                 "test_args": "--board tt",
                 "pre_test": "rmmod spidev spi_bcm2835 2>&1; true",
                 "program_cmd": "python3 ~/tt_fpga_program.py /dev/ttyACM0 {bitstream} --gpio-release",
@@ -340,9 +352,9 @@ DESIGNS = {
         "test_script": "designs/pmod-pin-id/host/identify_pmod_pins.py",
         "boards": {
             "acorn": {
-                # pmod_pin_id_acorn.py calls platform.build() directly, so the
-                # bitstream is build/acorn/top.bit and CI uploads that name.
-                "artifact": "pmod-pin-id-acorn-cle-215plus/top.bit",
+                # pmod_pin_id_acorn.py builds with build_name=platform.name, so the
+                # bitstream is .../gateware/sqrl_acorn.bit and CI uploads that name.
+                "artifact": "pmod-pin-id-acorn-cle-215plus/sqrl_acorn.bit",
                 "test_args": "--board acorn",
                 # Stop the login console so the host script can read GPIO14/15,
                 # and make sure GPIO14 is a plain input: with pin-ID loaded
@@ -370,6 +382,9 @@ DESIGNS = {
 
 # Extra files that certain boards need uploaded
 EXTRA_UPLOADS = {
+    "acorn": [
+        ("designs/acorn-pcie/host/pcie_match_mps.py", "~/pcie_match_mps.py"),
+    ],
     "tt": [
         ("designs/_host/tt_fpga_program.py", "~/tt_fpga_program.py"),
         ("designs/_host/tt_test_wrapper.py", "~/tt_test_wrapper.py"),
@@ -582,7 +597,12 @@ def generate_tests():
                 prog_template = HOST_PROGRAM_CMD[host_name]
                 prog_cmd = prog_template.format(bitstream=remote_bitstream, bitstream_abs=remote_bitstream)
             else:
-                prog_cmd = PROGRAM_CMD[board].format(bitstream=remote_bitstream)
+                prog_cmd = PROGRAM_CMD[board].format(bitstream=remote_bitstream, home=home)
+
+            test_cmd = f"python3 {remote_script} {test_args}"
+            # Gateway hosts run everything under `sudo -n sh -c` (_build_ssh_cmd); the direct-SSH ones do not.
+            if design.get("needs_root") and HOSTS[host_name]["ssh_type"] == "direct" and host_user(host_name) != "root":
+                test_cmd = f"sudo -n {test_cmd}"
 
             tests.append(
                 {
@@ -596,7 +616,7 @@ def generate_tests():
                     "remote_bitstream": remote_bitstream,
                     "remote_script": remote_script,
                     "program_cmd": prog_cmd,
-                    "test_cmd": f"python3 {remote_script} {test_args}",
+                    "test_cmd": test_cmd,
                     "pre_test": board_cfg.get("pre_test"),
                 }
             )
@@ -655,9 +675,9 @@ def run_single_test(test, skip_upload=False):
         ssh_run(test["host"], test["pre_test"], timeout=30)
 
     # TT FPGA boards: RP2350 sits between RPi and FPGA.
-    # UART/spiflash: combined program + bridge + test (UART goes through RP2350).
+    # UART: combined program + bridge + test (UART goes through RP2350).
     # PMOD: program via RP2350 wrapper (handles reset/retry), then test via RPi GPIO.
-    if test["board"] == "tt" and test["test_type"] in ("uart", "spiflash"):
+    if test["board"] == "tt" and test["test_type"] == "uart":
         wrapper_cmd = "python3 ~/tt_test_wrapper.py /dev/ttyACM0 {} {}".format(
             test["remote_bitstream"], test["test_cmd"]
         )

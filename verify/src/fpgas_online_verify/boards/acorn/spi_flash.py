@@ -16,18 +16,30 @@ want the IDCODE of the part that is actually there.
 
 Measured on pi-sw2-p48 (Pi 5, PCIe BAR0, 2026-09-21): 32 MiB read in 58 s.
 
+Refuses to run over PCIe while a kernel driver (litepcie.ko) is bound to the
+board: the driver owns BAR0 then, and its flash ioctl does not take our lock.
+Over UART it refuses while litepcie.ko is bound to any device, for the same
+SPI master's sake.
+
 Self-contained on purpose (stdlib only): the Pi hosts boot a tmpfs root with no
 LiteX. Runs over PCIe BAR0 by default, or over the UART bridge with `--uart`.
 
-    sudo python3 spi_flash.py id
-    sudo python3 spi_flash.py dump factory.bin
-    sudo python3 spi_flash.py verify sqrl_acorn_operational.bin 0x400000
-    sudo python3 spi_flash.py write  sqrl_acorn_operational.bin 0x400000
+    sudo fpgas-acorn-flash id
+    sudo fpgas-acorn-flash dump factory.bin
+    sudo fpgas-acorn-flash verify sqrl_acorn_operational.bin 0x400000
+    sudo fpgas-acorn-flash write  sqrl_acorn_operational.bin 0x400000 --idcode 0x03636093
 """
 
 import argparse
+import contextlib
+import errno
+import fcntl
 import hashlib
 import json
+import mmap
+import os
+import pathlib
+import struct
 import sys
 import time
 
@@ -40,14 +52,18 @@ SPI_MISO_HI = CSR_BASE + 0x3810
 SPI_MISO_LO = CSR_BASE + 0x3814
 FLASH_CS_N = CSR_BASE + 0x4000  # csr_map: flash_cs_n = 8
 SHIFT_BYTES = 5
+# Shared with the Acorn check (check.py, fpgas-acorn-verify): one user of the SoC's SPI master at a time. Its CS and
+# shift registers are single-user: two tools interleaving would corrupt a read, or a write.
+LOCK = "/run/lock/fpgas-acorn.lock"
+SYSFS_PCI = "/sys/bus/pci/devices"
 
 GOLDEN_ADDR = 0x000000
 OPERATIONAL_ADDR = 0x400000
 SLOT_SIZE = 4 << 20
 
-RDID, RDSR1, RDCR, READ4, OTPR = 0x9F, 0x05, 0x35, 0x13, 0x4B
+RDID, RDSR1, RDCR, READ4, OTPR, RSFDP = 0x9F, 0x05, 0x35, 0x13, 0x4B, 0x5A
 WREN, CLSR, PP4, P4E4, SE4 = 0x06, 0x30, 0x12, 0x21, 0xDC
-READ_OPCODES = {RDID, RDSR1, RDCR, READ4, OTPR}
+READ_OPCODES = {RDID, RDSR1, RDCR, READ4, OTPR, RSFDP}
 WRITE_OPCODES = {WREN, CLSR, PP4, P4E4, SE4}
 
 SR_WIP, SR_E_ERR, SR_P_ERR = 0x01, 0x20, 0x40
@@ -55,7 +71,27 @@ PAGE = 256
 SECTOR = 0x10000
 PARAM_SECTOR = 0x1000
 READ_CHUNK = 0x10000
-PARTS = {0x010219: "S25FL256S", 0x010220: "S25FL512S", 0x012018: "S25FL128S"}
+# Parts by RDID bytes 1-3 (manufacturer, type, capacity). The 256 Mbit S25FL-S and S25FS-S share 0x010219, so
+# bytes 1-3 alone name only their family, S25Fx256S (as rpi-hwid's labels.py JEDEC_PART names it).
+PARTS = {0x010219: "S25Fx256S", 0x010220: "S25FL512S", 0x012018: "S25FL128S"}
+# Parts by RDID byte 6, the family ID, for the bytes 1-3 it is defined for. The S25FL128S/S25FL256S datasheet
+# (Infineon 002-19099 Rev. *D) and the S25FS256S datasheet, section "Device ID and Common Flash Interface
+# (ID-CFI) Address Map", table "Manufacturer and Device ID": byte 4 (the ID-CFI length) is 0x4D; byte 5 is the
+# sector architecture, 0x00 uniform 256 KB sectors or 0x01 4 KB parameter sectors with 64 KB sectors, which
+# names no part (both layouts are the same part); byte 6 is the family, 0x80 FL-S and 0x81 FS-S. Linux's
+# drivers/mtd/spi-nor/spansion.c tells s25fl256s0/1 and s25fs256s0/1 apart the same way.
+PARTS_BY_FAMILY = {0x010219: {0x80: "S25FL256S", 0x81: "S25FS256S"}}
+UNIQUE_ID_BYTES = 16  # OTPR from 0: the 128-bit random number Spansion programs at the factory
+# Serial Flash Discoverable Parameters, JEDEC JESD216. Read SFDP is opcode 5Ah, a 3-byte address and 8 dummy
+# clocks, single-bit. The SFDP header is its first two DWORDs, from address 0: bytes 0-3 are the signature,
+# "SFDP" in that byte order (the DWORD 50444653h, least significant byte first), byte 4 the minor and byte 5
+# the major revision, byte 6 the number of parameter headers less one, byte 7 the access protocol.
+# The S25FL128S/S25FL256S has no SFDP: its datasheet (Infineon 002-19099 Rev. *D) lists no 5Ah in its command
+# summary (13.1) and never mentions SFDP; the part describes itself only in its ID-CFI space, read with RDID
+# (7.3, 11.2.2, 13.2). Read SFDP is not one of its commands, so its answer has no signature: "none".
+# The S25FS256S does answer it.
+SFDP_SIGNATURE = b"SFDP"
+SFDP_HEADER_BYTES = 8
 
 SYNC = bytes.fromhex("aa995566")
 REG_CMD, REG_IDCODE, REG_WBSTAR, REG_TIMER, REG_FDRI = 0x04, 0x0C, 0x10, 0x11, 0x02
@@ -66,6 +102,25 @@ HEADER_WORDS = 64
 
 class FlashError(Exception):
     pass
+
+
+def part(rdid):
+    """The part's name from its RDID bytes: from byte 6, the family ID, where PARTS_BY_FAMILY knows it, else
+    the family's name from bytes 1-3, else "unknown"."""
+    jedec = int.from_bytes(rdid[:3], "big")
+    family = rdid[5] if len(rdid) >= 6 else None
+    return PARTS_BY_FAMILY.get(jedec, {}).get(family) or PARTS.get(jedec, "unknown")
+
+
+def sfdp_revision(header):
+    """The SFDP revision a JESD216 header gives, "major.minor" (as rpi-hwid writes it, "1.6"); "none" when
+    the bytes do not start with the signature: the part answered Read SFDP without one; None when there are
+    fewer than SFDP_HEADER_BYTES, which is not a read. rpi-hwid's sfdp_summary() decides the same way."""
+    if len(header) < SFDP_HEADER_BYTES:
+        return None
+    if bytes(header[:4]) != SFDP_SIGNATURE:
+        return "none"
+    return f"{header[5]}.{header[4]}"
 
 
 def image_info(data):
@@ -168,20 +223,38 @@ class Flash:
 
     # -- reading -----------------------------------------------------------------------------------
 
+    def sfdp_header(self):
+        """The first SFDP_HEADER_BYTES of the SFDP space: Read SFDP from address 0, then one byte (8 clocks)
+        of dummy."""
+        return self.transaction([RSFDP, 0, 0, 0, 0], SFDP_HEADER_BYTES)
+
     def identify(self):
         rdid = self.transaction([RDID], 6)
-        jedec = int.from_bytes(rdid[:3], "big")
         capacity = rdid[2]
-        otp = self.transaction([OTPR, 0, 0, 0, 0], 16)
-        return {
+        otp = self.transaction([OTPR, 0, 0, 0, 0], UNIQUE_ID_BYTES)
+        info = {
             "rdid": rdid.hex(),
-            "part": PARTS.get(jedec, "unknown"),
+            "part": part(rdid),
             "size_bytes": 1 << capacity if 0x10 <= capacity <= 0x20 else None,
             "unique_id": otp.hex(),  # Spansion programs a 128-bit random number here at the factory
+            "unique_id_opcode": OTPR,
             "status": self.transaction([RDSR1], 1).hex(),
             "config": self.transaction([RDCR], 1).hex(),
             "quad_enabled": bool(self.transaction([RDCR], 1)[0] & 0x02),
         }
+        # A failed SFDP read loses only the SFDP: the IDs above stand, and sfdp_error says why.
+        try:
+            header = self.sfdp_header()
+        except (FlashError, OSError) as e:
+            info["sfdp_error"] = f"Read SFDP (0x5a) failed: {str(e) or type(e).__name__}"
+        else:
+            info["sfdp_header"] = header.hex()
+            revision = sfdp_revision(header)
+            if revision is None:
+                info["sfdp_error"] = f"Read SFDP (0x5a) gave {len(header)} bytes, not {SFDP_HEADER_BYTES}"
+            else:
+                info["sfdp"] = revision
+        return info
 
     def read(self, addr, length):
         out = bytearray()
@@ -249,35 +322,61 @@ class Flash:
 # -- buses ---------------------------------------------------------------------------------------------
 
 
+BAR0_SIZE = 0x10000  # what is mapped: every CSR this tool and the check use is below it
+
+
 class Bar0Bus:
-    """The SoC's CSRs through PCIe BAR0, with no kernel driver: needs root and memory decoding enabled."""
+    """The SoC's CSRs through a mapping of PCIe BAR0."""
 
-    def __init__(self, bdf):
-        import mmap
-        import os
-        import struct
-
-        self._struct = struct
-        fd = os.open(f"/sys/bus/pci/devices/{bdf}/resource0", os.O_RDWR | os.O_SYNC)
-        self._map = mmap.mmap(fd, 0x10000, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE)
+    def __init__(self, mapping):
+        self._map = mapping
 
     def read(self, addr):
         off = addr - CSR_BASE
-        return self._struct.unpack("<I", self._map[off : off + 4])[0]
+        return struct.unpack("<I", self._map[off : off + 4])[0]
 
     def write(self, addr, value):
         off = addr - CSR_BASE
-        self._map[off : off + 4] = self._struct.pack("<I", value)
+        self._map[off : off + 4] = struct.pack("<I", value)
+
+
+@contextlib.contextmanager
+def open_bar0(bdf, sysfs=None):
+    """BAR0 of `bdf` as a Bar0Bus, with memory decoding on for the duration and put back as it was afterwards.
+
+    With no driver bound (litepcie.ko is not loaded on the fleet) the endpoint's COMMAND register has memory
+    decoding off, and every BAR read returns all ones: the flash then "identifies" as RDID ffffffffffff.
+    Needs root."""
+    dev = pathlib.Path(sysfs or SYSFS_PCI) / bdf
+    with open(dev / "config", "r+b") as cfg:
+        cfg.seek(4)
+        command = struct.unpack("<H", cfg.read(2))[0]
+        if not command & 0x2:
+            cfg.seek(4)
+            cfg.write(struct.pack("<H", command | 0x2))
+            cfg.flush()
+        try:
+            fd = os.open(dev / "resource0", os.O_RDWR | os.O_SYNC)
+            try:
+                mapping = mmap.mmap(fd, BAR0_SIZE, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE)
+            finally:
+                os.close(fd)
+            try:
+                yield Bar0Bus(mapping)
+            finally:
+                mapping.close()
+        finally:
+            if not command & 0x2:
+                cfg.seek(4)
+                cfg.write(struct.pack("<H", command))
+                cfg.flush()
 
 
 class UARTBus:
     """The same CSRs over the UART bridge. Fine for `id`; a full dump would take hours."""
 
     def __init__(self, port):
-        import pathlib
-
-        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-        import uartbone_link
+        from . import uartbone_link
 
         self._link = uartbone_link.UARTBoneLink(uartbone_link._serial_opener(port))
         self._link.connect()
@@ -289,29 +388,139 @@ class UARTBus:
         self._link.write(addr, [value])
 
 
+def bound_driver(bdf, sysfs=None):
+    """The name of the kernel driver bound to `bdf`, or None.
+
+    A bound driver owns BAR0: litepcie.ko claims it at probe. The fleet kernel has CONFIG_STRICT_DEVMEM off, so
+    nothing stops a resource0 mapping of a claimed BAR, and two users would drive the same CSRs at once. The
+    host tools therefore check this before they map BAR0, and touch nothing when a driver is bound."""
+    link = pathlib.Path(sysfs or SYSFS_PCI) / bdf / "driver"
+    return os.path.basename(os.readlink(link)) if link.is_symlink() else None
+
+
+def litepcie_bound_anywhere(sysfs=None):
+    """The first PCI device litepcie.ko is bound to, or None. For the UART path, which has no BDF: the bridge
+    reaches the same SPI master the driver's flash ioctl drives."""
+    root = pathlib.Path(sysfs or SYSFS_PCI)
+    if not root.is_dir():
+        return None
+    return next((d.name for d in sorted(root.iterdir()) if bound_driver(d.name, root) == "litepcie"), None)
+
+
+def driver_bound_reason(driver):
+    what = "litepcie.ko" if driver == "litepcie" else f"the {driver} driver"
+    return f"{what} is bound: not checked"
+
+
+class LockError(Exception):
+    """The lock file cannot be opened (another user's file, say)."""
+
+
+LOCK_OPEN_TRIES = 3  # a lock file that vanishes and reappears more often than this is an error, not a spin
+
+
+def open_lock(path):
+    """A read-only descriptor of the lock file `path`: opened without O_CREAT when it is there (in the sticky
+    /run/lock, fs.protected_regular refuses even root an O_CREAT open of another user's file), created 0644
+    only when it is not. A symlink is never followed (O_NOFOLLOW) and is a LockError naming it, and the open
+    is tried LOCK_OPEN_TRIES times at most. The verify core's core.open_lock does the same; this file stays
+    stdlib-only."""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    nofollow = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+    for _ in range(LOCK_OPEN_TRIES):
+        try:
+            if os.path.islink(path):  # lstat: a link, dangling or not, is refused before anything opens it
+                raise OSError(errno.ELOOP, "is a symlink")
+            try:
+                return os.open(path, nofollow)
+            except FileNotFoundError:
+                pass
+            try:
+                return os.open(path, nofollow | os.O_CREAT | os.O_EXCL, 0o644)
+            except FileExistsError:
+                continue  # created in between: open that one
+        except PermissionError as e:
+            try:
+                owner = f"uid {os.stat(path).st_uid}"
+            except OSError:
+                owner = "unknown"
+            raise LockError(f"cannot open the lock file {path} (owned by {owner}): {e.strerror}; it should be "
+                            "root's: remove it, or reboot") from None  # fmt: skip
+        except OSError as e:
+            if e.errno != errno.ELOOP:
+                raise
+            raise LockError(f"the lock file {path} is a symlink, which is never followed: remove it, or "
+                            "reboot") from None  # fmt: skip
+    raise LockError(f"cannot open the lock file {path}: it was gone, then there, {LOCK_OPEN_TRIES} times over")
+
+
+def hold_lock(path=LOCK):
+    """Take the SoC lock, waiting for whoever has it; the returned file holds it until closed."""
+    held = os.fdopen(open_lock(path), "r")
+    fcntl.flock(held, fcntl.LOCK_EX)
+    return held
+
+
 def _progress(done, total):
     if done == total or done % (256 * PAGE) == 0:
         print(f"  programmed {done}/{total} bytes", flush=True)
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--bdf", default="0001:01:00.0", help="PCIe address of the SoC")
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        prog="fpgas-acorn-flash",
+        usage="%(prog)s [options] COMMAND [FILE ADDR]",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Read, check or write the Acorn's SPI flash, through the fpgas.online SoC\n"
+        "running on it. Prints RESULT: PASS or RESULT: FAIL last.",
+        epilog=f"""\
+commands:
+  id                print the flash's part, size, IDs and SFDP revision as JSON
+  dump FILE         read the whole flash into FILE
+  verify FILE ADDR  compare the flash at ADDR with FILE
+  write FILE ADDR   write FILE at ADDR, then read it back (needs --idcode)
+
+write takes a slot: {OPERATIONAL_ADDR:#x} (operational) or {GOLDEN_ADDR:#x} (golden, which also
+needs --i-know-this-writes-golden). Its --idcode is the FPGA's JTAG IDCODE:
+0x03636093 (CLE-215+) or 0x03631093 (CLE-101).
+
+examples:
+  sudo %(prog)s id
+  sudo %(prog)s dump backup.bin
+  sudo %(prog)s verify operational.bin 0x400000
+  sudo %(prog)s write operational.bin 0x400000 --idcode 0x03636093""",
+    )
+    parser.add_argument("--bdf", default="0001:01:00.0", help="the SoC's PCIe address (default: %(default)s)")
     parser.add_argument("--uart", metavar="PORT", help="use the UART bridge on PORT instead of PCIe")
-    sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("id", help="print what the flash says it is, as JSON")
-    dump = sub.add_parser("dump", help="read the whole flash to a file")
-    dump.add_argument("file")
+    sub = parser.add_subparsers(dest="command", required=True, help=argparse.SUPPRESS)
+    sub.add_parser("id")
+    sub.add_parser("dump").add_argument("file")
     for name in ("verify", "write"):
         p = sub.add_parser(name)
         p.add_argument("file")
         p.add_argument("addr", type=lambda s: int(s, 0))
-        p.add_argument("--idcode", type=lambda s: int(s, 0), required=name == "write", help="the FPGA's JTAG IDCODE")
-    sub.choices["write"].add_argument("--i-know-this-writes-golden", action="store_true")
-    args = parser.parse_args()
+    write = sub.choices["write"]
+    write.add_argument("--idcode", type=lambda s: int(s, 0), required=True, help="the FPGA's JTAG IDCODE")
+    write.add_argument("--i-know-this-writes-golden", action="store_true", help="allow writing the golden slot")
+    args = parser.parse_args(argv)
 
-    bus = UARTBus(args.uart) if args.uart else Bar0Bus(args.bdf)
-    flash = Flash(bus, allow_write=args.command == "write")
+    try:
+        lock = hold_lock(LOCK)  # noqa: F841 -- held until main returns
+    except LockError as e:
+        print(f"error: {e}")
+        print("RESULT: FAIL")
+        return 1
+    driver = ("litepcie" if litepcie_bound_anywhere() else None) if args.uart else bound_driver(args.bdf)
+    if driver:
+        print(f"error: {driver_bound_reason(driver)}")
+        print("RESULT: FAIL")
+        return 1
+    with contextlib.ExitStack() as stack:
+        bus = UARTBus(args.uart) if args.uart else stack.enter_context(open_bar0(args.bdf))
+        return _run(args, Flash(bus, allow_write=args.command == "write"))
+
+
+def _run(args, flash):
     try:
         info = flash.identify()
         if info["size_bytes"] is None:

@@ -61,7 +61,7 @@ For tests that do not use UART as the primary interface (e.g., PCIe enumeration)
 | [Ethernet](ethernet.md) | Yes | Yes | — | — | — |
 | [PCIe Enumeration](pcie-enumeration.md) | — | Yes | — | — | Yes |
 | [DDR Memory](ddr-memory.md) | Yes | Yes | — | — | Yes |
-| [SPI Flash ID](spi-flash-id.md) | Yes | Yes | Yes | Yes | Yes |
+| [SPI Flash ID](spi-flash-id.md) | Yes | Yes | Yes | — | Yes |
 
 Source: [Project README Test Matrix](../../README.md#test-matrix)
 

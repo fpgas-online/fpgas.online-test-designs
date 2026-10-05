@@ -32,8 +32,13 @@ name: Build FPGA Bitstreams
 
 on:
   push:
-    branches: [main]
+    branches: [main]   # a PR branch is built once, by pull_request, not twice
   pull_request:
+
+# The org shares 20 concurrent jobs: a new push to a PR cancels its stale run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   build:

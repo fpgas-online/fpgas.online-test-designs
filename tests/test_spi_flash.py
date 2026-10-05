@@ -1,4 +1,4 @@
-"""Unit tests for the SPI flash host tool (designs/acorn-pcie/host/spi_flash.py).
+"""Unit tests for the SPI flash host tool (fpgas_online_verify.boards.acorn.spi_flash, fpgas-acorn-flash).
 
 A fake register bus stands in for the SoC: it models LiteX's 40-bit SPIMaster
 CSRs and the separate `flash_cs_n` GPIO, and shifts every transfer through a
@@ -12,21 +12,16 @@ writer go wrong on the real part:
   * programming can only clear bits;
   * the first 128 KiB is overlaid by 4 KiB parameter sectors, which a 64 KiB
     sector erase does not touch;
-  * nothing is written without WREN, and WIP stays set for a few status reads.
+  * nothing is written without WREN, and WIP stays set for a few status reads;
+  * it has no SFDP: Read SFDP (5Ah) is not one of its commands, so it answers all ones. `sfdp` set to some
+    bytes makes it a part that has, answering from them.
 
 Fault switches (`erase_fails_at`, `program_flips_at`, `p_err_at`) exist because
 a flash that always works tests none of the checking code.
 """
 
-import importlib.util
-import pathlib
-
 import pytest
-
-_PATH = pathlib.Path(__file__).resolve().parents[1] / "designs" / "acorn-pcie" / "host" / "spi_flash.py"
-_spec = importlib.util.spec_from_file_location("spi_flash", _PATH)
-sf = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(sf)
+from fpgas_online_verify.boards.acorn import spi_flash as sf
 
 RDID = bytes.fromhex("0102194d0180")
 SIZE = 8 << 20  # enough for both slots; the real part is 32 MiB
@@ -44,6 +39,7 @@ class FakeS25FL:
         self.erase_fails_at = None
         self.program_flips_at = None
         self.p_err_at = None
+        self.sfdp = None
         self._rx = bytearray()
         self._tx = []
 
@@ -81,6 +77,9 @@ class FakeS25FL:
             return self.mem[(int.from_bytes(self._rx[1:5], "big") + index - 5) % SIZE]
         if op == 0x4B and index >= 5:
             return 0xA0 + (index - 5) if index - 5 < 16 else 0xFF
+        if op == 0x5A and index >= 5 and self.sfdp is not None:  # 3 address bytes, then 8 dummy clocks
+            addr = int.from_bytes(self._rx[1:4], "big") + index - 5
+            return self.sfdp[addr] if addr < len(self.sfdp) else 0xFF
         return 0xFF
 
     # -- commands that act when CS rises ---------------------------------------------------------
@@ -203,7 +202,97 @@ def test_identify_works_straight_after_configuration(bus):
     assert info["part"] == "S25FL256S"
     assert info["unique_id"] == bytes(range(0xA0, 0xB0)).hex()
     assert info["quad_enabled"] is True
+    assert info["unique_id_opcode"] == 0x4B
     assert bus.cs_n == 1
+
+
+# An SFDP header as JESD216 lays it out: "SFDP", minor 6, major 1, two parameter headers (NPH 1), access
+# protocol FFh; then the first parameter header (the basic table, ID 00h, revision 1.6, 16 DWORDs at 30h).
+SFDP_1_6 = b"SFDP" + bytes([0x06, 0x01, 0x01, 0xFF]) + bytes([0x00, 0x06, 0x01, 0x10, 0x30, 0x00, 0x00, 0xFF])
+
+
+def test_identify_reads_the_sfdp_revision_from_its_header(bus, chip):
+    chip.sfdp = SFDP_1_6
+    info = sf.Flash(bus).identify()
+    assert info["sfdp"] == "1.6"
+    assert info["sfdp_header"] == SFDP_1_6[:8].hex()
+    assert "sfdp_error" not in info
+    assert 0x5A in chip.opcodes
+
+
+def test_an_s25fl256s_has_no_sfdp_signature_so_its_sfdp_is_none(bus, chip):
+    info = sf.Flash(bus).identify()  # the fake S25FL256S answers 5Ah with all ones, as the part does
+    assert info["sfdp"] == "none" and info["sfdp_header"] == "ff" * 8
+
+
+@pytest.mark.parametrize(("header", "revision"), [
+    (SFDP_1_6, "1.6"),
+    (b"SFDP" + bytes([0x00, 0x01, 0x00, 0xFF]), "1.0"),
+    (b"SFDP" + bytes([0x08, 0x01, 0x02, 0xFF]), "1.8"),
+    (b"\xff" * 8, "none"),
+    (b"\x00" * 8, "none"),
+    (b"SFDX" + bytes([0x06, 0x01, 0x01, 0xFF]), "none"),
+    (b"SFDP", None),  # a header cut short is not a read, as rpi-hwid's sfdp_summary() has it
+    (b"\xff" * 7, None),
+    (b"", None),
+])  # fmt: skip
+def test_the_sfdp_revision_is_major_dot_minor_or_none(header, revision):
+    assert sf.sfdp_revision(header) == revision
+
+
+def test_read_sfdp_sends_a_3_byte_address_and_8_dummy_clocks(bus, chip):
+    sent = []
+    exchange = chip.exchange
+    chip.exchange = lambda byte: sent.append(byte) or exchange(byte)
+    chip.sfdp = SFDP_1_6
+    flash = sf.Flash(bus)
+    flash._wake()
+    sent.clear()
+    assert flash.sfdp_header() == SFDP_1_6[:8]
+    assert sent[:5] == [0x5A, 0, 0, 0, 0] and len(sent) == 5 + 8
+
+
+class SfdpFails(FakeBus):
+    """A bus whose SPI master stops answering during Read SFDP (as a UART link that drops would)."""
+
+    def write(self, addr, value):
+        super().write(addr, value)
+        if addr == sf.SPI_CONTROL and self.flash.opcodes and self.flash.opcodes[-1] == 0x5A:
+            raise OSError("the link stopped answering")
+
+
+def test_a_failed_sfdp_read_is_an_sfdp_error_and_the_ids_stand(chip):
+    info = sf.Flash(SfdpFails(chip)).identify()
+    assert info["sfdp_error"] == "Read SFDP (0x5a) failed: the link stopped answering"
+    assert "sfdp" not in info and info["rdid"] == RDID.hex() and info["part"] == "S25FL256S"
+
+
+def test_a_header_cut_short_is_an_sfdp_error_and_the_ids_stand(bus, monkeypatch):
+    monkeypatch.setattr(sf.Flash, "sfdp_header", lambda flash: b"SFDP")
+    info = sf.Flash(bus).identify()
+    assert info["sfdp_error"] == "Read SFDP (0x5a) gave 4 bytes, not 8"
+    assert "sfdp" not in info and info["sfdp_header"] == b"SFDP".hex() and info["part"] == "S25FL256S"
+
+
+def test_read_sfdp_is_a_read_opcode():
+    assert sf.RSFDP == 0x5A and sf.RSFDP in sf.READ_OPCODES and sf.RSFDP not in sf.WRITE_OPCODES
+
+
+@pytest.mark.parametrize(
+    ("rdid", "part"),
+    [
+        ("0102194d0180", "S25FL256S"),  # byte 5: 4 KB parameter sectors; byte 6: FL-S
+        ("0102194d0080", "S25FL256S"),  # byte 5: uniform 256 KB sectors; the same part
+        ("0102194d0181", "S25FS256S"),  # the same three bytes as an S25FL256S: byte 6 tells them apart
+        ("0102194d0081", "S25FS256S"),
+        ("0102194d0182", "S25Fx256S"),  # a family ID not known: the family's name, from bytes 1-3
+        ("010219", "S25Fx256S"),  # only three bytes
+        ("010220", "S25FL512S"),
+        ("ef4018000000", "unknown"),
+    ],
+)
+def test_the_part_is_named_from_the_family_id_in_rdid_byte_6(rdid, part):
+    assert sf.part(bytes.fromhex(rdid)) == part
 
 
 def test_read_spans_shifts_and_uses_four_byte_addresses(bus, chip):
@@ -288,3 +377,184 @@ def test_image_info_reads_the_multiboot_header():
     assert (info["wbstar"], info["iprog"], info["watchdog"], info["idcode"]) == (0x400000, True, True, 0x03636093)
     info = sf.image_info(OPERATIONAL)
     assert (info["wbstar"], info["iprog"], info["watchdog"]) == (0, False, True)
+
+
+# -- a driver holds BAR0 -------------------------------------------------------------------------------
+
+
+def _pci(tmp_path, bdf="0001:01:00.0", driver=None):
+    root = tmp_path / "devices"
+    (root / bdf).mkdir(parents=True)
+    if driver:
+        (tmp_path / "drivers" / driver).mkdir(parents=True)
+        (root / bdf / "driver").symlink_to(tmp_path / "drivers" / driver)
+    return root
+
+
+def test_bound_driver_names_the_driver_or_none(tmp_path):
+    assert sf.bound_driver("0001:01:00.0", _pci(tmp_path / "a")) is None
+    assert sf.bound_driver("0001:01:00.0", _pci(tmp_path / "b", driver="litepcie")) == "litepcie"
+
+
+def test_the_flash_tool_refuses_a_board_litepcie_holds_before_mapping_bar0(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(sf, "SYSFS_PCI", str(_pci(tmp_path, driver="litepcie")))
+    monkeypatch.setattr(sf, "LOCK", str(tmp_path / "lock"))
+
+    def no_bar0(bdf, sysfs=None):
+        raise AssertionError("BAR0 belongs to litepcie.ko")
+
+    monkeypatch.setattr(sf, "open_bar0", no_bar0)
+    assert sf.main(["--bdf", "0001:01:00.0", "id"]) == 1
+    out = capsys.readouterr().out
+    assert "error: litepcie.ko is bound: not checked" in out
+    assert "RESULT: FAIL" in out
+
+
+def test_the_uart_path_is_refused_too_while_litepcie_is_bound(tmp_path, monkeypatch, capsys):
+    """Over UART the bridge reaches the same SPI master that litepcie.ko's flash ioctl drives."""
+    monkeypatch.setattr(sf, "SYSFS_PCI", str(_pci(tmp_path, driver="litepcie")))
+    monkeypatch.setattr(sf, "LOCK", str(tmp_path / "lock"))
+
+    def no_uart(port):
+        raise AssertionError("the SoC's SPI master belongs to litepcie.ko")
+
+    monkeypatch.setattr(sf, "UARTBus", no_uart)
+    assert sf.main(["--uart", "/dev/ttyAMA0", "id"]) == 1
+    assert "error: litepcie.ko is bound: not checked" in capsys.readouterr().out
+
+
+def test_the_uart_path_is_fine_on_a_host_without_pci(tmp_path, monkeypatch):
+    monkeypatch.setattr(sf, "SYSFS_PCI", str(tmp_path / "no-pci"))
+    assert sf.litepcie_bound_anywhere() is None
+
+
+def _bar0_sysfs(tmp_path, command):
+    dev = tmp_path / "0001:01:00.0"
+    dev.mkdir(parents=True)
+    config = bytearray(64)
+    config[4:6] = command.to_bytes(2, "little")
+    (dev / "config").write_bytes(config)
+    (dev / "resource0").write_bytes(b"\xff" * sf.BAR0_SIZE)  # what an unanswered read gives
+    return dev
+
+
+def test_the_flash_tool_turns_memory_decoding_on_for_bar0_and_back_off_after(tmp_path, monkeypatch, capsys):
+    """With no driver bound, memory decoding is off and every BAR0 read is all ones ("RDID ffffffffffff"): the tool
+    turns it on as the check does (open_bar0), and puts it back. Here resource0 is a plain file of all ones, so the
+    flash does not identify itself, but the decoding bit is seen on while BAR0 is read."""
+    dev = _bar0_sysfs(tmp_path / "devices", 0x0000)
+    monkeypatch.setattr(sf, "SYSFS_PCI", str(tmp_path / "devices"))
+    monkeypatch.setattr(sf, "LOCK", str(tmp_path / "lock"))
+    seen = []
+    real = sf.Bar0Bus.read
+
+    def read(self, addr):
+        seen.append(int.from_bytes((dev / "config").read_bytes()[4:6], "little"))
+        return real(self, addr)
+
+    monkeypatch.setattr(sf.Bar0Bus, "read", read)
+    assert sf.main(["--bdf", "0001:01:00.0", "id"]) == 1
+    assert seen and all(c & 0x2 for c in seen)
+    assert int.from_bytes((dev / "config").read_bytes()[4:6], "little") == 0x0000
+    assert "flash did not identify itself" in capsys.readouterr().out
+
+
+# -- lock files ------------------------------------------------------------------------------------------------
+
+
+class Opens:
+    """Wraps os.open: records each (path, flags), and can refuse with EACCES as fs.protected_regular does."""
+
+    def __init__(self, monkeypatch, module, refuse=False):
+        self.calls, self.refuse, self.real = [], refuse, module.os.open
+        monkeypatch.setattr(module.os, "open", self)
+
+    def __call__(self, path, flags, mode=0o777):
+        self.calls.append((str(path), flags))
+        if self.refuse:
+            raise PermissionError(13, "Permission denied", str(path))
+        return self.real(path, flags, mode)
+
+
+def test_an_existing_lock_file_is_opened_without_o_creat(tmp_path, monkeypatch):
+    import os
+
+    lock = tmp_path / "board.lock"
+    lock.write_text("")
+    opens = Opens(monkeypatch, sf)
+    sf.hold_lock(str(lock)).close()
+    assert opens.calls and all(not flags & os.O_CREAT for _, flags in opens.calls)
+    assert all(not flags & (os.O_WRONLY | os.O_RDWR | os.O_TRUNC) for _, flags in opens.calls)
+
+
+def test_a_missing_lock_file_is_created_0644_with_o_excl(tmp_path, monkeypatch):
+    import os
+
+    old = os.umask(0o022)
+    try:
+        lock = tmp_path / "run" / "board.lock"
+        opens = Opens(monkeypatch, sf)
+        sf.hold_lock(str(lock)).close()
+    finally:
+        os.umask(old)
+    assert (lock.stat().st_mode & 0o777) == 0o644
+    created = [flags for _, flags in opens.calls if flags & os.O_CREAT]
+    assert created and all(flags & os.O_EXCL for flags in created)
+
+
+def test_a_lock_file_that_cannot_be_opened_is_a_clear_error(tmp_path, monkeypatch):
+    lock = tmp_path / "board.lock"
+    lock.write_text("")
+    Opens(monkeypatch, sf, refuse=True)
+    with pytest.raises(sf.LockError) as refused:
+        sf.hold_lock(str(lock)).close()
+    assert str(lock) in str(refused.value) and "owned by" in str(refused.value)
+
+
+def test_fpgas_acorn_flash_says_why_it_cannot_take_the_lock(tmp_path, monkeypatch, capsys):
+    lock = tmp_path / "lock"
+    lock.write_text("")
+    monkeypatch.setattr(sf, "LOCK", str(lock))
+    Opens(monkeypatch, sf, refuse=True)
+    assert sf.main(["id"]) == 1
+    out = capsys.readouterr().out
+    assert f"cannot open the lock file {lock}" in out and "RESULT: FAIL" in out
+
+
+# -- the SoC lock file ------------------------------------------------------------------------------------------
+
+
+def test_a_normal_soc_lock_file_is_opened(tmp_path):
+    lock = tmp_path / "acorn.lock"
+    lock.write_text("")
+    sf.hold_lock(str(lock)).close()
+    assert lock.is_file() and not lock.is_symlink()
+
+
+@pytest.mark.parametrize("target", ["dangling", "real"])
+def test_a_soc_lock_file_that_is_a_symlink_is_refused_and_named(tmp_path, target):
+    # A dangling link spun fpgas-acorn-flash for ever (ENOENT, then EEXIST); a link is never followed.
+    real = tmp_path / "elsewhere"
+    if target == "real":
+        real.write_text("keep")
+    lock = tmp_path / "acorn.lock"
+    lock.symlink_to(real)
+    with pytest.raises(sf.LockError, match="symlink") as refused:
+        sf.hold_lock(str(lock))
+    assert str(lock) in str(refused.value)
+    assert lock.is_symlink() and (real.read_text() == "keep" if target == "real" else not real.exists())
+
+
+def test_a_soc_lock_file_that_keeps_vanishing_is_an_error_not_a_spin(tmp_path, monkeypatch):
+    import os
+
+    calls = []
+
+    def racing(path, flags, mode=0o777):  # gone for the plain open, there for the create: every time
+        calls.append(flags)
+        raise FileExistsError(17, "File exists") if flags & os.O_CREAT else FileNotFoundError(2, "No such file")
+
+    monkeypatch.setattr(sf.os, "open", racing)
+    with pytest.raises(sf.LockError, match="gone, then there"):
+        sf.open_lock(str(tmp_path / "acorn.lock"))
+    assert len(calls) == 2 * sf.LOCK_OPEN_TRIES and all(flags & os.O_NOFOLLOW for flags in calls)

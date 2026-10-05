@@ -1,0 +1,47 @@
+"""Sqrl Acorn CLE-215+ / CLE-101 (and NiteFury/LiteFury): found on PCI, checked by suite.py.
+
+Every Xilinx or SQRL PCIe endpoint is claimed. The Acorn-family images are recognised: the fpgas.online SoC
+(10ee:7021 with our subsystem IDs), SQRL's factory image and the vendor XDMA sample. Two Xilinx PCIe boards
+that are not Acorns are named: a PCIe Screamer running PCILeech (10ee:0666), and a stock XDMA design that is
+most likely a PicoEVB (10ee:7021 subsystem 10ee:0007, told apart from an old LitePCIe build of ours with the
+same IDs by the XDMA class code 070001 and its BAR2). Anything else (such an older build of ours: one BAR,
+LitePCIe's class; or another design) fails as "not a design we built": an FPGA is plainly there, so
+reporting no board at all would hide it.
+
+An Acorn has its links to the Pi checked as well as PCIe (links.py): P1 JTAG, the P2 UART and, on the Pi 5
+setup, the P2 spare balls. Which setup the host is, and how it is wired, comes from wiring.toml (setup.py).
+
+spi_flash.py (fpgas-acorn-flash) is the operator's tool for the same flash, and shares the lock.
+"""
+
+from ...board import Board
+from . import check, suite
+
+
+class Acorn(Board):
+    name = slug = "acorn"
+    title = "Sqrl Acorn"
+    doc = "acorn.md"
+    lock = str(check.LOCK)  # shared with fpgas-acorn-flash (spi_flash.py)
+    tests = suite.SELECTABLE  # each can be run on its own with --test (power-cycle only when switched on)
+    opt_in = ((suite.POWER_CYCLE, "power-cycle-check = on"),)  # not run, or selectable, without the setting
+    label_fields = ("dna", "idcode", "flash", "flash_jedec", "flash_uid", "identifier")
+
+    def spot(self, host, usb, pci):
+        return [d for d in map(check.describe, pci) if d]
+
+    def weak(self, found):
+        return found.get("kind") not in ("fpgas-online", "sqrl-factory")  # the Xilinx sample runs on a NeTV2 too
+
+    def identify(self, host, found, options):
+        """Only the reads: pcie-bar0 (the running build, the flash's identity and the DNA over BAR0) and jtag
+        (IDCODE and DNA over P1). Neither writes the flash or reconfigures the FPGA; over BAR0 only the SPI
+        master and the flash's chip select are written (check.IdentifyBus)."""
+        options = {**options, "tests": list(suite.IDENTIFY_TESTS), "event": None, "identify_only": True}
+        return suite.check_board(found, options)["identity"]
+
+    def check(self, host, found, options):
+        return suite.check_board(found, options)
+
+
+BOARD = Acorn()

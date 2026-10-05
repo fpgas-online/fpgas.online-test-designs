@@ -16,7 +16,7 @@ through `litex_server`. Wire format checked against
 `litex/tools/remote/comm_uart.py`.
 
 Run it directly for a quick link check:
-    python3 uartbone_link.py [--port /dev/ttyAMA0] [--slow]
+    python3 -m fpgas_online_verify.boards.acorn.uartbone_link [--port /dev/ttyAMA0] [--slow]
 """
 
 import argparse
@@ -156,13 +156,23 @@ class UARTBoneLink:
             raise LinkError(f"no fpgas.online SoC answered at {RESET_BAUD} baud after a break")
         if not fast:
             return self.baud
+        return self.speed_up()
 
-        self.write(TUNING_WORD_ADDR, [tuning_word(FAST_BAUD)])
+    def speed_up(self, addr=TUNING_WORD_ADDR, word=None, baud=FAST_BAUD):
+        """Move both ends from the reset rate to `baud`: write the PHY's tuning word (`word`, by default the
+        one for `baud` at SYS_CLK_FREQ) at `addr`, then reopen the port. Returns the baud rate it ended at."""
+        self.write(addr, [tuning_word(baud) if word is None else word])
         self._settle(10 * 10 / RESET_BAUD + 0.02)  # let the 10-byte write drain at 1200 before reopening
-        self._open(FAST_BAUD)
+        self._open(baud)
         if not self._alive():  # a failed probe has already sent the break and gone back to the reset rate
-            raise LinkError(f"link worked at {RESET_BAUD} baud but not at {FAST_BAUD}; it is back at {RESET_BAUD}")
+            raise LinkError(f"link worked at {RESET_BAUD} baud but not at {baud}; it is back at {RESET_BAUD}")
         return self.baud
+
+    def reset(self):
+        """Back to the reset rate, with the bridge reset: where the next user of the port expects the link."""
+        if self.port is not None:
+            self._break()
+            self._open(RESET_BAUD)
 
     def close(self):
         if self.port is not None:

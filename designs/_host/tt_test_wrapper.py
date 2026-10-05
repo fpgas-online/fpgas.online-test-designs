@@ -9,9 +9,11 @@ This wrapper sets up a transparent UART bridge on the RP2350 so test
 scripts can communicate with the FPGA as if connected directly.
 
 Flow:
-  1. Upload bitstream to RP2350 filesystem (via mpremote)
-  2. Open raw serial to RP2350, enter MicroPython raw REPL
-  3. Execute combined script: set up UART0, program FPGA, enter bridge mode
+  1. Program the FPGA (tt_fpga_program.py: the RP2350 reads the bitstream from
+     this host over the serial link; nothing is written to the board)
+  2. Open raw serial to RP2350, enter MicroPython raw REPL (no reset: the
+     FPGA stays programmed)
+  3. Execute the bridge script: set up the UART, start the clock, bridge
   4. Create PTY pair -- test script connects to the PTY slave
   5. Relay data between serial (USB CDC / bridge) and PTY
   6. Run test script, report results, clean up
@@ -35,73 +37,16 @@ import threading
 import time
 import tty
 
-BITSTREAM_DEVICE_PATH = "/bitstreams/custom.bin"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import tt_fpga_program
 
-# MicroPython script that runs on the RP2350.
-# 1. Programs the iCE40 via PIO SPI
-# 2. Sets up UART1 on correct TTDBv3 GPIO pins
-# 3. Starts 50 MHz clock with deinit/recreate PWM fix
-# 4. Enters transparent UART <-> USB CDC bridge
-PROGRAM_AND_BRIDGE_SCRIPT = """\
+# MicroPython script that runs on the RP2350 once tt_fpga_program.py has programmed the iCE40:
+# 1. Sets up UART1 on correct TTDBv3 GPIO pins
+# 2. Starts 50 MHz clock with deinit/recreate PWM fix
+# 3. Enters transparent UART <-> USB CDC bridge
+BRIDGE_SCRIPT = """\
 from machine import UART, Pin
 import sys, utime
-
-from ttboard.fpga.fabricfox import DoDummyClocks, spi_write
-from rp2 import StateMachine
-
-# TTDBv3 SPI programming pins (hardcoded to bypass GPIOMap firmware bug:
-# all boards load GPIOMapTT04 instead of GPIOMapTTDBv3, so pin_indices()
-# returns wrong GPIO numbers).
-sck_pin = Pin(6, Pin.OUT)    # MNG03
-mosi_pin = Pin(3, Pin.OUT)   # MNG00
-ss_pin = Pin(5, Pin.OUT)     # MNG02
-reset_pin = Pin(1, Pin.OUT)  # CTRL_SEL_nRST (CRESET_B)
-
-reset_pin.low()
-ss_pin.low()
-utime.sleep_us(15000)
-reset_pin.high()
-utime.sleep_us(15000)
-
-freq = 1_000_000
-sm = StateMachine(0, spi_write, freq=freq*2*8,
-                  sideset_base=Pin(6),
-                  out_base=Pin(3))
-sm.restart()
-sm.active(1)
-try:
-    with open("__BITSTREAM_PATH__", "rb") as f:
-        if DoDummyClocks:
-            ss_pin.high()
-            utime.sleep_us(2000)
-            sm.put(0)
-            utime.sleep_us(20)
-            while sm.tx_fifo() != 0:
-                utime.sleep_us(2)
-            ss_pin.low()
-            utime.sleep_us(2000)
-        bc = 0
-        while True:
-            data = f.read(128)
-            if not data:
-                for _ in range(6):
-                    while sm.tx_fifo() != 0:
-                        utime.sleep_us(1)
-                    sm.put(0)
-                break
-            for b in data:
-                sm.put(b & 0xff, 24)
-                while sm.tx_fifo() != 0:
-                    utime.sleep_us(1)
-                bc += 1
-        while sm.tx_fifo():
-            utime.sleep_us(10)
-finally:
-    sm.active(0)
-    ss_pin.high()
-    sm.restart()
-
-sys.stdout.write('PROGRAM_OK\\n')
 
 # Set up UART1 on correct TTDBv3 pins BEFORE starting the clock,
 # so it captures the firmware boot banner.
@@ -159,7 +104,7 @@ while True:
             d = si.read(1)
             if d:
                 uart.write(d)
-""".replace("__BITSTREAM_PATH__", BITSTREAM_DEVICE_PATH)
+"""
 
 
 def reset_rp2350(port):
@@ -212,64 +157,22 @@ def usb_power_cycle(port):
             break
 
 
-def _install_safe_main(port):
-    """Replace the ttboard main.py with a minimal version.
-
-    The stock ttboard main.py calls DemoBoard() which probes I2C and
-    can hang permanently, making the RP2350 unrecoverable without a
-    physical reset.  Replace it with a no-op so the REPL always starts.
-    """
-    try:
-        result = subprocess.run(
-            [
-                "mpremote",
-                "connect",
-                port,
-                "exec",
-                "f = open('main.py', 'w')\n"
-                "f.write('# Safe main.py for FPGA test automation\\n')\n"
-                "f.write('print(\"TT FPGA board ready\")\\n')\n"
-                "f.close()",
-            ],
-            timeout=30,
-            capture_output=True,
-        )
-        if result.returncode != 0:
-            print("Warning: safe main.py install failed (non-critical)", file=sys.stderr)
-    except subprocess.TimeoutExpired:
-        print("Warning: safe main.py install timed out (non-critical)", file=sys.stderr)
-
-
-def upload_bitstream(port, local_path):
-    """Upload bitstream to RP2350 filesystem via mpremote."""
+def program_fpga(port, local_path):
+    """Program the iCE40 with the bitstream `local_path` on this host. Nothing is written to the board."""
     # Break any stuck MicroPython script before mpremote tries raw REPL.
     reset_rp2350(port)
-
-    subprocess.call(
-        ["mpremote", "connect", port, "exec", "import os\ntry:\n os.mkdir('/bitstreams')\nexcept OSError:\n pass"],
-        timeout=30,
-    )
-    rc = subprocess.call(
-        ["mpremote", "connect", port, "cp", local_path, ":" + BITSTREAM_DEVICE_PATH],
-        timeout=120,
-    )
-    if rc != 0:
+    rc, out, err = tt_fpga_program.program(port, local_path)
+    if rc != 0 or "PROGRAM_OK" not in out:
         # mpremote failed — try USB power cycle and retry once
-        print("mpremote failed, trying USB power cycle recovery...")
+        print("programming failed, trying USB power cycle recovery...")
+        print((out + err).strip()[-500:])
         usb_power_cycle(port)
         reset_rp2350(port)
-        subprocess.call(
-            ["mpremote", "connect", port, "exec", "import os\ntry:\n os.mkdir('/bitstreams')\nexcept OSError:\n pass"],
-            timeout=30,
-        )
-        rc = subprocess.call(
-            ["mpremote", "connect", port, "cp", local_path, ":" + BITSTREAM_DEVICE_PATH],
-            timeout=120,
-        )
-    if rc == 0:
-        # Install safe main.py to prevent DemoBoard() hangs on reboot
-        _install_safe_main(port)
-    return rc == 0
+        rc, out, err = tt_fpga_program.program(port, local_path)
+    print(out.strip())
+    if err.strip():
+        print(err.strip(), file=sys.stderr)
+    return rc == 0 and "PROGRAM_OK" in out
 
 
 def open_raw_serial(port):
@@ -361,24 +264,24 @@ def main():
     bitstream = sys.argv[2]
     test_cmd = sys.argv[3:]
 
-    # Step 1: Upload bitstream to RP2350
-    print("Uploading bitstream to RP2350...")
-    if not upload_bitstream(port, bitstream):
-        print("ERROR: Failed to upload bitstream", file=sys.stderr)
+    # Step 1: Program the FPGA; the RP2350 reads the bitstream from this host
+    print("Programming FPGA...")
+    if not program_fpga(port, bitstream):
+        print("ERROR: Failed to program the FPGA", file=sys.stderr)
         return 1
-    print("Upload complete.")
+    print("FPGA programmed.")
 
-    # Step 2: Open raw serial and program + bridge
+    # Step 2: Open raw serial and start the bridge
     print("Opening raw serial to RP2350...")
     serial_fd = open_raw_serial(port)
 
     print("Entering raw REPL...")
     enter_raw_repl(serial_fd)
 
-    print("Programming FPGA and starting UART bridge...")
+    print("Starting UART bridge...")
     ok, extra_data = execute_raw_repl(
         serial_fd,
-        PROGRAM_AND_BRIDGE_SCRIPT,
+        BRIDGE_SCRIPT,
         marker=b"BRIDGE_ACTIVE",
         timeout=60,
     )
@@ -388,7 +291,7 @@ def main():
         os.close(serial_fd)
         return 1
 
-    print("FPGA programmed, UART bridge active.")
+    print("UART bridge active.")
     print(f"Extra data after marker ({len(extra_data)} bytes): {extra_data[:200]!r}")
 
     # Step 3: Create PTY pair
@@ -402,27 +305,13 @@ def main():
     pty_attrs[3] = 0
     termios.tcsetattr(slave_fd, termios.TCSANOW, pty_attrs)
 
-    if extra_data:
-        os.write(master_fd, extra_data)
-
-    # Wait for boot data from RP2350 bridge.  The MicroPython script
-    # writes the captured FPGA boot banner to stdout AFTER the
-    # BRIDGE_ACTIVE marker, so it arrives on serial_fd slightly after
-    # execute_raw_repl() returns.  Read it here and inject into the
-    # PTY so the test script sees the BIOS banner immediately.
-    boot_deadline = time.monotonic() + 1.0
-    while time.monotonic() < boot_deadline:
-        r, _, _ = select.select([serial_fd], [], [], 0.2)
-        if serial_fd in r:
-            boot_data = os.read(serial_fd, 4096)
-            if boot_data:
-                os.write(master_fd, boot_data)
-                print(f"Boot data forwarded to PTY ({len(boot_data)} bytes)")
-                break
-        else:
-            # No more data within 200 ms — boot data has been consumed
-            # or the FPGA didn't produce any.
-            break
+    # Everything the board sends -- the data after the marker, the FPGA's boot output the MicroPython script
+    # captured and writes after BRIDGE_ACTIVE, and whatever follows -- is held until the test script has
+    # opened the PTY: pyserial empties the input buffer when it opens a port, so anything written to the
+    # PTY before then is lost. A design that prints only at boot (the SPI flash test's JEDEC ID) then never
+    # reached the test (pi-sw2-p33, 2026-09-27).
+    pending = bytearray(extra_data)
+    reader_ready = threading.Event()
 
     # Step 4: Start relay thread
     relay_active = True
@@ -431,11 +320,18 @@ def main():
     def relay_loop():
         while relay_active:
             try:
+                if reader_ready.is_set() and pending:
+                    os.write(master_fd, bytes(pending))
+                    relay_stats["serial_to_pty"] += len(pending)
+                    print(f"Held data forwarded to PTY ({len(pending)} bytes)", flush=True)
+                    pending.clear()
                 r, _, _ = select.select([serial_fd, master_fd], [], [], 0.1)
                 for ready_fd in r:
                     if ready_fd == serial_fd:
                         data = os.read(serial_fd, 4096)
-                        if data:
+                        if data and not reader_ready.is_set():
+                            pending.extend(data)
+                        elif data:
                             os.write(master_fd, data)
                             relay_stats["serial_to_pty"] += len(data)
                     elif ready_fd == master_fd:
@@ -470,9 +366,15 @@ def main():
     if actual_cmd and actual_cmd[0] in ("python3", "python"):
         actual_cmd.insert(1, "-u")
     print("Running: {}".format(" ".join(actual_cmd)), flush=True)
+    child = subprocess.Popen(actual_cmd)
+    if not wait_for_reader(child.pid, slave_name):
+        print(f"WARNING: the test did not open {slave_name} within 10 s; relaying anyway", flush=True)
+    reader_ready.set()
     try:
-        rc = subprocess.call(actual_cmd, timeout=180)
+        rc = child.wait(timeout=180)
     except subprocess.TimeoutExpired:
+        child.kill()
+        child.wait()
         print("ERROR: Test timed out", file=sys.stderr)
         rc = 1
 
@@ -497,6 +399,22 @@ def main():
             os.close(fd)
 
     return rc
+
+
+def wait_for_reader(pid, tty, timeout=10.0, settle=0.3):
+    """Wait until process `pid` has `tty` open (Linux: /proc/<pid>/fd), then `settle` seconds more for the
+    flush that follows pyserial's open. Gives up after `timeout`: the data is released anyway."""
+    deadline = time.monotonic() + timeout
+    fd_dir = f"/proc/{pid}/fd"
+    while time.monotonic() < deadline:
+        try:
+            if any(os.readlink(os.path.join(fd_dir, fd)) == tty for fd in os.listdir(fd_dir)):
+                time.sleep(settle)
+                return True
+        except OSError:
+            pass  # the process has not started, has exited, or an fd closed while we looked
+        time.sleep(0.05)
+    return False
 
 
 if __name__ == "__main__":

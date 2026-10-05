@@ -39,12 +39,14 @@ class BreakResetUARTBone(LiteXModule):
             )
         )
         self.wishbone = self.bridge.wishbone
+        # Does what a break does, for as long as it is high (P2SerialSwitch holds it while the pins are GPIOs).
+        self.reset = Signal()
         self.detector = UARTBreakDetector(clk_freq, break_s=break_s)
         self.comb += [
             self.detector.rx.eq(pads.rx),
-            self.bridge.reset.eq(self.detector.detected),
+            self.bridge.reset.eq(self.detector.detected | self.reset),
         ]
         self.sync += If(
-            self.detector.detected,
+            self.detector.detected | self.reset,
             self.bridge.phy._tuning_word.storage.eq(tuning_word(reset_baud, clk_freq)),
         )

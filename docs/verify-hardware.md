@@ -33,10 +33,9 @@ local ──ssh -o ProxyJump=pi@tweed.welland.mithis.com──> pi@10.21.2.46 's
 - The gateway login is the restricted `pi` jump account (rbash, only `ssh`
   and `ssh-keyscan`, an sshd `ForceCommand` wrapper, no sudo), managed by
   fpgas.online-infra `roles/jump`. It only provides the TCP forward; the
-  Pi authenticates your own key. tweed's copy was lost in the 2026-08-26
-  reinstall and restored from Ansible on 2026-09-03 (infra PR #61).
+  Pi authenticates your own key.
   `tweed.welland.mithis.com` resolves to `10.21.0.1` over WireGuard and to
-  tweed's public IPv6; see the DNS notes in that PR if the IPv6 path hangs.
+  tweed's public IPv6.
 - Each host entry names its **login user** (`user`, default `root`). The
   Welland Acorn Pi 5s only allow `pi` (pubkey) with passwordless sudo, so
   `_build_ssh_cmd(..., as_root=True)` wraps the command in
@@ -46,8 +45,9 @@ local ──ssh -o ProxyJump=pi@tweed.welland.mithis.com──> pi@10.21.2.46 's
   resolve to `/root`.
 - Only the six Welland Acorn hosts (`welland-sw2-p29` … `p48`, i.e.
   `10.21.2.<port>` under the [VLAN-per-port scheme](hardware/site-welland.md))
-  have been migrated. The Arty/NeTV2/Fomu/TT entries still carry the
-  pre-2026-08-23 `10.21.0.1NN` addresses and have not been re-probed.
+  have current addresses. The Arty/NeTV2/Fomu/TT entries carry flat
+  `10.21.0.1NN` addresses that Welland does not use
+  ([#17](https://github.com/fpgas-online/fpgas.online-test-designs/issues/17)).
 
 **Direct-SSH hosts** (rpi5-netv2, rpi3-netv2): reachable directly by
 hostname; the login user is part of `target`.
@@ -56,8 +56,8 @@ Use `--dry-run` to print the exact argv for every selected test before
 touching hardware.
 
 Run **one `verify_hardware.py` at a time**. Two instances going through the
-same jump host concurrently produced spurious "Host … is unreachable" and
-rc 255 failures on 2026-09-03; the same boards passed when run sequentially.
+same jump host concurrently get spurious "Host … is unreachable" and rc 255
+failures; the same boards pass when run sequentially.
 
 ## Host and Board Definitions
 
@@ -89,7 +89,7 @@ The `HOSTS` dict maps host names to their properties:
 
 `ssh_upload()` pipes file contents through SSH stdin to `cat > <remote_path>`. This avoids `scp` shell-escaping issues with double-hop SSH. The file data is read locally and sent as raw bytes.
 
-For TT FPGA boards, `EXTRA_UPLOADS` sends additional helper scripts from `designs/_host/` (`tt_fpga_program.py`, `tt_test_wrapper.py`, `tt_pmod_wrapper.py`) that handle RP2350 programming and GPIO release.
+For TT FPGA boards, `EXTRA_UPLOADS` sends additional helper scripts from `designs/_host/` (`tt_fpga_program.py`, `tt_test_wrapper.py`) that handle RP2350 programming and GPIO release.
 
 ## Pre-Test Commands
 
@@ -124,18 +124,17 @@ Programming varies by board:
 finding recorded in [acorn-pinmap.md](hardware/acorn-pinmap.md):
 
 1. `echo 1 > /sys/bus/pci/devices/0001:01:00.0/remove` — reconfiguring the
-   FPGA while its PCIe endpoint is enumerated crashes the Pi 5 outright
-   (2026-08-31, pi-sw2-p47). Skipped if nothing is enumerated.
-2. `ln -sfn /dev/gpiochip15 /dev/gpiochip0` — the fleet's openFPGALoader
-   0.10.0 opens `gpiochip0` unconditionally, but the 40-pin header is
-   `gpiochip15` on the deployed kernel. devtmpfs, so it is redone every time.
+   FPGA while its PCIe endpoint is enumerated crashes the Pi 5 outright.
+   Skipped if nothing is enumerated.
+2. `ln -sfn /dev/gpiochip15 /dev/gpiochip0` — openFPGALoader's libgpiod
+   cable opens `gpiochip0`, but on a Pi 5 the 40-pin header is the RP1's
+   chip. devtmpfs, so it is redone every time.
 3. `openFPGALoader --cable libgpiod --pins 10:9:11:8 <bitstream>` — bit-banged
-   JTAG on the SPI0 pins, TDI:TDO:TCK:TMS, about 16 s for an XC7A200T. The
-   `rp1pio` cable arrives with infra PR #48.
+   JTAG on the SPI0 pins, TDI:TDO:TCK:TMS, about 16 s for an XC7A200T.
 4. `echo 1 > /sys/bus/pci/rescan` — brings the endpoint back (the flash
    design's, or the newly loaded design's if it has PCIe).
 
-**TT FPGA**: `python3 ~/tt_fpga_program.py /dev/ttyACM0 <bitstream>` — Programming goes through the RP2350 microcontroller via USB CDC (`/dev/ttyACM0`). The script uses `mpremote` to upload the bitstream to the RP2350's filesystem, then executes a MicroPython script that programs the iCE40 via PIO-accelerated SPI and starts the 50 MHz clock. After programming, the RP2350 releases all shared GPIO pins to high-impedance so the RPi can communicate with the FPGA directly through the PMOD HAT.
+**TT FPGA**: `python3 ~/tt_fpga_program.py /dev/ttyACM0 <bitstream>` — Programming goes through the RP2350 microcontroller via USB CDC (`/dev/ttyACM0`). The script uses `mpremote mount` to show the RP2350 a copy of the bitstream on the Pi (nothing is written to the RP2350's filesystem), then executes a MicroPython script that reads it from there, programs the iCE40 via PIO-accelerated SPI and starts the 50 MHz clock. After programming, the RP2350 releases all shared GPIO pins to high-impedance so the RPi can communicate with the FPGA directly through the PMOD HAT.
 
 ### Programming Success Detection
 
@@ -174,8 +173,7 @@ The sequence:
 3. `snmpset ... i 1` (on)
 4. Poll `ssh_check_connectivity()` until the host responds (a Pi 5 PXE boot needs more than 90 s; the bound is 240 s)
 
-No fixed sleeps — all waits use polling with bounded timeouts. (The old
-`poe.sh` helper did not survive tweed's 2026-08-30 reinstall.)
+No fixed sleeps — all waits use polling with bounded timeouts.
 
 ## TT FPGA Programming
 
@@ -185,7 +183,7 @@ The RPi connects to the FPGA through the same PMOD HAT used for all other boards
 
 ### Programming Flow (tt_fpga_program.py / tt_pmod_wrapper.py)
 
-1. **Upload bitstream** to RP2350 filesystem via `mpremote` over USB CDC (`/dev/ttyACM0`). Includes `reset_rp2350()` (Ctrl-C to break any stuck MicroPython script) and USB power cycle retry.
+1. **Mount a copy of the bitstream** on the RP2350 with `mpremote mount` over USB CDC (`/dev/ttyACM0`); nothing is written to the RP2350's filesystem. Includes `reset_rp2350()` (Ctrl-C to break any stuck MicroPython script) and USB power cycle retry.
 2. **Program FPGA** via MicroPython raw REPL: PIO SPI to the iCE40, then start the 50 MHz PWM clock on GPIO16.
 3. **Release RP2350 GPIOs to high-Z** — all ui_in, uo_out, and uio pins are set to `Pin.IN` (input mode). This is critical: the RP2350 shares the same physical traces as the PMOD headers. Without releasing, the RP2350's output drivers would contend with the RPi's GPIO signals coming through the PMOD HAT.
 
@@ -195,33 +193,9 @@ After step 3, the RPi has clean access to the FPGA through the PMOD HAT, and tes
 
 The TT Demo Board's PMOD headers carry TinyTapeout I/O signals to/from the iCE40. PMOD cables connect these to the RPi's PMOD HAT ports (JA, JB, JC), mapping each signal to a specific RPi GPIO.
 
-**Inputs (RPi drives → FPGA receives):**
+The Welland hosts are cabled ui_in → HAT JA, uio → HAT JB, uo_out → HAT JC. The per-bit tables (iCE40 pin, HAT pin, RPi GPIO) are in [tt-fpga-pin-mapping.md](hardware/tt-fpga-pin-mapping.md#tinytapeout-io-signals).
 
-| TT Signal | iCE40 Pin | PMOD HAT | RPi GPIO |
-|-----------|-----------|----------|----------|
-| ui_in[0] | 13 | JA1 | 6 |
-| ui_in[1] | 19 | JA7 | 12 |
-| ui_in[2] | 18 | JA8 | 16 |
-| ui_in[3] | 21 | JB1 | 5 |
-| ui_in[4] | 23 | JC1 | 17 |
-| ui_in[5] | 25 | JC3 | 4 |
-| ui_in[6] | 26 | JC4 | 14 |
-| ui_in[7] | 27 | JC9 | 15 |
-
-**Outputs (FPGA drives → RPi reads):**
-
-| TT Signal | iCE40 Pin | PMOD HAT | RPi GPIO |
-|-----------|-----------|----------|----------|
-| uo_out[0] | 38 | JC2 | 18 |
-| uo_out[1] | 42 | JA10 | 21 |
-| uo_out[2] | 43 | JB8 | 8 |
-| uo_out[3] | 44 | JA9 | 20 |
-| uo_out[4] | 45 | JB2 | 11 |
-| uo_out[5] | 46 | JA3 | 19 |
-| uo_out[6] | 47 | JB4 | 10 |
-| uo_out[7] | 48 | JB3 | 9 |
-
-The UART design uses ui_in[3] (iCE40 pin 21, RPi GPIO 5) for serial RX and uo_out[4] (iCE40 pin 45, RPi GPIO 11) for serial TX.
+The UART design uses ui_in[3] (iCE40 pin 21) for serial RX and uo_out[4] (iCE40 pin 45) for serial TX; it is reached through the RP2350's USB bridge, not the RPi GPIOs.
 
 ## Test Execution and Result Detection
 

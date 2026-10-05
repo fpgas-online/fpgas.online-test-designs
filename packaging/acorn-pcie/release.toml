@@ -1,0 +1,15 @@
+# The Acorn PCIe SoC release the fleet is expected to carry, and the only input to
+# fpgas-online-acorn-bitstreams (packaging/acorn-pcie/build_debs.py). The manifest must hash to
+# manifest_sha256 and every asset to its manifest entry, or the build fails.
+#
+# Moving this pin is what changes the images every Acorn host checks its flash against, and which
+# images an operator's reset puts back: change it only in a reviewed PR, after the new release has been
+# published by designs/acorn-pcie/tools/publish_release.py and checked on a board.
+#
+# This release is pinned because its operational images carry the DRAM BIST and the P2 J2/K2 serial/GPIO
+# switch (built with Vivado 2025.2 from e568a40), so the boot check can test the DRAM and every P2 pin from
+# the image in flash. Its cle-215+ images were checked on pi-sw2-p48: Gen2 x1, the BIST over all 1 GiB with
+# 0 errors, every P2 pin both ways, and the UARTBone answering after the switch.
+repo = "fpgas-online/fpgas.online-test-designs"
+tag = "vivado-bitstreams-acorn-pcie-20261001-ge568a408e7bd"
+manifest_sha256 = "0b7a6efb23ae5ed2dbc103190bce0897c10b6c2cbb0a132c7aad47b7f0325115"
