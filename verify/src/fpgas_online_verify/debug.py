@@ -49,6 +49,11 @@ def detect(board, host, args):
 def _variant(board, host, args):
     if args.variant:
         return args.variant
+    if getattr(board, "variant_from_board", False):
+        # Only the boot check asks such a board what it is (it holds the board's port then): by hand, say so.
+        said = ", ".join(board.variants)
+        raise Problem("error", f"which {board.title} this is, is the board's own word, which only the boot check "
+                               f"reads: pass --variant ({said}) to load a design by hand")  # fmt: skip
     if len(board.variants) == 1:
         return next(iter(board.variants))
     found = board.find(host, usb_devices(), pci_devices())  # only from program and test: the lock is held

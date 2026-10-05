@@ -63,7 +63,7 @@ fpgas-verify's own fields:
 | `flash_config` | string | the configuration register, 2 hex digits: `0x02` | the flash was not read |
 | `flash_quad` | boolean | the configuration register's QUAD bit | the flash was not read |
 | `flash_uid_opcode` | string | the command that read the unique ID: `0x4b` | as `flash_uid` |
-| `tinytapeout_note` | string | why the [Tiny Tapeout fields](#tiny-tapeout-fields) were not read: rpi-hwid is not installed | not a TT board, or rpi-hwid is installed |
+| `tinytapeout_note` | string | why the [Tiny Tapeout fields](#tiny-tapeout-fields) were not read: rpi-hwid is not installed (the board then has no `variant`, and its check is an error) | not a TT board, or rpi-hwid is installed |
 | `tinytapeout_error` | string | why rpi-hwid could not give the Tiny Tapeout fields: it failed, gave no usable answer, did not see the board, found no Tiny Tapeout SDK on it, gave an empty field, or could not read `mcu`, `chip`, `demoboard` or `sdk` | not a TT board, rpi-hwid gave the fields, or it is not installed |
 
 ### Tiny Tapeout fields

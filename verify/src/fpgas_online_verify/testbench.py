@@ -312,6 +312,20 @@ class TestBoard(Board):
         <field>_error, which makes the check an error."""
         return {}
 
+    # A board whose variant finding it does not give (the Tiny Tapeout demo board: an RP2 on USB is the same
+    # whatever chip it carries): `found` has no variant, and settle() decides it from what the board itself
+    # said (port_facts), before any design is chosen. Other boards leave this False and nothing changes for
+    # them.
+    variant_from_board = False
+    # variant -> why the check has no test for it: a variant the board can be, that no bitstream here is for.
+    untested: ClassVar[dict] = {}
+
+    def settle(self, asked, found, facts):
+        """The variant of a board with variant_from_board, from `facts`; `asked` is --variant, or None. It is one
+        of `variants` or `untested`, or a Problem saying why the board is not checked: then no test runs and
+        nothing is loaded."""
+        raise NotImplementedError
+
     def identified(self, report, found, options, facts=None):
         """Who the board is (identity.py), from how it was found, its JTAG IDCODE and DNA, and `facts`
         (port_facts): put in the report and sent as fpga-board-identified, before any test runs."""
@@ -340,29 +354,43 @@ class TestBoard(Board):
         return out
 
     def check(self, host, found, options, runner=run):
+        late = self.variant_from_board  # the variant is settled from the board's own word, once its port is ours
         variant = options.get("variant") or found["variant"]
-        report = {"board": self.name, "variant": variant, "found": found, "tests": []}
+        report = {"board": self.name, "variant": None if late else variant, "found": found, "tests": []}
         images = bitstreams.images_dir(self.slug, options.get("images"))
         tests = self.verify_tests if options.get("tests") is None else options["tests"]
+        manifest, refused = None, None
         try:
             unknown = [t for t in tests if t not in self.tests]
             if unknown:
                 raise Problem(
                     "error", f"{self.title} has no test {', '.join(unknown)} (it has {', '.join(self.tests)})"
                 )
-            if variant not in self.variants:
-                raise Problem("error", f"{found} is no {self.title} variant this package has bitstreams for "
-                                       f"({', '.join(self.variants)})")  # fmt: skip
-            manifest = bitstreams.load_manifest(images, self.bitstreams_package)
+            if not late:
+                if variant not in self.variants:
+                    raise Problem("error", f"{found} is no {self.title} variant this package has bitstreams for "
+                                           f"({', '.join(self.variants)})")  # fmt: skip
+                manifest = bitstreams.load_manifest(images, self.bitstreams_package)
         except Problem as p:
             self.identified(report, found, options)
             return {**report, "result": p.result, "reason": p.reason}
-        report["bitstreams"] = manifest.get("version")
-        if self.idcodes:
+        if manifest is not None:
+            report["bitstreams"] = manifest.get("version")
+        if self.idcodes and not late:  # a JTAG part is a variant's: none is known yet for a late one
             report["jtag"] = self.jtag(host, found, variant, runner)
         event = options.get("event") or (lambda stage, details: None)
         with self.services_stopped(runner, options.get("restart_later")) as held:
             facts = self.port_facts(host, found, runner)
+            if late:
+                try:
+                    variant = report["variant"] = self.settle(options.get("variant"), found, facts)
+                    if variant in self.untested:  # known, and nothing here to test it with: said, not guessed at
+                        refused, tests = Problem("fail", self.untested[variant]), []
+                    else:
+                        manifest = bitstreams.load_manifest(images, self.bitstreams_package)
+                        report["bitstreams"] = manifest.get("version")
+                except Problem as p:  # not settled, or no bitstreams: no test runs and nothing is loaded
+                    refused, tests = p, []
             self.identified(report, found, options, facts)
             for test in tests:
                 event("fpga-test-started", {"test": test})
@@ -393,10 +421,14 @@ class TestBoard(Board):
         if held["failed"]:
             report["services_failed"] = held["failed"]
             results.append("error")
+        if refused:
+            results.append(refused.result)
         report["state"] = state
         report["result"] = worst(results)
         bad = [t for t in report["tests"] if t["result"] != "pass"]
         reasons = [f"{t['test']} {t['result']}: {t.get('reason', '')}" for t in bad] + facts_failed + held["failed"]
+        if refused:
+            reasons.insert(0, refused.reason)
         if jtag and jtag["result"] != "pass":
             reasons.insert(0, f"jtag {jtag['result']}: {jtag['reason']}")
         if reasons:

@@ -65,6 +65,17 @@ ADVICE = (
     (r"no device on the (P1 )?JTAG chain|no UARTBone reply",
      "Nothing answered on a cable between the Pi and the board: check that the JTAG and UART cables are seated "
      "and wired as the board's page shows."),
+    (r"did not say which Tiny Tapeout board it is",
+     "The demo board could not be asked whether it carries an FPGA or a Tiny Tapeout chip, so nothing was "
+     "loaded into it. The reason above says what stopped the read; if rpi-hwid is not installed, install it "
+     f"(sudo apt install python3-rpi-hwid, from https://github.com/mithro/rpi-hwid): {DOCS}"
+     "#which-tiny-tapeout-board-it-is"),
+    (r"carries a Tiny Tapeout chip, not an FPGA",
+     "This demo board has a Tiny Tapeout chip. The report says which (its identity's shuttle); the boot check "
+     f"tests only FPGA boards so far, so this is not a fault of the board: {ISSUES}/124"),
+    (r"is not running the Tiny Tapeout firmware",
+     "The demo board's microcontroller is in its USB boot loader. Power-cycle the board; if it comes back the "
+     "same, its firmware has to be installed again by whoever looks after the board."),
     (r"is not installed",
      "A tool the check needs is not installed: the reason above names it."),
     (r"does not match its manifest|manifest\.json is missing",
