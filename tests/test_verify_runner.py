@@ -15,7 +15,7 @@ import stat
 import subprocess
 
 import pytest
-from fpgas_online_verify import config, core, identity, runner, state
+from fpgas_online_verify import conclusion, config, core, identity, runner, state
 from fpgas_online_verify.board import Board, installed
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
 from fpgas_online_verify.boards.acorn import suite as acorn_suite
@@ -396,6 +396,51 @@ def test_a_failed_test_is_not_a_state_change(opts):
     arty.result = "fail"
     report = runner.verify({**opts, "board": "arty"}, _boards(arty), usb=[], pci=[])
     assert report["result"] == "fail" and "changes" not in report["state"]
+
+
+def test_a_fomu_that_an_earlier_check_took_off_usb_is_missing_with_that_said(opts):
+    """#135: the Fomu's test design has no USB, so after a reboot (not a power cycle) the board is there and
+    unseen. Still "missing": it was not checked. But the reason says what happened and what brings it back."""
+    from fpgas_online_verify.boards.fomu import BOARD as FOMU
+
+    state.save({"fomu": {"variant": "evt"}}, "then", opts["state"])
+    events = []
+    report = runner.verify({**opts, "event": lambda stage, d: events.append((stage, d))}, _boards(FOMU, Fake("arty")),
+                           usb=[], pci=[], mode=("auto", "test"))  # fmt: skip
+    assert report["result"] == "missing"
+    assert report["reason"].startswith("none of the installed boards (fomu, arty) was found (auto: USB/PCI IDs")
+    said = ("; a Fomu EVT was found on this host by an earlier check and is not there now: the check's own test "
+            "design has no USB, so a Fomu that has been checked is off USB until it is power-cycled: power-cycle "
+            "the Pi (a reboot is not enough)")  # fmt: skip
+    assert report["reason"].endswith(said)
+    assert events == [("fpga-no-board", {"reason": report["reason"]})]
+    assert report["state"]["changes"] == ["fomu: recorded, not found now"]
+    # configured for the Fomu alone, the same
+    alone = runner.verify({**opts, "board": "fomu"}, _boards(FOMU), usb=[], pci=[])
+    assert alone["result"] == "missing" and alone["reason"].endswith(said)
+    todo = " ".join(line.strip() for line in conclusion.lines(alone))
+    assert "The Fomu is very likely still plugged in" in todo and "Power-cycle the Pi" in todo
+
+
+def test_a_missing_board_is_not_explained_by_a_fomu_that_was_never_here_or_is_not_looked_for(opts):
+    from fpgas_online_verify.boards.fomu import BOARD as FOMU
+
+    # no record at all, a record without a Fomu, a record that cannot be read: nothing is added
+    assert "earlier check" not in runner.verify({**opts, "board": "fomu"}, _boards(FOMU), usb=[], pci=[])["reason"]
+    state.save({"arty": {"variant": "a7-35", "serial": "A"}}, "then", opts["state"])
+    assert "earlier check" not in runner.verify({**opts, "board": "fomu"}, _boards(FOMU), usb=[], pci=[])["reason"]
+    opts["state"].write_text("{broken")
+    assert "earlier check" not in runner.verify({**opts, "board": "fomu"}, _boards(FOMU), usb=[], pci=[])["reason"]
+    # a Fomu is recorded, but this host is set up for an Arty: the Fomu is not looked for, so nothing is said of it
+    state.save({"fomu": {"variant": "evt"}, "arty": {"variant": "a7-35"}}, "then", opts["state"])
+    report = runner.verify({**opts, "board": "arty"}, _boards(FOMU, Fake("arty")), usb=[], pci=[])
+    assert report["result"] == "missing" and "Fomu" not in report["reason"]
+    # a board whose check leaves it on its bus says nothing either
+    report = runner.verify(opts, _boards(Fake("arty")), usb=[], pci=[], mode=("auto", "test"))
+    assert report["reason"].count(";") == 0
+    # one of two Fomus on a host (keys fomu@<where>) is a Fomu recorded
+    state.save({"fomu@1-1.3": {"variant": "evt"}, "fomu@1-1.4": {"variant": "evt"}}, "then", opts["state"])
+    assert "earlier check" in runner.verify({**opts, "board": "fomu"}, _boards(FOMU), usb=[], pci=[])["reason"]
 
 
 def test_a_missing_board_on_the_first_run_records_nothing(opts):

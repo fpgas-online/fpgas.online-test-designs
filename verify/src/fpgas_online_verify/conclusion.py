@@ -83,6 +83,10 @@ ADVICE = (
     (r"no FPGA board is configured|conflicting fpga-board settings",
      "Say which board this host has: install one board's package (sudo apt install fpgas-online-<board>), or "
      "set `fpga-board` in /etc/fpgas-verify/*.ini."),
+    (r"is off USB until it is power-cycled",
+     "The Fomu is very likely still plugged in: the last check that found it loaded its test design, which has "
+     "no USB, and a reboot does not bring its boot loader back. Power-cycle the Pi (switch its power off and on, "
+     "or its PoE port) and the check will find it again."),
     (r"^no .* found: this host is set up for one|^none of the installed boards",
      "Check the board's power and cables. `sudo fpgas-<board>-debug detect` looks for it again without "
      "running the tests."),

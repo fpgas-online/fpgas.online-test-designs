@@ -21,6 +21,10 @@ class Fomu(TestBoard):
     label_fields = ("serial",)
     port = "/dev/serial0"
     flash_note = "not read: every verify rewrites the user image by DFU"
+    # #135: seen on a Pi 3B+ on 2026-10-05: the Fomu left USB 36 s into the boot, when the check loaded its
+    # design, and the next boot, a reboot, reported it missing.
+    gone_after_check = ("the check's own test design has no USB, so a Fomu that has been checked is off USB until "
+                        "it is power-cycled: power-cycle the Pi (a reboot is not enough)")  # fmt: skip
     tests: ClassVar[dict] = {
         "uart": {"artifact": "uart-test-fomu/kosagi_fomu_evt.bin", "script": "test_uart.py",
                  "args": ["--port", "{port}", "--board", "fomu", "--skip-banner"], "verify": True},

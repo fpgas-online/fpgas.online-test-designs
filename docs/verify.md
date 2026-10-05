@@ -648,6 +648,12 @@ Each test checks its bitstream's sha256 against the `-bitstreams` package's mani
   DNA is read over the same JTAG ([the device DNA](#the-device-dna)): one that cannot be read, or is all zeros
   or all ones, fails the board.
 * The Fomu runs only `uart` at boot: a DFU load replaces the bootloader until the next power cycle.
+* That test design has no USB, so a Fomu that has been checked is off USB until it is power-cycled, and the
+  check of the next boot does not find it if that boot was a reboot (seen on a Pi 3B+ on 5 October 2026: the
+  Fomu left USB 36 seconds into the boot, and the reboot after it reported `missing`). The result is still
+  `missing`, since the board was not checked; when the recorded state has a Fomu, the reason says so: `a Fomu
+  EVT was found on this host by an earlier check and is not there now: the check's own test design has no
+  USB, …`. Power-cycle the Pi. ([#135](https://github.com/fpgas-online/fpgas.online-test-designs/issues/135))
 * The TT FPGA's `fpgas-tt.service` is stopped for the tests and started again once the report is written, so
   it never starts against the report of the run before. If it cannot be started again the result is `error`
   and the report says so, in `services_failed` at the top of the report: the board's own entry keeps the
@@ -1138,6 +1144,7 @@ gpioinfo -c gpiochip0 | grep -E 'line +(2|3|4|14):'   # with that chip's name (g
 | It says | Meaning, and what to do |
 |---|---|
 | `missing`: `no <board> found: this host is set up for one…` | the board is not on USB/PCI (or JTAG). Check power and cables. A Fomu that has run a design needs a power cycle |
+| `missing`: `…; a Fomu EVT was found on this host by an earlier check and is not there now: …` | the Fomu is very likely still plugged in: the last check loaded its test design, which has no USB, and this boot was a reboot. Power-cycle the Pi (its power or its PoE port), not a reboot |
 | `missing`: `none of the installed boards … was found` | nothing attached. Expected on a Pi with no FPGA, and still a fail |
 | `error`: `the board did not say which Tiny Tapeout board it is, so no test was run and nothing was loaded` | the demo board could not be asked: the rest of the reason says why (rpi-hwid not installed, its `main.py` changed, its SDK did not start, rpi-hwid could not read it). [Which Tiny Tapeout board it is](#which-tiny-tapeout-board-it-is) |
 | `fail`: `the board carries a Tiny Tapeout chip, not an FPGA: it is identified, …` | a demo board with a Tiny Tapeout chip: the report's identity says which (`shuttle`); the boot check has no test for a chip yet ([#124](https://github.com/fpgas-online/fpgas.online-test-designs/issues/124)) |
