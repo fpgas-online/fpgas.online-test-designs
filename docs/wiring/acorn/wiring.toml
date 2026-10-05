@@ -48,12 +48,42 @@ VCC = { label = "VCC", what = "3.3 V from the Acorn" }
 #     (/proc/device-tree/model); gpiochip is the device-tree compatible of the GPIO chip that carries
 #     the pins above on that host.
 # ---------------------------------------------------------------------------------------------------
+# parts: what to have on the bench for one host of this carrier, besides what the wiring itself says (the
+#   housings, crimp terminals and resistors, which tables.py counts from the headers and wires). Each is
+#   { qty, part, number (a maker's part number, if we know one), note }.
+# ---------------------------------------------------------------------------------------------------
+# Needed whatever the carrier.
+[[parts]]
+qty = 1
+part = "SQRL Acorn CLE-215+, CLE-215 or CLE-101 (the same card is sold as LiteFury and NiteFury)"
+note = "M.2 M-key, 2280"
+
+[[parts]]
+qty = 1
+part = "Molex Pico-EZmate cable assembly, 6 circuits, a plug at each end"
+number = "Molex 0369200601"
+note = "cut in half: one half is the P1 cable, the other the P2 cable. All six wires are black"
+
+[[parts]]
+qty = 1
+part = "heat-shrink tube, about 2 mm, a few centimetres"
+note = "over each cut-back wire end, and over the joints of a series resistor where there is one"
+
 [carriers.pi5]
 name = "Raspberry Pi 5"
 jtag_pins = "10:9:11:8"
 jtag_cable = "libgpiod"
 uart = "/dev/ttyAMA0"
 resistors = []
+
+[[carriers.pi5.parts]]
+qty = 1
+part = "Raspberry Pi 5"
+
+[[carriers.pi5.parts]]
+qty = 1
+part = "M.2 M-key PCIe HAT for the Raspberry Pi 5 that leaves the 40-pin header free"
+note = "the sheet shows a Waveshare PoE M.2 HAT+"
 
 [carriers.pi5.hosts]
 "Raspberry Pi 5 Model B" = { gpiochip = "raspberrypi,rp1-gpio" }
@@ -108,6 +138,15 @@ uart = "/dev/ttyAMA0"
 # resistor lets JTAG win if a design drives J2.
 resistors = ["J2"]
 resistor_value = "470 Ω"
+
+[[carriers.blade.parts]]
+qty = 1
+part = "Compute Blade (Uptime Lab)"
+note = "its M.2 slot takes the card"
+
+[[carriers.blade.parts]]
+qty = 1
+part = "Raspberry Pi Compute Module 4 or 5"
 
 [carriers.blade.hosts]
 "Raspberry Pi Compute Module 4" = { gpiochip = "brcm,bcm2711-gpio" }

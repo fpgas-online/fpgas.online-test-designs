@@ -936,6 +936,152 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 * rpi-hwid refuses the Arty's and NeTV2's labels until their flash IDs are read; `--identify` exits 1 for
   them meanwhile.
 
+### Checking an Acorn's wiring
+
+The Acorn's check doubles as a wiring test: each of its tests uses a known set of wires between the card and
+the Pi, so which tests pass and what a failing one says point at the wire. The wiring itself (which wire goes
+to which pin, and the parts) is on the [Acorn wiring page](https://docs.fpgas.online/en/latest/boards/acorn/wiring.html),
+generated from [`docs/wiring/acorn/wiring.toml`](wiring/acorn/wiring.toml).
+
+#### After a fresh boot
+
+On a host whose root file system is in memory (a netbooted Pi with `overlayroot=tmpfs`, as the Compute Blades
+at ps1 are), what you install is gone at the next boot, and so is the boot check's unit. After each boot,
+install and run by hand:
+
+```bash
+# 1. The two apt repositories (as in "Installing" above).
+sudo install -d -m0755 /etc/apt/keyrings
+curl -fsSL https://apt.fpgas.online/apt.gpg | sudo tee /etc/apt/keyrings/apt.gpg > /dev/null
+echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
+  | sudo tee /etc/apt/sources.list.d/apt.list
+curl -fsSL https://fpgas.online/fpgas.online-fpga-tools/fpgas.online-fpga-tools.gpg \
+  | sudo tee /etc/apt/keyrings/fpgas.online-fpga-tools.gpg > /dev/null
+echo "deb [signed-by=/etc/apt/keyrings/fpgas.online-fpga-tools.gpg] https://fpgas.online/fpgas.online-fpga-tools/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
+  | sudo tee /etc/apt/sources.list.d/fpgas.online-fpga-tools.list
+
+# 2. The Acorn's packages.
+sudo apt update
+sudo apt install fpgas-online-acorn
+
+# 3. What is installed, and which board this host is set up to check.
+fpgas-verify --list
+
+# 4. The check. Nothing is sent anywhere (no file on this host says `publish = on`).
+sudo fpgas-acorn-verify
+```
+
+* The check only reads: it never writes the card's flash and never loads a design into the FPGA.
+* It exits 0 only for a pass. The summary is on the terminal; the same as JSON is in
+  `/run/fpgas-online/verify.json`.
+* To keep the packages across boots, they have to go into the image the host boots from; that is the host
+  owner's root image, not something these packages do.
+
+#### Which test uses which wire
+
+| Test | Wires it uses | A pass shows | Runs on a card still on SQRL's image |
+|---|---|---|---|
+| `pcie-link` | the M.2 slot | the card is seated and the PCIe link is at the setup's speed and width | yes |
+| `jtag` | P1: TCK, TMS, TDO for the IDCODE read; TDI as well for the device DNA read | all four JTAG wires, and that the FPGA is the variant's part | yes |
+| `pcie-bar0` | the M.2 slot | the fpgas.online design is running and answers over PCIe | no: it fails as `unconverted` and the tests below are not run |
+| `p2-uart` | P2: K2 (FPGA transmit) to the Pi's RXD (GPIO15), J2 (FPGA receive) from the Pi's TXD (GPIO14) | the serial pair, in the right direction | no |
+| `p2-serial` | the same two wires, driven and read as plain pins in both directions | each of J2 and K2 on its own, so a crossed pair or one open wire is told apart | no |
+| `p2-gpio` | P2: J5 to GPIO3, H5 to GPIO4, in both directions | the two spare wires | no; and never on a Compute Blade, whose cable does not carry them |
+| `flash`, `ddr`, `scratch`, `rp1-pio` | no wire of the cable (`scratch` also uses the serial pair) | nothing about the wiring | |
+
+So on a card that has not been converted yet, `pcie-link` and `jtag` are the wiring tests; the P2 wires can
+only be tested once the card runs the fpgas.online design
+([converting a card](hardware/acorn-pcie-programming.md)).
+
+#### From what it says to the wire
+
+| The failing line | Look at |
+|---|---|
+| `pcie-link fail: link is x2, expected x1` (or a speed) | the M.2 seat; or the setup's expected figures are not this host's |
+| `jtag fail: no device on the P1 JTAG chain` | the P1 cable is not plugged in, or TCK, TMS or TDO is open or on the wrong pin |
+| `jtag fail: P1 JTAG chain has …, expected one …` | another device answers, or the card is not the variant the host expects |
+| `jtag fail: device DNA over P1 JTAG reads 0x0…: the DNA port is not being read` | TDI: the IDCODE read worked without it |
+| `jtag fail: … GPIO14 (TMS) is held by … (uart0): the kernel does not hand out a pin that is held …` | not a wire: on a Compute Blade the serial port has the TMS pin ([below](#on-a-compute-blade)) |
+| `p2-uart fail: no UARTBone reply on /dev/ttyAMA0 (P2 K2/J2)` | the serial pair: open, or crossed; `p2-serial` says which |
+| `p2-serial fail: J2 -> GPIO14: the FPGA drove 1, the Pi read 0; K2 -> GPIO15: the FPGA drove 0, the Pi read 1; …` with every pattern mirrored | J2 and K2 are **crossed**: swap the two wires at the Pi end |
+| `p2-serial` or `p2-gpio` naming one ball only, the Pi always reading the same level | that one wire is **open** (the Pi reads its own pull) or on the wrong pin |
+| `p2-gpio fail: J5 -> GPIO3: …; H5 -> GPIO4: …` with every pattern mirrored | J5 and H5 are crossed |
+
+`p2-serial` and `p2-gpio` print what was driven and what was read, eight lines for two wires. The two digits
+are the two balls: the right-hand digit is J2 (or J5), the left-hand one K2 (or H5).
+
+**A crossed pair**: read on acorn-olive at Welland, 4 October 2026, whose P2 pairs were both crossed. `FPGA drives
+01` raises J2, which should arrive on GPIO14; it arrives on GPIO15:
+
+```text
+    p2-serial  fail: J2 -> GPIO14: the FPGA drove 1, the Pi read 0; K2 -> GPIO15: the FPGA drove 0, the Pi read 1; J2 -> GPIO14: the FPGA drove 0, the Pi read 1; K2 -> GPIO15: the FPGA drove 1, the Pi read 0; GPIO14 -> J2: the Pi drove 1, the FPGA read 0; GPIO15 -> K2: the Pi drove 0, the FPGA read 1; GPIO14 -> J2: the Pi drove 0, the FPGA read 1; GPIO15 -> K2: the Pi drove 1, the FPGA read 0; the UARTBone does not answer on /dev/ttyAMA0 after the switch (no fpgas.online SoC answered at 1200 baud after a break)
+        FPGA drives 00: Pi reads GPIO14=0 GPIO15=0
+        FPGA drives 01: Pi reads GPIO14=0 GPIO15=1
+        FPGA drives 10: Pi reads GPIO14=1 GPIO15=0
+        FPGA drives 11: Pi reads GPIO14=1 GPIO15=1
+        Pi drives 00: FPGA reads 00
+        Pi drives 01: FPGA reads 10
+        Pi drives 10: FPGA reads 01
+        Pi drives 11: FPGA reads 11
+```
+
+**One open wire**: read on acorn-sycamore at Welland the same day, whose J5 wire did not reach GPIO3. GPIO3
+reads 1 whatever the FPGA drives, and the FPGA reads J5 as 1 whatever the Pi drives; H5 and GPIO4 follow each
+other:
+
+```text
+    p2-gpio    fail: J5 -> GPIO3: the FPGA drove 0, the Pi read 1; J5 -> GPIO3: the FPGA drove 0, the Pi read 1; GPIO3 -> J5: the Pi drove 0, the FPGA read 1; GPIO3 -> J5: the Pi drove 0, the FPGA read 1
+        FPGA drives 00: Pi reads GPIO3=1 GPIO4=0
+        FPGA drives 01: Pi reads GPIO3=1 GPIO4=0
+        FPGA drives 10: Pi reads GPIO3=1 GPIO4=1
+        FPGA drives 11: Pi reads GPIO3=1 GPIO4=1
+        Pi drives 00: FPGA reads 01
+        Pi drives 01: FPGA reads 01
+        Pi drives 10: FPGA reads 11
+        Pi drives 11: FPGA reads 11
+```
+
+A correctly wired pair reads back what was driven: `FPGA drives 01: Pi reads GPIO14=1 GPIO15=0`, `Pi drives 01:
+FPGA reads 01`, and so on for every pattern.
+
+#### On a Compute Blade
+
+What has been run on a Compute Blade, and what has not, as of 5 October 2026:
+
+| | State |
+|---|---|
+| Installing the packages and running the check (Raspberry Pi OS trixie, CM5) | run at ps1: [the example](#reading-the-result) is that host's result |
+| `pcie-link` | run at ps1: passes (5.0 GT/s, x1) |
+| `jtag` with the serial port on, kernel 6.18 | run at ps1: **cannot work**. TMS is GPIO14, which is also the serial port's TX; that kernel does not lend a pin a driver has, and the serial driver cannot be detached while the system runs. The test fails saying so ([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)) |
+| `jtag` with the serial port off | **not yet run by us on this hardware** |
+| `jtag` under kernel 6.12, serial port on | recorded as working on one ps1 blade (`--pins 2:3:4:14`), before these packages existed; not run with them |
+| The `p2-uart` and `p2-serial` tests | **not yet run by us on this hardware**: they need a converted card |
+| Converting a card on a Compute Blade | **not yet run by us on this hardware**; the [written steps](hardware/acorn-pcie-programming.md) are for the Pi 5 setup |
+| A Compute Blade that passes the whole check | **not yet seen** |
+
+JTAG and the serial pair share GPIO14 on a Compute Blade (J2 reaches it through 470 Ω, so JTAG wins
+electrically). Under kernel 6.18 they cannot both be had from one boot: with the header's serial port on, the
+kernel keeps GPIO14 for it. The configuration we expect to work for JTAG, and with it for converting a card,
+is the serial port off at boot:
+
+```text
+# config.txt: the header's serial port off
+enable_uart=0
+# cmdline.txt: no console on it (remove this word)
+console=serial0,115200
+```
+
+**Not yet run by us on this hardware.** With the serial port off, `/dev/ttyAMA0` is not there, so the
+`p2-uart`, `p2-serial` and `scratch` tests cannot pass in that boot; what a Compute Blade's check should
+count as its result in each of the two configurations is not settled.
+
+To see who has the JTAG pins on a host, without running anything on the card:
+
+```bash
+pinctrl get 2,3,4,14,15                 # the function each pin is switched to
+gpioinfo | grep -E 'line +(2|3|4|14):'  # `consumer=` or `[used]` marks a line the kernel will not hand out
+```
+
 ### Common failures
 
 | It says | Meaning, and what to do |
