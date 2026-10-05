@@ -70,9 +70,11 @@ ADVICE = (
      "loaded into it. The reason above says what stopped the read; if rpi-hwid is not installed, install it "
      f"(sudo apt install python3-rpi-hwid, from https://github.com/mithro/rpi-hwid): {DOCS}"
      "#which-tiny-tapeout-board-it-is"),
-    (r"carries a Tiny Tapeout chip, not an FPGA",
-     "This demo board has a Tiny Tapeout chip. The report says which (its identity's shuttle); the boot check "
-     f"tests only FPGA boards so far, so this is not a fault of the board: {ISSUES}/124"),
+    (r"and the board runs SDK|no SDK release is recorded as supporting",
+     "The Tiny Tapeout SDK on the demo board is not a release known to work with the chip it carries, so the "
+     "board could not select a project on that chip. The board's firmware is installed by whoever looks after "
+     "the board (the check writes nothing to it). If that release does support the chip, the check's table "
+     f"lacks it: {ISSUES}"),
     (r"is not running the Tiny Tapeout firmware",
      "The demo board's microcontroller is in its USB boot loader. Power-cycle the board; if it comes back the "
      "same, its firmware has to be installed again by whoever looks after the board."),

@@ -49,6 +49,29 @@ def test_the_sdks_last_boot_line_means_it_started():
     assert started is True and reason == "the SDK started: tt.sdk_version=3.1.0"
 
 
+# What SDK 1.2.2's main.py prints (tt-micropython-firmware src/main.py at v1.2.2: no "BOOT:" line and no
+# tt.sdk_version line; the release in colour, then the board object). From the source, not from a board.
+SDK_1_BOOT = (
+    ">>> \r\nMPY: soft reboot\r\n\x1b[36mDetected TT04/TT05 demoboard \x1b[0m\r\n\r\n\r\n"
+    "The '\x1b[31mtt\x1b[0m' object is available.\r\n\r\n\x1b[36mTT SDK v1.2.2\x1b[0m\r\n\r\n\r\n"
+    "<DemoBoard in ASIC_RP_CONTROL tt03p5 project 'None'>\r\n\r\n"
+    "MicroPython v1.22.2 on 2024-02-22; Raspberry Pi Pico with RP2040\r\n"
+    'Type "help()" for more information.\r\n>>> '
+)
+
+
+def test_a_1_x_sdk_which_has_no_last_boot_line_started_when_it_built_the_board_and_reached_the_prompt():
+    started, reason = sdk_start.verdict(SDK_1_BOOT)
+    assert started is True and reason.startswith("the SDK started: TT SDK v1.2.2")
+    still = SDK_1_BOOT[: SDK_1_BOOT.index("<DemoBoard")]
+    assert sdk_start.verdict(still) == (None, "the SDK is still starting")
+    raised = SDK_1_BOOT.replace("<DemoBoard in", "Traceback (most recent call last):\r\nOSError: 5\r\n<DemoBoard in")
+    assert sdk_start.verdict(raised) == (False, "the board's main.py raised: OSError: 5")
+    # a later release printing the same line without its last one did not finish
+    later = SDK_1_BOOT.replace("MPY: soft reboot\r\n", "MPY: soft reboot\r\nBOOT: Tiny Tapeout SDK\r\n")
+    assert sdk_start.verdict(later)[0] is False
+
+
 def test_a_main_py_that_reaches_the_prompt_without_the_sdk_did_not_start_it():
     started, reason = sdk_start.verdict(NO_OP_BOOT)
     assert started is False
@@ -146,7 +169,27 @@ def test_a_main_py_that_was_changed_is_said_with_its_hash():
 def test_a_release_with_no_recorded_main_py_fails_and_says_what_to_do():
     ok, why = main_py.verdict(0, f"SDK_RELEASE 9.9.9\nMAIN_SHA256 {SDK_SHA}\n", "")
     assert not ok and why == (
-        "no main.py is recorded for SDK release 9.9.9 (recorded: 3.1.0): add it to tt_main_py.py")  # fmt: skip
+        "no main.py is recorded for SDK release 9.9.9 (recorded: 1.0.0 to 3.1.1): add it to tt_main_py.py")  # fmt: skip
+
+
+@pytest.mark.parametrize("release, digest", [
+    ("1.2.2", "b7c5e0509847674318a4c7350d24f9efb0fa1d75f7b6399c6a03d71f3dd62ffc"),  # what a TT03p5 board runs
+    ("2.0.4", "b4989604534cf4fe63f459b4da882d737cc6d9ad7bfab9bdb146f5372096423f"),  # the last for TT04 to TT08
+    ("3.1.0", "9ebe551a54715dd730261201ff4f21ad8ecbcd518b4809aa81675cca161e0cb4"),  # the FPGA boards'
+])  # fmt: skip
+def test_the_releases_chip_boards_run_have_their_main_py_recorded(release, digest):
+    assert main_py.MAIN_PY_SHA256[release] == digest
+    assert main_py.verdict(0, f"SDK_RELEASE {release}\nMAIN_SHA256 {digest}\n", "") == (
+        True, f"main.py is SDK {release}'s own")  # fmt: skip
+    other = main_py.MAIN_PY_SHA256["2.0.3"]  # another release's own main.py is not this release's
+    assert main_py.verdict(0, f"SDK_RELEASE {release}\nMAIN_SHA256 {other}\n", "")[0] is False
+
+
+def test_every_recorded_release_is_a_release_number_recorded_once():
+    releases = [r for group in main_py._MAIN_PY_RELEASES.values() for r in group]
+    assert len(releases) == len(set(releases)) == len(main_py.MAIN_PY_SHA256) == 21
+    assert all(len(d) == 64 and int(d, 16) >= 0 for d in main_py._MAIN_PY_RELEASES)
+    assert sorted(releases, key=main_py._release_key)[0] == "1.0.0"
 
 
 @pytest.mark.parametrize("rc, out, err, part", [

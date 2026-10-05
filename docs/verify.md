@@ -639,7 +639,7 @@ Each test checks its bitstream's sha256 against the `-bitstreams` package's mani
 | Arty A7 | USB `0403:6010` | `openFPGALoader -b arty` | `/dev/ttyUSB1` | `uart`, `ddr`, `spiflash`, `ethernet`, `pin-id` | `pmod` | FTDI serial, IDCODE, device DNA, flash JEDEC ID, sha256 of the flash's first 2.1 MiB |
 | NeTV2 | JTAG IDCODE over GPIO 4/17/27/22 | openocd (Pi 3/4), openFPGALoader `rp1pio` (Pi 5) | `/dev/ttyAMA0` | `uart`, `ddr`, `spiflash` | `ethernet`, `pmod`, `pin-id` | IDCODE, device DNA, flash JEDEC ID, sha256 of the flash's boot image |
 | Fomu EVT | USB `1209:5bf0` (DFU bootloader) | openFPGALoader over DFU | `/dev/serial0` | `uart` | `spiflash`, `pmod`, `pin-id` | USB serial |
-| TT FPGA | USB `2e8a:0005`, `2e8a:000f` (and `2e8a:0003`, the RP2's boot loader, which fails) | `tt_fpga_program.py` over `mpremote` | `/dev/ttyACM0` | `pin-id`, `uart` | `pmod` | USB serial |
+| TT FPGA | USB `2e8a:0005`, `2e8a:000f` (and `2e8a:0003`, the RP2's boot loader, which fails) | `tt_fpga_program.py` over `mpremote` | `/dev/ttyACM0` | `sdk` (loads nothing), `pin-id`, `uart`; a board with a Tiny Tapeout chip: `sdk` only | `pmod` | USB serial |
 
 * The Arty and NeTV2 are left running openFPGALoader's SPI-over-JTAG bridge (used to read the flash back), the
   others the last test design. Each returns to its flash image at its next power cycle.
@@ -673,23 +673,60 @@ chosen.
 
 | The board says (rpi-hwid's `chip`) | Variant | What the check does |
 |---|---|---|
-| `fpga` | `tt-fpga` | runs `pin-id` and `uart` |
-| `asic`, and a shuttle | `tt-asic` | nothing is loaded and no test runs: the result is `fail`, with the reason that the board is identified and that the boot check has no test for a chip yet |
+| `fpga` | `tt-fpga` | runs [`sdk`](#the-sdk-test), then loads and runs `pin-id` and `uart` |
+| `asic`, and a shuttle | `tt-asic` | runs [`sdk`](#the-sdk-test); nothing is loaded. The report's `not_run` says that its Pmod cabling is not tested yet |
 | nothing usable: rpi-hwid is not installed, could not read the board, or gave no shuttle for a chip | none | nothing is loaded and no test runs: the result is `error`, and the reason says what could not be read |
 | (an RP2 in its USB boot loader, `2e8a:0003`) | none | `fail`: `a Raspberry Pi RP2 is on USB but is not running the Tiny Tapeout firmware` |
 
 * An FPGA bitstream only ever goes to a board that said it is an FPGA board.
+* The check has one port for a demo board (`/dev/ttyACM0`). With two such RP2 boards on one Pi it cannot tell
+  which board that port is, so each is an `error` (`2 Raspberry Pi RP2 boards that can be Tiny Tapeout demo
+  boards are on this Pi's USB, …`): none is asked what it is and nothing is loaded. No host has two.
 * Other Raspberry Pi USB products (a debug probe, say) are not Tiny Tapeout boards and are not looked at.
 * `--variant tt-fpga` does not override the board: asked for on a board that says otherwise, it is an `error`.
 * `fpgas-tt-fpga-debug program` and `test` are for use by hand: they do not ask the board, so they need
   `--variant tt-fpga` said out loud, and load what they are told to.
 * A board whose `main.py` is not the one the check knows is not asked at all (the check will not run a
-  `main.py` it does not know), so it has no variant. The check knows the `main.py` of SDK 3.1.0 only: a
-  demo board with a Tiny Tapeout chip and an older SDK therefore ends as that `error` today, not as `tt-asic`.
+  `main.py` it does not know), so it has no variant. The check knows the `main.py` of every SDK release from
+  1.0.0 to 3.1.1 (`tt_main_py.py`); only 3.1.0's has been compared with a board.
+* A TT04 chip cannot be read by its SDK (2.0.x reports its shuttle as `unknown`), so a TT04 board gives no
+  shuttle and is the `error` of the third row, unless the board's own `config.ini` names the shuttle
+  (`force_shuttle`). The check never writes that file.
 * rpi-hwid looks at `2e8a:0005` only, so a board showing `2e8a:000f` is found and then cannot be asked.
-* A board that says `asic` is not held to naming its demo board or microcontroller; an FPGA board is.
+* A board that says `asic` is still a `tt-asic` when it named no demo board or microcontroller (an FPGA board
+  that named neither is an `error`); a chip board that named no microcontroller then fails the `sdk` test.
 * `variant` in the report, in `fpga-board-identified` and in `fpga-verified` is the decided one; it is absent
   when the board did not say.
+
+#### The `sdk` test
+
+The first test of every Tiny Tapeout board, and the whole check of a board with a Tiny Tapeout chip
+([#132](https://github.com/fpgas-online/fpgas.online-test-designs/issues/132)). It loads nothing and asks the
+board nothing more: it judges what the board said when it was asked what it is. The chip, the shuttle, the
+microcontroller and the SDK release must be a combination the SDK's releases support, since an SDK that does
+not know the board's chip cannot select a project on it:
+
+| The board carries | Microcontroller | SDK release |
+|---|---|---|
+| the FPGA breakout | RP2350 | 3.1.x |
+| a TT03p5 chip | RP2040 | 1.2.x |
+| a TT04, TT05, TT06, TT07 or TT08 chip | RP2040 | 2.0.x |
+
+* Anything else fails the test, with what the board said: `a tt06 chip needs SDK 2.0.x on an RP2040, and the
+  board runs SDK 1.2.2 on an RP2040`. A shuttle with no row fails as `no SDK release is recorded as supporting
+  a tt09 chip`: the table (`SDK_SUPPORTED` in `boards/tt_fpga.py`) gains a row when a release is known to
+  support it.
+* Together with the `main.py` read (the board's `main.py` is that release's own) and the SDK having started,
+  a pass means: the board answers, says what it is, and what it says is a combination the SDK's releases
+  support. It compares what the board said with a table; it measures nothing on the chip.
+* An FPGA board on another release line (3.0.x, or a later 3.2.x) fails `sdk` until its row is added; its
+  designs are still loaded and tested, and the board's result is `fail`.
+* **What it does not test** on a board with a Tiny Tapeout chip: the chip itself, and the Pmod cabling between
+  the demo board and the Pi. The report lists the cabling in `not_run` (`wiring`), the summary prints it, and
+  `fpga-verified` carries it in `board0_not_run`; it does not fail the board. The FPGA board's cabling is
+  tested by `pin-id`.
+* None of this has run on a board with a Tiny Tapeout chip: none was powered when it was written (5 October
+  2026). The FPGA board's row is what the three boards at Welland read.
 
 #### TT FPGA identity
 
@@ -1147,7 +1184,7 @@ gpioinfo -c gpiochip0 | grep -E 'line +(2|3|4|14):'   # with that chip's name (g
 | `missing`: `…; a Fomu EVT was found on this host by an earlier check and is not there now: …` | the Fomu may still be plugged in and working: the last check that found it loaded its test design, which has no USB, and a reboot does not bring it back. If it is plugged in, power-cycle the Pi (its power or its PoE port), not a reboot. The check cannot tell this from a Fomu that was unplugged |
 | `missing`: `none of the installed boards … was found` | nothing attached. Expected on a Pi with no FPGA, and still a fail |
 | `error`: `the board did not say which Tiny Tapeout board it is, so no test was run and nothing was loaded` | the demo board could not be asked: the rest of the reason says why (rpi-hwid not installed, its `main.py` changed, its SDK did not start, rpi-hwid could not read it). [Which Tiny Tapeout board it is](#which-tiny-tapeout-board-it-is) |
-| `fail`: `the board carries a Tiny Tapeout chip, not an FPGA: it is identified, …` | a demo board with a Tiny Tapeout chip: the report's identity says which (`shuttle`); the boot check has no test for a chip yet ([#124](https://github.com/fpgas-online/fpgas.online-test-designs/issues/124)) |
+| `fail`: `sdk fail: a tt06 chip needs SDK 2.0.x on an RP2040, and the board runs SDK …` / `no SDK release is recorded as supporting …` | the Tiny Tapeout SDK on the demo board is not a release known to work with the chip it carries. The firmware is installed by whoever looks after the board; the check writes nothing to it. [The `sdk` test](#the-sdk-test) |
 | `fail`: `a Raspberry Pi RP2 is on USB but is not running the Tiny Tapeout firmware` | the demo board's microcontroller is in its USB boot loader: power-cycle the board; if it comes back the same, its firmware is gone |
 | `error`: `… is not installed` | a tool is missing: `mpremote` (bookworm: bookworm-backports), openocd, openFPGALoader |
 | `error`: `no FPGA board is configured` / `conflicting fpga-board settings` | install one board's package, or fix `/etc/fpgas-verify/*.ini` |
@@ -1190,7 +1227,7 @@ gpioinfo -c gpiochip0 | grep -E 'line +(2|3|4|14):'   # with that chip's name (g
   | `result`, `reason` | the result, and why, when no board was checked |
   | `checked_at` | when (UTC, ISO 8601) |
   | `mode`, `configured_by`, `chosen_by` | `auto` or the board, the file (or "command line") that said so, and how the boards were found |
-  | `boards[]` | per board: `board`, `variant`, `found`, `result`, `reason` (every fault), `bitstreams`, `tests[]` (`test`, `result`, `reason`, `output`, and what the test read or measured), `identity` ([who the board is](identity.md)), `state`. The Arty's and NeTV2's also have `jtag`: `result`, `reason`, the [IDCODE's fields](#the-jtag-idcode), and `dna` or `dna_error` ([the device DNA](#the-device-dna)). The Acorn's also has `setup`, `running`, `flash`, `not_run`, and `driver` when one was unbound |
+  | `boards[]` | per board: `board`, `variant`, `found`, `result`, `reason` (every fault), `bitstreams`, `tests[]` (`test`, `result`, `reason`, `output`, and what the test read or measured), `identity` ([who the board is](identity.md)), `state`. The Arty's and NeTV2's also have `jtag`: `result`, `reason`, the [IDCODE's fields](#the-jtag-idcode), and `dna` or `dna_error` ([the device DNA](#the-device-dna)). The Acorn's also has `setup`, `running`, `flash`, `not_run`, and `driver` when one was unbound. `not_run` (test: why) is also on a Tiny Tapeout board with a chip, for the cabling test it does not have yet |
   | `state` | `file`, and `recorded` (`first run` or `--update`) or `changes` |
 
   ```bash
@@ -1247,7 +1284,7 @@ The check tells the site what it is doing as it goes. `fleet-event` (from
 | `fpga-board-identified` | exactly once for each board found: an Acorn once PCIe and JTAG have said who it is, any other board before its tests; a board whose check stops first, or that is not checked (`--test` naming none of its tests), from what finding it showed | `schema` (`fpga-identity/1`) and the board's [identity](identity.md) |
 | `fpga-test-started` | each test starts | `board`, `test` |
 | `fpga-test-finished` | each test ends | `board`, `test`, `result`, `reason` |
-| `fpga-verified` | the check is done | the report, flattened: `result`, `mode`, `reason`; per board `board0` (`netv2 a7-35 fail`), `board0_reason`, `board0_tests` (`uart=pass ddr=fail spiflash=pass`), `board0_bitstreams`, `board0_state_*`, `board0_identity_*` |
+| `fpga-verified` | the check is done | the report, flattened: `result`, `mode`, `reason`; per board `board0` (`netv2 a7-35 fail`), `board0_reason`, `board0_tests` (`uart=pass ddr=fail spiflash=pass`), `board0_not_run` (the names in `not_run`, when there are any), `board0_bitstreams`, `board0_state_*`, `board0_identity_*` |
 
 * `board` is the board's name, or `name@where` when there are two of a kind.
 * `fpga-verifying` and the progress events each wait at most 15 s, so a broker that is down does not hold up

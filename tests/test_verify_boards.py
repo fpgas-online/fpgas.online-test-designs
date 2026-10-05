@@ -10,7 +10,7 @@ import struct
 import sys
 
 import pytest
-from fpgas_online_verify import cli, core, debug, host_tests, idcode, identify, identity, testbench
+from fpgas_online_verify import cli, core, debug, host_tests, idcode, identify, identity, runner, testbench
 from fpgas_online_verify.boards import arty, fomu, netv2, tt_fpga
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
 
@@ -530,7 +530,9 @@ def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_rea
     assert report["services_stopped"] == ["fpgas-tt.service"]
     # the pin-ID scan loads its design itself and runs first; the bridge loads the UART design,
     # so the last design left on the board is one with a single TX pin, not one driving every Pmod line
-    assert [t["test"] for t in report["tests"]] == ["pin-id", "uart"]
+    # first of all the board's own word is judged (sdk), which loads nothing
+    assert [t["test"] for t in report["tests"]] == ["sdk", "pin-id", "uart"]
+    assert "bitstream" not in report["tests"][0] and "not_run" not in report
     (load,) = [c for c in run.calls if "tt_fpga_program.py" in " ".join(c)]
     assert load[3].endswith("pmod-pin-id-tt-fpga/tt_fpga_platform.bin") and load[4:] == ["--gpio-release"]
     bridged = [c for c in run.calls if "tt_test_wrapper.py" in " ".join(c)]
@@ -538,7 +540,7 @@ def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_rea
     assert bridged[0][2] == "/dev/ttyACM0" and bridged[0][5].endswith("test_uart.py")
     assert run.calls.index(load) < run.calls.index(bridged[0])
     assert report["state"] == {"variant": "tt-fpga", "serial": "E6"}
-    assert report["flash_note"].startswith("none: the FPGA breakout has no SPI flash")
+    assert report["flash_note"].startswith("none: nothing on the demo board is read back")
 
 
 def test_a_stopped_bridge_is_left_stopped_and_a_failed_test_still_restarts_a_running_one(tmp_path, monkeypatch):
@@ -608,9 +610,9 @@ E6_SAYS_FPGA = _rpi_hwid({**TT_BOARD, "usb_serial": "E6"})  # what the board wit
 
 
 def _nothing_loaded(report, run):
-    """No test ran and no design went to the board: neither loader was called."""
-    return report["tests"] == [] and not any("tt_fpga_program.py" in " ".join(c) or "tt_test_wrapper.py" in " ".join(c)
-                                             for c in run.calls)  # fmt: skip
+    """No test that loads a design ran and no design went to the board: neither loader was called."""
+    return not any("bitstream" in t for t in report["tests"]) and not any(
+        "tt_fpga_program.py" in " ".join(c) or "tt_test_wrapper.py" in " ".join(c) for c in run.calls)  # fmt: skip
 
 
 def _restarted_last(run):
@@ -1066,9 +1068,12 @@ class _Nothing:
 # -- which Tiny Tapeout board it is: the board's own word (#124) ------------------------------------------------
 
 # A demo board with a Tiny Tapeout chip, as rpi-hwid's tinytapeout_verdict() gives one (chip "asic", a shuttle).
+# Not read from a board: no chip board has been powered since rpi-hwid could read one. The values are what the
+# SDK's sources give (2.0.4 is the last release for the RP2040 boards; its demo board detection says "TT06+").
 TT_CHIP_BOARD = {**TT_BOARD, "shuttle": "tt06", "chip": "asic", "repo": "TinyTapeout/tinytapeout-06",
-                 "commit": "abc1234", "demoboard": "TTDBv2", "sdk": "v3.1.0", "mcu": "RP2040",
-                 "how": "Tiny Tapeout SDK on RP2040; chip ROM shuttle=tt06"}  # fmt: skip
+                 "commit": "abc1234", "demoboard": "TT06+", "sdk": "2.0.4", "mcu": "RP2040",
+                 "machine": "Raspberry Pi Pico with RP2040",
+                 "how": "Tiny Tapeout SDK 2.0.4 on Raspberry Pi Pico with RP2040; chip ROM shuttle=tt06"}  # fmt: skip
 
 
 def test_a_board_that_says_it_is_an_fpga_board_is_a_tt_fpga_and_only_then_is_a_design_loaded(tmp_path, monkeypatch):
@@ -1082,18 +1087,108 @@ def test_a_board_that_says_it_is_an_fpga_board_is_a_tt_fpga_and_only_then_is_a_d
     assert loads and min(loads) > asked  # the board is asked first
 
 
-def test_a_board_with_a_tiny_tapeout_chip_is_a_tt_asic_said_to_be_untested_and_nothing_is_loaded(tmp_path, monkeypatch):
+def test_a_healthy_board_with_a_tiny_tapeout_chip_passes_on_its_own_word_and_nothing_is_loaded(tmp_path, monkeypatch):
+    """#132: the chip board's check is the `sdk` test; its cabling is said to be not tested, which fails nothing."""
     _installed(monkeypatch)
     events = []
     run = Runner([_rpi_hwid(TT_CHIP_BOARD)])
     report = _check(TT, tmp_path, TT_FOUND, run, event=lambda stage, d: events.append((stage, d)))
     assert report["variant"] == "tt-asic" and report["identity"]["variant"] == "tt-asic"
     assert report["identity"]["chip"] == "asic" and report["identity"]["shuttle"] == "tt06"
-    assert report["result"] == "fail" and report["reason"] == TT.untested["tt-asic"]
-    assert "identified" in report["reason"] and "nothing was tested and nothing was loaded" in report["reason"]
+    assert report["result"] == "pass" and "reason" not in report
+    (sdk,) = report["tests"]
+    assert (sdk["test"], sdk["result"]) == ("sdk", "pass") and "reason" not in sdk
+    assert sdk["output"][-1] == "SDK 2.0.x on an RP2040 supports a tt06 chip"
+    assert report["not_run"] == tt_fpga.PENDING["tt-asic"] and set(report["not_run"]) == {"wiring"}
     assert _nothing_loaded(report, run) and "bitstreams" not in report and _restarted_last(run)
-    assert [stage for stage, _ in events] == ["fpga-board-identified"] and events[0][1]["variant"] == "tt-asic"
+    assert [stage for stage, _ in events] == ["fpga-board-identified", "fpga-test-started", "fpga-test-finished"]
+    assert events[0][1]["variant"] == "tt-asic" and events[2][1] == {"test": "sdk", "result": "pass", "reason": ""}
     assert report["state"] == {"variant": "tt-asic", "serial": "E661"}
+    # no bitstreams need be installed for it: the package's designs are the FPGA board's
+    bare = TT.check(_host(TT), TT_FOUND, {"images": tmp_path / "none"}, runner=Runner([_rpi_hwid(TT_CHIP_BOARD)]))
+    assert bare["result"] == "pass"
+
+
+def test_the_report_of_a_chip_board_reads_plainly_and_its_event_says_what_was_not_run(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    board = _check(TT, tmp_path, TT_FOUND, Runner([_rpi_hwid(TT_CHIP_BOARD)]))
+    report = {"result": "pass", "mode": "tt", "boards": [board]}
+    shown = runner.summary(report)
+    assert "  tt tt-asic: pass" in shown and "    sdk        pass" in shown
+    assert "    wiring     not run: the Pmod cabling between the demo board and the Pi is not tested" in shown
+    sent = runner.details(report)
+    assert sent["board0"] == "tt tt-asic pass" and sent["board0_tests"] == "sdk=pass"
+    assert sent["board0_not_run"] == "wiring"
+
+
+@pytest.mark.parametrize("said, variant, why", [
+    # a chip the SDK release on the board does not know: it could not select a project on it
+    ({"sdk": "1.2.2"}, "tt-asic",
+     "a tt06 chip needs SDK 2.0.x on an RP2040, and the board runs SDK 1.2.2 on an RP2040"),
+    ({"mcu": "RP2350", "sdk": "3.1.0"}, "tt-asic",
+     "a tt06 chip needs SDK 2.0.x on an RP2040, and the board runs SDK 3.1.0 on an RP2350"),
+    ({"shuttle": "tt03p5", "sdk": "2.0.4"}, "tt-asic",
+     "a tt03p5 chip needs SDK 1.2.x on an RP2040, and the board runs SDK 2.0.4 on an RP2040"),
+    ({"shuttle": "tt09"}, "tt-asic",
+     "no SDK release is recorded as supporting a tt09 chip: add its row to SDK_SUPPORTED"),
+    ({"mcu": None}, "tt-asic", "the board did not say its microcontroller"),
+    ({"sdk": "dev"}, "tt-asic", "the board's SDK release reads 'dev', which is not a release number"),
+    # what ttboard.VERSION is on a board with no release file
+    ({"sdk": "0.0.0"}, "tt-asic",
+     "a tt06 chip needs SDK 2.0.x on an RP2040, and the board runs SDK 0.0.0 on an RP2040"),
+    ({"chip": "fpga", "shuttle": None, "mcu": "RP2350", "sdk": "3.0.8", "demoboard": "TTDBv3 [3.2]"}, "tt-fpga",
+     "the FPGA breakout needs SDK 3.1.x on an RP2350, and the board runs SDK 3.0.8 on an RP2350"),
+])  # fmt: skip
+def test_a_board_whose_sdk_is_not_one_for_its_chip_fails_the_sdk_test_with_what_it_said(
+    tmp_path, monkeypatch, said, variant, why
+):
+    _installed(monkeypatch)
+    report = _check(TT, tmp_path, TT_FOUND, Runner([_rpi_hwid({**TT_CHIP_BOARD, **said})]))
+    assert report["variant"] == variant and report["result"] == "fail"
+    assert report["tests"][0]["test"] == "sdk" and report["tests"][0]["reason"] == why
+    assert f"sdk fail: {why}" in report["reason"]
+    assert any(line.startswith("SDK release: ") for line in report["tests"][0]["output"])
+
+
+@pytest.mark.parametrize("shuttle, sdk", [("tt03p5", "1.2.2"), ("tt04", "2.0.4"), ("tt05", "2.0.0"),
+                                          ("tt07", "v2.0.3"), ("tt08", "2.0.4")])  # fmt: skip
+def test_every_chip_the_fleet_has_passes_the_sdk_test_on_the_release_line_for_it(shuttle, sdk):
+    facts = {"chip": "asic", "shuttle": shuttle, "mcu": "RP2040", "sdk": sdk}
+    result, reason, lines = tt_fpga.sdk_check("tt-asic", facts)
+    assert (result, reason) == ("pass", None) and f"supports a {shuttle} chip" in lines[-1]
+
+
+def test_single_tests_asked_of_a_chip_board_are_refused_and_nothing_is_loaded(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    run = Runner([_rpi_hwid(TT_CHIP_BOARD)])
+    report = _check(TT, tmp_path, TT_FOUND, run, tests=["uart"])
+    assert report["result"] == "error" and report["variant"] == "tt-asic" and _nothing_loaded(report, run)
+    assert report["reason"] == "the board is a tt-asic: uart is for a tt-fpga, so nothing was loaded"
+    assert report["tests"] == [] and "not_run" not in report
+    # an empty list names no test: nothing is refused, and the board is not passed unchecked
+    none = _check(TT, tmp_path / "none", TT_FOUND, Runner([_rpi_hwid(TT_CHIP_BOARD)]), tests=[])
+    assert [t["test"] for t in none["tests"]] == ["sdk"] and none["result"] == "pass"
+
+
+def test_an_fpga_board_whose_sdk_test_fails_still_has_its_designs_loaded_and_tested(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    report = _check(TT, tmp_path, TT_FOUND, Runner([_rpi_hwid({**TT_BOARD, "sdk": "3.0.8"})]))
+    assert [(t["test"], t["result"]) for t in report["tests"]] == [("sdk", "fail"), ("pin-id", "pass"),
+                                                                    ("uart", "pass")]  # fmt: skip
+    assert report["result"] == "fail" and report["reason"].startswith("sdk fail: the FPGA breakout needs SDK 3.1.x")
+
+
+def test_rpi_hwid_gives_shuttles_in_lower_case_and_unknown_as_none_which_is_what_the_table_is_keyed_by():
+    """rpi-hwid's tinytapeout_verdict() lower-cases the ROM's shuttle and gives None for "unknown" (read in
+    mithro/rpi-hwid src/rpi_hwid/tinytapeout.py at 7d871be), so SDK_SUPPORTED holds lower-case names only."""
+    shuttles = [s for row in tt_fpga.SDK_SUPPORTED for s in row[1] if s]
+    assert shuttles and all(s == s.lower() and s != "unknown" for s in shuttles)
+
+
+def test_single_tests_asked_of_an_fpga_board_run_alone(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    report = _check(TT, tmp_path, TT_FOUND, Runner([_rpi_hwid(TT_BOARD)]), tests=["uart"])
+    assert report["result"] == "pass" and [t["test"] for t in report["tests"]] == ["uart"]
 
 
 def test_a_chip_board_whose_shuttle_could_not_be_read_has_no_variant(tmp_path, monkeypatch):
@@ -1134,10 +1229,35 @@ def test_only_an_rp2_that_can_be_a_demo_board_is_a_tiny_tapeout_board(tmp_path):
         ("1-2", "2e8a:000f", None), ("1-3", "2e8a:0003", None), ("1-4", "2e8a:0005", None)]  # fmt: skip
 
 
+def test_two_demo_boards_on_one_pi_are_both_an_error_and_neither_is_touched(tmp_path, monkeypatch):
+    """#124: the check has one port for a demo board, so with two it does not know which one it would talk to."""
+    _installed(monkeypatch)
+    usb = _usb(tmp_path, **{"1-2": ("2e8a", "0005", "A"), "1-4": ("2e8a", "0005", "B"),
+                            "1-1": ("2e8a", "000c", "PROBE")})  # fmt: skip
+    found = TT.spot(_host(TT), usb, [])
+    assert [(f["usb"], f["beside"]) for f in found] == [("1-2", ["1-4"]), ("1-4", ["1-2"])]
+    for one in found:
+        run = Runner([_rpi_hwid(TT_BOARD)])
+        report = _check(TT, tmp_path / one["usb"], one, run)
+        assert report["result"] == "error" and report["variant"] is None and _nothing_loaded(report, run)
+        assert report["reason"] == tt_fpga.ONE_PORT.format(n=2, port="/dev/ttyACM0")
+        assert report["reason"].startswith("2 Raspberry Pi RP2 boards that can be Tiny Tapeout demo boards")
+        assert not any(MAIN_PY in " ".join(c) or SDK_START in " ".join(c) or "rpi-hwid" in " ".join(c)
+                       for c in run.calls)  # fmt: skip
+        assert report["identity"]["serial"] == one["serial"] and report["found"]["beside"]
+    # one board alone has no such key, and is checked as before
+    (tmp_path / "one").mkdir()
+    (alone,) = TT.spot(_host(TT), _usb(tmp_path / "one", **{"1-2": ("2e8a", "0005", "A")}), [])
+    assert "beside" not in alone
+
+
 def test_no_other_board_settles_its_variant_late():
     """The hook is the Tiny Tapeout board's alone: every other board's check runs as it did."""
     assert TT.variant_from_board and not any(b.variant_from_board for b in (ARTY, NETV2, FOMU))
-    assert set(TT.untested) == {"tt-asic"} and not set(TT.untested) & set(TT.variants)
+    assert not any(b.fact_tests or b.pending for b in (ARTY, NETV2, FOMU))
+    # a variant no bitstream is for is checked by fact tests alone, and every pending test is such a variant's
+    assert TT.fact_tests_for("tt-asic") == ["sdk"] and "tt-asic" not in TT.variants
+    assert set(TT.pending) == {"tt-asic"} and "wiring" not in TT.tests
 
 
 def test_a_chip_board_whose_demo_board_was_not_detected_is_still_a_tt_asic(tmp_path, monkeypatch):

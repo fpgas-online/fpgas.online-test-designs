@@ -21,7 +21,7 @@ sudo apt install fpgas-online-tt-fpga
 
 `fpgas-online-tt` is a different package: the TT site's own.
 
-The check finds the board by its Raspberry Pi microcontroller on USB (`2e8a:0005` or `2e8a:000f`, MicroPython's serial port). That does not say whether the demo board carries the FPGA breakout or a Tiny Tapeout chip, so the check asks the board itself (below) and loads a design only into a board that said it is an FPGA board ([Which Tiny Tapeout board it is](../verify.md#which-tiny-tapeout-board-it-is)). On an FPGA board it first loads the PMOD pin identification design and checks the PMOD HAT cabling against the expected map (ui_in on HAT JA, uio on JB, uo_out on JC, [tt-fpga-pin-mapping.md](tt-fpga-pin-mapping.md)); a miswired HAT fails the board. It then loads the UART test design through that microcontroller (`tt_fpga_program.py`, over `mpremote`), and runs its host test through the UART bridge on `/dev/ttyACM0`. There is no SPI flash test: the breakout has no flash (see [Programming](#programming)). Nothing is written to the demo board: for every load the microcontroller reads the bitstream from the Pi over the serial link (see [Programming](#programming)). The board has no flash to compare, so what `changed` compares is its USB serial number. `mpremote` is `micropython-mpremote` in trixie, but only in bookworm-backports for bookworm: without it the check reports an `error`. Only the PMOD loopback test is left to `fpgas-tt-fpga-debug`.
+The check finds the board by its Raspberry Pi microcontroller on USB (`2e8a:0005` or `2e8a:000f`, MicroPython's serial port). That does not say whether the demo board carries the FPGA breakout or a Tiny Tapeout chip, so the check asks the board itself (below) and loads a design only into a board that said it is an FPGA board ([Which Tiny Tapeout board it is](../verify.md#which-tiny-tapeout-board-it-is)). Every board first has what it said judged by [the `sdk` test](../verify.md#the-sdk-test), which loads nothing; for a board with a Tiny Tapeout chip that is the whole check, and its Pmod cabling is reported as not tested. On an FPGA board it then loads the PMOD pin identification design and checks the PMOD HAT cabling against the expected map (ui_in on HAT JA, uio on JB, uo_out on JC, [tt-fpga-pin-mapping.md](tt-fpga-pin-mapping.md)); a miswired HAT fails the board. It then loads the UART test design through that microcontroller (`tt_fpga_program.py`, over `mpremote`), and runs its host test through the UART bridge on `/dev/ttyACM0`. There is no SPI flash test: the breakout has no flash (see [Programming](#programming)). Nothing is written to the demo board: for every load the microcontroller reads the bitstream from the Pi over the serial link (see [Programming](#programming)). The board has no flash to compare, so what `changed` compares is its USB serial number. `mpremote` is `micropython-mpremote` in trixie, but only in bookworm-backports for bookworm: without it the check reports an `error`. Only the PMOD loopback test is left to `fpgas-tt-fpga-debug`.
 
 Before the first test, while it holds `/dev/ttyACM0`, the check reads whether the board's `main.py` is still the SDK's own (`tt_main_py.py`, with or without rpi-hwid; a changed one is an `error`). It then starts the board's SDK (`tt_sdk_start.py`, see [The SDK's main.py](#the-sdks-mainpy)) and then runs `rpi-hwid tinytapeout --json --no-stop-service`, both only when [rpi-hwid](https://github.com/mithro/rpi-hwid) is installed (`python3-rpi-hwid`, which `fpgas-online-verify` suggests, from rpi-hwid's own apt repository). rpi-hwid asks the Tiny Tapeout SDK on the RP2350 which microcontroller, chip, demo board and SDK release this is. The answer goes into the board's identity, for rpi-hwid's Tiny Tapeout label ([TT FPGA identity](../verify.md#tt-fpga-identity), [Tiny Tapeout fields](../identity.md#tiny-tapeout-fields)). Without rpi-hwid the board cannot be asked which Tiny Tapeout board it is: the check is an `error` and nothing is loaded.
 
@@ -309,7 +309,9 @@ board ([#117](https://github.com/fpgas-online/fpgas.online-test-designs/issues/1
 touches it.
 
 The boot check starts the SDK before it asks who the board is: `tt_sdk_start.py` soft-resets the board from the
-friendly REPL, which runs `main.py`, and waits for the SDK's last boot line (`tt.sdk_version=...`). This is
+friendly REPL, which runs `main.py`, and waits for the SDK's last boot line (`tt.sdk_version=...`; a 1.x
+release, which a TT03p5 board runs, has no such line and is recognised by its `TT SDK v1...` line once it is
+back at the prompt). This is
 needed even with the right `main.py`: a soft reset from the raw REPL, which is what `mpremote` does, does not
 run `main.py`, so after any load the `tt` object is gone until the next start. A board whose `main.py` does not
 start the SDK fails the check with that reason.
@@ -318,8 +320,9 @@ start the SDK fails the check with that reason.
 visitor the board's Python prompt, and with it the board's files (Tim, 2026-10-05: the prompt stays). So the
 boot check first reads the SHA-256 of the board's `main.py` (`tt_main_py.py`) and compares it with the one
 recorded for the SDK release the board runs: a `main.py` that was replaced or edited is an `error` with that
-reason, not a pass. A board upgraded to an SDK release with no recorded `main.py` fails the same way until
-the release is added to `tt_main_py.py`.
+reason, not a pass. Every release from 1.0.0 to 3.1.1 is recorded (the releases demo boards with a Tiny
+Tapeout chip run are among them: 1.2.x and 2.0.x); a board on a release with no recorded `main.py` fails the
+same way until the release is added to `tt_main_py.py`.
 
 **No code of ours writes to a demo board.** The boot check and the debug tools change no file on it: not
 `main.py`, and no bitstream (see [Programming](#programming)); `tests/test_tt_host_scripts.py` holds every

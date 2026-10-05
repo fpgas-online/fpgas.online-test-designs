@@ -317,14 +317,27 @@ class TestBoard(Board):
     # said (port_facts), before any design is chosen. Other boards leave this False and nothing changes for
     # them.
     variant_from_board = False
-    # variant -> why the check has no test for it: a variant the board can be, that no bitstream here is for.
-    untested: ClassVar[dict] = {}
+    # Tests judged from what the board itself said (port_facts), which load nothing: test -> {"variants": the
+    # variants it is for, "check": f(variant, facts) giving (result, the reason or None, lines for the report)}.
+    # They run first, in the whole boot check only (not when single tests were asked for), and are the whole
+    # check of a variant that no bitstream here is for (a demo board with a Tiny Tapeout chip).
+    fact_tests: ClassVar[dict] = {}
+    # variant -> {test: why}: a test that variant is to have and the boot check does not run yet. It goes in the
+    # report's `not_run`, said and failing nothing.
+    pending: ClassVar[dict] = {}
 
     def settle(self, asked, found, facts):
         """The variant of a board with variant_from_board, from `facts`; `asked` is --variant, or None. It is one
-        of `variants` or `untested`, or a Problem saying why the board is not checked: then no test runs and
-        nothing is loaded."""
+        of `variants` or one a fact test is for, or a Problem saying why the board is not checked: then no test
+        runs and nothing is loaded."""
         raise NotImplementedError
+
+    def fact_tests_for(self, variant):
+        return [name for name, t in self.fact_tests.items() if variant in t["variants"]]
+
+    def run_fact_test(self, test, variant, facts):
+        result, reason, output = self.fact_tests[test]["check"](variant, facts)
+        return {"test": test, "result": result, **({"reason": reason} if reason else {}), "output": list(output)}
 
     def identified(self, report, found, options, facts=None):
         """Who the board is (identity.py), from how it was found, its JTAG IDCODE and DNA, and `facts`
@@ -384,14 +397,26 @@ class TestBoard(Board):
             if late:
                 try:
                     variant = report["variant"] = self.settle(options.get("variant"), found, facts)
-                    if variant in self.untested:  # known, and nothing here to test it with: said, not guessed at
-                        refused, tests = Problem("fail", self.untested[variant]), []
-                    else:
+                    if variant in self.variants:
                         manifest = bitstreams.load_manifest(images, self.bitstreams_package)
                         report["bitstreams"] = manifest.get("version")
+                    elif not options.get("tests"):  # no design is for it: its fact tests are its check
+                        tests = []
+                    else:
+                        raise Problem("error", f"the board is a {variant}: {', '.join(tests)} "
+                                               f"{'is' if len(tests) == 1 else 'are'} for a "
+                                               f"{' or '.join(self.variants)}, so nothing was loaded")  # fmt: skip
                 except Problem as p:  # not settled, or no bitstreams: no test runs and nothing is loaded
                     refused, tests = p, []
             self.identified(report, found, options, facts)
+            # No test named (None, or an empty list, which names none): the board's own word is judged.
+            for test in self.fact_tests_for(variant) if not options.get("tests") and not refused else ():
+                event("fpga-test-started", {"test": test})
+                report["tests"].append(self.run_fact_test(test, variant, facts))
+                done = report["tests"][-1]
+                event("fpga-test-finished", {"test": test, "result": done["result"], "reason": done.get("reason", "")})
+            if not refused and self.pending.get(variant):
+                report["not_run"] = dict(self.pending[variant])
             for test in tests:
                 event("fpga-test-started", {"test": test})
                 report["tests"].append(self.run_test(test, variant, host, images, manifest, runner))
