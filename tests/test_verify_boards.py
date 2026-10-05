@@ -1138,3 +1138,45 @@ def test_no_other_board_settles_its_variant_late():
     """The hook is the Tiny Tapeout board's alone: every other board's check runs as it did."""
     assert TT.variant_from_board and not any(b.variant_from_board for b in (ARTY, NETV2, FOMU))
     assert set(TT.untested) == {"tt-asic"} and not set(TT.untested) & set(TT.variants)
+
+
+def test_a_chip_board_whose_demo_board_was_not_detected_is_still_a_tt_asic(tmp_path, monkeypatch):
+    """rpi-hwid gives null for a demo board the SDK did not detect: on an FPGA board that is a failed read, on a
+    chip board it is not, and the chip and shuttle the board did say are kept."""
+    _installed(monkeypatch)
+    run = Runner([_rpi_hwid({**TT_CHIP_BOARD, "demoboard": None, "mcu": None})])
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    assert report["variant"] == "tt-asic" and "tinytapeout_error" not in report["identity"]
+    assert report["identity"]["shuttle"] == "tt06" and report["identity"]["demoboard"] is None
+    assert tt_fpga.tinytapeout_fields("E661", Runner([_rpi_hwid({**TT_CHIP_BOARD, "chip": None})])) == {
+        "tinytapeout_error": "rpi-hwid tinytapeout --json --no-stop-service: rpi-hwid could not read chip"}  # fmt: skip
+
+
+def test_an_fpga_board_with_no_bitstreams_is_an_error_identified_once_and_nothing_is_loaded(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    events = []
+    run = Runner([_rpi_hwid(TT_BOARD)])
+    report = TT.check(_host(TT), TT_FOUND, {"images": tmp_path / "none", "event": lambda s, d: events.append(s)},
+                      runner=run)  # fmt: skip
+    assert report["result"] == "error" and report["variant"] == "tt-fpga" and _nothing_loaded(report, run)
+    assert events == ["fpga-board-identified"] and report["identity"]["chip"] == "fpga"
+    assert _restarted_last(run)
+
+
+def test_a_test_the_tt_board_does_not_have_is_an_error_before_the_board_is_touched(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    run = Runner([_rpi_hwid(TT_BOARD)])
+    report = _check(TT, tmp_path, TT_FOUND, run, tests=["nonesuch"])
+    assert report["result"] == "error" and "has no test nonesuch" in report["reason"] and run.calls == []
+    assert report["variant"] is None and "variant" not in report["identity"]
+
+
+def test_by_hand_the_debug_tool_does_not_guess_a_tt_boards_variant():
+    import argparse
+
+    from fpgas_online_verify import debug
+
+    with pytest.raises(core.Problem, match="pass --variant \\(tt-fpga\\)"):
+        debug._variant(TT, _host(TT), argparse.Namespace(variant=None))
+    assert debug._variant(TT, _host(TT), argparse.Namespace(variant="tt-fpga")) == "tt-fpga"
+    assert debug._variant(FOMU, _host(FOMU), argparse.Namespace(variant=None)) == "evt"

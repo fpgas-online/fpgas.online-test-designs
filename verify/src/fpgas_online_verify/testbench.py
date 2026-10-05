@@ -376,7 +376,7 @@ class TestBoard(Board):
             return {**report, "result": p.result, "reason": p.reason}
         if manifest is not None:
             report["bitstreams"] = manifest.get("version")
-        if self.idcodes:
+        if self.idcodes and not late:  # a JTAG part is a variant's: none is known yet for a late one
             report["jtag"] = self.jtag(host, found, variant, runner)
         event = options.get("event") or (lambda stage, details: None)
         with self.services_stopped(runner, options.get("restart_later")) as held:

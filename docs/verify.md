@@ -675,7 +675,13 @@ chosen.
 * An FPGA bitstream only ever goes to a board that said it is an FPGA board.
 * Other Raspberry Pi USB products (a debug probe, say) are not Tiny Tapeout boards and are not looked at.
 * `--variant tt-fpga` does not override the board: asked for on a board that says otherwise, it is an `error`.
-* `fpgas-tt-fpga-debug program` and `test` are for use by hand and load what they are told to.
+* `fpgas-tt-fpga-debug program` and `test` are for use by hand: they do not ask the board, so they need
+  `--variant tt-fpga` said out loud, and load what they are told to.
+* A board whose `main.py` is not the one the check knows is not asked at all (the check will not run a
+  `main.py` it does not know), so it has no variant. The check knows the `main.py` of SDK 3.1.0 only: a
+  demo board with a Tiny Tapeout chip and an older SDK therefore ends as that `error` today, not as `tt-asic`.
+* rpi-hwid looks at `2e8a:0005` only, so a board showing `2e8a:000f` is found and then cannot be asked.
+* A board that says `asic` is not held to naming its demo board or microcontroller; an FPGA board is.
 * `variant` in the report, in `fpga-board-identified` and in `fpga-verified` is the decided one; it is absent
   when the board did not say.
 

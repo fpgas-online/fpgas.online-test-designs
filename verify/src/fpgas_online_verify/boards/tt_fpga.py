@@ -60,6 +60,10 @@ RPI_HWID_FIELDS = tuple(f for f in identity.TINYTAPEOUT_FIELDS if f != "usb_seri
 # chip ROM or the demo board detection), so null here is an error, never "there is none". shuttle, repo, commit
 # and demoboard_version can be null: the FPGA has no shuttle, so no ROM repository and no shuttle kit.
 ALWAYS_THERE = ("mcu", "chip", "demoboard", "sdk")
+# A board with a Tiny Tapeout chip is not held to that: rpi-hwid gives null for its demo board when the SDK did
+# not detect one, and for a microcontroller it does not know, and neither is a failed read. What it must have
+# said is its chip; whether it named a shuttle is settle()'s question.
+ALWAYS_THERE_ON_A_CHIP_BOARD = ("chip",)
 
 
 def which(name):
@@ -145,7 +149,8 @@ def tinytapeout_fields(usb_serial, runner=run):
     empty = [k for k, v in out.items() if v == ""]  # an identity field is never present and empty
     if empty:
         return {"tinytapeout_error": f"{command}: empty: {', '.join(empty)}"}
-    unread = [k for k in ALWAYS_THERE if k in out and out[k] is None]
+    needed = ALWAYS_THERE_ON_A_CHIP_BOARD if out.get("chip") == "asic" else ALWAYS_THERE
+    unread = [k for k in needed if k in out and out[k] is None]
     if unread:
         return {"tinytapeout_error": f"{command}: rpi-hwid could not read {', '.join(unread)}"}
     return out
