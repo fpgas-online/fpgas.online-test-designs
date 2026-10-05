@@ -10,6 +10,7 @@ on:
     paths:
       - "designs/pmod-pin-id/**"
       - "designs/_shared/**"
+      - "tests/test_pmod_pin_id_turns.py"
       # designs/_shared/build_helpers.py checks it exists at import
       - "scripts/fix_yosys_edif_libref.py"
       - "pyproject.toml"
@@ -235,6 +236,12 @@ jobs:
 
       - name: Install Python dependencies
         run: uv sync --extra build
+
+      # The senders that take turns on the wires two Pmods share (#142), and the host scan that hears both.
+      - name: Simulate the senders and test the host scan
+        run: |
+          uv run --extra build --with pytest pytest -v -rs tests/test_pmod_pin_id_turns.py \
+            designs/pmod-pin-id/host/test_identify_pmod_pins.py
 
       - name: Build TT FPGA PMOD Pin ID
         run: |

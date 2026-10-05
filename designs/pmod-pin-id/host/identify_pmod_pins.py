@@ -100,6 +100,8 @@ BOARDS = {
     # connector, not the cable, so it is expected here.
     "arty": {
         "description": "Arty A7 Pmod JA/JB/JC -> Digilent Pmod HAT JA/JB/JC",
+        "wires": 24,
+        "untested": "HAT JA.2-4 and JB.2-4, which share GPIO10/9/11: this board's design sends on both at once",
         "pins": [
             (8, "G13", "HAT JA.1 <- Arty JA.1"),
             (19, "D13", "HAT JA.7 <- Arty JA.7"),
@@ -123,17 +125,27 @@ BOARDS = {
     },
     # TT FPGA demo board on a Digilent Pmod HAT, as the Welland hosts are cabled:
     # ui_in on HAT JA, uio on JB, uo_out on JC (docs/hardware/tt-fpga-pin-mapping.md).
-    # The iCE40 transmits its package pin numbers. GPIO10/9/11 are left out, as
-    # for the Arty: ui_in and uio both drive them, and they decode as garbage.
+    # The iCE40 transmits its package pin numbers. All 24 wires are checked (#142).
+    # GPIO10/9/11 are each listed twice: they are HAT JA pins 2-4 *and* JB pins
+    # 2-4, so two wires end on each. The TT design gives the two FPGA pins their
+    # turns to send there (pmod_pin_id_tt.py), and the scan listens for a whole
+    # cycle and expects both pin numbers.
     "tt": {
         "description": "TT FPGA demo board Pmods -> Digilent Pmod HAT JA/JB/JC",
+        "wires": 24,
         "pins": [
             (8, "13", "HAT JA.1 <- ui_in[0]"),
+            (10, "19", "HAT JA.2 <- ui_in[1]"),
+            (9, "18", "HAT JA.3 <- ui_in[2]"),
+            (11, "21", "HAT JA.4 <- ui_in[3]"),
             (19, "23", "HAT JA.7 <- ui_in[4]"),
             (21, "25", "HAT JA.8 <- ui_in[5]"),
             (20, "26", "HAT JA.9 <- ui_in[6]"),
             (18, "27", "HAT JA.10 <- ui_in[7]"),
             (7, "2", "HAT JB.1 <- uio[0]"),
+            (10, "4", "HAT JB.2 <- uio[1]"),
+            (9, "3", "HAT JB.3 <- uio[2]"),
+            (11, "6", "HAT JB.4 <- uio[3]"),
             (26, "9", "HAT JB.7 <- uio[4]"),
             (13, "10", "HAT JB.8 <- uio[5]"),
             (3, "11", "HAT JB.9 <- uio[6]"),
@@ -156,17 +168,24 @@ def evaluate_board(board_name, results):
 
     *results* maps ``gpio -> decoded_label`` as produced by :func:`scan_gpios`
     (a clean ball name like ``"K2"``, a ``"?garbled"`` string, or ``None`` for
-    no signal). Returns ``(all_ok, rows)`` where each row is a dict with
+    no signal; for a GPIO two wires end on, a tuple of the labels heard there).
+    Returns ``(all_ok, rows)`` where each row is a dict with
     ``gpio``, ``label``, ``expected``, ``got`` and ``ok``. A pin passes only on
     an exact clean match — garbled and missing decodes both fail, because a
-    miswired or unprogrammed board must not be reported as good.
+    miswired or unprogrammed board must not be reported as good. On a shared
+    GPIO a wire passes when its own label is among those heard: each of the
+    two wires has its own row and its own label.
     """
     spec = BOARDS[board_name]
     rows = []
     all_ok = True
     for gpio, expected, label in spec["pins"]:
         got = results.get(gpio)
-        ok = got == expected
+        if isinstance(got, tuple):
+            ok = expected in got
+            got = "+".join(got)
+        else:
+            ok = got == expected
         if not ok:
             all_ok = False
         rows.append(
@@ -395,9 +414,34 @@ def label_from_frames(frames):
     return None
 
 
+def labels_from_frames(frames, min_repeats=3):
+    """Every valid label heard at least *min_repeats* times, as a sorted tuple.
+
+    For a GPIO two wires end on, where two FPGA pins send in turn: both labels
+    are there. A label heard once or twice is not kept: a capture that starts
+    or ends inside a label, or noise, can make one. Falls back to
+    :func:`label_from_frames`'s ``"?<raw>"`` marker or ``None`` when no label
+    was heard often enough.
+    """
+    from collections import Counter
+
+    text = bytes(b for b, _ok in frames).decode("latin-1")
+    lines = [ln.rstrip("\r") for ln in text.split("\n")]
+    counts = Counter(ln for ln in lines if ln and is_valid_label(ln))
+    heard = tuple(sorted(label for label, n in counts.items() if n >= min_repeats))
+    if heard:
+        return heard
+    one = label_from_frames(frames)
+    return one if one is None or one.startswith("?") else "?" + one
+
+
 # 1200 baud, "XNN\r\n" is 5 frames = 50 bit periods = ~42 ms per repeat;
 # 250 ms captures at least five repeats for the vote.
 CAPTURE_SECONDS = 0.25
+# A GPIO two wires end on: the two FPGA pins take turns of 0.4 s with 0.1 s of
+# silence between (pmod_pin_id_tt.py: one cycle is 1.0 s). 1.3 s holds a whole
+# turn of each wherever in the cycle the capture starts.
+SHARED_CAPTURE_SECONDS = 1.3
 
 
 def identify_pin(reader, capture_s=CAPTURE_SECONDS):
@@ -412,17 +456,28 @@ def identify_pin(reader, capture_s=CAPTURE_SECONDS):
 
 # -- Scanner -------------------------------------------------------------------
 
-def scan_gpios(gpio_list, chip_path):
-    """Scan a list of GPIO pins and return {gpio: label} mapping."""
+def identify_shared_pin(reader, capture_s=SHARED_CAPTURE_SECONDS):
+    """Capture a whole cycle of turns and return the labels heard: a sorted
+    tuple, a "?<raw>" marker, or None when the line is silent."""
+    events = reader.capture_edges(capture_s)
+    return labels_from_frames(decode_edges(events, max_start_candidates=24))
+
+
+def scan_gpios(gpio_list, chip_path, shared=()):
+    """Scan a list of GPIO pins and return {gpio: label} mapping. A GPIO in
+    *shared* is one two wires end on: it is listened to for a whole cycle of
+    turns, and its entry is a tuple of the labels heard."""
     results = {}
     for gpio_num in gpio_list:
         hat_label = HAT_GPIO_LABELS.get(gpio_num, f"GPIO{gpio_num}")
         reader = GpioReader(gpio_num, chip_path)
         try:
             reader.open()
-            label = identify_pin(reader)
+            label = identify_shared_pin(reader) if gpio_num in shared else identify_pin(reader)
             results[gpio_num] = label
-            if label is None:
+            if isinstance(label, tuple):
+                print(f"  GPIO{gpio_num:2d} ({'two wires end here':20s}) -> {' and '.join(label)}")
+            elif label is None:
                 print(f"  GPIO{gpio_num:2d} ({hat_label:20s}) -> (no signal)")
             elif label.startswith("?"):
                 print(f"  GPIO{gpio_num:2d} ({hat_label:20s}) -> (garbled: {label[1:]!r})")
@@ -547,6 +602,18 @@ def print_validation(board_name, rows):
         )
 
 
+def coverage(board_name):
+    """One line saying how many of the board's signal wires the check covers, so
+    that "18/18 pins match" is never read as "every wire was tested"."""
+    spec = BOARDS[board_name]
+    tested = len(spec["pins"])
+    wires = spec.get("wires", tested)
+    if tested == wires:
+        return f"All {wires} signal wires of this cabling are tested."
+    return (f"{tested} of the {wires} signal wires of this cabling are tested; "
+            f"{wires - tested} are NOT tested: {spec['untested']}.")
+
+
 # -- Main ----------------------------------------------------------------------
 
 def main():
@@ -576,8 +643,11 @@ def main():
     if args.gpios or args.hat_port:  # an explicit scan is discovery, whatever --board says
         args.board = None
 
+    shared = set()
     if args.board:
-        gpio_list = [gpio for gpio, _ball, _label in BOARDS[args.board]["pins"]]
+        listed = [gpio for gpio, _ball, _label in BOARDS[args.board]["pins"]]
+        gpio_list = list(dict.fromkeys(listed))  # each GPIO once, in the table's order
+        shared = {gpio for gpio in gpio_list if listed.count(gpio) > 1}
     elif args.gpios:
         gpio_list = args.gpios
     elif args.hat_port:
@@ -598,7 +668,7 @@ def main():
 
     functions = alt_functions(gpio_list)
     try:
-        results = scan_gpios(gpio_list, chip_path)
+        results = scan_gpios(gpio_list, chip_path, shared)
     finally:
         restore_alt_functions(functions)
 
@@ -609,6 +679,7 @@ def main():
         print_validation(args.board, rows)
         n_ok = sum(1 for r in rows if r["ok"])
         print(f"\n{n_ok}/{len(rows)} pins match expected wiring.")
+        print(coverage(args.board))
         print(f"RESULT: {'PASS' if all_ok else 'FAIL'}")
         sys.exit(0 if all_ok else 1)
 
