@@ -39,6 +39,8 @@ VCC = { label = "VCC", what = "3.3 V from the Acorn" }
 #   name: the silkscreen or pinout name; gpio + func: the SoC line and its function, if it has one;
 #   tag: the host's name for the pin as the sheet prints it beside the wire; rpi: the same pin on a
 #   Raspberry Pi 40-pin header, where the numbers differ.
+#   numbering: how the printed numbers run over a header of more than one column, seen from above:
+#   "across" each row in turn (1 2 / 3 4 / ...), or "down" each column in turn (1 to 5, then 6 to 10).
 # wires maps each connected signal to [header, pin]. Signals not listed are cut back: VCC always.
 #
 # What fpgas-verify reads to check a host of this carrier (verify/.../boards/acorn/setup.py):
@@ -115,6 +117,7 @@ note = "the sheet shows a Waveshare PoE M.2 HAT+"
 name = "40-pin header"
 short = "header"
 columns = 2
+numbering = "across"
 housings = [[5, 10], [19, 26]]
 
 [carriers.pi5.headers.gpio.pins]
@@ -180,6 +183,7 @@ part = "Raspberry Pi Compute Module 4 or 5"
 [carriers.blade.headers.ext]
 name = "Extension Port"
 columns = 2
+numbering = "down"
 housings = [[1, 10]]
 
 [carriers.blade.headers.ext.pins]

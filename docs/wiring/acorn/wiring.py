@@ -31,6 +31,16 @@ class Header:
     columns: int
     pins: dict  # pin number -> {name, gpio, func, tag, rpi}
     housings: list  # [(first pin, last pin)]
+    numbering: str = "across"  # how the printed numbers run, seen from above: "across" rows or "down" columns
+
+    def grid(self, first, last):
+        """Pins `first` to `last` as they sit on the board seen from above: one tuple per row, left to right."""
+        rows, rest = divmod(last - first + 1, self.columns)
+        if rest:
+            raise WiringError(f"{self.key}: pins {first} to {last} do not fill {self.columns} columns")
+        if self.numbering == "down":
+            return [tuple(first + c * rows + r for c in range(self.columns)) for r in range(rows)]
+        return [tuple(first + r * self.columns + c for c in range(self.columns)) for r in range(rows)]
 
 
 @dataclass
@@ -77,8 +87,16 @@ def _carrier(key, raw):
     headers = {}
     for hk, h in raw["headers"].items():
         pins = {int(n): p for n, p in h["pins"].items()}
+        if h["columns"] > 1 and h.get("numbering") not in ("across", "down"):
+            raise WiringError(f'wiring.toml: {key}: header {hk} needs numbering = "across" or "down"')
         headers[hk] = Header(
-            hk, h["name"], h.get("short", h["name"]), h["columns"], pins, [tuple(r) for r in h.get("housings", [])]
+            hk,
+            h["name"],
+            h.get("short", h["name"]),
+            h["columns"],
+            pins,
+            [tuple(r) for r in h.get("housings", [])],
+            h.get("numbering", "across"),
         )
     wires = {s: (w[0], int(w[1])) for s, w in raw["wires"].items()}
     parts = [*raw.get("parts", []), *DATA.get("parts", [])]  # this carrier's own, then what every carrier needs
