@@ -631,7 +631,7 @@ Each test checks its bitstream's sha256 against the `-bitstreams` package's mani
 | `ddr` | [`test_ddr.py`](../designs/ddr-memory/host/test_ddr.py) | the BIOS reports DRAM calibration and `Memtest OK` |
 | `spiflash` | [`test_spiflash.py`](../designs/spi-flash-id/host/test_spiflash.py) | the design reads the flash's JEDEC ID and prints `SPI_FLASH_TEST: PASS` |
 | `ethernet` | [`test_ethernet.py`](../designs/ethernet-test/host/test_ethernet.py) | the design answers ARP and ping through the Pi's USB Ethernet adapter (192.168.1.100/24 on that adapter only) |
-| `pin-id` | [`identify_pmod_pins.py`](../designs/pmod-pin-id/host/identify_pmod_pins.py) | every Pmod HAT GPIO receives the FPGA ball name the expected cabling puts there |
+| `pin-id` | [`identify_pmod_pins.py`](../designs/pmod-pin-id/host/identify_pmod_pins.py) | each Pmod HAT GPIO the test covers receives the FPGA ball name the expected cabling puts there. TT FPGA: all 24 signal wires of the three ribbons, each on its own (the six that share three Pi pins send in turns). Arty: 18 of 24 (not the six on the shared pins). The test's last lines say which |
 | `pmod` | [`test_pmod_loopback.py`](../designs/pmod-loopback/host/test_pmod_loopback.py) | the loopback wiring reads back; `-debug` only |
 
 | Board | Found by | Loaded with | UART | Boot-check tests, in order | Only in `-debug` | Recorded state |
@@ -1028,6 +1028,12 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 * The Arty, NeTV2, Fomu and TT FPGA are checked with the single-function test designs, loaded one at a time,
   not with the full test design.
 * `pin-id` checks each Pmod pin in one direction only, FPGA to Pi.
+* On an Arty, `pin-id` does not test the six wires on HAT JA pins 2-4 and JB pins 2-4 (they share three Pi
+  pins, and the Arty design sends on both at once); its output says so. The TT FPGA's design takes turns there
+  and tests all 24 ([#142](https://github.com/fpgas-online/fpgas.online-test-designs/issues/142)).
+* What `pin-id` cannot tell on a TT FPGA board: the JA wire and the JB wire of the same number (2, 3 or 4)
+  swapped with each other. The HAT joins those two wires on one Pi pin, so the Pi hears the same two pin
+  numbers either way. Every other miswiring of the three ribbons changes what some Pi pin hears.
 * The Acorn's PCIe transfer rate is not measured, nor the Arty's and NeTV2's DDR and Ethernet bandwidth:
   their `ddr` and `ethernet` tests pass or fail only.
 * The Arty's and NeTV2's flash is fingerprinted (a sha256 of its boot image region) and compared only with the
@@ -1227,7 +1233,7 @@ gpioinfo -c gpiochip0 | grep -E 'line +(2|3|4|14):'   # with that chip's name (g
 | `fail`: `loading it failed (exit N)` | the programmer could not load the design: JTAG wiring, cable, or programmer support |
 | `fail`: `python3 did not finish within 300 s` | the design never printed what the test waits for: wrong UART, or the design does not run |
 | `fail`: `the test exited 1` | the test failed; its last lines are in the summary. `fpgas-<board>-debug test <test>` shows all of it |
-| `fail`: `N/18 pins match expected wiring` | the Pmod HAT cabling differs from the board's expected map |
+| `fail`: `N/24 pins match expected wiring` (TT FPGA) or `N/18` (Arty) | the Pmod HAT cabling differs from the board's expected map: the table above that line shows each wire, what was expected on it and what was heard. The line after it says how many of the cabling's signal wires the test covers: all 24 on a TT FPGA board; 18 of 24 on an Arty, whose design cannot test the six wires on the three Pi pins two Pmods share |
 | `fail`: `… is an XC7A100T, not the a7-35's XC7A35T …` / `P1 JTAG chain has … expected one …` | the JTAG IDCODE is not the variant's part: the wrong board, or the wrong `--variant` |
 | `fail`: `the JTAG chain has N devices (…), not one` | more than the board's FPGA answers on its JTAG chain (an Arty or a NeTV2): another device wired into it, or a fault on the cable |
 | `fail`: `unconverted: …` | an Acorn on SQRL's factory image (or the XDMA sample): convert it ([acorn-pcie-programming.md](hardware/acorn-pcie-programming.md)) |

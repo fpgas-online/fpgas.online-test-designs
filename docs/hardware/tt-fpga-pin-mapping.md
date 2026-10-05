@@ -87,7 +87,7 @@ Direct programming of the iCE40 via openFPGALoader (bypassing the MicroPython RE
 | ui_in[6] | 26        | 23          | JA9          | 20       | pin-id   |
 | ui_in[7] | 27        | 24          | JA10         | 18       | pin-id   |
 
-(\*) ui_in[1:3] are on JA pins 2-4, which share RPi GPIOs with JB pins 2-4. The pin-id design drives every pin as an output, so on these GPIOs the ui_in and uio labels collide and the decode is garbage. Positions inferred from the pattern: the JA connector pin numbering matches the TT bit ordering straight through (bit 0→pin 1, bit 7→pin 10).
+(\*) ui_in[1:3] are on JA pins 2-4, which share RPi GPIOs with JB pins 2-4 (uio[1:3]). The pin-id design gives the two FPGA pins on each of those GPIOs their turns: ui_in[1:3] send their pin numbers for 0.4 s while uio[1:3] are high impedance, then nobody for 0.1 s, then the reverse; the scan listens on GPIO10, 9 and 11 for a whole cycle and expects both numbers ([#142](https://github.com/fpgas-online/fpgas.online-test-designs/issues/142)). Until that change these six wires were not tested, and their positions here were inferred from the pattern (bit 0→pin 1, bit 7→pin 10); they had not been measured with the new design when this was written, so the column still does not say `pin-id` for them. One thing the test cannot tell even then: the JA wire and the JB wire of the same number (2, 3 or 4) swapped with each other. Both end on the same Pi pin, where the HAT joins them, so the Pi hears the same two numbers either way; the two ribbons swapped as a whole is caught, by their other five wires.
 
 ### uo_out (User Outputs)
 
