@@ -8,8 +8,8 @@ host, kept as one table and turned into everything that shows it.
 | `wiring.toml` | **The wiring.** The Acorn's P1 and P2 pinouts, each carrier's headers as printed on the board, which wire goes to which pin, the series resistor, and the Dupont housings. |
 | `wiring.py` | Loads `wiring.toml` and refuses it if a wire lands on a 5 V or 3.3 V pin, two wires share a pin, VCC is wired, a ground meets a signal, or a wire is outside every housing. |
 | `gen.py` | Writes `generated/` from the table: the two wiring sheets (`sheetlib.py`) and the pin tables (`tables.py`). |
-| `steps.py` | A picture for a step of building a cable, drawn with the sheets' pieces: `generated/acorn-cable-<carrier>-<connector>.svg`, which wire goes in which cavity of the housing. `gen.py` writes it with the rest. |
-| `render.py` | Renders the sheets to PNG with headless Chromium, for pages and PDFs that cannot take the SVG. |
+| `steps.py` | The pictures for the steps of building a cable, on the sheets' canvas and photos: `generated/acorn-cable-<carrier>-<connector>.svg`, which wire goes in which cavity of the housing, for each of the four cables. Narrower than a sheet and with larger text, to be read at a page's text width. Its `ASSUMPTIONS` are printed on every picture until a built cable or a photograph settles them. `gen.py` writes the pictures with the rest. |
+| `render.py` | Renders every SVG in `generated/` to PNG, each at its own size, with headless Chrome (or Chromium where Chrome is not installed), for pages and PDFs that cannot take the SVG. |
 | `generated/` | The output, committed. [fpgas.online-docs](https://github.com/fpgas-online/fpgas.online-docs) copies it onto [docs.fpgas.online](https://docs.fpgas.online/en/latest/boards/acorn/wiring.html); do not edit it by hand. |
 | `GOALS.md` | What the sheets have to show, and what must not be on them. |
 | `photos/`, `prep_photos.py` | The board photos the sheets use, and the script that cut them from the vendors' originals. |
@@ -19,7 +19,7 @@ host, kept as one table and turned into everything that shows it.
 
 ```console
 $ uv run docs/wiring/acorn/gen.py          # about a minute: sheets and tables into generated/
-$ uv run --no-project python docs/wiring/acorn/render.py  # the PNGs (needs chromium)
+$ uv run docs/wiring/acorn/render.py       # the PNGs (needs google-chrome-stable or chromium)
 $ git add docs/wiring/acorn
 ```
 
