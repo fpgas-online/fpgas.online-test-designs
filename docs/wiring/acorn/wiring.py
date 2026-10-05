@@ -20,6 +20,7 @@ TOOLS = DATA.get("tools", [])
 for _tool in TOOLS:
     if not _tool.get("tool") or set(_tool) - {"tool", "note", "when"} or _tool.get("when", "resistor") != "resistor":
         raise ValueError(f'wiring.toml: a tool needs a `tool`, and may have `note` and `when = "resistor"`: {_tool}')
+LENGTHS = DATA["lengths"]  # {cut_back, resistor, strip} in mm: where the cables are cut
 DIRECTION = {"pi": "Pi → FPGA", "fpga": "FPGA → Pi", "both": "either"}
 
 

@@ -72,7 +72,16 @@ note = "cut in half: one half is the P1 cable, the other the P2 cable. All six w
 [[parts]]
 qty = 1
 part = "heat-shrink tube, about 2 mm, a few centimetres"
-note = "over each cut-back wire end, and over the joints of a series resistor where there is one"
+note = "over each cut-back wire end"
+
+# lengths: where the cables are cut, in millimetres. Our choice, not measured on a built cable.
+#   cut_back: how much of a wire that goes in no cavity is left at the plug.
+#   resistor: how far from its free end a wire is cut to take a series resistor.
+#   strip: how much insulation comes off for a crimp terminal.
+[lengths]
+cut_back = 10
+resistor = 15
+strip = 3
 
 # tools: what building the two cables takes, whatever the carrier. `when = "resistor"` is needed only on a
 # carrier whose wiring has a series resistor.
