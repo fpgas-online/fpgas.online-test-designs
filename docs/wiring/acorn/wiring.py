@@ -32,6 +32,8 @@ class Header:
     pins: dict  # pin number -> {name, gpio, func, tag, rpi}
     housings: list  # [(first pin, last pin)]
     numbering: str = "across"  # how the printed numbers run, seen from above: "across" rows or "down" columns
+    count: int = 0  # how many pins the whole header has
+    printed: bool = False  # the pin numbers are printed on the board beside the header
 
     def grid(self, first, last):
         """Pins `first` to `last` as they sit on the board seen from above: one tuple per row, left to right."""
@@ -97,6 +99,8 @@ def _carrier(key, raw):
             pins,
             [tuple(r) for r in h.get("housings", [])],
             h.get("numbering", "across"),
+            h.get("count", max(pins)),
+            h.get("printed", False),
         )
     wires = {s: (w[0], int(w[1])) for s, w in raw["wires"].items()}
     parts = [*raw.get("parts", []), *DATA.get("parts", [])]  # this carrier's own, then what every carrier needs

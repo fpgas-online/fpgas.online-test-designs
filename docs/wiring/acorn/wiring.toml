@@ -41,6 +41,8 @@ VCC = { label = "VCC", what = "3.3 V from the Acorn" }
 #   Raspberry Pi 40-pin header, where the numbers differ.
 #   numbering: how the printed numbers run over a header of more than one column, seen from above:
 #   "across" each row in turn (1 2 / 3 4 / ...), or "down" each column in turn (1 to 5, then 6 to 10).
+#   count: how many pins the whole header has, where `pins` lists only those near the wiring.
+#   printed: true where the pin numbers are printed on the board beside the header.
 # wires maps each connected signal to [header, pin]. Signals not listed are cut back: VCC always.
 #
 # What fpgas-verify reads to check a host of this carrier (verify/.../boards/acorn/setup.py):
@@ -118,6 +120,7 @@ name = "40-pin header"
 short = "header"
 columns = 2
 numbering = "across"
+count = 40
 housings = [[5, 10], [19, 26]]
 
 [carriers.pi5.headers.gpio.pins]
@@ -184,6 +187,7 @@ part = "Raspberry Pi Compute Module 4 or 5"
 name = "Extension Port"
 columns = 2
 numbering = "down"
+printed = true
 housings = [[1, 10]]
 
 [carriers.blade.headers.ext.pins]
@@ -202,6 +206,7 @@ housings = [[1, 10]]
 # calls it "UART Back" and lists GPIO14 and GPIO15 there as well as on the Extension Port.
 [carriers.blade.headers.uart]
 name = "UART"
+printed = true
 columns = 1
 housings = [[1, 4]]
 
