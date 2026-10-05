@@ -8,14 +8,20 @@ FPGA breakout or a Tiny Tapeout chip, and its microcontroller looks the same on 
 RP2350 and a chip board's RP2040 both read 2e8a:0005). So finding the board gives no variant: it is settled
 once the check holds the board's port, from the `chip` rpi-hwid read there, before any design is chosen:
 
-  chip "fpga"                      tt-fpga: the tests below run
-  chip "asic" and a shuttle        tt-asic: identified, and said to be untested (no test here is for a chip)
-  anything else                    no variant: an error saying what could not be read
+  chip "fpga"                      tt-fpga: the `sdk` test, then the designs below are loaded and tested
+  chip "asic" and a shuttle        tt-asic: the `sdk` test; nothing is loaded
+  anything else                    no variant: an error saying what could not be read, and no test
 
-In the last two cases no test runs and nothing is loaded: an FPGA bitstream only ever goes to a board that
-said it is an FPGA board. An RP2 that is in its USB boot loader (2e8a:0003) is found too, and fails as not
-running the Tiny Tapeout firmware. Other Raspberry Pi USB products (a debug probe, a Pico running something
-else) are not Tiny Tapeout boards and are not looked at.
+An FPGA bitstream only ever goes to a board that said it is an FPGA board. An RP2 that is in its USB boot
+loader (2e8a:0003) is found too, and fails as not running the Tiny Tapeout firmware. Other Raspberry Pi USB
+products (a debug probe, a Pico running something else) are not Tiny Tapeout boards and are not looked at.
+
+The `sdk` test (sdk_check) loads nothing and asks the board nothing more: it judges what the board already
+said. Chip, shuttle, microcontroller and SDK release must be a combination the SDK's releases support
+(SDK_SUPPORTED), since an SDK that does not know the board's chip cannot select a project on it. That, with
+the board's main.py being that release's own (below), is the whole check of a board with a Tiny Tapeout chip
+today (#132). Its Pmod cabling is not tested yet: the report says so in `not_run` (PENDING), which fails
+nothing.
 
 Nothing is written to the demo board: for every load the RP2350 reads the bitstream from the Pi over the serial
 link (tt_fpga_program.py, `mpremote mount`). The board has no flash of its own to compare, so the state is the
@@ -156,6 +162,54 @@ def tinytapeout_fields(usb_serial, runner=run):
     return out
 
 
+# What the SDK's releases support: (chip, the shuttles, the microcontroller, the SDK release line). From the
+# releases of TinyTapeout/tt-micropython-firmware, read 2026-10-05: 2.0.4 is the last release for the RP2040
+# demo boards (TT04 to TT08); 3.x is built for the RP2350 demo board, which carries the FPGA breakout; the
+# TT03p5 board (a Pico on the older demo board) runs 1.2.x, whose chip ROM reader names that shuttle itself.
+# A combination that is not here fails the `sdk` test with what the board said: add its row when a release
+# is known to support it.
+SDK_SUPPORTED = (
+    ("fpga", (None,), "RP2350", "3.1"),
+    ("asic", ("tt03p5",), "RP2040", "1.2"),
+    ("asic", ("tt04", "tt05", "tt06", "tt07", "tt08"), "RP2040", "2.0"),
+)
+# What the boot check of a board with a Tiny Tapeout chip does not do yet.
+PENDING = {
+    "tt-asic": {
+        "wiring": "the Pmod cabling between the demo board and the Pi is not tested on a board with a Tiny "
+                  "Tapeout chip yet (the wiring test is not part of the boot check)",
+    },
+}  # fmt: skip
+
+
+def sdk_line(release):
+    """'2.0.4' -> '2.0': the release line of an SDK release; None for text that is not one."""
+    parts = (release or "").lstrip("v").split(".")
+    return ".".join(parts[:2]) if len(parts) >= 3 and all(p.isdigit() for p in parts[:2]) else None
+
+
+def sdk_check(variant, facts):
+    """The `sdk` test: (result, reason, lines). Passes when the board's chip, shuttle, microcontroller and SDK
+    release are a row of SDK_SUPPORTED. Reads nothing: `facts` is what the board said (port_facts)."""
+    chip, shuttle, mcu, sdk = (facts.get(k) for k in ("chip", "shuttle", "mcu", "sdk"))
+    what = "the FPGA breakout" if chip == "fpga" else f"a {shuttle} chip"
+    said = [f"chip: {chip}", f"shuttle: {shuttle or '-'}", f"microcontroller: {mcu or 'not read'}",
+            f"SDK release: {sdk or 'not read'}"]  # fmt: skip
+    missing = [name for name, value in (("its microcontroller", mcu), ("its SDK release", sdk)) if not value]
+    if missing:
+        return "fail", f"the board did not say {' or '.join(missing)}", said
+    line = sdk_line(sdk)
+    if line is None:
+        return "fail", f"the board's SDK release reads {sdk!r}, which is not a release number", said
+    rows = [row for row in SDK_SUPPORTED if row[0] == chip and shuttle in row[1]]
+    if not rows:
+        return "fail", f"no SDK release is recorded as supporting {what}: add its row to SDK_SUPPORTED", said
+    if any(row[2] == mcu and row[3] == line for row in rows):
+        return "pass", None, [*said, f"SDK {line}.x on an {mcu} supports {what}"]
+    wanted = " or ".join(f"SDK {row[3]}.x on an {row[2]}" for row in rows)
+    return "fail", f"{what} needs {wanted}, and the board runs SDK {sdk} on an {mcu}", said
+
+
 PMOD_PRE = [["rmmod", "spidev", "spi_bcm2835"]]
 VENDOR = "2e8a"  # Raspberry Pi
 # The products a Tiny Tapeout demo board's microcontroller shows: MicroPython's USB serial (the two ids the
@@ -174,10 +228,8 @@ class TTFPGA(TestBoard):
     usb = tuple((VENDOR, product) for product in (*MICROPYTHON, BOOTLOADER))
     variants: ClassVar[dict] = {"tt-fpga": "tt-fpga"}  # the variants there are bitstreams for
     variant_from_board = True
-    untested: ClassVar[dict] = {
-        "tt-asic": "the board carries a Tiny Tapeout chip, not an FPGA: it is identified, and the boot check has "
-                   "no test for a chip yet, so nothing was tested and nothing was loaded",
-    }  # fmt: skip
+    fact_tests: ClassVar[dict] = {"sdk": {"variants": ("tt-fpga", "tt-asic"), "check": sdk_check}}
+    pending: ClassVar[dict] = PENDING
     # rpi-hwid's Tiny Tapeout label (its LABEL-CONTRACT.md, sections 1 and 7). Only the boot check reads the
     # fields rpi-hwid gives (it owns the port then): --identify takes them, and why they are missing, from the
     # boot report, matched by usb_serial.

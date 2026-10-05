@@ -288,6 +288,8 @@ def details(report):
             out[f"board{i}_reason"] = b["reason"]
         if b.get("tests"):
             out[f"board{i}_tests"] = " ".join(f"{t['test']}={t['result']}" for t in b["tests"])
+        if b.get("not_run"):
+            out[f"board{i}_not_run"] = ", ".join(b["not_run"])
         if b.get("bitstreams"):
             out[f"board{i}_bitstreams"] = str(b["bitstreams"])
         flatten(f"board{i}_state", b.get("state", {}), out)
