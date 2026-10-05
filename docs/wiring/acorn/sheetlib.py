@@ -115,16 +115,19 @@ class Sheet:
         )
         return x0, x0 + w
 
-    def photo(self, name, x, y, w, density=1.5, colours=96, crop=None):
+    def photo(self, name, x, y, w, density=1.5, colours=96, crop=None, turn=None):
         """A photo as vector art: `density` samples per sheet pixel, `colours` colours, one stroked path per colour.
 
         Each run of same-coloured samples along a row is one horizontal stroke. Pixels that are paper
         (the prep script's background) are left out, so the sheet shows through. `crop` = (x0, y0, x1, y1)
-        in photo pixels; the returned scale then maps cropped-photo pixels to the sheet.
+        in photo pixels; the returned scale then maps cropped-photo pixels to the sheet. `turn`: a Pillow
+        Image.Transpose to turn the cropped photo by.
         """
         im = Image.open(HERE / "photos" / name).convert("RGB")
         if crop is not None:
             im = im.crop(crop)
+        if turn is not None:
+            im = im.transpose(turn)
         h = w * im.height / im.width
         small = im.resize((round(w * density), round(h * density)), Image.LANCZOS)
         sw, shh = small.size
