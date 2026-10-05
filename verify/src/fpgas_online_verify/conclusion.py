@@ -70,6 +70,10 @@ ADVICE = (
      "loaded into it. The reason above says what stopped the read; if rpi-hwid is not installed, install it "
      f"(sudo apt install python3-rpi-hwid, from https://github.com/mithro/rpi-hwid): {DOCS}"
      "#which-tiny-tapeout-board-it-is"),
+    (r"Pmod wiring test is not yet part of the boot check",
+     "This demo board carries a Tiny Tapeout chip. It was identified and its other tests are above, but the "
+     "check cannot yet test its cabling to the Pi, and a board is not passed untested. Nothing is known to be "
+     f"wrong with the board: {ISSUES}/132"),
     (r"and the board runs SDK|no SDK release is recorded as supporting",
      "The Tiny Tapeout SDK on the demo board is not a release known to work with the chip it carries, so the "
      "board could not select a project on that chip. The board's firmware is installed by whoever looks after "
@@ -109,8 +113,10 @@ def own_reasons(board):
     One line for each stretch of the reason between two tests' parts. A stretch is not split further: a reason
     can itself hold "; " (a JTAG scan's faults), and half of one would not say what it is about."""
     parts = [board.get("reason", "")]
-    for t in _failed(board):
-        fragment = f"{t['test']} {t['result']}: {t.get('reason', '')}"
+    fragments = [f"{t['test']} {t['result']}: {t.get('reason', '')}" for t in _failed(board)]
+    # a test the board needs and the check does not have (testbench.py's `pending`) is on its "not run" line
+    fragments += [f"{test} not run: {why}" for test, why in (board.get("not_run") or {}).items()]
+    for fragment in fragments:
         for i, part in enumerate(parts):
             if fragment in part:
                 parts[i : i + 1] = part.split(fragment, 1)

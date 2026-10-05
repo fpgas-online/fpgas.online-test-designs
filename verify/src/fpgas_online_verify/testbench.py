@@ -322,8 +322,10 @@ class TestBoard(Board):
     # They run first, in the whole boot check only (not when single tests were asked for), and are the whole
     # check of a variant that no bitstream here is for (a demo board with a Tiny Tapeout chip).
     fact_tests: ClassVar[dict] = {}
-    # variant -> {test: why}: a test that variant is to have and the boot check does not run yet. It goes in the
-    # report's `not_run`, said and failing nothing.
+    # variant -> {test: why}: a test that variant must have and the boot check does not run yet. It goes in the
+    # report's `not_run`, and the board FAILS with that reason: a board is not passed on a check that leaves
+    # out a test it needs (Tim, 2026-10-05: "Fail until wiring is tested"). Its other tests still run and are
+    # reported, so the report shows what is known of the board.
     pending: ClassVar[dict] = {}
 
     def settle(self, asked, found, facts):
@@ -449,9 +451,13 @@ class TestBoard(Board):
         if refused:
             results.append(refused.result)
         report["state"] = state
+        untested = [f"{test} not run: {why}" for test, why in report.get("not_run", {}).items()]
+        if untested:
+            results.append("fail")
         report["result"] = worst(results)
         bad = [t for t in report["tests"] if t["result"] != "pass"]
-        reasons = [f"{t['test']} {t['result']}: {t.get('reason', '')}" for t in bad] + facts_failed + held["failed"]
+        reasons = [f"{t['test']} {t['result']}: {t.get('reason', '')}" for t in bad] + untested + facts_failed
+        reasons += held["failed"]
         if refused:
             reasons.insert(0, refused.reason)
         if jtag and jtag["result"] != "pass":
