@@ -299,7 +299,7 @@ What to do:
     it (on a Compute Blade the serial port holds GPIO14, which is also the
     JTAG TMS wire). The check cannot test JTAG on such a host yet:
     https://github.com/fpgas-online/fpgas.online-test-designs/issues/127
-  * To look at the acorn board by hand: sudo fpgas-acorn-debug --help (sudo
+  * To look at the acorn board yourself: sudo fpgas-acorn-debug --help (sudo
     apt install fpgas-online-acorn-debug)
   * What each message means:
     https://docs.fpgas.online/en/latest/verify/fpgas-verify.html#common-failures
@@ -339,7 +339,7 @@ RESULT: FAIL: a board did not pass.
     failed: pcie-link: link is x2, expected x1
     failed: jtag: device DNA over JTAG 0x1 is not the one over BAR0 0x54b48664b04854: TDI (or the DNA readout) is wrong
 What to do:
-  * To look at the acorn board by hand: sudo fpgas-acorn-debug --help (sudo
+  * To look at the acorn board yourself: sudo fpgas-acorn-debug --help (sudo
     apt install fpgas-online-acorn-debug)
   * What each message means:
     https://docs.fpgas.online/en/latest/verify/fpgas-verify.html#common-failures
@@ -372,7 +372,7 @@ RESULT: FAIL: a board did not pass.
   netv2 a7-35: fail (2 tests passed, 1 failed)
     failed: ddr: the test exited 1
 What to do:
-  * To look at the netv2 board by hand: sudo fpgas-netv2-debug --help (sudo
+  * To look at the netv2 board yourself: sudo fpgas-netv2-debug --help (sudo
     apt install fpgas-online-netv2-debug)
   * What each message means:
     https://docs.fpgas.online/en/latest/verify/fpgas-verify.html#common-failures

@@ -10,6 +10,7 @@ import json
 import pathlib
 
 from fpgas_online_verify import conclusion, runner
+from fpgas_online_verify.boards.acorn import check, suite
 
 DATA = pathlib.Path(__file__).parent / "data"
 KEPT_IN = "/run/fpgas-online/verify.json"
@@ -86,7 +87,7 @@ def test_a_host_that_is_no_acorn_setup_is_told_which_tests_that_stopped():
     unknown = "this host's setup is not known"
     board = _acorn("error", [("pcie-bar0", "pass", None)], reason=why, not_run={"jtag": unknown, "p2-uart": unknown})
     lines = conclusion.lines(_report("error", [board]))
-    assert lines[1] == "RESULT: ERROR: the check itself could not run properly, so it shows nothing about the board."
+    assert lines[1] == "RESULT: ERROR: the check could not do all of its work; the lines below say what went wrong."
     assert f"    fault: {why}" in lines
     assert "    not run: jtag, p2-uart: this host's setup is not known" in lines
     assert "The tests over PCIe were." in " ".join(line.strip() for line in lines)
@@ -99,17 +100,49 @@ def test_a_missing_board_names_the_boards_own_debug_command():
     assert "`sudo fpgas-arty-debug detect`" in " ".join(lines)
 
 
-def test_with_auto_the_board_in_the_advice_is_left_for_the_reader_to_fill_in():
+def test_with_auto_the_reader_is_told_what_board_stands_for():
     why = "none of the installed boards (arty, tt) was found (auto: USB/PCI IDs)"
-    lines = conclusion.lines({**_report("missing", reason=why), "mode": "auto"})
-    assert "`sudo fpgas-<board>-debug detect`" in " ".join(lines)
+    text = " ".join(line.strip() for line in conclusion.lines({**_report("missing", reason=why), "mode": "auto"}))
+    assert "`sudo fpgas-<board>-debug detect`" in text and "(<board> is acorn, arty, fomu, netv2 or tt-fpga)" in text
+
+
+def test_advice_about_one_boards_fault_names_that_board_even_with_auto():
+    board = {"board": "tt", "result": "error", "reason": "x.bit does not match its manifest", "tests": []}
+    text = " ".join(line.strip() for line in conclusion.lines({**_report("error", [board]), "mode": "auto"}))
+    assert "sudo apt install --reinstall fpgas-online-tt-fpga-bitstreams" in text and "<board>" not in text
+
+
+def test_a_check_that_passed_but_could_not_start_a_service_again_is_not_said_to_show_nothing():
+    """runner.run() makes the result an error when a service it stopped does not start: the board still passed."""
+    why = "fpgas-tt.service was not started again: Job failed"
+    board = {"board": "tt", "result": "pass", "tests": [{"test": "uart", "result": "pass"}]}
+    lines = conclusion.lines(_report("error", [board], reason=why))
+    assert lines[1:4] == ["RESULT: ERROR: the check could not do all of its work; the lines below say what went wrong.",
+                          f"  {why}", "  tt: pass (1 test passed, 0 failed)"]  # fmt: skip
+    assert not [line for line in lines if "debug" in line]
+
+
+def test_a_board_whose_check_stopped_before_any_test_says_no_test_ran():
+    board = {"board": "acorn", "result": "error", "reason": "the check crashed: KeyError: 'x'"}
+    lines = conclusion.lines(_report("error", [board]))
+    assert lines[2:4] == ["  acorn: error (no test ran)", "    fault: the check crashed: KeyError: 'x'"]
+
+
+def test_a_reason_that_holds_a_semicolon_stays_one_line():
+    """testbench.py's JTAG entry is not one of the tests, and its reason joins the scan's faults with "; "."""
+    jtag = "jtag fail: no device on the JTAG chain; openFPGALoader exited 1 reading the IDCODE"
+    board = {"board": "arty", "variant": "a7-35", "result": "fail", "reason": f"{jtag}; ddr fail: the test exited 1",
+             "tests": [{"test": "ddr", "result": "fail", "reason": "the test exited 1"}]}  # fmt: skip
+    assert conclusion.own_reasons(board) == [jtag]
+    between = {**board, "reason": "before; ddr fail: the test exited 1; after; more"}
+    assert conclusion.own_reasons(between) == ["before", "after; more"]
 
 
 def test_the_tt_boards_commands_are_named_tt_fpga():
     board = {"board": "tt", "variant": None, "result": "fail", "reason": "uart fail: the test exited 1",
              "tests": [{"test": "uart", "result": "fail", "reason": "the test exited 1"}]}  # fmt: skip
     lines = conclusion.lines(_report("fail", [board]))
-    assert "  tt -: fail (0 tests passed, 1 failed)" in lines
+    assert "  tt: fail (0 tests passed, 1 failed)" in lines
     assert "sudo fpgas-tt-fpga-debug --help" in " ".join(lines)
 
 
@@ -147,24 +180,36 @@ def test_a_report_on_stdout_is_not_given_as_a_file():
 def test_a_boards_own_reasons_are_its_reason_without_its_tests_parts():
     board = _blade()["boards"][0]
     assert conclusion.own_reasons(board) == [UNCONVERTED]
-    assert conclusion.own_reasons({"tests": [], "reason": "one; two"}) == ["one", "two"]
+    assert conclusion.own_reasons({"tests": [], "reason": "one; two"}) == ["one; two"]
     assert conclusion.own_reasons({"tests": []}) == []
 
 
 def test_every_advice_pattern_matches_a_reason_the_code_gives():
-    """Each entry is found by a reason as the check words it, so a reworded reason does not lose its advice."""
+    """Each entry is found by a reason as the check words it. Where the code has the wording as a value it is
+    taken from there, so rewording it there without the entry fails here; the rest are copies."""
     reasons = [
-        UNCONVERTED,
-        "unconverted: runs the vendor XDMA sample image, not the fpgas.online design",
-        "running the golden image: the operational slot did not boot",
+        *(check.not_ours({"kind": kind, "ids": "", "subsystem": ""}) for kind in ("sqrl-factory", "vendor-xdma")),
+        suite.GOLDEN,
         "this host (x) is not an Acorn setup in wiring.toml: y",
         "the FPGA has not restarted since an earlier boot's check",
         GPIOD,
         "no device on the P1 JTAG chain",
         "openocd is not installed",
         "x does not match its manifest",
+        "manifest.json is missing",
+        "no UARTBone reply on /dev/ttyAMA0 (P2 K2/J2)",
         "no FPGA board is configured",
+        "conflicting fpga-board settings: a and b",
+        "none of the installed boards (arty, tt) was found (auto: USB/PCI IDs)",
         "no Sqrl Acorn found: this host is set up for one, and nothing else is looked for",
     ]
     for pattern, _ in conclusion.ADVICE:
         assert any(conclusion.re.search(pattern, r) for r in reasons), pattern
+    for alternative in [a for pattern, _ in conclusion.ADVICE for a in pattern.split("|")]:
+        assert any(conclusion.re.search(alternative, r) for r in reasons), alternative
+
+
+def test_the_docs_show_what_the_code_prints_for_the_real_report():
+    """docs/verify.md's first failing example is this report's summary, line for line."""
+    docs = (pathlib.Path(__file__).parents[1] / "docs" / "verify.md").read_text()
+    assert runner.summary(_blade(), KEPT_IN).strip("\n") in docs

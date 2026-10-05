@@ -20,11 +20,12 @@ VERDICT = {
     "changed": "the board, or what is in its flash, is not what was recorded last time",
     "fail": "a board did not pass",
     "missing": "no board was found",
-    "error": "the check itself could not run properly, so it shows nothing about the board",
+    "error": "the check could not do all of its work; the lines below say what went wrong",
 }
 
 # Board names that are not their package and command names (fpgas-<slug>-debug, fpgas-online-<slug>-debug).
 SLUGS = {"tt": "tt-fpga"}
+BOARDS = "acorn, arty, fomu, netv2 or tt-fpga"  # what <board> stands for, when the report does not say which
 WIDTH = 78  # of the advice, which is sentences; a reason is one line however long, so it can be searched for
 
 # (what a reason says, what to do about it). Every entry whose pattern is found in any reason of the report is
@@ -55,7 +56,7 @@ ADVICE = (
      "Nothing answered on a cable between the Pi and the board: check that the JTAG and UART cables are seated "
      "and wired as the board's page shows."),
     (r"is not installed",
-     "A tool the check needs is not installed: the reason above names it (openFPGALoader, openocd, mpremote)."),
+     "A tool the check needs is not installed: the reason above names it."),
     (r"does not match its manifest|manifest\.json is missing",
      "The installed test bitstreams are damaged: sudo apt install --reinstall fpgas-online-<board>-bitstreams"),
     (r"no FPGA board is configured|conflicting fpga-board settings",
@@ -76,11 +77,18 @@ def _failed(board):
 
 
 def own_reasons(board):
-    """The board's reasons that belong to no one test: its reason without each failed test's part of it."""
-    text = board.get("reason", "")
+    """The board's reasons that belong to no one test: its reason without each failed test's part of it.
+
+    One line for each stretch of the reason between two tests' parts. A stretch is not split further: a reason
+    can itself hold "; " (a JTAG scan's faults), and half of one would not say what it is about."""
+    parts = [board.get("reason", "")]
     for t in _failed(board):
-        text = text.replace(f"{t['test']} {t['result']}: {t.get('reason', '')}", "", 1)
-    return [part for part in (p.strip() for p in text.split("; ")) if part]
+        fragment = f"{t['test']} {t['result']}: {t.get('reason', '')}"
+        for i, part in enumerate(parts):
+            if fragment in part:
+                parts[i : i + 1] = part.split(fragment, 1)
+                break
+    return [part for part in (p.strip().removeprefix(";").removesuffix(";").strip() for p in parts) if part]
 
 
 def _plural(n, word):
@@ -96,18 +104,29 @@ def _not_run(board):
 
 
 def _reasons(report):
-    out = [report.get("reason", "")]
+    """[(the board it is about or None, the reason)]: the report's own, then each board's."""
+    out = [(None, report.get("reason", ""))]
     for b in report["boards"]:
-        out += [*own_reasons(b), *(t.get("reason", "") for t in _failed(b)), *(b.get("not_run") or {}).values()]
-    return [r for r in out if r]
+        mine = [*own_reasons(b), *(t.get("reason", "") for t in _failed(b)), *(b.get("not_run") or {}).values()]
+        out += [(b["board"], r) for r in mine]
+    return [(board, r) for board, r in out if r]
 
 
 def advice(report):
-    """What to do about the faults found. `<board>` is the board the host is set up for, when it is for one."""
+    """What to do about the faults found. `<board>` in an entry is the board its reason is about, or the one
+    the host is set up for; when the report names neither, the reader is told what it stands for."""
     reasons = _reasons(report)
     mode = report.get("mode")
-    board = slug(mode) if mode and mode != "auto" else "<board>"
-    return [text.replace("<board>", board) for pattern, text in ADVICE if any(re.search(pattern, r) for r in reasons)]
+    out = []
+    for pattern, text in ADVICE:
+        about = [board for board, r in reasons if re.search(pattern, r)]
+        if not about:
+            continue
+        board = about[0] or (mode if mode and mode != "auto" else None)
+        if "<board>" in text:
+            text = text.replace("<board>", slug(board)) if board else f"{text} (<board> is {BOARDS})"
+        out.append(text)
+    return out
 
 
 def lines(report, kept_in=None):
@@ -119,10 +138,11 @@ def lines(report, kept_in=None):
     for b in report["boards"]:
         tests = b.get("tests", [])
         failed = _failed(b)
-        counts = [_plural(len(tests) - len(failed), "test") + " passed", f"{len(failed)} failed"]
+        counts = [_plural(len(tests) - len(failed), "test") + " passed", f"{len(failed)} failed"] if tests else []
         if b.get("not_run"):
             counts.append(f"{len(b['not_run'])} not run")
-        out.append(f"  {b['board']} {b.get('variant') or '-'}: {b['result']} ({', '.join(counts)})")
+        name = " ".join(filter(None, [b["board"], b.get("variant")]))
+        out.append(f"  {name}: {b['result']} ({', '.join(counts) or 'no test ran'})")
         out += [f"    fault: {reason}" for reason in own_reasons(b)]
         out += [f"    failed: {t['test']}: {t.get('reason') or t['result']}" for t in failed]
         out += [f"    not run: {', '.join(names)}: {why}" for names, why in _not_run(b)]
@@ -137,7 +157,7 @@ def lines(report, kept_in=None):
                     "sudo fpgas-verify --update")  # fmt: skip
     for b in report["boards"]:
         if b["result"] != "pass":
-            todo.append(f"To look at the {b['board']} board by hand: sudo fpgas-{slug(b['board'])}-debug --help "
+            todo.append(f"To look at the {b['board']} board yourself: sudo fpgas-{slug(b['board'])}-debug --help "
                         f"(sudo apt install fpgas-online-{slug(b['board'])}-debug)")  # fmt: skip
     todo.append(f"What each message means: {DOCS}#common-failures")
     for text in todo:  # a URL is never broken
