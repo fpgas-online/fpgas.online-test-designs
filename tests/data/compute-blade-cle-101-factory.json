@@ -1,0 +1,80 @@
+{
+  "schema_version": 2,
+  "result": "fail",
+  "checked_at": "2026-10-05T00:50:49+00:00",
+  "boards": [
+    {
+      "board": "acorn",
+      "found": {
+        "bdf": "0001:01:00.0",
+        "ids": "1e24:0101",
+        "subsystem": "0000:0000",
+        "kind": "sqrl-factory",
+        "variant": "cle-101",
+        "driver": null
+      },
+      "variant": "cle-101",
+      "tests": [
+        {
+          "test": "pcie-link",
+          "speed_gt_s": 5.0,
+          "width": 1,
+          "max_speed_gt_s": 5.0,
+          "max_width": 4,
+          "expected": {
+            "speed_gt_s": 5.0,
+            "width": 1
+          },
+          "result": "pass"
+        },
+        {
+          "test": "rp1-pio",
+          "output": [],
+          "result": "pass"
+        },
+        {
+          "test": "jtag",
+          "dna_error": "not read over P1 JTAG: --read-dna runs only once --detect has found the one FPGA expected",
+          "output": [
+            "openFPGALoader: line-request.c:199: gpiod_line_request_set_values_subset: Assertion `request' failed."
+          ],
+          "result": "fail",
+          "reason": "P1 JTAG: openFPGALoader --detect failed (exit -6) before scanning the JTAG chain: openFPGALoader: line-request.c:199: gpiod_line_request_set_values_subset: Assertion `request' failed."
+        }
+      ],
+      "setup": "Compute Blade",
+      "identity": {
+        "board": "acorn",
+        "kind": "acorn",
+        "variant": "cle-101",
+        "bdf": "0001:01:00.0",
+        "dna_error": "not read over P1 JTAG: --read-dna runs only once --detect has found the one FPGA expected",
+        "idcode_error": "P1 JTAG: openFPGALoader --detect failed (exit -6) before scanning the JTAG chain: openFPGALoader: line-request.c:199: gpiod_line_request_set_values_subset: Assertion `request' failed."
+      },
+      "not_run": {
+        "pcie-bar0": "unconverted: runs SQRL's factory image, not the fpgas.online design",
+        "flash": "unconverted: runs SQRL's factory image, not the fpgas.online design",
+        "ddr": "unconverted: runs SQRL's factory image, not the fpgas.online design",
+        "p2-uart": "the board does not run a known build",
+        "p2-serial": "unconverted: runs SQRL's factory image, not the fpgas.online design",
+        "scratch": "unconverted: runs SQRL's factory image, not the fpgas.online design",
+        "p2-gpio": "J5 and H5 are not wired on the Compute Blade setup"
+      },
+      "result": "fail",
+      "reason": "unconverted: runs SQRL's factory image, not the fpgas.online design; jtag fail: P1 JTAG: openFPGALoader --detect failed (exit -6) before scanning the JTAG chain: openFPGALoader: line-request.c:199: gpiod_line_request_set_values_subset: Assertion `request' failed.",
+      "state": {
+        "bdf": "0001:01:00.0",
+        "ids": "1e24:0101",
+        "subsystem": "0000:0000",
+        "variant": "cle-101"
+      }
+    }
+  ],
+  "mode": "acorn",
+  "configured_by": "/usr/share/fpgas-online/verify/mode.d/fpgas-online-acorn.ini",
+  "chosen_by": "configured: acorn",
+  "state": {
+    "file": "/var/lib/fpgas-online/verify-state.json",
+    "recorded": "first run"
+  }
+}

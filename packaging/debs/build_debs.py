@@ -154,6 +154,7 @@ def board_locks(inside):
     return sorted(b.lock for b in BOARDS.values() if b.lock.startswith(f"{RUN_DIR}/") == inside)
 
 
+DEFAULTS = "/etc/default/fpgas-verify"  # the boot run's options; a conffile
 TMPFILES_POSTINST = {"postinstall": str(HERE / "tmpfiles.postinst")}
 
 
@@ -179,6 +180,8 @@ def verify_nfpm(version, staging):
             *scripts,
             wrapper(staging, "fpgas-verify", ("from fpgas_online_verify.cli import verify_main", "verify_main")),
             {"src": str(HERE / "fpgas-verify.service"), "dst": "/usr/lib/systemd/system/fpgas-verify.service", **DATA},
+            # The file the unit's EnvironmentFile= names: only comments, so it is there to be read and edited.
+            {"src": str(HERE / "fpgas-verify.default"), "dst": DEFAULTS, "type": "config|noreplace", **DATA},
             {"dst": MODE_DIR, "type": "dir", "file_info": {"mode": 0o755}},
             tmpfiles(staging, "fpgas-online-verify", [f"d {RUN_DIR} 0755 root root -",
                                                       *(f"f {lock} 0644 root root -" for lock in board_locks(True))]),

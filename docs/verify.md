@@ -113,7 +113,10 @@ sudo fpgas-acorn-debug identify            # the same as fpgas-acorn-verify --id
 * `[verify] power-cycle-check = on` in the same files switches on the Acorn's [power-cycle
   check](#the-acorns-power-cycle-check-opt-in). It is off unless a file says so: the fpgas.online Pi root sets it
   in `/etc/fpgas-verify/`; elsewhere it stays off.
-* Options for the boot run go in `FPGAS_VERIFY_ARGS` in `/etc/default/fpgas-verify`.
+* Options for the boot run go in `FPGAS_VERIFY_ARGS` in `/etc/default/fpgas-verify`. The package installs that
+  file with every line a comment (it is what `EnvironmentFile=` in `systemctl cat fpgas-verify` names), so
+  the boot run is plain `fpgas-verify` until you edit it. It is a configuration file: an upgrade keeps your
+  edit.
 * From a checkout, without installing: `PYTHONPATH=verify/src python3 -m fpgas_online_verify --help`.
 
 ### Identity and labels
@@ -227,9 +230,17 @@ There is one result: **pass** or **fail**. A fail is named for its worst cause:
 | `error` | fail | the check itself could not run: a missing tool, a damaged package, no configuration |
 
 * Only `pass` exits 0. Anything else also leaves `fpgas-verify.service` failed.
-* The check goes on after a fault wherever it can, so the board's reason lists every fault it found.
-* The summary goes to stderr; at boot, to the journal (`journalctl -b -u fpgas-verify`). A failed test's last
-  8 output lines are shown.
+* The check goes on after a fault wherever it can, so the report lists every fault it found.
+* The summary goes to stderr; at boot, to the journal (`journalctl -b -u fpgas-verify`). It has two parts:
+  * every test in the order it ran, with its result, and a failed test's last 8 output lines;
+  * for a check that did not pass, a plain conclusion, last, so it is what is left on the terminal:
+    `RESULT:` and what it means; each board with how many tests passed, failed and were not run; a `fault:`
+    line for each thing wrong that is no one test's (the board runs SQRL's image, say), a `failed:` line for
+    each failed test with its reason, and a `not run:` line for the tests that did not run and why (a test that
+    does not apply to the setup is `not run`, and is not a failure); then `What to do:`, chosen from the
+    faults found; then where the JSON report is.
+* A reason is always one line, however long, so it can be searched for as it is ([Common
+  failures](#common-failures)).
 * The JSON report is in `/run/fpgas-online/verify.json`. It is replaced whole (written beside itself and
   renamed), so a reader sees the old report or the new one, never part of one. A `--report` path that is a
   symlink, a device or a pipe is written through instead, not replaced.
@@ -255,6 +266,57 @@ fpgas-verify: pass (mode auto, auto: USB/PCI IDs)
   state recorded (first run) in /var/lib/fpgas-online/verify-state.json
 ```
 
+**fail, a first install on someone's own hardware**: a Compute Blade with a CM5 and an Acorn CLE-101 still on
+SQRL's factory image (ps1's `pi16`, 2026-10-05; the summary its boot report gives). Two things are wrong, and
+neither is the installation: the card has not been converted, and on this setup the JTAG test cannot have its
+TMS pin ([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)).
+
+```text
+$ sudo fpgas-verify --no-publish
+
+******************************************************************************
+*** FPGA VERIFY: FAIL ******************************************************
+fpgas-verify: fail (mode acorn, configured: acorn)
+  acorn cle-101: fail
+    unconverted: runs SQRL's factory image, not the fpgas.online design
+    pcie-link  pass
+    rp1-pio    pass
+    jtag       fail: P1 JTAG: openFPGALoader --detect failed (exit -6) before scanning the JTAG chain: openFPGALoader: line-request.c:199: gpiod_line_request_set_values_subset: Assertion `request' failed.
+        openFPGALoader: line-request.c:199: gpiod_line_request_set_values_subset: Assertion `request' failed.
+    pcie-bar0  not run: unconverted: runs SQRL's factory image, not the fpgas.online design
+    flash      not run: unconverted: runs SQRL's factory image, not the fpgas.online design
+    ddr        not run: unconverted: runs SQRL's factory image, not the fpgas.online design
+    p2-uart    not run: the board does not run a known build
+    p2-serial  not run: unconverted: runs SQRL's factory image, not the fpgas.online design
+    scratch    not run: unconverted: runs SQRL's factory image, not the fpgas.online design
+    p2-gpio    not run: J5 and H5 are not wired on the Compute Blade setup
+  state recorded (first run) in /var/lib/fpgas-online/verify-state.json
+
+RESULT: FAIL: a board did not pass.
+  acorn cle-101: fail (2 tests passed, 1 failed, 7 not run)
+    fault: unconverted: runs SQRL's factory image, not the fpgas.online design
+    failed: jtag: P1 JTAG: openFPGALoader --detect failed (exit -6) before scanning the JTAG chain: openFPGALoader: line-request.c:199: gpiod_line_request_set_values_subset: Assertion `request' failed.
+    not run: pcie-bar0, flash, ddr, p2-serial, scratch: unconverted: runs SQRL's factory image, not the fpgas.online design
+    not run: p2-uart: the board does not run a known build
+    not run: p2-gpio: J5 and H5 are not wired on the Compute Blade setup
+What to do:
+  * The Acorn still runs the image it was sold with, not the fpgas.online one,
+    so only its PCIe link and its JTAG could be tested. It has to be converted
+    once (the fpgas.online image loaded over JTAG, then written to its flash
+    with fpgas-acorn-flash):
+    https://github.com/fpgas-online/fpgas.online-test-designs/blob/main/docs/hardware/acorn-pcie-programming.md
+  * openFPGALoader could not have one of the JTAG pins, because a driver holds
+    it (on a Compute Blade the serial port holds GPIO14, which is also the
+    JTAG TMS wire). The check cannot test JTAG on such a host yet:
+    https://github.com/fpgas-online/fpgas.online-test-designs/issues/127
+  * To look at the acorn board yourself: sudo fpgas-acorn-debug --help (sudo
+    apt install fpgas-online-acorn-debug)
+  * What each message means:
+    https://docs.fpgas.online/en/latest/verify/fpgas-verify.html#common-failures
+The whole report, for a program to read (JSON): /run/fpgas-online/verify.json
+******************************************************************************
+```
+
 **fail, with two faults**: the check run against the tests' fake Acorn
 ([`tests/acorn_fakes.py`](../tests/acorn_fakes.py)), with its PCIe link at x2 and a JTAG TDI wire that does not carry:
 
@@ -264,9 +326,10 @@ $ sudo fpgas-verify --no-publish
 ******************************************************************************
 *** FPGA VERIFY: FAIL ******************************************************
 fpgas-verify: fail (mode auto, auto: USB/PCI IDs)
-  acorn cle-215+: fail: pcie-link fail: link is x2, expected x1; jtag fail: device DNA over JTAG 0x1 is not the one over BAR0 0x54b48664b04854: TDI (or the DNA readout) is wrong
+  acorn cle-215+: fail
     pcie-link  fail: link is x2, expected x1
     pcie-bar0  pass
+    rp1-pio    pass
     jtag       fail: device DNA over JTAG 0x1 is not the one over BAR0 0x54b48664b04854: TDI (or the DNA readout) is wrong
         - 0 -> 0x13636093
         - 1 -> 0xffffffff
@@ -280,31 +343,50 @@ fpgas-verify: fail (mode auto, auto: USB/PCI IDs)
     flash 0x000000 match
     flash 0x400000 match
   state recorded (first run) in /var/lib/fpgas-online/verify-state.json
-  more: fpgas-<board>-debug (fpgas-online-<board>-debug)
+
+RESULT: FAIL: a board did not pass.
+  acorn cle-215+: fail (8 tests passed, 2 failed)
+    failed: pcie-link: link is x2, expected x1
+    failed: jtag: device DNA over JTAG 0x1 is not the one over BAR0 0x54b48664b04854: TDI (or the DNA readout) is wrong
+What to do:
+  * To look at the acorn board yourself: sudo fpgas-acorn-debug --help (sudo
+    apt install fpgas-online-acorn-debug)
+  * What each message means:
+    https://docs.fpgas.online/en/latest/verify/fpgas-verify.html#common-failures
+The whole report, for a program to read (JSON): /run/fpgas-online/verify.json
 ******************************************************************************
 ```
 
-**fail**: a NeTV2 whose DDR test fails (pi-sw1-p12, at boot):
+**fail**: a NeTV2 whose DDR test fails (pi-sw1-p12, at boot; the summary its report gives):
 
 ```text
 $ journalctl -b -u fpgas-verify -o cat
 ******************************************************************************
 *** FPGA VERIFY: FAIL ******************************************************
 fpgas-verify: fail (mode auto, auto: probed (netv2))
-  netv2 a7-35: fail: ddr fail: the test exited 1
+  netv2 a7-35: fail
     uart       pass
     ddr        fail: the test exited 1
-           Read: 0x40000000-0x401c0000 1.7MiB
-           Read: 0x40000000-0x401e0000 1.8MiB
-           Read: 0x40000000-0x40200000 2.0MiB
-          bus errors:  256/256
-          addr errors: 0/8192
-          data errors: 524288/524288
-          Memtest KO
-        RESULT: FAIL — DDR memory test had failures
+               Read: 0x40000000-0x401c0000 1.7MiB
+               Read: 0x40000000-0x401e0000 1.8MiB
+               Read: 0x40000000-0x40200000 2.0MiB
+              bus errors:  256/256
+              addr errors: 0/8192
+              data errors: 524288/524288
+              Memtest KO
+            RESULT: FAIL — DDR memory test had failures
     spiflash   pass
   state recorded (first run) in /var/lib/fpgas-online/verify-state.json
-  more: fpgas-<board>-debug (fpgas-online-<board>-debug)
+
+RESULT: FAIL: a board did not pass.
+  netv2 a7-35: fail (2 tests passed, 1 failed)
+    failed: ddr: the test exited 1
+What to do:
+  * To look at the netv2 board yourself: sudo fpgas-netv2-debug --help (sudo
+    apt install fpgas-online-netv2-debug)
+  * What each message means:
+    https://docs.fpgas.online/en/latest/verify/fpgas-verify.html#common-failures
+The whole report, for a program to read (JSON): /run/fpgas-online/verify.json
 ******************************************************************************
 ```
 
@@ -317,7 +399,15 @@ $ sudo fpgas-verify --no-publish; echo "exit $?"
 *** FPGA VERIFY: MISSING ***************************************************
 fpgas-verify: missing (mode arty, -)
   no Digilent Arty A7 found: this host is set up for one, and nothing else is looked for
-  more: fpgas-<board>-debug (fpgas-online-<board>-debug)
+
+RESULT: MISSING: no board was found.
+  no Digilent Arty A7 found: this host is set up for one, and nothing else is looked for
+What to do:
+  * Check the board's power and cables. `sudo fpgas-arty-debug detect` looks
+    for it again without running the tests.
+  * What each message means:
+    https://docs.fpgas.online/en/latest/verify/fpgas-verify.html#common-failures
+The whole report, for a program to read (JSON): /run/fpgas-online/verify.json
 ******************************************************************************
 
 exit 1
@@ -859,6 +949,7 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 | `fail`: `running the golden image` | the Acorn's operational slot did not boot; it fell back to golden |
 | `fail`: `link is x2, expected x1` | the Acorn's PCIe link is not the setup's (`expected.toml`) |
 | `fail`: `no device on the P1 JTAG chain` / `no UARTBone reply on /dev/ttyAMA0` | an Acorn's JTAG or P2 UART cable is off or miswired |
+| `fail`: `… gpiod_line_request_set_values_subset: Assertion 'request' failed` | openFPGALoader could not have one of the JTAG pins, because a driver holds it. Seen on a Compute Blade with a CM5 (kernel 6.18), where the serial port holds GPIO14, which is also JTAG TMS: the JTAG test cannot run there yet ([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)) |
 | `fail`: `openFPGALoader printed no raw IDCODE scan (needs --verbose-level 2 output)` | the tool's version, not the board: openFPGALoader exited 0 but printed no `- 0 -> 0x...` lines at `--verbose-level 2`, so it is older than v0.9.0. Its last lines are in the report's `output` |
 | `fail`: `… failed (exit N) before scanning the JTAG chain: …` | the scan tool exited with an error and printed no scan: the cable or gpiochip would not open, say. The reason ends with its last line of output; more is in the report's `output` |
 | `fail`: `… exited N reading the IDCODE` / `openFPGALoader --detect exited N …` | the IDCODE scan reported an error, even if it printed an IDCODE; its last lines are in the report's `output` |
