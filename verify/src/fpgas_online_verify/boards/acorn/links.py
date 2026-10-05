@@ -94,7 +94,10 @@ def header_gpiochip(compatible, gpiochip=GPIOCHIP, sysfs=SYSFS_GPIO, dev="/dev")
 # u32 num_attrs, u64 flags, 10 attributes of 16 bytes, 16 bytes of padding. GPIO_V2_LINE_FLAG_USED is bit 0.
 LINEINFO_IOCTL, LINEINFO_SIZE, LINE_USED = 0xC100B405, 256, 1
 DEBUGFS_PINCTRL = "/sys/kernel/debug/pinctrl"
-PINMUX_RE = re.compile(r"^pin (\d+) \(\S+\): device (\S+) function (\S+)", re.MULTILINE)
+# A strict controller's line (6.18, read on a CM5): "pin 14 (gpio14): device 1f00030000.serial function uart0
+# group gpio14". Another's (6.12, a Pi 5): "pin 14 (gpio14): 1f00030000.serial (GPIO UNCLAIMED) function uart0
+# group gpio14", and "pin 8 (gpio8): (MUX UNCLAIMED) (GPIO UNCLAIMED)" for a pin nothing has.
+PINMUX_RE = re.compile(r"^pin (\d+) \(\S+\): (?:device )?([^\s(]\S*) (?:\(GPIO [^)]*\) )?function (\S+)", re.MULTILINE)
 
 
 def _pinmux_owners(chip, sysfs=SYSFS_GPIO, debugfs=DEBUGFS_PINCTRL):

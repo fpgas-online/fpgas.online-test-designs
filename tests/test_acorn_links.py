@@ -522,6 +522,12 @@ def test_the_holder_is_named_from_the_pin_controllers_pinmux_pins(tmp_path):
         (debugfs / name).mkdir(parents=True)
         (debugfs / name / "pinmux-pins").write_text(text)
     assert links._pinmux_owners("/dev/gpiochip0", str(sysfs), str(debugfs)) == {14: "1f00030000.serial (uart0)"}
+    # as kernel 6.12 writes it (read on a Pi 5): no word "device", and who has the pin as a GPIO in brackets
+    (debugfs / "1f000d0000.gpio-pinctrl-rp1" / "pinmux-pins").write_text(
+        "pin 8 (gpio8): (MUX UNCLAIMED) (GPIO UNCLAIMED)\n"
+        "pin 14 (gpio14): 1f00030000.serial (GPIO UNCLAIMED) function uart0 group gpio14\n"
+    )
+    assert links._pinmux_owners("/dev/gpiochip0", str(sysfs), str(debugfs)) == {14: "1f00030000.serial (uart0)"}
     assert links._pinmux_owners("/dev/gpiochip0", str(sysfs), str(tmp_path / "none")) == {}
 
 
