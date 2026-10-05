@@ -674,13 +674,13 @@ def prepare(c, connector):
     wired = [s for s in pins if s not in plan.cut]
     lengths = wiring.LENGTHS
     sh = Sheet(W, 100)
-    title(sh, f"{connector} cable ({conn['what']}) for a {c.name}:", "find wire 1, then prepare the wires")
+    title(sh, f"{connector} cable ({conn['what']}) for a {c.name}:", "which wires are cut back, which get a terminal")
     # The card and its socket, as at the top of the cavity picture: this is how wire 1 is found.
     sockets, (px, py, pw, ph) = acorn_photo_down(sh, 30, 132, 360, T, crop=(0, 60, 160, 590))
     tx = px + pw + 20
-    ty = para(sh, tx, 98, f"Press the plug into socket {connector}.", W - 10 - tx, "bold")
+    ty = para(sh, tx, 98, f"The plug is drawn under socket {connector} to show which wire is which.", W - 10 - tx)
     ty = para(sh, tx, ty + 2, "Card underside up, M.2 edge to your left: wire 1 is the leftmost.", W - 10 - tx, "bold")
-    ty = para(sh, tx, ty + 2, FLAGS, W - 10 - tx)
+    ty = para(sh, tx, ty + 2, "Each wire keeps the flag you gave it in the step before.", W - 10 - tx)
     x1 = 164
     out, body = plug(sh, x1, max(py + ph + 30, ty - LINE + 14), pins)
     half = (sockets[connector][2] - sockets[connector][0]) / 2
@@ -848,14 +848,69 @@ def crimp():
     return sh.svg()
 
 
-def ground_check():
+FLAG_WIRE = 150  # a full wire as drawn, from the plug to its cut face
+FLAG_AT = 62  # a flag's centre, as drawn, above the cut face
+
+
+def flagged(sh, connector, sockets, x1, y, mark=True):
+    """The half cable before anything is cut: its plug under socket `connector`, six full black wires, a flag on each.
+
+    x1: the x of wire 1. mark: draw how far back from the tip the flags are.
+    Returns ({signal: its wire's cut face}, the plug's body).
+    """
+    pins = wiring.CONNECTORS[connector]["pins"]
+    out, body = plug(sh, x1, y, pins)
+    half = (sockets[connector][2] - sockets[connector][0]) / 2
+    middle = (body[0] + body[2]) / 2
+    wedge(sh, sockets[connector], (middle - half, body[1], middle + half, body[3]), down=True)
+    end = body[3] + FLAG_WIRE
+    ends = {}
+    for sig, (x, y0) in out.items():
+        n = pins.index(sig) + 1
+        sh.add(f'<line x1="{x}" y1="{y0}" x2="{x}" y2="{end}" stroke="{BODY}" stroke-width="{WIRE}"/>')
+        sh.add(f'<g id="flag-wire-{n}">')  # test_steps.py reads this back
+        token(sh, x + 15, end - FLAG_AT, n)
+        sh.add("</g>")
+        ends[sig] = (x, end)
+    if mark:
+        x = out[pins[-1]][0] + 46
+        sh.add(
+            f'<path d="M{x - 6},{end - FLAG_AT} h8 M{x - 6},{end} h8 M{x - 2},{end - FLAG_AT} V{end}" '
+            f'stroke="{INK}" stroke-width="1.5" fill="none"/>'
+        )
+        sh.text(x + 10, end - FLAG_AT / 2 - 5, f"about {wiring.LENGTHS['flag_back']} mm", T)
+        sh.text(x + 10, end - FLAG_AT / 2 - 5 + LINE, "back from the tip", T)
+    return ends, body
+
+
+def flag(connector):
+    """The flag step's own picture: the plug in its socket, all six wires whole, a numbered flag on each."""
+    conn = wiring.CONNECTORS[connector]
+    count = len(conn["pins"])
+    sh = Sheet(W, 100)
+    title(sh, f"{connector} cable ({conn['what']}): flag the {count} wires", "nothing is cut in this step")
+    sockets, (px, py, pw, ph) = acorn_photo_down(sh, 30, 132, 360, T, crop=(0, 60, 160, 590))
+    tx = px + pw + 20
+    ty = para(sh, tx, 98, f"Press the plug into socket {connector}.", W - 10 - tx, "bold")
+    ty = para(sh, tx, ty + 2, "Card underside up, M.2 edge to your left: wire 1 is the leftmost.", W - 10 - tx, "bold")
+    ty = para(sh, tx, ty + 2, FLAGS, W - 10 - tx)
+    ends, _body = flagged(sh, connector, sockets, 164, max(py + ph + 30, ty - LINE + 14))
+    y = max(e[1] for e in ends.values()) + 40
+    y = para(sh, 30, y, f"All {count} wires stay whole in this step. Next: the meter check of wire 1.", W - 40, "bold")
+    y = para(sh, 30, y + 4, f"All {count} wires are black. The plug and the flags are sketched.", W - 40, fill=MUTED)
+    sh.h = math.ceil(y - LINE + 14)
+    sh.check(f"flag {connector}")
+    return sh.svg()
+
+
+def ground_check(connector):
     """Before anything is cut: wire 1 is ground, so a meter from its end to the card's ground tells which end is 1."""
-    pins = wiring.CONNECTORS["P1"]["pins"]
+    pins = wiring.CONNECTORS[connector]["pins"]
     sh = Sheet(W, 100)
     title(
         sh,
         "Check which wire is wire 1, before cutting any wire back",
-        "the plug in its socket, the Acorn out of any slot",
+        f"the plug in socket {connector}, the Acorn out of any slot",
     )
     crop = (0, 0, 330, 590)
     sockets, (px, py, pw, ph) = acorn_photo_down(sh, 30, 132, 470, T, crop=crop)
@@ -867,24 +922,15 @@ def ground_check():
     sh.text(tx, (pad[1] + pad[3]) / 2 - 16, "the plated half-round", T, "bold")
     sh.text(tx, (pad[1] + pad[3]) / 2 + 6, "mounting pad at the", T, "bold")
     sh.text(tx, (pad[1] + pad[3]) / 2 + 28, "end of the card", T, "bold")
-    x1p = px + 56
-    out, body = plug(sh, x1p, py + ph + 34, pins)
-    half = (sockets["P1"][2] - sockets["P1"][0]) / 2
-    middle = (body[0] + body[2]) / 2
-    wedge(sh, sockets["P1"], (middle - half, body[1], middle + half, body[3]), down=True)
-    end = body[3] + 70
-    for sig, (x, y) in out.items():
-        sh.add(f'<line x1="{x}" y1="{y}" x2="{x}" y2="{end}" stroke="{BODY}" stroke-width="{WIRE}"/>')
-        token(sh, x, end + 20, pins.index(sig) + 1)
-    mx, my = 600, body[1] + 10  # the meter
-    sh.rect(mx, my, 130, 150, fill="#f3c623", stroke=INK, sw=3, rx=12)
-    sh.rect(mx + 14, my + 14, 102, 44, fill="#dfe8d8", stroke=INK, sw=1.5, rx=4)
-    sh.text(mx + 65, my + 43, "beep", T, "bold", INK, "middle")
-    sh.add(f'<circle cx="{mx + 65}" cy="{my + 102}" r="26" fill="{BODY}"/>')
-    sh.add(f'<path d="M{mx + 65},{my + 102} l0,-22" stroke="#fff" stroke-width="4"/>')
-    w1 = (out[pins[0]][0], end + 44)
+    mx = 620  # the meter's left edge: the plug is under its socket where that leaves the meter room
+    socket_middle = (sockets[connector][0] + sockets[connector][2]) / 2
+    x1p = min(max(socket_middle - 2.5 * PITCH, 64), mx - 5 * PITCH - 64)
+    ends, body = flagged(sh, connector, sockets, x1p, py + ph + 34, mark=False)
+    my = body[1] + 10
+    meter(sh, mx, my)
+    w1 = ends[pins[0]]
     sh.add(
-        f'<path d="M{mx},{my + 120} C{mx - 120},{my + 250} {w1[0] + 180},{w1[1] + 50} {w1[0]},{w1[1]}" fill="none" '
+        f'<path d="M{mx},{my + 120} C{mx - 60},{my + 250} {w1[0] + 120},{w1[1] + 70} {w1[0]},{w1[1]}" fill="none" '
         f'stroke="{RED}" stroke-width="4"/>'
     )
     pc = ((pad[0] + pad[2]) / 2, (pad[1] + pad[3]) / 2)
@@ -895,13 +941,13 @@ def ground_check():
     sh.add(
         f'<circle cx="{w1[0]}" cy="{w1[1]}" r="5" fill="{RED}"/><circle cx="{pc[0]}" cy="{pc[1]}" r="5" fill="{BODY}"/>'
     )
-    y = end + 122
+    y = w1[1] + 78
     y = para(
         sh,
         30,
         y,
         "Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1; the other probe "
-        "on the mounting pad: the meter must beep. Wire flagged 6: it must stay silent.",
+        f"on the mounting pad: the meter must beep. Wire flagged {len(pins)}: it must stay silent.",
         W - 40,
         "bold",
     )
@@ -909,7 +955,8 @@ def ground_check():
         sh,
         30,
         y + 4,
-        "If wire 6 beeps instead, the numbering is reversed: take the flags off and number from the other end.",
+        f"If wire {len(pins)} beeps instead, the numbering is reversed: take the flags off and number from the "
+        "other end.",
         W - 40,
         "bold",
         RED,
@@ -918,7 +965,7 @@ def ground_check():
         sh,
         30,
         y + 4,
-        NEITHER.format(strip=wiring.LENGTHS["strip"], last=6),
+        NEITHER.format(strip=wiring.LENGTHS["strip"], last=len(pins)),
         W - 40,
         "bold",
     )
@@ -926,13 +973,13 @@ def ground_check():
         sh,
         30,
         y + 4,
-        "Shown in socket P1; the same in P2. The pad is taken to be ground from the M.2 standard: not measured "
-        "on this card. The plug and the meter are sketched.",
+        "The pad is taken to be ground from the M.2 standard: not measured on this card. The plug, the flags and "
+        "the meter are sketched.",
         W - 40,
         fill=MUTED,
     )
     sh.h = math.ceil(y - LINE + 14)
-    sh.check("ground check")
+    sh.check(f"ground check {connector}")
     return sh.svg()
 
 
@@ -1000,11 +1047,18 @@ def check_picture():
 
 SHARED = {
     "acorn-cable-cut.svg": cut,
-    "acorn-cable-ground-check.svg": ground_check,
     "acorn-cable-crimp.svg": crimp,
     "acorn-cable-push.svg": push,
     "acorn-cable-check.svg": check_picture,
 }
+
+
+def flag_name(connector):
+    return f"acorn-cable-{connector.lower()}-flag.svg"
+
+
+def ground_check_name(connector):
+    return f"acorn-cable-{connector.lower()}-ground-check.svg"
 
 
 def prepare_name(c, connector):
@@ -1069,7 +1123,9 @@ def procedure(c):
         nonlocal n
         n += 1
         out.extend([f"**{n}.** {text}", ""])
-        for alt, name in images:
+        for alt, name, *lead in images:
+            for line in lead:  # why this picture is here again
+                out.extend([line, ""])
             out.extend([f"![{alt}]({name})", ""])
 
     step(
@@ -1083,7 +1139,11 @@ def procedure(c):
         pins = conn["pins"]
         shape = f"{data.columns}×{(plan.last - plan.first + 1) // data.columns}"
         cavity[connector] = (f"Which wire goes in which cavity, {connector} cable", png(file_name(c, connector)))
-        prep = (f"The {connector} cable: finding wire 1, and its wires prepared", png(prepare_name(c, connector)))
+        prep = (f"The {connector} cable: its wires prepared", png(prepare_name(c, connector)))
+        flags = (
+            f"The {connector} cable's plug in socket {connector}, all {len(pins)} wires whole, a flag on each",
+            png(flag_name(connector)),
+        )
         kept = [pins.index(s) + 1 for s in pins if s not in plan.cut]
         cut_n = [pins.index(s) + 1 for s in plan.cut]
         cut_who = number_list(cut_n)
@@ -1106,8 +1166,11 @@ def procedure(c):
         step(
             f"Find wire 1 of the {connector} cable and flag the wires, before cutting any wire back.\n\n"
             + "\n".join(f"{i}. {line}" for i, line in enumerate(flag, 1)),
-            prep,
-            ("Checking which wire is wire 1, with a meter", "acorn-cable-ground-check.png"),
+            flags,
+            (
+                f"Checking which wire is wire 1 with a meter, the plug in socket {connector}",
+                png(ground_check_name(connector)),
+            ),
         )
         one = len(cut_n) == 1
         step(
@@ -1153,7 +1216,7 @@ def procedure(c):
             "pin side of the housing: it must beep. Every other cavity must stay silent for that contact. "
             "The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.",
             ("A meter between the plug and the housing", "acorn-cable-check.png"),
-            cavity[connector],
+            (*cavity[connector], f"The {connector} cavity picture again, to read each wire's cavity from:"),
         )
     out.extend(["#### Fit the cables", ""])
     fits = []
@@ -1178,7 +1241,10 @@ def procedure(c):
         f"beep. Do the same for the other plug. Then contact {len(pins)} of each plug ({label_of(pins[-1])}, the wire "
         "you cut back): against the shell and against every other contact it must be silent.",
         (f"The bench check on a {c.name}", png(shell_check_name(c))),
-        *cavity.values(),
+        *(
+            (*picture, f"The {connector} cavity picture again, for where its housing sits and which corner is marked:")
+            for connector, picture in cavity.items()
+        ),
     )
     step(
         "Fit the cables, in this order. The sockets are on the underside of the card and may not be reachable once "
@@ -1411,6 +1477,7 @@ def build_names():
         names += [file_name(c, connector), prepare_name(c, connector)]
         if has_resistor(c, connector):
             names.append(resistor_name(c, connector))
+    names += [f(connector) for connector in wiring.CONNECTORS for f in (flag_name, ground_check_name)]
     return [*names, *SHARED, *(f(c) for c in wiring.CARRIERS.values() for f in (fit_name, shell_check_name))]
 
 
@@ -1425,6 +1492,9 @@ def build():
         out[prepare_name(c, connector)] = prepare(c, connector)
         if has_resistor(c, connector):
             out[resistor_name(c, connector)] = resistor_picture(c, connector)
+    for connector in wiring.CONNECTORS:
+        out[flag_name(connector)] = flag(connector)
+        out[ground_check_name(connector)] = ground_check(connector)
     for name, draw in SHARED.items():
         out[name] = draw()
     for key, c in wiring.CARRIERS.items():
