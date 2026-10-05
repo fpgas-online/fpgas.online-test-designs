@@ -244,7 +244,6 @@ If the golden bitstream at address 0x0 is corrupted, PCIe will not come up on bo
 1. **Load a PCIe-capable bitstream to SRAM via JTAG** (volatile — lost on power cycle):
    ```bash
    echo 1 | sudo tee /sys/bus/pci/devices/0001:01:00.0/remove   # if anything is enumerated
-   sudo rmmod spidev spi_bcm2835                                 # Pi 0-4 only
    openFPGALoader --cable libgpiod --pins 10:9:11:8 golden.bit
    ```
 
@@ -481,7 +480,6 @@ The same SRAM bootstrap with LiteX's own tools, for a host that has
 2. **Load golden to SRAM via JTAG** (volatile):
    ```bash
    echo 1 | sudo tee /sys/bus/pci/devices/0001:01:00.0/remove   # detach the factory endpoint
-   sudo rmmod spidev spi_bcm2835                                 # Pi 0-4 only
    openFPGALoader --cable libgpiod --pins 10:9:11:8 golden.bit
    ```
 
