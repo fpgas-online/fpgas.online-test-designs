@@ -88,6 +88,10 @@ strip = 3
 # same), `resistor_tube` over a series resistor and its joints.
 tube = 2
 resistor_tube = 3
+# flag_back: how far from its free end a wire's numbered flag goes: further than `resistor`, so the flag
+#   survives that cut. resistor_lead: how long each lead of a series resistor is left.
+flag_back = 25
+resistor_lead = 5
 
 # tools: what building the two cables takes, whatever the carrier. `when = "resistor"` is needed only on a
 # carrier whose wiring has a series resistor; `note_resistor` is added to the note on such a carrier.

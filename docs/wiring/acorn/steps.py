@@ -644,6 +644,12 @@ SKETCHED = "Sketched, not from a photograph."
 # ----------------------------------------------------------------------------------------------
 # Step pictures
 # ----------------------------------------------------------------------------------------------
+FLAGS = (
+    f"Put a numbered tape flag on each wire, 1 to 6, about {wiring.LENGTHS['flag_back']} mm back from the tip, "
+    "clear of the end that will be cut and stripped later."
+)
+
+
 def number_list(numbers):
     """ "wire 6", "wires 4 and 5", "wires 1, 2 and 3"; a run of four or more as "wires 1 to 5"."""
     numbers = [int(n) for n in numbers]
@@ -668,7 +674,7 @@ def prepare(c, connector):
     tx = px + pw + 20
     ty = para(sh, tx, 98, f"Press the plug into socket {connector}.", W - 10 - tx, "bold")
     ty = para(sh, tx, ty + 2, "Card underside up, M.2 edge to your left: wire 1 is the leftmost.", W - 10 - tx, "bold")
-    ty = para(sh, tx, ty + 2, "Put a numbered tape flag on each wire at its free end, 1 to 6.", W - 10 - tx)
+    ty = para(sh, tx, ty + 2, FLAGS, W - 10 - tx)
     x1 = 164
     out, body = plug(sh, x1, max(py + ph + 30, ty - LINE + 14), pins)
     half = (sockets[connector][2] - sockets[connector][0]) / 2
@@ -733,8 +739,8 @@ def resistor_picture(c, connector):
     rows = (
         f"1. Cut wire {n} about {mm} mm from its free end.",
         f"2. Slide a piece of the {wiring.LENGTHS['resistor_tube']} mm tube onto the wire, clear of the cut.",
-        f"3. Strip about {wiring.LENGTHS['strip']} mm from each cut end. Solder the {c.resistor_value} resistor "
-        "between them.",
+        f"3. Strip {wiring.LENGTHS['strip']} mm from each cut end. Trim the resistor's leads to "
+        f"{wiring.LENGTHS['resistor_lead']} mm each. Solder it in.",
         "4. Slide the tube over the resistor and both joints and shrink it.",
     )
     y = 100
@@ -886,7 +892,8 @@ def ground_check():
         sh,
         30,
         y,
-        "Wire flagged 1 to the mounting pad: the meter must beep. Wire flagged 6: it must stay silent.",
+        "Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1; the other probe "
+        "on the mounting pad: the meter must beep. Wire flagged 6: it must stay silent.",
         W - 40,
         "bold",
     )
@@ -969,7 +976,7 @@ def check_picture():
     y = cy + 108
     y = para(sh, 30, y, "Set the meter to continuity. For each wire, touch its contact on the plug and "
              "its terminal in the housing: the meter must beep.", W - 40, "bold")  # fmt: skip
-    y = para(sh, 30, y + 4, "Then try the cavities on each side of it: the meter must stay silent.", W - 40, "bold")
+    y = para(sh, 30, y + 4, "Then try every other cavity: silent.", W - 40, "bold")
     sh.h = math.ceil(y - LINE + 14)
     sh.check("check")
     return sh.svg()
@@ -1069,10 +1076,11 @@ def procedure(c):
         step(
             f"Press the plug of {half} half into socket {connector} on the underside of the Acorn. Hold the card "
             "underside up with the M.2 edge to your left: wire 1 is the leftmost. Put a numbered tape flag on each "
-            f"of the {len(pins)} wires at its free end, 1 to {len(pins)}, a little back from the tip, which will be "
-            "stripped later. "
+            f"of the {len(pins)} wires, 1 to {len(pins)}, about {lengths['flag_back']} mm back from the tip, clear "
+            "of the end that will be cut and stripped later. "
             "While the plug sits in the socket (the Acorn out of any slot, unpowered), set the meter to continuity. "
-            "Put one probe on the cut end of the wire flagged 1 and the other on the plated half-round mounting pad "
+            "Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not "
+            "stripped yet), and put the other probe on the plated half-round mounting pad "
             f"at the end of the card: it must beep. Then the wire flagged {len(pins)}: it must stay silent. "
             f"If wire {len(pins)} beeps instead, stop: the numbering is reversed; take the flags off and number from "
             "the other end. Then take the plug out again.",
@@ -1093,6 +1101,7 @@ def procedure(c):
                 f"Cut wire {pins.index(sig) + 1} ({label_of(sig)}) about {lengths['resistor']} mm from its free end. "
                 f"Slide a piece of the {lengths['resistor_tube']} mm tube onto the wire, clear of the cut. "
                 f"Strip about {lengths['strip']} mm from each cut end. "
+                f"Trim the resistor's leads to about {lengths['resistor_lead']} mm each. "
                 f"Solder the {c.resistor_value} resistor between the two cut ends. "
                 "Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this.",
                 (f"The resistor fitted into wire {pins.index(sig) + 1}", png(resistor_name(c, connector))),
@@ -1117,9 +1126,9 @@ def procedure(c):
             ("Which way round a terminal goes in, and the pull test", "acorn-cable-push.png"),
         )
         step(
-            "Check each wire with a meter on continuity. Put one probe on its contact on the plug and the other "
-            "on its metal terminal, through the opening on the pin side of the housing: the meter must beep. "
-            "The cavities beside it must stay silent. "
+            "Check each wire with a meter on continuity. For each wire: one probe on its contact on the plug, the "
+            "other on the terminal in the cavity the picture gives for that wire number, through the opening on the "
+            "pin side of the housing: it must beep. Every other cavity must stay silent for that contact. "
             "The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.",
             ("A meter between the plug and the housing", "acorn-cable-check.png"),
             cavity[connector],
@@ -1140,7 +1149,9 @@ def procedure(c):
         last.append(f"the {connector} housing on the {on}, marked corner on pin {plan.first}")
     first = next(iter(wiring.CONNECTORS.values()))["pins"][0]
     step(
-        f"Fit {fits[0]}, and {fits[1]}. The Acorn is not in its slot and the plugs are free. With the power off, "
+        "This is a bench check; the housings come off again in the next step. "
+        f"Fit {fits[0]}, and {fits[1]}. The Acorn is not in its slot and the plugs are free. With the host unplugged "
+        "from power, "
         "put one meter probe "
         f"on contact 1 ({label_of(first)}) of a plug and the other on {c.shell}: it must "
         f"beep. Do the same for the other plug. Then contact {len(pins)} of each plug ({label_of(pins[-1])}, the wire "
