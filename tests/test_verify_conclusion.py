@@ -202,6 +202,7 @@ def test_every_advice_pattern_matches_a_reason_the_code_gives():
         f"{tt_fpga.NOT_TT_FIRMWARE}: it is in its USB boot loader (2e8a:0003)",
         tt_fpga.sdk_check("tt-asic", {"chip": "asic", "shuttle": "tt06", "mcu": "RP2040", "sdk": "1.2.2"})[1],
         tt_fpga.sdk_check("tt-asic", {"chip": "asic", "shuttle": "tt09", "mcu": "RP2040", "sdk": "2.0.4"})[1],
+        tt_fpga.PENDING["tt-asic"]["wiring"],
         "openocd is not installed",
         "x does not match its manifest",
         "manifest.json is missing",
