@@ -265,6 +265,27 @@ def test_a_wire_on_a_shared_gpio_passes_only_when_its_own_label_is_heard_there()
         assert [r["gpio"] for r in rows if not r["ok"]] == [11, 11]
 
 
+def test_the_ja_and_jb_ribbons_swapped_as_a_whole_are_caught_by_their_unshared_wires():
+    """On the shared GPIOs the Pi hears the same two numbers whichever ribbon is on which port (the HAT joins
+    them: the one miswiring this test cannot tell is JA.n and JB.n swapped, n = 2 to 4). The other five wires
+    of each ribbon tell the ribbons apart."""
+    good = _tt_good()
+    ja, jb = [8, 19, 21, 20, 18], [7, 26, 13, 3, 2]  # HAT JA and JB pins 1, 7, 8, 9, 10
+    swapped = {**good, **{a: good[b] for a, b in zip(ja, jb)}, **{b: good[a] for a, b in zip(ja, jb)}}
+    all_ok, rows = ident.evaluate_board("tt", swapped)
+    assert not all_ok and sorted(r["gpio"] for r in rows if not r["ok"]) == sorted(ja + jb)
+    assert all(r["ok"] for r in rows if r["gpio"] in TT_SHARED)  # the limit, stated
+
+
+def test_a_capture_may_start_and_end_anywhere_in_the_cycle():
+    turn_a = _edges_for("19\r\n" * 10)
+    turn_b = _edges_for("4\r\n" * 12, start_ns=turn_a[-1][1] + 100_000_000)
+    cycle = turn_a + turn_b
+    for drop in range(0, 40, 3):
+        frames = ident.decode_edges(cycle[drop : len(cycle) - drop // 2], max_start_candidates=24)
+        assert ident.labels_from_frames(frames) == ("19", "4"), drop
+
+
 def test_both_labels_are_heard_when_two_pins_take_turns_and_a_stray_one_is_not():
     """One cycle as pmod_pin_id_tt.py sends it: a dozen "19", silence, a dozen "4", silence."""
     turn_a = _edges_for("19\r\n" * 10)

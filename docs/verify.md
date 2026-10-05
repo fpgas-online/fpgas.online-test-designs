@@ -1026,6 +1026,9 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 * On an Arty, `pin-id` does not test the six wires on HAT JA pins 2-4 and JB pins 2-4 (they share three Pi
   pins, and the Arty design sends on both at once); its output says so. The TT FPGA's design takes turns there
   and tests all 24 ([#142](https://github.com/fpgas-online/fpgas.online-test-designs/issues/142)).
+* What `pin-id` cannot tell on a TT FPGA board: the JA wire and the JB wire of the same number (2, 3 or 4)
+  swapped with each other. The HAT joins those two wires on one Pi pin, so the Pi hears the same two pin
+  numbers either way. Every other miswiring of the three ribbons changes what some Pi pin hears.
 * The Acorn's PCIe transfer rate is not measured, nor the Arty's and NeTV2's DDR and Ethernet bandwidth:
   their `ddr` and `ethernet` tests pass or fail only.
 * The Arty's and NeTV2's flash is fingerprinted (a sha256 of its boot image region) and compared only with the
