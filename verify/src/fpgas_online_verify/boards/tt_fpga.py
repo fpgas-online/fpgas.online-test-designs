@@ -246,8 +246,8 @@ class TTFPGA(TestBoard):
     services = ("fpgas-tt.service",)  # the TT site's bridge keeps the RP2350's port open while it runs
     flash_note = ("none: nothing on the demo board is read back; the FPGA breakout has no SPI flash, and its "
                   "RP2350 loads each bitstream from the Pi")  # fmt: skip
-    # Run in this order, and the board is left with the last design loaded (testbench.py): the pin-ID scan
-    # comes first, so a UART-bridge design (one TX pin) is what stays, not one driving every Pmod line.
+    # Run in this order: the pin-ID scan comes first, so the UART-bridge design (one TX pin) is the last test
+    # design, not one driving every Pmod line. What the board is left running is `left_running`, below.
     tests: ClassVar[dict] = {
         # The Pmod HAT cabling, against identify_pmod_pins.BOARDS["tt"] (ui_in on HAT JA, uio JB, uo_out JC).
         "pin-id": {"artifact": "pmod-pin-id-{v}/tt_fpga_platform.bin", "script": "identify_pmod_pins.py",
@@ -258,6 +258,17 @@ class TTFPGA(TestBoard):
                  "runner": "tt-bridge"},
         "pmod": {"artifact": "gpio-loopback-{v}/tt_fpga_platform.bin", "script": "test_pmod_loopback.py",
                  "args": ["--board", "tt"], "pre": PMOD_PRE, "program_args": ["--gpio-release"]},
+    }  # fmt: skip
+
+    # #139: the check ends by streaming a design that moves the seven-segment display, so the board looks
+    # alive on its camera until a visitor loads a design (designs/tt-display: clocked by the iCE40's own
+    # oscillator, it needs nothing of the RP2350 afterwards and drives only uo_out). --gpio-release: the
+    # RP2350's own pins on ui_in, uo_out and uio are left as inputs, so nothing but the FPGA drives the display.
+    # It lasts until the board's SDK next starts (a visitor's Commander, the site's Run), which puts the SDK's
+    # own default project into the FPGA.
+    left_running: ClassVar[dict] = {
+        "tt-fpga": {"design": "display", "artifact": "tt-display-tt-fpga/tt_fpga_platform.bin",
+                    "program_args": ["--gpio-release"]},
     }  # fmt: skip
 
     def spot(self, host, usb, pci):
