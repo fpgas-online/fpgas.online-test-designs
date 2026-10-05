@@ -419,7 +419,7 @@ def test_a_fomu_that_an_earlier_check_took_off_usb_is_missing_with_that_said(opt
     alone = runner.verify({**opts, "board": "fomu"}, _boards(FOMU), usb=[], pci=[])
     assert alone["result"] == "missing" and alone["reason"].endswith(said)
     todo = " ".join(line.strip() for line in conclusion.lines(alone))
-    assert "The Fomu is very likely still plugged in" in todo and "Power-cycle the Pi" in todo
+    assert "The Fomu may still be plugged in and working" in todo and "power-cycle the Pi" in todo
 
 
 def test_a_missing_board_is_not_explained_by_a_fomu_that_was_never_here_or_is_not_looked_for(opts):

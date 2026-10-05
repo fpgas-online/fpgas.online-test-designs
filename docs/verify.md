@@ -1144,7 +1144,7 @@ gpioinfo -c gpiochip0 | grep -E 'line +(2|3|4|14):'   # with that chip's name (g
 | It says | Meaning, and what to do |
 |---|---|
 | `missing`: `no <board> found: this host is set up for one…` | the board is not on USB/PCI (or JTAG). Check power and cables. A Fomu that has run a design needs a power cycle |
-| `missing`: `…; a Fomu EVT was found on this host by an earlier check and is not there now: …` | the Fomu is very likely still plugged in: the last check loaded its test design, which has no USB, and this boot was a reboot. Power-cycle the Pi (its power or its PoE port), not a reboot |
+| `missing`: `…; a Fomu EVT was found on this host by an earlier check and is not there now: …` | the Fomu may still be plugged in and working: the last check that found it loaded its test design, which has no USB, and a reboot does not bring it back. If it is plugged in, power-cycle the Pi (its power or its PoE port), not a reboot. The check cannot tell this from a Fomu that was unplugged |
 | `missing`: `none of the installed boards … was found` | nothing attached. Expected on a Pi with no FPGA, and still a fail |
 | `error`: `the board did not say which Tiny Tapeout board it is, so no test was run and nothing was loaded` | the demo board could not be asked: the rest of the reason says why (rpi-hwid not installed, its `main.py` changed, its SDK did not start, rpi-hwid could not read it). [Which Tiny Tapeout board it is](#which-tiny-tapeout-board-it-is) |
 | `fail`: `the board carries a Tiny Tapeout chip, not an FPGA: it is identified, …` | a demo board with a Tiny Tapeout chip: the report's identity says which (`shuttle`); the boot check has no test for a chip yet ([#124](https://github.com/fpgas-online/fpgas.online-test-designs/issues/124)) |
