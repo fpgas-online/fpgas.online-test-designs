@@ -13,6 +13,10 @@ The pins, the cable and the GPIO chip come from the host's setup (setup.py, from
            the FPGA, so the enumerated PCIe endpoint is safe (docs/hardware/acorn-pcie-programming.md).
            openFPGALoader leaves TMS/TDI/TCK driven, so the pins are put back as they were found: on a
            Compute Blade GPIO14 is TMS and also the UART's TX, so it goes back to its UART function.
+           Before the tool runs, the header's GPIO chip is asked whether it would hand out each JTAG pin
+           (held_pins): a kernel whose pin controller is strict does not lend a pin a driver has, so on a
+           Blade with the UART on, GPIO14 cannot be had. The tool is then not run, and the test fails
+           naming the pin and its holder (#127).
   p2-uart  The UARTBone bridge on K2/J2: the identifier at the reset rate (1200 baud) must be the one BAR0
            gave; then the fast rate the gateware supports (921600, set through the PHY's tuning word); and
            at that rate the identifier again, the device DNA and the XADC readings. The link is left at the
@@ -30,9 +34,11 @@ Each gives a test entry in the board's report: {test, result, reason, output, ..
 """
 
 import contextlib
+import fcntl
 import os
 import re
 import stat
+import struct
 
 from ... import dna as device_dna
 from ... import idcode
@@ -79,6 +85,63 @@ def header_gpiochip(compatible, gpiochip=GPIOCHIP, sysfs=SYSFS_GPIO, dev="/dev")
         os.symlink(header, gpiochip)
     elif os.path.realpath(gpiochip) != os.path.realpath(header):
         raise Problem("error", f"{gpiochip} is not the header's GPIO chip ({header}): P1 JTAG not probed")
+    return gpiochip
+
+
+# -- who holds a pin ------------------------------------------------------------------------------------------
+
+# GPIO_V2_GET_LINEINFO_IOCTL (linux/gpio.h): struct gpio_v2_line_info is name[32], consumer[32], u32 offset,
+# u32 num_attrs, u64 flags, 10 attributes of 16 bytes, 16 bytes of padding. GPIO_V2_LINE_FLAG_USED is bit 0.
+LINEINFO_IOCTL, LINEINFO_SIZE, LINE_USED = 0xC100B405, 256, 1
+DEBUGFS_PINCTRL = "/sys/kernel/debug/pinctrl"
+# A strict controller's line (6.18, read on a CM5): "pin 14 (gpio14): device 1f00030000.serial function uart0
+# group gpio14". Another's (6.12, a Pi 5): "pin 14 (gpio14): 1f00030000.serial (GPIO UNCLAIMED) function uart0
+# group gpio14", and "pin 8 (gpio8): (MUX UNCLAIMED) (GPIO UNCLAIMED)" for a pin nothing has.
+PINMUX_RE = re.compile(r"^pin (\d+) \(\S+\): (?:device )?([^\s(]\S*) (?:\(GPIO [^)]*\) )?function (\S+)", re.MULTILINE)
+
+
+def _pinmux_owners(chip, sysfs=SYSFS_GPIO, debugfs=DEBUGFS_PINCTRL):
+    """{pin: "the device (its function)"} from the pin controller's pinmux-pins in debugfs: which driver has
+    each muxed pin. Only to name the holder: {} when debugfs or the controller's entry cannot be read."""
+    try:
+        controller = os.path.basename(os.path.dirname(os.path.realpath(f"{sysfs}/{os.path.basename(chip)}")))
+        owners = {}
+        for d in sorted(os.listdir(debugfs)):
+            if d.startswith(f"{controller}-"):
+                with open(f"{debugfs}/{d}/pinmux-pins") as f:
+                    owners.update({int(pin): f"{device} ({function})" for pin, device, function
+                                   in PINMUX_RE.findall(f.read())})  # fmt: skip
+        return owners
+    except (OSError, ValueError):  # ValueError: text that does not decode
+        return {}
+
+
+def held_pins(chip, gpios, sysfs=SYSFS_GPIO, debugfs=DEBUGFS_PINCTRL):
+    """{gpio: who holds it} for the lines of `chip` the kernel will not hand out: one a program has requested,
+    or, on a kernel whose pin controller is strict (the RP1's from 6.18 at least), one muxed to a driver, as
+    GPIO14 is to the UART. A GPIO request for such a line fails, so a tool that needs it cannot run.
+    {} when the chip cannot be asked: the tool then runs and says what it says."""
+    held = {}
+    try:
+        fd = os.open(os.path.realpath(chip), os.O_RDONLY)
+    except OSError:
+        return {}
+    try:
+        for gpio in gpios:
+            info = bytearray(LINEINFO_SIZE)
+            struct.pack_into("I", info, 64, gpio)
+            try:
+                fcntl.ioctl(fd, LINEINFO_IOCTL, info)
+            except OSError:
+                continue  # this line cannot be asked about: what the others said still stands
+            if struct.unpack_from("Q", info, 72)[0] & LINE_USED:
+                held[gpio] = bytes(info[32:64]).split(b"\0")[0].decode(errors="replace")
+    finally:
+        os.close(fd)
+    if held:
+        owners = _pinmux_owners(os.path.realpath(chip), sysfs, debugfs)
+        held = {g: owners.get(g) or (f'"{c}"' if c else "a kernel driver") for g, c in held.items()}
+    return held
 
 
 # -- The Pi 5's RP1 PIO, for openfpgaloader-rp1pio ---------------------------------------------------------
@@ -144,8 +207,17 @@ def _entry(test, faults, output=(), **seen):
 
 # -- P1: JTAG ------------------------------------------------------------------------------------------
 
+HELD = "the kernel does not hand out a pin that is held, so the JTAG chain cannot be scanned"
 
-def jtag(setup, variant, run, bar0_dna=None, gpiochip=None):
+
+def pins_held(setup, holders):
+    """Why JTAG cannot be probed: which of its pins are held, and by whom."""
+    signal = dict(zip(setup.jtag_gpios, ("TDI", "TDO", "TCK", "TMS")))
+    pins = ", ".join(f"GPIO{g} ({signal[g]}) is held by {who}" for g, who in sorted(holders.items()))
+    return f"{pins}: {HELD}"
+
+
+def jtag(setup, variant, run, bar0_dna=None, gpiochip=None, held=held_pins):
     want = IDCODES[variant]
     base = ["openFPGALoader", "--cable", setup.jtag_cable, "--pins", setup.jtag_pins]
     faults, output, seen = [], [], {}
@@ -159,7 +231,12 @@ def jtag(setup, variant, run, bar0_dna=None, gpiochip=None):
     # why the device DNA was not read, if it is not: apart from the IDCODE's faults (identity's dna_error)
     dna_error = "not read over P1 JTAG: --read-dna runs only once --detect has found the one FPGA expected"
     try:
-        (gpiochip or header_gpiochip)(setup.gpiochip)
+        chip = (gpiochip or header_gpiochip)(setup.gpiochip)
+        holders = held(chip, setup.jtag_gpios) if chip else {}
+        if holders:
+            # openFPGALoader would be refused the pin (and Debian's 0.13.1 aborts on a libgpiod assertion
+            # instead of saying so, #127): not run, and the reason is the pin's holder
+            raise Problem("fail", pins_held(setup, holders))
         rc, out = run([*base, "--detect", *idcode.OPENFPGALOADER_RAW_ARGS], JTAG_TIMEOUT)
         found = idcode.parse(out)
         output += (found and rc == 0 and idcode.scan_lines(out)) or out.strip().splitlines()[-6:]

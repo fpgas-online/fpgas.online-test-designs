@@ -244,7 +244,7 @@ class _Suite:
 
     def jtag(self):
         return links.jtag(self.setup, self.found["variant"], self.run, self._good_bar0_dna(),
-                          self.options.get("gpiochip"))  # fmt: skip
+                          self.options.get("gpiochip"), self.options.get("held_pins", links.held_pins))  # fmt: skip
 
     def _good_bar0_dna(self):
         """BAR0's DNA, for the other paths to be compared with, unless it is stuck (check.dna_faults): that is
