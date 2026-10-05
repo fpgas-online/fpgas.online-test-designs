@@ -16,7 +16,7 @@ The parts for **one** Raspberry Pi 5 host; for several hosts, that many of each.
 
 | Have it | Qty | Part | Part number | What it is for |
 |---|---|---|---|---|
-| ☐ | 1 | Raspberry Pi 5 | — | — |
+| ☐ | 1 | Raspberry Pi 5 | — | the host |
 | ☐ | 1 | M.2 M-key PCIe HAT for the Raspberry Pi 5 that leaves the 40-pin header free | — | the sheet shows a Waveshare PoE M.2 HAT+ |
 | ☐ | 1 | SQRL Acorn CLE-215+, CLE-215 or CLE-101 (the same card is sold as LiteFury and NiteFury) | — | M.2 M-key, 2280 |
 | ☐ | 1 | Molex Pico-EZmate cable assembly, 6 circuits, a plug at each end | Molex 0369200601 | cut in half: one half is the P1 cable, the other the P2 cable. All six wires are black |
@@ -43,7 +43,14 @@ The tools to build its two cables, once for any number of hosts:
 
 #### The P1 cable (JTAG)
 
-**2.** Press the plug of one half into socket P1 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost. Put a numbered tape flag on each of the 6 wires, 1 to 6, about 25 mm back from the tip, clear of the end that will be cut and stripped later. While the plug sits in the socket (the Acorn out of any slot, unpowered), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: it must beep. Then the wire flagged 6: it must stay silent. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again; if still neither beeps, stop: the ground point is not confirmed. Then take the plug out again.
+**2.** Find wire 1 of the P1 cable and flag the wires, before cutting any wire back.
+
+1. Press the plug of one half into socket P1 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost.
+2. Put a numbered tape flag on each of the 6 wires, 1 at the left to 6, about 25 mm back from the tip, clear of the end that will be cut and stripped later.
+3. With the plug still in the socket (the Acorn out of any slot, unpowered), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: it must beep.
+4. Do the same with the wire flagged 6: it must stay silent.
+5. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again; if still neither beeps, stop: the ground point is not confirmed.
+6. Take the plug out again.
 
 ![The P1 cable: finding wire 1, and its wires prepared](acorn-cable-pi5-p1-prepare.png)
 
@@ -71,7 +78,14 @@ The tools to build its two cables, once for any number of hosts:
 
 #### The P2 cable (I/O)
 
-**7.** Press the plug of the other half into socket P2 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost. Put a numbered tape flag on each of the 6 wires, 1 to 6, about 25 mm back from the tip, clear of the end that will be cut and stripped later. While the plug sits in the socket (the Acorn out of any slot, unpowered), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: it must beep. Then the wire flagged 6: it must stay silent. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again; if still neither beeps, stop: the ground point is not confirmed. Then take the plug out again.
+**7.** Find wire 1 of the P2 cable and flag the wires, before cutting any wire back.
+
+1. Press the plug of the other half into socket P2 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost.
+2. Put a numbered tape flag on each of the 6 wires, 1 at the left to 6, about 25 mm back from the tip, clear of the end that will be cut and stripped later.
+3. With the plug still in the socket (the Acorn out of any slot, unpowered), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: it must beep.
+4. Do the same with the wire flagged 6: it must stay silent.
+5. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again; if still neither beeps, stop: the ground point is not confirmed.
+6. Take the plug out again.
 
 ![The P2 cable: finding wire 1, and its wires prepared](acorn-cable-pi5-p2-prepare.png)
 
@@ -101,6 +115,8 @@ The tools to build its two cables, once for any number of hosts:
 
 **12.** This is a bench check; the housings come off again in the next step. Fit the P1 housing on the 40-pin header pins 19 to 26 with its marked corner on pin 19, counted as in the picture, and the P2 housing on the 40-pin header pins 5 to 10 with its marked corner on pin 5, counted as in the picture. The Acorn is not in its slot and the plugs are free. With the host unplugged from power, put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Raspberry Pi 5: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent.
 
+![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check.png)
+
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png)
 
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png)
@@ -108,12 +124,12 @@ The tools to build its two cables, once for any number of hosts:
 **13.** Fit the cables, in this order. The sockets are on the underside of the card and may not be reachable once it is in the slot.
 
 1. Power off the Raspberry Pi 5 and unplug its power.
-2. Take both housings off again.
+2. If the housings are on the headers (after the bench check), take them off.
 3. Press the P1 plug into socket P1 and the P2 plug into socket P2 on the underside of the Acorn, each the way round it was when you put the flags on, until fully seated.
 4. Put the Acorn in the M.2 slot and fit its screw.
 5. Fit the P1 housing on the 40-pin header pins 19 to 26, marked corner on pin 19, and the P2 housing on the 40-pin header pins 5 to 10, marked corner on pin 5.
 
-![Where sockets P1 and P2 are, and which end is wire 1](acorn-cable-ground-check.png)
+![Fitting the cables on a Raspberry Pi 5, in order](acorn-cable-pi5-fit.png)
 
 ![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5.png)
 
