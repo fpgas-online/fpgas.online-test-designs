@@ -109,6 +109,21 @@ def find(boards, mode, options, usb, pci):
     raise Problem("missing", f"none of the installed boards ({', '.join(boards)}) was found ({how})")
 
 
+def recorded_and_gone(boards, mode, path):
+    """For each board looked for whose own check takes it off its bus (Board.gone_after_check) and that the
+    recorded state has: a sentence saying so. Nothing was found, so such a board may be there and unseen."""
+    recorded = state.load(path)
+    if not isinstance(recorded, dict) or "unreadable" in recorded:
+        return []
+    looked_for = boards.values() if mode == config.AUTO else [b for b in boards.values() if mode in (b.name, b.slug)]
+    out = []
+    for b in looked_for:
+        if b.gone_after_check and any(key == b.name or key.startswith(f"{b.name}@") for key in recorded):
+            out.append(f"a {b.title} was found on this host by an earlier check and is not there now: "
+                       f"{b.gone_after_check}")  # fmt: skip
+    return out
+
+
 def _keys(targets):
     """A state key per board found: its name, or with more than one of a kind, name@where."""
     names = [b.name for b, _, _ in targets]
@@ -195,7 +210,9 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
     except Problem as p:
         report.update(result=p.result, reason=p.reason)
         if p.result == "missing":  # say what was recorded, if anything: nothing is recorded now
-            event("fpga-no-board", {"reason": p.reason})
+            gone = recorded_and_gone(boards, report.get("mode"), options.get("state", state.STATE))
+            report["reason"] = "; ".join([p.reason, *gone])
+            event("fpga-no-board", {"reason": report["reason"]})
             report["state"] = compare_state(report, [], [], False, options.get("state", state.STATE))
         return report
     reports, not_checked = [], []
