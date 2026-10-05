@@ -704,7 +704,7 @@ def pi5(nudge=0):
         sh,
         "CARRIER A  ·  WELLAND.FPGAS.ONLINE",
         "SQRL Acorn CLE-215+ to Raspberry Pi 5",
-        "Waveshare PoE M.2 HAT+ on a Pi 5: the Acorn needs the Pi 5's PCIe, so no earlier Pi can carry it.",
+        "Waveshare PoE M.2 HAT+ on a Pi 5. An Acorn needs PCIe, which a Pi 4 or older does not have.",
         f"--pins {c.jtag_pins}",
         "These are GPIO numbers, not header pin numbers",
     )
