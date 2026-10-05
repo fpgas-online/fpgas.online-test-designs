@@ -1476,3 +1476,20 @@ def test_a_temporary_file_is_not_left_when_the_report_cannot_be_made_readable(tm
     with pytest.raises(PermissionError):
         runner.write({"result": "pass"}, str(tmp_path / "verify.json"))
     assert list(tmp_path.iterdir()) == []
+
+
+def test_a_failed_check_says_whether_it_was_published_before_its_conclusion(opts, tmp_path, monkeypatch, capsys):
+    """The publish line is with the run's own lines; the plain conclusion (conclusion.py) still comes last and
+    names the report that was written."""
+    monkeypatch.setattr(runner, "installed", lambda: _boards(Fake("arty", seen=[{"variant": "a7-35"}], result="fail")))
+    monkeypatch.setattr(runner, "usb_devices", lambda: [])
+    monkeypatch.setattr(runner, "pci_devices", lambda: [])
+    sent = []
+    monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append(stage) or True)
+    fleet = _fleet(tmp_path)
+    out = tmp_path / "r.json"
+    assert runner.run({"state": opts["state"], "board": "arty", "report": str(out), **fleet}) == 1
+    err = capsys.readouterr().err
+    assert err.index("  published to the fleet: ") < err.index("RESULT: FAIL: a board did not pass.")
+    assert f"(JSON): {out}" in err.split("RESULT:")[1]
+    assert sent[0] == "fpga-verifying" and sent[-1] == "fpga-verified"

@@ -213,9 +213,11 @@ def test_every_advice_pattern_matches_a_reason_the_code_gives():
 
 
 def test_the_docs_show_what_the_code_prints_for_the_real_report():
-    """docs/verify.md's first failing example is this report's summary, line for line."""
+    """docs/verify.md's first failing example is this report's summary, line for line, as a run with --no-publish
+    gives it (the report is from before fpgas-verify said whether it published)."""
     docs = (pathlib.Path(__file__).parents[1] / "docs" / "verify.md").read_text()
-    assert runner.summary(_blade(), KEPT_IN).strip("\n") in docs
+    report = {**_blade(), "publish": {"on": False, "why": "--no-publish"}}
+    assert runner.summary(report, KEPT_IN).strip("\n") in docs
 
 
 def test_a_jtag_pin_the_serial_port_has_gets_the_blades_advice_and_any_other_holder_the_general_one():

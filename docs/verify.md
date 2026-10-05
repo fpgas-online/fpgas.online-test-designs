@@ -90,7 +90,7 @@ sudo fpgas-acorn-debug identify            # the same as fpgas-acorn-verify --id
   (`not published: no file says ...`), and there is no error. The
   fpgas.online Pi root sets it in `/etc/fpgas-verify/fleet.ini`, so a fleet Pi tells its site how the check
   went; there, `--no-publish` is how a run by hand stays private. The transcripts below were taken on fleet
-  Pis, which is why they carry it.
+  Pis, which is why they carry it; each shows the line that says whether it was published.
 * `--test` runs part of the check. It is never published, never recorded, and its report goes to stdout
   unless `--report` says otherwise.
 * Only one command uses a board at a time. A second one prints
@@ -250,6 +250,7 @@ There is one result: **pass** or **fail**. A fail is named for its worst cause:
 ```text
 $ sudo fpgas-verify --no-publish
 fpgas-verify: pass (mode auto, auto: USB/PCI IDs)
+  not published: --no-publish
   acorn cle-215+: pass
     pcie-link  pass
     pcie-bar0  pass
@@ -277,6 +278,7 @@ $ sudo fpgas-verify --no-publish
 ******************************************************************************
 *** FPGA VERIFY: FAIL ******************************************************
 fpgas-verify: fail (mode acorn, configured: acorn)
+  not published: --no-publish
   acorn cle-101: fail
     unconverted: runs SQRL's factory image, not the fpgas.online design
     pcie-link  pass
@@ -326,6 +328,7 @@ $ sudo fpgas-verify --no-publish
 ******************************************************************************
 *** FPGA VERIFY: FAIL ******************************************************
 fpgas-verify: fail (mode auto, auto: USB/PCI IDs)
+  not published: --no-publish
   acorn cle-215+: fail
     pcie-link  fail: link is x2, expected x1
     pcie-bar0  pass
@@ -364,6 +367,7 @@ $ journalctl -b -u fpgas-verify -o cat
 ******************************************************************************
 *** FPGA VERIFY: FAIL ******************************************************
 fpgas-verify: fail (mode auto, auto: probed (netv2))
+  published to the fleet: `publish = on` in /etc/fpgas-verify/fleet.ini
   netv2 a7-35: fail
     uart       pass
     ddr        fail: the test exited 1
@@ -399,6 +403,7 @@ $ sudo fpgas-verify --no-publish; echo "exit $?"
 *** FPGA VERIFY: MISSING ***************************************************
 fpgas-verify: missing (mode arty, -)
   no Digilent Arty A7 found: this host is set up for one, and nothing else is looked for
+  not published: --no-publish
 
 RESULT: MISSING: no board was found.
   no Digilent Arty A7 found: this host is set up for one, and nothing else is looked for
