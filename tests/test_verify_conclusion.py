@@ -10,7 +10,7 @@ import json
 import pathlib
 
 from fpgas_online_verify import conclusion, runner
-from fpgas_online_verify.boards.acorn import check, suite
+from fpgas_online_verify.boards.acorn import check, links, setup, suite
 
 DATA = pathlib.Path(__file__).parent / "data"
 KEPT_IN = "/run/fpgas-online/verify.json"
@@ -193,6 +193,7 @@ def test_every_advice_pattern_matches_a_reason_the_code_gives():
         "this host (x) is not an Acorn setup in wiring.toml: y",
         "the FPGA has not restarted since an earlier boot's check",
         GPIOD,
+        links.pins_held(setup.detect("Raspberry Pi Compute Module 5 Rev 1.0"), {14: "1f00030000.serial (uart0)"}),
         "no device on the P1 JTAG chain",
         "openocd is not installed",
         "x does not match its manifest",

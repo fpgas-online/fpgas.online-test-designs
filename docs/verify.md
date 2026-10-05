@@ -792,6 +792,11 @@ that says how to switch it on.
 * Every Pi pin a test drives is put back as it was found (function, pull, and an output's level); the FPGA's
   side is left as inputs. On a Compute Blade GPIO14 is both TMS and the UART's TX, and goes back to its UART
   function.
+* Before the JTAG tool runs, the check asks the header's GPIO chip whether each JTAG pin can be had. A kernel
+  whose pin controller is strict (the RP1's on 6.18, seen on a CM5) does not lend a pin a driver has: on a
+  Compute Blade with the serial port on, that is GPIO14. The tool is then not run and `jtag` fails, naming the
+  pin and who has it ([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)). Which
+  boot configuration a Compute Blade needs for both JTAG and the P2 UART is not settled.
 
 #### The JTAG IDCODE
 
@@ -936,6 +941,7 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 | `fail`: `running the golden image` | the Acorn's operational slot did not boot; it fell back to golden |
 | `fail`: `link is x2, expected x1` | the Acorn's PCIe link is not the setup's (`expected.toml`) |
 | `fail`: `no device on the P1 JTAG chain` / `no UARTBone reply on /dev/ttyAMA0` | an Acorn's JTAG or P2 UART cable is off or miswired |
+| `fail`: `P1 JTAG could not be probed: GPIO14 (TMS) is held by 1f00030000.serial (uart0): the kernel does not hand out a pin that is held…` | an Acorn's JTAG pin is in use by another driver, so the scan was not tried. Seen on a Compute Blade with a CM5 (kernel 6.18): TMS and the serial port's TX are both GPIO14, and with the serial port on the kernel does not lend the pin. JTAG cannot be tested there while the serial port is on; booting with it off should free the pin, which is not yet confirmed on hardware ([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)) |
 | `fail`: `… gpiod_line_request_set_values_subset: Assertion 'request' failed` | openFPGALoader could not have one of the JTAG pins, because a driver holds it. Seen on a Compute Blade with a CM5 (kernel 6.18), where the serial port holds GPIO14, which is also JTAG TMS: the JTAG test cannot run there yet ([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)) |
 | `fail`: `openFPGALoader printed no raw IDCODE scan (needs --verbose-level 2 output)` | the tool's version, not the board: openFPGALoader exited 0 but printed no `- 0 -> 0x...` lines at `--verbose-level 2`, so it is older than v0.9.0. Its last lines are in the report's `output` |
 | `fail`: `… failed (exit N) before scanning the JTAG chain: …` | the scan tool exited with an error and printed no scan: the cable or gpiochip would not open, say. The reason ends with its last line of output; more is in the report's `output` |

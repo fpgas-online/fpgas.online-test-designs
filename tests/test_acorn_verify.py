@@ -1001,3 +1001,16 @@ def test_identify_never_runs_or_marks_the_power_cycle_check(tmp_path, images):
     rig = Rig(tmp_path, images)
     ACORN.identify({}, rig.found(), rig.options(power_cycle_check=True, boot_id=BOOT_A))
     assert rig.soc.scratch == av.SCRATCH_RESET
+
+
+def test_on_a_blade_whose_uart_holds_tms_the_jtag_test_fails_saying_so_and_the_rest_still_runs(tmp_path, images):
+    """What ps1's Compute Blade showed (#127): the kernel does not lend GPIO14 while the serial port has it."""
+    rig = Rig(tmp_path, images, model=fk.CM5)
+    rig.pi.pins.update({2: ["no", "pu", None], 3: ["no", "pu", None], 4: ["no", "pu", None]})
+    held = {14: "1f00030000.serial (uart0)"}
+    report = rig.check(gpiochip=lambda c: "/dev/gpiochip0", held_pins=lambda chip, gpios: held)
+    results = _results(report)
+    assert results["jtag"] == "fail" and results["pcie-bar0"] == results["flash"] == results["p2-uart"] == "pass"
+    assert "GPIO14 (TMS) is held by 1f00030000.serial (uart0)" in report["reason"]
+    assert not rig.pi.ran("openFPGALoader")
+    assert report["identity"]["dna"]  # still known, from BAR0

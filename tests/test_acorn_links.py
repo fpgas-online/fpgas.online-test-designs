@@ -459,3 +459,66 @@ def test_rp1_pio_runs_only_on_a_bcm2712(tmp_path, compatible, why):
 
 def test_a_host_without_a_device_tree_skips_rp1_pio(tmp_path):
     assert links.not_rp1_host(str(tmp_path / "none")).startswith("cannot read ")
+
+
+# -- a JTAG pin the kernel will not hand out (#127) -----------------------------------------------------------
+
+UART_HOLDS_TMS = {14: "1f00030000.serial (uart0)"}
+
+
+def test_a_jtag_pin_held_by_a_driver_is_said_plainly_and_the_tool_is_not_run():
+    """On a Compute Blade TMS is GPIO14, the UART's TX. A kernel whose pin controller is strict refuses a GPIO
+    request for it while the UART has it, and openFPGALoader 0.13.1 then aborts on a libgpiod assertion."""
+    pi = fk.FakePi(idcode=0x13631093)
+    t = links.jtag(BLADE, "cle-101", pi, gpiochip=lambda c: "/dev/gpiochip0", held=lambda chip, gpios: UART_HOLDS_TMS)
+    assert t["result"] == "fail"
+    uart = "GPIO14 (TMS) is held by 1f00030000.serial (uart0)"
+    assert t["reason"] == f"P1 JTAG could not be probed: {uart}: {links.HELD}"
+    assert links.HELD == "the kernel does not hand out a pin that is held, so the JTAG chain cannot be scanned"
+    assert t["dna_error"].startswith("not read over P1 JTAG: P1 JTAG could not be probed: GPIO14 (TMS) is held")
+    assert not pi.ran("openFPGALoader")
+    assert pi.pins[14][:2] == ["a4", "pn"]  # still the UART's
+
+
+def test_the_pins_asked_about_are_the_setups_jtag_pins_on_its_header_chip():
+    asked = []
+    pi = fk.FakePi(idcode=0x13631093)
+    t = links.jtag(BLADE, "cle-101", pi, gpiochip=lambda c: "/dev/chip", held=lambda *a: asked.append(a) or {})
+    assert asked == [("/dev/chip", [2, 3, 4, 14])] and t["result"] == "pass"
+
+
+def test_every_held_pin_is_named_with_its_signal():
+    reason = links.pins_held(BLADE, {14: "1f00030000.serial (uart0)", 2: "a kernel driver"})
+    uart = "GPIO14 (TMS) is held by 1f00030000.serial (uart0)"
+    assert reason == f"GPIO2 (TDI) is held by a kernel driver, {uart}: {links.HELD}"
+
+
+def test_the_header_chip_is_handed_back_for_asking_about_its_lines(tmp_path):
+    sysfs, dev = _gpio_sysfs(tmp_path, PI5_CHIPS)
+    assert links.header_gpiochip(PI5.gpiochip, f"{dev}/gpiochip0", sysfs, dev) == f"{dev}/gpiochip0"
+
+
+def test_a_chip_that_cannot_be_asked_holds_nothing_so_the_tool_still_runs(tmp_path):
+    assert links.held_pins(str(tmp_path / "no-such-chip"), [2, 3, 4, 14]) == {}
+    plain = tmp_path / "gpiochip0"
+    plain.write_text("")  # not a GPIO chip: the ioctl is refused
+    assert links.held_pins(str(plain), [2, 3, 4, 14]) == {}
+
+
+def test_the_holder_is_named_from_the_pin_controllers_pinmux_pins(tmp_path):
+    """/sys/bus/gpio/devices/gpiochip0 is a link into the controller's device; debugfs names its pinmux by it."""
+    device = tmp_path / "devices" / "1f000d0000.gpio"
+    (device / "gpiochip0").mkdir(parents=True)
+    sysfs = tmp_path / "bus"
+    sysfs.mkdir()
+    (sysfs / "gpiochip0").symlink_to(device / "gpiochip0")
+    debugfs = tmp_path / "debug"
+    for name, text in {
+        "1f000d0000.gpio-pinctrl-rp1": "Pinmux settings per pin\npin 2 (gpio2): UNCLAIMED\n"
+                                       "pin 14 (gpio14): device 1f00030000.serial function uart0 group gpio14\n",
+        "107d504100.pinctrl-pinctrl-bcm2712": "pin 14 (gpio14): device other function spi group gpio14\n",
+    }.items():  # fmt: skip
+        (debugfs / name).mkdir(parents=True)
+        (debugfs / name / "pinmux-pins").write_text(text)
+    assert links._pinmux_owners("/dev/gpiochip0", str(sysfs), str(debugfs)) == {14: "1f00030000.serial (uart0)"}
+    assert links._pinmux_owners("/dev/gpiochip0", str(sysfs), str(tmp_path / "none")) == {}
