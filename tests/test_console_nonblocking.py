@@ -5,6 +5,11 @@ BIOS uses libbase's interrupt-driven ring instead, which drains into the UART on
 crossover side is the host's `xover_rxtx`/`xover_rxempty` CSRs.
 """
 
+import pytest
+
+pytest.importorskip("litex")
+pytest.importorskip("migen")
+
 from litex.soc.cores.uart import UARTCrossover
 from migen import Memory, Signal, run_simulation
 

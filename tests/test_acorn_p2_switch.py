@@ -1,5 +1,10 @@
 """Simulation: the Acorn's J2/K2 serial/GPIO switch is the serial link until a host says otherwise, and goes back."""
 
+import pytest
+
+pytest.importorskip("litex")
+pytest.importorskip("migen")
+
 from litex.soc.interconnect import csr_bus
 from migen import Module, run_simulation
 

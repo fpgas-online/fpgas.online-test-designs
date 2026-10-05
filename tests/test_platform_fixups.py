@@ -4,6 +4,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+pytest.importorskip("litex")
+pytest.importorskip("litex_boards")
+pytest.importorskip("migen")
+
 from litex.build.generic_platform import IOStandard, Subsignal
 from litex_boards.platforms import digilent_arty, kosagi_fomu_evt, kosagi_netv2
 from migen import ClockDomain
