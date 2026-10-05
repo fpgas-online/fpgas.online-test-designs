@@ -15,6 +15,11 @@ DATA = tomllib.loads((HERE / "wiring.toml").read_text())
 
 CONNECTORS = DATA["connectors"]
 SIGNALS = DATA["signals"]
+# [{tool, note?, when?}]: what building the cables takes. `when = "resistor"`: only where a wire has one.
+TOOLS = DATA.get("tools", [])
+for _tool in TOOLS:
+    if not _tool.get("tool") or set(_tool) - {"tool", "note", "when"} or _tool.get("when", "resistor") != "resistor":
+        raise ValueError(f'wiring.toml: a tool needs a `tool`, and may have `note` and `when = "resistor"`: {_tool}')
 DIRECTION = {"pi": "Pi → FPGA", "fpga": "FPGA → Pi", "both": "either"}
 
 

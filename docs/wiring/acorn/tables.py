@@ -150,7 +150,13 @@ def bom(c):
     if c.resistors:
         on = ", ".join(sorted(wiring.SIGNALS[s]["label"] for s in c.resistors))
         rows.append((len(c.resistors), f"resistor, {c.resistor_value}, 1/8 W axial", "—", f"in series with {on}"))
-    return table(["Have it", "Qty", "Part", "Part number", "What it is for"], [(TICK, *r) for r in rows])
+    parts = table(["Have it", "Qty", "Part", "Part number", "What it is for"], [(TICK, *r) for r in rows])
+    tools = [(TICK, t["tool"], t.get("note", "—")) for t in wiring.TOOLS if "when" not in t or c.resistors]
+    return (
+        f"The parts for **one** {c.name} host; for several hosts, that many of each.\n\n{parts}\n"
+        "The tools to build its two cables, once for any number of hosts:\n\n"
+        + table(["Have it", "Tool", "What it is for"], tools)
+    )
 
 
 def build():

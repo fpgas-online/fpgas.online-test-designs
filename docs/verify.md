@@ -982,7 +982,7 @@ at ps1 are), what you install is gone at the next boot, and so is the boot check
 install and run by hand:
 
 ```bash
-# 1. The two apt repositories (as in "Installing" above).
+# 1. The two apt repositories the packages come from.
 sudo install -d -m0755 /etc/apt/keyrings
 curl -fsSL https://apt.fpgas.online/apt.gpg | sudo tee /etc/apt/keyrings/apt.gpg > /dev/null
 echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
@@ -1012,6 +1012,11 @@ sudo fpgas-acorn-verify --no-publish
   `/run/fpgas-online/verify.json`.
 * To keep the packages across boots, they have to go into the image the host boots from; that is the host
   owner's root image, not something these packages do.
+* The check needs no bitstream file of yours. The images it compares the card's flash with, and the design
+  that converts a card, are installed with it by `fpgas-online-acorn-bitstreams`, in
+  `/usr/share/fpgas-online/acorn-pcie/images/` (for a CLE-101: `acorn-cle-101-sqrl_acorn.bit` and the two
+  flash images, [converting a card](hardware/acorn-pcie-programming.md)). No package installs a pin-id or
+  loopback design for the Acorn; the check does not use one.
 
 #### Which test uses which wire
 
@@ -1096,6 +1101,7 @@ What has been run on a Compute Blade, and what has not, as of 5 October 2026:
 | The `p2-uart` and `p2-serial` tests | **not yet run by us on this hardware**: they need a converted card |
 | Converting a card on a Compute Blade | **not yet run by us on this hardware**; the [written steps](hardware/acorn-pcie-programming.md) are for the Pi 5 setup |
 | A Compute Blade that passes the whole check | **not yet seen** |
+| The `p2-serial` test on a blade whose J2 wire has no 470 Ω resistor (pi20 as wired on 5 October 2026: the pair on Extension Port pins 9 and 10) | **not yet run by us on this hardware**. From the code: the test never has both ends of a wire driving at once (the Pi's pins are made inputs before the FPGA drives, and the FPGA's outputs are switched off before the Pi drives), so it does not rely on the resistor. What the resistor guards against is a design that drives J2 while JTAG or the serial port drives GPIO14; the fpgas.online design leaves J2 an input |
 
 JTAG and the serial pair share GPIO14 on a Compute Blade (J2 reaches it through 470 Ω, so JTAG wins
 electrically). Under kernel 6.18 they cannot both be had from one boot: with the header's serial port on, the
@@ -1107,6 +1113,12 @@ documentation does not say that it frees GPIO14 on a Compute Module 5:
   when the primary serial port is a PL011; we have not seen it left unset on a Compute Blade); and if the
   port is switched on by a `dtoverlay=uart0…` or `dtparam=uart0` line, that line has to go instead;
 * in `cmdline.txt`, the word `console=serial0,115200` deleted from the one line, if it is there.
+
+On a netbooted host those are not files on the host: they are the copies the firmware fetches from the boot
+server at each boot, so they are changed there, by whoever keeps that server, and the change is for every host
+booting from that tree. At ps1 the blades' root is the gateway's `/srv/nfs/rpi/trixie/root` (read from the
+kernel command line of pi16 and pi20, 5 October 2026); where the gateway keeps the firmware's `config.txt` and
+`cmdline.txt` was not read by us.
 
 Then check that the pin is free (the two commands below) before trying JTAG. With the serial port off, `/dev/ttyAMA0` is not there, so the
 `p2-uart`, `p2-serial` and `scratch` tests cannot pass in that boot; what a Compute Blade's check should

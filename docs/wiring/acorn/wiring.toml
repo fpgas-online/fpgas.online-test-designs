@@ -69,6 +69,29 @@ qty = 1
 part = "heat-shrink tube, about 2 mm, a few centimetres"
 note = "over each cut-back wire end, and over the joints of a series resistor where there is one"
 
+# tools: what building the two cables takes, whatever the carrier. `when = "resistor"` is needed only on a
+# carrier whose wiring has a series resistor.
+[[tools]]
+tool = "multimeter with a continuity buzzer"
+note = "all six wires of the cable are black: each is buzzed through from the plug to its terminal before the housing is fitted, and again after"
+
+[[tools]]
+tool = "wire strippers for fine wire, and side cutters"
+note = "to cut the cable in half, strip about 3 mm from each wire, and cut back the wires that are not connected"
+
+[[tools]]
+tool = "crimping tool for 2.54 mm Dupont terminals"
+note = "one crimp for each connected wire"
+
+[[tools]]
+tool = "soldering iron and solder"
+when = "resistor"
+note = "to join the series resistor into its wire"
+
+[[tools]]
+tool = "hot-air tool for the heat-shrink tube"
+note = "over each cut-back end and each soldered joint"
+
 [carriers.pi5]
 name = "Raspberry Pi 5"
 jtag_pins = "10:9:11:8"
