@@ -1284,7 +1284,19 @@ def fit_host_blade(sh, c, y):
         rect = hl[plan.header]
         corner(sh, rect)
         centre = min(max((rect[0] + rect[2]) / 2, ix + 20), ix + iw - 20)
-        sh.tag(centre, iy + ih + 16, connector, "#fff", size=T, h=24, anchor="middle", fg=INK, stroke=INK, pad=6)
+        # The bare name is the Acorn's socket; the box on the host is where that cable's housing goes.
+        sh.tag(
+            centre,
+            iy + ih + 16,
+            f"{connector} housing",
+            "#fff",
+            size=T,
+            h=24,
+            anchor="middle",
+            fg=INK,
+            stroke=INK,
+            pad=3,  # the two headers are close together: a wider label would touch its neighbour
+        )
     ty = para(sh, 30, y + 26 + w * 521 / 3120 + 34, f"{c.name}, from above.", 330, "bold")
     ty = para(sh, 30, ty, "The red corner of each box is the housing's marked corner, on the pin printed 1.", 330)
     return max(ty - LINE, iy + ih + 30)
