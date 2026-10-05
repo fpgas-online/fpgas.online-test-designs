@@ -245,7 +245,7 @@ def test_the_last_step_fits_plugs_then_card_then_both_housings_on_their_headers(
     c = wiring.CARRIERS[key]
     last = steps.procedure(c).split("Fit the cables, in this order.")[1]
     assert steps.fit_block(c).rstrip() in last and steps.png(steps.fit_name(c)) in last
-    assert "acorn-cable-ground-check.png" not in last
+    assert "ground-check.png" not in last
     assert (wiring.HERE / "generated" / f"acorn-fit-{key}.md").read_text().endswith(steps.fit_block(c))
     order = [
         last.index(s) for s in (c.power_off, "take them off", "Press the P1 plug", "Put the Acorn in the M.2 slot")
@@ -261,7 +261,8 @@ def test_the_last_step_fits_plugs_then_card_then_both_housings_on_their_headers(
 def test_the_ground_check_is_in_each_flag_step_and_on_the_box():
     for c in wiring.CARRIERS.values():
         text = steps.procedure(c)
-        assert text.count("acorn-cable-ground-check.png") == len(wiring.CONNECTORS)
+        for connector in wiring.CONNECTORS:
+            assert text.count(steps.png(steps.ground_check_name(connector))) == 1
         assert text.count("If wire 6 beeps instead, stop") == len(wiring.CONNECTORS)
         assert text.count(f"about {wiring.LENGTHS['flag_back']} mm back from the tip") == len(wiring.CONNECTORS)
         assert text.count("Every other cavity must stay silent for that contact.") == len(wiring.CONNECTORS)
@@ -270,3 +271,47 @@ def test_the_ground_check_is_in_each_flag_step_and_on_the_box():
         assert text.index("If wire 6 beeps instead") < text.index("Cut wire")
     assert any("mounting pad is ground" in item and "not measured" in item for item in steps.ASSUMPTIONS)
     assert wiring.LENGTHS["flag_back"] > wiring.LENGTHS["resistor"]
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_the_flag_step_shows_whole_wires_and_the_cut_picture_comes_only_after_the_meter_check(key):
+    """The meter check exists so that the wire cut is the 3.3 V one: no picture before it may show a wire cut."""
+    c = wiring.CARRIERS[key]
+    text = steps.procedure(c)
+    for connector in wiring.CONNECTORS:
+        flag_step = text.split(f"Find wire 1 of the {connector} cable")[1].split("\n**")[0]
+        images = re.findall(r"!\[[^\]]*\]\(([^)]+)\)", flag_step)
+        assert images == [steps.png(steps.flag_name(connector)), steps.png(steps.ground_check_name(connector))]
+        prepared = steps.png(steps.prepare_name(c, connector))
+        assert text.count(prepared) == 1
+        assert text.index(prepared) > text.index(steps.png(steps.ground_check_name(connector)))
+        cut_step = text[: text.index(prepared)].rsplit("\n**", 1)[1]
+        assert "off about" in cut_step and "in no cavity" in cut_step
+
+
+@pytest.mark.parametrize("connector", list(wiring.CONNECTORS))
+def test_the_flag_and_meter_pictures_draw_every_wire_whole_with_its_flag(connector):
+    count = len(wiring.CONNECTORS[connector]["pins"])
+    for draw in (steps.flag, steps.ground_check):
+        svg = draw(connector)
+        assert re.findall(r'<g id="flag-wire-(\d+)">', svg) == [str(n) for n in range(1, count + 1)]
+        assert "terminal-wire-" not in svg and "resistor-wire-" not in svg
+        # six wires of one length, from the plug to their cut faces
+        wires = re.findall(
+            rf'<line x1="([\d.]+)" y1="([\d.]+)" x2="\1" y2="([\d.]+)" stroke="{steps.BODY}" '
+            rf'stroke-width="{steps.WIRE}"/>',
+            svg,
+        )
+        assert len(wires) == count and len({(y0, y1) for _x, y0, y1 in wires}) == 1
+        assert float(wires[0][2]) - float(wires[0][1]) == steps.FLAG_WIRE
+
+
+def test_a_repeated_cavity_picture_says_why_it_is_there_again():
+    for c in wiring.CARRIERS.values():
+        lines = steps.procedure(c).splitlines()
+        for connector in wiring.CONNECTORS:
+            cavity = steps.png(steps.file_name(c, connector))
+            at = [i for i, line in enumerate(lines) if f"]({cavity})" in line]
+            assert len(at) == 3
+            for i in at[1:]:
+                assert lines[i - 2].startswith(f"The {connector} cavity picture again")

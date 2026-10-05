@@ -52,13 +52,13 @@ The tools to build its two cables, once for any number of hosts:
 5. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again; if still neither beeps, stop: the ground point is not confirmed.
 6. Take the plug out again.
 
-![The P1 cable: finding wire 1, and its wires prepared](acorn-cable-pi5-p1-prepare.png)
+![The P1 cable's plug in socket P1, all 6 wires whole, a flag on each](acorn-cable-p1-flag.png)
 
-![Checking which wire is wire 1, with a meter](acorn-cable-ground-check.png)
+![Checking which wire is wire 1 with a meter, the plug in socket P1](acorn-cable-p1-ground-check.png)
 
 **3.** Cut wire 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over the cut end. It goes in no cavity. Wire 6 is VCC, 3.3 V from the Acorn: it must never reach the host. Leave wires 1 to 5 at full length.
 
-![The P1 cable: finding wire 1, and its wires prepared](acorn-cable-pi5-p1-prepare.png)
+![The P1 cable: its wires prepared](acorn-cable-pi5-p1-prepare.png)
 
 **4.** Strip about 3 mm from wires 1 to 5. Crimp a Dupont terminal on each.
 
@@ -74,6 +74,8 @@ The tools to build its two cables, once for any number of hosts:
 
 ![A meter between the plug and the housing](acorn-cable-check.png)
 
+The P1 cavity picture again, to read each wire's cavity from:
+
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png)
 
 #### The P2 cable (I/O)
@@ -87,13 +89,13 @@ The tools to build its two cables, once for any number of hosts:
 5. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again; if still neither beeps, stop: the ground point is not confirmed.
 6. Take the plug out again.
 
-![The P2 cable: finding wire 1, and its wires prepared](acorn-cable-pi5-p2-prepare.png)
+![The P2 cable's plug in socket P2, all 6 wires whole, a flag on each](acorn-cable-p2-flag.png)
 
-![Checking which wire is wire 1, with a meter](acorn-cable-ground-check.png)
+![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check.png)
 
 **8.** Cut wire 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over the cut end. It goes in no cavity. Wire 6 is VCC, 3.3 V from the Acorn: it must never reach the host. Leave wires 1 to 5 at full length.
 
-![The P2 cable: finding wire 1, and its wires prepared](acorn-cable-pi5-p2-prepare.png)
+![The P2 cable: its wires prepared](acorn-cable-pi5-p2-prepare.png)
 
 **9.** Strip about 3 mm from wires 1 to 5. Crimp a Dupont terminal on each.
 
@@ -109,6 +111,8 @@ The tools to build its two cables, once for any number of hosts:
 
 ![A meter between the plug and the housing](acorn-cable-check.png)
 
+The P2 cavity picture again, to read each wire's cavity from:
+
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png)
 
 #### Fit the cables
@@ -117,7 +121,11 @@ The tools to build its two cables, once for any number of hosts:
 
 ![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check.png)
 
+The P1 cavity picture again, for where its housing sits and which corner is marked:
+
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png)
+
+The P2 cavity picture again, for where its housing sits and which corner is marked:
 
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png)
 
