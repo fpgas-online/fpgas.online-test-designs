@@ -42,8 +42,10 @@ the others:
 | `p2-gpio` | Pi 5 setup only: J5 and H5 driven from the FPGA and read on GPIO3/GPIO4, then driven from the Pi and read on the FPGA |
 | `power-cycle` (opt-in: `power-cycle-check = on`, set on the fpgas.online fleet) | the FPGA restarted since the last check (it was configured, or its SoC reset), that is, it did not keep its state across the Pi's restart ([verify.md](../verify.md#the-acorns-power-cycle-check-opt-in)) |
 
+Where each setup's wires land on the host:
+
 | Setup | JTAG `--pins` | openFPGALoader cable | J2 / K2 | J5 / H5 |
-|---|---|---|---|
+|---|---|---|---|---|
 | Pi 5 + Waveshare HAT | `10:9:11:8` | `libgpiod` (the RP1's GPIO chip, linked as `/dev/gpiochip0`) | GPIO14 / GPIO15 | GPIO3 / GPIO4 |
 | Compute Blade, CM4 | `2:3:4:14` | `libgpiod` (the BCM2711's GPIO chip; a CM4 has no RP1, so no `rp1pio`) | GPIO14 / GPIO15 | cut |
 | Compute Blade, CM5 | `2:3:4:14` | `libgpiod` (the RP1's GPIO chip) | GPIO14 / GPIO15 | cut |
@@ -214,11 +216,22 @@ P1 is wired to the Pi's SPI0 pins; openFPGALoader bit-bangs JTAG through libgpio
 (about 16 s for a full XC7A200T bitstream). The load goes to SRAM only and is
 lost at power cycle, which is what makes it safe to experiment with.
 
+On a Raspberry Pi 5 with the M.2 HAT (the card is at `0001:01:00.0`; P1's TDI, TDO, TCK, TMS are GPIO 10, 9,
+11, 8, which is `--pins 10:9:11:8`):
+
 ```bash
 echo 1 | sudo tee /sys/bus/pci/devices/0001:01:00.0/remove   # MUST detach the endpoint first on a Pi 5
 sudo ln -sfn /dev/gpiochip15 /dev/gpiochip0                   # Pi 5 only: the libgpiod cable opens gpiochip0
 openFPGALoader --cable libgpiod --pins 10:9:11:8 <bitstream.bit>
 ```
+
+On a Compute Blade the address is the one `lspci -D` shows (`0000:01:00.0` on a CM4, `0001:01:00.0` on a
+CM5) and the pins are `--pins 2:3:4:14`. Detach the endpoint first there too (the CM5 has the Pi 5's BCM2712
+root complex; we have not tried a CM4 without it). `/dev/gpiochip0` is already the header's chip on a CM4; on
+a CM5 run `gpiodetect` and use the chip it lists as `pinctrl-rp1` (it was `gpiochip0` under kernel 6.18; a
+Pi 5 under 6.12 had `gpiochip15`), so the `ln` line above may not apply. The differences are listed in
+[acorn-pcie-programming.md](acorn-pcie-programming.md#on-a-compute-blade). **Not yet run by us on a Compute
+Blade with these packages.**
 
 Pin order, the Pi 5 `gpiochip15` trap, the PCIe detach rule and the
 `overlayroot=tmpfs` gotcha are all in [acorn-pinmap.md](acorn-pinmap.md).

@@ -4,6 +4,7 @@
 acorn-connectors.md          the Acorn's P1 and P2, pin by pin
 acorn-<carrier>-<P1|P2>.md   where each wire of that cable goes on that carrier
 acorn-<carrier>-<header>.md  a carrier's header, pin by pin, as printed on the board
+acorn-<carrier>-bom.md       what to have on the bench for one host of that carrier, to tick off
 """
 
 import wiring
@@ -123,9 +124,39 @@ def header(c, key):
     return table(head, rows)
 
 
+TICK = "☐"  # an empty box to tick on paper
+
+
+def bom(c):
+    """The parts for one host of this carrier. The carrier's and the common parts are wiring.toml's `parts`;
+    the housings, the crimp terminals and the resistors are counted from the wiring, so they cannot drift
+    from it."""
+    rows = [(p["qty"], p["part"], p.get("number", "—"), p.get("note", "—")) for p in c.parts]
+    for h in c.headers.values():
+        for first, last in h.housings:
+            n = last - first + 1
+            shape = f"{h.columns}×{n // h.columns}"
+            wires = sorted(pin for s, (hk, pin) in c.wires.items() if hk == h.key and first <= pin <= last)
+            empty = n - len(wires)
+            note = f"over {h.name} pins {first} to {last}" + (
+                f"; {empty} of its {n} cavities {'stays' if empty == 1 else 'stay'} empty"
+                if empty
+                else "; every cavity is used"
+            )
+            rows.append((1, f"Dupont housing, {shape}, 2.54 mm pitch", "—", note))
+    labels = [wiring.SIGNALS[s]["label"] for conn in wiring.CONNECTORS.values() for s in conn["pins"] if s in c.wires]
+    rows.append((len(labels), "Dupont female crimp terminal, 2.54 mm", "—",
+                 "one for each connected wire: " + ", ".join(labels)))  # fmt: skip
+    if c.resistors:
+        on = ", ".join(sorted(wiring.SIGNALS[s]["label"] for s in c.resistors))
+        rows.append((len(c.resistors), f"resistor, {c.resistor_value}, 1/8 W axial", "—", f"in series with {on}"))
+    return table(["Have it", "Qty", "Part", "Part number", "What it is for"], [(TICK, *r) for r in rows])
+
+
 def build():
     out = {"acorn-connectors.md": BANNER + connectors()}
     for key, c in wiring.CARRIERS.items():
+        out[f"acorn-{key}-bom.md"] = BANNER + bom(c)
         for conn in wiring.CONNECTORS:
             out[f"acorn-{key}-{conn.lower()}.md"] = BANNER + cable(c, conn)
         for hk in c.headers:

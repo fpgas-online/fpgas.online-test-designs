@@ -37,6 +37,7 @@ class Carrier:
     resistor_value: str
     headers: dict  # key -> Header
     wires: dict  # signal -> (header key, pin)
+    parts: list  # [{qty, part, number?, note?}] besides what the wiring itself counts
 
     def tag(self, sig):
         """The host's name for the pin a signal lands on, as the sheet prints it; None for none."""
@@ -75,9 +76,11 @@ def _carrier(key, raw):
             hk, h["name"], h.get("short", h["name"]), h["columns"], pins, [tuple(r) for r in h.get("housings", [])]
         )
     wires = {s: (w[0], int(w[1])) for s, w in raw["wires"].items()}
+    parts = [*raw.get("parts", []), *DATA.get("parts", [])]  # this carrier's own, then what every carrier needs
     c = Carrier(
-        key, raw["name"], raw["jtag_pins"], set(raw.get("resistors", [])), raw.get("resistor_value", ""), headers, wires
-    )
+        key, raw["name"], raw["jtag_pins"], set(raw.get("resistors", [])), raw.get("resistor_value", ""), headers,
+        wires, parts,
+    )  # fmt: skip
     _check(c)
     return c
 
@@ -116,6 +119,11 @@ def _check(c):
             errors.append(f"{c.key}: jtag_pins is {c.jtag_pins}, but TDI:TDO:TCK:TMS land on {derived}")
     except KeyError as e:
         errors.append(f"{c.key}: a JTAG wire is missing, or lands on a pin with no gpio ({e})")
+    for part in c.parts:
+        if not isinstance(part.get("qty"), int) or part["qty"] < 1 or not part.get("part"):
+            errors.append(f"{c.key}: a part needs a whole `qty` of 1 or more and a `part`: {part}")
+        if set(part) - {"qty", "part", "number", "note"}:
+            errors.append(f"{c.key}: part {part.get('part')!r} has keys other than qty, part, number, note")
     if c.resistors and not c.resistor_value:
         errors.append(f"{c.key}: resistors listed but no resistor_value")
     for r in c.resistors:

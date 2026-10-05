@@ -72,6 +72,18 @@ P1 cables are unmated. Details in
 
 All Compute Blades boot Trixie arm64 (Debian 13) via NFS with overlayroot. JTAG via Expansion Module Port using [Compute Blade wiring](https://docs.fpgas.online/en/latest/boards/acorn/wiring.html#compute-blade): `openFPGALoader --cable libgpiod --pins 2:3:4:14` (openFPGALoader **0.13.1** on all four, so `--read-dna` works). UART via GPIO14/15 (`/dev/ttyAMA0`, crossover confirmed on pi20 with the pin-ID design: K2→GPIO15, J2→GPIO14). All four have `console=tty1` and `serial-getty@ttyAMA0` inactive, so FPGA output on the UART cannot trigger SysRq ([#3](https://github.com/fpgas-online/fpgas.online-test-designs/issues/3)). PCIe via M.2 slot. Loading a design that drives J2 (pin-ID does) contends with TMS on GPIO14 and costs JTAG until a PoE cycle of the port; PoE control on the FS728TPv2 works only via the Netgear-proprietary OID over SNMPv3 (see `fpgas.online-poe/scripts/poe.sh`).
 
+Read on pi16 on 5 October 2026 (as a visitor, with fpgas-online-verify 0.0.post1100 installed by the site's
+owner): Compute Module 5 Lite Rev 1.0, 8 GB, serial `9fb8cfc7cb291e63`; Raspbian 13 (trixie) with a 32-bit
+(armhf) userspace on kernel `6.18.50+rpt-rpi-v8`; `enable_uart=1`, `console=serial0,115200` and
+`serial-getty@ttyAMA0` active, so what is said above (arm64, kernel 6.12.75, `console=tty1`, no serial getty)
+no longer holds there.
+The card enumerates as `1e24:0101` (SQRL's factory image). `fpgas-acorn-verify`: `pcie-link` passes (5.0 GT/s,
+x1); `jtag` cannot run, because the serial port has GPIO14 (TMS) and that kernel does not lend it
+([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)), so no scan has run there since, and the
+"P1 unmated" above for pi16 rests on the earlier pull-up reading alone; every other test waits for the card to be converted. How to read that result,
+and what has and has not been run on a Compute Blade:
+[Checking an Acorn's wiring](../verify.md#checking-an-acorns-wiring). pi14, pi18 and pi20 were not read that day.
+
 ### Other Hosts
 
 | Host | Port | IP          | RPi MAC           | RPi Model         | Notes                      |

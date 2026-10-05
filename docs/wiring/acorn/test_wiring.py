@@ -75,3 +75,37 @@ def test_jtag_pins_must_match_where_the_jtag_wires_land():
         d["wires"]["TDI"], d["wires"]["TDO"] = d["wires"]["TDO"], d["wires"]["TDI"]
 
     rejects(swap, "jtag_pins is 2:3:4:14, but TDI:TDO:TCK:TMS land on 3:2:4:14")
+
+
+def _bom(key):
+    rows = [r.split(" | ") for r in tables.bom(wiring.CARRIERS[key]).splitlines()[2:]]
+    return {r[2]: (int(r[1]), r[4].rstrip(" |")) for r in rows}
+
+
+def test_the_parts_list_counts_housings_terminals_and_resistors_from_the_wiring():
+    """The housings are the headers' own, a terminal for each connected wire, a resistor for each wire that
+    has one: counted, so the list cannot say something the wiring does not."""
+    blade, pi5 = _bom("blade"), _bom("pi5")
+    assert blade["Dupont housing, 2×5, 2.54 mm pitch"] == (
+        1,
+        "over Extension Port pins 1 to 10; 5 of its 10 cavities stay empty",
+    )
+    assert blade["Dupont housing, 1×4, 2.54 mm pitch"] == (1, "over UART pins 1 to 4; 1 of its 4 cavities stays empty")
+    assert blade["Dupont female crimp terminal, 2.54 mm"][0] == len(wiring.CARRIERS["blade"].wires) == 8
+    assert blade["resistor, 470 Ω, 1/8 W axial"] == (1, "in series with J2")
+    assert pi5["Dupont housing, 2×3, 2.54 mm pitch"][0] == pi5["Dupont housing, 2×4, 2.54 mm pitch"][0] == 1
+    assert pi5["Dupont female crimp terminal, 2.54 mm"][0] == len(wiring.CARRIERS["pi5"].wires) == 10
+    assert not [part for part in pi5 if part.startswith("resistor")]
+
+
+def test_every_line_of_a_parts_list_can_be_ticked_and_names_the_cable_by_its_part_number():
+    for key in wiring.CARRIERS:
+        lines = tables.bom(wiring.CARRIERS[key]).splitlines()
+        assert lines[0] == "| Have it | Qty | Part | Part number | What it is for |"
+        assert all(line.startswith(f"| {tables.TICK} | ") for line in lines[2:])
+        assert any("| Molex 0369200601 |" in line for line in lines)
+
+
+def test_a_part_without_a_quantity_is_refused():
+    rejects(lambda d: d["parts"].append({"part": "a thing"}), "a part needs a whole `qty`")
+    rejects(lambda d: d["parts"].append({"qty": 1, "part": "a thing", "price": 3}), "keys other than")
