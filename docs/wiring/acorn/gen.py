@@ -153,22 +153,27 @@ def rounded(path, r=9):
     return " ".join(d)
 
 
-def draw_wires(sh, wires, paths):
-    """Every wire, then every VERTICAL run again over a paper-coloured gap: verticals always pass over horizontals."""
+def draw_wires(sh, wires, paths, wire=WIRE, halo=HALO):
+    """Every wire, then every VERTICAL run again over a paper-coloured gap: verticals always pass over horizontals.
+
+    A path is any run of horizontal and vertical pieces; `wire` and `halo` are the widths of the line and of the gap.
+    """
     for p in paths:
         sh.wire_segments += [(a[0], a[1], b[0], b[1]) for a, b in segments(p)]
     for w, p in zip(wires, paths, strict=True):
         sh.add(
-            f'<path d="{rounded(p)}" fill="none" stroke="{w["colour"]}" stroke-width="{WIRE}" '
+            f'<path d="{rounded(p)}" fill="none" stroke="{w["colour"]}" stroke-width="{wire}" '
             f'stroke-linejoin="round" stroke-linecap="round"/>'
         )
     for w, p in zip(wires, paths, strict=True):
-        (x, y0), (_, y1) = p[1], p[2]
-        if abs(y1 - y0) < 40:
-            continue
-        lo, hi = min(y0, y1) + 11, max(y0, y1) - 11
-        sh.add(f'<line x1="{x}" y1="{lo}" x2="{x}" y2="{hi}" stroke="{PAPER}" stroke-width="{HALO}"/>')
-        sh.add(f'<line x1="{x}" y1="{lo - 2}" x2="{x}" y2="{hi + 2}" stroke="{w["colour"]}" stroke-width="{WIRE}"/>')
+        for (x, y0), (x1, y1) in segments(p):
+            if x != x1 or abs(y1 - y0) < 40:
+                continue
+            lo, hi = min(y0, y1) + 11, max(y0, y1) - 11
+            sh.add(f'<line x1="{x}" y1="{lo}" x2="{x}" y2="{hi}" stroke="{PAPER}" stroke-width="{halo}"/>')
+            sh.add(
+                f'<line x1="{x}" y1="{lo - 2}" x2="{x}" y2="{hi + 2}" stroke="{w["colour"]}" stroke-width="{wire}"/>'
+            )
 
 
 def arrow(sh, x, y, colour, direction):
@@ -532,6 +537,36 @@ ACORN_CONNECTORS = {
 }  # photo rows from the top of the upper connector to the bottom of the lower
 
 
+# The two sockets in acorn-cw.jpg, in photo pixels. A cable is plugged into P1 there, its wires leaving to the right.
+ACORN_CW = {"P1": (6, 336, 128, 550), "P2": (10, 94, 128, 304)}
+
+
+def acorn_photo_down(sh, x, y, w, size, crop=(0, 60, 290, 590)):
+    """The connector end of the card turned so that the sockets are along the top and a plug's wires leave
+    downwards: acorn-cw.jpg a quarter turn clockwise, so pin 1 of each socket and the M.2 edge are on the left.
+
+    For a picture whose cable hangs down from the plug (steps.py). All the words are above the photo, at
+    `size`, so that a zoom cone can leave a socket downwards without crossing any. `crop` is in acorn-cw.jpg's
+    own pixels. Returns ({socket: highlight rect}, the photo's (x, y, w, h)).
+    """
+    (px, py, pw, ph), k = sh.photo("acorn-cw.jpg", x, y, w, crop=crop, turn=Image.Transpose.ROTATE_270)
+    row = size * 1.45  # the height of a line of tags
+    sockets = {}
+    for name, (x0, y0, x1, y1) in ACORN_CW.items():
+        # a quarter turn clockwise takes (x, y) of the crop to (crop height - y, x)
+        rect = (px + (crop[3] - y1) * k, py + (x0 - crop[0]) * k, px + (crop[3] - y0) * k, py + (x1 - crop[0]) * k)
+        sockets[name] = rect
+        highlight(sh, rect)
+        _, b = sh.tag(rect[0], py - row / 2 - 5, "pin 1", "#fff", size=size, h=row, fg=INK, stroke=INK, pad=5)
+        sh.tag(b + 6, py - row / 2 - 5, name, MARK, size=size, h=row, fg=INK, stroke=INK, pad=7)
+        sh.add(f'<path d="M{rect[0] + 4},{py - 5} v9" stroke="{INK}" stroke-width="2.5"/>')  # pin 1 is at this end
+    ty = py - row - 14
+    sh.add(f'<path d="M{px},{ty - size * 0.32} l{size * 0.7},{-size * 0.4} l0,{size * 0.8} z" fill="{MUTED}"/>')
+    sh.text(px + size, ty, "M.2 edge connector", size, "bold", MUTED)
+    sh.text(px + pw, ty, "Acorn underside", size, "bold", INK, "end")
+    return sockets, (px, py, pw, ph)
+
+
 def acorn_photo(sh, x, centre_y, w, rotation):
     """The connector end of the card, connectors facing the plugs, the pair centred on `centre_y`.
 
@@ -541,8 +576,7 @@ def acorn_photo(sh, x, centre_y, w, rotation):
     k = w / Image.open(HERE / "photos" / f"acorn-{rotation}.jpg").width
     (ax, ay, _aw, ah), k = sh.photo(f"acorn-{rotation}.jpg", x, centre_y - (top + bottom) / 2 * k, w)
     if rotation == "cw":  # connectors on the left edge, P2 on top, pin 1 at the bottom, M.2 edge below
-        p2 = (ax + 10 * k, ay + 94 * k, ax + 128 * k, ay + 304 * k)
-        p1 = (ax + 6 * k, ay + 336 * k, ax + 128 * k, ay + 550 * k)
+        p1, p2 = ((ax + x0 * k, ay + y0 * k, ax + x1 * k, ay + y1 * k) for x0, y0, x1, y1 in ACORN_CW.values())
         sh.text(x + w / 2, ay - 10, "Acorn underside, fan end", 12.5, "bold", INK, "middle")
         sh.text(x + w / 2, ay + ah + 17, "M.2 edge connector this way", 11.5, "bold", MUTED, "middle")
         sh.add(f'<path d="M{x + w / 2 - 7},{ay + ah + 24} l14,0 l-7,10 z" fill="{MUTED}"/>')
@@ -560,6 +594,52 @@ def acorn_photo(sh, x, centre_y, w, rotation):
         pin1_y = rect[3] - 9 if rotation == "cw" else rect[1] + 9
         sh.tag(inward, pin1_y, "1", "#fff", size=10, h=15, anchor=anchor, fg=INK, stroke=INK, pad=4)
     return p1, p2
+
+
+# Where each header of the blade is, in photo pixels: in blade.jpg (the whole board) and in blade-port.jpg.
+BLADE_BOARD = {"ext": (2388, 334, 2484, 494), "uart": (2494, 336, 2546, 470)}
+BLADE_HEADERS = {"ext": (1228, 100, 1466, 488), "uart": (1484, 120, 1566, 408)}
+
+
+def blade_photos(sh, x, y, w, inset, only=None, title=12.5, beside=False):
+    """The Compute Blade from above at (x, y), `w` wide, and under it a close-up of its two headers at
+    `inset` = (x, y, width), with the headers highlighted.
+
+    only: highlight just this header, on the board and in the close-up. title: the size of the words above
+    the board, or 0 for none. beside: the close-up is beside the board, not under it. Returns ({header key:
+    highlight rect in the close-up}, the close-up's (x, y, w, h)).
+    """
+    (px, py, _pw, _ph), k = sh.photo("blade.jpg", x, y, w)
+    if title:
+        sh.text(x, y - 12, "Compute Blade, from above", title, "bold")
+    x0, y0, x1, y1 = (2378, 336, 2530, 496) if only is None else BLADE_BOARD[only]  # both headers, or the one
+    strip_hl = (px + x0 * k, py + y0 * k, px + x1 * k, py + y1 * k)
+    highlight(sh, strip_hl)
+    # Only the two headers and the numbers printed round them. The legends above them are left out: cropped,
+    # the UART legend ("1 5V 2 GND 3 TX 4 RX") would sit over the Extension Port and read as its pinout.
+    crop = (1215, 40, 1640, 500)
+    (ix, iy, iw, ih), ki = sh.photo("blade-port.jpg", *inset, crop=crop)
+    hl = {
+        key: (
+            ix + (x0 - crop[0]) * ki,
+            iy + (y0 - crop[1]) * ki,
+            ix + (x1 - crop[0]) * ki,
+            iy + (y1 - crop[1]) * ki,
+        )
+        for key, (x0, y0, x1, y1) in BLADE_HEADERS.items()
+        if only in (None, key)
+    }
+    for rect in hl.values():
+        highlight(sh, rect)
+    wedge(sh, strip_hl, (ix, iy, ix + iw, iy + ih), down=not beside)
+    return hl, (ix, iy, iw, ih)
+
+
+# The photo credits of each carrier's pictures: the sheets' footers and the step pictures.
+CREDITS = {
+    "pi5": "Photos: Waveshare (PoE M.2 HAT+), RHS Research (LiteFury underside; the Acorn is the same PCB)",
+    "blade": "Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn is the same PCB)",
+}
 
 
 # ----------------------------------------------------------------------------------------------
@@ -668,7 +748,7 @@ def pi5(nudge=0):
     wire_ends(sh, hdr, wires, {s: c.tag(s) for s in mapping}, "right")
 
     legend(sh, 40, 700, c.resistor_value if c.resistors else "")
-    footer(sh, "Photos: Waveshare (PoE M.2 HAT+), RHS Research (LiteFury underside; the Acorn is the same PCB)")
+    footer(sh, CREDITS["pi5"])
     sh.check("pi5")
     return sh.svg(), cross + 3 * tight
 
@@ -686,34 +766,13 @@ def blade(nudge=0):
         "These are GPIO (IO) numbers, not the printed pin numbers",
     )
 
-    (px, py, _pw, _ph), k = sh.photo("blade.jpg", 30, 142, 500)
-    sh.text(30, 130, "Compute Blade, from above", 12.5, "bold")
-    strip_hl = (px + 2378 * k, py + 336 * k, px + 2530 * k, py + 496 * k)
-    highlight(sh, strip_hl)
-    # Only the two headers and the numbers printed round them. The legends above them are left out: cropped,
-    # the UART legend ("1 5V 2 GND 3 TX 4 RX") would sit over the Extension Port and read as its pinout.
-    crop = (1215, 40, 1640, 500)
-    (ix, iy, iw, ih), ki = sh.photo("blade-port.jpg", 30, 250, 360, crop=crop)
-    port_hl = (
-        ix + (1228 - crop[0]) * ki,
-        iy + (100 - crop[1]) * ki,
-        ix + (1466 - crop[0]) * ki,
-        iy + (488 - crop[1]) * ki,
-    )
-    uart_hl = (
-        ix + (1484 - crop[0]) * ki,
-        iy + (120 - crop[1]) * ki,
-        ix + (1566 - crop[0]) * ki,
-        iy + (408 - crop[1]) * ki,
-    )
-    highlight(sh, port_hl)
-    highlight(sh, uart_hl)
-    wedge(sh, strip_hl, (ix, iy, ix + iw, iy + ih), down=True)
+    hl, (_ix, iy, _iw, ih) = blade_photos(sh, 30, 142, 500, (30, 250, 360))
+    port_hl, uart_hl = hl["ext"], hl["uart"]
 
     pitch, pad = 64, 32
     p1_map, p2_map = c.mapping("ext"), c.mapping("uart")
-    uart = Header(sh, 640, 150, [(n,) for n in range(1, 5)], pitch, pad, "right")
-    port = Header(sh, 560, 470 + nudge, [(r + 1, r + 6) for r in range(5)], pitch, pad, "right")
+    uart = Header(sh, 640, 150, c.headers["uart"].grid(*c.headers["uart"].housings[0]), pitch, pad, "right")
+    port = Header(sh, 560, 470 + nudge, c.headers["ext"].grid(*c.headers["ext"].housings[0]), pitch, pad, "right")
     wedge(sh, uart_hl, uart.body)
     wedge(sh, port_hl, port.body, under=True)
     sh.tag(
@@ -763,7 +822,7 @@ def blade(nudge=0):
     sh.text(1076, 752, "Mark pin 1 on both housings.", 12.5, "bold", RED)
     sh.text(1076, 769, "Turned round, either one puts 5 V on a signal wire.", 12, "regular", RED)
     legend(sh, 40, 700, c.resistor_value if c.resistors else "")
-    footer(sh, "Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn is the same PCB)")
+    footer(sh, CREDITS["blade"])
     sh.check("blade")
     return sh.svg(), cross + 3 * tight
 
@@ -792,6 +851,9 @@ def build(search=False):
         out[fname] = best[0]
         print(f"{fname}: {len(best[0]) // 1024} KiB, routing score {best[1]}, header nudged {best[2]} px")
     out.update(tables.build())
+    import steps  # here, not at the top: steps draws with the pieces above, so it imports this module
+
+    out.update(steps.build())
     return out
 
 

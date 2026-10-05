@@ -146,12 +146,21 @@ def bom(c):
             rows.append((1, f"Dupont housing, {shape}, 2.54 mm pitch", "—", note))
     labels = [wiring.SIGNALS[s]["label"] for conn in wiring.CONNECTORS.values() for s in conn["pins"] if s in c.wires]
     rows.append((len(labels), "Dupont female crimp terminal, 2.54 mm", "—",
-                 "one for each connected wire: " + ", ".join(labels)))  # fmt: skip
+                 "one for each connected wire: " + ", ".join(labels)
+                 + "; buy a few more than this, as spares"))  # fmt: skip
     if c.resistors:
         on = ", ".join(sorted(wiring.SIGNALS[s]["label"] for s in c.resistors))
         rows.append((len(c.resistors), f"resistor, {c.resistor_value}, 1/8 W axial", "—", f"in series with {on}"))
+        tube = wiring.LENGTHS["resistor_tube"]
+        rows.append(
+            (1, f"heat-shrink tube, about {tube} mm, a few centimetres", "—", "over the resistor and both joints")
+        )
     parts = table(["Have it", "Qty", "Part", "Part number", "What it is for"], [(TICK, *r) for r in rows])
-    tools = [(TICK, t["tool"], t.get("note", "—")) for t in wiring.TOOLS if "when" not in t or c.resistors]
+    tools = [
+        (TICK, t["tool"], t.get("note", "—") + (t.get("note_resistor", "") if c.resistors else ""))
+        for t in wiring.TOOLS
+        if "when" not in t or c.resistors
+    ]
     return (
         f"The parts for **one** {c.name} host; for several hosts, that many of each.\n\n{parts}\n"
         "The tools to build its two cables, once for any number of hosts:\n\n"

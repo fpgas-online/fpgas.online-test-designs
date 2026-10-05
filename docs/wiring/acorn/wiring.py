@@ -18,8 +18,17 @@ SIGNALS = DATA["signals"]
 # [{tool, note?, when?}]: what building the cables takes. `when = "resistor"`: only where a wire has one.
 TOOLS = DATA.get("tools", [])
 for _tool in TOOLS:
-    if not _tool.get("tool") or set(_tool) - {"tool", "note", "when"} or _tool.get("when", "resistor") != "resistor":
+    if (
+        not _tool.get("tool")
+        or set(_tool) - {"tool", "note", "note_resistor", "when"}
+        or _tool.get("when", "resistor") != "resistor"
+    ):
         raise ValueError(f'wiring.toml: a tool needs a `tool`, and may have `note` and `when = "resistor"`: {_tool}')
+LENGTHS = DATA["lengths"]  # {cut_back, resistor, strip, tube, resistor_tube, flag_back, resistor_lead} in mm
+if LENGTHS["flag_back"] <= LENGTHS["resistor"]:
+    raise ValueError("wiring.toml: [lengths] flag_back must be greater than resistor, or the flag is cut off")
+if not any(f"heat-shrink tube, about {LENGTHS['tube']} mm" in p["part"] for p in DATA.get("parts", [])):
+    raise ValueError("wiring.toml: [lengths] tube is not the size of the heat-shrink tube in [[parts]]")
 DIRECTION = {"pi": "Pi → FPGA", "fpga": "FPGA → Pi", "both": "either"}
 
 
@@ -31,6 +40,18 @@ class Header:
     columns: int
     pins: dict  # pin number -> {name, gpio, func, tag, rpi}
     housings: list  # [(first pin, last pin)]
+    numbering: str = "across"  # how the printed numbers run, seen from above: "across" rows or "down" columns
+    count: int = 0  # how many pins the whole header has
+    printed: bool = False  # the pin numbers are printed on the board beside the header
+
+    def grid(self, first, last):
+        """Pins `first` to `last` as they sit on the board seen from above: one tuple per row, left to right."""
+        rows, rest = divmod(last - first + 1, self.columns)
+        if rest:
+            raise WiringError(f"{self.key}: pins {first} to {last} do not fill {self.columns} columns")
+        if self.numbering == "down":
+            return [tuple(first + c * rows + r for c in range(self.columns)) for r in range(rows)]
+        return [tuple(first + r * self.columns + c for c in range(self.columns)) for r in range(rows)]
 
 
 @dataclass
@@ -43,6 +64,9 @@ class Carrier:
     headers: dict  # key -> Header
     wires: dict  # signal -> (header key, pin)
     parts: list  # [{qty, part, number?, note?}] besides what the wiring itself counts
+    host: str = ""  # the host in a word, for a pin name that needs its owner: "blade TX"
+    shell: str = ""  # bare metal of the host that is its ground, for a meter probe
+    power_off: str = ""  # how the host is made dead before the cables are fitted, as a sentence
 
     def tag(self, sig):
         """The host's name for the pin a signal lands on, as the sheet prints it; None for none."""
@@ -77,14 +101,24 @@ def _carrier(key, raw):
     headers = {}
     for hk, h in raw["headers"].items():
         pins = {int(n): p for n, p in h["pins"].items()}
+        if h["columns"] > 1 and h.get("numbering") not in ("across", "down"):
+            raise WiringError(f'wiring.toml: {key}: header {hk} needs numbering = "across" or "down"')
         headers[hk] = Header(
-            hk, h["name"], h.get("short", h["name"]), h["columns"], pins, [tuple(r) for r in h.get("housings", [])]
+            hk,
+            h["name"],
+            h.get("short", h["name"]),
+            h["columns"],
+            pins,
+            [tuple(r) for r in h.get("housings", [])],
+            h.get("numbering", "across"),
+            h.get("count", max(pins)),
+            h.get("printed", False),
         )
     wires = {s: (w[0], int(w[1])) for s, w in raw["wires"].items()}
     parts = [*raw.get("parts", []), *DATA.get("parts", [])]  # this carrier's own, then what every carrier needs
     c = Carrier(
         key, raw["name"], raw["jtag_pins"], set(raw.get("resistors", [])), raw.get("resistor_value", ""), headers,
-        wires, parts,
+        wires, parts, raw.get("host", raw["name"]), raw["shell"], raw.get("power_off", "Power off the host."),
     )  # fmt: skip
     _check(c)
     return c

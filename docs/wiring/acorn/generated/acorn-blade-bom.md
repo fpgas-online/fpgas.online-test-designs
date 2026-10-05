@@ -5,21 +5,23 @@ The parts for **one** Compute Blade host; for several hosts, that many of each.
 | Have it | Qty | Part | Part number | What it is for |
 |---|---|---|---|---|
 | ☐ | 1 | Compute Blade (Uptime Lab) | — | its M.2 slot takes the card |
-| ☐ | 1 | Raspberry Pi Compute Module 4 or 5 | — | — |
+| ☐ | 1 | Raspberry Pi Compute Module 4 or 5 | — | the host: it sits on the Compute Blade |
 | ☐ | 1 | SQRL Acorn CLE-215+, CLE-215 or CLE-101 (the same card is sold as LiteFury and NiteFury) | — | M.2 M-key, 2280 |
 | ☐ | 1 | Molex Pico-EZmate cable assembly, 6 circuits, a plug at each end | Molex 0369200601 | cut in half: one half is the P1 cable, the other the P2 cable. All six wires are black |
-| ☐ | 1 | heat-shrink tube, about 2 mm, a few centimetres | — | over each cut-back wire end, and over the joints of a series resistor where there is one |
+| ☐ | 1 | heat-shrink tube, about 2 mm, a few centimetres | — | over each cut-back wire end |
 | ☐ | 1 | Dupont housing, 2×5, 2.54 mm pitch | — | over Extension Port pins 1 to 10; 5 of its 10 cavities stay empty |
 | ☐ | 1 | Dupont housing, 1×4, 2.54 mm pitch | — | over UART pins 1 to 4; 1 of its 4 cavities stays empty |
-| ☐ | 8 | Dupont female crimp terminal, 2.54 mm | — | one for each connected wire: GND, TCK, TDO, TMS, TDI, GND, J2, K2 |
+| ☐ | 8 | Dupont female crimp terminal, 2.54 mm | — | one for each connected wire: GND, TCK, TDO, TMS, TDI, GND, J2, K2; buy a few more than this, as spares |
 | ☐ | 1 | resistor, 470 Ω, 1/8 W axial | — | in series with J2 |
+| ☐ | 1 | heat-shrink tube, about 3 mm, a few centimetres | — | over the resistor and both joints |
 
 The tools to build its two cables, once for any number of hosts:
 
 | Have it | Tool | What it is for |
 |---|---|---|
-| ☐ | multimeter with a continuity buzzer | all six wires of the cable are black: each is buzzed through from the plug to its bare end before crimping, and to its cavity before connecting |
+| ☐ | multimeter with a continuity buzzer | all six wires of the cable are black: each is checked from the plug to its cavity before the cable is fitted |
 | ☐ | wire strippers for fine wire, and side cutters | to cut the cable in half, strip about 3 mm from each wire, and cut back the wires that are not connected |
 | ☐ | crimping tool for 2.54 mm Dupont terminals | one crimp for each connected wire |
 | ☐ | soldering iron and solder | to join the series resistor into its wire |
-| ☐ | hot-air tool for the heat-shrink tube | over each cut-back end (VCC always), and over the joints of a series resistor where there is one |
+| ☐ | hot-air tool for the heat-shrink tube | to shrink the tube over each cut-back end (VCC always), and over the series resistor |
+| ☐ | masking tape and a fine marker pen, or a paint pen | to flag the six wires with their numbers, and to mark the pin 1 corner of each housing |
