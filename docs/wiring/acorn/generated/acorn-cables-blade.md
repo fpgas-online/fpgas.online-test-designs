@@ -6,6 +6,8 @@ Not yet run by us on this hardware: written from the design.
 
 Two short cables from the Acorn's two connectors to the Compute Blade: the P1 cable carries JTAG, the P2 cable carries the serial port.
 
+GND, TCK, TDO, TMS, TDI, J2 and K2 are the names on the pictures for each wire; J2 and K2 are the FPGA's pin names.
+
 ![The finished wiring: Acorn to Compute Blade](acorn-wiring-computeblade.png)
 
 ### Parts and tools
@@ -18,11 +20,12 @@ The parts for **one** Compute Blade host; for several hosts, that many of each.
 | ☐ | 1 | Raspberry Pi Compute Module 4 or 5 | — | — |
 | ☐ | 1 | SQRL Acorn CLE-215+, CLE-215 or CLE-101 (the same card is sold as LiteFury and NiteFury) | — | M.2 M-key, 2280 |
 | ☐ | 1 | Molex Pico-EZmate cable assembly, 6 circuits, a plug at each end | Molex 0369200601 | cut in half: one half is the P1 cable, the other the P2 cable. All six wires are black |
-| ☐ | 1 | heat-shrink tube, about 2 mm, a few centimetres | — | over each cut-back wire end, and over the joints of a series resistor where there is one |
+| ☐ | 1 | heat-shrink tube, about 2 mm, a few centimetres | — | over each cut-back wire end |
 | ☐ | 1 | Dupont housing, 2×5, 2.54 mm pitch | — | over Extension Port pins 1 to 10; 5 of its 10 cavities stay empty |
 | ☐ | 1 | Dupont housing, 1×4, 2.54 mm pitch | — | over UART pins 1 to 4; 1 of its 4 cavities stays empty |
-| ☐ | 8 | Dupont female crimp terminal, 2.54 mm | — | one for each connected wire: GND, TCK, TDO, TMS, TDI, GND, J2, K2 |
+| ☐ | 8 | Dupont female crimp terminal, 2.54 mm | — | one for each connected wire: GND, TCK, TDO, TMS, TDI, GND, J2, K2, and a few spare |
 | ☐ | 1 | resistor, 470 Ω, 1/8 W axial | — | in series with J2 |
+| ☐ | 1 | heat-shrink tube, about 3 mm, a few centimetres | — | over the resistor and both joints |
 
 The tools to build its two cables, once for any number of hosts:
 
@@ -42,19 +45,23 @@ The tools to build its two cables, once for any number of hosts:
 
 #### The P1 cable (JTAG)
 
-**2.** Take one half. Count its wires from the pin 1 end of the plug. Cut wire 6 back short and shrink a piece of heat-shrink tube over the cut end. Wire 6 is VCC, 3.3 V from the Acorn: it must never reach the host.
+**2.** Press the plug of one half into socket P1 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost. Put a numbered tape flag on each of the 6 wires at its free end, 1 to 6, then take the plug out again.
 
-![The P1 cable's wires prepared](acorn-cable-blade-p1-prepare.png)
+![The P1 cable: finding wire 1, and its wires prepared](acorn-cable-blade-p1-prepare.png)
 
-**3.** Strip about 3 mm from wires 1, 2, 3, 4 and 5. Crimp a Dupont terminal on each.
+**3.** Cut wire 6 off about 10 mm from the plug and shrink a piece of tube over the cut end. It goes in no cavity. Wire 6 is VCC, 3.3 V from the Acorn: it must never reach the host. Leave wires 1 to 5 at full length.
+
+![The P1 cable: finding wire 1, and its wires prepared](acorn-cable-blade-p1-prepare.png)
+
+**4.** Strip about 3 mm from wires 1 to 5. Crimp a Dupont terminal on each.
 
 ![Stripping and crimping, and which way a terminal goes in](acorn-cable-crimp.png)
 
-**4.** Mark the pin 1 corner of the 2×5 housing. Push each terminal into the cavity the picture gives for its wire number, latch tab towards the window, until it clicks. Turned round, the housing puts 5 V on the TCK wire.
+**5.** Mark the pin 1 corner of the 2×5 housing with a paint pen or a dot of tape (top left in the picture). Push each terminal into the cavity the picture gives for its wire number, latch tab towards the window, until it clicks. Turned round, the housing puts 5 V on the TCK wire, which can destroy the host. Wire 6 goes in no cavity.
 
 ![Which wire goes in which cavity, P1 cable](acorn-cable-blade-p1.png)
 
-**5.** Check each wire with a meter on continuity: its contact on the plug to its cavity must beep, and the cavities beside it must stay silent.
+**6.** Check each wire with a meter on continuity: its contact on the plug to its terminal in the housing must beep, and the cavities beside it must stay silent.
 
 ![A meter between the plug and the housing](acorn-cable-check.png)
 
@@ -62,19 +69,27 @@ The tools to build its two cables, once for any number of hosts:
 
 #### The P2 cable (I/O)
 
-**6.** Take the other half. Count its wires from the pin 1 end of the plug. Cut wires 4, 5 and 6 back short and shrink a piece of heat-shrink tube over each cut end. Wire 6 is VCC, 3.3 V from the Acorn: it must never reach the host. Cut wire 2 (J2) near its free end, solder the 470 Ω resistor into the cut, and shrink tube over the resistor and both joints.
+**7.** Press the plug of the other half into socket P2 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost. Put a numbered tape flag on each of the 6 wires at its free end, 1 to 6, then take the plug out again.
 
-![The P2 cable's wires prepared](acorn-cable-blade-p2-prepare.png)
+![The P2 cable: finding wire 1, and its wires prepared](acorn-cable-blade-p2-prepare.png)
 
-**7.** Strip about 3 mm from wires 1, 2 and 3. Crimp a Dupont terminal on each.
+**8.** Cut wires 4, 5 and 6 off about 10 mm from the plug and shrink a piece of tube over each cut end. They go in no cavity. Wire 6 is VCC, 3.3 V from the Acorn: it must never reach the host. Leave wires 1, 2 and 3 at full length.
+
+![The P2 cable: finding wire 1, and its wires prepared](acorn-cable-blade-p2-prepare.png)
+
+**9.** Cut wire 2 (J2) about 15 mm from its free end. Slide a piece of the wider tube onto the wire, clear of the cut. Solder the 470 Ω resistor between the two cut ends. Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this.
+
+![The resistor fitted into wire 2](acorn-cable-blade-p2-resistor.png)
+
+**10.** Strip about 3 mm from wires 1, 2 and 3. Crimp a Dupont terminal on each.
 
 ![Stripping and crimping, and which way a terminal goes in](acorn-cable-crimp.png)
 
-**8.** Mark the pin 1 corner of the 1×4 housing. Push each terminal into the cavity the picture gives for its wire number, latch tab towards the window, until it clicks. Turned round, the housing puts 5 V on the K2 wire.
+**11.** Mark the pin 1 corner of the 1×4 housing with a paint pen or a dot of tape (top left in the picture). Push each terminal into the cavity the picture gives for its wire number, latch tab towards the window, until it clicks. Turned round, the housing puts 5 V on the K2 wire, which can destroy the host. Wires 4, 5 and 6 go in no cavity.
 
 ![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2.png)
 
-**9.** Check each wire with a meter on continuity: its contact on the plug to its cavity must beep, and the cavities beside it must stay silent.
+**12.** Check each wire with a meter on continuity: its contact on the plug to its terminal in the housing must beep, and the cavities beside it must stay silent.
 
 ![A meter between the plug and the housing](acorn-cable-check.png)
 
@@ -82,7 +97,15 @@ The tools to build its two cables, once for any number of hosts:
 
 #### Fit the cables
 
-**10.** With the power off, press the plugs into the Acorn's P1 and P2 sockets. Fit the P1 housing on the Extension Port, its marked corner on pin 1, and the P2 housing on the UART, its marked corner on pin 1.
+**13.** Fit the P1 housing on the Extension Port with its marked corner on the pin printed 1 beside the header, and the P2 housing on the UART with its marked corner on the pin printed 1 beside the header. With the power off and the plugs not yet in the Acorn, put one meter probe on contact 1 (GND) of a plug and the other on a metal connector shell of the host: it must beep. Do the same for the other plug. Then try contact 6 of each plug against the shell and against every other contact: it must be silent to everything.
+
+![Which wire goes in which cavity, P1 cable](acorn-cable-blade-p1.png)
+
+![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2.png)
+
+**14.** Still with the power off, press the plugs into sockets P1 and P2 on the underside of the Acorn, each the way round it was when you put the flags on.
+
+![Where socket P1 is, and which end is wire 1](acorn-cable-blade-p1-prepare.png)
 
 ![The finished wiring: Acorn to Compute Blade](acorn-wiring-computeblade.png)
 

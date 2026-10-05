@@ -6,6 +6,8 @@ Not yet run by us on this hardware: written from the design.
 
 Two short cables from the Acorn's two connectors to the Raspberry Pi 5: the P1 cable carries JTAG, the P2 cable carries the serial port.
 
+GND, TCK, TDO, TMS, TDI, J2, K2, J5 and H5 are the names on the pictures for each wire; J2, K2, J5 and H5 are the FPGA's pin names.
+
 ![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5.png)
 
 ### Parts and tools
@@ -18,10 +20,10 @@ The parts for **one** Raspberry Pi 5 host; for several hosts, that many of each.
 | ☐ | 1 | M.2 M-key PCIe HAT for the Raspberry Pi 5 that leaves the 40-pin header free | — | the sheet shows a Waveshare PoE M.2 HAT+ |
 | ☐ | 1 | SQRL Acorn CLE-215+, CLE-215 or CLE-101 (the same card is sold as LiteFury and NiteFury) | — | M.2 M-key, 2280 |
 | ☐ | 1 | Molex Pico-EZmate cable assembly, 6 circuits, a plug at each end | Molex 0369200601 | cut in half: one half is the P1 cable, the other the P2 cable. All six wires are black |
-| ☐ | 1 | heat-shrink tube, about 2 mm, a few centimetres | — | over each cut-back wire end, and over the joints of a series resistor where there is one |
+| ☐ | 1 | heat-shrink tube, about 2 mm, a few centimetres | — | over each cut-back wire end |
 | ☐ | 1 | Dupont housing, 2×3, 2.54 mm pitch | — | over 40-pin header pins 5 to 10; 1 of its 6 cavities stays empty |
 | ☐ | 1 | Dupont housing, 2×4, 2.54 mm pitch | — | over 40-pin header pins 19 to 26; 3 of its 8 cavities stay empty |
-| ☐ | 10 | Dupont female crimp terminal, 2.54 mm | — | one for each connected wire: GND, TCK, TDO, TMS, TDI, GND, J2, K2, J5, H5 |
+| ☐ | 10 | Dupont female crimp terminal, 2.54 mm | — | one for each connected wire: GND, TCK, TDO, TMS, TDI, GND, J2, K2, J5, H5, and a few spare |
 
 The tools to build its two cables, once for any number of hosts:
 
@@ -40,19 +42,23 @@ The tools to build its two cables, once for any number of hosts:
 
 #### The P1 cable (JTAG)
 
-**2.** Take one half. Count its wires from the pin 1 end of the plug. Cut wire 6 back short and shrink a piece of heat-shrink tube over the cut end. Wire 6 is VCC, 3.3 V from the Acorn: it must never reach the host.
+**2.** Press the plug of one half into socket P1 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost. Put a numbered tape flag on each of the 6 wires at its free end, 1 to 6, then take the plug out again.
 
-![The P1 cable's wires prepared](acorn-cable-pi5-p1-prepare.png)
+![The P1 cable: finding wire 1, and its wires prepared](acorn-cable-pi5-p1-prepare.png)
 
-**3.** Strip about 3 mm from wires 1, 2, 3, 4 and 5. Crimp a Dupont terminal on each.
+**3.** Cut wire 6 off about 10 mm from the plug and shrink a piece of tube over the cut end. It goes in no cavity. Wire 6 is VCC, 3.3 V from the Acorn: it must never reach the host. Leave wires 1 to 5 at full length.
+
+![The P1 cable: finding wire 1, and its wires prepared](acorn-cable-pi5-p1-prepare.png)
+
+**4.** Strip about 3 mm from wires 1 to 5. Crimp a Dupont terminal on each.
 
 ![Stripping and crimping, and which way a terminal goes in](acorn-cable-crimp.png)
 
-**4.** Mark the pin 19 corner of the 2×4 housing. Push each terminal into the cavity the picture gives for its wire number, latch tab towards the window, until it clicks. Turned round, the housing puts its wires on the wrong pins.
+**5.** Mark the pin 19 corner of the 2×4 housing with a paint pen or a dot of tape (top left in the picture). Push each terminal into the cavity the picture gives for its wire number, latch tab towards the window, until it clicks. Turned round, the housing puts its wires on the wrong pins. Wire 6 goes in no cavity.
 
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png)
 
-**5.** Check each wire with a meter on continuity: its contact on the plug to its cavity must beep, and the cavities beside it must stay silent.
+**6.** Check each wire with a meter on continuity: its contact on the plug to its terminal in the housing must beep, and the cavities beside it must stay silent.
 
 ![A meter between the plug and the housing](acorn-cable-check.png)
 
@@ -60,19 +66,23 @@ The tools to build its two cables, once for any number of hosts:
 
 #### The P2 cable (I/O)
 
-**6.** Take the other half. Count its wires from the pin 1 end of the plug. Cut wire 6 back short and shrink a piece of heat-shrink tube over the cut end. Wire 6 is VCC, 3.3 V from the Acorn: it must never reach the host.
+**7.** Press the plug of the other half into socket P2 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost. Put a numbered tape flag on each of the 6 wires at its free end, 1 to 6, then take the plug out again.
 
-![The P2 cable's wires prepared](acorn-cable-pi5-p2-prepare.png)
+![The P2 cable: finding wire 1, and its wires prepared](acorn-cable-pi5-p2-prepare.png)
 
-**7.** Strip about 3 mm from wires 1, 2, 3, 4 and 5. Crimp a Dupont terminal on each.
+**8.** Cut wire 6 off about 10 mm from the plug and shrink a piece of tube over the cut end. It goes in no cavity. Wire 6 is VCC, 3.3 V from the Acorn: it must never reach the host. Leave wires 1 to 5 at full length.
+
+![The P2 cable: finding wire 1, and its wires prepared](acorn-cable-pi5-p2-prepare.png)
+
+**9.** Strip about 3 mm from wires 1 to 5. Crimp a Dupont terminal on each.
 
 ![Stripping and crimping, and which way a terminal goes in](acorn-cable-crimp.png)
 
-**8.** Mark the pin 5 corner of the 2×3 housing. Push each terminal into the cavity the picture gives for its wire number, latch tab towards the window, until it clicks. Turned round, the housing puts its wires on the wrong pins.
+**10.** Mark the pin 5 corner of the 2×3 housing with a paint pen or a dot of tape (top left in the picture). Push each terminal into the cavity the picture gives for its wire number, latch tab towards the window, until it clicks. Turned round, the housing puts its wires on the wrong pins. Wire 6 goes in no cavity.
 
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png)
 
-**9.** Check each wire with a meter on continuity: its contact on the plug to its cavity must beep, and the cavities beside it must stay silent.
+**11.** Check each wire with a meter on continuity: its contact on the plug to its terminal in the housing must beep, and the cavities beside it must stay silent.
 
 ![A meter between the plug and the housing](acorn-cable-check.png)
 
@@ -80,7 +90,15 @@ The tools to build its two cables, once for any number of hosts:
 
 #### Fit the cables
 
-**10.** With the power off, press the plugs into the Acorn's P1 and P2 sockets. Fit the P1 housing on the 40-pin header pins 19 to 26, its marked corner on pin 19, and the P2 housing on the 40-pin header pins 5 to 10, its marked corner on pin 5.
+**12.** Fit the P1 housing on the 40-pin header pins 19 to 26 with its marked corner on pin 19, counted as in the picture, and the P2 housing on the 40-pin header pins 5 to 10 with its marked corner on pin 5, counted as in the picture. With the power off and the plugs not yet in the Acorn, put one meter probe on contact 1 (GND) of a plug and the other on a metal connector shell of the host: it must beep. Do the same for the other plug. Then try contact 6 of each plug against the shell and against every other contact: it must be silent to everything.
+
+![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png)
+
+![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png)
+
+**13.** Still with the power off, press the plugs into sockets P1 and P2 on the underside of the Acorn, each the way round it was when you put the flags on.
+
+![Where socket P1 is, and which end is wire 1](acorn-cable-pi5-p1-prepare.png)
 
 ![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5.png)
 
