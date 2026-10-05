@@ -77,9 +77,18 @@ def test_jtag_pins_must_match_where_the_jtag_wires_land():
     rejects(swap, "jtag_pins is 2:3:4:14, but TDI:TDO:TCK:TMS land on 3:2:4:14")
 
 
+def _tables(key):
+    """The parts table and the tools table of a carrier's list, each as its rows' cells."""
+    text = tables.bom(wiring.CARRIERS[key])
+    blocks = [[line for line in block.splitlines() if line.startswith("|")] for block in text.split("\n\n")]
+    parts, tools = [block for block in blocks if block]
+    return [[cell.strip() for cell in row.strip("|").split(" | ")] for row in parts], [
+        [cell.strip() for cell in row.strip("|").split(" | ")] for row in tools
+    ]
+
+
 def _bom(key):
-    rows = [r.split(" | ") for r in tables.bom(wiring.CARRIERS[key]).splitlines()[2:]]
-    return {r[2]: (int(r[1]), r[4].rstrip(" |")) for r in rows}
+    return {r[2]: (int(r[1]), r[4]) for r in _tables(key)[0][2:]}
 
 
 def test_the_parts_list_counts_housings_terminals_and_resistors_from_the_wiring():
@@ -100,10 +109,23 @@ def test_the_parts_list_counts_housings_terminals_and_resistors_from_the_wiring(
 
 def test_every_line_of_a_parts_list_can_be_ticked_and_names_the_cable_by_its_part_number():
     for key in wiring.CARRIERS:
-        lines = tables.bom(wiring.CARRIERS[key]).splitlines()
-        assert lines[0] == "| Have it | Qty | Part | Part number | What it is for |"
-        assert all(line.startswith(f"| {tables.TICK} | ") for line in lines[2:])
-        assert any("| Molex 0369200601 |" in line for line in lines)
+        parts, tools = _tables(key)
+        assert parts[0] == ["Have it", "Qty", "Part", "Part number", "What it is for"]
+        assert tools[0] == ["Have it", "Tool", "What it is for"]
+        assert all(row[0] == tables.TICK for row in [*parts[2:], *tools[2:]])
+        assert any(row[3] == "Molex 0369200601" for row in parts[2:])
+
+
+def test_a_list_says_it_is_for_one_host_and_names_the_tools_the_cables_take():
+    blade, pi5 = tables.bom(wiring.CARRIERS["blade"]), tables.bom(wiring.CARRIERS["pi5"])
+    assert blade.startswith("The parts for **one** Compute Blade host; for several hosts, that many of each.\n\n|")
+    assert "The tools to build its two cables, once for any number of hosts:" in blade
+    tools = {row[1] for row in _tables("blade")[1][2:]}
+    assert {"multimeter with a continuity buzzer", "crimping tool for 2.54 mm Dupont terminals"} <= tools
+    # the iron is for the series resistor, which only the Compute Blade's wiring has
+    assert "soldering iron and solder" in tools
+    assert "soldering iron and solder" not in {row[1] for row in _tables("pi5")[1][2:]}
+    assert pi5.startswith("The parts for **one** Raspberry Pi 5 host;")
 
 
 def test_a_part_without_a_quantity_is_refused():
