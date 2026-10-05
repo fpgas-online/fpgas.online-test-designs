@@ -13,8 +13,9 @@ its camera until a visitor loads a design
 | Pins ignored | `clk`, `rst_n`, `ui_in`, `uio` (never driven, never read) |
 | Pattern | one segment runs round the outer ring (a to f), an eighth of a second a step; the middle segment changes at each lap; the dot is lit for the first half of each second |
 
-It needs nothing from the demo board's microcontroller once it is loaded, so a reset of the microcontroller
-does not stop it. It is replaced when the board's own SDK next starts (the SDK loads its default project then)
+It needs nothing from the demo board's microcontroller once it is loaded: no clock, no reset, no input.
+(Whether a reset of the microcontroller leaves the FPGA configured is the board's, and had not been tried when
+this was written.) It is replaced when the board's own SDK next starts (the SDK loads its default project then)
 or when a visitor loads a design.
 
 ## Build

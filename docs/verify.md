@@ -711,7 +711,7 @@ reads it.
 * It is loaded last, after every test (also after a failed one, and after single tests named with `--test`),
   and nothing is done to the board after it. Like every load it is streamed: nothing is stored on the board.
 * It runs from the FPGA's own oscillator and drives only `uo_out`, so it needs nothing from the board's
-  microcontroller and survives the microcontroller being reset.
+  microcontroller once it is loaded: no clock, no reset, no input.
 * The report says so: `left_running` (`design`, `bitstream`) on the board, a `left running:` line in the
   summary, `board0_left_running` in `fpga-verified`.
 * **A load of it that fails does not fail the board**: the board was tested before it, and the design is for

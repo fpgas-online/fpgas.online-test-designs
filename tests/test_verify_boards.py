@@ -10,7 +10,18 @@ import struct
 import sys
 
 import pytest
-from fpgas_online_verify import cli, core, debug, host_tests, idcode, identify, identity, runner, testbench
+from fpgas_online_verify import (
+    cli,
+    conclusion,
+    core,
+    debug,
+    host_tests,
+    idcode,
+    identify,
+    identity,
+    runner,
+    testbench,
+)
 from fpgas_online_verify.boards import arty, fomu, netv2, tt_fpga
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
 
@@ -1288,6 +1299,17 @@ def test_the_display_design_is_left_after_single_tests_and_after_a_failed_test_t
     report = _check(TT, tmp_path / "failed", TT_FOUND, run)
     assert report["result"] == "fail" and report["left_running"]["design"] == "display"
     assert _loads(run)[-1] == "tt-display-tt-fpga"
+
+
+def test_a_load_that_times_out_is_a_warning_and_a_failing_boards_closing_lines_keep_it_apart(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    run = Runner([(DISPLAY, core.Problem("error", "tt_fpga_program.py did not finish within 300 s")),
+                  ("tt_test_wrapper.py", (1, "could not enter raw repl")), _rpi_hwid(TT_BOARD)])  # fmt: skip
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    assert report["result"] == "fail" and "did not finish within 300 s" in report["warnings"][0]
+    assert "did not finish" not in report["reason"]  # the warning is not a reason the board failed
+    closing = conclusion.lines({"result": "fail", "mode": "tt", "boards": [report]})
+    assert sum(line.startswith("    warning (not why it did not pass): the display design") for line in closing) == 1
 
 
 def test_nothing_is_left_running_on_a_board_that_did_not_say_it_is_an_fpga_board(tmp_path, monkeypatch):
