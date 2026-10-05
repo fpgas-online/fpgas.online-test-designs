@@ -75,11 +75,12 @@ All Compute Blades boot Trixie arm64 (Debian 13) via NFS with overlayroot. JTAG 
 Read on pi16 on 5 October 2026 (as a visitor, with fpgas-online-verify 0.0.post1100 installed by the site's
 owner): Compute Module 5 Lite Rev 1.0, 8 GB, serial `9fb8cfc7cb291e63`; Raspbian 13 (trixie) with a 32-bit
 (armhf) userspace on kernel `6.18.50+rpt-rpi-v8`; `enable_uart=1`, `console=serial0,115200` and
-`serial-getty@ttyAMA0` active, so the settings above (`console=tty1`, no serial getty) no longer hold there.
+`serial-getty@ttyAMA0` active, so what is said above (arm64, kernel 6.12.75, `console=tty1`, no serial getty)
+no longer holds there.
 The card enumerates as `1e24:0101` (SQRL's factory image). `fpgas-acorn-verify`: `pcie-link` passes (5.0 GT/s,
 x1); `jtag` cannot run, because the serial port has GPIO14 (TMS) and that kernel does not lend it
-([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)), so whether a P1 cable is fitted
-is still not known from a scan; every other test waits for the card to be converted. How to read that result,
+([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)), so no scan has run there since, and the
+"P1 unmated" above for pi16 rests on the earlier pull-up reading alone; every other test waits for the card to be converted. How to read that result,
 and what has and has not been run on a Compute Blade:
 [Checking an Acorn's wiring](../verify.md#checking-an-acorns-wiring). pi14, pi18 and pi20 were not read that day.
 
