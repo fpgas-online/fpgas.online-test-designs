@@ -328,6 +328,32 @@ class TestBoard(Board):
     # reported, so the report shows what is known of the board.
     pending: ClassVar[dict] = {}
 
+    # variant -> a design the check loads last and leaves running, which is no test: nothing reads it (the TT
+    # FPGA's moving display, #139): {"design": its name, "artifact": as a test's, "program_args": as a test's}.
+    # It is in the board's bitstreams package beside the tests' designs. A load that fails is a warning in the
+    # report, never the board's result: the board was tested before it, and is left as its last test left it.
+    left_running: ClassVar[dict] = {}
+
+    def artifacts(self):
+        """[(test or design name, variant, artifact path)]: every bitstream the bitstreams package holds."""
+        out = [(test, variant, self.artifact(test, variant)) for test in self.tests for variant in self.variants]
+        return out + [(spec["design"], variant, spec["artifact"]) for variant, spec in self.left_running.items()]
+
+    def leave_running(self, variant, host, images, manifest, runner=run):
+        """Load the variant's left_running design: (what the report says was left running, None), or
+        (None, why it could not be loaded). Never raises."""
+        spec = self.left_running[variant]
+        try:
+            entry = bitstreams.entry_for(manifest, spec["artifact"], self.bitstreams_package)
+            bitstream = bitstreams.checked(images, entry)[0]
+            argv = [*self.program_argv(bitstream, host, None), *spec.get("program_args", [])]
+            rc, text = runner(argv, PROGRAM_TIMEOUT)
+        except Problem as p:
+            return None, p.reason
+        if rc != 0:
+            return None, f"loading it failed (exit {rc}): {' '.join(tail(text, 2))}"
+        return {"design": spec["design"], "bitstream": spec["artifact"]}, None
+
     def settle(self, asked, found, facts):
         """The variant of a board with variant_from_board, from `facts`; `asked` is --variant, or None. It is one
         of `variants` or one a fact test is for, or a Problem saying why the board is not checked: then no test
@@ -424,6 +450,14 @@ class TestBoard(Board):
                 report["tests"].append(self.run_test(test, variant, host, images, manifest, runner))
                 done = report["tests"][-1]
                 event("fpga-test-finished", {"test": test, "result": done["result"], "reason": done.get("reason", "")})
+            if not refused and manifest is not None and variant in self.left_running:  # last: nothing follows it
+                left, why_not = self.leave_running(variant, host, images, manifest, runner)
+                if left:
+                    report["left_running"] = left
+                else:
+                    name = self.left_running[variant]["design"]
+                    report["warnings"] = [f"the {name} design, which the check leaves running, could not be loaded "
+                                          f"({why_not}): the board is left as its last test left it"]  # fmt: skip
         if held["stopped"]:
             report["services_stopped"] = held["stopped"]
         jtag = report.get("jtag", {})

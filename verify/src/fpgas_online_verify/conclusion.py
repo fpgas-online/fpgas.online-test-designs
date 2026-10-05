@@ -181,6 +181,7 @@ def lines(report, kept_in=None):
         out += [f"    not run: {', '.join(names)}: {why}" for names, why in _not_run(b)]
         if b.get("tests_skipped"):
             out.append(f"    not run: {', '.join(b['tests_skipped'])}: this board has no such test")
+        out += [f"    warning (not why it did not pass): {w}" for w in b.get("warnings", [])]
     changes = report.get("state", {}).get("changes", [])
     out += [f"  changed: {change}" for change in changes]
     out.append("What to do:")

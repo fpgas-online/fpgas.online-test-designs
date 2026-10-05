@@ -15,6 +15,7 @@ hardware features and produces pass/fail results suitable for CI.
 | [pcie-enumeration](pcie-enumeration/) | SoC | PCIe link training and enumeration | NeTV2, Acorn (CLE-215+/215/101) |
 | [pmod-loopback](pmod-loopback/) | Gateware | GPIO loopback (directly wired pins) | Arty A7, NeTV2, TT FPGA |
 | [pmod-pin-id](pmod-pin-id/) | Gateware | UART TX pin identification | Arty A7, Fomu, TT FPGA, Acorn |
+| [tt-display](tt-display/) | Gateware | Not a test: the moving display pattern the boot check leaves running | TT FPGA |
 
 ## Shared Modules
 

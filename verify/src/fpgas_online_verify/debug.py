@@ -76,6 +76,9 @@ def listing(board, host, args):
         for variant in board.variants:
             path = board.artifact(name, variant)
             print(f"  {name:<10} {variant:<8} {where:<11} {path}{'' if path in have else '  (not installed)'}")
+    for variant, spec in board.left_running.items():
+        path, missing = spec["artifact"], "" if spec["artifact"] in have else "  (not installed)"
+        print(f"  {spec['design']:<10} {variant:<8} {'left running':<11} {path}{missing}")
     return 0
 
 
