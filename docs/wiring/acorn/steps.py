@@ -44,6 +44,12 @@ CABLES = [("blade", "P1"), ("blade", "P2"), ("pi5", "P1"), ("pi5", "P2")]
 
 # What every picture rests on that nobody has yet checked with the parts in the hand. One list: when a
 # photograph or a built cable settles a line, remove it here and it leaves every picture.
+# What to do when the ground check proves nothing; the same words in the step and on its picture.
+NEITHER = (
+    "If neither wire beeps, strip about {strip} mm from wires 1 and {last} and try again; "
+    "if still neither beeps, stop: the ground point is not confirmed."
+)
+
 ASSUMPTIONS = [
     "the wire-side view is not mirrored",
     "the header's pin numbers run as shown",
@@ -55,7 +61,7 @@ ASSUMPTIONS = [
 ]
 ASSUMED = (
     "Not yet checked against a cable in the hand:",
-    "Check wire 1 with a meter before cutting anything: the flag step shows how.",
+    "Check wire 1 with a meter before cutting any wire back: the flag step shows how.",
 )
 BOX_LINE = 20  # from line to line in the box of assumptions
 ACORN_PAD = (188, 0, 308, 80)  # the plated half-round mounting pad at the end of the card, in acorn-cw.jpg
@@ -847,7 +853,9 @@ def ground_check():
     pins = wiring.CONNECTORS["P1"]["pins"]
     sh = Sheet(W, 100)
     title(
-        sh, "Check which wire is wire 1, before cutting anything", "the plug in its socket, the Acorn out of any slot"
+        sh,
+        "Check which wire is wire 1, before cutting any wire back",
+        "the plug in its socket, the Acorn out of any slot",
     )
     crop = (0, 0, 330, 590)
     sockets, (px, py, pw, ph) = acorn_photo_down(sh, 30, 132, 470, T, crop=crop)
@@ -905,6 +913,14 @@ def ground_check():
         W - 40,
         "bold",
         RED,
+    )
+    y = para(
+        sh,
+        30,
+        y + 4,
+        NEITHER.format(strip=wiring.LENGTHS["strip"], last=6),
+        W - 40,
+        "bold",
     )
     y = para(
         sh,
@@ -1083,7 +1099,9 @@ def procedure(c):
             "stripped yet), and put the other probe on the plated half-round mounting pad "
             f"at the end of the card: it must beep. Then the wire flagged {len(pins)}: it must stay silent. "
             f"If wire {len(pins)} beeps instead, stop: the numbering is reversed; take the flags off and number from "
-            "the other end. Then take the plug out again.",
+            "the other end. "
+            + NEITHER.format(strip=lengths["strip"], last=len(pins))
+            + " Then take the plug out again.",
             prep,
             ("Checking which wire is wire 1, with a meter", "acorn-cable-ground-check.png"),
         )
@@ -1159,8 +1177,8 @@ def procedure(c):
         *cavity.values(),
     )
     actions = [
-        "Take both housings off again.",
         c.power_off,
+        "Take both housings off again.",
         "Press the P1 plug into socket P1 and the P2 plug into socket P2 on the underside of the Acorn, each the way "
         "round it was when you put the flags on, until fully seated.",
         "Put the Acorn in the M.2 slot and fit its screw.",

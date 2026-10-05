@@ -244,7 +244,10 @@ def test_cavities_are_drawn_where_the_header_has_them_and_each_wire_ends_at_its_
 def test_the_last_step_fits_plugs_then_card_then_both_housings_on_their_headers(key):
     c = wiring.CARRIERS[key]
     last = steps.procedure(c).split("Fit the cables, in this order.")[1]
-    order = [last.index(s) for s in ("Take both housings off", "Press the P1 plug", "Put the Acorn in the M.2 slot")]
+    order = [
+        last.index(s)
+        for s in (c.power_off, "Take both housings off", "Press the P1 plug", "Put the Acorn in the M.2 slot")
+    ]
     assert order == sorted(order)
     for connector in wiring.CONNECTORS:
         plan = steps.housing(c, connector)
