@@ -20,7 +20,9 @@ TOOLS = DATA.get("tools", [])
 for _tool in TOOLS:
     if not _tool.get("tool") or set(_tool) - {"tool", "note", "when"} or _tool.get("when", "resistor") != "resistor":
         raise ValueError(f'wiring.toml: a tool needs a `tool`, and may have `note` and `when = "resistor"`: {_tool}')
-LENGTHS = DATA["lengths"]  # {cut_back, resistor, strip} in mm: where the cables are cut
+LENGTHS = DATA["lengths"]  # {cut_back, resistor, strip, tube, resistor_tube} in mm
+if not any(f"heat-shrink tube, about {LENGTHS['tube']} mm" in p["part"] for p in DATA.get("parts", [])):
+    raise ValueError("wiring.toml: [lengths] tube is not the size of the heat-shrink tube in [[parts]]")
 DIRECTION = {"pi": "Pi → FPGA", "fpga": "FPGA → Pi", "both": "either"}
 
 
@@ -57,6 +59,7 @@ class Carrier:
     wires: dict  # signal -> (header key, pin)
     parts: list  # [{qty, part, number?, note?}] besides what the wiring itself counts
     host: str = ""  # the host in a word, for a pin name that needs its owner: "blade TX"
+    shell: str = ""  # bare metal of the host that is its ground, for a meter probe
 
     def tag(self, sig):
         """The host's name for the pin a signal lands on, as the sheet prints it; None for none."""
@@ -108,7 +111,7 @@ def _carrier(key, raw):
     parts = [*raw.get("parts", []), *DATA.get("parts", [])]  # this carrier's own, then what every carrier needs
     c = Carrier(
         key, raw["name"], raw["jtag_pins"], set(raw.get("resistors", [])), raw.get("resistor_value", ""), headers,
-        wires, parts, raw.get("host", raw["name"]),
+        wires, parts, raw.get("host", raw["name"]), raw["shell"],
     )  # fmt: skip
     _check(c)
     return c

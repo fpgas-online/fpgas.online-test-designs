@@ -11,7 +11,7 @@ The parts for **one** Compute Blade host; for several hosts, that many of each.
 | ☐ | 1 | heat-shrink tube, about 2 mm, a few centimetres | — | over each cut-back wire end |
 | ☐ | 1 | Dupont housing, 2×5, 2.54 mm pitch | — | over Extension Port pins 1 to 10; 5 of its 10 cavities stay empty |
 | ☐ | 1 | Dupont housing, 1×4, 2.54 mm pitch | — | over UART pins 1 to 4; 1 of its 4 cavities stays empty |
-| ☐ | 8 | Dupont female crimp terminal, 2.54 mm | — | one for each connected wire: GND, TCK, TDO, TMS, TDI, GND, J2, K2, and a few spare |
+| ☐ | 8 | Dupont female crimp terminal, 2.54 mm | — | one for each connected wire: GND, TCK, TDO, TMS, TDI, GND, J2, K2; buy a few more than this, as spares |
 | ☐ | 1 | resistor, 470 Ω, 1/8 W axial | — | in series with J2 |
 | ☐ | 1 | heat-shrink tube, about 3 mm, a few centimetres | — | over the resistor and both joints |
 
@@ -19,8 +19,8 @@ The tools to build its two cables, once for any number of hosts:
 
 | Have it | Tool | What it is for |
 |---|---|---|
-| ☐ | multimeter with a continuity buzzer | all six wires of the cable are black: each is buzzed through from the plug to its bare end before crimping, and to its cavity before connecting |
+| ☐ | multimeter with a continuity buzzer | all six wires of the cable are black: each is checked from the plug to its cavity before the cable is fitted |
 | ☐ | wire strippers for fine wire, and side cutters | to cut the cable in half, strip about 3 mm from each wire, and cut back the wires that are not connected |
 | ☐ | crimping tool for 2.54 mm Dupont terminals | one crimp for each connected wire |
 | ☐ | soldering iron and solder | to join the series resistor into its wire |
-| ☐ | hot-air tool for the heat-shrink tube | over each cut-back end (VCC always), and over the joints of a series resistor where there is one |
+| ☐ | hot-air tool for the heat-shrink tube | to shrink the tube over each cut-back end (VCC always), and over a series resistor on a carrier that has one |

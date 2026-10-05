@@ -44,6 +44,7 @@ VCC = { label = "VCC", what = "3.3 V from the Acorn" }
 #   count: how many pins the whole header has, where `pins` lists only those near the wiring.
 #   printed: true where the pin numbers are printed on the board beside the header.
 # host (on the carrier): the host in a word, put before a pin name that does not say whose it is ("blade TX").
+# shell (on the carrier): bare metal of the host that is its ground, for a meter probe.
 # wires maps each connected signal to [header, pin]. Signals not listed are cut back: VCC always.
 #
 # What fpgas-verify reads to check a host of this carrier (verify/.../boards/acorn/setup.py):
@@ -82,12 +83,16 @@ note = "over each cut-back wire end"
 cut_back = 10
 resistor = 15
 strip = 3
+# The heat-shrink tube's sizes, as the steps name them: `tube` for a cut-back end (the part above says the
+# same), `resistor_tube` over a series resistor and its joints.
+tube = 2
+resistor_tube = 3
 
 # tools: what building the two cables takes, whatever the carrier. `when = "resistor"` is needed only on a
 # carrier whose wiring has a series resistor.
 [[tools]]
 tool = "multimeter with a continuity buzzer"
-note = "all six wires of the cable are black: each is buzzed through from the plug to its bare end before crimping, and to its cavity before connecting"
+note = "all six wires of the cable are black: each is checked from the plug to its cavity before the cable is fitted"
 
 [[tools]]
 tool = "wire strippers for fine wire, and side cutters"
@@ -104,11 +109,12 @@ note = "to join the series resistor into its wire"
 
 [[tools]]
 tool = "hot-air tool for the heat-shrink tube"
-note = "over each cut-back end (VCC always), and over the joints of a series resistor where there is one"
+note = "to shrink the tube over each cut-back end (VCC always), and over a series resistor on a carrier that has one"
 
 [carriers.pi5]
 name = "Raspberry Pi 5"
 host = "Pi"
+shell = "the metal shell of a USB socket on the Raspberry Pi 5"
 jtag_pins = "10:9:11:8"
 jtag_cable = "libgpiod"
 uart = "/dev/ttyAMA0"
@@ -171,6 +177,7 @@ GND1 = ["gpio", 25]
 [carriers.blade]
 name = "Compute Blade"
 host = "blade"
+shell = "the metal shell of a USB socket on the Compute Blade"
 jtag_pins = "2:3:4:14"
 # A CM4 has no RP1, so no rp1pio cable: libgpiod drives the BCM2711's own GPIO chip there.
 jtag_cable = "libgpiod"

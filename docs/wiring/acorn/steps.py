@@ -211,7 +211,7 @@ def plug(sh, x1, y, pins, numbers=True, flip=False):
     return out, body
 
 
-def cut_ends(sh, c, pins, out, cut, y, right, notes_y=0, length=0):
+def cut_ends(sh, c, pins, out, cut, y, right, notes_y=0, length=0, mark=True):
     """The wires that go in no cavity: each a short stub ending in a piece of heat-shrink tube, with why.
 
     Neighbours cut for the same reason share one note. The notes are in a column to the right of the last
@@ -226,7 +226,7 @@ def cut_ends(sh, c, pins, out, cut, y, right, notes_y=0, length=0):
         else:
             groups.append([[sig], why])
     x, ty = max(out[s][0] for s in cut) + 20, max(y, notes_y) + 15  # the notes: below whatever is above them
-    if length:  # a dimension mark beside the last stub: this much of the wire is left at the plug
+    if length and mark:  # a dimension mark beside the last stub: this much of the wire is left at the plug
         top = out[cut[-1]][1]
         sh.add(
             f'<path d="M{x - 6},{top} h8 M{x - 6},{y + 28} h8 M{x - 2},{top} V{y + 28}" stroke="{INK}" '
@@ -416,7 +416,7 @@ def cable(c, connector):
     middle = (body[0] + body[2]) / 2
     wedge(sh, sockets[connector], (middle - half, body[1], middle + half, body[3]), down=True)
     tag_y, stubs_bottom, cut_bottom, cut_x = plug_notes(
-        sh, c, pins, plan, out, body, max(body[1] + 20, host_bottom + 24)
+        sh, c, pins, plan, out, body, max(body[1] + 20, host_bottom + 24), wiring.LENGTHS["cut_back"], mark=False
     )
 
     # The housing: where its cavities and the wires' lanes are.
@@ -575,7 +575,7 @@ def cable(c, connector):
 # ----------------------------------------------------------------------------------------------
 # Pieces the cavity picture and the step pictures share
 # ----------------------------------------------------------------------------------------------
-def plug_notes(sh, c, pins, plan, out, body, y, length=0):
+def plug_notes(sh, c, pins, plan, out, body, y, length=0, mark=True):
     """Beside the plug: how it is seen and how the card lies; under it, the cut-back wires with why.
 
     Returns (the y of the wires' signal tags, the bottom of the cut stubs, of their notes, the notes' x).
@@ -585,7 +585,7 @@ def plug_notes(sh, c, pins, plan, out, body, y, length=0):
     ty = para(sh, note_x, ty, "as it sits in the socket.", W - 10 - note_x, "bold")
     ty = para(sh, note_x, ty, CARD_WAY_UP, W - 10 - note_x)
     tag_y = body[3] + 24
-    return (tag_y, *cut_ends(sh, c, pins, out, plan.cut, tag_y + 18, W - 10, ty - LINE + 8, length))
+    return (tag_y, *cut_ends(sh, c, pins, out, plan.cut, tag_y + 18, W - 10, ty - LINE + 8, length, mark))
 
 
 def wire_tags(sh, out, wired, tag_y):
@@ -722,7 +722,7 @@ def resistor_picture(c, connector):
     x0, x1, cut_x = 150, 640, 500  # the wire from the plug's side to its free end, and where it is cut
     rows = (
         f"1. Cut wire {n} about {mm} mm from its free end.",
-        "2. Slide a piece of the wider tube onto the wire, clear of the cut.",
+        f"2. Slide a piece of the {wiring.LENGTHS['resistor_tube']} mm tube onto the wire, clear of the cut.",
         f"3. Solder the {c.resistor_value} resistor between the two cut ends.",
         "4. Slide the tube over the resistor and both joints and shrink it.",
     )
@@ -868,7 +868,7 @@ def check_picture():
     )
     sh.text(body[0], body[3] + 26, "one probe on the metal contact of the plug", T)
     sh.text(cx - 59, cy + 46, "the other probe on the metal terminal,", T)
-    sh.text(cx - 59, cy + 46 + LINE, "through the cavity's opening", T)
+    sh.text(cx - 59, cy + 46 + LINE, "through the opening on the pin side of the housing", T)
     y = cy + 108
     y = para(sh, 30, y, "Set the meter to continuity. For each wire, touch its contact on the plug and "
              "its terminal in the housing: the meter must beep.", W - 40, "bold")  # fmt: skip
@@ -965,7 +965,8 @@ def procedure(c):
         )
         one = len(cut_n) == 1
         step(
-            f"Cut {cut_who} off about {lengths['cut_back']} mm from the plug and shrink a piece of tube over "
+            f"Cut {cut_who} off about {lengths['cut_back']} mm from the plug and shrink a piece of the "
+            f"{lengths['tube']} mm tube over "
             f"{'the cut end' if one else 'each cut end'}. {'It goes' if one else 'They go'} in no cavity. "
             f"Wire {len(pins)} is VCC, 3.3 V from the Acorn: it must never reach the host. "
             f"Leave {number_list(kept)} at full length.",
@@ -974,7 +975,7 @@ def procedure(c):
         for sig in (s for s in pins if s in c.resistors and s not in plan.cut):
             step(
                 f"Cut wire {pins.index(sig) + 1} ({label_of(sig)}) about {lengths['resistor']} mm from its free end. "
-                "Slide a piece of the wider tube onto the wire, clear of the cut. "
+                f"Slide a piece of the {lengths['resistor_tube']} mm tube onto the wire, clear of the cut. "
                 f"Solder the {c.resistor_value} resistor between the two cut ends. "
                 "Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this.",
                 (f"The resistor fitted into wire {pins.index(sig) + 1}", png(resistor_name(c, connector))),
@@ -987,15 +988,19 @@ def procedure(c):
         if any(label_of(s) != "GND" for sigs in turned_rails(c, plan).values() for s in sigs):
             warning = warning[:-1] + ", which can destroy the host."
         step(
-            f"Mark the pin {plan.first} corner of the {shape} housing with a paint pen or a dot of tape (top left in "
-            "the picture). Push each terminal into the cavity the picture gives for its wire number, latch tab "
-            f"towards the window, until it clicks. {warning} "
+            f"Hold the empty {shape} housing with the wire openings facing you and its long side upright, as in "
+            "the picture. Until it is marked, either way up is the same. "
+            f"Mark {'the top left corner' if data.columns > 1 else 'the top end'} with a paint pen or a dot of tape: "
+            f"that is the pin {plan.first} corner. "
+            "For each wire, read the number on its flag, find the same number in the picture, and push its terminal "
+            f"into that cavity, latch tab towards the window, until it clicks. {warning} "
             f"{cut_who[0].upper()}{cut_who[1:]} {'goes' if one else 'go'} in no cavity.",
             cavity[connector],
         )
         step(
-            "Check each wire with a meter on continuity: its contact on the plug to its terminal in the housing "
-            "must beep, and the cavities beside it must stay silent.",
+            "Check each wire with a meter on continuity. Put one probe on its contact on the plug and the other "
+            "on its metal terminal, through the opening on the pin side of the housing: the meter must beep. "
+            "The cavities beside it must stay silent.",
             ("A meter between the plug and the housing", "acorn-cable-check.png"),
             cavity[connector],
         )
@@ -1015,14 +1020,14 @@ def procedure(c):
     first = next(iter(wiring.CONNECTORS.values()))["pins"][0]
     step(
         f"Fit {fits[0]}, and {fits[1]}. With the power off and the plugs not yet in the Acorn, put one meter probe "
-        f"on contact 1 ({label_of(first)}) of a plug and the other on a metal connector shell of the host: it must "
-        "beep. Do the same for the other plug. Then try contact 6 of each plug against the shell and against every "
-        "other contact: it must be silent to everything.",
+        f"on contact 1 ({label_of(first)}) of a plug and the other on {c.shell}: it must "
+        f"beep. Do the same for the other plug. Then contact {len(pins)} of each plug ({label_of(pins[-1])}, the wire "
+        "you cut back): against the shell and against every other contact it must be silent.",
         *cavity.values(),
     )
     step(
         "Still with the power off, press the plugs into sockets P1 and P2 on the underside of the Acorn, each the "
-        "way round it was when you put the flags on.",
+        "way round it was when you put the flags on. Press each plug until it is fully seated.",
         ("Where socket P1 is, and which end is wire 1", png(prepare_name(c, "P1"))),
         sheet,
     )

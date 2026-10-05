@@ -146,11 +146,15 @@ def bom(c):
             rows.append((1, f"Dupont housing, {shape}, 2.54 mm pitch", "—", note))
     labels = [wiring.SIGNALS[s]["label"] for conn in wiring.CONNECTORS.values() for s in conn["pins"] if s in c.wires]
     rows.append((len(labels), "Dupont female crimp terminal, 2.54 mm", "—",
-                 "one for each connected wire: " + ", ".join(labels) + ", and a few spare"))  # fmt: skip
+                 "one for each connected wire: " + ", ".join(labels)
+                 + "; buy a few more than this, as spares"))  # fmt: skip
     if c.resistors:
         on = ", ".join(sorted(wiring.SIGNALS[s]["label"] for s in c.resistors))
         rows.append((len(c.resistors), f"resistor, {c.resistor_value}, 1/8 W axial", "—", f"in series with {on}"))
-        rows.append((1, "heat-shrink tube, about 3 mm, a few centimetres", "—", "over the resistor and both joints"))
+        tube = wiring.LENGTHS["resistor_tube"]
+        rows.append(
+            (1, f"heat-shrink tube, about {tube} mm, a few centimetres", "—", "over the resistor and both joints")
+        )
     parts = table(["Have it", "Qty", "Part", "Part number", "What it is for"], [(TICK, *r) for r in rows])
     tools = [(TICK, t["tool"], t.get("note", "—")) for t in wiring.TOOLS if "when" not in t or c.resistors]
     return (

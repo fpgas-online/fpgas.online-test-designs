@@ -79,7 +79,7 @@ def test_the_picture_shows_each_cavity_with_its_wire_or_empty(key, connector):
         else:
             assert inside == ["empty", str(pin)], pin
     for sig in plan.cut:  # a cut wire is named in a note, and is in no cavity
-        assert any(re.match(rf"wires? .*\b{pins.index(sig) + 1}\b.*: cut back", w) for w in words(svg)), sig
+        assert any(re.match(rf"wires? .*\b{pins.index(sig) + 1}\b.*: cut off about 10 mm", w) for w in words(svg)), sig
 
 
 @pytest.mark.parametrize(("key", "connector"), CABLES)
@@ -195,9 +195,9 @@ def test_the_procedure_is_complete_in_itself(key):
     assert text.count("which can destroy the host") == sum(
         "puts 5 V on" in steps.turned_warning(c, steps.housing(c, conn)) for conn in wiring.CONNECTORS
     )
-    assert "about 10 mm from the plug" in text and "and a few spare" in text
+    assert "about 10 mm from the plug" in text and "buy a few more than this, as spares" in text
     assert (
-        text.index("Slide a piece of the wider tube") < text.index("Solder the") if RAW[key].get("resistors") else True
+        text.index("Slide a piece of the 3 mm tube") < text.index("Solder the") if RAW[key].get("resistors") else True
     )
 
 
