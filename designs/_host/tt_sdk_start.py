@@ -2,7 +2,9 @@
 """Start the Tiny Tapeout SDK on a demo board and say whether it came up.
 
 The SDK's own main.py builds the `tt` object when the board starts and ends by
-printing `tt.sdk_version=<release>`. That start-up state is what `rpi-hwid
+printing `tt.sdk_version=<release>` (from release 2.0.0; a 1.x release, which a
+TT03p5 board runs, prints `TT SDK v<release>` and then the `tt` object, and has no
+such last line). That start-up state is what `rpi-hwid
 tinytapeout` reads to say what the board is. It is lost whenever something has
 soft-reset the board from the raw REPL (mpremote does: a raw-REPL soft reset
 does not run main.py), so before asking the board who it is, this script
@@ -27,7 +29,10 @@ import time
 import tty
 
 STARTED = re.compile(r"^tt\.sdk_version=\S+\r?$", re.M)  # the SDK main.py's last boot line, once complete
-SDK_BOOT = "BOOT: Tiny Tapeout SDK"  # its first (tt-micropython-firmware src/main.py)
+SDK_BOOT = "BOOT: Tiny Tapeout SDK"  # its first (tt-micropython-firmware src/main.py), from release 2.0.0
+# A 1.x main.py prints neither: it prints this (in colour) once the board object is built, then the object,
+# and returns to the prompt (src/main.py at v1.2.2, read 2026-10-05; not yet seen on a board).
+SDK_1_STARTED = re.compile(r"TT SDK v(1\.\d+\.\d+)")
 REBOOTED = "soft reboot"  # MicroPython's own line on a friendly-REPL Ctrl-D
 RAW_REPL = "raw REPL; CTRL-B to exit"  # what follows a soft reset made in the raw REPL, which runs no main.py
 PROMPT = re.compile(r"(?:^|\n)>>> ?$")  # the friendly prompt, on a line of its own, with nothing after it
@@ -52,6 +57,9 @@ def verdict(text):
         return False, f"the board's main.py raised: {raised[0] if raised else 'an exception'}"
     if SDK_BOOT in after:
         return False, "the SDK's main.py ran to the prompt without finishing its start-up"
+    release = SDK_1_STARTED.search(after)
+    if release:  # at the prompt, nothing raised, and its board object was built
+        return True, f"the SDK started: TT SDK v{release.group(1)} (a 1.x release prints no tt.sdk_version line)"
     return False, f"main.py ran to the prompt without starting the Tiny Tapeout SDK: it is not the SDK's ({RESTORE})"
 
 
