@@ -226,5 +226,7 @@ def test_a_jtag_pin_the_serial_port_has_gets_the_blades_advice_and_any_other_hol
 
     uart = todo({14: "1f00030000.serial (uart0)"})
     assert "while the serial port is on, JTAG cannot be tested there" in uart and f"{conclusion.ISSUES}/127" in uart
-    other = todo({2: '"spi0 CS0"'})
-    assert "serial port" not in other and "Stop what has the pin" in other
+    assert "Stop what has the pin" not in uart  # one line of advice for it, not two that disagree
+    for holders in ({2: '"spi0 CS0"'}, {14: '"serial-test"'}):  # a program that asked for the line, whatever its name
+        other = todo(holders)
+        assert "serial port" not in other and "Stop what has the pin" in other

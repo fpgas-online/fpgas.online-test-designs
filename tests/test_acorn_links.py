@@ -526,6 +526,10 @@ def test_the_holder_is_named_from_the_pin_controllers_pinmux_pins(tmp_path):
     (debugfs / "1f000d0000.gpio-pinctrl-rp1" / "pinmux-pins").write_text(
         "pin 8 (gpio8): (MUX UNCLAIMED) (GPIO UNCLAIMED)\n"
         "pin 14 (gpio14): 1f00030000.serial (GPIO UNCLAIMED) function uart0 group gpio14\n"
+        # forms that name no one driver as the pin's function: no holder is taken from them
+        "pin 6 (gpio6): (MUX UNCLAIMED) pinctrl-rp1:577\n"
+        "pin 7 (gpio7): 1f00050000.spi pinctrl-rp1:578 function spi0 group gpio7\n"
+        "pin 9 (gpio9): 1f00050000.spi (GPIO UNCLAIMED) (HOG) function spi0 group gpio9\n"
     )
     assert links._pinmux_owners("/dev/gpiochip0", str(sysfs), str(debugfs)) == {14: "1f00030000.serial (uart0)"}
     assert links._pinmux_owners("/dev/gpiochip0", str(sysfs), str(tmp_path / "none")) == {}
