@@ -540,7 +540,7 @@ def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_rea
     assert bridged[0][2] == "/dev/ttyACM0" and bridged[0][5].endswith("test_uart.py")
     assert run.calls.index(load) < run.calls.index(bridged[0])
     assert report["state"] == {"variant": "tt-fpga", "serial": "E6"}
-    assert report["flash_note"].startswith("none: the FPGA breakout has no SPI flash")
+    assert report["flash_note"].startswith("none: nothing on the demo board is read back")
 
 
 def test_a_stopped_bridge_is_left_stopped_and_a_failed_test_still_restarts_a_running_one(tmp_path, monkeypatch):
@@ -1165,6 +1165,24 @@ def test_single_tests_asked_of_a_chip_board_are_refused_and_nothing_is_loaded(tm
     assert report["result"] == "error" and report["variant"] == "tt-asic" and _nothing_loaded(report, run)
     assert report["reason"] == "the board is a tt-asic: uart is for a tt-fpga, so nothing was loaded"
     assert report["tests"] == [] and "not_run" not in report
+    # an empty list is no test asked for: nothing runs, and nothing is refused
+    none = _check(TT, tmp_path / "none", TT_FOUND, Runner([_rpi_hwid(TT_CHIP_BOARD)]), tests=[])
+    assert none["tests"] == [] and none["result"] == "pass" and _nothing_loaded(none, run)
+
+
+def test_an_fpga_board_whose_sdk_test_fails_still_has_its_designs_loaded_and_tested(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    report = _check(TT, tmp_path, TT_FOUND, Runner([_rpi_hwid({**TT_BOARD, "sdk": "3.0.8"})]))
+    assert [(t["test"], t["result"]) for t in report["tests"]] == [("sdk", "fail"), ("pin-id", "pass"),
+                                                                    ("uart", "pass")]  # fmt: skip
+    assert report["result"] == "fail" and report["reason"].startswith("sdk fail: the FPGA breakout needs SDK 3.1.x")
+
+
+def test_rpi_hwid_gives_shuttles_in_lower_case_and_unknown_as_none_which_is_what_the_table_is_keyed_by():
+    """rpi-hwid's tinytapeout_verdict() lower-cases the ROM's shuttle and gives None for "unknown" (read in
+    mithro/rpi-hwid src/rpi_hwid/tinytapeout.py at 7d871be), so SDK_SUPPORTED holds lower-case names only."""
+    shuttles = [s for row in tt_fpga.SDK_SUPPORTED for s in row[1] if s]
+    assert shuttles and all(s == s.lower() and s != "unknown" for s in shuttles)
 
 
 def test_single_tests_asked_of_an_fpga_board_run_alone(tmp_path, monkeypatch):

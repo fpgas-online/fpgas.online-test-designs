@@ -400,7 +400,7 @@ class TestBoard(Board):
                     if variant in self.variants:
                         manifest = bitstreams.load_manifest(images, self.bitstreams_package)
                         report["bitstreams"] = manifest.get("version")
-                    elif options.get("tests") is None:  # no design is for it: its fact tests are its check
+                    elif not options.get("tests"):  # no design is for it: its fact tests are its check
                         tests = []
                     else:
                         raise Problem("error", f"the board is a {variant}: {', '.join(tests)} "

@@ -68,7 +68,8 @@ RPI_HWID_FIELDS = tuple(f for f in identity.TINYTAPEOUT_FIELDS if f != "usb_seri
 ALWAYS_THERE = ("mcu", "chip", "demoboard", "sdk")
 # A board with a Tiny Tapeout chip is not held to that: rpi-hwid gives null for its demo board when the SDK did
 # not detect one, and for a microcontroller it does not know, and neither is a failed read. What it must have
-# said is its chip; whether it named a shuttle is settle()'s question.
+# said is its chip; whether it named a shuttle is settle()'s question, and whether its microcontroller and SDK
+# release are ones for that chip is the `sdk` test's, which fails a board that named no microcontroller.
 ALWAYS_THERE_ON_A_CHIP_BOARD = ("chip",)
 
 
@@ -238,7 +239,8 @@ class TTFPGA(TestBoard):
     report_fields = ("variant", *RPI_HWID_FIELDS, "tinytapeout_")
     port = "/dev/ttyACM0"
     services = ("fpgas-tt.service",)  # the TT site's bridge keeps the RP2350's port open while it runs
-    flash_note = "none: the FPGA breakout has no SPI flash; the RP2350 loads each bitstream from the Pi"
+    flash_note = ("none: nothing on the demo board is read back; the FPGA breakout has no SPI flash, and its "
+                  "RP2350 loads each bitstream from the Pi")  # fmt: skip
     # Run in this order, and the board is left with the last design loaded (testbench.py): the pin-ID scan
     # comes first, so a UART-bridge design (one TX pin) is what stays, not one driving every Pmod line.
     tests: ClassVar[dict] = {

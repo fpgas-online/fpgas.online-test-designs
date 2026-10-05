@@ -684,7 +684,8 @@ chosen.
   shuttle and is the `error` of the third row, unless the board's own `config.ini` names the shuttle
   (`force_shuttle`). The check never writes that file.
 * rpi-hwid looks at `2e8a:0005` only, so a board showing `2e8a:000f` is found and then cannot be asked.
-* A board that says `asic` is not held to naming its demo board or microcontroller; an FPGA board is.
+* A board that says `asic` is still a `tt-asic` when it named no demo board or microcontroller (an FPGA board
+  that named neither is an `error`); a chip board that named no microcontroller then fails the `sdk` test.
 * `variant` in the report, in `fpga-board-identified` and in `fpga-verified` is the decided one; it is absent
   when the board did not say.
 
@@ -707,7 +708,10 @@ not know the board's chip cannot select a project on it:
   a tt09 chip`: the table (`SDK_SUPPORTED` in `boards/tt_fpga.py`) gains a row when a release is known to
   support it.
 * Together with the `main.py` read (the board's `main.py` is that release's own) and the SDK having started,
-  a pass means: the board answers, it is the board it says it is, and its firmware is the one for its chip.
+  a pass means: the board answers, says what it is, and what it says is a combination the SDK's releases
+  support. It compares what the board said with a table; it measures nothing on the chip.
+* An FPGA board on another release line (3.0.x, or a later 3.2.x) fails `sdk` until its row is added; its
+  designs are still loaded and tested, and the board's result is `fail`.
 * **What it does not test** on a board with a Tiny Tapeout chip: the chip itself, and the Pmod cabling between
   the demo board and the Pi. The report lists the cabling in `not_run` (`wiring`), the summary prints it, and
   `fpga-verified` carries it in `board0_not_run`; it does not fail the board. The FPGA board's cabling is
