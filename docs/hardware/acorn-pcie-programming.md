@@ -453,8 +453,8 @@ The steps are the same, with these differences (pins from
 | | Pi 5 + Waveshare HAT | Compute Blade |
 |---|---|---|
 | JTAG `--pins` | `10:9:11:8` | `2:3:4:14` |
-| `/dev/gpiochip0` | a symlink to the RP1 chip | CM4: already the header chip. CM5: the RP1 chip, as on a Pi 5 |
-| PCIe address (`D=`, and `--bdf` for `fpgas-acorn-flash`) | `0001:01:00.0` | the one `lspci -D` shows (`0000:01:00.0` on a CM4) |
+| `/dev/gpiochip0` | a symlink to the RP1 chip | CM4: already the header chip. CM5: the RP1 chip. Under kernel 6.18 it was already `gpiochip0`; check with `gpiodetect` |
+| PCIe address (`D=`, and `--bdf` for `fpgas-acorn-flash`) | `0001:01:00.0` | the one `lspci -D` shows (`0000:01:00.0` on a CM4, `0001:01:00.0` on a CM5) |
 | Pins after openFPGALoader | `8 9 10 11` to `ip pd` | `2 3 4` to `ip pd`. `14` is shared with the P2 UART (J2, through 470 Ω), so put it back to its UART function: `pinctrl set 14 a0` on a CM4, `a4` on a CM5 |
 
 **Not yet run by us on this hardware**: nobody has converted a card on a
