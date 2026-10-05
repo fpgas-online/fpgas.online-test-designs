@@ -25,6 +25,10 @@ class Board:
     # check holds), which --identify takes from the boot report instead.
     label_fields = ()
     report_fields = ()
+    # Why this board can be off its bus now with nothing wrong, when the last check that found it left it so
+    # (the Fomu: its test design has no USB). Said when it is not found and the recorded state has it: the
+    # result stays "missing", since it was not checked, and the reason says what brings it back.
+    gone_after_check = ""
 
     def facts(self, port=None):
         """What the check needs to know about this host."""
