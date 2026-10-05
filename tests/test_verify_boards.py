@@ -123,9 +123,11 @@ def _usb(tmp_path, **devices):
 
 
 def test_usb_boards_are_found_with_their_serial(tmp_path):
-    usb = _usb(tmp_path, **{"1-1": ("0403", "6010", "210319B0C2F1"), "1-2": ("2E8A", "0009", "E66164084")})
+    usb = _usb(tmp_path, **{"1-1": ("0403", "6010", "210319B0C2F1"), "1-2": ("2E8A", "0005", "E66164084")})
     assert ARTY.spot(_host(ARTY), usb, []) == [{"variant": "a7-35", "usb": "1-1", "serial": "210319B0C2F1"}]
-    assert TT.spot(_host(TT), usb, [])[0]["serial"] == "E66164084"  # hex case normalised: 2E8A matches
+    # hex case normalised: 2E8A matches. No variant: an RP2 on USB does not say which Tiny Tapeout board it is.
+    (tt,) = TT.spot(_host(TT), usb, [])
+    assert tt == {"variant": None, "usb": "1-2", "serial": "E66164084", "usb_id": "2e8a:0005"}
     assert FOMU.spot(_host(FOMU), usb, []) == []
 
 
@@ -514,9 +516,10 @@ def test_a_netv2_on_a_pi5_loads_with_rp1pio_and_muxes_its_uart(tmp_path):
     assert any(c[:3] == ["openFPGALoader", "-c", "rp1pio"] and c[-1].endswith("kosagi_netv2.bit") for c in run.calls)
 
 
-def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_read_flash(tmp_path):
-    run = Runner()
-    report = _check(TT, tmp_path, {"variant": "tt-fpga", "usb": "1-2", "serial": "E6"}, run)
+def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_read_flash(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    run = Runner([E6_SAYS_FPGA])
+    report = _check(TT, tmp_path, TT_E6, run)
     assert report["result"] == "pass"
     # the TT site's bridge holds /dev/ttyACM0 (pi-sw2-p33, 2026-09-27): stopped for the tests, started after
     assert run.calls[:2] == [
@@ -538,39 +541,44 @@ def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_rea
     assert report["flash_note"].startswith("none: the FPGA breakout has no SPI flash")
 
 
-def test_a_stopped_bridge_is_left_stopped_and_a_failed_test_still_restarts_a_running_one(tmp_path):
-    idle = Runner([("is-active", (3, "inactive"))])
-    report = _check(TT, tmp_path, {"variant": "tt-fpga", "usb": "1-2", "serial": "E6"}, idle)
+def test_a_stopped_bridge_is_left_stopped_and_a_failed_test_still_restarts_a_running_one(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    idle = Runner([("is-active", (3, "inactive")), E6_SAYS_FPGA])
+    report = _check(TT, tmp_path, TT_E6, idle)
     assert not any(c[:2] == ["systemctl", "stop"] or c[:2] == ["systemctl", "start"] for c in idle.calls)
     assert "services_stopped" not in report
-    failing = Runner([("tt_test_wrapper.py", (1, "could not enter raw repl"))])
-    report = _check(TT, tmp_path, {"variant": "tt-fpga", "usb": "1-2", "serial": "E6"}, failing)
+    failing = Runner([("tt_test_wrapper.py", (1, "could not enter raw repl")), E6_SAYS_FPGA])
+    report = _check(TT, tmp_path, TT_E6, failing)
     assert report["result"] == "fail" and failing.calls[-1] == ["systemctl", "start", "--no-block", "fpgas-tt.service"]
 
 
-def test_a_check_told_to_leave_the_start_to_its_caller_only_says_what_it_stopped(tmp_path):
+def test_a_check_told_to_leave_the_start_to_its_caller_only_says_what_it_stopped(tmp_path, monkeypatch):
+    _installed(monkeypatch)
     later = []
-    run = Runner([])
-    report = _check(TT, tmp_path, {"variant": "tt-fpga", "usb": "1-2", "serial": "E6"}, run, restart_later=later)
+    run = Runner([E6_SAYS_FPGA])
+    report = _check(TT, tmp_path, TT_E6, run, restart_later=later)
     assert later == ["fpgas-tt.service"] and report["services_stopped"] == ["fpgas-tt.service"]
     assert ["systemctl", "stop", "fpgas-tt.service"] in run.calls
     assert not any(c[:2] == ["systemctl", "start"] for c in run.calls)  # runner.run starts it, after the report
 
 
-def test_a_bridge_that_will_not_stop_or_restart_makes_the_check_an_error(tmp_path):
+def test_a_bridge_that_will_not_stop_or_restart_makes_the_check_an_error(tmp_path, monkeypatch):
+    _installed(monkeypatch)
     stuck = Runner([("systemctl stop", (1, "Failed to stop fpgas-tt.service: Access denied"))])
-    report = _check(TT, tmp_path, {"variant": "tt-fpga", "usb": "1-2", "serial": "E6"}, stuck)
+    report = _check(TT, tmp_path, TT_E6, stuck)
     assert report["result"] == "error" and "fpgas-tt.service would not stop" in report["reason"]
     assert not any(c[:2] == ["systemctl", "start"] for c in stuck.calls)  # it was never stopped
-    gone = Runner([("systemctl start", (5, "Unit fpgas-tt.service not found."))])
-    report = _check(TT, tmp_path, {"variant": "tt-fpga", "usb": "1-2", "serial": "E6"}, gone)
+    gone = Runner([("systemctl start", (5, "Unit fpgas-tt.service not found.")), E6_SAYS_FPGA])
+    report = _check(TT, tmp_path, TT_E6, gone)
     assert report["result"] == "error" and "fpgas-tt.service was not started again" in report["reason"]
     assert report["services_failed"] == ["fpgas-tt.service was not started again: Unit fpgas-tt.service not found."]
 
 
 # -- the TT FPGA's identity, from rpi-hwid ---------------------------------------------------------------------
 
-TT_FOUND = {"variant": "tt-fpga", "usb": "1-2", "serial": "E661"}
+# As finding it gives it: no variant. The board says which Tiny Tapeout board it is (#124).
+TT_FOUND = {"variant": None, "usb": "1-2", "serial": "E661", "usb_id": "2e8a:0005"}
+TT_E6 = {**TT_FOUND, "serial": "E6"}
 RPI_HWID_TT = ["/usr/bin/rpi-hwid", "tinytapeout", "--json", "--no-stop-service"]
 SDK_START = "tt_sdk_start.py"
 MAIN_PY = "tt_main_py.py"
@@ -594,6 +602,15 @@ def _rpi_hwid(*boards, rc=0, stderr=""):
 
 def _installed(monkeypatch):
     monkeypatch.setattr(tt_fpga, "which", lambda name: "/usr/bin/" + name)
+
+
+E6_SAYS_FPGA = _rpi_hwid({**TT_BOARD, "usb_serial": "E6"})  # what the board with serial E6 answers rpi-hwid
+
+
+def _nothing_loaded(report, run):
+    """No test ran and no design went to the board: neither loader was called."""
+    return report["tests"] == [] and not any("tt_fpga_program.py" in " ".join(c) or "tt_test_wrapper.py" in " ".join(c)
+                                             for c in run.calls)  # fmt: skip
 
 
 def _restarted_last(run):
@@ -639,7 +656,8 @@ def test_a_board_whose_sdk_does_not_start_is_an_error_and_is_not_asked_who_it_is
     why = report["identity"]["tinytapeout_error"]
     assert why.startswith("the Tiny Tapeout SDK did not start on the demo board: SDK_START: FAIL: main.py ran")
     assert "docs/hardware/tt-fpga.md" in why and why in report["reason"]
-    assert [t["result"] for t in report["tests"]] == ["pass", "pass"]  # the tests still ran
+    # a board that did not say what it is is not tested: no FPGA design goes to it
+    assert _nothing_loaded(report, run) and report["variant"] is None and tt_fpga.NOT_SAID in report["reason"]
 
 
 def test_a_board_whose_main_py_a_visitor_changed_is_an_error_with_that_reason(tmp_path, monkeypatch):
@@ -656,7 +674,7 @@ def test_a_board_whose_main_py_a_visitor_changed_is_an_error_with_that_reason(tm
     why = report["identity"]["tinytapeout_error"]
     assert why.startswith("the demo board's main.py is not known to be the SDK's own: MAIN_PY: FAIL: the board's")
     assert why in report["reason"]
-    assert [t["result"] for t in report["tests"]] == ["pass", "pass"]  # the tests still ran
+    assert _nothing_loaded(report, run) and report["variant"] is None and tt_fpga.NOT_SAID in report["reason"]
 
 
 def test_without_rpi_hwid_main_py_is_still_checked_but_the_sdk_is_not_started(tmp_path):
@@ -664,7 +682,7 @@ def test_without_rpi_hwid_main_py_is_still_checked_but_the_sdk_is_not_started(tm
     report = _check(TT, tmp_path, TT_FOUND, run)
     assert sum(MAIN_PY in " ".join(c) for c in run.calls) == 1
     assert not any(SDK_START in " ".join(c) for c in run.calls)
-    assert report["result"] == "pass" and "tinytapeout_note" in report["identity"]
+    assert report["result"] == "error" and "tinytapeout_note" in report["identity"]
 
 
 def test_without_rpi_hwid_a_changed_main_py_is_still_an_error(tmp_path):
@@ -674,10 +692,12 @@ def test_without_rpi_hwid_a_changed_main_py_is_still_an_error(tmp_path):
     assert "tinytapeout_note" not in report["identity"]
 
 
-def test_a_main_py_check_that_could_not_run_is_an_error_and_the_tests_still_run(tmp_path, monkeypatch):
+def test_a_main_py_check_that_could_not_run_is_an_error_and_nothing_is_loaded(tmp_path, monkeypatch):
     _installed(monkeypatch)
+    calls = []
 
     def run(argv, timeout):
+        calls.append([str(a) for a in argv])
         if MAIN_PY in " ".join(map(str, argv)):
             raise core.Problem("error", "tt_main_py.py did not finish within 90 s")
         return 0, ""
@@ -687,7 +707,7 @@ def test_a_main_py_check_that_could_not_run_is_an_error_and_the_tests_still_run(
     assert report["result"] == "error" and why.endswith(
         "it could not be checked: tt_main_py.py did not finish within 90 s"
     )
-    assert [t["result"] for t in report["tests"]] == ["pass", "pass"]
+    assert report["tests"] == [] and not any("tt_fpga_program.py" in " ".join(c) for c in calls)
 
 
 def test_a_field_rpi_hwid_left_out_stays_out_and_leaves_the_tt_identity_not_whole(tmp_path, monkeypatch):
@@ -699,12 +719,14 @@ def test_a_field_rpi_hwid_left_out_stays_out_and_leaves_the_tt_identity_not_whol
     assert identify.missing(TT, report["identity"]) == [("sdk", "not read")]
 
 
-def test_without_rpi_hwid_the_tt_fields_are_not_read_and_the_board_does_not_fail(tmp_path):
+def test_without_rpi_hwid_the_board_cannot_say_what_it_is_so_it_is_an_error_and_nothing_is_loaded(tmp_path):
+    """Until #124 such a board passed as a tt-fpga it had never said it was."""
     run = Runner()
     report = _check(TT, tmp_path, TT_FOUND, run)
-    assert report["result"] == "pass" and "reason" not in report
+    assert report["result"] == "error" and report["variant"] is None and _nothing_loaded(report, run)
+    assert report["reason"] == f"{tt_fpga.NOT_SAID}: {tt_fpga.NOT_INSTALLED}"
     assert not any("rpi-hwid" in " ".join(c) for c in run.calls) and _restarted_last(run)
-    assert report["identity"] == {"board": "tt", "kind": "tt", "variant": "tt-fpga", "serial": "E661", "usb": "1-2",
+    assert report["identity"] == {"board": "tt", "kind": "tt", "serial": "E661", "usb": "1-2",
                                   "usb_serial": "E661", "tinytapeout_note": tt_fpga.NOT_INSTALLED}  # fmt: skip
     assert tt_fpga.NOT_INSTALLED.startswith("not read: rpi-hwid is not installed")
 
@@ -742,7 +764,7 @@ def test_rpi_hwid_that_cannot_say_who_the_tt_board_is_makes_the_check_an_error(t
     assert why in error and error.startswith("rpi-hwid tinytapeout --json --no-stop-service")
     assert not set(TT_FIELDS) & set(report["identity"]) and report["identity"]["usb_serial"] == "E661"
     assert report["result"] == "error" and f"tinytapeout_error: {error}" in report["reason"]
-    assert [t["result"] for t in report["tests"]] == ["pass", "pass"]  # the tests still ran
+    assert _nothing_loaded(report, run) and report["variant"] is None and "variant" not in report["identity"]
     assert _restarted_last(run)
 
 
@@ -1039,3 +1061,80 @@ class _Nothing:
 
     def __exit__(self, *a):
         return False
+
+
+# -- which Tiny Tapeout board it is: the board's own word (#124) ------------------------------------------------
+
+# A demo board with a Tiny Tapeout chip, as rpi-hwid's tinytapeout_verdict() gives one (chip "asic", a shuttle).
+TT_CHIP_BOARD = {**TT_BOARD, "shuttle": "tt06", "chip": "asic", "repo": "TinyTapeout/tinytapeout-06",
+                 "commit": "abc1234", "demoboard": "TTDBv2", "sdk": "v3.1.0", "mcu": "RP2040",
+                 "how": "Tiny Tapeout SDK on RP2040; chip ROM shuttle=tt06"}  # fmt: skip
+
+
+def test_a_board_that_says_it_is_an_fpga_board_is_a_tt_fpga_and_only_then_is_a_design_loaded(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    run = Runner([_rpi_hwid(TT_BOARD)])
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    assert report["result"] == "pass" and report["variant"] == report["identity"]["variant"] == "tt-fpga"
+    asked = run.calls.index(RPI_HWID_TT)
+    loaders = ("tt_fpga_program.py", "tt_test_wrapper.py")
+    loads = [i for i, c in enumerate(run.calls) if any(name in " ".join(c) for name in loaders)]
+    assert loads and min(loads) > asked  # the board is asked first
+
+
+def test_a_board_with_a_tiny_tapeout_chip_is_a_tt_asic_said_to_be_untested_and_nothing_is_loaded(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    events = []
+    run = Runner([_rpi_hwid(TT_CHIP_BOARD)])
+    report = _check(TT, tmp_path, TT_FOUND, run, event=lambda stage, d: events.append((stage, d)))
+    assert report["variant"] == "tt-asic" and report["identity"]["variant"] == "tt-asic"
+    assert report["identity"]["chip"] == "asic" and report["identity"]["shuttle"] == "tt06"
+    assert report["result"] == "fail" and report["reason"] == TT.untested["tt-asic"]
+    assert "identified" in report["reason"] and "nothing was tested and nothing was loaded" in report["reason"]
+    assert _nothing_loaded(report, run) and "bitstreams" not in report and _restarted_last(run)
+    assert [stage for stage, _ in events] == ["fpga-board-identified"] and events[0][1]["variant"] == "tt-asic"
+    assert report["state"] == {"variant": "tt-asic", "serial": "E661"}
+
+
+def test_a_chip_board_whose_shuttle_could_not_be_read_has_no_variant(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    run = Runner([_rpi_hwid({**TT_CHIP_BOARD, "shuttle": None})])
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    assert report["result"] == "error" and report["variant"] is None and _nothing_loaded(report, run)
+    assert report["reason"] == f"{tt_fpga.NOT_SAID}: it has a Tiny Tapeout chip whose shuttle could not be read"
+
+
+def test_an_rp2_in_its_boot_loader_fails_as_not_running_the_firmware_and_its_port_is_left_alone(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    run = Runner()
+    report = _check(TT, tmp_path, {**TT_FOUND, "usb_id": "2e8a:0003"}, run)
+    assert report["result"] == "fail" and report["variant"] is None and _nothing_loaded(report, run)
+    assert report["reason"] == f"{tt_fpga.NOT_TT_FIRMWARE}: it is in its USB boot loader (2e8a:0003)"
+    assert not any(MAIN_PY in " ".join(c) or "rpi-hwid" in " ".join(c) for c in run.calls)
+
+
+def test_a_variant_asked_for_that_the_board_does_not_say_it_is_loads_nothing(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    run = Runner([_rpi_hwid(TT_CHIP_BOARD)])
+    report = _check(TT, tmp_path, TT_FOUND, run, variant="tt-fpga")
+    assert report["result"] == "error" and _nothing_loaded(report, run)
+    assert "--variant tt-fpga was asked for, but the board says it is a tt-asic" in report["reason"]
+    agreed = Runner([_rpi_hwid(TT_BOARD)])
+    assert _check(TT, tmp_path / "again", TT_FOUND, agreed, variant="tt-fpga")["result"] == "pass"
+
+
+def test_only_an_rp2_that_can_be_a_demo_board_is_a_tiny_tapeout_board(tmp_path):
+    """MicroPython's USB serial (0005, 000f: the two ids the fpgas-tt udev rule matches) or the boot loader
+    (0003): not a debug probe (000c) or anything else of Raspberry Pi's, which until #124 was called a tt-fpga."""
+    usb = _usb(tmp_path, **{"1-1": ("2e8a", "000c", "PROBE"), "1-2": ("2e8a", "000f", "A"),
+                            "1-3": ("2e8a", "0003", None), "1-4": ("2e8a", "0005", "B"),
+                            "1-5": ("2e8a", "00c0", "HUB")})  # fmt: skip
+    found = TT.spot(_host(TT), usb, [])
+    assert [(f["usb"], f["usb_id"], f["variant"]) for f in found] == [
+        ("1-2", "2e8a:000f", None), ("1-3", "2e8a:0003", None), ("1-4", "2e8a:0005", None)]  # fmt: skip
+
+
+def test_no_other_board_settles_its_variant_late():
+    """The hook is the Tiny Tapeout board's alone: every other board's check runs as it did."""
+    assert TT.variant_from_board and not any(b.variant_from_board for b in (ARTY, NETV2, FOMU))
+    assert set(TT.untested) == {"tt-asic"} and not set(TT.untested) & set(TT.variants)

@@ -10,6 +10,7 @@ import json
 import pathlib
 
 from fpgas_online_verify import conclusion, runner
+from fpgas_online_verify.boards import tt_fpga
 from fpgas_online_verify.boards.acorn import check, links, setup, suite
 
 DATA = pathlib.Path(__file__).parent / "data"
@@ -197,6 +198,9 @@ def test_every_advice_pattern_matches_a_reason_the_code_gives():
         links.pins_held(BLADE, {14: "1f00030000.serial (uart0)"}),
         links.pins_held(BLADE, {2: '"spi0 CS0"'}),
         "no device on the P1 JTAG chain",
+        f"{tt_fpga.NOT_SAID}: {tt_fpga.NOT_INSTALLED}",
+        tt_fpga.BOARD.untested["tt-asic"],
+        f"{tt_fpga.NOT_TT_FIRMWARE}: it is in its USB boot loader (2e8a:0003)",
         "openocd is not installed",
         "x does not match its manifest",
         "manifest.json is missing",

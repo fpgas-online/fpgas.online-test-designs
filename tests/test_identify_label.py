@@ -554,7 +554,7 @@ TT_USB = [{"vendor": "2e8a", "product": "0005", "serial": "E661", "path": "1-2"}
 TT_BOOT = {"board": "tt", "kind": "tt", "variant": "tt-fpga", "serial": "E661", "usb": "1-2", "usb_serial": "E661",
            "mcu": "RP2350", "shuttle": None, "chip": "fpga", "repo": None, "commit": None,
            "demoboard": "TTDBv3 [3.2]", "demoboard_version": None, "sdk": "v3.1.0"}  # fmt: skip
-TT_REPORT_FIELDS = ["chip", "commit", "demoboard", "demoboard_version", "mcu", "repo", "sdk", "shuttle"]
+TT_REPORT_FIELDS = ["chip", "commit", "demoboard", "demoboard_version", "mcu", "repo", "sdk", "shuttle", "variant"]
 
 
 def _read_tt(tmp_path, usb=TT_USB):

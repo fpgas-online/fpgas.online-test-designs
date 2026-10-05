@@ -3,6 +3,20 @@ over mpremote). The FPGA's UART reaches the Pi only through the RP2350, so the U
 through tt_test_wrapper.py's bridge, which loads the design too. There is no SPI-flash test: the breakout has
 no flash (docs/hardware/tt-fpga.md).
 
+Which Tiny Tapeout board it is, is the board's own word, never a guess (#124). The same demo board carries an
+FPGA breakout or a Tiny Tapeout chip, and its microcontroller looks the same on USB either way (an FPGA board's
+RP2350 and a chip board's RP2040 both read 2e8a:0005). So finding the board gives no variant: it is settled
+once the check holds the board's port, from the `chip` rpi-hwid read there, before any design is chosen:
+
+  chip "fpga"                      tt-fpga: the tests below run
+  chip "asic" and a shuttle        tt-asic: identified, and said to be untested (no test here is for a chip)
+  anything else                    no variant: an error saying what could not be read
+
+In the last two cases no test runs and nothing is loaded: an FPGA bitstream only ever goes to a board that
+said it is an FPGA board. An RP2 that is in its USB boot loader (2e8a:0003) is found too, and fails as not
+running the Tiny Tapeout firmware. Other Raspberry Pi USB products (a debug probe, a Pico running something
+else) are not Tiny Tapeout boards and are not looked at.
+
 Nothing is written to the demo board: for every load the RP2350 reads the bitstream from the Pi over the serial
 link (tt_fpga_program.py, `mpremote mount`). The board has no flash of its own to compare, so the state is the
 RP2350's USB serial number. Loading needs mpremote (micropython-mpremote: in trixie, and only
@@ -10,10 +24,10 @@ bookworm-backports for bookworm).
 
 Who the board is, for rpi-hwid's Tiny Tapeout label, comes from `rpi-hwid tinytapeout --json --no-stop-service`,
 run while the check holds the RP2350's port (fpgas-tt.service stopped) and before any test loads a design: it
-asks the Tiny Tapeout SDK on the RP2350 over its REPL. rpi-hwid is optional: it is found on PATH and run, never
-imported. Without it those fields are not read and the identity says so in tinytapeout_note; the board does not
-fail for it. When rpi-hwid is there but cannot say who the board is, the identity has tinytapeout_error and the
-check is an error.
+asks the Tiny Tapeout SDK on the RP2350 over its REPL. rpi-hwid is found on PATH and run, never imported. Without it
+the board cannot be asked who it is: the identity says so in tinytapeout_note, and the check is an error, since
+the variant is not known. When rpi-hwid is there but cannot say who the board is, the identity has
+tinytapeout_error and the check is an error.
 
 rpi-hwid reads only what the SDK built when the board started, so the board's SDK is started first
 (tt_sdk_start.py: a soft reset from the friendly REPL, which runs the board's main.py). A board whose main.py is
@@ -25,7 +39,7 @@ import sys
 from typing import ClassVar
 
 from .. import host_tests, identity
-from ..core import Problem, run, tail
+from ..core import Problem, run, tail, usb_matching
 from ..testbench import TestBoard
 
 RPI_HWID = "rpi-hwid"
@@ -138,6 +152,13 @@ def tinytapeout_fields(usb_serial, runner=run):
 
 
 PMOD_PRE = [["rmmod", "spidev", "spi_bcm2835"]]
+VENDOR = "2e8a"  # Raspberry Pi
+# The products a Tiny Tapeout demo board's microcontroller shows: MicroPython's USB serial (the two ids the
+# fpgas-tt udev rule matches; an FPGA board's RP2350 has been read as 0005), and the RP2's boot loader, which is
+# a board that cannot answer.
+MICROPYTHON, BOOTLOADER = ("0005", "000f"), "0003"
+NOT_TT_FIRMWARE = "a Raspberry Pi RP2 is on USB but is not running the Tiny Tapeout firmware"
+NOT_SAID = "the board did not say which Tiny Tapeout board it is, so no test was run and nothing was loaded"
 
 
 class TTFPGA(TestBoard):
@@ -145,13 +166,19 @@ class TTFPGA(TestBoard):
     slug = "tt-fpga"  # fpgas-online-tt is the TT site's own package
     title = "TT FPGA Demo Board"
     doc = "tt-fpga.md"
-    usb = (("2e8a", None),)  # any Raspberry Pi USB product: the RP2350 running MicroPython
-    variants: ClassVar[dict] = {"tt-fpga": "tt-fpga"}
+    usb = tuple((VENDOR, product) for product in (*MICROPYTHON, BOOTLOADER))
+    variants: ClassVar[dict] = {"tt-fpga": "tt-fpga"}  # the variants there are bitstreams for
+    variant_from_board = True
+    untested: ClassVar[dict] = {
+        "tt-asic": "the board carries a Tiny Tapeout chip, not an FPGA: it is identified, and the boot check has "
+                   "no test for a chip yet, so nothing was tested and nothing was loaded",
+    }  # fmt: skip
     # rpi-hwid's Tiny Tapeout label (its LABEL-CONTRACT.md, sections 1 and 7). Only the boot check reads the
     # fields rpi-hwid gives (it owns the port then): --identify takes them, and why they are missing, from the
     # boot report, matched by usb_serial.
     label_fields = ("usb_serial", "mcu", "chip", "demoboard", "demoboard_version", "sdk")
-    report_fields = (*RPI_HWID_FIELDS, "tinytapeout_")
+    # The variant too: only the boot check asks the board which Tiny Tapeout board it is.
+    report_fields = ("variant", *RPI_HWID_FIELDS, "tinytapeout_")
     port = "/dev/ttyACM0"
     services = ("fpgas-tt.service",)  # the TT site's bridge keeps the RP2350's port open while it runs
     flash_note = "none: the FPGA breakout has no SPI flash; the RP2350 loads each bitstream from the Pi"
@@ -169,8 +196,32 @@ class TTFPGA(TestBoard):
                  "args": ["--board", "tt"], "pre": PMOD_PRE, "program_args": ["--gpio-release"]},
     }  # fmt: skip
 
+    def spot(self, host, usb, pci):
+        """Every RP2 on USB that can be a Tiny Tapeout demo board, with no variant: settle() decides it."""
+        return [{"variant": None, "usb": d["path"], "serial": d["serial"], "usb_id": f"{d['vendor']}:{d['product']}"}
+                for d in usb_matching(usb, self.usb)]  # fmt: skip
+
+    def settle(self, asked, found, facts):
+        if found.get("usb_id") == f"{VENDOR}:{BOOTLOADER}":
+            raise Problem("fail", f"{NOT_TT_FIRMWARE}: it is in its USB boot loader ({found['usb_id']})")
+        chip = facts.get("chip")
+        if chip == "fpga":
+            variant = "tt-fpga"
+        elif chip == "asic" and facts.get("shuttle"):
+            variant = "tt-asic"
+        elif "tinytapeout_note" in facts:  # rpi-hwid is not installed: nothing asked the board
+            raise Problem("error", f"{NOT_SAID}: {facts['tinytapeout_note']}")
+        elif chip == "asic":
+            raise Problem("error", f"{NOT_SAID}: it has a Tiny Tapeout chip whose shuttle could not be read")
+        else:  # why is in the identity's tinytapeout_error, which the report's reason carries too
+            raise Problem("error", NOT_SAID)
+        if asked and asked != variant:
+            raise Problem("error", f"--variant {asked} was asked for, but the board says it is a {variant}: "
+                                   "nothing was loaded")  # fmt: skip
+        return variant
+
     def port_facts(self, host, found, runner=run):
-        if not found.get("serial"):
+        if not found.get("serial") or found.get("usb_id") == f"{VENDOR}:{BOOTLOADER}":
             return {}
         # Whether main.py is still the SDK's own needs only the port, so it is said with or without rpi-hwid.
         why_not = main_py_changed(host["port"], runner)
