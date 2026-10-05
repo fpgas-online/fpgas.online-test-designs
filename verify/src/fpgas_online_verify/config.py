@@ -1,5 +1,6 @@
-"""Which board, or boards, this host verifies: `[verify] fpga-board = <board>|auto`; and whether the opt-in
-power-cycle check is on: `[verify] power-cycle-check = on|off`.
+"""Which board, or boards, this host verifies: `[verify] fpga-board = <board>|auto`; whether the result is
+sent to the fleet: `[verify] publish = on|off`; and whether the opt-in power-cycle check is on: `[verify]
+power-cycle-check = on|off`.
 
 Read from `*.ini` in the mode directory (/usr/share/fpgas-online/verify/mode.d, written by the one installed
 mode package: fpgas-online-<board>, or fpgas-online-multi-board for `auto`) and then the admin's directory
@@ -59,11 +60,29 @@ def power_cycle_check(mode_dir=MODE_DIR, admin_dir=ADMIN_DIR):
     The check fails a board whose FPGA has not restarted since the last check, that is, one that did not
     restart with its Pi. That only makes sense where a restart of the host is known to restart the card, as on
     the fpgas.online fleet, whose root turns it on in /etc/fpgas-verify; elsewhere it stays off."""
+    return _switch(POWER_CYCLE_CHECK, mode_dir, admin_dir)
+
+
+PUBLISH = "publish"
+
+
+def publish(mode_dir=MODE_DIR, admin_dir=ADMIN_DIR):
+    """(whether the check tells the fleet how it went, the file that says so or None): `[verify] publish =
+    on|off` in the same files as `fpga-board`, the admin's directory first. Off when no file says.
+
+    Publishing is for the fpgas.online fleet, whose Pi root turns it on in /etc/fpgas-verify: its site lists a
+    board by what the boot check reported. Anywhere else there is nobody to tell, so a host that only has the
+    packages sends nothing, at boot or by hand."""
+    return _switch(PUBLISH, mode_dir, admin_dir)
+
+
+def _switch(key, mode_dir, admin_dir):
+    """(on, the file that says so or None) for an on/off setting; a value that is neither is an error."""
     for directory in (admin_dir, mode_dir):
-        value, path = _setting(directory, POWER_CYCLE_CHECK)
+        value, path = _setting(directory, key)
         if value is None:
             continue
         if value.lower() not in (*ON, *OFF):
-            raise Problem("error", f"{path}: {POWER_CYCLE_CHECK} is {value!r}; it is `on` or `off`")
+            raise Problem("error", f"{path}: {key} is {value!r}; it is `on` or `off`")
         return value.lower() in ON, path
     return False, None

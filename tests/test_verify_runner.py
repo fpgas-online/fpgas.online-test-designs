@@ -10,6 +10,7 @@
 
 import json
 import os
+import pathlib
 import stat
 import subprocess
 
@@ -588,15 +589,120 @@ def test_the_start_is_published_before_the_result(opts, tmp_path, monkeypatch):
     sent = []
     monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append((stage, details)))
     out = tmp_path / "r.json"
-    assert runner.run({**opts, "board": "arty", "report": str(out), "no_publish": False}) == 0
+    assert runner.run({**opts, "board": "arty", "report": str(out), **_fleet(tmp_path)}) == 0
     assert [s for s, _ in sent] == ["fpga-verifying", "fpga-verified"]
     assert sent[0][1]["started_at"] and sent[1][1]["result"] == "pass"
+    assert json.loads(out.read_text())["publish"] == {"on": True, "configured_by": str(tmp_path / "etc" / "fleet.ini")}
     sent.clear()
-    runner.run({**opts, "board": "arty", "report": str(out), "no_publish": True})
-    assert sent == []
+    runner.run({**opts, "board": "arty", "report": str(out), **_fleet(tmp_path), "no_publish": True})
+    assert sent == []  # --no-publish wins over the fleet's file
 
 
-def test_a_test_run_is_never_published_nor_written_over_the_boot_report(opts, monkeypatch, capsys):
+def _fleet(tmp_path):
+    """What the fpgas.online Pi root adds to a host: /etc/fpgas-verify/fleet.ini with `publish = on`."""
+    admin = tmp_path / "etc"
+    admin.mkdir(exist_ok=True)
+    (admin / "fleet.ini").write_text("[verify]\npublish = on\n")
+    return {"no_publish": False, "admin_dir": admin, "mode_dir": tmp_path / "no-mode.d"}
+
+
+def _run_arty(opts, tmp_path, monkeypatch, admin_text=None, mode_text=None):
+    """One whole run on a host with an Arty; returns (exit status, the report, the stages published)."""
+    monkeypatch.setattr(runner, "installed", lambda: _boards(Fake("arty", seen=[{"variant": "a7-35"}])))
+    monkeypatch.setattr(runner, "usb_devices", lambda: [])
+    monkeypatch.setattr(runner, "pci_devices", lambda: [])
+    sent = []
+    monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append(stage) or True)
+    mode, admin = tmp_path / "mode.d", tmp_path / "etc"
+    mode.mkdir()
+    admin.mkdir()
+    (mode / "fpgas-online-arty.ini").write_text("[verify]\nfpga-board = arty\n" + (mode_text or ""))
+    if admin_text:
+        (admin / "fleet.ini").write_text("[verify]\n" + admin_text)
+    out = tmp_path / "r.json"
+    rc = runner.run({"state": opts["state"], "report": str(out), "mode_dir": mode, "admin_dir": admin})
+    return rc, json.loads(out.read_text()), sent
+
+
+def test_a_host_that_only_has_the_packages_publishes_nothing(opts, tmp_path, monkeypatch, capsys):
+    """No file says `publish = on`: nothing is sent, at boot or by hand, and nothing is said about it."""
+    rc, report, sent = _run_arty(opts, tmp_path, monkeypatch)
+    assert rc == 0 and report["result"] == "pass" and sent == []
+    assert report["publish"] == {"on": False, "why": runner.NO_FILE}
+    err = capsys.readouterr().err
+    assert (
+        "  not published: no file says `publish = on` (the fpgas.online Pi root has /etc/" in err
+        and "could not" not in err
+    )
+
+
+def test_the_fleets_root_turns_publishing_on(opts, tmp_path, monkeypatch):
+    rc, report, sent = _run_arty(opts, tmp_path, monkeypatch, admin_text="publish = on\n")
+    assert rc == 0 and sent[0] == "fpga-verifying" and sent[-1] == "fpga-verified"
+    assert report["publish"] == {"on": True, "configured_by": str(tmp_path / "etc" / "fleet.ini")}
+
+
+def test_etc_can_turn_publishing_off_again(opts, tmp_path, monkeypatch):
+    rc, report, sent = _run_arty(opts, tmp_path, monkeypatch, admin_text="publish = off\n", mode_text="publish = on\n")
+    assert rc == 0 and sent == []
+    assert report["publish"] == {"on": False, "configured_by": str(tmp_path / "etc" / "fleet.ini")}
+
+
+def test_a_publish_setting_that_is_neither_on_nor_off_fails_loudly_and_sends_nothing(opts, tmp_path, monkeypatch):
+    rc, report, sent = _run_arty(opts, tmp_path, monkeypatch, admin_text="publish = maybe\n")
+    assert rc == 1 and report["result"] == "error" and sent == []
+    assert "publish is 'maybe'; it is `on` or `off`" in report["reason"]
+    assert report["publish"] == {"on": False, "why": "the setting could not be read"}
+
+
+def test_no_publish_does_not_read_the_setting_so_a_bad_one_does_not_stop_a_private_run(opts, tmp_path, monkeypatch):
+    monkeypatch.setattr(runner, "installed", lambda: _boards(Fake("arty", seen=[{"variant": "a7-35"}])))
+    monkeypatch.setattr(runner, "usb_devices", lambda: [])
+    monkeypatch.setattr(runner, "pci_devices", lambda: [])
+    sent = []
+    monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append(stage) or True)
+    admin = tmp_path / "etc"
+    admin.mkdir()
+    (admin / "fleet.ini").write_text("[verify]\npublish = maybe\n")
+    out = tmp_path / "r.json"
+    asked = {**opts, "board": "arty", "report": str(out), "admin_dir": admin, "mode_dir": tmp_path / "none"}
+    assert runner.run(asked) == 0 and sent == []
+    assert json.loads(out.read_text())["publish"] == {"on": False, "why": "--no-publish"}
+
+
+INFRA_FLEET_INI = pathlib.Path(__file__).parent / "data" / "infra-fleet.ini"
+
+
+def test_the_file_the_fleets_root_carries_turns_publishing_on(opts, tmp_path, monkeypatch, capsys):
+    """tests/data/infra-fleet.ini is a copy of what fpgas.online-infra writes to /etc/fpgas-verify/fleet.ini in
+    the Pi root: ansible/roles/onpi/files/etc/fpgas-verify/fleet.ini, copied by roles/onpi/tasks/fpga_verify.yml
+    (infra PR #225). The section, the key and its value are an agreement between the two repositories: rename
+    one here and this fails, instead of every board on the fleet going quiet. Change both together."""
+    text = INFRA_FLEET_INI.read_text()
+    assert "[verify]" in text and "publish = on" in text.splitlines()
+    admin = tmp_path / "root-etc"
+    admin.mkdir()
+    (admin / "fleet.ini").write_text(text)
+    assert config.publish(tmp_path / "no-mode.d", admin) == (True, admin / "fleet.ini")
+    assert config.PUBLISH == "publish" and "on" in config.ON
+    rc, report, sent = _run_arty(opts, tmp_path, monkeypatch, admin_text=text.split("[verify]\n", 1)[1])
+    assert rc == 0 and sent[0] == "fpga-verifying" and sent[-1] == "fpga-verified" and report["publish"]["on"]
+    assert "  published to the fleet: `publish = on` in " in capsys.readouterr().err
+
+
+def test_the_publish_setting_reads_like_the_others(tmp_path):
+    mode, admin = _dirs(tmp_path)
+    assert config.publish(mode, admin) == (False, None)
+    assert config.publish(tmp_path / "none", tmp_path / "nor-this") == (False, None)
+    (mode / "fpgas-online-multi-board.ini").write_text("[verify]\nfpga-board = auto\npublish = yes\n")
+    assert config.publish(mode, admin) == (True, mode / "fpgas-online-multi-board.ini")
+    (admin / "a.ini").write_text("[verify]\npublish = on\n")
+    (admin / "b.ini").write_text("[verify]\npublish = off\n")
+    with pytest.raises(Problem, match="conflicting publish settings"):
+        config.publish(mode, admin)
+
+
+def test_a_test_run_is_never_published_nor_written_over_the_boot_report(opts, tmp_path, monkeypatch, capsys):
     arty = WithTests("arty", ["uart"], seen=[{"variant": "a7-35"}])
     monkeypatch.setattr(runner, "installed", lambda: _boards(arty))
     monkeypatch.setattr(runner, "usb_devices", lambda: [])
@@ -604,7 +710,7 @@ def test_a_test_run_is_never_published_nor_written_over_the_boot_report(opts, mo
     sent, written = [], []
     monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append(stage))
     monkeypatch.setattr(runner, "write", lambda report, where: written.append(where) or where)
-    assert runner.run({**opts, "board": "arty", "tests": ["uart"], "no_publish": False}) == 0
+    assert runner.run({**opts, "board": "arty", "tests": ["uart"], **_fleet(tmp_path)}) == 0
     assert sent == [] and written == ["-"]
     written.clear()
     runner.run({**opts, "board": "arty", "tests": ["uart"], "report": "elsewhere.json"})
@@ -856,7 +962,7 @@ def test_the_events_go_out_in_order_and_a_dead_broker_stops_the_progress_ones(op
     sent = []
     monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append((stage, details)) or True)
     out = tmp_path / "r.json"
-    runner.run({**opts, "board": "arty", "report": str(out), "no_publish": False})
+    runner.run({**opts, "board": "arty", "report": str(out), **_fleet(tmp_path)})
     assert [s for s, _ in sent] == ["fpga-verifying", "fpga-board-found", "fpga-board-identified",
                                     "fpga-test-started", "fpga-test-finished", "fpga-test-started",
                                     "fpga-test-finished", "fpga-verified"]  # fmt: skip
@@ -864,7 +970,7 @@ def test_the_events_go_out_in_order_and_a_dead_broker_stops_the_progress_ones(op
     assert sent[1][1] == {"board": "arty", "variant": "a7-35", "where": "-"}
     sent.clear()
     monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append(stage) and False)
-    runner.run({**opts, "board": "arty", "report": str(out), "no_publish": False})
+    runner.run({**opts, "board": "arty", "report": str(out), **_fleet(tmp_path)})
     assert sent == ["fpga-verifying", "fpga-verified"]  # one timeout, not one per test; the result is still tried
 
 
@@ -896,7 +1002,7 @@ def test_even_a_crash_outside_any_board_gives_a_report_and_fpga_verified(opts, t
     sent = []
     monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append((stage, details)) or True)
     out = tmp_path / "r.json"
-    assert runner.run({**opts, "report": str(out), "no_publish": False}) == 1
+    assert runner.run({**opts, "report": str(out), **_fleet(tmp_path)}) == 1
     report = json.loads(out.read_text())
     assert report["result"] == "error" and "KeyError" in report["reason"]
     assert sent[-1][0] == "fpga-verified" and sent[-1][1]["result"] == "error"
@@ -1370,3 +1476,20 @@ def test_a_temporary_file_is_not_left_when_the_report_cannot_be_made_readable(tm
     with pytest.raises(PermissionError):
         runner.write({"result": "pass"}, str(tmp_path / "verify.json"))
     assert list(tmp_path.iterdir()) == []
+
+
+def test_a_failed_check_says_whether_it_was_published_before_its_conclusion(opts, tmp_path, monkeypatch, capsys):
+    """The publish line is with the run's own lines; the plain conclusion (conclusion.py) still comes last and
+    names the report that was written."""
+    monkeypatch.setattr(runner, "installed", lambda: _boards(Fake("arty", seen=[{"variant": "a7-35"}], result="fail")))
+    monkeypatch.setattr(runner, "usb_devices", lambda: [])
+    monkeypatch.setattr(runner, "pci_devices", lambda: [])
+    sent = []
+    monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append(stage) or True)
+    fleet = _fleet(tmp_path)
+    out = tmp_path / "r.json"
+    assert runner.run({"state": opts["state"], "board": "arty", "report": str(out), **fleet}) == 1
+    err = capsys.readouterr().err
+    assert err.index("  published to the fleet: ") < err.index("RESULT: FAIL: a board did not pass.")
+    assert f"(JSON): {out}" in err.split("RESULT:")[1]
+    assert sent[0] == "fpga-verifying" and sent[-1] == "fpga-verified"

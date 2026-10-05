@@ -70,8 +70,8 @@ Install **one** of these. They conflict, so a host is never set up for two board
 ### Running it
 
 ```bash
-sudo fpgas-verify --no-publish             # check this host's board, as the boot does
-sudo fpgas-arty-verify --no-publish        # check the Arty, whatever this host is set up for
+sudo fpgas-verify                          # check this host's board, as the boot does
+sudo fpgas-arty-verify                     # check the Arty, whatever this host is set up for
 sudo fpgas-arty-verify --test ddr          # run one test; the JSON report goes to stdout
 sudo fpgas-acorn-verify --test pcie-link --test flash   # only some tests (these two only read)
 sudo fpgas-verify --update                 # after flashing or swapping a board on purpose
@@ -85,9 +85,12 @@ sudo fpgas-acorn-debug identify            # the same as fpgas-acorn-verify --id
 ```
 
 * Run them with `sudo`; `--help`, `--list` and `fpgas-<board>-debug list` do not need it.
-* Without `--no-publish`, a host that is not a fleet Pi also prints
-  `fpgas-verify: could not publish fpga-verifying ([Errno 2] No such file or directory: 'fleet-event')`.
-  The result is unaffected.
+* Nothing is sent anywhere unless a file says `[verify] publish = on` (next to `fpga-board`, below). A host that
+  only has the packages installed publishes nothing, at boot or by hand; its summary says so in one line
+  (`not published: no file says ...`), and there is no error. The
+  fpgas.online Pi root sets it in `/etc/fpgas-verify/fleet.ini`, so a fleet Pi tells its site how the check
+  went; there, `--no-publish` is how a run by hand stays private. The transcripts below were taken on fleet
+  Pis, which is why they carry it; each shows the line that says whether it was published.
 * `--test` runs part of the check. It is never published, never recorded, and its report goes to stdout
   unless `--report` says otherwise.
 * Only one command uses a board at a time. A second one prints
@@ -100,6 +103,13 @@ sudo fpgas-acorn-debug identify            # the same as fpgas-acorn-verify --id
   naming the file and its owner: remove it, or reboot.
 * Which board a host checks is `[verify] fpga-board = <board>` or `auto`, in `*.ini` files: the board's
   package puts one in `/usr/share/fpgas-online/verify/mode.d/`; one in `/etc/fpgas-verify/` overrides it.
+* `[verify] publish = on` in the same files makes the check tell the fleet how it went ([events](#events)). It
+  is off unless a file says so; a value that is neither `on` nor `off`, or two files that disagree, is an
+  error and nothing is sent. Accepted values are `on`, `yes`, `true`, `1` and `off`, `no`, `false`, `0`, as for `power-cycle-check`.
+  Every report and summary says whether the run was published and why: `"publish": {"on": true,
+  "configured_by": "/etc/fpgas-verify/fleet.ini"}` and `published to the fleet: ...`, or `"publish": {"on":
+  false, "why": "..."}` and `not published: ...`. On a fleet Pi, `not published: no file ...` in
+  `journalctl -b -u fpgas-verify` means the root lost its `fleet.ini`.
 * `[verify] power-cycle-check = on` in the same files switches on the Acorn's [power-cycle
   check](#the-acorns-power-cycle-check-opt-in). It is off unless a file says so: the fpgas.online Pi root sets it
   in `/etc/fpgas-verify/`; elsewhere it stays off.
@@ -240,6 +250,7 @@ There is one result: **pass** or **fail**. A fail is named for its worst cause:
 ```text
 $ sudo fpgas-verify --no-publish
 fpgas-verify: pass (mode auto, auto: USB/PCI IDs)
+  not published: --no-publish
   acorn cle-215+: pass
     pcie-link  pass
     pcie-bar0  pass
@@ -267,6 +278,7 @@ $ sudo fpgas-verify --no-publish
 ******************************************************************************
 *** FPGA VERIFY: FAIL ******************************************************
 fpgas-verify: fail (mode acorn, configured: acorn)
+  not published: --no-publish
   acorn cle-101: fail
     unconverted: runs SQRL's factory image, not the fpgas.online design
     pcie-link  pass
@@ -316,6 +328,7 @@ $ sudo fpgas-verify --no-publish
 ******************************************************************************
 *** FPGA VERIFY: FAIL ******************************************************
 fpgas-verify: fail (mode auto, auto: USB/PCI IDs)
+  not published: --no-publish
   acorn cle-215+: fail
     pcie-link  fail: link is x2, expected x1
     pcie-bar0  pass
@@ -354,6 +367,7 @@ $ journalctl -b -u fpgas-verify -o cat
 ******************************************************************************
 *** FPGA VERIFY: FAIL ******************************************************
 fpgas-verify: fail (mode auto, auto: probed (netv2))
+  published to the fleet: `publish = on` in /etc/fpgas-verify/fleet.ini
   netv2 a7-35: fail
     uart       pass
     ddr        fail: the test exited 1
@@ -389,6 +403,7 @@ $ sudo fpgas-verify --no-publish; echo "exit $?"
 *** FPGA VERIFY: MISSING ***************************************************
 fpgas-verify: missing (mode arty, -)
   no Digilent Arty A7 found: this host is set up for one, and nothing else is looked for
+  not published: --no-publish
 
 RESULT: MISSING: no board was found.
   no Digilent Arty A7 found: this host is set up for one, and nothing else is looked for
@@ -430,7 +445,7 @@ options:
   --images DIR       the bitstreams (default: installed)
   --state FILE       the recorded state
   --report FILE      the JSON report; '-' for stdout (the default with --test)
-  --no-publish       do not send the result to the fleet
+  --no-publish       send nothing to the fleet, even with publish = on
 
 the result is pass (exit 0) or a fail named for its worst cause (exit 1):
   pass          every test passed, and the board and flash are as recorded
@@ -443,6 +458,7 @@ files:
   /run/fpgas-online/verify.json            the report (--report)
   /var/lib/fpgas-online/verify-state.json  the recorded state (--state)
   /etc/fpgas-verify/*.ini                  fpga-board = BOARD or auto
+                                           publish = on or off
                                            power-cycle-check = on or off
 ```
 
@@ -464,7 +480,7 @@ options:
   --images DIR       the bitstreams (default: installed)
   --state FILE       the recorded state
   --report FILE      the JSON report; '-' for stdout (the default with --test)
-  --no-publish       do not send the result to the fleet
+  --no-publish       send nothing to the fleet, even with publish = on
 
 tests in the boot check:
   uart ddr spiflash ethernet pin-id
@@ -481,6 +497,7 @@ the result is pass (exit 0) or a fail named for its worst cause (exit 1):
 files:
   /run/fpgas-online/verify.json            the report (--report)
   /var/lib/fpgas-online/verify-state.json  the recorded state (--state)
+  /etc/fpgas-verify/*.ini                  publish = on or off
 ```
 
 ```text
@@ -531,7 +548,7 @@ options:
   --images DIR   the bitstreams (default: installed)
   --state FILE   the recorded state
   --report FILE  the JSON report; '-' for stdout (the default with --test)
-  --no-publish   do not send the result to the fleet
+  --no-publish   send nothing to the fleet, even with publish = on
 
 tests in the boot check:
   pcie-link pcie-bar0 rp1-pio jtag flash ddr p2-uart p2-serial scratch p2-gpio
@@ -548,7 +565,8 @@ the result is pass (exit 0) or a fail named for its worst cause (exit 1):
 files:
   /run/fpgas-online/verify.json            the report (--report)
   /var/lib/fpgas-online/verify-state.json  the recorded state (--state)
-  /etc/fpgas-verify/*.ini                  power-cycle-check = on or off
+  /etc/fpgas-verify/*.ini                  publish = on or off
+                                           power-cycle-check = on or off
 ```
 
 ```text
@@ -999,6 +1017,7 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 | What | How |
 |---|---|
 | Install | every netbooted Pi at a site shares one read-only NFS root, built with `fpgas-online-all-boards` (infra `roles/onpi/tasks/fpga_verify.yml`) |
+| Publishing | the root carries `/etc/fpgas-verify/fleet.ini` with `[verify]` and `publish = on` (infra `roles/onpi`); without it the check sends nothing and the site never lists the board |
 | When | `fpgas-verify.service` runs it once per boot, and only then: to check a Pi again, reboot it. It starts after `fpgas-fleet-agent.service` and before `fpgas-tt.service` (ordering only); time limit 30 minutes |
 | State | `/var/lib` is on the root's tmpfs overlay, so every boot is a first run and `changed` never fires |
 | No board | Orange Pis, or a Pi whose board is off, report `missing`, a fail; the Pi still boots and takes ssh |
@@ -1030,7 +1049,7 @@ The check tells the site what it is doing as it goes. `fleet-event` (from
   `fpga-verified` still is.
 * A failure to send is reported on stderr and does not change the result; the report stays in
   `/run/fpgas-online/verify.json`.
-* `--test` runs and `--no-publish` send nothing.
+* Nothing is sent without `publish = on` (above). With it, `--test` runs and `--no-publish` still send nothing.
 
 The progress events of an Acorn passing every test, in order, with their details (the check run against the
 tests' fake Acorn, [`tests/acorn_fakes.py`](../tests/acorn_fakes.py); the last 12 are cut):

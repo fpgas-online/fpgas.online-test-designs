@@ -18,7 +18,7 @@ echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(. /et
   | sudo tee /etc/apt/sources.list.d/apt.list
 sudo apt update
 sudo apt install fpgas-online-arty     # or -acorn, -netv2, -fomu, -tt-fpga; -all-boards for any of them
-sudo fpgas-verify --no-publish         # check the board now; it also runs at every boot
+sudo fpgas-verify                      # check the board now; it also runs at every boot
 ```
 
 **[docs/verify.md](docs/verify.md)**: installing, running and reading `fpgas-verify`, how fpgas.online uses it,

@@ -32,11 +32,15 @@ def _files(board):
         f"  {state.STATE!s:<40} the recorded state (--state)",
     ]
     ini = f"  {str(config.ADMIN_DIR) + '/*.ini':<40} "
+    more = f"  {'':<40} "
     if board is None:
         rows.append(f"{ini}fpga-board = BOARD or auto")
-        rows.append(f"  {'':<40} power-cycle-check = on or off")
-    elif getattr(board, "opt_in", None):  # the Acorn: its own command reads the same setting
-        rows.append(f"{ini}power-cycle-check = on or off")
+        rows.append(f"{more}publish = on or off")
+        rows.append(f"{more}power-cycle-check = on or off")
+    else:  # a board's own command reads the same settings, but not which board
+        rows.append(f"{ini}publish = on or off")
+        if getattr(board, "opt_in", None):  # the Acorn
+            rows.append(f"{more}power-cycle-check = on or off")
     return "files:\n" + "\n".join(rows)
 
 
@@ -101,7 +105,7 @@ def _verify_parser(prog, board=None):
     parser.add_argument("--state", type=pathlib.Path, metavar="FILE", help="the recorded state")
     report = "the JSON report; '-' for stdout" + (" (the default with --test)" if selectable else "")
     parser.add_argument("--report", metavar="FILE", help=report)
-    parser.add_argument("--no-publish", action="store_true", help="do not send the result to the fleet")
+    parser.add_argument("--no-publish", action="store_true", help="send nothing to the fleet, even with publish = on")
     return parser
 
 
