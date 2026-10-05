@@ -10,10 +10,11 @@ import json
 import pathlib
 
 from fpgas_online_verify import conclusion, runner
-from fpgas_online_verify.boards.acorn import check, suite
+from fpgas_online_verify.boards.acorn import check, links, setup, suite
 
 DATA = pathlib.Path(__file__).parent / "data"
 KEPT_IN = "/run/fpgas-online/verify.json"
+BLADE = setup.detect("Raspberry Pi Compute Module 5 Rev 1.0")
 UNCONVERTED = "unconverted: runs SQRL's factory image, not the fpgas.online design"
 GPIOD = ("P1 JTAG: openFPGALoader --detect failed (exit -6) before scanning the JTAG chain: openFPGALoader: "
          "line-request.c:199: gpiod_line_request_set_values_subset: Assertion `request' failed.")  # fmt: skip
@@ -193,6 +194,8 @@ def test_every_advice_pattern_matches_a_reason_the_code_gives():
         "this host (x) is not an Acorn setup in wiring.toml: y",
         "the FPGA has not restarted since an earlier boot's check",
         GPIOD,
+        links.pins_held(BLADE, {14: "1f00030000.serial (uart0)"}),
+        links.pins_held(BLADE, {2: '"spi0 CS0"'}),
         "no device on the P1 JTAG chain",
         "openocd is not installed",
         "x does not match its manifest",
@@ -213,3 +216,17 @@ def test_the_docs_show_what_the_code_prints_for_the_real_report():
     """docs/verify.md's first failing example is this report's summary, line for line."""
     docs = (pathlib.Path(__file__).parents[1] / "docs" / "verify.md").read_text()
     assert runner.summary(_blade(), KEPT_IN).strip("\n") in docs
+
+
+def test_a_jtag_pin_the_serial_port_has_gets_the_blades_advice_and_any_other_holder_the_general_one():
+    def todo(holders):
+        why = f"P1 JTAG could not be probed: {links.pins_held(BLADE, holders)}"
+        board = _acorn("fail", [("jtag", "fail", why)], reason=f"jtag fail: {why}")
+        return " ".join(line.strip() for line in conclusion.lines(_report("fail", [board])))
+
+    uart = todo({14: "1f00030000.serial (uart0)"})
+    assert "while the serial port is on, JTAG cannot be tested there" in uart and f"{conclusion.ISSUES}/127" in uart
+    assert "Stop what has the pin" not in uart  # one line of advice for it, not two that disagree
+    for holders in ({2: '"spi0 CS0"'}, {14: '"serial-test"'}):  # a program that asked for the line, whatever its name
+        other = todo(holders)
+        assert "serial port" not in other and "Stop what has the pin" in other

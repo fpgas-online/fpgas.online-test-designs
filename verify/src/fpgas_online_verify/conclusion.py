@@ -48,6 +48,16 @@ ADVICE = (
     (r"the FPGA has not restarted since",
      "The FPGA kept its configuration across the Pi's restart: power-cycle the Pi (not a reboot), then run the "
      "check again."),
+    (r"GPIO14 \(TMS\) is held by [0-9a-f]+\.serial \(.*the JTAG chain cannot be scanned",
+     "The serial port has a pin JTAG needs, so the JTAG test could not run. On a Compute Blade the JTAG TMS "
+     "wire and the serial port's TX are the same pin (GPIO14): while the serial port is on, JTAG cannot be "
+     "tested there. Booting with it off (enable_uart in config.txt) should free the pin; that is not yet "
+     f"confirmed on hardware: {ISSUES}/127"),
+    # any other holder: not the serial port's own case above, which has its own words
+    (r"^(?!.*GPIO14 \(TMS\) is held by [0-9a-f]+\.serial \().*is held by .*the JTAG chain cannot be scanned",
+     "A JTAG pin is in use by a driver or by another program (the reason above names it), so the JTAG test "
+     "could not run. Stop what has the pin, or take the pin away from it in the boot configuration, and run "
+     "the check again."),
     (r"gpiod_line_request",
      "openFPGALoader could not have one of the JTAG pins, because a driver holds it (on a Compute Blade the "
      "serial port holds GPIO14, which is also the JTAG TMS wire). The check cannot test JTAG on such a host "

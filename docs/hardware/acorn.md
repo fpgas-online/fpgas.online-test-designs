@@ -49,7 +49,9 @@ the others:
 | Compute Blade, CM5 | `2:3:4:14` | `libgpiod` (the RP1's GPIO chip) | GPIO14 / GPIO15 | cut |
 
 On the Blade J2 shares GPIO14 with TMS through 470 Ω, so after the JTAG test GPIO14 goes back to its UART
-function. The PCI slot and IDs, the device DNA, the flash's identity and the sha256 of each slot are what
+function. On a CM5 with kernel 6.18 the kernel does not lend GPIO14 while the serial port has it, so with the
+serial port on the `jtag` test fails saying so, without running openFPGALoader
+([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)). The PCI slot and IDs, the device DNA, the flash's identity and the sha256 of each slot are what
 `changed` compares, so a flash rewritten since the last run (by `fpgas-acorn-flash write`, say) is fatal
 until `sudo fpgas-verify --update`. The PCIe transfer rate (DMA) is not measured yet.
 
