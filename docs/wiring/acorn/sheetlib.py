@@ -45,7 +45,9 @@ def label_of(sig):
 # SVG canvas that knows how wide its text is
 # ----------------------------------------------------------------------------------------------
 class Sheet:
-    def __init__(self):
+    def __init__(self, w=W, h=H):
+        """A canvas of w x h. The wiring sheets are W x H; a step picture (steps.py) picks its own size."""
+        self.w, self.h = w, h
         self.parts = []
         self.texts = []  # (bbox, string, may_touch_wire)
         self.wire_segments = []  # (x0, y0, x1, y1)
@@ -174,7 +176,7 @@ class Sheet:
                     f"{what} leaves its box: {tuple(round(v) for v in inner)} vs {tuple(round(v) for v in outer)}"
                 )
         for bbox, s, _ in self.texts:
-            if bbox[0] < 8 or bbox[1] < 8 or bbox[2] > W - 8 or bbox[3] > H - 8:
+            if bbox[0] < 8 or bbox[1] < 8 or bbox[2] > self.w - 8 or bbox[3] > self.h - 8:
                 errors.append(f"text {s!r} leaves the canvas")
         for (a, sa, _), (b, sb, _) in itertools.combinations(self.texts, 2):
             if a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]:
@@ -211,9 +213,10 @@ class Sheet:
     def svg(self):
         body = "".join(self.parts)  # glyph ids are allocated while the parts are drawn
         return (
-            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}">'
+            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {self.w} {self.h}" width="{self.w}" '
+            f'height="{self.h}">'
             + self.glyph_defs()
-            + f'<rect width="{W}" height="{H}" fill="{PAPER}"/>'
+            + f'<rect width="{self.w}" height="{self.h}" fill="{PAPER}"/>'
             + body
             + "</svg>"
         )
