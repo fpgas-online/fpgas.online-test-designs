@@ -23,4 +23,5 @@ The tools to build its two cables, once for any number of hosts:
 | ☐ | wire strippers for fine wire, and side cutters | to cut the cable in half, strip about 3 mm from each wire, and cut back the wires that are not connected |
 | ☐ | crimping tool for 2.54 mm Dupont terminals | one crimp for each connected wire |
 | ☐ | soldering iron and solder | to join the series resistor into its wire |
-| ☐ | hot-air tool for the heat-shrink tube | to shrink the tube over each cut-back end (VCC always), and over a series resistor on a carrier that has one |
+| ☐ | hot-air tool for the heat-shrink tube | to shrink the tube over each cut-back end (VCC always), and over the series resistor |
+| ☐ | masking tape and a fine marker pen, or a paint pen | to flag the six wires with their numbers, and to mark the pin 1 corner of each housing |
