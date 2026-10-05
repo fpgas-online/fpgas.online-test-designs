@@ -93,10 +93,10 @@ def test_the_turned_round_warning_names_a_rail_exactly_when_a_wire_would_land_on
         and rail(header[str(plan.first + plan.last - pin)]["name"])
     }
     drawn = " ".join(words(picture(key, connector)))
-    assert ("Turned round, it puts" in drawn) == bool(hits)
-    assert ("Turned round, its wires land on the wrong pins." in drawn) == (not hits)
+    assert (re.search(r"Turned round, the housing puts [0-9.]+ V on", drawn) is not None) == bool(hits)
+    assert ("Turned round, the housing puts its wires on the wrong pins." in drawn) == (not hits)
     for sig in hits:
-        assert re.search(rf"Turned round, it puts [^.]*\b{wiring.SIGNALS[sig]['label']}\b", drawn)
+        assert re.search(rf"Turned round, the housing puts .*\b{wiring.SIGNALS[sig]['label']}\b", drawn)
 
 
 def test_which_cables_the_warning_names_a_rail_on():
@@ -105,9 +105,9 @@ def test_which_cables_the_warning_names_a_rail_on():
         (key, connector): steps.turned_warning(wiring.CARRIERS[key], steps.housing(wiring.CARRIERS[key], connector))
         for key, connector in CABLES
     }
-    assert warned["blade", "P1"] == "Turned round, it puts 5 V on the TCK wire."
-    assert warned["blade", "P2"] == "Turned round, it puts 5 V on the K2 wire."
-    assert warned["pi5", "P1"] == warned["pi5", "P2"] == "Turned round, its wires land on the wrong pins."
+    assert warned["blade", "P1"] == "Turned round, the housing puts 5 V on the TCK wire."
+    assert warned["blade", "P2"] == "Turned round, the housing puts 5 V on the K2 wire."
+    assert warned["pi5", "P1"] == warned["pi5", "P2"] == "Turned round, the housing puts its wires on the wrong pins."
 
 
 @pytest.mark.parametrize(("key", "connector"), CABLES)

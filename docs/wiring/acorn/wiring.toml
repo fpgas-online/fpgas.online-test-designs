@@ -43,6 +43,7 @@ VCC = { label = "VCC", what = "3.3 V from the Acorn" }
 #   "across" each row in turn (1 2 / 3 4 / ...), or "down" each column in turn (1 to 5, then 6 to 10).
 #   count: how many pins the whole header has, where `pins` lists only those near the wiring.
 #   printed: true where the pin numbers are printed on the board beside the header.
+# host (on the carrier): the host in a word, put before a pin name that does not say whose it is ("blade TX").
 # wires maps each connected signal to [header, pin]. Signals not listed are cut back: VCC always.
 #
 # What fpgas-verify reads to check a host of this carrier (verify/.../boards/acorn/setup.py):
@@ -98,6 +99,7 @@ note = "over each cut-back end (VCC always), and over the joints of a series res
 
 [carriers.pi5]
 name = "Raspberry Pi 5"
+host = "Pi"
 jtag_pins = "10:9:11:8"
 jtag_cable = "libgpiod"
 uart = "/dev/ttyAMA0"
@@ -159,6 +161,7 @@ GND1 = ["gpio", 25]
 
 [carriers.blade]
 name = "Compute Blade"
+host = "blade"
 jtag_pins = "2:3:4:14"
 # A CM4 has no RP1, so no rp1pio cable: libgpiod drives the BCM2711's own GPIO chip there.
 jtag_cable = "libgpiod"

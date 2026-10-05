@@ -13,11 +13,11 @@ are part of generated/ and of `gen.py --check`.
 
 import itertools
 import math
+import re
 from dataclasses import dataclass
 
 import wiring
 from gen import (
-    CREDITS,
     acorn_photo_down,
     blade_photos,
     crossings,
@@ -33,7 +33,7 @@ T = 17  # body text: 15 px where the picture is shown 700 px wide
 LINE = 22  # from one line of body text to the next
 PITCH = 60  # between two wires at the plug, as drawn: a whole number of lanes, so a wire is on a lane or well off it
 LANE = 20  # between two wires running side by side
-CAV_W, CAV_H, ROWS = 118, 48, 58  # a cavity, and from one row of cavities to the next
+CAV_W, CAV_H, ROWS = 118, 44, 52  # a cavity, and from one row of cavities to the next
 WIRE, HALO = 5.5, 11
 GREY = "#9aa0a8"  # a wire that is cut back and is not VCC
 
@@ -104,8 +104,21 @@ def turned_warning(c, plan):
         hits = " and ".join(
             f"{rail} on the {' and '.join(sigs)} wire{'s' if len(sigs) > 1 else ''}" for rail, sigs in rails.items()
         )
-        return f"Turned round, it puts {hits}."
-    return "Turned round, its wires land on the wrong pins."
+        return f"Turned round, the housing puts {hits}."
+    return "Turned round, the housing puts its wires on the wrong pins."
+
+
+# The cable's wires are all black (the note on the cable in wiring.toml's parts): the drawn colours are the signals'.
+COLOURS = "Wire colours are for this picture only: the real wires are all black. Count from the plug's pin 1 end."
+# How the card lies in the turned photo (gen.acorn_photo_down), for the reader holding it.
+CARD_WAY_UP = "Acorn turned underside up, M.2 edge to your left."
+
+
+def host_pin(c, name):
+    """A pin's name with the host before it where the name alone does not say whose it is: "blade TX"."""
+    if name in ("GND", "5 V", "3.3 V") or re.fullmatch(r"(GPIO|IO)\d+", name):
+        return name
+    return f"{c.host} {name}"
 
 
 def file_name(c, connector):
@@ -147,7 +160,7 @@ def token(sh, cx, cy, n, s=30):
 # ----------------------------------------------------------------------------------------------
 def assumptions(sh, x, y, w):
     """The box of what is not yet checked. Returns its bottom."""
-    pad, gap = 12, 24
+    pad, gap = 8, 24
     col_w = (w - 2 * pad - gap) / 2
     items = [wrap(sh, item, col_w - 14) for item in ASSUMPTIONS]
     # two columns of items, split where the taller column is shortest
@@ -187,7 +200,7 @@ def plug(sh, x1, y, pins):
     return out, body
 
 
-def cut_ends(sh, c, pins, out, cut, y, right):
+def cut_ends(sh, c, pins, out, cut, y, right, notes_y=0):
     """The wires that go in no cavity: each a short stub ending in a piece of heat-shrink tube, with why.
 
     Neighbours cut for the same reason share one note. The notes are in a column to the right of the last
@@ -201,7 +214,7 @@ def cut_ends(sh, c, pins, out, cut, y, right):
             groups[-1][0].append(sig)
         else:
             groups.append([[sig], why])
-    x, ty = max(out[s][0] for s in cut) + 20, y + 15
+    x, ty = max(out[s][0] for s in cut) + 20, max(y, notes_y) + 15  # the notes: below whatever is above them
     for sigs, why in groups:
         colour = RED if "VCC" in sigs else GREY
         for sig in sigs:
@@ -302,7 +315,7 @@ def host_blade(sh, c, plan, x, y, w):
         sh, x, ty - 8, tw, (x + tw + 14, y, close), only=plan.header, title=0, beside=True
     )
     # narrower than the board: the cone from the header on the board to the close-up passes on the right
-    ty = para(sh, x, ty + tw * 521 / 3120 + 26, "The housing is drawn the same way round as the close-up.", tw * 0.72)
+    ty = para(sh, x, ty + tw * 521 / 3120 + 26, "Housing drawn as in the close-up.", tw * 0.8)
     rect = hl[plan.header]
     name_w = sh.width(data.name, T, "bold") + 12
     centre = min((rect[0] + rect[2]) / 2, x + w - name_w / 2)
@@ -332,7 +345,13 @@ def host_pi5(sh, c, plan, x, y, w):
     sh.tag(frame[0] - 5, row_y(r0), str(plan.first), "#fff", anchor="end", **style)
     sh.tag(frame[2] + 5, row_y(r1), str(plan.last), "#fff", **style)
     if r0 >= 2:
-        sh.tag(frame[0] - 5, row_y(0) - 3, "pin 1", "#fff", anchor="end", **style)
+        # above its row, clear of the housing's own number, with a line to the pin
+        sh.tag(frame[0] - 5, row_y(0) - 12, "pin 1", "#fff", anchor="end", **style)
+        pin1 = px + (left - crop[0]) * k
+        sh.add(
+            f'<path d="M{frame[0] - 5:.1f},{row_y(0) - 12:.1f} L{pin1:.1f},{row_y(0):.1f}" stroke="{INK}" '
+            'stroke-width="2"/>'
+        )
     ty = para(sh, x, y + 14, "Pi 5 with the PoE M.2 HAT+, from above", tw, "bold")
     ty = para(
         sh,
@@ -364,13 +383,13 @@ def cable(c, connector):
     shape = f"{cols}×{len(grid)}"
     sh = Sheet(W, 100)  # the height is set once everything is placed
 
-    sh.text(30, 38, f"{connector} cable ({conn['what']}) for a {c.name}:", 26, "bold")
-    sh.text(30, 64, f"which wire goes in which cavity of the {shape} Dupont housing", 19, "bold", MUTED)
-    sh.add(f'<line x1="30" y1="78" x2="{W - 10}" y2="78" stroke="{INK}" stroke-width="1.5"/>')
+    sh.text(30, 34, f"{connector} cable ({conn['what']}) for a {c.name}:", 26, "bold")
+    sh.text(30, 58, f"which wire goes in which cavity of the {shape} Dupont housing", 19, "bold", MUTED)
+    sh.add(f'<line x1="30" y1="70" x2="{W - 10}" y2="70" stroke="{INK}" stroke-width="1.5"/>')
 
     # The card, and under its socket the plug the same way round; beside the card, where the housing will go.
-    sockets, (px, py, pw, ph) = acorn_photo_down(sh, 30, 148, 360, T, crop=(0, 60, 200, 590))
-    host_bottom = HOSTS[c.key](sh, c, plan, px + pw + 20, 92, W - 10 - (px + pw + 20))
+    sockets, (px, py, pw, ph) = acorn_photo_down(sh, 30, 132, 360, T, crop=(0, 60, 160, 590))
+    host_bottom = HOSTS[c.key](sh, c, plan, px + pw + 20, 84, W - 10 - (px + pw + 20))
     x1 = 164
     out, body = plug(sh, x1, max(py + ph + 30, host_bottom - 30), pins)
     # the cone is as wide on the plug as the socket it leaves, so it never spreads into the words beside it
@@ -380,14 +399,14 @@ def cable(c, connector):
     note_x = body[2] + 14
     ty = para(sh, note_x, max(body[1] + 20, host_bottom + 24), "The plug, seen from above", W - 10 - note_x, "bold")
     ty = para(sh, note_x, ty, "as it sits in the socket.", W - 10 - note_x, "bold")
-    para(sh, note_x, ty, "Sketched from the photo, not from the maker's drawing.", W - 10 - note_x, fill=MUTED)
+    ty = para(sh, note_x, ty, CARD_WAY_UP, W - 10 - note_x)
     tag_y = body[3] + 24
-    stubs_bottom, cut_bottom, cut_x = cut_ends(sh, c, pins, out, plan.cut, tag_y + 22, W - 10)
+    stubs_bottom, cut_bottom, cut_x = cut_ends(sh, c, pins, out, plan.cut, tag_y + 18, W - 10, ty - LINE + 8)
 
     # The housing: where its cavities and the wires' lanes are.
     wired = [s for s in pins if s not in plan.cut]
     where = {n: (r, col) for r, row in enumerate(grid) for col, n in enumerate(row)}
-    names = {n: pin_label(data.pins[n]["name"]) for n in plan.cavities}
+    names = {n: host_pin(c, pin_label(data.pins[n]["name"])) for n in plan.cavities}
     resistors = [s for s in wired if s in c.resistors]
     if resistors and cols > 1:
         raise wiring.WiringError(f"{c.key}: a series resistor at a housing of two columns is not drawn yet")
@@ -418,8 +437,8 @@ def cable(c, connector):
     else:
         cav_x = (lanes[-1] + LANE + gap,) if wires[0]["side"] > 0 else (cav,)
     body_x = (cav_x[0] - 10, cav_x[-1] + CAV_W + 10)
-    level0 = stubs_bottom + 16  # the first level a wire may cross to its lane at: below the cut ends
-    hy = level0 + LANE * (len(wired) - 1) + 44
+    level0 = stubs_bottom + 10  # the first level a wire may cross to its lane at: below the cut ends
+    hy = level0 + LANE * (len(wired) - 1) + 32
     if body_x[1] + 80 > cut_x:  # the housing reaches under the notes of the cut wires
         hy = max(hy, cut_bottom + 40)
 
@@ -465,7 +484,7 @@ def cable(c, connector):
             )  # fmt: skip
             sh.text(x + 9, cy + 6, "empty", T, "bold" if danger else "regular", RED if danger else MUTED, box=box)
             if danger:
-                sh.text(x + CAV_W - 8, cy + 20, name, T, "bold", RED, "end", box=box)
+                sh.text(x + CAV_W - 8, cy + 17, name, T, "bold", RED, "end", box=box)
         sh.text(x + CAV_W - 8, cy - 9, str(n), T, "regular", MUTED, "end", box=box)
         sh.add("</g><!--/cavity-->")
         note_fill, face = (RED, "bold") if name == "5 V" else (INK, "regular") if sig or rail else (MUTED, "regular")
@@ -498,15 +517,17 @@ def cable(c, connector):
         sh.text(body_x[0], y, "The two columns are drawn apart to let the wires through.", T, "regular", MUTED)
     # the view in words: under the sketch if that ends about level with the housing, else under the housing
     lines = sum(len(wrap(sh, text, 185, face="bold")) for text in view)
-    if side_y + lines * LINE <= hy + body_h + 30:
+    if side_y + lines * LINE <= y + 24:
         tx, ty, tw = side_x, side_y + LINE, 185
     else:
-        tx, ty, tw = 30, y + LINE + 6, side_x - 50
+        tx, ty, tw = 30, max(y, side_y) + LINE + 4, W - 40
     for text in view:
         ty = para(sh, tx, ty, text, tw, "bold")
-    y = max(y, ty - LINE, side_y) + 32
+    # the next line: a full line below words that span the picture, a little less below words at the side
+    y = max(y + 18, side_y + 18, ty - LINE + 21 if tx == side_x else ty + 2)
 
     # What the marks mean, the warnings, what is not yet checked, and whose photos these are.
+    y = para(sh, 30, y, COLOURS, W - 40) + 6
     token(sh, 43, y - 6, "n", 26)
     x = 64 + sh.text(64, y, "wire number: its place in the plug", T) + 28
     sh.text(x, y, "n", T, "regular", MUTED)
@@ -520,8 +541,8 @@ def cable(c, connector):
             sh,
             30,
             ty + 6,
-            f"{c.resistor_value} resistor: soldered into wire {pins.index(sig) + 1} ({label_of(sig)}) at the "
-            "housing end, with heat shrink over it and both joints.",
+            f"{c.resistor_value} resistor: soldered into wire {pins.index(sig) + 1} ({label_of(sig)}), "
+            "heat shrink over it and both joints.",
             W - 40,
             "bold",
         )
@@ -529,14 +550,13 @@ def cable(c, connector):
         sh,
         30,
         ty + 8,
-        f"Mark the pin {plan.first} corner of the housing before filling it. {turned_warning(c, plan)}",
+        f"Mark the pin {plan.first} corner first. {turned_warning(c, plan)}",
         W - 40,
         "bold",
         RED,
     )
-    ty = assumptions(sh, 30, ty - LINE + 12, W - 40) + 28
-    ty = para(sh, 30, ty, CREDITS[c.key], W - 40, fill=MUTED)
-    sh.h = math.ceil(ty - LINE + 14)
+    ty = assumptions(sh, 30, ty - LINE + 8, W - 40) + LINE
+    sh.h = math.ceil(ty - LINE + 4)
     sh.check(file_name(c, connector))
     return sh.svg(), score
 

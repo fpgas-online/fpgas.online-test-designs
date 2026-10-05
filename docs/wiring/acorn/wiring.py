@@ -55,6 +55,7 @@ class Carrier:
     headers: dict  # key -> Header
     wires: dict  # signal -> (header key, pin)
     parts: list  # [{qty, part, number?, note?}] besides what the wiring itself counts
+    host: str = ""  # the host in a word, for a pin name that needs its owner: "blade TX"
 
     def tag(self, sig):
         """The host's name for the pin a signal lands on, as the sheet prints it; None for none."""
@@ -106,7 +107,7 @@ def _carrier(key, raw):
     parts = [*raw.get("parts", []), *DATA.get("parts", [])]  # this carrier's own, then what every carrier needs
     c = Carrier(
         key, raw["name"], raw["jtag_pins"], set(raw.get("resistors", [])), raw.get("resistor_value", ""), headers,
-        wires, parts,
+        wires, parts, raw.get("host", raw["name"]),
     )  # fmt: skip
     _check(c)
     return c
