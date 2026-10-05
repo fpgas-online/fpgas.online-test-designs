@@ -161,9 +161,12 @@ jobs:
             done <<< "$artifacts"
           }
 
-          # List all workflow runs for this commit
-          runs=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${HEAD_SHA}&status=completed&per_page=100" \
-            --jq '.workflow_runs[] | select(.conclusion == "success") | .id')
+          # Every run for this commit that finished successfully, chosen from the plain list of its runs (the
+          # list the step above waited on). Not `status=completed`: GitHub's filtered listing lags the plain one
+          # by some minutes, and on main at 11695a3 it left out the UART build that had just finished, so the
+          # release was not made (#133).
+          runs=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${HEAD_SHA}&per_page=100" \
+            --jq '.workflow_runs[] | select(.status == "completed" and .conclusion == "success") | .id')
 
           for run_id in $runs; do
             download_run "$run_id"
