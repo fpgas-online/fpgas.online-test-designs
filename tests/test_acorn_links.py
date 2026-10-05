@@ -9,6 +9,7 @@ P2 UARTBone (2026-10-01). tests/test_acorn_verify.py runs them inside the whole 
 import ast
 import os
 import pathlib
+import struct
 
 import pytest
 from fpgas_online_verify.boards.acorn import check, links, setup, uartbone_link
@@ -522,3 +523,24 @@ def test_the_holder_is_named_from_the_pin_controllers_pinmux_pins(tmp_path):
         (debugfs / name / "pinmux-pins").write_text(text)
     assert links._pinmux_owners("/dev/gpiochip0", str(sysfs), str(debugfs)) == {14: "1f00030000.serial (uart0)"}
     assert links._pinmux_owners("/dev/gpiochip0", str(sysfs), str(tmp_path / "none")) == {}
+
+
+def test_a_line_is_held_when_the_kernel_flags_it_used_and_the_holder_is_its_consumer(tmp_path, monkeypatch):
+    """The packing of GPIO_V2_GET_LINEINFO: the offset goes in at byte 64, the flags come back at byte 72 (bit 0
+    is "not available for request") and the consumer at byte 32. The kernel is a stand-in here."""
+    chip = tmp_path / "gpiochip0"
+    chip.write_text("")
+    asked = []
+
+    def ioctl(fd, request, info):
+        (gpio,) = struct.unpack_from("I", info, 64)
+        asked.append((request, len(info), gpio))
+        if gpio == 3:
+            raise OSError(22, "Invalid argument")
+        struct.pack_into("Q", info, 72, {14: 1, 2: 1, 4: 2}.get(gpio, 0))  # GPIO4: another flag, not "used"
+        info[32 : 32 + len(b"spi0 CS0")] = b"spi0 CS0" if gpio == 2 else b"\0" * 8
+
+    monkeypatch.setattr(links.fcntl, "ioctl", ioctl)
+    none = str(tmp_path / "none")
+    assert links.held_pins(str(chip), [2, 3, 4, 14], none, none) == {2: '"spi0 CS0"', 14: "a kernel driver"}
+    assert asked == [(0xC100B405, 256, g) for g in (2, 3, 4, 14)]

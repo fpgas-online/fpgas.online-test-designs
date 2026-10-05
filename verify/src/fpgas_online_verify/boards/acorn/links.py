@@ -109,7 +109,7 @@ def _pinmux_owners(chip, sysfs=SYSFS_GPIO, debugfs=DEBUGFS_PINCTRL):
                     owners.update({int(pin): f"{device} ({function})" for pin, device, function
                                    in PINMUX_RE.findall(f.read())})  # fmt: skip
         return owners
-    except OSError:
+    except (OSError, ValueError):  # ValueError: text that does not decode
         return {}
 
 
@@ -130,7 +130,7 @@ def held_pins(chip, gpios, sysfs=SYSFS_GPIO, debugfs=DEBUGFS_PINCTRL):
             try:
                 fcntl.ioctl(fd, LINEINFO_IOCTL, info)
             except OSError:
-                return {}
+                continue  # this line cannot be asked about: what the others said still stands
             if struct.unpack_from("Q", info, 72)[0] & LINE_USED:
                 held[gpio] = bytes(info[32:64]).split(b"\0")[0].decode(errors="replace")
     finally:
