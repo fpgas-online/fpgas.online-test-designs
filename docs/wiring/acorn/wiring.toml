@@ -73,7 +73,7 @@ note = "over each cut-back wire end, and over the joints of a series resistor wh
 # carrier whose wiring has a series resistor.
 [[tools]]
 tool = "multimeter with a continuity buzzer"
-note = "all six wires of the cable are black: each is buzzed through from the plug to its terminal before the housing is fitted, and again after"
+note = "all six wires of the cable are black: each is buzzed through from the plug to its bare end before crimping, and to its cavity before connecting"
 
 [[tools]]
 tool = "wire strippers for fine wire, and side cutters"
@@ -90,7 +90,7 @@ note = "to join the series resistor into its wire"
 
 [[tools]]
 tool = "hot-air tool for the heat-shrink tube"
-note = "over each cut-back end and each soldered joint"
+note = "over each cut-back end (VCC always), and over the joints of a series resistor where there is one"
 
 [carriers.pi5]
 name = "Raspberry Pi 5"

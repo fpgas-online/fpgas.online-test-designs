@@ -18,8 +18,8 @@ The tools to build its two cables, once for any number of hosts:
 
 | Have it | Tool | What it is for |
 |---|---|---|
-| ☐ | multimeter with a continuity buzzer | all six wires of the cable are black: each is buzzed through from the plug to its terminal before the housing is fitted, and again after |
+| ☐ | multimeter with a continuity buzzer | all six wires of the cable are black: each is buzzed through from the plug to its bare end before crimping, and to its cavity before connecting |
 | ☐ | wire strippers for fine wire, and side cutters | to cut the cable in half, strip about 3 mm from each wire, and cut back the wires that are not connected |
 | ☐ | crimping tool for 2.54 mm Dupont terminals | one crimp for each connected wire |
 | ☐ | soldering iron and solder | to join the series resistor into its wire |
-| ☐ | hot-air tool for the heat-shrink tube | over each cut-back end and each soldered joint |
+| ☐ | hot-air tool for the heat-shrink tube | over each cut-back end (VCC always), and over the joints of a series resistor where there is one |
