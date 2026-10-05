@@ -244,9 +244,11 @@ def test_cavities_are_drawn_where_the_header_has_them_and_each_wire_ends_at_its_
 def test_the_last_step_fits_plugs_then_card_then_both_housings_on_their_headers(key):
     c = wiring.CARRIERS[key]
     last = steps.procedure(c).split("Fit the cables, in this order.")[1]
+    assert steps.fit_block(c).rstrip() in last and steps.png(steps.fit_name(c)) in last
+    assert "acorn-cable-ground-check.png" not in last
+    assert (wiring.HERE / "generated" / f"acorn-fit-{key}.md").read_text().endswith(steps.fit_block(c))
     order = [
-        last.index(s)
-        for s in (c.power_off, "Take both housings off", "Press the P1 plug", "Put the Acorn in the M.2 slot")
+        last.index(s) for s in (c.power_off, "take them off", "Press the P1 plug", "Put the Acorn in the M.2 slot")
     ]
     assert order == sorted(order)
     for connector in wiring.CONNECTORS:
@@ -259,7 +261,7 @@ def test_the_last_step_fits_plugs_then_card_then_both_housings_on_their_headers(
 def test_the_ground_check_is_in_each_flag_step_and_on_the_box():
     for c in wiring.CARRIERS.values():
         text = steps.procedure(c)
-        assert text.count("acorn-cable-ground-check.png") == len(wiring.CONNECTORS) + 1
+        assert text.count("acorn-cable-ground-check.png") == len(wiring.CONNECTORS)
         assert text.count("If wire 6 beeps instead, stop") == len(wiring.CONNECTORS)
         assert text.count(f"about {wiring.LENGTHS['flag_back']} mm back from the tip") == len(wiring.CONNECTORS)
         assert text.count("Every other cavity must stay silent for that contact.") == len(wiring.CONNECTORS)
