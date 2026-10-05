@@ -16,6 +16,7 @@ import wiring
 RAW = wiring.DATA["carriers"]
 CABLES = [(key, connector) for key in wiring.CARRIERS for connector in wiring.CONNECTORS]
 RAILS = ("5V", "3.3V")
+CUT = wiring.LENGTHS["cut_back"]
 
 
 @functools.cache
@@ -79,7 +80,9 @@ def test_the_picture_shows_each_cavity_with_its_wire_or_empty(key, connector):
         else:
             assert inside == ["empty", str(pin)], pin
     for sig in plan.cut:  # a cut wire is named in a note, and is in no cavity
-        assert any(re.match(rf"wires? .*\b{pins.index(sig) + 1}\b.*: cut off about 10 mm", w) for w in words(svg)), sig
+        assert any(re.match(rf"wires? .*\b{pins.index(sig) + 1}\b.*: cut off about {CUT} mm", w) for w in words(svg)), (
+            sig
+        )
 
 
 @pytest.mark.parametrize(("key", "connector"), CABLES)
@@ -154,7 +157,7 @@ def test_the_prepare_picture_cuts_exactly_the_cut_wires_and_puts_a_terminal_on_t
     assert {int(n) for n in re.findall(r'<g id="terminal-wire-(\d+)">', svg)} == wired
     cut = set()
     for note in words(svg):
-        m = re.match(r"wires? ([\d and]+): cut off about 10", note)
+        m = re.match(rf"wires? ([\d and]+): cut off about {CUT}\b", note)
         if m:
             cut |= {int(n) for n in re.findall(r"\d+", m.group(1))}
     assert cut == set(range(1, len(pins) + 1)) - wired
@@ -195,7 +198,7 @@ def test_the_procedure_is_complete_in_itself(key):
     assert text.count("which can destroy the host") == sum(
         "puts 5 V on" in steps.turned_warning(c, steps.housing(c, conn)) for conn in wiring.CONNECTORS
     )
-    assert "about 10 mm from the plug" in text and "buy a few more than this, as spares" in text
+    assert f"about {CUT} mm from the plug" in text and "buy a few more than this, as spares" in text
     assert (
         text.index("Slide a piece of the 3 mm tube") < text.index("Solder the") if RAW[key].get("resistors") else True
     )
@@ -205,3 +208,55 @@ def gen_credits(key):
     import gen
 
     return gen.CREDITS[key]
+
+
+@pytest.mark.parametrize(("key", "connector"), CABLES)
+def test_cavities_are_drawn_where_the_header_has_them_and_each_wire_ends_at_its_own(key, connector):
+    c = wiring.CARRIERS[key]
+    plan = steps.housing(c, connector)
+    pins = wiring.CONNECTORS[connector]["pins"]
+    svg = picture(key, connector)
+    at = {}
+    for pin, x, y, w, h in re.findall(
+        r'<g id="cavity-(\d+)"><rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"', svg
+    ):
+        at[int(pin)] = (float(x), float(y), float(x) + float(w), float(y) + float(h))
+    grid = c.headers[plan.header].grid(plan.first, plan.last)
+    assert sorted(at) == sorted(n for row in grid for n in row)
+    for r, row in enumerate(grid):
+        assert len({at[n][1] for n in row}) == 1  # one row, one height
+        assert [at[n][0] for n in row] == sorted(at[n][0] for n in row)  # left to right as the header has them
+        if r:
+            assert at[row[0]][1] > at[grid[r - 1][0]][1]  # rows downwards
+    for col in range(len(grid[0])):
+        assert len({at[row[col]][0] for row in grid}) == 1  # one column, one x
+    ends = {
+        int(n): (float(x), float(y)) for n, x, y in re.findall(r'id="wire-(\d+)-end" cx="([\d.]+)" cy="([\d.]+)"', svg)
+    }
+    wired = {pins.index(s) + 1: pin for s, (h, pin) in RAW[key]["wires"].items() if s in pins}
+    assert sorted(ends) == sorted(wired)
+    for number, (x, y) in ends.items():
+        own = [n for n, (x0, y0, x1, y1) in at.items() if x0 - 1 <= x <= x1 + 1 and y0 <= y <= y1]
+        assert own == [wired[number]], number
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_the_last_step_fits_plugs_then_card_then_both_housings_on_their_headers(key):
+    c = wiring.CARRIERS[key]
+    last = steps.procedure(c).split("Fit the cables, in this order.")[1]
+    order = [last.index(s) for s in ("Take both housings off", "Press the P1 plug", "Put the Acorn in the M.2 slot")]
+    assert order == sorted(order)
+    for connector in wiring.CONNECTORS:
+        plan = steps.housing(c, connector)
+        fit = f"the {connector} housing on the {c.headers[plan.header].name}"
+        assert last.index(fit) > order[-1]
+        assert f"marked corner on pin {plan.first}" in last
+
+
+def test_the_ground_check_is_in_each_flag_step_and_on_the_box():
+    for c in wiring.CARRIERS.values():
+        text = steps.procedure(c)
+        assert text.count("acorn-cable-ground-check.png") == len(wiring.CONNECTORS) + 1
+        assert text.count("If wire 6 beeps instead, stop") == len(wiring.CONNECTORS)
+        assert text.index("If wire 6 beeps instead") < text.index("Cut wire")
+    assert any("mounting pad is ground" in item and "not measured" in item for item in steps.ASSUMPTIONS)

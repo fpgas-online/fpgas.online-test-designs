@@ -50,8 +50,15 @@ ASSUMPTIONS = [
     "plug pin 1 is nearest the M.2 edge",
     "the plug's shape, drawn from a photo",
     "where the housing's windows are",
+    "which face of the plug shows its contacts",
+    "the card's mounting pad is ground (from the M.2 standard, not measured on this card)",
 ]
-ASSUMED = ("Not yet checked against a cable in the hand:", "Check wire 1 with a meter before trusting this view.")
+ASSUMED = (
+    "Not yet checked against a cable in the hand:",
+    "Check wire 1 with a meter before cutting anything: the flag step shows how.",
+)
+BOX_LINE = 20  # from line to line in the box of assumptions
+ACORN_PAD = (188, 0, 308, 80)  # the plated half-round mounting pad at the end of the card, in acorn-cw.jpg
 
 # hat-ccw.jpg, in photo pixels: the part shown, the centres of the header's two columns, the centre of
 # its first row, and from one row to the next.
@@ -176,19 +183,19 @@ def assumptions(sh, x, y, w):
     split = min(range(len(items) + 1), key=lambda k: max(sum(map(len, items[:k])), sum(map(len, items[k:]))) * 10 - k)
     columns = [items[:split], items[split:]]
     rows = max(sum(map(len, col)) for col in columns)
-    h = (2 + rows) * LINE + 2 * pad - 2
+    h = (2 + rows) * BOX_LINE + 2 * pad - 2
     box = (x, y, x + w, y + h)
     sh.rect(x, y, w, h, fill="#fff8e1", stroke=INK, sw=1.5, rx=8)
     top = y + pad + T * 0.8
     sh.text(x + pad, top, ASSUMED[0], T, "bold", INK, box=box)
     for i, col in enumerate(columns):
-        cx, ty = x + pad + i * (col_w + gap), top + LINE
+        cx, ty = x + pad + i * (col_w + gap), top + BOX_LINE
         for item in col:
             sh.add(f'<circle cx="{cx + 4}" cy="{ty - T * 0.3:.1f}" r="3" fill="{INK}"/>')
             for line in item:
                 sh.text(cx + 14, ty, line, T, "regular", INK, box=box)
-                ty += LINE
-    sh.text(x + pad, top + (1 + rows) * LINE, ASSUMED[1], T, "bold", INK, box=box)
+                ty += BOX_LINE
+    sh.text(x + pad, top + (1 + rows) * BOX_LINE, ASSUMED[1], T, "bold", INK, box=box)
     return y + h
 
 
@@ -407,7 +414,7 @@ def cable(c, connector):
     sh.add(f'<line x1="30" y1="70" x2="{W - 10}" y2="70" stroke="{INK}" stroke-width="1.5"/>')
 
     # The card, and under its socket the plug the same way round; beside the card, where the housing will go.
-    sockets, (px, py, pw, ph) = acorn_photo_down(sh, 30, 132, 360, T, crop=(0, 60, 160, 590))
+    sockets, (px, py, pw, ph) = acorn_photo_down(sh, 30, 132, 360, T, crop=(0, 60, 134, 590))
     host_bottom = HOSTS[c.key](sh, c, plan, px + pw + 20, 84, W - 10 - (px + pw + 20))
     x1 = 164
     out, body = plug(sh, x1, max(py + ph + 30, host_bottom - 30), pins)
@@ -471,6 +478,9 @@ def cable(c, connector):
     body_h = len(grid) * ROWS + 10
     sh.rect(body_x[0], hy, body_x[1] - body_x[0], body_h, fill="#f1f3f5", stroke=INK, sw=3, rx=10)
     draw_wires(sh, wires, paths, WIRE, HALO)
+    for w, path in zip(wires, paths, strict=True):  # where each wire ends, as drawn: test_steps.py reads it back
+        number = pins.index(w["sig"]) + 1
+        sh.add(f'<circle id="wire-{number}-end" cx="{path[-1][0]}" cy="{path[-1][1]}" r="0"/>')
     wire_tags(sh, out, wired, tag_y)
 
     for n, sig in plan.cavities.items():
@@ -531,14 +541,14 @@ def cable(c, connector):
     if side_y + lines * LINE <= y + 24:
         tx, ty, tw = side_x, side_y + LINE, 185
     else:
-        tx, ty, tw = 30, max(y, side_y) + LINE + 4, W - 40
+        tx, ty, tw = 30, max(y, side_y) + LINE - 2, W - 40
     for text in view:
         ty = para(sh, tx, ty, text, tw, "bold")
     # the next line: a full line below words that span the picture, a little less below words at the side
-    y = max(y + 18, side_y + 18, ty - LINE + 21 if tx == side_x else ty + 2)
+    y = max(y + 12, side_y + 12, ty - LINE + 21 if tx == side_x else ty + 2)
 
     # What the marks mean, the warnings, what is not yet checked, and whose photos these are.
-    y = para(sh, 30, y, COLOURS, W - 40) + 6
+    y = para(sh, 30, y, COLOURS, W - 40) + 2
     token(sh, 43, y - 6, "n", 26)
     x = 64 + sh.text(64, y, "wire number: its place in the plug", T) + 28
     sh.text(x, y, "n", T, "regular", MUTED)
@@ -566,7 +576,7 @@ def cable(c, connector):
         "bold",
         RED,
     )
-    ty = assumptions(sh, 30, ty - LINE + 8, W - 40) + LINE
+    ty = assumptions(sh, 30, ty - LINE + 5, W - 40) + LINE
     sh.h = math.ceil(ty - LINE + 4)
     sh.check(file_name(c, connector))
     return sh.svg(), score
@@ -723,7 +733,8 @@ def resistor_picture(c, connector):
     rows = (
         f"1. Cut wire {n} about {mm} mm from its free end.",
         f"2. Slide a piece of the {wiring.LENGTHS['resistor_tube']} mm tube onto the wire, clear of the cut.",
-        f"3. Solder the {c.resistor_value} resistor between the two cut ends.",
+        f"3. Strip about {wiring.LENGTHS['strip']} mm from each cut end. Solder the {c.resistor_value} resistor "
+        "between them.",
         "4. Slide the tube over the resistor and both joints and shrink it.",
     )
     y = 100
@@ -804,15 +815,15 @@ def terminal_side(sh, x, y):
 
 
 def crimp():
-    """Strip, crimp, and which way round the terminal goes into the housing."""
+    """Strip and crimp."""
     sh = Sheet(W, 100)
-    title(sh, "Crimp a terminal on each wire, and push it into its cavity", SKETCHED)
+    title(sh, "Crimp a terminal on each wire", SKETCHED)
     # 1: strip
-    sh.text(30, 100, "1. Strip about 3 mm.", T, "bold")
+    sh.text(30, 100, f"1. Strip about {wiring.LENGTHS['strip']} mm.", T, "bold")
     sh.add(f'<line x1="40" y1="150" x2="150" y2="150" stroke="{BODY}" stroke-width="9"/>')
     sh.add('<line x1="150" y1="150" x2="172" y2="150" stroke="#b87333" stroke-width="5"/>')
     sh.add(f'<path d="M150,166 v12 M172,166 v12 M150,172 h22" stroke="{INK}" stroke-width="1.5" fill="none"/>')
-    sh.text(161, 198, "3 mm", T, "regular", INK, "middle")
+    sh.text(161, 198, f"{wiring.LENGTHS['strip']} mm", T, "regular", INK, "middle")
     # 2: crimp
     sh.text(270, 100, "2. Crimp the terminal on.", T, "bold")
     end = terminal_side(sh, 350, 162)
@@ -820,22 +831,108 @@ def crimp():
     sh.text(end - 38, 130, "latch tab", T, "regular", MUTED, "middle")
     sh.text(270, 210, "One crimp grips the bare wire,", T)
     sh.text(270, 210 + LINE, "the other the insulation.", T)
-    # 3: push in
-    sh.text(30, 282, "3. Push it into its cavity, latch tab towards the window, until it clicks.", T, "bold")
-    hx, hy = 250, 326
+    sh.h = 262
+    sh.check("crimp")
+    return sh.svg()
+
+
+def ground_check():
+    """Before anything is cut: wire 1 is ground, so a meter from its end to the card's ground tells which end is 1."""
+    pins = wiring.CONNECTORS["P1"]["pins"]
+    sh = Sheet(W, 100)
+    title(
+        sh, "Check which wire is wire 1, before cutting anything", "the plug in its socket, the Acorn out of any slot"
+    )
+    crop = (0, 0, 330, 590)
+    sockets, (px, py, pw, ph) = acorn_photo_down(sh, 30, 132, 470, T, crop=crop)
+    k = pw / (crop[3] - crop[1])
+    x0, y0, x1, y1 = ACORN_PAD  # in acorn-cw.jpg; a quarter turn clockwise takes (x, y) to (crop height - y, x)
+    pad = (px + (crop[3] - y1) * k, py + (x0 - crop[0]) * k, px + (crop[3] - y0) * k, py + (x1 - crop[0]) * k)
+    highlight(sh, pad)
+    tx = px + pw + 16
+    sh.text(tx, (pad[1] + pad[3]) / 2 - 16, "the plated half-round", T, "bold")
+    sh.text(tx, (pad[1] + pad[3]) / 2 + 6, "mounting pad at the", T, "bold")
+    sh.text(tx, (pad[1] + pad[3]) / 2 + 28, "end of the card", T, "bold")
+    x1p = px + 56
+    out, body = plug(sh, x1p, py + ph + 34, pins)
+    half = (sockets["P1"][2] - sockets["P1"][0]) / 2
+    middle = (body[0] + body[2]) / 2
+    wedge(sh, sockets["P1"], (middle - half, body[1], middle + half, body[3]), down=True)
+    end = body[3] + 70
+    for sig, (x, y) in out.items():
+        sh.add(f'<line x1="{x}" y1="{y}" x2="{x}" y2="{end}" stroke="{BODY}" stroke-width="{WIRE}"/>')
+        token(sh, x, end + 20, pins.index(sig) + 1)
+    mx, my = 600, body[1] + 10  # the meter
+    sh.rect(mx, my, 130, 150, fill="#f3c623", stroke=INK, sw=3, rx=12)
+    sh.rect(mx + 14, my + 14, 102, 44, fill="#dfe8d8", stroke=INK, sw=1.5, rx=4)
+    sh.text(mx + 65, my + 43, "beep", T, "bold", INK, "middle")
+    sh.add(f'<circle cx="{mx + 65}" cy="{my + 102}" r="26" fill="{BODY}"/>')
+    sh.add(f'<path d="M{mx + 65},{my + 102} l0,-22" stroke="#fff" stroke-width="4"/>')
+    w1 = (out[pins[0]][0], end + 44)
+    sh.add(
+        f'<path d="M{mx},{my + 120} C{mx - 120},{my + 250} {w1[0] + 180},{w1[1] + 50} {w1[0]},{w1[1]}" fill="none" '
+        f'stroke="{RED}" stroke-width="4"/>'
+    )
+    pc = ((pad[0] + pad[2]) / 2, (pad[1] + pad[3]) / 2)
+    sh.add(
+        f'<path d="M{mx + 100},{my} C{mx + 100},{my - 60} {pc[0] + 40},{pc[1] + 70} {pc[0]},{pc[1]}" fill="none" '
+        f'stroke="{BODY}" stroke-width="4"/>'
+    )
+    sh.add(
+        f'<circle cx="{w1[0]}" cy="{w1[1]}" r="5" fill="{RED}"/><circle cx="{pc[0]}" cy="{pc[1]}" r="5" fill="{BODY}"/>'
+    )
+    y = end + 122
+    y = para(
+        sh,
+        30,
+        y,
+        "Wire flagged 1 to the mounting pad: the meter must beep. Wire flagged 6: it must stay silent.",
+        W - 40,
+        "bold",
+    )
+    y = para(
+        sh,
+        30,
+        y + 4,
+        "If wire 6 beeps instead, the numbering is reversed: take the flags off and number from the other end.",
+        W - 40,
+        "bold",
+        RED,
+    )
+    y = para(
+        sh,
+        30,
+        y + 4,
+        "Shown in socket P1; the same in P2. The pad is taken to be ground from the M.2 standard: not measured "
+        "on this card. The plug and the meter are sketched.",
+        W - 40,
+        fill=MUTED,
+    )
+    sh.h = math.ceil(y - LINE + 14)
+    sh.check("ground check")
+    return sh.svg()
+
+
+def push():
+    """Which way round a terminal goes into its cavity, and the pull that tests it."""
+    sh = Sheet(W, 100)
+    title(sh, "Push each terminal into its cavity", SKETCHED)
+    sh.text(30, 100, "1. Push it in, latch tab towards the window, until it clicks.", T, "bold")
+    hx, hy = 250, 150
     sh.rect(hx, hy, 150, 60, fill="#f1f3f5", stroke=INK, sw=3, rx=6)  # the housing, cut through one cavity
     sh.rect(hx + 46, hy - 4, 18, 8, fill=INK, rx=2)  # its window: the mark the cavity pictures use
-    terminal_side(sh, hx - 30, hy + 30)
+    end = terminal_side(sh, hx - 30, hy + 30)
     sh.add(f'<path d="M{hx - 150},{hy + 62} h60" stroke="{INK}" stroke-width="2.5"/>')
     sh.add(f'<path d="M{hx - 94},{hy + 56} l10,6 l-10,6 z" fill="{INK}"/>')
     sh.text(hx + 55, hy - 14, "window", T, "regular", MUTED, "middle")
+    sh.text(end - 80, hy + 84, "latch tab, under the window", T, "regular", MUTED)
     sh.text(hx + 170, hy + 22, "housing, cut through", T, "regular", MUTED)
     sh.text(hx + 170, hy + 22 + LINE, "one cavity", T, "regular", MUTED)
-    y = para(sh, 30, hy + 104, "4. Pull the wire gently. The terminal must stay in.", W - 40, "bold")
+    y = para(sh, 30, hy + 128, "2. Pull the wire gently. The terminal must stay in.", W - 40, "bold")
     sh.rect(34, y - 11, 18, 8, fill=INK, rx=2)
     y = para(sh, 64, y, "the window, as marked on the housing in the cavity picture", W - 74)
     sh.h = math.ceil(y - LINE + 14)
-    sh.check("crimp")
+    sh.check("push")
     return sh.svg()
 
 
@@ -878,7 +975,13 @@ def check_picture():
     return sh.svg()
 
 
-SHARED = {"acorn-cable-cut.svg": cut, "acorn-cable-crimp.svg": crimp, "acorn-cable-check.svg": check_picture}
+SHARED = {
+    "acorn-cable-cut.svg": cut,
+    "acorn-cable-ground-check.svg": ground_check,
+    "acorn-cable-crimp.svg": crimp,
+    "acorn-cable-push.svg": push,
+    "acorn-cable-check.svg": check_picture,
+}
 
 
 def prepare_name(c, connector):
@@ -907,6 +1010,12 @@ def procedure(c):
     labels = list(dict.fromkeys(label_of(s) for s in used))
     balls = [label_of(s) for s in used if "ball" in wiring.SIGNALS[s]]
 
+    spares = sum(
+        1 for s in wiring.CONNECTORS["P2"]["pins"] if s in c.wires and wiring.SIGNALS[s]["what"] == "spare GPIO"
+    )
+    count = {1: "one", 2: "two", 3: "three"}.get(spares, str(spares))
+    spare = f" and {count} spare GPIO{'s' if spares > 1 else ''}" if spares else ""
+
     def listed(words):
         return ", ".join(words[:-1]) + f" and {words[-1]}" if len(words) > 1 else words[0]
 
@@ -918,7 +1027,7 @@ def procedure(c):
         "### What you will have",
         "",
         f"Two short cables from the Acorn's two connectors to the {c.name}: the P1 cable carries JTAG, the P2 "
-        "cable carries the serial port.",
+        f"cable carries the serial port{spare}.",
         "",
         f"{listed(labels)} are the names on the pictures for each wire; {listed(balls)} are the FPGA's pin names.",
         "",
@@ -960,8 +1069,15 @@ def procedure(c):
         step(
             f"Press the plug of {half} half into socket {connector} on the underside of the Acorn. Hold the card "
             "underside up with the M.2 edge to your left: wire 1 is the leftmost. Put a numbered tape flag on each "
-            f"of the {len(pins)} wires at its free end, 1 to {len(pins)}, then take the plug out again.",
+            f"of the {len(pins)} wires at its free end, 1 to {len(pins)}, a little back from the tip, which will be "
+            "stripped later. "
+            "While the plug sits in the socket (the Acorn out of any slot, unpowered), set the meter to continuity. "
+            "Put one probe on the cut end of the wire flagged 1 and the other on the plated half-round mounting pad "
+            f"at the end of the card: it must beep. Then the wire flagged {len(pins)}: it must stay silent. "
+            f"If wire {len(pins)} beeps instead, stop: the numbering is reversed; take the flags off and number from "
+            "the other end. Then take the plug out again.",
             prep,
+            ("Checking which wire is wire 1, with a meter", "acorn-cable-ground-check.png"),
         )
         one = len(cut_n) == 1
         step(
@@ -976,13 +1092,14 @@ def procedure(c):
             step(
                 f"Cut wire {pins.index(sig) + 1} ({label_of(sig)}) about {lengths['resistor']} mm from its free end. "
                 f"Slide a piece of the {lengths['resistor_tube']} mm tube onto the wire, clear of the cut. "
+                f"Strip about {lengths['strip']} mm from each cut end. "
                 f"Solder the {c.resistor_value} resistor between the two cut ends. "
                 "Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this.",
                 (f"The resistor fitted into wire {pins.index(sig) + 1}", png(resistor_name(c, connector))),
             )
         step(
             f"Strip about {lengths['strip']} mm from {number_list(kept)}. Crimp a Dupont terminal on each.",
-            ("Stripping and crimping, and which way a terminal goes in", "acorn-cable-crimp.png"),
+            ("Stripping and crimping", "acorn-cable-crimp.png"),
         )
         warning = turned_warning(c, plan)
         if any(label_of(s) != "GND" for sigs in turned_rails(c, plan).values() for s in sigs):
@@ -994,18 +1111,21 @@ def procedure(c):
             f"that is the pin {plan.first} corner. "
             "For each wire, read the number on its flag, find the same number in the picture, and push its terminal "
             f"into that cavity, latch tab towards the window, until it clicks. {warning} "
-            f"{cut_who[0].upper()}{cut_who[1:]} {'goes' if one else 'go'} in no cavity.",
+            f"{cut_who[0].upper()}{cut_who[1:]} {'goes' if one else 'go'} in no cavity. "
+            "Pull each wire gently: the terminal must stay in.",
             cavity[connector],
+            ("Which way round a terminal goes in, and the pull test", "acorn-cable-push.png"),
         )
         step(
             "Check each wire with a meter on continuity. Put one probe on its contact on the plug and the other "
             "on its metal terminal, through the opening on the pin side of the housing: the meter must beep. "
-            "The cavities beside it must stay silent.",
+            "The cavities beside it must stay silent. "
+            "The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.",
             ("A meter between the plug and the housing", "acorn-cable-check.png"),
             cavity[connector],
         )
     out.extend(["#### Fit the cables", ""])
-    fits = []
+    fits, last = [], []
     for connector in wiring.CONNECTORS:
         plan = housing(c, connector)
         data = c.headers[plan.header]
@@ -1017,18 +1137,28 @@ def procedure(c):
             else f"pin {plan.first}, counted as in the picture"
         )
         fits.append(f"the {connector} housing on the {on} with its marked corner on {pin}")
+        last.append(f"the {connector} housing on the {on}, marked corner on pin {plan.first}")
     first = next(iter(wiring.CONNECTORS.values()))["pins"][0]
     step(
-        f"Fit {fits[0]}, and {fits[1]}. With the power off and the plugs not yet in the Acorn, put one meter probe "
+        f"Fit {fits[0]}, and {fits[1]}. The Acorn is not in its slot and the plugs are free. With the power off, "
+        "put one meter probe "
         f"on contact 1 ({label_of(first)}) of a plug and the other on {c.shell}: it must "
         f"beep. Do the same for the other plug. Then contact {len(pins)} of each plug ({label_of(pins[-1])}, the wire "
         "you cut back): against the shell and against every other contact it must be silent.",
         *cavity.values(),
     )
+    actions = [
+        "Take both housings off again.",
+        c.power_off,
+        "Press the P1 plug into socket P1 and the P2 plug into socket P2 on the underside of the Acorn, each the way "
+        "round it was when you put the flags on, until fully seated.",
+        "Put the Acorn in the M.2 slot and fit its screw.",
+        f"Fit {last[0]}, and {last[1]}.",
+    ]
     step(
-        "Still with the power off, press the plugs into sockets P1 and P2 on the underside of the Acorn, each the "
-        "way round it was when you put the flags on. Press each plug until it is fully seated.",
-        ("Where socket P1 is, and which end is wire 1", png(prepare_name(c, "P1"))),
+        "Fit the cables, in this order. The sockets are on the underside of the card and may not be reachable once "
+        "it is in the slot.\n\n" + "\n".join(f"{i}. {action}" for i, action in enumerate(actions, 1)),
+        ("Where sockets P1 and P2 are, and which end is wire 1", "acorn-cable-ground-check.png"),
         sheet,
     )
     out.extend([CREDITS[c.key] + ".", ""])
