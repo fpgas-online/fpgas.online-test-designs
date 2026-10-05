@@ -5,7 +5,7 @@ The parts for **one** Compute Blade host; for several hosts, that many of each.
 | Have it | Qty | Part | Part number | What it is for |
 |---|---|---|---|---|
 | ☐ | 1 | Compute Blade (Uptime Lab) | — | its M.2 slot takes the card |
-| ☐ | 1 | Raspberry Pi Compute Module 4 or 5 | — | — |
+| ☐ | 1 | Raspberry Pi Compute Module 4 or 5 | — | the host: it sits on the Compute Blade |
 | ☐ | 1 | SQRL Acorn CLE-215+, CLE-215 or CLE-101 (the same card is sold as LiteFury and NiteFury) | — | M.2 M-key, 2280 |
 | ☐ | 1 | Molex Pico-EZmate cable assembly, 6 circuits, a plug at each end | Molex 0369200601 | cut in half: one half is the P1 cable, the other the P2 cable. All six wires are black |
 | ☐ | 1 | heat-shrink tube, about 2 mm, a few centimetres | — | over each cut-back wire end |

@@ -134,6 +134,7 @@ resistors = []
 [[carriers.pi5.parts]]
 qty = 1
 part = "Raspberry Pi 5"
+note = "the host"
 
 [[carriers.pi5.parts]]
 qty = 1
@@ -207,6 +208,7 @@ note = "its M.2 slot takes the card"
 [[carriers.blade.parts]]
 qty = 1
 part = "Raspberry Pi Compute Module 4 or 5"
+note = "the host: it sits on the Compute Blade"
 
 [carriers.blade.hosts]
 "Raspberry Pi Compute Module 4" = { gpiochip = "brcm,bcm2711-gpio" }
