@@ -642,7 +642,9 @@ Each test checks its bitstream's sha256 against the `-bitstreams` package's mani
 | TT FPGA | USB `2e8a:0005`, `2e8a:000f` (and `2e8a:0003`, the RP2's boot loader, which fails) | `tt_fpga_program.py` over `mpremote` | `/dev/ttyACM0` | `sdk` (loads nothing), `pin-id`, `uart`; a board with a Tiny Tapeout chip: `sdk` only | `pmod` | USB serial |
 
 * The Arty and NeTV2 are left running openFPGALoader's SPI-over-JTAG bridge (used to read the flash back), the
-  others the last test design. Each returns to its flash image at its next power cycle.
+  Fomu its test design, and the TT FPGA a design that moves its display
+  ([what the TT FPGA is left running](#what-the-tt-fpga-is-left-running)). Each returns to its flash image at
+  its next power cycle (the TT FPGA has none: it is empty until something is loaded).
 * The Arty and NeTV2 have their whole JTAG IDCODE read and decoded before the tests
   ([the JTAG IDCODE](#the-jtag-idcode)): a part that is not the variant's fails the board. Then their device
   DNA is read over the same JTAG ([the device DNA](#the-device-dna)): one that cannot be read, or is all zeros
@@ -697,6 +699,31 @@ chosen.
   that named neither is an `error`); a chip board that named no microcontroller then fails the `sdk` test.
 * `variant` in the report, in `fpga-board-identified` and in `fpga-verified` is the decided one; it is absent
   when the board did not say.
+
+#### What the TT FPGA is left running
+
+The check of an FPGA board ends by streaming one more design, [`tt-display`](../designs/tt-display/README.md),
+so that the board's seven-segment display moves and the board looks alive on its camera
+([#139](https://github.com/fpgas-online/fpgas.online-test-designs/issues/139)): one segment runs round the
+ring, the middle segment changes at each lap, the dot blinks once a second. It is not a test, and nothing
+reads it.
+
+* It is loaded last, after every test (also after a failed one, and after single tests named with `--test`),
+  and nothing is done to the board after it. Like every load it is streamed: nothing is stored on the board.
+* It runs from the FPGA's own oscillator and drives only `uo_out`, so it needs nothing from the board's
+  microcontroller once it is loaded: no clock, no reset, no input.
+* The report says so: `left_running` (`design`, `bitstream`) on the board, a `left running:` line in the
+  summary, `board0_left_running` in `fpga-verified`.
+* **A load of it that fails does not fail the board**: the board was tested before it, and the design is for
+  the camera. It is said, though: `warnings` on the board in the report (`the display design, which the check
+  leaves running, could not be loaded (…): the board is left as its last test left it`), a `WARNING:` line in
+  the summary, and `board0_warnings` in `fpga-verified`.
+* **How long it lasts**: until the board's own SDK next starts, which happens when a visitor's Commander
+  connects or a design is run from the site. SDK 3.1.0 then loads its own default project
+  (`tt_um_factory_test`), which on an FPGA board shows a still pattern. What the display shows after that is
+  the SDK's and the site bridge's, not the check's.
+* A board with a Tiny Tapeout chip is left as it was: the design is an FPGA bitstream, and goes only to a
+  board that said it carries the FPGA.
 
 #### The `sdk` test
 
@@ -1227,7 +1254,7 @@ gpioinfo -c gpiochip0 | grep -E 'line +(2|3|4|14):'   # with that chip's name (g
   | `result`, `reason` | the result, and why, when no board was checked |
   | `checked_at` | when (UTC, ISO 8601) |
   | `mode`, `configured_by`, `chosen_by` | `auto` or the board, the file (or "command line") that said so, and how the boards were found |
-  | `boards[]` | per board: `board`, `variant`, `found`, `result`, `reason` (every fault), `bitstreams`, `tests[]` (`test`, `result`, `reason`, `output`, and what the test read or measured), `identity` ([who the board is](identity.md)), `state`. The Arty's and NeTV2's also have `jtag`: `result`, `reason`, the [IDCODE's fields](#the-jtag-idcode), and `dna` or `dna_error` ([the device DNA](#the-device-dna)). The Acorn's also has `setup`, `running`, `flash`, `not_run`, and `driver` when one was unbound. `not_run` (test: why) is also on a Tiny Tapeout board with a chip, for the cabling test it does not have yet |
+  | `boards[]` | per board: `board`, `variant`, `found`, `result`, `reason` (every fault), `bitstreams`, `tests[]` (`test`, `result`, `reason`, `output`, and what the test read or measured), `identity` ([who the board is](identity.md)), `state`. The Arty's and NeTV2's also have `jtag`: `result`, `reason`, the [IDCODE's fields](#the-jtag-idcode), and `dna` or `dna_error` ([the device DNA](#the-device-dna)). The Acorn's also has `setup`, `running`, `flash`, `not_run`, and `driver` when one was unbound. `not_run` (test: why) is also on a Tiny Tapeout board with a chip, for the cabling test it does not have yet. A TT FPGA board's has `left_running` (`design`, `bitstream`: the design the check loaded last and left), or `warnings` (a list of sentences) when that load failed; a warning never changes `result` |
   | `state` | `file`, and `recorded` (`first run` or `--update`) or `changes` |
 
   ```bash
@@ -1284,7 +1311,7 @@ The check tells the site what it is doing as it goes. `fleet-event` (from
 | `fpga-board-identified` | exactly once for each board found: an Acorn once PCIe and JTAG have said who it is, any other board before its tests; a board whose check stops first, or that is not checked (`--test` naming none of its tests), from what finding it showed | `schema` (`fpga-identity/1`) and the board's [identity](identity.md) |
 | `fpga-test-started` | each test starts | `board`, `test` |
 | `fpga-test-finished` | each test ends | `board`, `test`, `result`, `reason` |
-| `fpga-verified` | the check is done | the report, flattened: `result`, `mode`, `reason`; per board `board0` (`netv2 a7-35 fail`), `board0_reason`, `board0_tests` (`uart=pass ddr=fail spiflash=pass`), `board0_not_run` (the names in `not_run`, when there are any), `board0_bitstreams`, `board0_state_*`, `board0_identity_*` |
+| `fpga-verified` | the check is done | the report, flattened: `result`, `mode`, `reason`; per board `board0` (`netv2 a7-35 fail`), `board0_reason`, `board0_tests` (`uart=pass ddr=fail spiflash=pass`), `board0_not_run` (the names in `not_run`, when there are any), `board0_left_running` (the design's name) or `board0_warnings`, `board0_bitstreams`, `board0_state_*`, `board0_identity_*` |
 
 * `board` is the board's name, or `name@where` when there are two of a kind.
 * `fpga-verifying` and the progress events each wait at most 15 s, so a broker that is down does not hold up
