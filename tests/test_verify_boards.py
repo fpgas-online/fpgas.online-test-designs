@@ -1229,6 +1229,28 @@ def test_only_an_rp2_that_can_be_a_demo_board_is_a_tiny_tapeout_board(tmp_path):
         ("1-2", "2e8a:000f", None), ("1-3", "2e8a:0003", None), ("1-4", "2e8a:0005", None)]  # fmt: skip
 
 
+def test_two_demo_boards_on_one_pi_are_both_an_error_and_neither_is_touched(tmp_path, monkeypatch):
+    """#124: the check has one port for a demo board, so with two it does not know which one it would talk to."""
+    _installed(monkeypatch)
+    usb = _usb(tmp_path, **{"1-2": ("2e8a", "0005", "A"), "1-4": ("2e8a", "0005", "B"),
+                            "1-1": ("2e8a", "000c", "PROBE")})  # fmt: skip
+    found = TT.spot(_host(TT), usb, [])
+    assert [(f["usb"], f["beside"]) for f in found] == [("1-2", ["1-4"]), ("1-4", ["1-2"])]
+    for one in found:
+        run = Runner([_rpi_hwid(TT_BOARD)])
+        report = _check(TT, tmp_path / one["usb"], one, run)
+        assert report["result"] == "error" and report["variant"] is None and _nothing_loaded(report, run)
+        assert report["reason"] == tt_fpga.ONE_PORT.format(n=2, port="/dev/ttyACM0")
+        assert report["reason"].startswith("2 Raspberry Pi RP2 boards that can be Tiny Tapeout demo boards")
+        assert not any(MAIN_PY in " ".join(c) or SDK_START in " ".join(c) or "rpi-hwid" in " ".join(c)
+                       for c in run.calls)  # fmt: skip
+        assert report["identity"]["serial"] == one["serial"] and report["found"]["beside"]
+    # one board alone has no such key, and is checked as before
+    (tmp_path / "one").mkdir()
+    (alone,) = TT.spot(_host(TT), _usb(tmp_path / "one", **{"1-2": ("2e8a", "0005", "A")}), [])
+    assert "beside" not in alone
+
+
 def test_no_other_board_settles_its_variant_late():
     """The hook is the Tiny Tapeout board's alone: every other board's check runs as it did."""
     assert TT.variant_from_board and not any(b.variant_from_board for b in (ARTY, NETV2, FOMU))

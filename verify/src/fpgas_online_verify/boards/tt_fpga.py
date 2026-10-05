@@ -219,6 +219,11 @@ VENDOR = "2e8a"  # Raspberry Pi
 MICROPYTHON, BOOTLOADER = ("0005", "000f"), "0003"
 NOT_TT_FIRMWARE = "a Raspberry Pi RP2 is on USB but is not running the Tiny Tapeout firmware"
 NOT_SAID = "the board did not say which Tiny Tapeout board it is, so no test was run and nothing was loaded"
+# The check talks to the demo board on one fixed port, and with two boards on a Pi that port is one of them and
+# not known to be this one. Checking each on its own port is not written (no host has two): said, not guessed.
+ONE_PORT = ("{n} Raspberry Pi RP2 boards that can be Tiny Tapeout demo boards are on this Pi's USB, and the check "
+            "has one port for a demo board ({port}): it cannot tell which board that port is, so none was asked "
+            "what it is, no test was run and nothing was loaded")  # fmt: skip
 
 
 class TTFPGA(TestBoard):
@@ -256,11 +261,17 @@ class TTFPGA(TestBoard):
     }  # fmt: skip
 
     def spot(self, host, usb, pci):
-        """Every RP2 on USB that can be a Tiny Tapeout demo board, with no variant: settle() decides it."""
-        return [{"variant": None, "usb": d["path"], "serial": d["serial"], "usb_id": f"{d['vendor']}:{d['product']}"}
-                for d in usb_matching(usb, self.usb)]  # fmt: skip
+        """Every RP2 on USB that can be a Tiny Tapeout demo board, with no variant: settle() decides it. With
+        more than one, each also has "beside": where the others are (ONE_PORT)."""
+        found = [{"variant": None, "usb": d["path"], "serial": d["serial"], "usb_id": f"{d['vendor']}:{d['product']}"}
+                 for d in usb_matching(usb, self.usb)]  # fmt: skip
+        if len(found) > 1:
+            found = [{**f, "beside": [o["usb"] for o in found if o is not f]} for f in found]
+        return found
 
     def settle(self, asked, found, facts):
+        if found.get("beside"):
+            raise Problem("error", ONE_PORT.format(n=len(found["beside"]) + 1, port=self.port))
         if found.get("usb_id") == f"{VENDOR}:{BOOTLOADER}":
             raise Problem("fail", f"{NOT_TT_FIRMWARE}: it is in its USB boot loader ({found['usb_id']})")
         chip = facts.get("chip")
@@ -280,8 +291,8 @@ class TTFPGA(TestBoard):
         return variant
 
     def port_facts(self, host, found, runner=run):
-        if not found.get("serial") or found.get("usb_id") == f"{VENDOR}:{BOOTLOADER}":
-            return {}
+        if not found.get("serial") or found.get("usb_id") == f"{VENDOR}:{BOOTLOADER}" or found.get("beside"):
+            return {}  # nothing is asked of a board that cannot answer, or that the port may not be the port of
         # Whether main.py is still the SDK's own needs only the port, so it is said with or without rpi-hwid.
         why_not = main_py_changed(host["port"], runner)
         if why_not:

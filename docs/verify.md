@@ -673,6 +673,9 @@ chosen.
 | (an RP2 in its USB boot loader, `2e8a:0003`) | none | `fail`: `a Raspberry Pi RP2 is on USB but is not running the Tiny Tapeout firmware` |
 
 * An FPGA bitstream only ever goes to a board that said it is an FPGA board.
+* The check has one port for a demo board (`/dev/ttyACM0`). With two such RP2 boards on one Pi it cannot tell
+  which board that port is, so each is an `error` (`2 Raspberry Pi RP2 boards that can be Tiny Tapeout demo
+  boards are on this Pi's USB, …`): none is asked what it is and nothing is loaded. No host has two.
 * Other Raspberry Pi USB products (a debug probe, say) are not Tiny Tapeout boards and are not looked at.
 * `--variant tt-fpga` does not override the board: asked for on a board that says otherwise, it is an `error`.
 * `fpgas-tt-fpga-debug program` and `test` are for use by hand: they do not ask the board, so they need
