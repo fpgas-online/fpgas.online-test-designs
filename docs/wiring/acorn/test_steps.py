@@ -154,7 +154,7 @@ def test_the_prepare_picture_cuts_exactly_the_cut_wires_and_puts_a_terminal_on_t
     assert {int(n) for n in re.findall(r'<g id="terminal-wire-(\d+)">', svg)} == wired
     cut = set()
     for note in words(svg):
-        m = re.match(r"wires? ([\d and]+): cut back", note)
+        m = re.match(r"wires? ([\d and]+): cut off about 10", note)
         if m:
             cut |= {int(n) for n in re.findall(r"\d+", m.group(1))}
     assert cut == set(range(1, len(pins) + 1)) - wired
@@ -182,15 +182,23 @@ def test_the_procedure_is_complete_in_itself(key):
         assert image.replace(".png", ".svg") in built or image.startswith("acorn-wiring-"), image
     for connector in wiring.CONNECTORS:
         cavity = steps.file_name(c, connector).replace(".svg", ".png")
-        assert images.count(cavity) == 2  # where the housing is filled, and again where it is checked
+        assert images.count(cavity) == 3  # where the housing is filled, where it is checked, where it is fitted
         assert steps.prepare_name(c, connector).replace(".svg", ".png") in images
-        assert steps.turned_warning(c, steps.housing(c, connector)) in text
+        assert steps.turned_warning(c, steps.housing(c, connector))[:-1] in text
     assert tables.bom(c).strip() in text  # the parts list itself, not a link to it
     assert "it must never reach the host" in text
     prose = "\n".join(line for line in text.splitlines() if not line.startswith("|"))  # the parts tables apart
     assert not re.search(r"^#{1,2} ", text, re.M) and "—" not in prose and "see above" not in text.lower()
     assert text.rstrip().endswith(gen_credits(key) + ".")
-    assert ("470 Ω resistor into the cut" in text) == bool(RAW[key].get("resistors"))
+    assert ("Solder the 470 Ω resistor between the two cut ends." in text) == bool(RAW[key].get("resistors"))
+    assert ("heat-shrink tube, about 3 mm" in text) == bool(RAW[key].get("resistors"))
+    assert text.count("which can destroy the host") == sum(
+        "puts 5 V on" in steps.turned_warning(c, steps.housing(c, conn)) for conn in wiring.CONNECTORS
+    )
+    assert "about 10 mm from the plug" in text and "and a few spare" in text
+    assert (
+        text.index("Slide a piece of the wider tube") < text.index("Solder the") if RAW[key].get("resistors") else True
+    )
 
 
 def gen_credits(key):
