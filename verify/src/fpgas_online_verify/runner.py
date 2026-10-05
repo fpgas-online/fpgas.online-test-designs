@@ -22,7 +22,7 @@ import pathlib
 import sys
 import tempfile
 
-from . import config, identity, state
+from . import conclusion, config, identity, state
 from .board import installed
 from .core import Problem, flatten, hold_lock, pci_devices, publish, tail, usb_devices, worst
 from .core import run as run_command
@@ -304,7 +304,9 @@ def details(report):
     return out
 
 
-def summary(report):
+def summary(report, kept_in=None):
+    """What a person reads: every test as it ran, and for a check that did not pass, the plain conclusion last
+    (conclusion.py). `kept_in` is where the JSON report was written."""
     lines = []
     bad = report["result"] != "pass"
     if bad:
@@ -319,9 +321,8 @@ def summary(report):
     if report.get("not_checked"):
         lines.append(f"  not checked (none of the tests asked for): {', '.join(report['not_checked'])}")
     for b in report["boards"]:
-        lines.append(
-            f"  {b['board']} {b.get('variant') or '-'}: {b['result']}" + (f": {b['reason']}" if "reason" in b else "")
-        )
+        lines.append(f"  {b['board']} {b.get('variant') or '-'}: {b['result']}")
+        lines += [f"    {reason}" for reason in conclusion.own_reasons(b)]  # a test's reason is on its own line
         for t in b.get("tests", []):
             lines.append(f"    {t['test']:<10} {t['result']}" + (f": {t['reason']}" if "reason" in t else ""))
             if t["result"] != "pass":
@@ -338,13 +339,10 @@ def summary(report):
     st = report.get("state", {})
     for change in st.get("changes", []):
         lines.append(f"  CHANGED {change}")
-    if st.get("changes"):
-        lines.append("  if this change was meant (a board flashed or swapped on purpose): sudo fpgas-verify --update")
-    elif st.get("recorded"):
+    if st.get("recorded") and not st.get("changes"):
         lines.append(f"  state recorded ({st['recorded']}) in {st['file']}")
     if bad:
-        lines.append("  more: fpgas-<board>-debug (fpgas-online-<board>-debug)")
-        lines += ["*" * 78, ""]
+        lines += [*conclusion.lines(report, kept_in), "*" * 78, ""]
     return "\n".join(lines)
 
 
@@ -436,7 +434,7 @@ def run(options, prog="fpgas-verify"):
         report["reason"] = "; ".join([*([report["reason"]] if report.get("reason") else []), *not_started])
     if to_stdout or not_started:  # stdout gets one document, after the starts: nothing reads it as a file
         kept_in = write(report, kept_in)
-    print(summary(report), file=sys.stderr)
+    print(summary(report, kept_in), file=sys.stderr)
     if not options.get("no_publish"):
         publish("fpga-verified", details(report), kept_in, prog)
     return 0 if report["result"] == "pass" else 1

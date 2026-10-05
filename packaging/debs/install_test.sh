@@ -51,6 +51,12 @@ done
 command -v openFPGALoader >/dev/null || fail "no openFPGALoader for the Arty"
 command -v arping >/dev/null || fail "no arping for the Arty's Ethernet test"
 enabled || fail "fpgas-verify.service not enabled by fpgas-online-arty"
+# The file the unit names is there, sets nothing, and is a conffile (kept across upgrades, removed by a purge).
+envfile=$(sed -n 's/^EnvironmentFile=-\{0,1\}//p' /usr/lib/systemd/system/fpgas-verify.service)
+[ "$envfile" = /etc/default/fpgas-verify ] || fail "the unit's EnvironmentFile is '$envfile'"
+[ -f "$envfile" ] || fail "the unit names $envfile, which is not installed"
+if grep -v '^#' "$envfile" | grep -q .; then fail "$envfile sets something: $(grep -v '^#' "$envfile")"; fi
+dpkg-query -W -f='${Conffiles}\n' fpgas-online-verify | grep -q "^ $envfile " || fail "$envfile is not a conffile"
 cat /usr/share/fpgas-online/verify/mode.d/*.ini
 set +e
 fpgas-verify --no-publish --report /tmp/r.json 2>/tmp/err; rc=$?

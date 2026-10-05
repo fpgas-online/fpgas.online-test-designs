@@ -182,3 +182,15 @@ def test_the_run_directory_and_every_lock_file_are_made_root_owned_at_boot(tmp_p
 def test_the_tmpfiles_postinst_creates_only_when_systemd_runs():
     text = (_REPO / "packaging" / "debs" / "tmpfiles.postinst").read_text()
     assert "[ -d /run/systemd/system ]" in text and "/usr/lib/tmpfiles.d/fpgas-online-*.conf" in text
+
+
+def test_the_file_the_unit_reads_its_options_from_is_installed_and_sets_nothing(tmp_path):
+    """`systemctl cat fpgas-verify` is where people look (issue #126): the EnvironmentFile it names exists, as a
+    conffile of comments, so an edit survives an upgrade and the boot run is `fpgas-verify` until someone edits."""
+    unit = (_REPO / "packaging" / "debs" / "fpgas-verify.service").read_text()
+    (named,) = [line.split("=", 1)[1].lstrip("-") for line in unit.splitlines() if line.startswith("EnvironmentFile=")]
+    entry = _dst(bd.verify_nfpm(V, tmp_path))[named]
+    assert named == bd.DEFAULTS == "/etc/default/fpgas-verify" and entry["type"] == "config|noreplace"
+    text = pathlib.Path(entry["src"]).read_text()
+    assert all(line.startswith("#") for line in text.splitlines())
+    assert "FPGAS_VERIFY_ARGS" in text and "$FPGAS_VERIFY_ARGS" in unit
