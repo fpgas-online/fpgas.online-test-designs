@@ -175,11 +175,23 @@ jobs:
             for wf in $(gh api "repos/${{ github.repository }}/actions/workflows?per_page=100" \
               --jq '.workflows[] | select(.state == "active" and (.name | startswith("Build: "))) | .id'); do
               grep -qx "$wf" <<< "$ran" && continue
-              main_run=$(gh api "repos/${{ github.repository }}/actions/workflows/${wf}/runs?branch=main&event=push&status=success&per_page=1" \
-                --jq '.workflow_runs[0] | select(.) | "\(.id) \(.head_sha) \(.name)"')
-              [ -z "$main_run" ] && continue
-              read -r main_id main_sha main_name <<< "$main_run"
+              # Main's newest SUCCESSFUL run of this workflow, chosen from the plain list of its newest runs.
+              # Not `status=success&per_page=1`: for some minutes after main's builds finish, GitHub's filtered
+              # listing has answered with a run that is months old, whose artifacts the packages cannot use (#133).
+              main_runs=$(gh api "repos/${{ github.repository }}/actions/workflows/${wf}/runs?branch=main&event=push&per_page=30" \
+                --jq '.workflow_runs[] | "\(.id) \(.head_sha) \(.status) \(.conclusion) \(.name)"')
+              [ -z "$main_runs" ] && continue
+              main_run=$(awk '$3 == "completed" && $4 == "success" { print; exit }' <<< "$main_runs")
+              if [ -z "$main_run" ]; then
+                echo "::error::none of main's 30 newest runs of workflow ${wf} succeeded: no build to take its artifacts from"
+                exit 1
+              fi
+              read -r main_id main_sha _ _ main_name <<< "$main_run"
+              skipped=$(awk -v id="$main_id" '$1 == id { exit } { n++ } END { print n + 0 }' <<< "$main_runs")
               echo "::notice::${main_name} did not run on this pull request (paths filter): its artifacts are from main, run ${main_id} at ${main_sha}"
+              if [ "$skipped" -gt 0 ]; then
+                echo "::warning::${main_name}: ${skipped} newer run(s) on main are not finished or did not succeed; an older build is used"
+              fi
               download_run "$main_id"
             done
           fi
