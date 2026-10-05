@@ -10,6 +10,7 @@ import re
 
 import pytest
 import steps
+import tables
 import wiring
 
 RAW = wiring.DATA["carriers"]
@@ -142,3 +143,57 @@ def test_a_two_column_header_without_its_numbering_is_refused():
     del d["headers"]["ext"]["numbering"]
     with pytest.raises(wiring.WiringError, match="needs numbering"):
         wiring._carrier("blade", d)
+
+
+@pytest.mark.parametrize(("key", "connector"), CABLES)
+def test_the_prepare_picture_cuts_exactly_the_cut_wires_and_puts_a_terminal_on_the_rest(key, connector):
+    c = wiring.CARRIERS[key]
+    pins = wiring.CONNECTORS[connector]["pins"]
+    svg = steps.prepare(c, connector)
+    wired = {pins.index(s) + 1 for s in pins if s in RAW[key]["wires"]}
+    assert {int(n) for n in re.findall(r'<g id="terminal-wire-(\d+)">', svg)} == wired
+    cut = set()
+    for note in words(svg):
+        m = re.match(r"wires? ([\d and]+): cut back", note)
+        if m:
+            cut |= {int(n) for n in re.findall(r"\d+", m.group(1))}
+    assert cut == set(range(1, len(pins) + 1)) - wired
+    # the resistor: on exactly the wires wiring.toml lists for this carrier, if they are in this cable
+    resistors = {pins.index(s) + 1 for s in RAW[key].get("resistors", []) if s in pins}
+    assert {int(n) for n in re.findall(r'<g id="resistor-wire-(\d+)">', svg)} == resistors
+
+
+def test_the_series_resistor_is_prepared_on_wire_2_of_the_blade_p2_cable_only():
+    found = {
+        (key, connector): re.findall(r'<g id="resistor-wire-(\d+)">', steps.prepare(wiring.CARRIERS[key], connector))
+        for key, connector in CABLES
+    }
+    assert found == {("blade", "P2"): ["2"], ("blade", "P1"): [], ("pi5", "P1"): [], ("pi5", "P2"): []}
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_the_procedure_is_complete_in_itself(key):
+    c = wiring.CARRIERS[key]
+    text = steps.procedure(c)
+    built = set(steps.build_names())
+    images = re.findall(r"!\[[^\]]*\]\(([^)]+)\)", text)
+    for image in images:
+        assert "/" not in image  # by bare file name, in the same directory
+        assert image.replace(".png", ".svg") in built or image.startswith("acorn-wiring-"), image
+    for connector in wiring.CONNECTORS:
+        cavity = steps.file_name(c, connector).replace(".svg", ".png")
+        assert images.count(cavity) == 2  # where the housing is filled, and again where it is checked
+        assert steps.prepare_name(c, connector).replace(".svg", ".png") in images
+        assert steps.turned_warning(c, steps.housing(c, connector)) in text
+    assert tables.bom(c).strip() in text  # the parts list itself, not a link to it
+    assert "it must never reach the host" in text
+    prose = "\n".join(line for line in text.splitlines() if not line.startswith("|"))  # the parts tables apart
+    assert not re.search(r"^#{1,2} ", text, re.M) and "—" not in prose and "see above" not in text.lower()
+    assert text.rstrip().endswith(gen_credits(key) + ".")
+    assert ("470 Ω resistor into the cut" in text) == bool(RAW[key].get("resistors"))
+
+
+def gen_credits(key):
+    import gen
+
+    return gen.CREDITS[key]
