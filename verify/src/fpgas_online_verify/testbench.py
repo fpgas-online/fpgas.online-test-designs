@@ -409,7 +409,8 @@ class TestBoard(Board):
                 except Problem as p:  # not settled, or no bitstreams: no test runs and nothing is loaded
                     refused, tests = p, []
             self.identified(report, found, options, facts)
-            for test in self.fact_tests_for(variant) if options.get("tests") is None and not refused else ():
+            # No test named (None, or an empty list, which names none): the board's own word is judged.
+            for test in self.fact_tests_for(variant) if not options.get("tests") and not refused else ():
                 event("fpga-test-started", {"test": test})
                 report["tests"].append(self.run_fact_test(test, variant, facts))
                 done = report["tests"][-1]

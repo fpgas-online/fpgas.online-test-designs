@@ -1165,9 +1165,9 @@ def test_single_tests_asked_of_a_chip_board_are_refused_and_nothing_is_loaded(tm
     assert report["result"] == "error" and report["variant"] == "tt-asic" and _nothing_loaded(report, run)
     assert report["reason"] == "the board is a tt-asic: uart is for a tt-fpga, so nothing was loaded"
     assert report["tests"] == [] and "not_run" not in report
-    # an empty list is no test asked for: nothing runs, and nothing is refused
+    # an empty list names no test: nothing is refused, and the board is not passed unchecked
     none = _check(TT, tmp_path / "none", TT_FOUND, Runner([_rpi_hwid(TT_CHIP_BOARD)]), tests=[])
-    assert none["tests"] == [] and none["result"] == "pass" and _nothing_loaded(none, run)
+    assert [t["test"] for t in none["tests"]] == ["sdk"] and none["result"] == "pass"
 
 
 def test_an_fpga_board_whose_sdk_test_fails_still_has_its_designs_loaded_and_tested(tmp_path, monkeypatch):
