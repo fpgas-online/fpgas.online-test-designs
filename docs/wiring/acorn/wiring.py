@@ -24,6 +24,7 @@ for _tool in TOOLS:
         or _tool.get("when", "resistor") != "resistor"
     ):
         raise ValueError(f'wiring.toml: a tool needs a `tool`, and may have `note` and `when = "resistor"`: {_tool}')
+SOURCES = DATA["sources"]  # {a statement of fact on the pages: where it comes from, or that nobody has checked}
 LENGTHS = DATA["lengths"]  # {cut_back, resistor, strip, tube, resistor_tube, flag_back, resistor_lead} in mm
 if LENGTHS["flag_back"] <= LENGTHS["resistor"]:
     raise ValueError("wiring.toml: [lengths] flag_back must be greater than resistor, or the flag is cut off")

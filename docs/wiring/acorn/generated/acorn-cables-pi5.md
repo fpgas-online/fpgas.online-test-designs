@@ -33,6 +33,7 @@ The tools to build its two cables, once for any number of hosts:
 | ☐ | wire strippers for fine wire, and side cutters | to cut the cable in half, strip about 3 mm from each wire, and cut back the wires that are not connected |
 | ☐ | crimping tool for 2.54 mm Dupont terminals | one crimp for each connected wire |
 | ☐ | hot-air tool for the heat-shrink tube | to shrink the tube over each cut-back end (VCC always) |
+| ☐ | a fine probe tip for the multimeter, or a sewing pin to hold against a probe | the plug's contacts are 1.2 mm apart, and a terminal is reached through a small opening |
 | ☐ | masking tape and a fine marker pen, or a paint pen | to flag the six wires with their numbers, and to mark the pin 1 corner of each housing |
 
 ### Steps
@@ -46,7 +47,7 @@ The tools to build its two cables, once for any number of hosts:
 **2.** Find wire 1 of the P1 cable and flag the wires, before cutting any wire back.
 
 1. Press the plug of one half into socket P1 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost.
-2. Put a numbered tape flag on each of the 6 wires, 1 at the left to 6, about 25 mm back from the tip, clear of the end that will be cut and stripped later.
+2. Put a numbered tape flag on each of the 6 wires, 1 at the left to 6, about 25 mm back from the tip, clear of the end that will be cut and stripped later. Write P1 on the flag of wire 1 as well: off the card, the two halves look alike.
 3. With the plug still in the socket (the Acorn out of any slot, unpowered), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: it must beep.
 4. Do the same with the wire flagged 6: it must stay silent.
 5. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again; if still neither beeps, stop: the ground point is not confirmed.
@@ -83,7 +84,7 @@ The P1 cavity picture again, to read each wire's cavity from:
 **7.** Find wire 1 of the P2 cable and flag the wires, before cutting any wire back.
 
 1. Press the plug of the other half into socket P2 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost.
-2. Put a numbered tape flag on each of the 6 wires, 1 at the left to 6, about 25 mm back from the tip, clear of the end that will be cut and stripped later.
+2. Put a numbered tape flag on each of the 6 wires, 1 at the left to 6, about 25 mm back from the tip, clear of the end that will be cut and stripped later. Write P2 on the flag of wire 1 as well: off the card, the two halves look alike.
 3. With the plug still in the socket (the Acorn out of any slot, unpowered), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: it must beep.
 4. Do the same with the wire flagged 6: it must stay silent.
 5. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again; if still neither beeps, stop: the ground point is not confirmed.
@@ -117,7 +118,7 @@ The P2 cavity picture again, to read each wire's cavity from:
 
 #### Fit the cables
 
-**12.** This is a bench check; the housings come off again in the next step. Fit the P1 housing on the 40-pin header pins 19 to 26 with its marked corner on pin 19, counted as in the picture, and the P2 housing on the 40-pin header pins 5 to 10 with its marked corner on pin 5, counted as in the picture. The Acorn is not in its slot and the plugs are free. With the host unplugged from power, put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Raspberry Pi 5: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent.
+**12.** This is a bench check; the housings come off again before the cables are fitted. Fit the P1 housing on the 40-pin header pins 19 to 26 with its marked corner on pin 19, counted as in the picture, and the P2 housing on the 40-pin header pins 5 to 10 with its marked corner on pin 5, counted as in the picture. The Acorn is not in its slot and the plugs are free. With the host unplugged from power, put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Raspberry Pi 5: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent.
 
 ![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check.png)
 
@@ -131,7 +132,7 @@ The P2 cavity picture again, for where its housing sits and which corner is mark
 
 **13.** Fit the cables, in this order. The sockets are on the underside of the card and may not be reachable once it is in the slot.
 
-1. Power off the Raspberry Pi 5 and unplug its power.
+1. Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE.
 2. If the housings are on the headers (after the bench check), take them off.
 3. Press the P1 plug into socket P1 and the P2 plug into socket P2 on the underside of the Acorn, each the way round it was when you put the flags on, until fully seated.
 4. Put the Acorn in the M.2 slot and fit its screw.

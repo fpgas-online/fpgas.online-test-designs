@@ -870,6 +870,8 @@ def flagged(sh, connector, sockets, x1, y, mark=True):
         sh.add(f'<line x1="{x}" y1="{y0}" x2="{x}" y2="{end}" stroke="{BODY}" stroke-width="{WIRE}"/>')
         sh.add(f'<g id="flag-wire-{n}">')  # test_steps.py reads this back
         token(sh, x + 15, end - FLAG_AT, n)
+        if n == 1:  # the cable's name, written on wire 1's flag: off the card the two halves look alike
+            sh.text(x - 12, end - FLAG_AT + 6, connector, T, "bold", INK, "end")
         sh.add("</g>")
         ends[sig] = (x, end)
     if mark:
@@ -1079,8 +1081,27 @@ def has_resistor(c, connector):
 SHEETS = {"pi5": "acorn-wiring-pi5", "blade": "acorn-wiring-computeblade"}
 
 
-def procedure(c):
-    """Building both cables for one carrier, complete in itself: every step has its picture under it."""
+def resistor_reason(c, sig):
+    """Why a wire has a series resistor, from the wiring: its host pin is also a JTAG wire's."""
+    gpio = c.headers[c.wires[sig][0]].pins[c.wires[sig][1]].get("gpio")
+    shared = [
+        s for s in ("TDI", "TDO", "TCK", "TMS") if c.headers[c.wires[s][0]].pins[c.wires[s][1]].get("gpio") == gpio
+    ]
+    if not gpio or not shared:
+        raise wiring.WiringError(f"{c.key}: {sig} has a series resistor and shares its pin with no JTAG wire: say why")
+    return (
+        f"The resistor is there because {label_of(sig)} lands on {gpio}, which is also JTAG {shared[0]}: with "
+        f"{c.resistor_value} in the wire, JTAG still gets through if the FPGA drives {label_of(sig)} (designed so, "
+        "not yet measured)."
+    )
+
+
+def procedure_parts(c, restart=False):
+    """Building both cables for one carrier, as parts: {"head", one per connector, "fit", "tail": lines}.
+
+    restart: number the steps from 1 in each part, for a part that is a page of its own. The first cable's
+    part starts with cutting the bought cable in half.
+    """
     lengths = wiring.LENGTHS
     sheet = (f"The finished wiring: Acorn to {c.name}", f"{SHEETS[c.key]}.png")
     used = [s for conn in wiring.CONNECTORS.values() for s in conn["pins"] if s in c.wires]
@@ -1118,15 +1139,17 @@ def procedure(c):
         "",
     ]
     n = 0
+    parts = {"head": out}
+    target = parts[next(iter(wiring.CONNECTORS))] = []
 
     def step(text, *images):
         nonlocal n
         n += 1
-        out.extend([f"**{n}.** {text}", ""])
+        target.extend([f"**{n}.** {text}", ""])
         for alt, name, *lead in images:
             for line in lead:  # why this picture is here again
-                out.extend([line, ""])
-            out.extend([f"![{alt}]({name})", ""])
+                target.extend([line, ""])
+            target.extend([f"![{alt}]({name})", ""])
 
     step(
         "Cut the Molex cable in half with side cutters. Each half is one cable.",
@@ -1147,13 +1170,17 @@ def procedure(c):
         kept = [pins.index(s) + 1 for s in pins if s not in plan.cut]
         cut_n = [pins.index(s) + 1 for s in plan.cut]
         cut_who = number_list(cut_n)
-        out.extend([f"#### The {connector} cable ({conn['what']})", ""])
+        target = parts.setdefault(connector, [])
+        if restart and not target:
+            n = 0
+        target.extend([f"#### The {connector} cable ({conn['what']})", ""])
         half = "one" if connector == next(iter(wiring.CONNECTORS)) else "the other"
         flag = [
             f"Press the plug of {half} half into socket {connector} on the underside of the Acorn. Hold the card "
             "underside up with the M.2 edge to your left: wire 1 is the leftmost.",
             f"Put a numbered tape flag on each of the {len(pins)} wires, 1 at the left to {len(pins)}, about "
-            f"{lengths['flag_back']} mm back from the tip, clear of the end that will be cut and stripped later.",
+            f"{lengths['flag_back']} mm back from the tip, clear of the end that will be cut and stripped later. "
+            f"Write {connector} on the flag of wire 1 as well: off the card, the two halves look alike.",
             "With the plug still in the socket (the Acorn out of any slot, unpowered), set the meter to continuity. "
             "Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not "
             "stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: "
@@ -1188,7 +1215,8 @@ def procedure(c):
                 f"Strip about {lengths['strip']} mm from each cut end. "
                 f"Trim the resistor's leads to about {lengths['resistor_lead']} mm each. "
                 f"Solder the {c.resistor_value} resistor between the two cut ends. "
-                "Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this.",
+                "Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this. "
+                + resistor_reason(c, sig),
                 (f"The resistor fitted into wire {pins.index(sig) + 1}", png(resistor_name(c, connector))),
             )
         step(
@@ -1218,7 +1246,10 @@ def procedure(c):
             ("A meter between the plug and the housing", "acorn-cable-check.png"),
             (*cavity[connector], f"The {connector} cavity picture again, to read each wire's cavity from:"),
         )
-    out.extend(["#### Fit the cables", ""])
+    target = parts["fit"] = []
+    if restart:
+        n = 0
+    target.extend(["#### Fit the cables", ""])
     fits = []
     for connector in wiring.CONNECTORS:
         plan = housing(c, connector)
@@ -1233,7 +1264,7 @@ def procedure(c):
         fits.append(f"the {connector} housing on the {on} with its marked corner on {pin}")
     first = next(iter(wiring.CONNECTORS.values()))["pins"][0]
     step(
-        "This is a bench check; the housings come off again in the next step. "
+        "This is a bench check; the housings come off again before the cables are fitted. "
         f"Fit {fits[0]}, and {fits[1]}. The Acorn is not in its slot and the plugs are free. With the host unplugged "
         "from power, "
         "put one meter probe "
@@ -1251,8 +1282,150 @@ def procedure(c):
         "it is in the slot.\n\n" + fit_block(c).rstrip(),
         sheet,
     )
-    out.extend([CREDITS[c.key] + ".", ""])
-    return "\n".join(out)
+    parts["tail"] = [CREDITS[c.key] + ".", ""]
+    return parts
+
+
+def procedure(c):
+    """Building both cables for one carrier, complete in itself: every step has its picture under it."""
+    return "\n".join(line for part in procedure_parts(c).values() for line in part)
+
+
+# ----------------------------------------------------------------------------------------------
+# The building guide as pages: an overview, then one page for each connector's cable, then the fitting
+# ----------------------------------------------------------------------------------------------
+# connector -> (file name part, the page's name). The parts list is tables.bom(), a page of its own.
+GUIDE = {"P1": ("jtag", "JTAG connector"), "P2": ("uart", "UART connector")}
+
+
+def guide_name(c, part):
+    return f"acorn-build-{c.key}-{part}.md"
+
+
+def needs(c, connector):
+    """What one cable takes from the parts list, as a sentence: so its page can be started without the list."""
+    plan = housing(c, connector)
+    data = c.headers[plan.header]
+    pins = wiring.CONNECTORS[connector]["pins"]
+    wired = [s for s in pins if s not in plan.cut]
+    shape = f"{data.columns}×{(plan.last - plan.first + 1) // data.columns}"
+    items = [
+        "one half of the Molex Pico-EZmate cable (a plug with six black wires)"
+        if connector == next(iter(wiring.CONNECTORS))
+        else 'the other half of the Molex Pico-EZmate cable, which was cut in half on the page "JTAG connector 1" '
+        "(if it is still whole: cut it in the middle with side cutters; each half is one cable)",
+        f"the {shape} Dupont housing",
+        f"{len(wired)} Dupont crimp terminals, and a few spare",
+        f"{wiring.LENGTHS['tube']} mm heat-shrink tube",
+    ]
+    if has_resistor(c, connector):
+        items += [f"the {c.resistor_value} resistor", f"{wiring.LENGTHS['resistor_tube']} mm heat-shrink tube"]
+    tools = "a multimeter with a continuity buzzer, side cutters, wire strippers, the crimping tool, a hot-air tool"
+    if has_resistor(c, connector):
+        tools += ", a soldering iron"
+    return (
+        f"For this cable: {'; '.join(items)}. Tools: {tools}, masking tape and a fine pen. The Acorn itself, out of "
+        "any slot, is needed for the first steps."
+    )
+
+
+def renumbered(lines):
+    """The lines of some steps, numbered from 1 again."""
+    out, n = [], 0
+    for line in lines:
+        if re.match(r"\*\*\d+\.\*\* ", line):
+            n += 1
+            line = re.sub(r"^\*\*\d+\.\*\* ", f"**{n}.** ", line)
+        out.append(line)
+    return out
+
+
+def cut_at(lines, start):
+    """(the steps before the one whose words start `start`, that step and the rest numbered from 1)."""
+    at = [i for i, line in enumerate(lines) if re.match(r"\*\*\d+\.\*\* " + re.escape(start), line)]
+    if len(at) != 1:
+        raise wiring.WiringError(f"the building guide: {len(at)} steps start {start!r}, not one")
+    return lines[: at[0]], renumbered(lines[at[0] :])
+
+
+def guide(c):
+    """{file name: page body} of the building guide for one carrier. Each page is complete in itself.
+
+    overview; for each connector `<part>-1` (prepare the wires) and `<part>-2` (fill and check the housing);
+    bench (the check with the power off); fit.
+    """
+    if list(wiring.CONNECTORS) != list(GUIDE):
+        raise wiring.WiringError(f"the building guide has pages for {list(GUIDE)}, not for {list(wiring.CONNECTORS)}")
+    parts = procedure_parts(c, restart=True)
+    head = parts["head"]
+    will_have = head[head.index("### What you will have") + 2 : head.index("### Parts and tools")]
+    not_run = "Not yet run by us on this hardware: written from the design."
+    order = ["Parts and tools: the list to tick off before starting."]
+    for connector, (_, title) in GUIDE.items():
+        order += [
+            f"{title} 1: the {connector} cable's wires flagged, checked with a meter, cut back and crimped.",
+            f"{title} 2: the {connector} cable's housing filled and checked.",
+        ]
+    order += [
+        "Bench check: both cables checked on the host with the power off.",
+        "Fitting: the plugs, the card and the housings go in.",
+        "Verifying: the check run on the host, and what a failing line means.",
+    ]
+
+    def body(need, lines, *after):
+        """A page: what it needs, its steps, then any headed paragraphs that close it."""
+        lines = [line for line in lines if not line.startswith("#### ")]
+        while lines and not lines[0]:
+            lines.pop(0)
+        head = [tables.BANNER.strip(), "", not_run, "", "## What you need", "", need, "", "## Steps", ""]
+        return "\n".join([*head, *lines, *(line for extra in after for line in (extra, "")), *parts["tail"]])
+
+    out = {
+        guide_name(c, "overview"): "\n".join([
+            tables.BANNER.strip(), "", not_run, "", "## What you will have", "", *will_have,
+            "Nothing in this guide cuts a wire to length: each half of the bought cable is used at the length it "
+            "has, apart from the wires that are cut back at the plug. Whether a half reaches from the card in its "
+            f"slot to the {c.name}'s headers has not been measured by us: hold a half cable against the host before "
+            "you cut anything.", "",
+            "## The order of work", "", *(f"{i}. {line}" for i, line in enumerate(order, 1)), "",
+            "## Where the facts come from", "",
+            *(f"- {claim}: {source}." for claim, source in wiring.SOURCES.items()), "",
+            *parts["tail"],
+        ]),
+    }  # fmt: skip
+    for connector, (part, _title) in GUIDE.items():
+        plan = housing(c, connector)
+        data = c.headers[plan.header]
+        shape = f"{data.columns}×{(plan.last - plan.first + 1) // data.columns}"
+        prepare, fill = cut_at(parts[connector], "Hold the empty")
+        out[guide_name(c, f"{part}-1")] = body(needs(c, connector), prepare)
+        out[guide_name(c, f"{part}-2")] = body(
+            f"The {connector} cable with its wires flagged and a terminal crimped on each (the page before this one), "
+            f"the empty {shape} Dupont housing, a paint pen or a dot of tape, and a multimeter with a continuity "
+            "buzzer and a fine probe or a sewing pin.",
+            fill,
+            "## If a terminal is in the wrong cavity",
+            "A Dupont housing holds each terminal by a small plastic tab over its latch, in the window. Lift that tab "
+            "a little with a pin and pull the wire gently: the terminal comes out, and can be pushed into the right "
+            "cavity. (How these housings release; not yet done by us on these cables.)",
+        )
+    bench, fit_ = cut_at(parts["fit"], "Fit the cables, in this order")
+    out[guide_name(c, "bench")] = body(
+        f"Both finished cables, the {c.name} unplugged from power, and a multimeter with a continuity buzzer. The "
+        "Acorn stays out of its slot.",
+        bench,
+        "## If it fails",
+        "Do not fit the cables. A contact 1 that does not beep means that cable's ground wire is open or in the wrong "
+        "cavity; a contact 6 that beeps anywhere means the 3.3 V wire was not the one cut back. Go back to that "
+        'cable\'s page "fill and check the housing" and check every wire again.',
+    )
+    out[guide_name(c, "fit")] = body(
+        f"Both cables, checked on the bench (the page before this one), the Acorn and the {c.name}.",
+        fit_,
+        "## Next",
+        'Power the host on and run the check: the page "verifying 1".',
+    )
+    return out
 
 
 # Where the M.2 slot is in each host's photo, in photo pixels: blade.jpg, hat-ccw.jpg.
@@ -1502,4 +1675,5 @@ def build():
         out[shell_check_name(c)] = shell_check(c)
         out[f"acorn-fit-{key}.md"] = tables.BANNER + fit_block(c)
         out[f"acorn-cables-{key}.md"] = procedure(c)
+        out.update(guide(c))
     return out
