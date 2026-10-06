@@ -329,7 +329,9 @@ def pages(c):
     ]
     if c.key == "pi5":
         out += [
-            "A pass, on an Acorn on a Raspberry Pi 5 at welland (pi-sw2-p47, 2 October 2026):",
+            "A pass, on the Acorn and Raspberry Pi 5 seen at welland's sw2 p47 on 2 October 2026 (on 6 October "
+            "2026 that port had acorn-holly, device DNA `0x00200c8664b04854`, on the Pi 5 2 GB "
+            "`285df3f84af242d0`). The run names the host by its port, `pi-sw2-p47`:",
             "",
             transcript(PASS, "pi-sw2-p47", "2026-10-02").strip(),
             "",
