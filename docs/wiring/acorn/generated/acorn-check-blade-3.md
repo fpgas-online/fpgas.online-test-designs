@@ -33,7 +33,7 @@ documentation does not say that it frees GPIO14 on a Compute Module 5:
 netbooted host fetches them from one directory on the gateway, `/srv/nfs/rpi/trixie/boot/`: the gateway's TFTP
 root has one entry for each host's serial number, and every one of them points at that same directory (read on
 the ps1 gateway, 6 October 2026). So one `config.txt` and one `cmdline.txt` serve every host that boots from it,
-and a change there reaches all of them at their next boot. The gateway is Carl's: ask him. The blades' root file
+and a change there reaches all of them at their next boot. The gateway belongs to whoever runs the site (at ps1: Carl), and the change is theirs to make. The blades' root file
 system is the gateway's `/srv/nfs/rpi/trixie/root` (read from the kernel command line of pi16 and pi20 at ps1,
 5 October 2026).
 
