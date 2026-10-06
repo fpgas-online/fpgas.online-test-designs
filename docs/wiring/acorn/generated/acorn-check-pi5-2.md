@@ -14,7 +14,7 @@ Find the failing line in the table, then the wire in the two cavity pictures und
 | `jtag fail: device DNA over P1 JTAG reads 0x0: the DNA port is not being read` (or `reads 0x1ffffffffffffff`), `openFPGALoader --read-dna read no device DNA over P1 JTAG`, or `device DNA over JTAG … is not the one over BAR0 …` | TDI: the IDCODE read worked without it |
 | `p2-uart fail: no UARTBone reply on /dev/ttyAMA0 (P2 K2/J2)` | the serial pair: open, or crossed; `p2-serial` says which |
 | `p2-serial fail: J2 -> GPIO14: the FPGA drove 1, the Pi read 0; K2 -> GPIO15: the FPGA drove 0, the Pi read 1; …` with the `01` and `10` lines swapped and `00` and `11` right | J2 and K2 are **crossed**: wires 2 and 3 of the P2 cable are in each other's cavity. Take both terminals out of the housing and put each in the other's cavity (the P2 cavity picture below) |
-| `p2-serial` or `p2-gpio` naming one ball only | that one wire is **open**, or on the wrong pin. Before the FPGA drives, the test sets the Pi's pull against the level to come, so an open wire reads the opposite of what was driven; GPIO3 (J5's pin) has a pull-up of its own on the Pi, so an open J5 wire reads 1 whatever is driven |
+| `p2-serial` or `p2-gpio` naming one of its two signals only (J2 or K2; J5 or H5) | that one wire is **open**, or on the wrong pin. Before the FPGA drives, the test sets the Pi's pull against the level to come, so an open wire reads the opposite of what was driven; GPIO3 (J5's pin) has a pull-up of its own on the Pi, so an open J5 wire reads 1 whatever is driven |
 | `p2-gpio fail: J5 -> GPIO3: …; H5 -> GPIO4: …` with the `01` and `10` lines swapped and `00` and `11` right | J5 and H5 are **crossed**: wires 4 and 5 of the P2 cable are in each other's cavity. Take both terminals out of the housing and put each in the other's cavity (the P2 cavity picture below) |
 
 The two cavity pictures are the ones the cables were built from, shown again to find a wire's cavity. Their notes about cutting, marking and the meter check belong to building the cables.
@@ -23,7 +23,7 @@ The two cavity pictures are the ones the cables were built from, shown again to 
 
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png)
 
-`p2-serial` and `p2-gpio` print what was driven and what was read, eight lines for two wires. The two digits are the two balls: the right-hand digit is J2 (or J5), the left-hand one K2 (or H5).
+`p2-serial` and `p2-gpio` print what was driven and what was read, eight lines for two wires. The two digits are the two signals: the right-hand digit is J2 (or J5), the left-hand one K2 (or H5).
 
 **A crossed pair**: read on acorn-olive at Welland (an Acorn on a Raspberry Pi 5), 4 October 2026, whose P2 pairs were both crossed. The `p2-serial` test
 drives each wire as a plain pin, first from the FPGA and then from the host. `FPGA drives 01` raises J2, which

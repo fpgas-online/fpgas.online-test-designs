@@ -118,6 +118,10 @@ note = "to shrink the tube over each cut-back end (VCC always)"
 note_resistor = ", and over the series resistor"
 
 [[tools]]
+tool = "a fine probe tip for the multimeter, or a sewing pin to hold against a probe"
+note = "the plug's contacts are 1.2 mm apart, and a terminal is reached through a small opening"
+
+[[tools]]
 tool = "masking tape and a fine marker pen, or a paint pen"
 note = "to flag the six wires with their numbers, and to mark the pin 1 corner of each housing"
 
@@ -190,7 +194,7 @@ GND1 = ["gpio", 25]
 name = "Compute Blade"
 host = "blade"
 shell = "the metal shell of a USB socket on the Compute Blade"
-power_off = "Power off the Compute Blade: unplug its PoE cable."
+power_off = "Power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in."
 jtag_pins = "2:3:4:14"
 # A CM4 has no RP1, so no rp1pio cable: libgpiod drives the BCM2711's own GPIO chip there.
 jtag_cable = "libgpiod"

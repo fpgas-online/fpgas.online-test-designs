@@ -1162,7 +1162,8 @@ def procedure_parts(c, restart=False):
             f"Press the plug of {half} half into socket {connector} on the underside of the Acorn. Hold the card "
             "underside up with the M.2 edge to your left: wire 1 is the leftmost.",
             f"Put a numbered tape flag on each of the {len(pins)} wires, 1 at the left to {len(pins)}, about "
-            f"{lengths['flag_back']} mm back from the tip, clear of the end that will be cut and stripped later.",
+            f"{lengths['flag_back']} mm back from the tip, clear of the end that will be cut and stripped later. "
+            f"Write {connector} on the flag of wire 1 as well: off the card, the two halves look alike.",
             "With the plug still in the socket (the Acorn out of any slot, unpowered), set the meter to continuity. "
             "Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not "
             "stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: "
@@ -1197,7 +1198,10 @@ def procedure_parts(c, restart=False):
                 f"Strip about {lengths['strip']} mm from each cut end. "
                 f"Trim the resistor's leads to about {lengths['resistor_lead']} mm each. "
                 f"Solder the {c.resistor_value} resistor between the two cut ends. "
-                "Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this.",
+                "Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this. "
+                f"The resistor is there because the pin this wire lands on is shared with JTAG: with "
+                f"{c.resistor_value} in the wire, JTAG still gets through if the FPGA drives it (designed so, not "
+                "yet measured).",
                 (f"The resistor fitted into wire {pins.index(sig) + 1}", png(resistor_name(c, connector))),
             )
         step(
@@ -1350,26 +1354,13 @@ def guide(c):
         "Verifying: the check run on the host, and what a failing line means.",
     ]
 
-    def body(need, lines):
+    def body(need, lines, *after):
+        """A page: what it needs, its steps, then any headed paragraphs that close it."""
         lines = [line for line in lines if not line.startswith("#### ")]
         while lines and not lines[0]:
             lines.pop(0)
-        return "\n".join(
-            [
-                tables.BANNER.strip(),
-                "",
-                not_run,
-                "",
-                "## What you need",
-                "",
-                need,
-                "",
-                "## Steps",
-                "",
-                *lines,
-                *parts["tail"],
-            ]
-        )
+        head = [tables.BANNER.strip(), "", not_run, "", "## What you need", "", need, "", "## Steps", ""]
+        return "\n".join([*head, *lines, *(line for extra in after for line in (extra, "")), *parts["tail"]])
 
     out = {
         guide_name(c, "overview"): "\n".join([
@@ -1389,15 +1380,26 @@ def guide(c):
             f"the empty {shape} Dupont housing, a paint pen or a dot of tape, and a multimeter with a continuity "
             "buzzer and a fine probe or a sewing pin.",
             fill,
+            "## If a terminal is in the wrong cavity",
+            "A Dupont housing holds each terminal by a small plastic tab over its latch, in the window. Lift that tab "
+            "a little with a pin and pull the wire gently: the terminal comes out, and can be pushed into the right "
+            "cavity. (How these housings release; not yet done by us on these cables.)",
         )
     bench, fit_ = cut_at(parts["fit"], "Fit the cables, in this order")
     out[guide_name(c, "bench")] = body(
         f"Both finished cables, the {c.name} unplugged from power, and a multimeter with a continuity buzzer. The "
         "Acorn stays out of its slot.",
         bench,
+        "## If it fails",
+        "Do not fit the cables. A contact 1 that does not beep means that cable's ground wire is open or in the wrong "
+        "cavity; a contact 6 that beeps anywhere means the 3.3 V wire was not the one cut back. Go back to that "
+        'cable\'s page "fill and check the housing" and check every wire again.',
     )
     out[guide_name(c, "fit")] = body(
-        f"Both cables, checked on the bench (the page before this one), the Acorn and the {c.name}.", fit_
+        f"Both cables, checked on the bench (the page before this one), the Acorn and the {c.name}.",
+        fit_,
+        "## Next",
+        'Power the host on and run the check: the page "verifying 1".',
     )
     return out
 

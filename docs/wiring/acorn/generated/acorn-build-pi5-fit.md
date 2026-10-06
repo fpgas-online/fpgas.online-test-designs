@@ -20,4 +20,8 @@ Both cables, checked on the bench (the page before this one), the Acorn and the 
 
 ![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5.png)
 
+## Next
+
+Power the host on and run the check: the page "verifying 1".
+
 Photos: Waveshare (PoE M.2 HAT+), RHS Research (LiteFury underside; the Acorn is the same PCB).

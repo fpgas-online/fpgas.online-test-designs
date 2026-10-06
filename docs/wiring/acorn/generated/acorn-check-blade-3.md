@@ -2,11 +2,13 @@
 
 ## What has been run on a Compute Blade
 
+**What to expect on a Compute Blade today.** `pcie-link` passes when the card is seated. `jtag` cannot run in a boot that has the header's serial port on (kernel 6.18): the serial port holds GPIO14, which is also the JTAG TMS wire, so `jtag` fails there whatever the wiring. Every other test is `not run` until the card is converted to the fpgas.online design, and converting a card on a blade has not been done by us. So the result today is `fail` even with perfect cables: it shows that the card is seated and its PCIe link is up, and it cannot yet show that the two cables are right. The bench check with a meter, before fitting, is what the cables rest on until then.
+
 What has been run on a Compute Blade, and what has not, as of 5 October 2026:
 
 | | State |
 |---|---|
-| Installing the packages and running the check (Raspberry Pi OS trixie, CM5) | run at ps1: the failing example under "Read the result" on this page is that host's result, taken with 0.0.post1100, before the check named the pin's holder |
+| Installing the packages and running the check (Raspberry Pi OS trixie, CM5) | run at ps1: the failing run printed on the page "verifying 1" is that host's result, taken with 0.0.post1100, before the check named the pin's holder |
 | `pcie-link` | run at ps1: passes (5.0 GT/s, x1) |
 | `jtag` with the serial port on, kernel 6.18 | run at ps1: **cannot work**. TMS is GPIO14, which is also the serial port's TX; that kernel does not lend a pin a driver has, and the serial driver cannot be detached while the system runs. From 0.0.post1111 the test fails saying so, without running the tool ([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)) |
 | `jtag` with the serial port off | **not yet run by us on this hardware** |
@@ -14,7 +16,7 @@ What has been run on a Compute Blade, and what has not, as of 5 October 2026:
 | The `p2-uart` and `p2-serial` tests | **not yet run by us on this hardware**: they need a converted card |
 | Converting a card on a Compute Blade | **not yet run by us on this hardware**; the [written steps](https://docs.fpgas.online/en/latest/boards/acorn/pcie-programming.html) are for the Pi 5 setup |
 | A Compute Blade that passes the whole check | **not yet seen** |
-| The `p2-serial` test on a blade whose J2 wire has no 470 Ω resistor (pi20 as wired on 5 October 2026: the pair on Extension Port pins 9 and 10) | **not yet run by us on this hardware**. From the code: while it runs to its end or raises an error, the test never has both ends of a wire driving at once (the Pi's pins are made inputs before the FPGA drives, and the FPGA's outputs are switched off before the Pi drives), so it does not rely on the resistor. What the resistor guards against is a design that drives J2 while JTAG or the serial port drives GPIO14; the fpgas.online design leaves J2 an input except while the host has switched J2/K2 to GPIO mode and enabled J2's output, which is what this test does, with the Pi's GPIO14 an input at that moment |
+| The `p2-serial` test on a blade whose J2 wire has no 470 Ω resistor (pi20 at ps1 as wired on 5 October 2026: the pair on Extension Port pins 9 and 10) | **not yet run by us on this hardware**. From the code: while it runs to its end or raises an error, the test never has both ends of a wire driving at once (the Pi's pins are made inputs before the FPGA drives, and the FPGA's outputs are switched off before the Pi drives), so it does not rely on the resistor. What the resistor guards against is a design that drives J2 while JTAG or the serial port drives GPIO14; the fpgas.online design leaves J2 an input except while the host has switched J2/K2 to GPIO mode and enabled J2's output, which is what this test does, with the Pi's GPIO14 an input at that moment |
 
 JTAG and the serial pair share GPIO14 on a Compute Blade (J2 reaches it through 470 Ω, so JTAG wins
 electrically). Under kernel 6.18 they cannot both be had from one boot: with the header's serial port on, the
@@ -30,10 +32,10 @@ documentation does not say that it frees GPIO14 on a Compute Module 5:
 On a netbooted host those files may not be on the host: where the firmware reads `config.txt` and
 `cmdline.txt` from is not something we have read, and if it fetches them from a boot server, they are changed
 there, by whoever keeps that server, for every host booting from that tree. At ps1 the blades' root is the
-gateway's `/srv/nfs/rpi/trixie/root` (read from the kernel command line of pi16 and pi20, 5 October 2026);
+gateway's `/srv/nfs/rpi/trixie/root` (read from the kernel command line of pi16 and pi20 at ps1, 5 October 2026);
 where the firmware's copies come from was not read by us.
 
-Then check that the pin is free (the two commands below) before trying JTAG. With the serial port off, `/dev/ttyAMA0` is not there, so the
+Then check that the pin is free (the commands below) before trying JTAG. With the serial port off, `/dev/ttyAMA0` is not there, so the
 `p2-uart`, `p2-serial` and `scratch` tests cannot pass in that boot; what a Compute Blade's check should
 count as its result in each of the two configurations is not settled.
 

@@ -20,4 +20,8 @@ The P2 cavity picture again, for where its housing sits and which corner is mark
 
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png)
 
+## If it fails
+
+Do not fit the cables. A contact 1 that does not beep means that cable's ground wire is open or in the wrong cavity; a contact 6 that beeps anywhere means the 3.3 V wire was not the one cut back. Go back to that cable's page "fill and check the housing" and check every wire again.
+
 Photos: Waveshare (PoE M.2 HAT+), RHS Research (LiteFury underside; the Acorn is the same PCB).

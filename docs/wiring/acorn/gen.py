@@ -702,8 +702,8 @@ def pi5(nudge=0):
     sh = Sheet()
     title_block(
         sh,
-        "CARRIER A  ·  WELLAND.FPGAS.ONLINE",
-        "SQRL Acorn CLE-215+ to Raspberry Pi 5",
+        "ACORN WIRING  ·  RASPBERRY PI 5",
+        "SQRL Acorn to Raspberry Pi 5",
         "Waveshare PoE M.2 HAT+ on a Pi 5. An Acorn needs PCIe, which a Pi 4 or older does not have.",
         f"--pins {c.jtag_pins}",
         "These are GPIO numbers, not header pin numbers",
@@ -758,8 +758,8 @@ def blade(nudge=0):
     sh = Sheet()
     title_block(
         sh,
-        "CARRIER B  ·  PS1.FPGAS.ONLINE",
-        "SQRL Acorn CLE-101 (LiteFury) to Compute Blade",
+        "ACORN WIRING  ·  COMPUTE BLADE",
+        "SQRL Acorn to Compute Blade",
         "CM4 or CM5. Pins carry the numbers printed on the blade: Extension Port 1 to 5 left, 6 to 10 right; "
         "UART 1 to 4.",
         f"--pins {c.jtag_pins}",

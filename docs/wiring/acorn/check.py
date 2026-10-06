@@ -240,6 +240,20 @@ INSTALL = {
         "file system is in memory (`overlayroot=tmpfs`), what you install is gone at the next boot:"
     ),
 }
+# What a blade owner can expect, said once and shown on the first and the last verifying page.
+TODAY = {
+    "blade": [
+        "",
+        "**What to expect on a Compute Blade today.** `pcie-link` passes when the card is seated. `jtag` cannot "
+        "run in a boot that has the header's serial port on (kernel 6.18): the serial port holds GPIO14, which "
+        "is also the JTAG TMS wire, so `jtag` fails there whatever the wiring. Every other test is `not run` "
+        "until the card is converted to the fpgas.online design, and converting a card on a blade has not been "
+        "done by us. So the result today is `fail` even with perfect cables: it shows that the card is seated "
+        "and its PCIe link is up, and it cannot yet show that the two cables are right. The bench check with a "
+        "meter, before fitting, is what the cables rest on until then.",
+        "",
+    ]
+}
 PASS = "**pass**: an Acorn on the Pi 5 setup"
 BLADE_FAIL = "**fail, a first install on someone's own hardware**"
 
@@ -261,6 +275,10 @@ def pages(c):
         f"{c.host}, so which tests pass, and what a failing one says, point at the wire. An Acorn is sold as a "
         "CLE-215+ and as a CLE-101; the check covers both, and its summary names the one it found (`acorn "
         "cle-101`).",
+        "",
+        "The check never writes the card's flash and never loads a design into the FPGA. It drives the P1 and "
+        "P2 wires, which is how it tests them, and puts the host's pins back as it found them.",
+        *TODAY.get(c.key, []),
         "",
         "## Install it and run it",
         "",
@@ -296,6 +314,9 @@ def pages(c):
             "pin, which the header's serial port holds.",
             "",
             transcript(BLADE_FAIL).strip(),
+            "",
+            "That run was made with version 0.0.post1100 of the check. From 0.0.post1111 the `jtag` line says "
+            "what holds the pin instead: `P1 JTAG could not be probed: GPIO14 (TMS) is held by … (uart0)`.",
             "",
             "A pass will list every test with `pass` and end there, with no `RESULT:` part; on a Compute Blade "
             "`p2-gpio` stays `not run`, because J5 and H5 are not wired.",
@@ -353,6 +374,7 @@ def pages(c):
             "",
             "## What has been run on a Compute Blade",
             "",
+            *TODAY["blade"][1:],
             site_links(fragment("compute-blade.md", c)).strip(),
             "",
         ]

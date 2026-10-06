@@ -10,7 +10,7 @@ Both cables, checked on the bench (the page before this one), the Acorn and the 
 
 **1.** Fit the cables, in this order. The sockets are on the underside of the card and may not be reachable once it is in the slot.
 
-1. Power off the Compute Blade: unplug its PoE cable.
+1. Power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in.
 2. If the housings are on the headers (after the bench check), take them off.
 3. Press the P1 plug into socket P1 and the P2 plug into socket P2 on the underside of the Acorn, each the way round it was when you put the flags on, until fully seated.
 4. Put the Acorn in the M.2 slot and fit its screw.
@@ -19,5 +19,9 @@ Both cables, checked on the bench (the page before this one), the Acorn and the 
 ![Fitting the cables on a Compute Blade, in order](acorn-cable-blade-fit.png)
 
 ![The finished wiring: Acorn to Compute Blade](acorn-wiring-computeblade.png)
+
+## Next
+
+Power the host on and run the check: the page "verifying 1".
 
 Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn is the same PCB).

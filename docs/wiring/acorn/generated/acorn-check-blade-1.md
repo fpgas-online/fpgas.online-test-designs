@@ -4,6 +4,11 @@
 
 `fpgas-verify` is the program that checks an FPGA board from the machine it is attached to. For an Acorn its check doubles as a wiring test: each of its tests uses a known set of wires between the card and the blade, so which tests pass, and what a failing one says, point at the wire. An Acorn is sold as a CLE-215+ and as a CLE-101; the check covers both, and its summary names the one it found (`acorn cle-101`).
 
+The check never writes the card's flash and never loads a design into the FPGA. It drives the P1 and P2 wires, which is how it tests them, and puts the host's pins back as it found them.
+
+**What to expect on a Compute Blade today.** `pcie-link` passes when the card is seated. `jtag` cannot run in a boot that has the header's serial port on (kernel 6.18): the serial port holds GPIO14, which is also the JTAG TMS wire, so `jtag` fails there whatever the wiring. Every other test is `not run` until the card is converted to the fpgas.online design, and converting a card on a blade has not been done by us. So the result today is `fail` even with perfect cables: it shows that the card is seated and its PCIe link is up, and it cannot yet show that the two cables are right. The bench check with a meter, before fitting, is what the cables rest on until then.
+
+
 ## Install it and run it
 
 The Compute Blades at ps1 boot from the network with their root file system in memory (`overlayroot=tmpfs`): what you install is gone at the next boot, and so is the check that would run at boot. So after each boot, install and run by hand:
@@ -85,6 +90,8 @@ The whole report, for a program to read (JSON): /run/fpgas-online/verify.json
 ******************************************************************************
 ```
 
+That run was made with version 0.0.post1100 of the check. From 0.0.post1111 the `jtag` line says what holds the pin instead: `P1 JTAG could not be probed: GPIO14 (TMS) is held by … (uart0)`.
+
 A pass will list every test with `pass` and end there, with no `RESULT:` part; on a Compute Blade `p2-gpio` stays `not run`, because J5 and H5 are not wired.
 
 ## Which test uses which wire
@@ -100,7 +107,7 @@ A pass will list every test with `pass` and end there, with no `RESULT:` part; o
 | `p2-serial` | the same two wires, driven and read as plain pins in both directions | each of J2 and K2 on its own, so a crossed pair or one open wire is told apart | no |
 | `p2-gpio` | none: J5 and H5 are not wired on a Compute Blade | nothing: it is listed as `not run` | never runs |
 | `rp1-pio` | no wire: `/dev/pio0` on a Pi 5 or CM5 | nothing about the wiring (not run on other hosts) | yes |
-| `flash`, `ddr`, `scratch` | no wire of the cable (`scratch` also uses the serial pair) | nothing about the wiring | no |
+| `flash`, `ddr`, `scratch` | no wire of the cable, except that `scratch` also goes over the serial pair | nothing about the wiring | no |
 
 So on a card that has not been converted yet, `pcie-link` and `jtag` are the wiring tests; the P2 wires can
 only be tested once the card runs the fpgas.online design

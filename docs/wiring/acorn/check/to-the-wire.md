@@ -7,12 +7,12 @@
 <!-- blade -->| `jtag fail: … GPIO14 (TMS) is held by … (uart0): the kernel does not hand out a pin that is held …` | not a wire: the serial port holds GPIO14, which is also TMS, so JTAG cannot run in a boot that has the header's serial port on (kernel 6.18). The page "what has been run on a Compute Blade" says what has been tried |
 | `p2-uart fail: no UARTBone reply on /dev/ttyAMA0 (P2 K2/J2)` | the serial pair: open, or crossed; `p2-serial` says which |
 | `p2-serial fail: J2 -> GPIO14: the FPGA drove 1, the Pi read 0; K2 -> GPIO15: the FPGA drove 0, the Pi read 1; …` with the `01` and `10` lines swapped and `00` and `11` right | J2 and K2 are **crossed**: {crossed_serial} |
-<!-- pi5 -->| `p2-serial` or `p2-gpio` naming one ball only | that one wire is **open**, or on the wrong pin. Before the FPGA drives, the test sets the Pi's pull against the level to come, so an open wire reads the opposite of what was driven; GPIO3 (J5's pin) has a pull-up of its own on the Pi, so an open J5 wire reads 1 whatever is driven |
-<!-- blade -->| `p2-serial` naming one ball only | that one wire is **open**, or on the wrong pin. Before the FPGA drives, the test sets the host's pull against the level to come, so an open wire reads the opposite of what was driven |
+<!-- pi5 -->| `p2-serial` or `p2-gpio` naming one of its two signals only (J2 or K2; J5 or H5) | that one wire is **open**, or on the wrong pin. Before the FPGA drives, the test sets the Pi's pull against the level to come, so an open wire reads the opposite of what was driven; GPIO3 (J5's pin) has a pull-up of its own on the Pi, so an open J5 wire reads 1 whatever is driven |
+<!-- blade -->| `p2-serial` naming one of its two signals only (J2 or K2) | that one wire is **open**, or on the wrong pin. Before the FPGA drives, the test sets the host's pull against the level to come, so an open wire reads the opposite of what was driven |
 <!-- pi5 -->| `p2-gpio fail: J5 -> GPIO3: …; H5 -> GPIO4: …` with the `01` and `10` lines swapped and `00` and `11` right | J5 and H5 are **crossed**: {crossed_spare} |
 
-<!-- pi5 -->`p2-serial` and `p2-gpio` print what was driven and what was read, eight lines for two wires. The two digits are the two balls: the right-hand digit is J2 (or J5), the left-hand one K2 (or H5).
-<!-- blade -->`p2-serial` prints what was driven and what was read, eight lines for two wires. The two digits are the two balls: the right-hand digit is J2, the left-hand one K2.
+<!-- pi5 -->`p2-serial` and `p2-gpio` print what was driven and what was read, eight lines for two wires. The two digits are the two signals: the right-hand digit is J2 (or J5), the left-hand one K2 (or H5).
+<!-- blade -->`p2-serial` prints what was driven and what was read, eight lines for two wires. The two digits are the two signals: the right-hand digit is J2, the left-hand one K2.
 
 **A crossed pair**: read on acorn-olive at Welland (an Acorn on a Raspberry Pi 5), 4 October 2026, whose P2 pairs were both crossed. The `p2-serial` test
 drives each wire as a plain pin, first from the FPGA and then from the host. `FPGA drives 01` raises J2, which

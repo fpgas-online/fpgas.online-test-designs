@@ -22,4 +22,8 @@ The P1 cavity picture again, to read each wire's cavity from:
 
 ![Which wire goes in which cavity, P1 cable](acorn-cable-blade-p1.png)
 
+## If a terminal is in the wrong cavity
+
+A Dupont housing holds each terminal by a small plastic tab over its latch, in the window. Lift that tab a little with a pin and pull the wire gently: the terminal comes out, and can be pushed into the right cavity. (How these housings release; not yet done by us on these cables.)
+
 Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn is the same PCB).
