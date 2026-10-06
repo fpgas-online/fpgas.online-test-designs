@@ -62,7 +62,7 @@ def test_no_table_is_wider_than_six_columns():
 
 def test_no_page_comes_near_five_printed_sheets():
     for name, text in FILES.items():
-        assert sheets(text) <= 3, (name, sheets(text))
+        assert sheets(text) <= 4, (name, sheets(text))
 
 
 def test_a_wire_table_has_the_chain_in_order_and_every_wire_of_its_group_once():
@@ -83,11 +83,11 @@ def test_a_wire_table_has_the_chain_in_order_and_every_wire_of_its_group_once():
 def test_the_rows_the_hand_written_page_had_are_still_what_the_tables_say():
     """A few rows of the page this generator replaced, as it stood at commit ef38e22."""
     page = FILES["tt-fpga-pins-ui-uo.md"] + FILES["tt-fpga-pins-uio-uart.md"]
-    assert "| 13 | `ui_in[0]` | Input pin 1 | JA pin 1 | GPIO8 | measured |" in page
-    assert "| 21 | `ui_in[3]` | Input pin 4 | JA pin 4 | GPIO11 (shared) | from the design |" in page
-    assert "| 48 | `uo_out[7]` | Output pin 10 | JC pin 10 | GPIO6 | measured |" in page
-    assert "| 12 | `uio[7]` | Bidirectional pin 10 | JB pin 10 | GPIO2 | measured |" in page
-    assert "| 45 | `uo_out[4]` | serial data out of the design (its TX) | Output pin 7 | JC pin 7 | GPIO4 |" in page
+    assert "| 13 | `ui_in[0]` | INPUT pin 1 | JA pin 1 | GPIO8 | measured |" in page
+    assert "| 21 | `ui_in[3]` | INPUT pin 4 | JA pin 4 | GPIO11 (shared) | from the design |" in page
+    assert "| 48 | `uo_out[7]` | OUTPUT pin 10 | JC pin 10 | GPIO6 | measured |" in page
+    assert "| 12 | `uio[7]` | BIDIR pin 10 | JB pin 10 | GPIO2 | measured |" in page
+    assert "| 45 | `uo_out[4]` | serial data out of the design (its TX) | OUTPUT pin 7 | JC pin 7 | GPIO4 |" in page
 
 
 def test_a_page_with_a_wire_table_repeats_the_picture_and_how_to_find_the_header_in_place():
@@ -95,7 +95,8 @@ def test_a_page_with_a_wire_table_repeats_the_picture_and_how_to_find_the_header
         text = FILES[name]
         shown = re.findall(r"\[!\[[^\]]+\]\((tt-fpga-pmod-cables[a-z-]*)\.png\)\]\(\1\.svg\)", text)
         assert shown and set(shown) <= set(picture.PICTURES), name
-        assert "**Finding the headers.**" in text and "**Not checked by us against a board:**" in text, name
+        assert "**Finding the headers.**" in text, name
+        assert "**Pin 1 and the cables: from the makers' documents, not checked by us on a board.**" in text, name
         assert "pin 1 to pin 1" in text, name
     # the picture of each page picks out the headers that page is about
     assert "tt-fpga-pmod-cables-ui-uo.png" in FILES["tt-fpga-pins-ui-uo.md"]
@@ -137,13 +138,24 @@ def test_the_pin_1_warning_is_under_every_picture():
             assert text[shown.end() :].startswith(warning), name
 
 
-def test_the_cables_are_described_with_what_is_and_is_not_recorded_about_them():
+def test_the_cables_are_described_with_what_the_makers_say_and_what_is_not_recorded():
     for name in WIRE_PAGES:
         text = FILES[name]
-        assert "Each board puts its own 3.3 V supply on those pins" in text, name
-        assert "Whether the cables in use join the 3.3 V pins of the two boards is not recorded" in text, name
-        assert "nor is the kind of cable (what is on each of its ends)" in text, name
+        for fact in W.facts.values():
+            assert f"{fact['says']}." in text, (name, fact["key"])
+        assert "are printed INPUT (`ui_in`), BIDIR (`uio`) and OUTPUT (`uo_out`)" in text, name
+        assert "a twelve-wire straight cable joins the two boards' 3.3 V supplies" in text, name
+        assert "whether its pins 6 and 12 are connected, is not recorded; asked on 6 October 2026" in text, name
+        assert "Neither the wires nor any pin 1 mark can be made out" in text, name
     assert "measured, except the wires on shared GPIOs" in FILES["tt-fpga-cables.md"]
+
+
+def test_every_makers_fact_has_its_source_on_the_sources_page_and_none_is_called_verified():
+    text = FILES["tt-fpga-sources.md"]
+    for fact in W.facts.values():
+        assert f"- {fact['says']}: {fact['source']}." in text, fact["key"]
+    assert "github.com/TinyTapeout/tt-demo-pcb" in text and text.count("read from a copy on 6 October 2026") >= 3
+    assert "verified by us on" not in text.replace("not verified by us on", "")
 
 
 def test_the_ui_in_page_says_the_dip_switches_are_there_and_that_their_setting_is_not_recorded():
@@ -178,7 +190,7 @@ def test_the_page_of_other_pins_says_there_is_no_flash_and_that_no_cable_carries
     assert text.count("no cable carries them, and the Raspberry Pi cannot reach them") == 2
     assert "| 16 | `SPI_SS` |" in text and "| GPIO6 | clock |" in text
     assert "is not recorded in this repository and has not been measured by us" in text
-    assert "| dot | `uo_out[7]` | 48 | Output pin 10 | JC pin 10 | GPIO6 |" in text
+    assert "| dot | `uo_out[7]` | 48 | OUTPUT pin 10 | JC pin 10 | GPIO6 |" in text
     assert "| 37 | `rst_n` | the design's reset: low resets it | GPIO14 (not verified by us) |" in text
     assert "| 20 | `clk_rp2040` | the clock into the design, made by the microcontroller: 50 MHz | GPIO16 |" in text
     assert "| 39 | `rgb_led.r` | red of the three-colour LED: low lights it | not recorded |" in text

@@ -54,7 +54,7 @@ class Wiring:
     board: dict
     pmod: dict
     groups: dict  # name -> {what, drive, fpga_pins, connector, header, mcu_first_gpio, colour}
-    headers: dict  # key -> {name, place}
+    headers: dict  # key -> {name}: the name printed on the board
     hat: dict  # port -> {gpios}
     cables: dict  # header key -> port
     uart: dict
@@ -65,6 +65,7 @@ class Wiring:
     measurements: tuple
     unmeasured: dict
     sources: dict
+    facts: dict  # key -> {says, source}: what the makers' documents say
 
     def wire(self, group, bit):
         return next(w for w in self.wires if w.group == group and w.bit == bit)
@@ -120,7 +121,7 @@ def build(data):
             errors.append(f"{name} and {carried[g['header']]} are both on header {g['header']!r}")
         carried[g["header"]] = name
     for key, h in headers.items():
-        _need(h, ("name", "place"), f"header {key}", errors)
+        _need(h, ("name",), f"header {key}", errors)
         if key not in carried:
             errors.append(f"header {key!r} carries no group")
         if key not in cables:
@@ -211,13 +212,19 @@ def build(data):
             Measurement(covered, tuple(m["dates"]), m["how"], when, m["where"], m.get("also", ""), m["record"])
         )
     _need(data.get("unmeasured", {}), ("why",), "[unmeasured]", errors)
+    facts = {}
+    for fact in data.get("facts", []):
+        if _need(fact, ("key", "says", "source"), "a fact", errors):
+            if fact["key"] in facts:
+                errors.append(f"two facts have the key {fact['key']!r}")
+            facts[fact["key"]] = fact
     if not data.get("sources"):
         errors.append("[sources] is empty: every statement of fact on the pages needs where it comes from")
     if errors:
         raise WiringError("wiring.toml:\n  " + "\n  ".join(errors))
     return Wiring(
         data["board"], pmod, groups, headers, hat, cables, uart, display, data["config"], data.get("other", []),
-        tuple(wires), tuple(measurements), data["unmeasured"], data["sources"],
+        tuple(wires), tuple(measurements), data["unmeasured"], data["sources"], facts,
     )  # fmt: skip
 
 

@@ -39,7 +39,7 @@ def test_the_picture_follows_the_wiring_when_a_cable_moves():
     d = copy.deepcopy(wiring.DATA)
     d["cables"]["input"], d["cables"]["bidir"] = "JB", "JA"
     words = labels(picture.draw(wiring.build(d), "tt-fpga-pmod-cables"))
-    assert "Input to JB" in words and "Bidirectional to JA" in words and "Input to JA" not in words
+    assert "INPUT to JB" in words and "BIDIR to JA" in words and "INPUT to JA" not in words
 
 
 def test_the_shared_gpios_are_said_on_the_picture_from_the_hat_table():
@@ -69,8 +69,8 @@ def test_it_is_legible_printed_on_a4():
 
 def test_a_picture_that_picks_headers_out_still_names_every_cable():
     words = labels(SVGS["tt-fpga-pmod-cables-uo.svg"])
-    assert "Tiny Tapeout FPGA demo board to Pmod HAT: the Output header" in words
-    assert {"Input to JA", "Bidirectional to JB", "Output to JC"} <= set(words)
+    assert "Tiny Tapeout FPGA demo board to Pmod HAT: the OUTPUT header" in words
+    assert {"INPUT to JA", "BIDIR to JB", "OUTPUT to JC"} <= set(words)
     assert words.count("pin 1 to pin 1") == 1  # only the cable the picture is about
 
 

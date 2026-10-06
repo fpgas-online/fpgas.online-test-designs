@@ -5,13 +5,15 @@ One drawing, from wiring.toml, written several times: whole (`tt-fpga-pmod-cable
 headers a table is about picked out, the rest drawn faint, so that a table can show the reader where its
 header is without sending them to another page. PICTURES lists them.
 
-It is a diagram, not a drawing of the boards: the headers are in the order Tiny Tapeout's documents give,
-the ports in the order of their names, and every connector is drawn the way the Pmod standard numbers its
-pins (1 to 6 in one row, 7 to 12 in the other). Where pin 1 is on a real board is not recorded in this
-repository. The gold square is therefore pin NUMBER 1, drawn where the numbering puts it and not where a
-board has it, and the picture says so in words (PIN_1), as does every page under the picture: a reader
-must not take the square's corner for a place on the board. When a board has been looked at, record where
-pin 1 is in wiring.toml, draw it, and take the warning off.
+It is a diagram, not a drawing of the boards: the headers are in the order, and under the printed names,
+that Tiny Tapeout's documents give, the ports in the order of their names, and every connector is drawn
+the way the Pmod standard numbers its pins (1 to 6 in one row, 7 to 12 in the other). Where pin 1 is on
+each real connector is known only from the makers' drawing and photograph (wiring.toml, [[facts]]), not
+from a board, and those do not settle which way up a socket's two rows are when you look into it. The
+gold square is therefore pin NUMBER 1, drawn where the numbering puts it and not where a board has it,
+and the picture says so in words (PIN_1), as does every page under the picture: a reader must not take
+the square's corner for a place on the board. When a board has been looked at, record where pin 1 is in
+wiring.toml, draw both sockets as seen looking into them, say so on the picture, and take the warning off.
 
 Drawn on the canvas the Acorn sheets use (docs/wiring/wiringlib/canvas.py): text as glyph outlines, its own
 paper background, and a build that fails if any text leaves the canvas, overlaps other text or sits on a
@@ -45,8 +47,8 @@ OFF = "#8a929c"  # a cable that this picture is not about
 # {file name without its suffix: (the header keys it picks out, or None for all; the end of its title)}
 PICTURES = {
     "tt-fpga-pmod-cables": (None, "which header goes to which port"),
-    "tt-fpga-pmod-cables-ui-uo": (("input", "output"), "the Input and Output headers"),
-    "tt-fpga-pmod-cables-uo": (("output",), "the Output header"),
+    "tt-fpga-pmod-cables-ui-uo": (("input", "output"), "the INPUT and OUTPUT headers"),
+    "tt-fpga-pmod-cables-uo": (("output",), "the OUTPUT header"),
 }
 DRIVES = {"pi": "the Pi drives", "fpga": "the FPGA drives", "both": "either end drives"}
 

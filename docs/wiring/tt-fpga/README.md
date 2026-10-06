@@ -47,8 +47,9 @@ modules have the same names as the Acorn generator's (`wiring`, `tables`), so on
   date, its place and the record it was carried from. Nothing is measured by being written here: add an entry
   only for a measurement that was made, with the record that shows it.
 - A fact nobody has checked says so, in `[sources]`, in those words.
-- The picture is a diagram. What is printed beside each connector, and where pin 1 is on a real board, is not
-  recorded in this repository; the pages say so rather than guess. The gold square is pin NUMBER 1 of the
+- The picture is a diagram. What is printed beside each connector, and where pin 1 is, is known only from the
+  two makers' documents (`[[facts]]` in `wiring.toml`, each with its source), not from a board of ours; the
+  pages say so rather than guess. The gold square is pin NUMBER 1 of the
   Pmod numbering, not a place on the board, and `picture.PIN_1` says so on the picture and under it on every
   page. When someone reads it off a board, record it in `wiring.toml` with its date, draw it, and take the
   warning off.

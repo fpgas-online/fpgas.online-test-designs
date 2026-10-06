@@ -6,26 +6,26 @@ For the person at the bench with a Tiny Tapeout demo board that has the FPGA bre
 
 **Pin 1 on the picture.** The gold square is pin NUMBER 1 of the Pmod numbering. It is not a place on the board. Find pin 1 on each connector by its marking before plugging a cable in. A 2x6 cable turned round puts 3.3 V on signal pins.
 
-**Finding the headers.** The demo board has three 12-pin Pmod headers side by side along its bottom edge. Seen from above, they are: Input (`ui_in`) on the left, Bidirectional (`uio`) in the middle, Output (`uo_out`) on the right. The Digilent Pmod HAT has three ports: JA, JB and JC. A 12-pin Pmod cable joins each header to its port, pin 1 to pin 1: Input to JA, Bidirectional to JB and Output to JC. A USB-C cable joins the demo board to a USB port of the Raspberry Pi.
+**Finding the headers.** The demo board's three Pmod connectors are printed INPUT (`ui_in`), BIDIR (`uio`) and OUTPUT (`uo_out`). They are on the bottom edge, in that order from left to right, with the board held so that its "Tiny Tapeout Demoboard" text reads upright. The Pmod HAT's JA, JB and JC are 2x6 Pmod host ports (female sockets). Pins 6 and 12 of each are tied to the HAT's 3.3 V supply, and pins 5 and 11 are ground. A 12-pin Pmod cable joins each header to its port, pin 1 to pin 1: INPUT to JA, BIDIR to JB and OUTPUT to JC. A USB-C cable joins the demo board to a USB port of the Raspberry Pi.
 
-**Not checked by us against a board:** the order of the headers (it is from Tiny Tapeout's documents), what is printed beside each header and each port, and where pin 1 is on each connector. Input, Bidirectional and Output are this page's names for the headers; JA, JB and JC are Digilent's names for the ports. On a Pmod connector pins 1 to 6 are one row and pins 7 to 12 the other; pins 5 and 11 are ground and pins 6 and 12 are 3.3 V. Each board puts its own 3.3 V supply on those pins (the Digilent Pmod HAT from the Raspberry Pi's). Whether the cables in use join the 3.3 V pins of the two boards is not recorded, and nor is the kind of cable (what is on each of its ends).
+**Pin 1 and the cables: from the makers' documents, not checked by us on a board.** Each of the demo board's three is a female right-angle 2x6 socket, numbered as Digilent numbers a host port, with the board's own 3.3 V supply on pins 6 and 12. In the maker's drawing of the demo board, pin 1 is the square pad under the label i0, b0 or o0, at the right-hand end of the row farther from the board edge; no "1" is printed there. Digilent's product photograph of the HAT shows a printed "1" beside one end of each port's inner row, and "3V3" and "GND" at the other end. This is legible for JA and JB; JC's label is not legible in the photograph. Digilent's specification says: "the pin numbering conventions for the 2x6 connectors are non-standard and are mirrored between the host connector and the peripheral board connector". Seen on the cameras of fpga-1 and fpga-3 on 6 October 2026: a black two-row housing is plugged on each of the demo board's three connectors; a rainbow ribbon runs from them on fpga-1. Neither the wires nor any pin 1 mark can be made out. Both ends are female sockets, so each cable needs a male end at each board; a twelve-wire straight cable joins the two boards' 3.3 V supplies. What cable is fitted on our boards, and whether its pins 6 and 12 are connected, is not recorded; asked on 6 October 2026. On a Pmod connector pins 1 to 6 are one row and pins 7 to 12 the other; pins 5 and 11 are ground and pins 6 and 12 are 3.3 V. Where each of these statements comes from: Sources (`tt-fpga-sources.md`).
 
 **Reading the table.** *iCE40 pin* is the pin number of the FPGA itself (a Lattice iCE40UP5K in its 48-pin SG48 package). *Signal* is the Tiny Tapeout name a design uses. *Demo board* and *Pmod HAT* give the connector and its pin; a cable joins pins of the same number. *Pi GPIO* is the Raspberry Pi's GPIO number (the BCM number), not a position on its 40-pin header.
 
 ### `uio`: eight signals that the design can use as inputs or as outputs, each on its own
 
-Either end may drive each of these: the design decides, signal by signal. They are on the demo board's Bidirectional header, cabled to Pmod HAT port JB.
+Either end may drive each of these: the design decides, signal by signal. They are on the demo board's BIDIR header, cabled to Pmod HAT port JB.
 
 | iCE40 pin | Signal | Demo board | Pmod HAT | Pi GPIO | Checked |
 |---|---|---|---|---|---|
-| 2 | `uio[0]` | Bidirectional pin 1 | JB pin 1 | GPIO7 | measured |
-| 4 | `uio[1]` | Bidirectional pin 2 | JB pin 2 | GPIO10 (shared) | from the design |
-| 3 | `uio[2]` | Bidirectional pin 3 | JB pin 3 | GPIO9 (shared) | from the design |
-| 6 | `uio[3]` | Bidirectional pin 4 | JB pin 4 | GPIO11 (shared) | from the design |
-| 9 | `uio[4]` | Bidirectional pin 7 | JB pin 7 | GPIO26 | measured |
-| 10 | `uio[5]` | Bidirectional pin 8 | JB pin 8 | GPIO13 | measured |
-| 11 | `uio[6]` | Bidirectional pin 9 | JB pin 9 | GPIO3 | measured |
-| 12 | `uio[7]` | Bidirectional pin 10 | JB pin 10 | GPIO2 | measured |
+| 2 | `uio[0]` | BIDIR pin 1 | JB pin 1 | GPIO7 | measured |
+| 4 | `uio[1]` | BIDIR pin 2 | JB pin 2 | GPIO10 (shared) | from the design |
+| 3 | `uio[2]` | BIDIR pin 3 | JB pin 3 | GPIO9 (shared) | from the design |
+| 6 | `uio[3]` | BIDIR pin 4 | JB pin 4 | GPIO11 (shared) | from the design |
+| 9 | `uio[4]` | BIDIR pin 7 | JB pin 7 | GPIO26 | measured |
+| 10 | `uio[5]` | BIDIR pin 8 | JB pin 8 | GPIO13 | measured |
+| 11 | `uio[6]` | BIDIR pin 9 | JB pin 9 | GPIO3 | measured |
+| 12 | `uio[7]` | BIDIR pin 10 | JB pin 10 | GPIO2 | measured |
 
 **Checked.** *measured*: read on boards on 29 September 2026 and 4 October 2026; for where and how, see Sources (`tt-fpga-sources.md`). *from the design*: not read on a board; it follows the pattern of the measured wires (bit n of a group on the pin of that place in its header and port); not measured by us.
 
@@ -37,8 +37,8 @@ A design's serial port uses two of the signals of the other two headers, by Tiny
 
 | iCE40 pin | Signal | Use | Demo board | Pmod HAT | Pi GPIO |
 |---|---|---|---|---|---|
-| 21 | `ui_in[3]` | serial data into the design (its RX) | Input pin 4 | JA pin 4 | GPIO11 (shared) |
-| 45 | `uo_out[4]` | serial data out of the design (its TX) | Output pin 7 | JC pin 7 | GPIO4 |
+| 21 | `ui_in[3]` | serial data into the design (its RX) | INPUT pin 4 | JA pin 4 | GPIO11 (shared) |
+| 45 | `uo_out[4]` | serial data out of the design (its TX) | OUTPUT pin 7 | JC pin 7 | GPIO4 |
 
 On its way to the Raspberry Pi's GPIO, `ui_in[3]` is from the design and `uo_out[4]` is measured.
 

@@ -11,7 +11,7 @@ Each file is complete in itself, for a reader at a bench with paper only: it sta
 banner, says who it is for, and repeats the picture and the sentences needed to find the header it is
 about, rather than pointing at another page. Its headings start at level 3, so a page includes it under
 one of its own sections. No table is wider than six columns of short values. A page built from one file
-stays well inside five printed A4 sheets (test_tables.py holds each to a size).
+stays inside five printed A4 sheets (test_tables.py holds each to a size).
 
 Every wire's row comes from wiring.WIRING, so no number is written twice.
 """
@@ -72,26 +72,25 @@ def image(name, alt):
     return f"[![{alt}]({name}.png)]({name}.svg)\n\n**Pin 1 on the picture.** {warning}\n"
 
 
+def says(*keys):
+    """The makers' facts `keys` of wiring.toml, as sentences."""
+    return " ".join(f"{W.facts[k]['says']}." for k in keys)
+
+
 def finding(keys=None):
-    """The sentences a reader needs to find the headers `keys` (all of them by default) and their ports."""
+    """The sentences a reader needs to find the headers `keys` (all of them by default) and their ports, and
+    what the makers' documents say about the connectors, pin 1 and the cables."""
     keys = list(W.headers) if keys is None else keys
-    row = ", ".join(f"{h['name']} ({code(group_on(k))}) {h['place']}" for k, h in W.headers.items())
     joins = spoken(f"{header_name(k)} to {W.cables[k]}" for k in keys)
     which = "each header to its port" if len(keys) > 1 else "the header to its port"
     return (
-        f"**Finding the headers.** The demo board has {NUMBER[len(W.headers)]} 12-pin Pmod headers side by side along "
-        f"its bottom edge. Seen from above, they are: {row}. The {W.board['hat']} has {NUMBER[len(W.hat)]} ports: "
-        f"{spoken(W.hat)}. A 12-pin Pmod cable joins {which}, pin 1 to pin 1: {joins}. A USB-C cable joins the "
-        "demo board to a USB port of the Raspberry Pi.\n\n"
-        "**Not checked by us against a board:** the order of the headers (it is from Tiny Tapeout's "
-        "documents), what is printed beside each header and each port, and where pin 1 is on each connector. "
-        f"{spoken(h['name'] for h in W.headers.values())} are this page's names for the headers; "
-        f"{spoken(W.hat)} are Digilent's names for the ports. On a Pmod connector pins 1 to 6 are one row and "
-        f"pins 7 to 12 the other; pins {spoken(W.pmod['ground_pins'])} are ground and pins "
-        f"{spoken(W.pmod['power_pins'])} are {W.pmod['power']}. Each board puts its own {W.pmod['power']} "
-        f"supply on those pins (the {W.board['hat']} from the Raspberry Pi's). Whether the cables in use join "
-        f"the {W.pmod['power']} pins of the two boards is not recorded, and nor is the kind of cable (what is "
-        "on each of its ends).\n"
+        f"**Finding the headers.** {says('printed', 'hat-ports')} A 12-pin Pmod cable joins {which}, pin 1 to "
+        f"pin 1: {joins}. A USB-C cable joins the demo board to a USB port of the Raspberry Pi.\n\n"
+        "**Pin 1 and the cables: from the makers' documents, not checked by us on a board.** "
+        f"{says('sockets', 'pin-1-demo-board', 'pin-1-hat', 'mirrored', 'cameras', 'cable')} On a Pmod connector "
+        f"pins 1 to 6 are one row and pins 7 to 12 the other; pins {spoken(W.pmod['ground_pins'])} are ground and "
+        f"pins {spoken(W.pmod['power_pins'])} are {W.pmod['power']}. Where each of these statements comes from: "
+        f"Sources ({code(SOURCES_PAGE)}).\n"
     )
 
 
@@ -218,7 +217,7 @@ def ui_uo():
     parts = [
         f"{LEAD} This part covers {W.groups['ui_in']['what']} ({code('ui_in')}) and "
         f"{W.groups['uo_out']['what']} ({code('uo_out')}), wire by wire.",
-        image("tt-fpga-pmod-cables-ui-uo", "The Input header goes to port JA and the Output header to port JC"),
+        image("tt-fpga-pmod-cables-ui-uo", "The INPUT header goes to port JA and the OUTPUT header to port JC"),
         finding(keys),
         READING,
         group_section("ui_in"),
@@ -375,6 +374,8 @@ def sources():
         out[f"The wires no measurement covers ({spoken(code(w.signal) for w in unmeasured)})"] = (
             f"from the design: {W.unmeasured['why']}{also}"
         )
+    for fact in W.facts.values():
+        out[fact["says"]] = fact["source"]
     for claim, source in W.sources.items():
         out[claim] = source.replace("{uart.checked}", W.uart["checked"])
     return out

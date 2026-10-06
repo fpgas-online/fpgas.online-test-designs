@@ -2,30 +2,30 @@
 
 For the person at the bench with a Tiny Tapeout demo board that has the FPGA breakout in its chip socket, joined to a Raspberry Pi carrying a Digilent Pmod HAT. This part covers the design's eight inputs (`ui_in`) and the design's eight outputs (`uo_out`), wire by wire.
 
-[![The Input header goes to port JA and the Output header to port JC](tt-fpga-pmod-cables-ui-uo.png)](tt-fpga-pmod-cables-ui-uo.svg)
+[![The INPUT header goes to port JA and the OUTPUT header to port JC](tt-fpga-pmod-cables-ui-uo.png)](tt-fpga-pmod-cables-ui-uo.svg)
 
 **Pin 1 on the picture.** The gold square is pin NUMBER 1 of the Pmod numbering. It is not a place on the board. Find pin 1 on each connector by its marking before plugging a cable in. A 2x6 cable turned round puts 3.3 V on signal pins.
 
-**Finding the headers.** The demo board has three 12-pin Pmod headers side by side along its bottom edge. Seen from above, they are: Input (`ui_in`) on the left, Bidirectional (`uio`) in the middle, Output (`uo_out`) on the right. The Digilent Pmod HAT has three ports: JA, JB and JC. A 12-pin Pmod cable joins each header to its port, pin 1 to pin 1: Input to JA and Output to JC. A USB-C cable joins the demo board to a USB port of the Raspberry Pi.
+**Finding the headers.** The demo board's three Pmod connectors are printed INPUT (`ui_in`), BIDIR (`uio`) and OUTPUT (`uo_out`). They are on the bottom edge, in that order from left to right, with the board held so that its "Tiny Tapeout Demoboard" text reads upright. The Pmod HAT's JA, JB and JC are 2x6 Pmod host ports (female sockets). Pins 6 and 12 of each are tied to the HAT's 3.3 V supply, and pins 5 and 11 are ground. A 12-pin Pmod cable joins each header to its port, pin 1 to pin 1: INPUT to JA and OUTPUT to JC. A USB-C cable joins the demo board to a USB port of the Raspberry Pi.
 
-**Not checked by us against a board:** the order of the headers (it is from Tiny Tapeout's documents), what is printed beside each header and each port, and where pin 1 is on each connector. Input, Bidirectional and Output are this page's names for the headers; JA, JB and JC are Digilent's names for the ports. On a Pmod connector pins 1 to 6 are one row and pins 7 to 12 the other; pins 5 and 11 are ground and pins 6 and 12 are 3.3 V. Each board puts its own 3.3 V supply on those pins (the Digilent Pmod HAT from the Raspberry Pi's). Whether the cables in use join the 3.3 V pins of the two boards is not recorded, and nor is the kind of cable (what is on each of its ends).
+**Pin 1 and the cables: from the makers' documents, not checked by us on a board.** Each of the demo board's three is a female right-angle 2x6 socket, numbered as Digilent numbers a host port, with the board's own 3.3 V supply on pins 6 and 12. In the maker's drawing of the demo board, pin 1 is the square pad under the label i0, b0 or o0, at the right-hand end of the row farther from the board edge; no "1" is printed there. Digilent's product photograph of the HAT shows a printed "1" beside one end of each port's inner row, and "3V3" and "GND" at the other end. This is legible for JA and JB; JC's label is not legible in the photograph. Digilent's specification says: "the pin numbering conventions for the 2x6 connectors are non-standard and are mirrored between the host connector and the peripheral board connector". Seen on the cameras of fpga-1 and fpga-3 on 6 October 2026: a black two-row housing is plugged on each of the demo board's three connectors; a rainbow ribbon runs from them on fpga-1. Neither the wires nor any pin 1 mark can be made out. Both ends are female sockets, so each cable needs a male end at each board; a twelve-wire straight cable joins the two boards' 3.3 V supplies. What cable is fitted on our boards, and whether its pins 6 and 12 are connected, is not recorded; asked on 6 October 2026. On a Pmod connector pins 1 to 6 are one row and pins 7 to 12 the other; pins 5 and 11 are ground and pins 6 and 12 are 3.3 V. Where each of these statements comes from: Sources (`tt-fpga-sources.md`).
 
 **Reading the table.** *iCE40 pin* is the pin number of the FPGA itself (a Lattice iCE40UP5K in its 48-pin SG48 package). *Signal* is the Tiny Tapeout name a design uses. *Demo board* and *Pmod HAT* give the connector and its pin; a cable joins pins of the same number. *Pi GPIO* is the Raspberry Pi's GPIO number (the BCM number), not a position on its 40-pin header.
 
 ### `ui_in`: the design's eight inputs
 
-The Raspberry Pi drives these; the FPGA reads them. They are on the demo board's Input header, cabled to Pmod HAT port JA. The demo board's DIP switches are on these signals too (from `docs/hardware/tt-fpga.md`; not verified by us). How the switches must be set while the Raspberry Pi drives these signals is not recorded.
+The Raspberry Pi drives these; the FPGA reads them. They are on the demo board's INPUT header, cabled to Pmod HAT port JA. The demo board's DIP switches are on these signals too (from `docs/hardware/tt-fpga.md`; not verified by us). How the switches must be set while the Raspberry Pi drives these signals is not recorded.
 
 | iCE40 pin | Signal | Demo board | Pmod HAT | Pi GPIO | Checked |
 |---|---|---|---|---|---|
-| 13 | `ui_in[0]` | Input pin 1 | JA pin 1 | GPIO8 | measured |
-| 19 | `ui_in[1]` | Input pin 2 | JA pin 2 | GPIO10 (shared) | from the design |
-| 18 | `ui_in[2]` | Input pin 3 | JA pin 3 | GPIO9 (shared) | from the design |
-| 21 | `ui_in[3]` | Input pin 4 | JA pin 4 | GPIO11 (shared) | from the design |
-| 23 | `ui_in[4]` | Input pin 7 | JA pin 7 | GPIO19 | measured |
-| 25 | `ui_in[5]` | Input pin 8 | JA pin 8 | GPIO21 | measured |
-| 26 | `ui_in[6]` | Input pin 9 | JA pin 9 | GPIO20 | measured |
-| 27 | `ui_in[7]` | Input pin 10 | JA pin 10 | GPIO18 | measured |
+| 13 | `ui_in[0]` | INPUT pin 1 | JA pin 1 | GPIO8 | measured |
+| 19 | `ui_in[1]` | INPUT pin 2 | JA pin 2 | GPIO10 (shared) | from the design |
+| 18 | `ui_in[2]` | INPUT pin 3 | JA pin 3 | GPIO9 (shared) | from the design |
+| 21 | `ui_in[3]` | INPUT pin 4 | JA pin 4 | GPIO11 (shared) | from the design |
+| 23 | `ui_in[4]` | INPUT pin 7 | JA pin 7 | GPIO19 | measured |
+| 25 | `ui_in[5]` | INPUT pin 8 | JA pin 8 | GPIO21 | measured |
+| 26 | `ui_in[6]` | INPUT pin 9 | JA pin 9 | GPIO20 | measured |
+| 27 | `ui_in[7]` | INPUT pin 10 | JA pin 10 | GPIO18 | measured |
 
 **Checked.** *measured*: read on boards on 29 September 2026 and 4 October 2026; for where and how, see Sources (`tt-fpga-sources.md`). *from the design*: not read on a board; it follows the pattern of the measured wires (bit n of a group on the pin of that place in its header and port); not measured by us.
 
@@ -33,17 +33,17 @@ The Raspberry Pi drives these; the FPGA reads them. They are on the demo board's
 
 ### `uo_out`: the design's eight outputs
 
-The FPGA drives these; the Raspberry Pi reads them. The same eight signals light the demo board's seven-segment display. They are on the demo board's Output header, cabled to Pmod HAT port JC.
+The FPGA drives these; the Raspberry Pi reads them. The same eight signals light the demo board's seven-segment display. They are on the demo board's OUTPUT header, cabled to Pmod HAT port JC.
 
 | iCE40 pin | Signal | Demo board | Pmod HAT | Pi GPIO | Checked |
 |---|---|---|---|---|---|
-| 38 | `uo_out[0]` | Output pin 1 | JC pin 1 | GPIO16 | measured |
-| 42 | `uo_out[1]` | Output pin 2 | JC pin 2 | GPIO14 | measured |
-| 43 | `uo_out[2]` | Output pin 3 | JC pin 3 | GPIO15 | measured |
-| 44 | `uo_out[3]` | Output pin 4 | JC pin 4 | GPIO17 | measured |
-| 45 | `uo_out[4]` | Output pin 7 | JC pin 7 | GPIO4 | measured |
-| 46 | `uo_out[5]` | Output pin 8 | JC pin 8 | GPIO12 | measured |
-| 47 | `uo_out[6]` | Output pin 9 | JC pin 9 | GPIO5 | measured |
-| 48 | `uo_out[7]` | Output pin 10 | JC pin 10 | GPIO6 | measured |
+| 38 | `uo_out[0]` | OUTPUT pin 1 | JC pin 1 | GPIO16 | measured |
+| 42 | `uo_out[1]` | OUTPUT pin 2 | JC pin 2 | GPIO14 | measured |
+| 43 | `uo_out[2]` | OUTPUT pin 3 | JC pin 3 | GPIO15 | measured |
+| 44 | `uo_out[3]` | OUTPUT pin 4 | JC pin 4 | GPIO17 | measured |
+| 45 | `uo_out[4]` | OUTPUT pin 7 | JC pin 7 | GPIO4 | measured |
+| 46 | `uo_out[5]` | OUTPUT pin 8 | JC pin 8 | GPIO12 | measured |
+| 47 | `uo_out[6]` | OUTPUT pin 9 | JC pin 9 | GPIO5 | measured |
+| 48 | `uo_out[7]` | OUTPUT pin 10 | JC pin 10 | GPIO6 | measured |
 
 **Checked.** *measured*: read on boards on 29 September 2026 and 4 October 2026; for where and how, see Sources (`tt-fpga-sources.md`).
