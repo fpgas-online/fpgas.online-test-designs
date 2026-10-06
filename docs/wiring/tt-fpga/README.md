@@ -14,7 +14,7 @@ the [Acorn generator](../acorn/README.md), and built from the same pieces ([`../
 | `render.py` | Renders every SVG in `generated/` to PNG with headless Chrome (or Chromium), for pages and PDFs that cannot take the SVG. |
 | `generated/` | The output, committed. Do not edit it by hand. |
 | `test_code_agrees.py` | **What stops the documentation and the tests drifting apart.** See below. |
-| `test_wiring.py`, `test_tables.py`, `test_picture.py` | The checks on the table, the pages and the picture. |
+| `test_wiring.py`, `test_tables.py`, `test_picture.py`, `test_output.py` | The checks on the table, the pages, the picture, and `--check` agreeing with what `gen.py` writes and removes. |
 
 ## The test code keeps its own numbers, and a test holds them to this table
 
@@ -26,7 +26,7 @@ Raspberry Pi one file at a time, and the gateware's pins are in LiteX's own form
 read `wiring.toml`. `test_code_agrees.py` reads each of them and fails when any entry differs from
 `wiring.toml`: every wire of the pin identification table, the Pmod HAT's GPIO lists, the wires the pin
 identification design gives turns to, the loopback test's GPIO lists, every pin of the platform file, the
-loader's microcontroller pins and the serial bridge's. A change to the wiring is made in `wiring.toml` and in
+loader's microcontroller pins (in both of its ways of sending), the clock's pin and frequency in the loader, the serial bridge and the gateware, the serial bridge's pins, the FPGA device, and where the display design puts the middle bar and the dot. A change to the wiring is made in `wiring.toml` and in
 the code in the same commit, or the `Wiring sheets` workflow fails.
 
 ## Changing the wiring
@@ -48,7 +48,12 @@ modules have the same names as the Acorn generator's (`wiring`, `tables`), so on
   only for a measurement that was made, with the record that shows it.
 - A fact nobody has checked says so, in `[sources]`, in those words.
 - The picture is a diagram. What is printed beside each connector, and where pin 1 is on a real board, is not
-  recorded in this repository; the pages say so rather than guess. When someone reads it off a board, record it
-  in `wiring.toml` with its date and draw it.
-- An FPGA on a demo board is loaded by streaming only; no code of ours writes, replaces or deletes a file on a
-  Tiny Tapeout demo board. `tables.STREAMING` prints that on every page that mentions loading.
+  recorded in this repository; the pages say so rather than guess. The gold square is pin NUMBER 1 of the
+  Pmod numbering, not a place on the board, and `picture.PIN_1` says so on the picture and under it on every
+  page. When someone reads it off a board, record it in `wiring.toml` with its date, draw it, and take the
+  warning off.
+- The rule: an FPGA on a demo board is loaded by streaming only, and no code of ours may write, replace or
+  delete a file on a demo board. `tables.STREAMING` prints the rule on every page that mentions loading, and
+  claims as fact only what this repository holds: its own loader and tests do not.
+- A measurement's dates are printed under each table; where and how it was made is printed once, on the
+  sources page.

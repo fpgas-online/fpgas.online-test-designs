@@ -44,7 +44,10 @@ def test_only_a_wire_with_a_gpio_to_itself_is_called_measured():
 
 def test_a_measurement_carries_its_date_its_place_and_its_record():
     (m,) = W.measurements
-    assert "29 September 2026" in m.when and "4 October 2026" in m.when
+    assert m.dates == ("29 September 2026", "4 October 2026")
+    assert m.when == "on 29 September 2026, and again by the boot check (`fpgas-verify`) on 4 October 2026"
+    rejects(lambda d: d["measurements"][0].pop("dates"), "a measurement has no dates")
+    rejects(lambda d: d["measurements"][0].__setitem__("when", "one day"), "must name each of its `dates`")
     assert "welland" in m.where and "tt-fpga-pin-mapping.md" in m.record
     rejects(lambda d: d["measurements"][0].pop("when"), "a measurement has no when")
     rejects(lambda d: d["measurements"][0].pop("record"), "a measurement has no record")
@@ -93,3 +96,8 @@ def test_a_microcontroller_gpio_given_twice_is_refused():
 
 def test_a_wiring_without_sources_is_refused():
     rejects(lambda d: d["sources"].clear(), "sources. is empty")
+
+
+def test_the_clock_must_have_its_frequency_and_a_pin_our_code_drives():
+    rejects(lambda d: d["other"][0].pop("hz"), "needs one clock")
+    rejects(lambda d: d["other"][0].__setitem__("mcu_source", "tt"), "needs one clock")

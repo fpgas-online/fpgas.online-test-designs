@@ -4,18 +4,20 @@ For the person at the bench with a Tiny Tapeout demo board that has the FPGA bre
 
 [![Which Pmod header of the demo board goes to which port of the Pmod HAT](tt-fpga-pmod-cables.png)](tt-fpga-pmod-cables.svg)
 
+**Pin 1 on the picture.** The gold square is pin NUMBER 1 of the Pmod numbering. It is not a place on the board. Find pin 1 on each connector by its marking before plugging a cable in. A 2x6 cable turned round puts 3.3 V on signal pins.
+
 **Finding the headers.** The demo board has three 12-pin Pmod headers side by side along its bottom edge. Seen from above, they are: Input (`ui_in`) on the left, Bidirectional (`uio`) in the middle, Output (`uo_out`) on the right. The Digilent Pmod HAT has three ports: JA, JB and JC. A 12-pin Pmod cable joins each header to its port, pin 1 to pin 1: Input to JA, Bidirectional to JB and Output to JC. A USB-C cable joins the demo board to a USB port of the Raspberry Pi.
 
-**Not checked by us against a board:** the order of the headers (it is from Tiny Tapeout's documents), what is printed beside each header and each port, and where pin 1 is on each connector. Input, Bidirectional and Output are this page's names for the headers; JA, JB and JC are Digilent's names for the ports. On a Pmod connector pins 1 to 6 are one row and pins 7 to 12 the other; pins 5 and 11 are ground and pins 6 and 12 are 3.3 V. Whether the cables in use join the 3.3 V pins of the two boards is not recorded.
+**Not checked by us against a board:** the order of the headers (it is from Tiny Tapeout's documents), what is printed beside each header and each port, and where pin 1 is on each connector. Input, Bidirectional and Output are this page's names for the headers; JA, JB and JC are Digilent's names for the ports. On a Pmod connector pins 1 to 6 are one row and pins 7 to 12 the other; pins 5 and 11 are ground and pins 6 and 12 are 3.3 V. Each board puts its own 3.3 V supply on those pins (the Digilent Pmod HAT from the Raspberry Pi's). Whether the cables in use join the 3.3 V pins of the two boards is not recorded, and nor is the kind of cable (what is on each of its ends).
 
 | Demo board header | Signals | Pmod HAT port | Driven by | Checked |
 |---|---|---|---|---|
-| Input | `ui_in[0]` to `ui_in[7]` | JA | the Raspberry Pi | measured, but for the shared GPIOs |
-| Bidirectional | `uio[0]` to `uio[7]` | JB | either end | measured, but for the shared GPIOs |
+| Input | `ui_in[0]` to `ui_in[7]` | JA | the Raspberry Pi | measured, except the wires on shared GPIOs |
+| Bidirectional | `uio[0]` to `uio[7]` | JB | either end | measured, except the wires on shared GPIOs |
 | Output | `uo_out[0]` to `uo_out[7]` | JC | the FPGA | measured |
 
-**Checked.** *measured*: read with the pin identification design (each FPGA pin sends its own pin number, and the Raspberry Pi reads which number arrives on which GPIO) on 29 September 2026, and again by the boot check (`fpgas-verify`) on 4 October 2026, on the three Tiny Tapeout FPGA boards seen at welland's sw2 p33, p35 and p36 on those days; a fourth, seen at p34, was not powered either time. The measurement joins the iCE40 pin to the Pi GPIO; the connector pin numbers in between are from the two boards' documents. *from the design*: not read on a board; it follows the pattern of the measured wires (bit n of a group on the pin of that place in its header and port); not measured by us.
+**Checked.** *measured*: read on boards on 29 September 2026 and 4 October 2026; for where and how, see Sources (`tt-fpga-sources.md`). *from the design*: not read on a board; it follows the pattern of the measured wires (bit n of a group on the pin of that place in its header and port); not measured by us.
 
 **Shared GPIOs.** The Digilent Pmod HAT joins some pins of two ports to one Raspberry Pi GPIO, so the two signals on them are one wire at the Raspberry Pi: GPIO10 is JA pin 2 and JB pin 2 (`ui_in[1]` and `uio[1]`); GPIO9 is JA pin 3 and JB pin 3 (`ui_in[2]` and `uio[2]`); GPIO11 is JA pin 4 and JB pin 4 (`ui_in[3]` and `uio[3]`). Whatever the Raspberry Pi puts on such a GPIO reaches both signals. A design that drives one of these `uio` signals drives the signal it shares with too, and the Raspberry Pi must then leave that GPIO as an input.
 
-The USB-C cable carries the demo board's serial link to the Raspberry Pi: it is how the FPGA is loaded and how a design's serial port is reached. **The FPGA is loaded by streaming only.** The demo board's microcontroller reads the bitstream from the Raspberry Pi over the USB-C cable and passes it straight to the FPGA. No code of ours writes, replaces or deletes a file on a Tiny Tapeout demo board.
+The USB-C cable carries the demo board's serial link to the Raspberry Pi: it is how the FPGA is loaded and how a design's serial port is reached. **The rule here: an FPGA on a demo board is loaded by streaming only**, and no code of ours may write, replace or delete a file on a demo board. The loader and the tests in this repository do not: the demo board's microcontroller reads the bitstream from the Raspberry Pi over the USB-C cable and passes it straight to the FPGA.

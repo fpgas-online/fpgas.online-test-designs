@@ -4,7 +4,7 @@ For the person at the bench with a Tiny Tapeout demo board that has the FPGA bre
 
 ### Loading the FPGA: its configuration pins
 
-**The FPGA is loaded by streaming only.** The demo board's microcontroller reads the bitstream from the Raspberry Pi over the USB-C cable and passes it straight to the FPGA. No code of ours writes, replaces or deletes a file on a Tiny Tapeout demo board.
+**The rule here: an FPGA on a demo board is loaded by streaming only**, and no code of ours may write, replace or delete a file on a demo board. The loader and the tests in this repository do not: the demo board's microcontroller reads the bitstream from the Raspberry Pi over the USB-C cable and passes it straight to the FPGA.
 
 The FPGA breakout has no SPI flash (no memory chip that keeps a design), so the FPGA is loaded again after every power-up. Its four configuration pins go only to the demo board's microcontroller. None is on a Pmod header: no cable carries them, and the Raspberry Pi cannot reach them.
 
@@ -28,13 +28,15 @@ Which microcontroller pin is wired to which of the four iCE40 pins is not record
 
 ### The seven-segment display
 
-The display is on the eight `uo_out` signals, the same ones that go to the Output header: whatever a design puts on `uo_out` shows on the display and reaches the Raspberry Pi too. Segments a to f are the six outer bars in order round the ring, g is the middle bar, and the dot is the decimal point.
+The display is on the eight `uo_out` signals, the same ones that go to the Output header: whatever a design puts on `uo_out` shows on the display and reaches the Raspberry Pi too. Segments a to f are the six bars of the outer ring, in the order `designs/tt-display` runs round it; where a is, and which way round the ring that order goes, is not recorded and not verified by us. g is the middle bar and the dot is the decimal point.
 
 [![The Output header goes to port JC](tt-fpga-pmod-cables-uo.png)](tt-fpga-pmod-cables-uo.svg)
 
+**Pin 1 on the picture.** The gold square is pin NUMBER 1 of the Pmod numbering. It is not a place on the board. Find pin 1 on each connector by its marking before plugging a cable in. A 2x6 cable turned round puts 3.3 V on signal pins.
+
 **Finding the headers.** The demo board has three 12-pin Pmod headers side by side along its bottom edge. Seen from above, they are: Input (`ui_in`) on the left, Bidirectional (`uio`) in the middle, Output (`uo_out`) on the right. The Digilent Pmod HAT has three ports: JA, JB and JC. A 12-pin Pmod cable joins the header to its port, pin 1 to pin 1: Output to JC. A USB-C cable joins the demo board to a USB port of the Raspberry Pi.
 
-**Not checked by us against a board:** the order of the headers (it is from Tiny Tapeout's documents), what is printed beside each header and each port, and where pin 1 is on each connector. Input, Bidirectional and Output are this page's names for the headers; JA, JB and JC are Digilent's names for the ports. On a Pmod connector pins 1 to 6 are one row and pins 7 to 12 the other; pins 5 and 11 are ground and pins 6 and 12 are 3.3 V. Whether the cables in use join the 3.3 V pins of the two boards is not recorded.
+**Not checked by us against a board:** the order of the headers (it is from Tiny Tapeout's documents), what is printed beside each header and each port, and where pin 1 is on each connector. Input, Bidirectional and Output are this page's names for the headers; JA, JB and JC are Digilent's names for the ports. On a Pmod connector pins 1 to 6 are one row and pins 7 to 12 the other; pins 5 and 11 are ground and pins 6 and 12 are 3.3 V. Each board puts its own 3.3 V supply on those pins (the Digilent Pmod HAT from the Raspberry Pi's). Whether the cables in use join the 3.3 V pins of the two boards is not recorded, and nor is the kind of cable (what is on each of its ends).
 
 | Segment | Signal | iCE40 pin | Demo board | Pmod HAT | Pi GPIO |
 |---|---|---|---|---|---|
@@ -47,7 +49,7 @@ The display is on the eight `uo_out` signals, the same ones that go to the Outpu
 | g | `uo_out[6]` | 47 | Output pin 9 | JC pin 9 | GPIO5 |
 | dot | `uo_out[7]` | 48 | Output pin 10 | JC pin 10 | GPIO6 |
 
-**Checked.** *measured*: read with the pin identification design (each FPGA pin sends its own pin number, and the Raspberry Pi reads which number arrives on which GPIO) on 29 September 2026, and again by the boot check (`fpgas-verify`) on 4 October 2026, on the three Tiny Tapeout FPGA boards seen at welland's sw2 p33, p35 and p36 on those days; a fourth, seen at p34, was not powered either time. The measurement joins the iCE40 pin to the Pi GPIO; the connector pin numbers in between are from the two boards' documents. Which segment each signal lights is from Tiny Tapeout's board specification; not verified by us segment by segment.
+**Checked.** *measured*: read on boards on 29 September 2026 and 4 October 2026; for where and how, see Sources (`tt-fpga-sources.md`). Which segment each signal lights is from Tiny Tapeout's board specification; not verified by us segment by segment.
 
 ### The clock, the reset and the LED
 
@@ -55,11 +57,11 @@ None of these is on a Pmod header: no cable carries them, and the Raspberry Pi c
 
 | iCE40 pin | Name in our designs | What it is | RP2350 pin |
 |---|---|---|---|
-| 20 | `clk_rp2040` | the clock into the design: 50 MHz, made by the microcontroller | GPIO16 |
+| 20 | `clk_rp2040` | the clock into the design, made by the microcontroller: 50 MHz | GPIO16 |
 | 37 | `rst_n` | the design's reset: low resets it | GPIO14 (not verified by us) |
-| 39 | `rgb_led.r` | red of the three-colour LED: low lights it | none |
-| 40 | `rgb_led.g` | green of the three-colour LED: low lights it | none |
-| 41 | `rgb_led.b` | blue of the three-colour LED: low lights it | none |
+| 39 | `rgb_led.r` | red of the three-colour LED: low lights it | not recorded |
+| 40 | `rgb_led.g` | green of the three-colour LED: low lights it | not recorded |
+| 41 | `rgb_led.b` | blue of the three-colour LED: low lights it | not recorded |
 
 ### The same 24 signals at the microcontroller
 
@@ -71,4 +73,4 @@ For a version 3 demo board, whose microcontroller is an RP2350; a version 2 demo
 | `uio[0]` to `uio[7]` | GPIO25 to GPIO32 |
 | `uo_out[0]` to `uo_out[7]` | GPIO33 to GPIO40 |
 
-After a load made with `--gpio-release` (every Pmod test uses it), our loader sets these 24 pins to inputs, so that only the FPGA and the Raspberry Pi drive the signals.
+After a load made with `--gpio-release`, our loader sets these 24 pins to inputs, so that only the FPGA and the Raspberry Pi drive the signals.

@@ -32,15 +32,18 @@ LEAD = (
     "For the person at the bench with a Tiny Tapeout demo board that has the FPGA breakout in its chip "
     f"socket, joined to a {W.board['host']}."
 )
-# Tim's standing rule, printed wherever a page mentions loading the FPGA.
+# The standing rule, printed wherever a page mentions loading the FPGA: first the rule, as a rule, then
+# the fact this repository can stand behind (tests/test_tt_host_scripts.py holds what its scripts send).
 STREAMING = (
-    "**The FPGA is loaded by streaming only.** The demo board's microcontroller reads the bitstream from the "
-    "Raspberry Pi over the USB-C cable and passes it straight to the FPGA. No code of ours writes, replaces "
-    "or deletes a file on a Tiny Tapeout demo board."
+    "**The rule here: an FPGA on a demo board is loaded by streaming only**, and no code of ours may write, "
+    "replace or delete a file on a demo board. The loader and the tests in this repository do not: the demo "
+    "board's microcontroller reads the bitstream from the Raspberry Pi over the USB-C cable and passes it "
+    "straight to the FPGA."
 )
 
 
 NUMBER = {1: "one", 2: "two", 3: "three", 4: "four"}
+SOURCES_PAGE = "tt-fpga-sources.md"
 
 
 def code(s):
@@ -65,7 +68,8 @@ def image(name, alt):
     """A picture of picture.PICTURES, as the PNG with a link to the SVG; both are beside this file."""
     if name not in picture.PICTURES:
         raise KeyError(f"{name} is not a picture that picture.py draws")
-    return f"[![{alt}]({name}.png)]({name}.svg)\n"
+    warning = " ".join(picture.pin_1_warning(W))
+    return f"[![{alt}]({name}.png)]({name}.svg)\n\n**Pin 1 on the picture.** {warning}\n"
 
 
 def finding(keys=None):
@@ -84,8 +88,10 @@ def finding(keys=None):
         f"{spoken(h['name'] for h in W.headers.values())} are this page's names for the headers; "
         f"{spoken(W.hat)} are Digilent's names for the ports. On a Pmod connector pins 1 to 6 are one row and "
         f"pins 7 to 12 the other; pins {spoken(W.pmod['ground_pins'])} are ground and pins "
-        f"{spoken(W.pmod['power_pins'])} are {W.pmod['power']}. Whether the cables in use join the "
-        f"{W.pmod['power']} pins of the two boards is not recorded.\n"
+        f"{spoken(W.pmod['power_pins'])} are {W.pmod['power']}. Each board puts its own {W.pmod['power']} "
+        f"supply on those pins (the {W.board['hat']} from the Raspberry Pi's). Whether the cables in use join "
+        f"the {W.pmod['power']} pins of the two boards is not recorded, and nor is the kind of cable (what is "
+        "on each of its ends).\n"
     )
 
 
@@ -120,13 +126,14 @@ CHAIN = ["iCE40 pin", "Signal", "Demo board", "Pmod HAT", "Pi GPIO"]
 
 
 def checked(wires):
-    """What 'measured' and 'from the design' mean for these wires: the date and the place, in place."""
+    """What 'measured' and 'from the design' mean for these wires, in one short line: the days of the
+    measurement here, and where and how once, on the sources page."""
     out = []
     for m in dict.fromkeys(W.measured(w) for w in wires):
         if m is not None:
             out.append(
-                f"*measured*: {m.how} {m.when}, {m.where}. The measurement joins the iCE40 pin to the Pi GPIO; "
-                "the connector pin numbers in between are from the two boards' documents."
+                f"*measured*: read on boards on {spoken(m.dates)}; for where and how, see Sources "
+                f"({code(SOURCES_PAGE)})."
             )
     if any(W.measured(w) is None for w in wires):
         out.append(f"*from the design*: not read on a board; {W.unmeasured['why']}.")
@@ -175,7 +182,7 @@ def group_section(group):
     parts = [
         f"### {code(group)}: {g['what']}",
         f"{drive}{extra} They are on the demo board's {W.header_of(group)['name']} header, cabled to Pmod HAT "
-        f"port {wires[0].port}.",
+        f"port {wires[0].port}.{' ' + g['note'] if g.get('note') else ''}",
         table(head, [[*chain(w), checked_cell(w)] for w in wires]),
         checked(wires),
     ]
@@ -190,7 +197,7 @@ def cables():
         group = group_on(key)
         wires = W.of_group(group)
         states = sorted({checked_cell(w) for w in wires}, reverse=True)
-        how = states[0] if len(states) == 1 else "measured, but for the shared GPIOs"
+        how = states[0] if len(states) == 1 else "measured, except the wires on shared GPIOs"
         rows.append([h["name"], f"{code(group + '[0]')} to {code(group + '[7]')}", W.cables[key],
                      wiring.DRIVES[W.groups[group]["drive"]], how])  # fmt: skip
     parts = [
@@ -231,6 +238,8 @@ def uart_section():
         f"convention: {code(rx.signal)} carries data into the design and {code(tx.signal)} carries data out of "
         f"it. Our test design runs it at {u['baud']} baud.",
         table([*CHAIN[:2], "Use", *CHAIN[2:]], rows),
+        f"On its way to the Raspberry Pi's GPIO, {code(rx.signal)} is {checked_cell(rx)} and {code(tx.signal)} is "
+        f"{checked_cell(tx)}.",
         checked([rx, tx]),
         f"The demo board's microcontroller (an {mcu} on a version 3 demo board) is on the same two signals: its "
         f"GPIO{rx.mcu_gpio} sends to {code(rx.signal)} and its GPIO{tx.mcu_gpio} receives from "
@@ -289,8 +298,9 @@ def display_section():
             "### The seven-segment display",
             f"The display is on the eight {code(group)} signals, the same ones that go to the "
             f"{header_name(key)} header: whatever a design puts on {code(group)} shows on the display and "
-            "reaches the Raspberry Pi too. Segments a to f are the six outer bars in order round the ring, g is "
-            "the middle bar, and the dot is the decimal point.",
+            "reaches the Raspberry Pi too. Segments a to f are the six bars of the outer ring, in the order "
+            "`designs/tt-display` runs round it; where a is, and which way round the ring that order goes, is "
+            "not recorded and not verified by us. g is the middle bar and the dot is the decimal point.",
             image("tt-fpga-pmod-cables-uo", f"The {header_name(key)} header goes to port {W.cables[key]}").strip(),
             finding([key]).strip(),
             table(["Segment", "Signal", "iCE40 pin", *CHAIN[2:]], rows).strip(),
@@ -305,10 +315,11 @@ def other_section():
     mcu = W.board["mcu"]
     rows = []
     for o in W.other:
-        gpio = "none"
+        gpio = "not recorded"
         if "mcu_gpio" in o:
             gpio = f"GPIO{o['mcu_gpio']}" + ("" if o["mcu_source"] == "code" else " (not verified by us)")
-        rows.append([o["pin"], code(o["signal"]), o["what"], gpio])
+        what = o["what"] + (f": {o['hz'] / 1e6:g} MHz" if "hz" in o else "")
+        rows.append([o["pin"], code(o["signal"]), what, gpio])
     groups = [
         [f"{code(g + '[0]')} to {code(g + '[7]')}", f"GPIO{v['mcu_first_gpio']} to GPIO{v['mcu_first_gpio'] + 7}"]
         for g, v in W.groups.items()
@@ -324,7 +335,7 @@ def other_section():
             "RP2040 with other pin numbers, and our loader is written for version 3. Bit 0 is on the first "
             "GPIO of each range and bit 7 on the last.",
             table(["Signals", f"{mcu} pins"], groups).strip(),
-            "After a load made with `--gpio-release` (every Pmod test uses it), our loader sets these 24 pins "
+            "After a load made with `--gpio-release`, our loader sets these 24 pins "
             "to inputs, so that only the FPGA and the Raspberry Pi drive the signals.",
         ]
     ) + "\n"  # fmt: skip
@@ -386,5 +397,5 @@ def build():
         "tt-fpga-pins-ui-uo.md": BANNER + ui_uo(),
         "tt-fpga-pins-uio-uart.md": BANNER + uio_uart(),
         "tt-fpga-pins-other.md": BANNER + other(),
-        "tt-fpga-sources.md": BANNER + sources_page(),
+        SOURCES_PAGE: BANNER + sources_page(),
     }

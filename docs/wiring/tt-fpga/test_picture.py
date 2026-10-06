@@ -8,6 +8,7 @@ import copy
 import re
 
 import picture
+import pytest
 import wiring
 
 W = wiring.WIRING
@@ -71,3 +72,22 @@ def test_a_picture_that_picks_headers_out_still_names_every_cable():
     assert "Tiny Tapeout FPGA demo board to Pmod HAT: the Output header" in words
     assert {"Input to JA", "Bidirectional to JB", "Output to JC"} <= set(words)
     assert words.count("pin 1 to pin 1") == 1  # only the cable the picture is about
+
+
+def test_every_picture_says_in_words_that_the_gold_square_is_a_number_not_a_place():
+    """Where pin 1 is on a board has not been read off one, so the square must not be taken for a place."""
+    for name, svg in SVGS.items():
+        words = labels(svg)
+        assert "The gold square is pin NUMBER 1 of the Pmod numbering. It is not a place on the board." in words, name
+        assert (
+            "Find pin 1 on each connector by its marking before plugging a cable in. "
+            "A 2x6 cable turned round puts 3.3 V on signal pins."
+        ) in words, name
+
+
+def test_the_warning_about_a_cable_turned_round_is_worked_out_from_the_numbering():
+    assert picture.turned_round(W) == [1, 7]  # where pins 12 and 6, the 3.3 V pins, land
+    d = copy.deepcopy(wiring.DATA)
+    d["pmod"].update(signal_pins=[2, 3, 4, 5, 8, 9, 10, 11], ground_pins=[6, 12], power_pins=[1, 7])
+    with pytest.raises(SystemExit, match="it no longer does"):
+        picture.pin_1_warning(wiring.build(d))

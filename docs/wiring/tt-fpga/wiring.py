@@ -41,8 +41,9 @@ class Wire:
 @dataclass(frozen=True)
 class Measurement:
     wires: frozenset  # the signals it covers
+    dates: tuple  # the days it was made, as printed
     how: str
-    when: str
+    when: str  # who or what measured on each of those days, with the days in it
     where: str
     also: str
     record: str
@@ -179,6 +180,10 @@ def build(data):
                     others = ", ".join(o.signal for o in on if o != w)
                     errors.append(f"{w.signal}, which the FPGA drives, shares GPIO{gpio} with {others}")
 
+    clocks = [o for o in data.get("other", []) if "hz" in o]
+    if len(clocks) != 1 or not isinstance(clocks[0]["hz"], int) or clocks[0].get("mcu_source") != "code":
+        errors.append("[[other]] needs one clock: an entry with a whole `hz`, made by a GPIO our code drives")
+
     uart = data["uart"]
     for end, drive in (("rx", "pi"), ("tx", "fpga")):
         u = uart[end]
@@ -194,12 +199,17 @@ def build(data):
     own = frozenset(w.signal for w in wires if [x.gpio for x in wires].count(w.gpio) == 1)
     measurements = []
     for m in data.get("measurements", []):
-        if not _need(m, ("wires", "how", "when", "where", "record"), "a measurement", errors):
+        if not _need(m, ("wires", "dates", "how", "when", "where", "record"), "a measurement", errors):
             continue
+        when = m["when"].format(*m["dates"])
+        if not all(date in when for date in m["dates"]):
+            errors.append("a measurement's `when` must name each of its `dates`, as {0}, {1}, ...")
         covered = own if m["wires"] == "own" else frozenset(m["wires"])
         if not covered <= signals:
             errors.append(f"a measurement names wires that do not exist: {', '.join(sorted(covered - signals))}")
-        measurements.append(Measurement(covered, m["how"], m["when"], m["where"], m.get("also", ""), m["record"]))
+        measurements.append(
+            Measurement(covered, tuple(m["dates"]), m["how"], when, m["where"], m.get("also", ""), m["record"])
+        )
     _need(data.get("unmeasured", {}), ("why",), "[unmeasured]", errors)
     if not data.get("sources"):
         errors.append("[sources] is empty: every statement of fact on the pages needs where it comes from")

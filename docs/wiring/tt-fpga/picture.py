@@ -8,7 +8,10 @@ header is without sending them to another page. PICTURES lists them.
 It is a diagram, not a drawing of the boards: the headers are in the order Tiny Tapeout's documents give,
 the ports in the order of their names, and every connector is drawn the way the Pmod standard numbers its
 pins (1 to 6 in one row, 7 to 12 in the other). Where pin 1 is on a real board is not recorded in this
-repository, so the picture does not pretend to show it; the pages say so beside the picture.
+repository. The gold square is therefore pin NUMBER 1, drawn where the numbering puts it and not where a
+board has it, and the picture says so in words (PIN_1), as does every page under the picture: a reader
+must not take the square's corner for a place on the board. When a board has been looked at, record where
+pin 1 is in wiring.toml, draw it, and take the warning off.
 
 Drawn on the canvas the Acorn sheets use (docs/wiring/wiringlib/canvas.py): text as glyph outlines, its own
 paper background, and a build that fails if any text leaves the canvas, overlaps other text or sits on a
@@ -24,7 +27,15 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))  # docs/wir
 import wiring
 from wiringlib.canvas import FAINT, GOLD, INK, MUTED, RED, Sheet
 
-W, H = 1040, 760
+W, H = 1040, 830
+# Said on the picture and, by tables.py, under it on every page, until where pin 1 is has been read off a
+# board. That a cable turned round puts the power pins on signal pins follows from the numbering:
+# turned_round() works it out from wiring.toml and draw() refuses to say it if it is not so.
+PIN_1 = (
+    "The gold square is pin NUMBER 1 of the Pmod numbering. It is not a place on the board.",
+    "Find pin 1 on each connector by its marking before plugging a cable in.",
+    "A 2x6 cable turned round puts {power} on signal pins.",
+)
 SMALLEST = 15  # px: no text on the picture is smaller
 CELL = 34  # a pin of a connector
 BOARD_FILL = "#eef0f3"
@@ -40,7 +51,7 @@ PICTURES = {
 DRIVES = {"pi": "the Pi drives", "fpga": "the FPGA drives", "both": "either end drives"}
 
 
-def spoken(items):
+def listed(items):
     """['a', 'b', 'c'] -> 'a, b, c'."""
     return ", ".join(str(i) for i in items)
 
@@ -57,10 +68,22 @@ def shared_note(w):
             pins_a = [w.pmod["signal_pins"][w.hat[a]["gpios"].index(g)] for g in both]
             pins_b = [w.pmod["signal_pins"][w.hat[b]["gpios"].index(g)] for g in both]
             notes.append(
-                f"{a} pins {spoken(pins_a)} and {b} pins {spoken(pins_b)} are the same "
-                f"Raspberry Pi GPIOs: {spoken(both)}."
+                f"{a} pins {listed(pins_a)} and {b} pins {listed(pins_b)} are the same "
+                f"Raspberry Pi GPIOs: {listed(both)}."
             )
     return notes
+
+
+def turned_round(w):
+    """The pins the power pins land on when a 2x6 plug is turned half a turn: pin n goes to pin 13 - n."""
+    return sorted(13 - pin for pin in w.pmod["power_pins"])
+
+
+def pin_1_warning(w):
+    """PIN_1 as the three sentences to print, or SystemExit if the wiring no longer makes the last one true."""
+    if not set(turned_round(w)) <= set(w.pmod["signal_pins"]):
+        raise SystemExit("picture.py: PIN_1 says a cable turned round puts power on signal pins; it no longer does")
+    return [line.format(power=w.pmod["power"]) for line in PIN_1]
 
 
 def connector(sh, w, cx, top, lit, ringed=()):
@@ -152,12 +175,19 @@ def draw(w, name):
     for i, note in enumerate(shared_note(w)):
         sh.text(left + 16, hat_top + 148 + 20 * i, note, SMALLEST)
 
+    # the warning about pin 1, in words on the picture itself
+    first, *rest = pin_1_warning(w)
+    box = (left, H - 122, W - left, H - 60)
+    sh.rect(box[0], box[1], box[2] - box[0], box[3] - box[1], fill="#fff4d6", stroke=GOLD, sw=2, rx=8)
+    sh.text(left + 16, H - 96, first, 16, "bold", box=box)
+    sh.text(left + 16, H - 73, " ".join(rest), 16, box=box)
+
     # the key
     x, y = left, H - 22
     x = swatch(sh, x, y, "pin 1", GOLD, INK, 2.5)
-    x = swatch(sh, x, y, f"signal: pins {spoken(w.pmod['signal_pins'])}")
-    x = swatch(sh, x, y, f"ground: pins {spoken(w.pmod['ground_pins'])}", GROUND_FILL)
-    x = swatch(sh, x, y, f"{w.pmod['power']}: pins {spoken(w.pmod['power_pins'])}", POWER_FILL, RED)
+    x = swatch(sh, x, y, f"signal: pins {listed(w.pmod['signal_pins'])}")
+    x = swatch(sh, x, y, f"ground: pins {listed(w.pmod['ground_pins'])}", GROUND_FILL)
+    x = swatch(sh, x, y, f"{w.pmod['power']}: pins {listed(w.pmod['power_pins'])}", POWER_FILL, RED)
     if shared_gpios:
         swatch(sh, x, y, "one GPIO, two ports", ring=True)
 

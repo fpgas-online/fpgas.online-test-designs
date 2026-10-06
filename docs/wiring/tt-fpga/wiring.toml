@@ -13,6 +13,7 @@
 [board]
 name = "Tiny Tapeout demo board with the FPGA breakout"
 fpga = "Lattice iCE40UP5K in its 48-pin SG48 package"
+fpga_device = "ice40-up5k-sg48"  # the same, as designs/_shared/tt_fpga_platform.py names it to the toolchain
 mcu = "RP2350"  # the demo board's microcontroller on a version 3 demo board; version 2 has an RP2040
 hat = "Digilent Pmod HAT"
 host = "Raspberry Pi carrying a Digilent Pmod HAT"
@@ -33,12 +34,14 @@ power = "3.3 V"
 #   connector: that group's name in the platform's connector table.
 #   header: the demo board header that carries it.  drive: which end drives it (pi, fpga, both).
 #   mcu_first_gpio: the RP2350 GPIO on bit 0; bit n is on that plus n (demo board version 3).
+#   note: a sentence printed with the group's table; what it states has its entry in [sources].
 # ---------------------------------------------------------------------------------------------------
 [groups.ui_in]
 what = "the design's eight inputs"
 drive = "pi"
 fpga_pins = [13, 19, 18, 21, 23, 25, 26, 27]
 connector = "tt_input"
+note = "The demo board's DIP switches are on these signals too (from `docs/hardware/tt-fpga.md`; not verified by us). How the switches must be set while the Raspberry Pi drives these signals is not recorded."
 header = "input"
 mcu_first_gpio = 17
 colour = "#b4491f"
@@ -155,13 +158,15 @@ what = "clock"
 # ---------------------------------------------------------------------------------------------------
 # The FPGA pins that are not Tiny Tapeout inputs or outputs. None is on a Pmod header.
 #   signal: the name in designs/_shared/tt_fpga_platform.py.  mcu_gpio: the RP2350 GPIO at the other end.
+#   hz: the clock's frequency, as the loader and the serial bridge set it and the platform file expects it.
 #   mcu_source: "code" when our own code drives that GPIO, "tt" when the number is only from Tiny Tapeout's
 #   documents (docs/hardware/pmod-tt.md).
 # ---------------------------------------------------------------------------------------------------
 [[other]]
 signal = "clk_rp2040"
 pin = 20
-what = "the clock into the design: 50 MHz, made by the microcontroller"
+what = "the clock into the design, made by the microcontroller"
+hz = 50_000_000
 mcu_gpio = 16
 mcu_source = "code"
 
@@ -191,16 +196,19 @@ what = "blue of the three-colour LED: low lights it"
 # What has been measured, and where. Nothing here is invented: each entry is carried from a record in
 # this repository, named in `record`. A wire that no entry covers is printed as "from the design".
 #   wires = "own": the wires whose Raspberry Pi GPIO no other wire ends on.
-#   how, when, where: printed under every table that has a measured wire.
-#   also, record: printed with them in the sources list only.
+#   dates: the days it was made; printed under every table that has a measured wire, with a pointer to the
+#   sources list.
+#   how, when, where, also, record: printed once, in the sources list. `when` says who or what measured on
+#   each of `dates`, in their order ({0}, {1}).
 # ---------------------------------------------------------------------------------------------------
 [[measurements]]
 wires = "own"
 how = "read with the pin identification design (each FPGA pin sends its own pin number, and the Raspberry Pi reads which number arrives on which GPIO)"
-when = "on 29 September 2026, and again by the boot check (`fpgas-verify`) on 4 October 2026"
-where = "on the three Tiny Tapeout FPGA boards seen at welland's sw2 p33, p35 and p36 on those days; a fourth, seen at p34, was not powered either time"
+dates = ["29 September 2026", "4 October 2026"]
+when = "on {0}, and again by the boot check (`fpgas-verify`) on {1}"
+where = "on the three Tiny Tapeout FPGA boards seen at welland's sw2 p33, p35 and p36 on those days; the host at sw2 p34 was not powered either time"
 also = "On 3 September 2026 those three ports had the demo boards whose microcontrollers have the USB serial numbers `4df39a7a6856f86f`, `8c46329b33590ecb` and `a2961e5cac65b25f` (`docs/hardware/site-welland.md`); whether the same boards were there on the days of the measurement is not recorded"
-record = "the hand-written `docs/hardware/tt-fpga-pin-mapping.md` that this generator replaced, as it stood at commit `ef38e22`"
+record = "the hand-written `docs/hardware/tt-fpga-pin-mapping.md` that this generator replaced, as it stood at commit `ef38e22`; and, wire by wire, the scan decoded on those boards, kept as the expected values of `test_a_tt_cabled_as_the_fleet_passes_and_ja_jc_swapped_fails` in `designs/pmod-pin-id/host/test_identify_pmod_pins.py` (as commit `8987ede` left it), whose comment gives the same ports and days"
 
 # What is printed for a wire that no measurement covers.
 [unmeasured]
@@ -220,7 +228,9 @@ also = "Since issue 142 of fpgas.online-test-designs (two wires that end on one 
 "The cables (12-pin Pmod cables, pin 1 to pin 1), and whether they join the 3.3 V pins of the two boards" = "`docs/hardware/rpi-hat-pmod.md` calls them 12-pin Pmod ribbon cables that connect straight through, and the measured wires are where a straight-through cable puts them. Which cable was used, and whether its 3.3 V wires are connected, is not recorded and not verified by us"
 "The serial port (which two signals, which two RP2350 GPIOs, the speed)" = "`designs/_shared/tt_fpga_platform.py` and `designs/_host/tt_test_wrapper.py`; a test keeps these tables equal to both. The `uart` test goes through the microcontroller and not through the Pmod HAT. {uart.checked}. Nobody has used these two signals as a serial port from the Raspberry Pi's GPIO"
 "The iCE40's configuration pins, and that the breakout has no SPI flash" = "`docs/hardware/tt-fpga.md`, from the breakout's published design (TinyTapeout/breakout-pcb), checked there on 4 October 2026; not measured by us"
-"The RP2350 GPIOs that load the FPGA and make its clock" = "`designs/_host/tt_fpga_program.py`, the loader every test on these boards uses; a test keeps these tables equal to it"
+"The RP2350 GPIOs that load the FPGA and make its clock" = "`designs/_host/tt_fpga_program.py`, the loader, and `designs/_host/tt_test_wrapper.py`, the serial bridge, which starts the clock again. A test holds the four loading pins (in both of the loader's ways of sending), the clock pin and the clock's frequency to those two files, and the frequency to the platform file"
 "The other RP2350 GPIO numbers (those on the 24 signals, and the one on the reset)" = "Tiny Tapeout's pinout documents for the version 3 demo board, as `docs/hardware/pmod-tt.md` summarises them. Our loader sets the GPIOs of the 24 signals to inputs after a load, and our serial bridge uses two of them; the rest, and the reset's, are not verified by us"
-"Which segment of the display each bit of `uo_out` lights" = "Tiny Tapeout's board specification, as `docs/hardware/tt-fpga.md` gives it, and `designs/tt-display`, which is written to it; not verified by us segment by segment"
+"Which segment of the display each bit of `uo_out` lights, and that a to f are the outer ring in that order" = "Tiny Tapeout's board specification, as `docs/hardware/tt-fpga.md` gives it, and `designs/tt-display`, which is written to it and describes its pattern as one segment running round the outer ring, a to f (a test holds the place of g and of the dot to that design). Where a is, and which way round the ring runs, is not recorded; none of it is verified by us segment by segment"
 "That the three-colour LED lights when its pin is low" = "a comment in `designs/_shared/tt_fpga_platform.py`; not verified by us"
+"That the demo board's DIP switches are on the `ui_in` signals" = "`docs/hardware/tt-fpga.md`, which gives no source for it; not verified by us. How the switches must be set while the Raspberry Pi drives `ui_in` is not recorded"
+"That each board puts its own 3.3 V supply on Pmod pins 6 and 12" = "`docs/hardware/rpi-hat-pmod.md` for the Pmod HAT (from the Raspberry Pi's 3.3 V supply) and `docs/hardware/pmod-tt.md` for the demo board's headers; not verified by us with a meter"

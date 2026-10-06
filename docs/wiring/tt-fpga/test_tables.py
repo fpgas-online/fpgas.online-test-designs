@@ -103,12 +103,53 @@ def test_a_page_with_a_wire_table_repeats_the_picture_and_how_to_find_the_header
     assert "(tt-fpga-pmod-cables.png)" in FILES["tt-fpga-pins-uio-uart.md"]
 
 
-def test_a_measured_wire_has_its_date_and_place_under_its_table_and_an_unmeasured_one_says_so():
+def test_a_measured_wire_has_its_dates_under_its_table_and_its_place_once_on_the_sources_page():
     (m,) = W.measurements
+    line = "*measured*: read on boards on 29 September 2026 and 4 October 2026; for where and how, see Sources"
+    for name in ("tt-fpga-cables.md", "tt-fpga-pins-ui-uo.md", "tt-fpga-pins-uio-uart.md", "tt-fpga-pins-other.md"):
+        text = FILES[name]
+        assert line in text and "(`tt-fpga-sources.md`)" in text, name
+        assert m.where not in text and "sw2" not in text.replace(W.uart["checked"], ""), name
     for name in ("tt-fpga-cables.md", "tt-fpga-pins-ui-uo.md", "tt-fpga-pins-uio-uart.md"):
         text = FILES[name]
-        assert m.when in text and m.where in text, name
         assert "*from the design*: not read on a board;" in text and "not measured by us" in text, name
+    sources = FILES["tt-fpga-sources.md"]
+    assert sources.count(m.where) == 1 and m.when in sources and m.record in sources
+    assert "the host at sw2 p34 was not powered either time" in sources
+    assert "test_identify_pmod_pins.py" in m.record and "`8987ede`" in m.record and "`ef38e22`" in m.record
+
+
+def test_the_serial_ports_table_says_which_of_its_two_wires_is_measured():
+    text = FILES["tt-fpga-pins-uio-uart.md"]
+    assert "`ui_in[3]` is from the design and `uo_out[4]` is measured." in text
+
+
+def test_the_pin_1_warning_is_under_every_picture():
+    warning = (
+        "**Pin 1 on the picture.** The gold square is pin NUMBER 1 of the Pmod numbering. It is not a place on "
+        "the board. Find pin 1 on each connector by its marking before plugging a cable in. A 2x6 cable turned "
+        "round puts 3.3 V on signal pins."
+    )
+    for name in WIRE_PAGES:
+        text = FILES[name]
+        assert text.count(warning) == text.count(".png)](") >= 1, name
+        for shown in re.finditer(r"\.svg\)\n\n", text):
+            assert text[shown.end() :].startswith(warning), name
+
+
+def test_the_cables_are_described_with_what_is_and_is_not_recorded_about_them():
+    for name in WIRE_PAGES:
+        text = FILES[name]
+        assert "Each board puts its own 3.3 V supply on those pins" in text, name
+        assert "Whether the cables in use join the 3.3 V pins of the two boards is not recorded" in text, name
+        assert "nor is the kind of cable (what is on each of its ends)" in text, name
+    assert "measured, except the wires on shared GPIOs" in FILES["tt-fpga-cables.md"]
+
+
+def test_the_ui_in_page_says_the_dip_switches_are_there_and_that_their_setting_is_not_recorded():
+    text = FILES["tt-fpga-pins-ui-uo.md"]
+    assert "The demo board's DIP switches are on these signals too" in text
+    assert "How the switches must be set while the Raspberry Pi drives these signals is not recorded." in text
 
 
 def test_the_shared_gpios_are_explained_on_every_page_that_has_one():
@@ -120,11 +161,15 @@ def test_the_shared_gpios_are_explained_on_every_page_that_has_one():
 
 
 def test_the_streaming_rule_is_on_every_page_that_mentions_loading():
+    """As a rule, and then only the fact this repository can stand behind: its own loader and tests."""
     for name, text in FILES.items():
         if re.search(r"\bload(s|ed|ing|er)?\b", text, re.I) and name != "tt-fpga-sources.md":
-            assert "**The FPGA is loaded by streaming only.**" in text, name
-            assert "No code of ours writes, replaces or deletes a file on a Tiny Tapeout demo board." in text, name
+            assert tables.STREAMING in text, name
     assert tables.STREAMING in FILES["tt-fpga-pins-other.md"] and tables.STREAMING in FILES["tt-fpga-cables.md"]
+    assert tables.STREAMING.startswith("**The rule here: an FPGA on a demo board is loaded by streaming only**")
+    assert "no code of ours may write, replace or delete a file on a demo board" in tables.STREAMING
+    assert "The loader and the tests in this repository do not" in tables.STREAMING
+    assert "No code of ours writes" not in "".join(FILES.values())
 
 
 def test_the_page_of_other_pins_says_there_is_no_flash_and_that_no_cable_carries_them():
@@ -135,6 +180,10 @@ def test_the_page_of_other_pins_says_there_is_no_flash_and_that_no_cable_carries
     assert "is not recorded in this repository and has not been measured by us" in text
     assert "| dot | `uo_out[7]` | 48 | Output pin 10 | JC pin 10 | GPIO6 |" in text
     assert "| 37 | `rst_n` | the design's reset: low resets it | GPIO14 (not verified by us) |" in text
+    assert "| 20 | `clk_rp2040` | the clock into the design, made by the microcontroller: 50 MHz | GPIO16 |" in text
+    assert "| 39 | `rgb_led.r` | red of the three-colour LED: low lights it | not recorded |" in text
+    assert "| none |" not in text and "every Pmod test" not in text
+    assert "where a is, and which way round the ring that order goes, is not recorded and not verified by us" in text
     assert "| `uio[0]` to `uio[7]` | GPIO25 to GPIO32 |" in text
 
 
@@ -156,5 +205,6 @@ def test_the_words_follow_the_writing_rules():
         for banned in ("ten64", "/home/", "~/", "10.21.", "pi-sw", "mithis", "color", "center"):
             assert banned not in low, (name, banned)
         assert not re.search(r"\b20\d\d-\d\d-\d\d\b", text), name  # dates are written out, day first
-        for seen in re.findall(r"sw2 p\d+[^.;]*", text):
-            assert "seen at welland's sw2" in text and ("that day" in seen or "those days" in seen), (name, seen)
+        for seen in re.findall(r"[^.;]*sw2 p\d+[^.;]*", text):
+            assert "seen at welland's sw2" in text, name
+            assert "that day" in seen or "those days" in seen or "either time" in seen, (name, seen)
