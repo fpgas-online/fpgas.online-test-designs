@@ -351,6 +351,19 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
         need = pages[steps.guide_name(c, part)]
         assert f"if it is fitted, {c.power_off[0].lower()}{c.power_off[1:]} Then take the card out." in need
     assert "cut in half, once" in overview
+    # the wire-1 check has an outcome for every result, and says what the last wire's silence rests on
+    for part in ("jtag-1", "uart-1"):
+        body = pages[steps.guide_name(c, part)]
+        assert "If both wires beep, stop and cut nothing" in body and "has not been measured by us" in body
+        assert "If neither wire beeps" in body and "beeps instead, stop" in body
+    # a wire with the series resistor in it is not told to beep: its page gives the reading to expect
+    for part, connector in (("jtag-2", "P1"), ("uart-2", "P2")):
+        body = pages[steps.guide_name(c, part)]
+        has = steps.through_resistor(c, connector)
+        assert bool(has) == any(s in c.resistors for s in wiring.CONNECTORS[connector]["pins"])
+        assert ("is the exception" in body) == bool(has)
+        if has:
+            assert f"it must read about {c.resistor_value}" in body and "must read open" in body
     assert ("the one wire that is cut to take the resistor" in overview) == bool(c.resistors)
     if c.resistors:
         assert f"lands on GPIO14, which is also JTAG TMS: with {c.resistor_value} in the wire" in steps.procedure(c)

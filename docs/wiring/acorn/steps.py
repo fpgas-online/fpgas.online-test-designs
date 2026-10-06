@@ -49,6 +49,12 @@ NEITHER = (
     "If neither wire beeps, strip about {strip} mm from wires 1 and {last} and try again; "
     "if still neither beeps, stop: the ground point is not confirmed."
 )
+# The other result that proves nothing. That the last wire is silent rests on something nobody has measured.
+BOTH = (
+    "If both wires beep, stop and cut nothing: the check cannot tell them apart. Wire {last} is the card's "
+    "3.3 V; that it stays silent to ground on a card with no power is expected and has not been measured by us. "
+    "Set the meter to ohms and tell us what each of the two wires reads to the pad."
+)
 
 ASSUMPTIONS = [
     "the wire-side view is not mirrored",
@@ -971,6 +977,7 @@ def ground_check(connector):
         W - 40,
         "bold",
     )
+    y = para(sh, 30, y + 4, BOTH.format(last=len(pins)), W - 40, "bold")
     y = para(
         sh,
         30,
@@ -1120,6 +1127,22 @@ def has_resistor(c, connector):
 SHEETS = {"pi5": "acorn-wiring-pi5", "blade": "acorn-wiring-computeblade"}
 
 
+def through_resistor(c, connector):
+    """What the meter shows on a wire that has the series resistor in it: said where every wire "must beep"."""
+    pins = wiring.CONNECTORS[connector]["pins"]
+    plan = housing(c, connector)
+    wires = [pins.index(s) + 1 for s in pins if s in c.resistors and s not in plan.cut]
+    if not wires:
+        return ""
+    assert len(wires) == 1, wires  # the sentence is written for one
+    return (
+        f"**Wire {wires[0]} is the exception: it has the {c.resistor_value} resistor in it, and through that most "
+        f"meters do not beep.** For wire {wires[0]} set the meter to ohms: between its contact on the plug and its "
+        f"terminal it must read about {c.resistor_value}; to every other cavity it must read open (no reading). "
+        "Then set the meter back to continuity. "
+    )
+
+
 def resistor_reason(c, sig):
     """Why a wire has a series resistor, from the wiring: its host pin is also a JTAG wire's."""
     gpio = c.headers[c.wires[sig][0]].pins[c.wires[sig][1]].get("gpio")
@@ -1227,6 +1250,7 @@ def procedure_parts(c, restart=False):
             f"Do the same with the wire flagged {len(pins)}: it must stay silent.",
             f"If wire {len(pins)} beeps instead, stop: the numbering is reversed; take the flags off and number from "
             "the other end. " + NEITHER.format(strip=lengths["strip"], last=len(pins)),
+            BOTH.format(last=len(pins)),
             "Take the plug out again.",
         ]
         step(
@@ -1281,7 +1305,8 @@ def procedure_parts(c, restart=False):
             "Check each wire with a meter on continuity. For each wire: one probe on its contact on the plug, the "
             "other on the terminal in the cavity the picture gives for that wire number, through the opening on the "
             "pin side of the housing: it must beep. Every other cavity must stay silent for that contact. "
-            "The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.",
+            + through_resistor(c, connector)
+            + "The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.",
             ("A meter between the plug and the housing", "acorn-cable-check.png"),
             (*cavity[connector], f"The {connector} cavity picture again, to read each wire's cavity from:"),
         )

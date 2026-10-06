@@ -14,7 +14,7 @@ The P2 cable with its wires flagged and a terminal crimped on each (the page bef
 
 ![Which way round a terminal goes in, and the pull test](acorn-cable-push.png)
 
-**2.** Check each wire with a meter on continuity. For each wire: one probe on its contact on the plug, the other on the terminal in the cavity the picture gives for that wire number, through the opening on the pin side of the housing: it must beep. Every other cavity must stay silent for that contact. The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.
+**2.** Check each wire with a meter on continuity. For each wire: one probe on its contact on the plug, the other on the terminal in the cavity the picture gives for that wire number, through the opening on the pin side of the housing: it must beep. Every other cavity must stay silent for that contact. **Wire 2 is the exception: it has the 470 Ω resistor in it, and through that most meters do not beep.** For wire 2 set the meter to ohms: between its contact on the plug and its terminal it must read about 470 Ω; to every other cavity it must read open (no reading). Then set the meter back to continuity. The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.
 
 ![A meter between the plug and the housing](acorn-cable-check.png)
 
