@@ -2,7 +2,25 @@
 
 # TT FPGA Demo Board v3 Pin Mapping
 
-Pin mapping for the TinyTapeout FPGA Demo Board v3 (TTDBv3) as connected in the fpgas.online test infrastructure. Four hosts on the Welland S3300 (switch 2): pi-sw2-p33 (10.21.2.33, `fpga-1`), pi-sw2-p34 (10.21.2.34, `fpga-2`), pi-sw2-p35 (10.21.2.35, `fpga-3`), pi-sw2-p36 (10.21.2.36, `fpga-4`). See [tt-fpga.md](tt-fpga.md#deployment) for MACs, RP2350 serials and the serial-port ownership rule.
+The pin mapping of a Tiny Tapeout FPGA demo board on a Raspberry Pi with a Digilent Pmod HAT is kept in one
+place, and this page is not it:
+
+- **The wiring itself**, the cable picture and the pin tables:
+  [`docs/wiring/tt-fpga/`](../wiring/tt-fpga/README.md) in this repository, generated from `wiring.toml`.
+  A test there fails if the tables and the test code's own numbers ever differ.
+
+| What | Generated page |
+| --- | --- |
+| Which demo board header goes to which Pmod HAT port, with the picture | [tt-fpga-cables.md](../wiring/tt-fpga/generated/tt-fpga-cables.md) |
+| `ui_in` and `uo_out`, wire by wire: iCE40 pin, signal, demo board pin, Pmod HAT pin, Pi GPIO | [tt-fpga-pins-ui-uo.md](../wiring/tt-fpga/generated/tt-fpga-pins-ui-uo.md) |
+| `uio`, wire by wire, the GPIOs that two ports share, and the serial port | [tt-fpga-pins-uio-uart.md](../wiring/tt-fpga/generated/tt-fpga-pins-uio-uart.md) |
+| The pins that load the FPGA, the seven-segment display, the clock, the reset and the LED | [tt-fpga-pins-other.md](../wiring/tt-fpga/generated/tt-fpga-pins-other.md) |
+| Where each of those facts comes from, and what nobody has checked | [tt-fpga-sources.md](../wiring/tt-fpga/generated/tt-fpga-sources.md) |
+
+[![Which Pmod header of the demo board goes to which port of the Pmod HAT](../wiring/tt-fpga/generated/tt-fpga-pmod-cables.png)](../wiring/tt-fpga/generated/tt-fpga-pmod-cables.svg)
+
+What is left on this page is what is not wiring: how the FPGA is loaded, and notes on the serial port and the
+loopback test. Which boards exist and where they are is not kept here either: see [tt-fpga.md](tt-fpga.md#deployment).
 
 ## Hardware Overview
 
@@ -40,12 +58,8 @@ The iCE40 is programmed via the RP2350 over USB CDC, not directly from the RPi.
 
 ### RP2350 SPI Programming Pins
 
-| Signal   | RP2350 GPIO | Function                  |
-| -------- | ----------- | ------------------------- |
-| SCK      | GPIO6       | SPI clock                 |
-| MOSI     | GPIO3       | SPI data out              |
-| SS       | GPIO5       | SPI chip select           |
-| CRESET_B | GPIO1       | iCE40 configuration reset |
+The microcontroller pins the loader drives, and the iCE40's configuration pins:
+[tt-fpga-pins-other.md, "Loading the FPGA"](../wiring/tt-fpga/generated/tt-fpga-pins-other.md#loading-the-fpga-its-configuration-pins).
 
 ### Programming Flow
 
@@ -72,73 +86,25 @@ Direct programming of the iCE40 via openFPGALoader (bypassing the MicroPython RE
 
 ## TinyTapeout I/O Signals
 
-### ui_in (User Inputs)
+The tables of `ui_in`, `uo_out` and `uio` (iCE40 pin, demo board pin, Pmod HAT pin, Pi GPIO, and whether each
+wire was measured) are generated: [tt-fpga-pins-ui-uo.md](../wiring/tt-fpga/generated/tt-fpga-pins-ui-uo.md) and
+[tt-fpga-pins-uio-uart.md](../wiring/tt-fpga/generated/tt-fpga-pins-uio-uart.md). The second one explains the three Raspberry Pi GPIOs
+that Pmod HAT ports JA and JB share, and what that means for a design.
 
-8-bit input bus. The RPi drives these through the PMOD HAT; the FPGA reads them. Cabled to PMOD HAT port JA.
+Two things about those shared GPIOs that are about testing, not wiring:
 
-| Bit      | iCE40 Pin | RP2350 GPIO | PMOD HAT Pin | RPi GPIO | Verified |
-| -------- | --------- | ----------- | ------------ | -------- | -------- |
-| ui_in[0] | 13        | 17          | JA1          | 8        | pin-id   |
-| ui_in[1] | 19        | 18          | JA2          | 10       | (*)      |
-| ui_in[2] | 18        | 19          | JA3          | 9        | (*)      |
-| ui_in[3] | 21        | 20          | JA4          | 11       | (*)      |
-| ui_in[4] | 23        | 21          | JA7          | 19       | pin-id   |
-| ui_in[5] | 25        | 22          | JA8          | 21       | pin-id   |
-| ui_in[6] | 26        | 23          | JA9          | 20       | pin-id   |
-| ui_in[7] | 27        | 24          | JA10         | 18       | pin-id   |
+- The pin identification design gives the two FPGA pins on each shared GPIO their turns: `ui_in[1:3]` send their
+  pin numbers for 0.4 s while `uio[1:3]` are high impedance, then nobody for 0.1 s, then the reverse; the scan
+  listens on each shared GPIO for a whole cycle and expects both numbers
+  ([#142](https://github.com/fpgas-online/fpgas.online-test-designs/issues/142)). One thing the test cannot
+  tell even then: the JA wire and the JB wire of the same number (2, 3 or 4) swapped with each other. Both end
+  on the same Pi pin, where the HAT joins them, so the Pi hears the same two numbers either way; the two
+  ribbons swapped as a whole is caught, by their other five wires.
+- The SPI kernel modules must be unloaded (`rmmod spidev spi_bcm2835`) before a Pmod test, since they claim
+  GPIO7 to GPIO11, which are Pmod HAT JA pins 1 to 4 and JB pins 1 to 4.
 
-(\*) ui_in[1:3] are on JA pins 2-4, which share RPi GPIOs with JB pins 2-4 (uio[1:3]). The pin-id design gives the two FPGA pins on each of those GPIOs their turns: ui_in[1:3] send their pin numbers for 0.4 s while uio[1:3] are high impedance, then nobody for 0.1 s, then the reverse; the scan listens on GPIO10, 9 and 11 for a whole cycle and expects both numbers ([#142](https://github.com/fpgas-online/fpgas.online-test-designs/issues/142)). Until that change these six wires were not tested, and their positions here were inferred from the pattern (bit 0→pin 1, bit 7→pin 10); they had not been measured with the new design when this was written, so the column still does not say `pin-id` for them. One thing the test cannot tell even then: the JA wire and the JB wire of the same number (2, 3 or 4) swapped with each other. Both end on the same Pi pin, where the HAT joins them, so the Pi hears the same two numbers either way; the two ribbons swapped as a whole is caught, by their other five wires.
-
-### uo_out (User Outputs)
-
-8-bit output bus. The FPGA drives these; the RPi reads them through the PMOD HAT. Cabled to PMOD HAT port JC.
-
-| Bit       | iCE40 Pin | RP2350 GPIO | PMOD HAT Pin | RPi GPIO | Verified |
-| --------- | --------- | ----------- | ------------ | -------- | -------- |
-| uo_out[0] | 38        | 33          | JC1          | 16       | pin-id   |
-| uo_out[1] | 42        | 34          | JC2          | 14       | pin-id   |
-| uo_out[2] | 43        | 35          | JC3          | 15       | pin-id   |
-| uo_out[3] | 44        | 36          | JC4          | 17       | pin-id   |
-| uo_out[4] | 45        | 37          | JC7          | 4        | pin-id   |
-| uo_out[5] | 46        | 38          | JC8          | 12       | pin-id   |
-| uo_out[6] | 47        | 39          | JC9          | 5        | pin-id   |
-| uo_out[7] | 48        | 40          | JC10         | 6        | pin-id   |
-
-Measured with the pin-id design on pi-sw2-p33, p35 and p36 on 2026-09-29 and again by `fpgas-verify` on 2026-10-04: all three are cabled ui_in → JA, uio → JB, uo_out → JC (pi-sw2-p34 was not powered for either measurement). Earlier versions of this page had JA and JC the other way round ([issue #58](https://github.com/fpgas-online/fpgas.online-test-designs/issues/58)).
-
-### uio (Bidirectional I/O)
-
-8-bit bidirectional bus. Connected through the TT board's third PMOD header to PMOD HAT port JB.
-
-| Bit    | iCE40 Pin | RP2350 GPIO | PMOD HAT Pin | RPi GPIO |
-| ------ | --------- | ----------- | ------------ | -------- |
-| uio[0] | 2         | 25          | JB1          | 7        |
-| uio[1] | 4         | 26          | JB2          | 10       |
-| uio[2] | 3         | 27          | JB3          | 9        |
-| uio[3] | 6         | 28          | JB4          | 11       |
-| uio[4] | 9         | 29          | JB7          | 26       |
-| uio[5] | 10        | 30          | JB8          | 13       |
-| uio[6] | 11        | 31          | JB9          | 3        |
-| uio[7] | 12        | 32          | JB10         | 2        |
-
-RP2350 GPIO numbers follow the sequential pattern (ui_in=17-24, uio=25-32, uo_out=33-40).
-
-**WARNING — JA/JB pin sharing conflict**: HAT JB pins 2-4 and HAT JA pins 2-4 are the [same RPi GPIO lines](rpi-hat-pmod.md) (GPIO10, GPIO9, GPIO11 — the shared SPI0 bus). This means 3 ui_in signals and 3 uio signals are electrically connected at the RPi side:
-
-| RPi GPIO | HAT JA Pin | TT Signal (ui_in) | HAT JB Pin | TT Signal (uio) | Conflict |
-| -------- | ---------- | ----------------- | ---------- | --------------- | -------- |
-| GPIO10   | JA2        | ui_in[1]          | JB2        | uio[1]          | Shorted  |
-| GPIO9    | JA3        | ui_in[2]          | JB3        | uio[2]          | Shorted  |
-| GPIO11   | JA4        | ui_in[3]          | JB4        | uio[3]          | Shorted  |
-
-In a normal design ui_in is an input, so the short does not make two FPGA outputs fight (the pin-id design, which drives everything, is the exception). It does mean:
-
-- **A design that drives uio[1,2,3]** also drives ui_in[1,2,3], and the RPi must leave GPIO10/9/11 as inputs or it fights the FPGA.
-- **The RPi driving ui_in[1,2,3]** also drives uio[1,2,3], so those uio bits must be inputs in the design.
-- **Bidirectional I/O test**: cannot test uio[1,2,3] independently of ui_in[1,2,3].
-- **SPI kernel modules**: Must be unloaded (`rmmod spidev spi_bcm2835`) since GPIO7-11 overlap with HAT JA pins 1-4 and JB pins 1-4.
-
-The 5 unaffected uio bits (uio[0], uio[4:7]) on JB pins 1 and 7-10 use unique RPi GPIOs and work correctly.
+Earlier versions of this page had JA and JC the other way round
+([issue #58](https://github.com/fpgas-online/fpgas.online-test-designs/issues/58)).
 
 ## UART Interface
 
@@ -146,10 +112,8 @@ The TT standard UART uses ui_in[3] (RX) and uo_out[4] (TX), following the [TinyT
 
 ### Signal Routing
 
-| Signal                    | iCE40 Pin | TT Signal | RP2350 GPIO | PMOD HAT Pin | RPi GPIO |
-| ------------------------- | --------- | --------- | ----------- | ------------ | -------- |
-| Serial RX (FPGA receives) | 21        | ui_in[3]  | GPIO20      | JA4          | 11       |
-| Serial TX (FPGA sends)    | 45        | uo_out[4] | GPIO37      | JC7          | 4        |
+Which pins, headers and GPIOs the two serial signals are on:
+[tt-fpga-pins-uio-uart.md, "The serial port (UART)"](../wiring/tt-fpga/generated/tt-fpga-pins-uio-uart.md#the-serial-port-uart).
 
 ### Access via RP2350 USB bridge (recommended)
 
@@ -173,53 +137,25 @@ The RPi would have to transmit on GPIO11 and receive on GPIO4. On the BCM2711, U
 
 ## PMOD Loopback
 
-The GPIO loopback design computes `uo_out = ~ui_in`: the RPi drives the 8 ui_in pins (HAT JA) and reads the 8 uo_out pins (HAT JC). See the ui_in and uo_out tables above for the mapping.
+The GPIO loopback design computes `uo_out = ~ui_in`: the RPi drives the 8 ui_in pins (HAT JA) and reads the 8
+uo_out pins (HAT JC). The mapping is in [tt-fpga-pins-ui-uo.md](../wiring/tt-fpga/generated/tt-fpga-pins-ui-uo.md).
 
-`test_pmod_loopback.py`'s `tt` config follows these tables: bit i is driven on JA and read on JC. It replaces GPIO lists that predated the measured cabling ([issue #19](https://github.com/fpgas-online/fpgas.online-test-designs/issues/19)). The loopback is not one of the tests `fpgas-verify` runs at boot; it is the `pmod` test of `fpgas-tt-fpga-debug`.
+`test_pmod_loopback.py`'s `tt` config follows those tables (a test in `docs/wiring/tt-fpga/` holds it to them): bit i is driven on JA and read on JC. It replaces GPIO lists that predated the measured cabling ([issue #19](https://github.com/fpgas-online/fpgas.online-test-designs/issues/19)). The loopback is not one of the tests `fpgas-verify` runs at boot; it is the `pmod` test of `fpgas-tt-fpga-debug`.
 
 ### Pre-test Requirements
 
 - `rmmod spidev spi_bcm2835` — SPI kernel modules claim GPIO7-11 (HAT JA pins 1-4 and JB pin 1, used by ui_in[0:3] and uio[0])
 - RP2350 GPIOs must be released to high-Z after FPGA programming (the programming wrapper handles this automatically)
-- Driving ui_in[1:3] also drives uio[1:3] (see the warning above); the loopback design does not use uio
+- Driving ui_in[1:3] also drives uio[1:3] (the shared GPIOs, above); the loopback design does not use uio
 
-## Configuration SPI
+## Configuration SPI, 7-Segment Display, Other Signals
 
-The iCE40's dedicated SPI pins on the FPGA breakout board (not shared with PMOD). They go only to the demo board's microcontroller, which loads the bitstream over them; the breakout has no SPI flash ([tt-fpga.md](tt-fpga.md#programming)).
-
-| iCE40 pin function | iCE40 Pin |
-| ------------------ | --------- |
-| SPI_SS             | 16        |
-| SPI_SCK            | 15        |
-| SPI_SI             | 17        |
-| SPI_SO             | 14        |
-
-## 7-Segment Display
-
-The TT Demo PCB has a 7-segment LED display connected to uo_out[0:6]. These share the same PMOD traces — when the RPi is driving GPIO tests, the display reflects the test patterns.
-
-| Segment | TT Signal | iCE40 Pin |
-| ------- | --------- | --------- |
-| a       | uo_out[0] | 38        |
-| b       | uo_out[1] | 42        |
-| c       | uo_out[2] | 43        |
-| d       | uo_out[3] | 44        |
-| e       | uo_out[4] | 45        |
-| f       | uo_out[5] | 46        |
-| g       | uo_out[6] | 47        |
-
-## Other Signals
-
-| Signal     | iCE40 Pin | Function                            |
-| ---------- | --------- | ----------------------------------- |
-| clk_rp2040 | 20        | 50 MHz clock from RP2350 PWM GPIO16 |
-| rst_n      | 37        | Reset (active low)                  |
-| RGB LED R  | 39        | Accent LED (active low)             |
-| RGB LED G  | 40        | Accent LED (active low)             |
-| RGB LED B  | 41        | Accent LED (active low)             |
+Generated: [tt-fpga-pins-other.md](../wiring/tt-fpga/generated/tt-fpga-pins-other.md). The breakout has no SPI flash
+([tt-fpga.md](tt-fpga.md#programming)).
 
 ## References
 
+- The wiring, its generator and its tests: [docs/wiring/tt-fpga/](../wiring/tt-fpga/README.md)
 - TT FPGA platform definition: [tt_fpga_platform.py](../../designs/_shared/tt_fpga_platform.py)
 - TinyTapeout PCB Specs: [tinytapeout.com/specs/pcb](https://tinytapeout.com/specs/pcb/)
 - PMOD Interface Specification: [pmod.md](pmod.md)
