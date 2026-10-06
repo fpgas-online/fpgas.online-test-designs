@@ -124,7 +124,8 @@ BOARDS = {
         ],
     },
     # TT FPGA demo board on a Digilent Pmod HAT, as the Welland hosts are cabled:
-    # ui_in on HAT JA, uio on JB, uo_out on JC (docs/hardware/tt-fpga-pin-mapping.md).
+    # ui_in on HAT JA, uio on JB, uo_out on JC. docs/wiring/tt-fpga/wiring.toml holds the same wiring for the
+    # documentation, and docs/wiring/tt-fpga/test_code_agrees.py fails if this table and it differ: change both.
     # The iCE40 transmits its package pin numbers. All 24 wires are checked (#142).
     # GPIO10/9/11 are each listed twice: they are HAT JA pins 2-4 *and* JB pins
     # 2-4, so two wires end on each. The TT design gives the two FPGA pins their

@@ -56,7 +56,7 @@ BOARD_CONFIGS = {
     },
     "tt": {
         # TT FPGA Demo Board v3 via PMOD HAT, as the Welland hosts are cabled:
-        # HAT JA → TT ui_in, HAT JC → TT uo_out (docs/hardware/tt-fpga-pin-mapping.md,
+        # HAT JA → TT ui_in, HAT JC → TT uo_out (docs/wiring/tt-fpga/wiring.toml, which a test holds these lists to;
         # measured with the pin-id design). Bit i is header pin 1-4, 7-10 in order.
         # FPGA does: uo_out = ~ui_in (per-bit inversion, 8-bit).
         # RP2350 GPIOs must be released to input (high-Z) first.
