@@ -12,9 +12,12 @@ The pictures are generated/tt-fpga-pmod-cables*.svg (picture.py), the tables gen
 fontTools is pinned and the fonts are in ../wiringlib/fonts/, so the output is the same on every machine.
 """
 
+import pathlib
 import sys
 
-import picture  # it puts docs/wiring on the import path, which wiringlib (below) is found on
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))  # docs/wiring, for wiringlib
+
+import picture
 import tables
 import wiring
 from wiringlib import output

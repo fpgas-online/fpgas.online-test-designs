@@ -8,16 +8,24 @@ def stale(files, out):
     """What in `out` is not what the generator produces now, as a sorted list of lines; empty when current.
 
     `files` is {file name: text}: every .svg and .md the generator writes. A file that differs or is
-    missing is stale, so is an .svg or .md in `out` that the generator no longer writes, and so is a PNG
-    whose SVG has changed since chrome.py rendered it (png-sources.sha256 records what it rendered from).
+    missing is stale, so is an .svg, .md or .png in `out` that the generator no longer writes (a PNG is
+    written for each SVG), and so is a PNG whose SVG has changed since chrome.py rendered it
+    (png-sources.sha256 records what it rendered from).
     """
     found = [f for f, text in files.items() if not (out / f).exists() or (out / f).read_text() != text]
-    found += [p.name for p in out.glob("*") if p.suffix in (".svg", ".md") and p.name not in files]
+    found += [f"{p.name} (the generator no longer writes it)" for p in unwanted(files, out)]
     rendered = (out / "png-sources.sha256").read_text() if (out / "png-sources.sha256").exists() else ""
     for f, text in files.items():
         if f.endswith(".svg") and f"{hashlib.sha256(text.encode()).hexdigest()}  {f}" not in rendered.splitlines():
             found.append(f"{f[:-4]}.png (rendered from an older {f}; run render.py)")
     return sorted(found)
+
+
+def unwanted(files, out):
+    """The .svg, .md and .png files in `out` that the generator does not write: write() removes them and
+    check() fails on them, so the two can never disagree about what belongs in generated/."""
+    keep = set(files) | {f"{f[:-4]}.png" for f in files if f.endswith(".svg")}
+    return sorted(p for p in out.glob("*") if p.suffix in (".svg", ".png", ".md") and p.name not in keep)
 
 
 def check(files, out):
@@ -36,9 +44,7 @@ def write(files, out):
     out.mkdir(exist_ok=True)
     for f, text in files.items():
         (out / f).write_text(text)
-    keep = set(files) | {f"{f[:-4]}.png" for f in files if f.endswith(".svg")}
-    gone = [p for p in out.glob("*") if p.suffix in (".svg", ".png", ".md") and p.name not in keep]
-    for p in gone:
+    for p in unwanted(files, out):
         p.unlink()
-    removed = f", removed {len(gone)} it no longer writes" if gone else ""
-    print(f"wrote {len(files)} files to {out.parent.name}/{out.name}/{removed}; run render.py for the PNGs")
+        print(f"removed {out.parent.name}/{out.name}/{p.name}: the generator no longer writes it")
+    print(f"wrote {len(files)} files to {out.parent.name}/{out.name}/; run render.py for the PNGs")

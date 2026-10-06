@@ -16,10 +16,13 @@ header and removes the long loops around it.
 """
 
 import itertools
+import pathlib
 import random
 import sys
 
-import tables  # it puts docs/wiring on the import path, which wiringlib (below) is found on
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))  # docs/wiring, for wiringlib
+
+import tables
 import wiring
 from PIL import Image
 from sheetlib import (
