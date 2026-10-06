@@ -854,6 +854,9 @@ def build(search=False):
     import steps  # here, not at the top: steps draws with the pieces above, so it imports this module
 
     out.update(steps.build())
+    import check  # the same: it shows steps' cavity pictures again and draws with their pieces
+
+    out.update(check.build())
     return out
 
 

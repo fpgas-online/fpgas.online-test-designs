@@ -1,0 +1,352 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Checking an Acorn's wiring with fpgas-verify: one page for each carrier, and its picture.
+
+A page is for one reader: someone with an Acorn on that carrier who has built the cables and wants to
+know whether they are right. It is assembled from
+
+* the words in check/*.md, which both pages share. A line starting `<!-- pi5 -->` or `<!-- blade -->` is
+  for that carrier only, and so is a block between `<!-- pi5:begin -->` and `<!-- pi5:end -->`;
+* wiring.toml, for which wire of which cable goes to which pin of this carrier (the picture, and what to
+  swap when a pair is crossed);
+* docs/verify.md, the tool's reference, for the transcripts of real runs and the Acorn rows of its
+  "Common failures" table, so that each exists once;
+* the cavity pictures steps.py draws, shown again where a failing line has to be taken to a wire.
+
+gen.py's build() calls build() here, so the pages are part of generated/ and of `gen.py --check`.
+"""
+
+import math
+import re
+
+import steps
+import tables
+import wiring
+from gen import pin_label
+from sheetlib import INK, MUTED, RED, SIGNALS, Sheet, label_of
+from steps import GREY, LINE, WIRE, T, W
+
+FRAGMENTS = wiring.HERE / "check"
+VERIFY = wiring.HERE.parent.parent / "verify.md"  # docs/verify.md
+SITE = "https://docs.fpgas.online/en/latest"
+CONVERTING = f"{SITE}/boards/acorn/pcie-programming.html"
+FAILURES = f"{SITE}/verify/fpgas-verify.html#common-failures"
+
+# Which test proves which wire. A ground wire is every test's return.
+USES = {
+    "TCK": "jtag",
+    "TMS": "jtag",
+    "TDO": "jtag",
+    "TDI": "jtag, its device DNA read",
+    "J2": "p2-uart, p2-serial",
+    "K2": "p2-uart, p2-serial",
+    "J5": "p2-gpio",
+    "H5": "p2-gpio",
+}
+# The rows of verify.md's "Common failures" that are about an Acorn: each named by the start of its first cell.
+ACORN_FAILURES = [
+    "`fail`: `unconverted: …`",
+    "`fail`: `… is not a design we built`",
+    "`fail`: `running the golden image`",
+    "`fail`: `link is x2, expected x1`",
+    "`fail`: `no device on the P1 JTAG chain`",
+    "`fail`: `P1 JTAG could not be probed: GPIO14 (TMS) is held by",
+    "`fail`: `… gpiod_line_request_set_values_subset: Assertion",
+    "`fail`: `openFPGALoader printed no raw IDCODE scan",
+    "`fail`: `… failed (exit N) before scanning the JTAG chain",
+    "`fail`: `device DNA over P1 JTAG reads 0x…",
+    "`fail`: `device DNA over JTAG … is not the one over BAR0`",
+    "`fail`: `J5 -> GPIO3:",
+    "`fail`: `K2 -> GPIO15:",
+    "`fail`: `DRAM write",
+    "`fail`: `power-cycle fail:",
+    "`error`: `this host (…) is not an Acorn setup in wiring.toml`",
+    "`error`: `… does not match its manifest`",
+    "`changed`",
+]
+ONLY = {"blade": ["GPIO14 (TMS) is held by", "gpiod_line_request_set_values_subset"], "pi5": ["`J5 -> GPIO3:"]}
+
+
+def name(c):
+    return f"acorn-check-{c.key}.md"
+
+
+def picture_name(c):
+    return f"acorn-check-{c.key}-wires.svg"
+
+
+# ----------------------------------------------------------------------------------------------
+# The words
+# ----------------------------------------------------------------------------------------------
+def fragment(file, c):
+    """check/<file> as it reads for carrier `c`: the other carrier's lines and blocks are left out."""
+    out, skipping = [], False
+    for line in (FRAGMENTS / file).read_text().splitlines():
+        block = re.fullmatch(r"<!-- (\w+):(begin|end) -->", line.strip())
+        if block:
+            if block[1] not in wiring.CARRIERS:
+                raise wiring.WiringError(f"check/{file}: no carrier {block[1]!r}")
+            skipping = block[2] == "begin" and block[1] != c.key
+            continue
+        if skipping:
+            continue
+        mark = re.match(r"<!-- (\w+) -->", line)
+        if mark:
+            if mark[1] not in wiring.CARRIERS:
+                raise wiring.WiringError(f"check/{file}: no carrier {mark[1]!r}")
+            if mark[1] != c.key:
+                continue
+            line = line[mark.end() :]
+        out.append(line)
+    if skipping:
+        raise wiring.WiringError(f"check/{file}: a block is not closed")
+    return "\n".join(out).strip() + "\n"
+
+
+def transcript(marker):
+    """The ```text block of verify.md that follows the line starting with `marker`."""
+    text = VERIFY.read_text()
+    if text.count("\n" + marker) != 1:
+        raise wiring.WiringError(f"docs/verify.md: {marker!r} starts {text.count(chr(10) + marker)} lines, not one")
+    after = text[text.index("\n" + marker) :]
+    block = re.search(r"```text\n.*?\n```\n", after, re.S)
+    if not block or "\n**" in after[1 : block.start()]:
+        raise wiring.WiringError(f"docs/verify.md: no transcript straight after {marker!r}")
+    return block[0]
+
+
+def failures(c):
+    """The Acorn rows of verify.md's "Common failures" table that can be met on carrier `c`, as a table."""
+    text = VERIFY.read_text()
+    table = text[text.index("### Common failures\n") :].split("\n### ")[0]
+    rows = [line for line in table.splitlines() if line.startswith("| `")]
+    out = ["| It says | Meaning, and what to do |", "|---|---|"]
+    for start in ACORN_FAILURES:
+        found = [r for r in rows if r.startswith("| " + start)]
+        if len(found) != 1:
+            raise wiring.WiringError(f"docs/verify.md, Common failures: {len(found)} rows start {start!r}, not one")
+        other = [key for key, marks in ONLY.items() if key != c.key and any(m in start for m in marks)]
+        if not other:
+            out.append(site_links(found[0]))
+    return "\n".join(out) + "\n"
+
+
+def site_links(text):
+    """verify.md's links, written from docs/, as they have to read from a page of the site."""
+    text = text.replace("](hardware/acorn-pcie-programming.md)", f"]({CONVERTING})")
+    text = text.replace(
+        "([acorn-pcie-programming.md](hardware/acorn-pcie-programming.md))", f"([converting a card]({CONVERTING}))"
+    )
+    text = re.sub(r"\]\(#([a-z0-9-]+)\)", rf"]({SITE}/verify/fpgas-verify.html#\1)", text)
+    return text
+
+
+def wire_of(c, sig):
+    """(connector, wire number) of a signal."""
+    for connector, conn in wiring.CONNECTORS.items():
+        if sig in conn["pins"]:
+            return connector, conn["pins"].index(sig) + 1
+    raise wiring.WiringError(f"{sig} is on no connector")
+
+
+def swap(c, a, b):
+    """What to do when the wires of signals a and b are in each other's cavity."""
+    (connector, na), (_, nb) = wire_of(c, a), wire_of(c, b)
+    words = (
+        f"wires {na} and {nb} of the {connector} cable are in each other's cavity. Take both terminals out of the "
+        f"housing and put each in the other's cavity (the {connector} cavity picture below)"
+    )
+    kept = [s for s in (a, b) if s in c.resistors]
+    if kept:
+        n = wire_of(c, kept[0])[1]
+        words += f". The {c.resistor_value} resistor stays in wire {n} ({label_of(kept[0])})"
+    return words
+
+
+def landing(c, sig):
+    """Where a wire lands on the host: ("GPIO10", "header pin 19")."""
+    hk, pin = c.wires[sig]
+    hdr = c.headers[hk]
+    return steps.host_pin(c, pin_label(hdr.pins[pin]["name"])), f"{hdr.short} pin {pin}"
+
+
+# ----------------------------------------------------------------------------------------------
+# The picture: which test uses which wire
+# ----------------------------------------------------------------------------------------------
+def picture(c):
+    """Both cables as the builder flagged them: each wire with where it lands and the test that proves it."""
+    sh = Sheet(W, 100)
+    steps.title(sh, f"Which test uses which wire: Acorn on a {c.name}", "the wire numbers are the flags you put on")
+    y = 104
+    rows = 46
+    for connector, conn in wiring.CONNECTORS.items():
+        pins = conn["pins"]
+        sh.text(30, y, f"{connector} cable ({conn['what']})", T + 3, "bold")
+        out, body = steps.plug(sh, 76, y + 14, pins)
+        for i, sig in enumerate(pins):
+            x, y0 = out[sig]
+            row = body[3] + 40 + (len(pins) - 1 - i) * rows
+            n = i + 1
+            if sig in c.wires:
+                colour = SIGNALS[sig][0]
+                sh.add(f'<line x1="{x}" y1="{y0}" x2="{x}" y2="{row}" stroke="{colour}" stroke-width="{WIRE}"/>')
+                sh.wire_segments.append((x, y0, x, row - 16))
+                steps.token(sh, x, row, n)
+                pin, where = landing(c, sig)
+                first = f"{label_of(sig)} to {pin}, {where}"
+                second = "ground: every test's return" if label_of(sig) == "GND" else f"test: {USES[sig]}"
+                sh.text(x + 24, row - 3, first, T, "bold", colour)
+                sh.text(x + 24, row - 3 + LINE - 2, second, T, "regular", INK)
+            else:
+                colour = RED if sig == "VCC" else GREY
+                sh.add(f'<line x1="{x}" y1="{y0}" x2="{x}" y2="{y0 + 12}" stroke="{colour}" stroke-width="{WIRE}"/>')
+                sh.rect(x - 8, y0 + 8, 16, 22, fill=colour, stroke=INK, sw=1.5, rx=5)
+                steps.token(sh, x, row, n)
+                why = "3.3 V from the Acorn" if sig == "VCC" else label_of(sig)
+                sh.text(x + 24, row - 3, f"{why}: cut back, in no cavity", T, "bold", colour if sig == "VCC" else MUTED)
+                sh.text(x + 24, row - 3 + LINE - 2, "no test uses it", T, "regular", MUTED)
+        y = body[3] + 40 + len(pins) * rows + 26
+    y = steps.para(
+        sh, 30, y, "pcie-link and pcie-bar0 go through the M.2 slot; rp1-pio, flash and ddr use no wire of the cables; "
+        "scratch uses the serial pair as well.", W - 40, "bold",
+    )  # fmt: skip
+    if not any(s in c.wires for s in ("J5", "H5")):
+        y = steps.para(sh, 30, y + 4, f"p2-gpio is never run on a {c.name}: J5 and H5 are not wired.", W - 40, "bold")
+    y = steps.para(sh, 30, y + 4, steps.COLOURS, W - 40)
+    y = steps.para(sh, 30, y + 4, "The plugs are sketched, not from a photograph.", W - 40, fill=MUTED)
+    sh.h = math.ceil(y - LINE + 14)
+    sh.check(f"check wires {c.key}")
+    return sh.svg()
+
+
+# ----------------------------------------------------------------------------------------------
+# The page
+# ----------------------------------------------------------------------------------------------
+INSTALL = {
+    "blade": (
+        "The Compute Blades at ps1 boot from the network with their root file system in memory "
+        "(`overlayroot=tmpfs`): what you install is gone at the next boot, and so is the check that would run at "
+        "boot. So after each boot, install and run by hand:"
+    ),
+    "pi5": (
+        "**On a Raspberry Pi 5 of the fleet (welland) there is nothing to install.** The root it boots from "
+        "carries the packages and runs the check once at each boot. Read that result, or run the check again "
+        "by hand without telling the site:\n\n"
+        "```bash\n"
+        "journalctl -b -u fpgas-verify -o cat       # what the check at this boot said\n"
+        "sudo fpgas-verify --no-publish             # run it again now; nothing is sent to the site\n"
+        "```\n\n"
+        "**On a Raspberry Pi 5 that is not booted from the fleet's root**, install and run by hand. If its root "
+        "file system is in memory (`overlayroot=tmpfs`), what you install is gone at the next boot:"
+    ),
+}
+PASS = "**pass**: an Acorn on the Pi 5 setup"
+BLADE_FAIL = "**fail, a first install on someone's own hardware**"
+
+
+def page(c):
+    """The whole page for one carrier, headings from level 2, to be included under a page's title."""
+    after_boot = fragment("after-a-boot.md", c)
+    install = after_boot[after_boot.index("```bash") :]
+    cavity = {k: steps.png(steps.file_name(c, k)) for k in wiring.CONNECTORS}
+    out = [
+        tables.BANNER.strip(),
+        "",
+        "## What the check is",
+        "",
+        "`fpgas-verify` is the program that checks an FPGA board from the machine it is attached to. For an Acorn "
+        "its check doubles as a wiring test: each of its tests uses a known set of wires between the card and the "
+        f"{c.host}, so which tests pass, and what a failing one says, point at the wire.",
+        "",
+        "## 1. Install it and run it",
+        "",
+        INSTALL[c.key],
+        "",
+        install.strip(),
+        "",
+        "## 2. Read the result",
+        "",
+        "There is one result, **pass** or **fail**, and only a pass exits 0. The summary on the terminal lists "
+        "every test in the order it ran with its result; for a check that did not pass it ends with `RESULT:`, a "
+        "`failed:` line for each failed test, a `not run:` line for the tests that did not run and why, and "
+        "`What to do:`.",
+        "",
+    ]
+    if c.key == "pi5":
+        out += [
+            "A pass, on an Acorn on a Raspberry Pi 5 at welland (pi-sw2-p47, 2 October 2026):",
+            "",
+            transcript(PASS).strip(),
+            "",
+        ]
+    else:
+        out += [
+            "**No Compute Blade has passed the whole check yet.** This is what one prints today: a Compute Blade "
+            "with a Compute Module 5 and an Acorn CLE-101 still on the image it was sold with (pi16 at ps1, "
+            "5 October 2026). Two things are wrong and neither is the wiring or the installation: the card has "
+            "not been converted to the fpgas.online design, and in this boot the JTAG test cannot have its TMS "
+            "pin (the last part of this page).",
+            "",
+            transcript(BLADE_FAIL).strip(),
+            "",
+            "What a pass looks like, for comparison, on an Acorn on a Raspberry Pi 5 (pi-sw2-p47 at welland, "
+            "2 October 2026). On a Compute Blade `p2-gpio` will read `not run`:",
+            "",
+            transcript(PASS).strip(),
+            "",
+        ]
+    out += [
+        "## 3. Which test uses which wire",
+        "",
+        f"![Both cables of an Acorn on a {c.name}: each wire, where it lands, and the test that proves it]"
+        f"({steps.png(picture_name(c))})",
+        "",
+        site_links(fragment("which-test.md", c)).strip(),
+        "",
+        "## 4. From a failing line to the wire",
+        "",
+        "Find the failing line in the table, then the wire in the two cavity pictures under it: the number in a "
+        "cavity is the number on the wire's flag.",
+        "",
+        site_links(fragment("to-the-wire.md", c))
+        .replace("{crossed_serial}", swap(c, "J2", "K2"))
+        .replace("{crossed_spare}", swap(c, "J5", "H5") if "J5" in c.wires else "")
+        .strip(),
+        "",
+    ]
+    for connector in wiring.CONNECTORS:
+        out += [f"![Which wire goes in which cavity, {connector} cable]({cavity[connector]})", ""]
+    if c.key == "blade":
+        out += [
+            "## 5. What has been run on a Compute Blade, and JTAG's shared pin",
+            "",
+            site_links(fragment("compute-blade.md", c)).strip(),
+            "",
+        ]
+    out += [
+        f"## {6 if c.key == 'blade' else 5}. Every other message about an Acorn",
+        "",
+        "The check's own words, from the tool's list of [common failures]"
+        f"({FAILURES}), which has the other boards' too.",
+        "",
+        failures(c).strip(),
+        "",
+        "## What the check does to the card and the host",
+        "",
+        after_boot[after_boot.index("* The check never writes") : after_boot.index("* To keep the packages")].strip(),
+        "",
+    ]
+    text = "\n".join(out)
+    text = site_links(text)
+    stray = re.findall(r"(?<!!)\[[^\]]*\]\((?!https?://)[^)]*\)", text)
+    if stray or "{" in re.sub(r"```.*?```", "", text, flags=re.S).replace("{port, mac, sn}", ""):
+        raise wiring.WiringError(f"{name(c)}: a link that is not absolute, or an unfilled place: {stray}")
+    return text
+
+
+def build():
+    """{file name: contents} for each carrier's page and picture."""
+    out = {}
+    for c in wiring.CARRIERS.values():
+        out[picture_name(c)] = picture(c)
+        out[name(c)] = page(c)
+    return out

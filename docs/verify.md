@@ -1049,170 +1049,17 @@ What [verify-goals.md](verify-goals.md) asks for that the check does not do yet:
 ### Checking an Acorn's wiring
 
 The Acorn's check doubles as a wiring test: each of its tests uses a known set of wires between the card and
-the Pi, so which tests pass and what a failing one says point at the wire. The wiring itself (which wire goes
-to which pin, and the parts) is on the [Acorn wiring page](https://docs.fpgas.online/en/latest/boards/acorn/wiring.html),
-generated from [`docs/wiring/acorn/wiring.toml`](wiring/acorn/wiring.toml); the parts to have on the bench, as a
-list to tick off, are generated from the same table for a
-[Raspberry Pi 5](wiring/acorn/generated/acorn-pi5-bom.md) and for a
-[Compute Blade](wiring/acorn/generated/acorn-blade-bom.md).
+the host, so which tests pass and what a failing one says point at the wire. That is a page of its own for
+each carrier, from installing after a boot to which wire a failing line means:
 
-#### After a fresh boot
+* [an Acorn on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checking-compute-blade.html)
+  ([source](wiring/acorn/generated/acorn-check-blade.md)), with what has and has not been run on a blade;
+* [an Acorn on a Raspberry Pi 5](https://docs.fpgas.online/en/latest/boards/acorn/checking-pi5.html)
+  ([source](wiring/acorn/generated/acorn-check-pi5.md)).
 
-On a host whose root file system is in memory (a netbooted Pi with `overlayroot=tmpfs`, as the Compute Blades
-at ps1 are), what you install is gone at the next boot, and so is the boot check's unit. After each boot,
-install and run by hand:
-
-```bash
-# 1. The two apt repositories the packages come from.
-sudo install -d -m0755 /etc/apt/keyrings
-curl -fsSL https://apt.fpgas.online/apt.gpg | sudo tee /etc/apt/keyrings/apt.gpg > /dev/null
-echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
-  | sudo tee /etc/apt/sources.list.d/apt.list
-curl -fsSL https://fpgas.online/fpgas.online-fpga-tools/fpgas.online-fpga-tools.gpg \
-  | sudo tee /etc/apt/keyrings/fpgas.online-fpga-tools.gpg > /dev/null
-echo "deb [signed-by=/etc/apt/keyrings/fpgas.online-fpga-tools.gpg] https://fpgas.online/fpgas.online-fpga-tools/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
-  | sudo tee /etc/apt/sources.list.d/fpgas.online-fpga-tools.list
-
-# 2. The Acorn's packages.
-sudo apt update
-sudo apt install fpgas-online-acorn
-
-# 3. What is installed, and which board this host is set up to check.
-fpgas-verify --list
-
-# 4. The check. Nothing is sent anywhere unless a file on the host says `publish = on`; --no-publish makes sure.
-sudo fpgas-acorn-verify --no-publish
-```
-
-* The check never writes the card's flash and never loads a design into the FPGA. It does drive the P1 and P2
-  wires, which is how it tests them, and puts the Pi's pins back as it found them; on a converted card it
-  writes the design's scratch register and puts the old value back (with the opt-in power-cycle check on, it
-  leaves a marker there); and it records what it found on this host
-  (`/var/lib/fpgas-online/verify-state.json`).
-* It exits 0 only for a pass. The summary is on the terminal; the same as JSON is in
-  `/run/fpgas-online/verify.json`.
-* To keep the packages across boots, they have to go into the image the host boots from; that is the host
-  owner's root image, not something these packages do.
-* The check needs no bitstream file of yours. The images it compares the card's flash with, and the design
-  that converts a card, are installed with it by `fpgas-online-acorn-bitstreams`, in
-  `/usr/share/fpgas-online/acorn-pcie/images/` (for a CLE-101: `acorn-cle-101-sqrl_acorn.bit` and the two
-  flash images, [converting a card](hardware/acorn-pcie-programming.md)). No package installs a pin-id or
-  loopback design for the Acorn; the check does not use one.
-
-#### Which test uses which wire
-
-| Test | Wires it uses | A pass shows | Runs on a card still on SQRL's image |
-|---|---|---|---|
-| `pcie-link` | the M.2 slot | the card is seated and the PCIe link is at the setup's speed and width | yes |
-| `jtag` | P1: TCK, TMS, TDO for the IDCODE read; TDI as well for the device DNA read | all four JTAG wires, and that the FPGA is the variant's part | yes |
-| `pcie-bar0` | the M.2 slot | the fpgas.online design is running and answers over PCIe | no: the board gets `fault: unconverted: …`; this test, `p2-uart`, `p2-serial`, `p2-gpio`, `flash`, `ddr` and `scratch` are listed as `not run` (`pcie-link`, `jtag` and `rp1-pio` still run) |
-| `p2-uart` | P2: K2 (FPGA transmit) to the Pi's RXD (GPIO15), J2 (FPGA receive) from the Pi's TXD (GPIO14) | the serial pair, in the right direction | no |
-| `p2-serial` | the same two wires, driven and read as plain pins in both directions | each of J2 and K2 on its own, so a crossed pair or one open wire is told apart | no |
-| `p2-gpio` | P2: J5 to GPIO3, H5 to GPIO4, in both directions | the two spare wires | no; and never on a Compute Blade, whose cable does not carry them |
-| `rp1-pio` | no wire: `/dev/pio0` on a Pi 5 or CM5 | nothing about the wiring (not run on other hosts) | yes |
-| `flash`, `ddr`, `scratch` | no wire of the cable (`scratch` also uses the serial pair) | nothing about the wiring | no |
-
-So on a card that has not been converted yet, `pcie-link` and `jtag` are the wiring tests; the P2 wires can
-only be tested once the card runs the fpgas.online design
-([converting a card](hardware/acorn-pcie-programming.md)).
-
-#### From what it says to the wire
-
-| The failing line | Look at |
-|---|---|
-| `pcie-link fail: link is x2, expected x1` (or a speed) | the M.2 seat; or the setup's expected figures are not this host's |
-| `jtag fail: no device on the P1 JTAG chain` | the P1 cable is not plugged in, or TCK, TMS or TDO is open or on the wrong pin |
-| `jtag fail: P1 JTAG chain has …, expected one …` | another device answers, or the card is not the variant the host expects |
-| `jtag fail: device DNA over P1 JTAG reads 0x0: the DNA port is not being read` (or `reads 0x1ffffffffffffff`), `openFPGALoader --read-dna read no device DNA over P1 JTAG`, or `device DNA over JTAG … is not the one over BAR0 …` | TDI: the IDCODE read worked without it |
-| `jtag fail: … GPIO14 (TMS) is held by … (uart0): the kernel does not hand out a pin that is held …` | not a wire: on a Compute Blade the serial port has the TMS pin ([below](#on-a-compute-blade)) |
-| `p2-uart fail: no UARTBone reply on /dev/ttyAMA0 (P2 K2/J2)` | the serial pair: open, or crossed; `p2-serial` says which |
-| `p2-serial fail: J2 -> GPIO14: the FPGA drove 1, the Pi read 0; K2 -> GPIO15: the FPGA drove 0, the Pi read 1; …` with the `01` and `10` lines swapped and `00` and `11` right | J2 and K2 are **crossed**: swap the two wires at the Pi end (on a Compute Blade the J2 wire carries the 470 Ω resistor: the resistor stays with J2) |
-| `p2-serial` or `p2-gpio` naming one ball only | that one wire is **open**, or on the wrong pin. Before the FPGA drives, the test sets the Pi's pull against the level to come, so an open wire reads the opposite of what was driven; GPIO3 (the Pi 5's J5) has a pull-up of its own on the Pi, so an open J5 wire reads 1 whatever is driven |
-| `p2-gpio fail: J5 -> GPIO3: …; H5 -> GPIO4: …` with the `01` and `10` lines swapped and `00` and `11` right | J5 and H5 are crossed |
-
-`p2-serial` and `p2-gpio` print what was driven and what was read, eight lines for two wires. The two digits
-are the two balls: the right-hand digit is J2 (or J5), the left-hand one K2 (or H5).
-
-**A crossed pair**: read on acorn-olive at Welland, 4 October 2026, whose P2 pairs were both crossed. `FPGA drives
-01` raises J2, which should arrive on GPIO14; it arrives on GPIO15:
-
-```text
-    p2-serial  fail: J2 -> GPIO14: the FPGA drove 1, the Pi read 0; K2 -> GPIO15: the FPGA drove 0, the Pi read 1; J2 -> GPIO14: the FPGA drove 0, the Pi read 1; K2 -> GPIO15: the FPGA drove 1, the Pi read 0; GPIO14 -> J2: the Pi drove 1, the FPGA read 0; GPIO15 -> K2: the Pi drove 0, the FPGA read 1; GPIO14 -> J2: the Pi drove 0, the FPGA read 1; GPIO15 -> K2: the Pi drove 1, the FPGA read 0; the UARTBone does not answer on /dev/ttyAMA0 after the switch (no fpgas.online SoC answered at 1200 baud after a break)
-        FPGA drives 00: Pi reads GPIO14=0 GPIO15=0
-        FPGA drives 01: Pi reads GPIO14=0 GPIO15=1
-        FPGA drives 10: Pi reads GPIO14=1 GPIO15=0
-        FPGA drives 11: Pi reads GPIO14=1 GPIO15=1
-        Pi drives 00: FPGA reads 00
-        Pi drives 01: FPGA reads 10
-        Pi drives 10: FPGA reads 01
-        Pi drives 11: FPGA reads 11
-```
-
-**One open wire**: read on acorn-sycamore at Welland the same day, whose J5 wire did not reach GPIO3. GPIO3
-reads 1 whatever the FPGA drives (the Pi's own pull-up on GPIO3 wins over the test's pull-down; on GPIO4 an
-open wire would read the opposite of what was driven), and on this card the FPGA read J5 as 1 whatever the Pi
-drove; H5 and GPIO4 follow each other:
-
-```text
-    p2-gpio    fail: J5 -> GPIO3: the FPGA drove 0, the Pi read 1; J5 -> GPIO3: the FPGA drove 0, the Pi read 1; GPIO3 -> J5: the Pi drove 0, the FPGA read 1; GPIO3 -> J5: the Pi drove 0, the FPGA read 1
-        FPGA drives 00: Pi reads GPIO3=1 GPIO4=0
-        FPGA drives 01: Pi reads GPIO3=1 GPIO4=0
-        FPGA drives 10: Pi reads GPIO3=1 GPIO4=1
-        FPGA drives 11: Pi reads GPIO3=1 GPIO4=1
-        Pi drives 00: FPGA reads 01
-        Pi drives 01: FPGA reads 01
-        Pi drives 10: FPGA reads 11
-        Pi drives 11: FPGA reads 11
-```
-
-A correctly wired pair reads back what was driven: `FPGA drives 01: Pi reads GPIO14=1 GPIO15=0`, `Pi drives 01:
-FPGA reads 01`, and so on for every pattern.
-
-#### On a Compute Blade
-
-What has been run on a Compute Blade, and what has not, as of 5 October 2026:
-
-| | State |
-|---|---|
-| Installing the packages and running the check (Raspberry Pi OS trixie, CM5) | run at ps1: the first failing example under [Reading the result](#reading-the-result) is that host's result, taken with 0.0.post1100, before the check named the pin's holder |
-| `pcie-link` | run at ps1: passes (5.0 GT/s, x1) |
-| `jtag` with the serial port on, kernel 6.18 | run at ps1: **cannot work**. TMS is GPIO14, which is also the serial port's TX; that kernel does not lend a pin a driver has, and the serial driver cannot be detached while the system runs. From 0.0.post1111 the test fails saying so, without running the tool ([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)) |
-| `jtag` with the serial port off | **not yet run by us on this hardware** |
-| `jtag` under kernel 6.12, serial port on | recorded as working on one ps1 blade (`--pins 2:3:4:14`), before these packages existed; not run with them |
-| The `p2-uart` and `p2-serial` tests | **not yet run by us on this hardware**: they need a converted card |
-| Converting a card on a Compute Blade | **not yet run by us on this hardware**; the [written steps](hardware/acorn-pcie-programming.md) are for the Pi 5 setup |
-| A Compute Blade that passes the whole check | **not yet seen** |
-| The `p2-serial` test on a blade whose J2 wire has no 470 Ω resistor (pi20 as wired on 5 October 2026: the pair on Extension Port pins 9 and 10) | **not yet run by us on this hardware**. From the code: while it runs to its end or raises an error, the test never has both ends of a wire driving at once (the Pi's pins are made inputs before the FPGA drives, and the FPGA's outputs are switched off before the Pi drives), so it does not rely on the resistor. What the resistor guards against is a design that drives J2 while JTAG or the serial port drives GPIO14; the fpgas.online design leaves J2 an input except while the host has switched J2/K2 to GPIO mode and enabled J2's output, which is what this test does, with the Pi's GPIO14 an input at that moment |
-
-JTAG and the serial pair share GPIO14 on a Compute Blade (J2 reaches it through 470 Ω, so JTAG wins
-electrically). Under kernel 6.18 they cannot both be had from one boot: with the header's serial port on, the
-kernel keeps GPIO14 for it. The configuration we expect to work for JTAG, and with it for converting a card,
-is the header's serial port off at boot. **Not yet run by us on this hardware**, and Raspberry Pi's
-documentation does not say that it frees GPIO14 on a Compute Module 5:
-
-* in `config.txt`, the line `enable_uart=0`, written out (Raspberry Pi's documentation gives the default as 1
-  when the primary serial port is a PL011; we have not seen it left unset on a Compute Blade); and if the
-  port is switched on by a `dtoverlay=uart0…` or `dtparam=uart0` line, that line has to go instead;
-* in `cmdline.txt`, the word `console=serial0,115200` deleted from the one line, if it is there.
-
-On a netbooted host those files may not be on the host: where the firmware reads `config.txt` and
-`cmdline.txt` from is not something we have read, and if it fetches them from a boot server, they are changed
-there, by whoever keeps that server, for every host booting from that tree. At ps1 the blades' root is the
-gateway's `/srv/nfs/rpi/trixie/root` (read from the kernel command line of pi16 and pi20, 5 October 2026);
-where the firmware's copies come from was not read by us.
-
-Then check that the pin is free (the two commands below) before trying JTAG. With the serial port off, `/dev/ttyAMA0` is not there, so the
-`p2-uart`, `p2-serial` and `scratch` tests cannot pass in that boot; what a Compute Blade's check should
-count as its result in each of the two configurations is not settled.
-
-To see who has the JTAG pins on a host, without running anything on the card:
-
-```bash
-pinctrl get 2,3,4,14,15     # the function each pin is switched to
-gpiodetect                  # the header's chip: `pinctrl-rp1` on a CM5, `pinctrl-bcm2711` on a CM4
-gpioinfo -c gpiochip0 | grep -E 'line +(2|3|4|14):'   # with that chip's name (gpiod 2; gpiod 1: `gpioinfo gpiochip0`)
-# a line shown with a consumer (`consumer="kernel"`) or `[used]` is one the kernel will not hand out
-```
+Both are generated by [`docs/wiring/acorn/check.py`](wiring/acorn/check.py) from the words in
+[`docs/wiring/acorn/check/`](wiring/acorn/check/), the wiring table
+[`wiring.toml`](wiring/acorn/wiring.toml), and the Acorn transcripts and rows of this document.
 
 ### Common failures
 
