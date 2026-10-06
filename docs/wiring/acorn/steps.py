@@ -1007,11 +1007,11 @@ def card():
             "at the end of the card (boxed, right): the card's mounting pad, taken to be "
             "ground from the M.2 standard, not measured on this card.",
         ),
-        ("The M.2 edge connector", "is off the picture to the left: this is the end away from it, the fan end."),
+        ("The M.2 edge connector", "is off the picture to the left: this is the end of the card away from it."),
         (
             "Not in this photograph",
-            "the FPGA with its heatsink and fan, which are on the other face. Where the LEDs are has not been read "
-            "off a card by us. No photograph of the other face is in these pages yet.",
+            "the other face of the card, the one with the FPGA: no photograph of it is in these pages yet, and "
+            "where the LEDs are has not been read off a card by us.",
         ),
     )
     for name, words in rows:
