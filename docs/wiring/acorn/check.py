@@ -262,7 +262,6 @@ def pages(c):
     """{part: page body} for one carrier, headings from level 2, each to be included under a page's title."""
     after_boot = fragment("after-a-boot.md", c)
     install = after_boot[after_boot.index("```bash") : after_boot.index("```\n", after_boot.index("```bash") + 7) + 4]
-    notes = after_boot[after_boot.index("* The check never writes") :]
     wire_table, wire_examples = site_links(fragment("to-the-wire.md", c)).split("\n\n", 1)
     cavity = {k: steps.png(steps.file_name(c, k)) for k in wiring.CONNECTORS}
     out = [
@@ -329,10 +328,6 @@ def pages(c):
         f"({steps.png(picture_name(c))})",
         "",
         site_links(fragment("which-test.md", c)).strip(),
-        "",
-        "## What the check does to the card and the host",
-        "",
-        notes.strip(),
         "",
     ]
     fails = [

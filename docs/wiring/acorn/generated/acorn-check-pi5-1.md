@@ -85,20 +85,3 @@ fpgas-verify: pass (mode auto, auto: USB/PCI IDs)
 So on a card that has not been converted yet, `pcie-link` and `jtag` are the wiring tests; the P2 wires can
 only be tested once the card runs the fpgas.online design
 ([converting a card](https://docs.fpgas.online/en/latest/boards/acorn/pcie-programming.html)).
-
-## What the check does to the card and the host
-
-* The check never writes the card's flash and never loads a design into the FPGA. It does drive the P1 and P2
-  wires, which is how it tests them, and puts the Pi's pins back as it found them; on a converted card it
-  writes the design's scratch register and puts the old value back (with the opt-in power-cycle check on, it
-  leaves a marker there); and it records what it found on this host
-  (`/var/lib/fpgas-online/verify-state.json`).
-* It exits 0 only for a pass. The summary is on the terminal; the same as JSON is in
-  `/run/fpgas-online/verify.json`.
-* To keep the packages across boots, they have to go into the image the host boots from; that is the host
-  owner's root image, not something these packages do.
-* The check needs no bitstream file of yours. The images it compares the card's flash with, and the design
-  that converts a card, are installed with it by `fpgas-online-acorn-bitstreams`, in
-  `/usr/share/fpgas-online/acorn-pcie/images/` (for a CLE-101: `acorn-cle-101-sqrl_acorn.bit` and the two
-  flash images, [converting a card](https://docs.fpgas.online/en/latest/boards/acorn/pcie-programming.html)). No package installs a pin-id or
-  loopback design for the Acorn; the check does not use one.
