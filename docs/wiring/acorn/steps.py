@@ -1364,7 +1364,8 @@ def needs(c, connector):
         tools += ", a soldering iron"
     return (
         f"For this cable: {'; '.join(items)}. Tools: {tools}, masking tape and a fine pen. The Acorn itself, out of "
-        "any slot, is needed for the first steps."
+        f"any slot, is needed for the first steps: if it is fitted, {c.power_off[0].lower()}{c.power_off[1:]} Then "
+        "take the card out."
     )
 
 
@@ -1416,19 +1417,22 @@ def guide(c):
         lines = [line for line in lines if not line.startswith("#### ")]
         while lines and not lines[0]:
             lines.pop(0)
-        head = [tables.BANNER.strip(), "", not_run, "", "## What you need", "", need, "", "## Steps", ""]
-        return "\n".join([*head, *lines, *(line for extra in after for line in (extra, "")), *parts["tail"]])
+        head = [tables.BANNER.strip(), "", f"{not_run} {parts['tail'][0]}", "", "## What you need", "", need, ""]
+        return "\n".join([*head, "## Steps", "", *lines, *(line for extra in after for line in (extra, ""))])
 
     out = {
         guide_name(c, "overview"): "\n".join([
             tables.BANNER.strip(), "", not_run, "", "## What you will have", "", *will_have,
-            "Nothing in this guide cuts a wire to length: each half of the bought cable is used at the length it "
-            "has, apart from the wires that are cut back at the plug. Whether a half reaches from the card in its "
+            "Nothing in this guide cuts a wire to length. The bought cable is cut in half, once, as the first step "
+            "(before the meter check, which needs the cut faces); each half is then used at the length it has, "
+            "apart from the wires that are cut back at the plug"
+            + (" and the one wire that is cut to take the resistor" if c.resistors else "")
+            + ". Whether a half reaches from the card in its "
             f"slot to the {c.name}'s headers has not been measured by us: hold a half cable against the host before "
             "you cut anything.", "",
             "## The order of work", "", *(f"{i}. {line}" for i, line in enumerate(order, 1)), "",
             "## Where the facts come from", "",
-            *(f"- {claim}: {source}." for claim, source in wiring.SOURCES.items()), "",
+            *(f"- {s['claim']}: {s['source']}." for s in wiring.SOURCES if s.get("carrier", c.key) == c.key), "",
             *parts["tail"],
         ]),
     }  # fmt: skip

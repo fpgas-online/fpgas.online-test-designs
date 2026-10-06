@@ -10,7 +10,7 @@ GND, TCK, TDO, TMS, TDI, J2, K2, J5 and H5 are the names on the pictures for eac
 
 ![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5.png)
 
-Nothing in this guide cuts a wire to length: each half of the bought cable is used at the length it has, apart from the wires that are cut back at the plug. Whether a half reaches from the card in its slot to the Raspberry Pi 5's headers has not been measured by us: hold a half cable against the host before you cut anything.
+Nothing in this guide cuts a wire to length. The bought cable is cut in half, once, as the first step (before the meter check, which needs the cut faces); each half is then used at the length it has, apart from the wires that are cut back at the plug. Whether a half reaches from the card in its slot to the Raspberry Pi 5's headers has not been measured by us: hold a half cable against the host before you cut anything.
 
 ## The order of work
 
@@ -28,7 +28,6 @@ Nothing in this guide cuts a wire to length: each half of the bought cable is us
 - The order of the pins in the Acorn's two sockets (P1: GND, TCK, TDO, TMS, TDI, VCC; P2: GND, J2, K2, J5, H5, VCC), and that pin 1 is the end nearest the M.2 edge: the "Pico-EZmate connectors pinout on Acorn, Nite/LiteFury" legend on the LiteX Acorn CLE-215 wiki, and the silkscreen of RHS Research's JTAG adapter. Which end of a plug is wire 1 is checked with a meter in the guide before anything is cut.
 - That pin 6 (VCC) carries 3.3 V from the Acorn: not verified by us: taken from the same legend's name for the pin. The guide cuts that wire back whatever it carries.
 - The wiring on a Raspberry Pi 5 (which wire to which header pin): Raspberry Pi's 40-pin header numbering; every wire of it carried in the check that passed on the Acorn and Raspberry Pi 5 seen at welland's sw2 p47 on 2 October 2026 (on 6 October 2026 that port had acorn-holly, device DNA `0x00200c8664b04854`, on the Pi 5 2 GB `285df3f84af242d0`): jtag, p2-uart, p2-serial and p2-gpio pass.
-- The Compute Blade's Extension Port and UART header (which pin is which): read off Uptime Lab's board photo and their GPIO table; no Compute Blade has been wired this way by us yet.
 - The Molex cable (part 0369200601: six circuits, a plug at each end, all six wires black, contacts 1.2 mm apart): not verified by us for this guide: from the part's description and the cables in use at welland.
 - That an Acorn CLE-215+, CLE-215 and CLE-101 are the same card, also sold as NiteFury and LiteFury, so that a LiteFury photo can stand for an Acorn: RHS Research's NiteFury-and-LiteFury repository for the family; not verified by us card against card.
 - The lengths (how far a wire is cut back, stripped, flagged): our choice, not measured.

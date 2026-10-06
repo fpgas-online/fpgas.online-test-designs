@@ -338,7 +338,14 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
     for name, body in pages.items():
         assert "next step" not in body and "step before" not in body.replace("in the step before.", ""), name
     overview = pages[steps.guide_name(c, "overview")]
-    assert all(f"- {claim}: " in overview for claim in wiring.SOURCES) and "has not been measured by us" in overview
+    mine = [s for s in wiring.SOURCES if s.get("carrier", key) == key]
+    others = [s for s in wiring.SOURCES if s.get("carrier", key) != key]
+    assert mine and all(f"- {s['claim']}: " in overview for s in mine) and "has not been measured by us" in overview
+    assert others and not any(s["claim"] in overview for s in others)  # nothing about the other carrier
+    assert all(s.get("carrier") in (None, *wiring.CARRIERS) for s in wiring.SOURCES)
+    for part in ("jtag-1", "uart-1", "bench", "fit"):  # the photo credit is not left to be the last line of a page
+        assert pages[steps.guide_name(c, part)].count("Photos: ") == 1
+        assert not pages[steps.guide_name(c, part)].rstrip().endswith("same PCB).")
     if c.resistors:
         assert f"lands on GPIO14, which is also JTAG TMS: with {c.resistor_value} in the wire" in steps.procedure(c)
     # the meter check of wire 1 is on the page that cuts wires, before the cut
