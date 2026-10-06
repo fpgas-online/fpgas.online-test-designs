@@ -14,8 +14,9 @@
 <!-- pi5 -->`p2-serial` and `p2-gpio` print what was driven and what was read, eight lines for two wires. The two digits are the two balls: the right-hand digit is J2 (or J5), the left-hand one K2 (or H5).
 <!-- blade -->`p2-serial` prints what was driven and what was read, eight lines for two wires. The two digits are the two balls: the right-hand digit is J2, the left-hand one K2.
 
-**A crossed pair**: read on acorn-olive at Welland (an Acorn on a Raspberry Pi 5), 4 October 2026, whose P2 pairs were both crossed. `FPGA drives
-01` raises J2, which should arrive on GPIO14; it arrives on GPIO15:
+**A crossed pair**: read on acorn-olive at Welland (an Acorn on a Raspberry Pi 5), 4 October 2026, whose P2 pairs were both crossed. The `p2-serial` test
+drives each wire as a plain pin, first from the FPGA and then from the host. `FPGA drives 01` raises J2, which
+should arrive on GPIO14; it arrives on GPIO15:
 
 ```text
     p2-serial  fail: J2 -> GPIO14: the FPGA drove 1, the Pi read 0; K2 -> GPIO15: the FPGA drove 0, the Pi read 1; J2 -> GPIO14: the FPGA drove 0, the Pi read 1; K2 -> GPIO15: the FPGA drove 1, the Pi read 0; GPIO14 -> J2: the Pi drove 1, the FPGA read 0; GPIO15 -> K2: the Pi drove 0, the FPGA read 1; GPIO14 -> J2: the Pi drove 0, the FPGA read 1; GPIO15 -> K2: the Pi drove 1, the FPGA read 0; the UARTBone does not answer on /dev/ttyAMA0 after the switch (no fpgas.online SoC answered at 1200 baud after a break)

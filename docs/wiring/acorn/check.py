@@ -246,7 +246,9 @@ BLADE_FAIL = "**fail, a first install on someone's own hardware**"
 def page(c):
     """The whole page for one carrier, headings from level 2, to be included under a page's title."""
     after_boot = fragment("after-a-boot.md", c)
-    install = after_boot[after_boot.index("```bash") :]
+    install = after_boot[after_boot.index("```bash") : after_boot.index("```\n", after_boot.index("```bash") + 7) + 4]
+    notes = after_boot[after_boot.index("* The check never writes") :]
+    wire_table, wire_examples = site_links(fragment("to-the-wire.md", c)).split("\n\n", 1)
     cavity = {k: steps.png(steps.file_name(c, k)) for k in wiring.CONNECTORS}
     out = [
         tables.BANNER.strip(),
@@ -255,13 +257,19 @@ def page(c):
         "",
         "`fpgas-verify` is the program that checks an FPGA board from the machine it is attached to. For an Acorn "
         "its check doubles as a wiring test: each of its tests uses a known set of wires between the card and the "
-        f"{c.host}, so which tests pass, and what a failing one says, point at the wire.",
+        f"{c.host}, so which tests pass, and what a failing one says, point at the wire. An Acorn is sold as a "
+        "CLE-215+ and as a CLE-101; the check covers both, and its summary names the one it found (`acorn "
+        "cle-101`).",
         "",
         "## 1. Install it and run it",
         "",
         INSTALL[c.key],
         "",
         install.strip(),
+        "",
+        "`fpgas-verify` checks whichever board this host is set up for, as the check at boot does; "
+        "`fpgas-acorn-verify` checks the Acorn whatever the host is set up for. On a host set up for an Acorn "
+        "the two print the same.",
         "",
         "## 2. Read the result",
         "",
@@ -307,14 +315,21 @@ def page(c):
         "Find the failing line in the table, then the wire in the two cavity pictures under it: the number in a "
         "cavity is the number on the wire's flag.",
         "",
-        site_links(fragment("to-the-wire.md", c))
-        .replace("{crossed_serial}", swap(c, "J2", "K2"))
+        f"**Before you touch a cable: {c.power_off}** After moving a wire, boot and run the check again. One "
+        "test can be run on its own, `sudo fpgas-acorn-verify --test jtag` or `--test p2-serial`; its report "
+        "is then JSON on the terminal.",
+        "",
+        wire_table.replace("{crossed_serial}", swap(c, "J2", "K2"))
         .replace("{crossed_spare}", swap(c, "J5", "H5") if "J5" in c.wires else "")
         .strip(),
+        "",
+        "The two cavity pictures are the ones the cables were built from, shown again to find a wire's "
+        "cavity. Their notes about cutting, marking and the meter check belong to building the cables.",
         "",
     ]
     for connector in wiring.CONNECTORS:
         out += [f"![Which wire goes in which cavity, {connector} cable]({cavity[connector]})", ""]
+    out += [wire_examples.strip(), ""]
     if c.key == "blade":
         out += [
             "## 5. What has been run on a Compute Blade, and JTAG's shared pin",
@@ -332,7 +347,7 @@ def page(c):
         "",
         "## What the check does to the card and the host",
         "",
-        after_boot[after_boot.index("* The check never writes") : after_boot.index("* To keep the packages")].strip(),
+        notes.strip(),
         "",
     ]
     text = "\n".join(out)

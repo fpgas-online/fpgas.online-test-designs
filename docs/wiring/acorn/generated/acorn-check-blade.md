@@ -2,7 +2,7 @@
 
 ## What the check is
 
-`fpgas-verify` is the program that checks an FPGA board from the machine it is attached to. For an Acorn its check doubles as a wiring test: each of its tests uses a known set of wires between the card and the blade, so which tests pass, and what a failing one says, point at the wire.
+`fpgas-verify` is the program that checks an FPGA board from the machine it is attached to. For an Acorn its check doubles as a wiring test: each of its tests uses a known set of wires between the card and the blade, so which tests pass, and what a failing one says, point at the wire. An Acorn is sold as a CLE-215+ and as a CLE-101; the check covers both, and its summary names the one it found (`acorn cle-101`).
 
 ## 1. Install it and run it
 
@@ -30,20 +30,7 @@ fpgas-verify --list
 sudo fpgas-acorn-verify --no-publish
 ```
 
-* The check never writes the card's flash and never loads a design into the FPGA. It does drive the P1 and P2
-  wires, which is how it tests them, and puts the Pi's pins back as it found them; on a converted card it
-  writes the design's scratch register and puts the old value back (with the opt-in power-cycle check on, it
-  leaves a marker there); and it records what it found on this host
-  (`/var/lib/fpgas-online/verify-state.json`).
-* It exits 0 only for a pass. The summary is on the terminal; the same as JSON is in
-  `/run/fpgas-online/verify.json`.
-* To keep the packages across boots, they have to go into the image the host boots from; that is the host
-  owner's root image, not something these packages do.
-* The check needs no bitstream file of yours. The images it compares the card's flash with, and the design
-  that converts a card, are installed with it by `fpgas-online-acorn-bitstreams`, in
-  `/usr/share/fpgas-online/acorn-pcie/images/` (for a CLE-101: `acorn-cle-101-sqrl_acorn.bit` and the two
-  flash images, [converting a card](https://docs.fpgas.online/en/latest/boards/acorn/pcie-programming.html)). No package installs a pin-id or
-  loopback design for the Acorn; the check does not use one.
+`fpgas-verify` checks whichever board this host is set up for, as the check at boot does; `fpgas-acorn-verify` checks the Acorn whatever the host is set up for. On a host set up for an Acorn the two print the same.
 
 ## 2. Read the result
 
@@ -143,6 +130,8 @@ only be tested once the card runs the fpgas.online design
 
 Find the failing line in the table, then the wire in the two cavity pictures under it: the number in a cavity is the number on the wire's flag.
 
+**Before you touch a cable: Power off the Compute Blade: unplug its PoE cable.** After moving a wire, boot and run the check again. One test can be run on its own, `sudo fpgas-acorn-verify --test jtag` or `--test p2-serial`; its report is then JSON on the terminal.
+
 | The failing line | Look at |
 |---|---|
 | `pcie-link fail: link is x2, expected x1` (or a speed) | the M.2 seat; or the setup's expected figures are not this host's |
@@ -154,10 +143,17 @@ Find the failing line in the table, then the wire in the two cavity pictures und
 | `p2-serial fail: J2 -> GPIO14: the FPGA drove 1, the Pi read 0; K2 -> GPIO15: the FPGA drove 0, the Pi read 1; …` with the `01` and `10` lines swapped and `00` and `11` right | J2 and K2 are **crossed**: wires 2 and 3 of the P2 cable are in each other's cavity. Take both terminals out of the housing and put each in the other's cavity (the P2 cavity picture below). The 470 Ω resistor stays in wire 2 (J2) |
 | `p2-serial` naming one ball only | that one wire is **open**, or on the wrong pin. Before the FPGA drives, the test sets the host's pull against the level to come, so an open wire reads the opposite of what was driven |
 
+The two cavity pictures are the ones the cables were built from, shown again to find a wire's cavity. Their notes about cutting, marking and the meter check belong to building the cables.
+
+![Which wire goes in which cavity, P1 cable](acorn-cable-blade-p1.png)
+
+![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2.png)
+
 `p2-serial` prints what was driven and what was read, eight lines for two wires. The two digits are the two balls: the right-hand digit is J2, the left-hand one K2.
 
-**A crossed pair**: read on acorn-olive at Welland (an Acorn on a Raspberry Pi 5), 4 October 2026, whose P2 pairs were both crossed. `FPGA drives
-01` raises J2, which should arrive on GPIO14; it arrives on GPIO15:
+**A crossed pair**: read on acorn-olive at Welland (an Acorn on a Raspberry Pi 5), 4 October 2026, whose P2 pairs were both crossed. The `p2-serial` test
+drives each wire as a plain pin, first from the FPGA and then from the host. `FPGA drives 01` raises J2, which
+should arrive on GPIO14; it arrives on GPIO15:
 
 ```text
     p2-serial  fail: J2 -> GPIO14: the FPGA drove 1, the Pi read 0; K2 -> GPIO15: the FPGA drove 0, the Pi read 1; J2 -> GPIO14: the FPGA drove 0, the Pi read 1; K2 -> GPIO15: the FPGA drove 1, the Pi read 0; GPIO14 -> J2: the Pi drove 1, the FPGA read 0; GPIO15 -> K2: the Pi drove 0, the FPGA read 1; GPIO14 -> J2: the Pi drove 0, the FPGA read 1; GPIO15 -> K2: the Pi drove 1, the FPGA read 0; the UARTBone does not answer on /dev/ttyAMA0 after the switch (no fpgas.online SoC answered at 1200 baud after a break)
@@ -173,10 +169,6 @@ Find the failing line in the table, then the wire in the two cavity pictures und
 
 A correctly wired pair reads back what was driven: `FPGA drives 01: Pi reads GPIO14=1 GPIO15=0`, `Pi drives 01:
 FPGA reads 01`, and so on for every pattern.
-
-![Which wire goes in which cavity, P1 cable](acorn-cable-blade-p1.png)
-
-![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2.png)
 
 ## 5. What has been run on a Compute Blade, and JTAG's shared pin
 
@@ -257,3 +249,10 @@ The check's own words, from the tool's list of [common failures](https://docs.fp
   (`/var/lib/fpgas-online/verify-state.json`).
 * It exits 0 only for a pass. The summary is on the terminal; the same as JSON is in
   `/run/fpgas-online/verify.json`.
+* To keep the packages across boots, they have to go into the image the host boots from; that is the host
+  owner's root image, not something these packages do.
+* The check needs no bitstream file of yours. The images it compares the card's flash with, and the design
+  that converts a card, are installed with it by `fpgas-online-acorn-bitstreams`, in
+  `/usr/share/fpgas-online/acorn-pcie/images/` (for a CLE-101: `acorn-cle-101-sqrl_acorn.bit` and the two
+  flash images, [converting a card](https://docs.fpgas.online/en/latest/boards/acorn/pcie-programming.html)). No package installs a pin-id or
+  loopback design for the Acorn; the check does not use one.

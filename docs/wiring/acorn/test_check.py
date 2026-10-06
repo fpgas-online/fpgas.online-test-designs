@@ -70,7 +70,7 @@ def test_the_transcripts_and_failure_rows_come_from_the_tool_reference():
     with pytest.raises(wiring.WiringError):
         check.transcript("**no such transcript**")
     # the tool's own reference still points at both pages, and keeps the anchor its summary prints
-    assert "boards/acorn/checking-compute-blade.html" in verify and "boards/acorn/checking-pi5.html" in verify
+    assert "boards/acorn/building/compute-blade/verifying.html" in verify and "boards/acorn/building/rpi-5/verifying.html" in verify
     assert "\n### Common failures\n" in verify and "#### On a Compute Blade" not in verify
 
 

@@ -1079,8 +1079,12 @@ def has_resistor(c, connector):
 SHEETS = {"pi5": "acorn-wiring-pi5", "blade": "acorn-wiring-computeblade"}
 
 
-def procedure(c):
-    """Building both cables for one carrier, complete in itself: every step has its picture under it."""
+def procedure_parts(c, restart=False):
+    """Building both cables for one carrier, as parts: {"head", one per connector, "fit", "tail": lines}.
+
+    restart: number the steps from 1 in each part, for a part that is a page of its own. The first cable's
+    part starts with cutting the bought cable in half.
+    """
     lengths = wiring.LENGTHS
     sheet = (f"The finished wiring: Acorn to {c.name}", f"{SHEETS[c.key]}.png")
     used = [s for conn in wiring.CONNECTORS.values() for s in conn["pins"] if s in c.wires]
@@ -1118,15 +1122,17 @@ def procedure(c):
         "",
     ]
     n = 0
+    parts = {"head": out}
+    target = parts[next(iter(wiring.CONNECTORS))] = []
 
     def step(text, *images):
         nonlocal n
         n += 1
-        out.extend([f"**{n}.** {text}", ""])
+        target.extend([f"**{n}.** {text}", ""])
         for alt, name, *lead in images:
             for line in lead:  # why this picture is here again
-                out.extend([line, ""])
-            out.extend([f"![{alt}]({name})", ""])
+                target.extend([line, ""])
+            target.extend([f"![{alt}]({name})", ""])
 
     step(
         "Cut the Molex cable in half with side cutters. Each half is one cable.",
@@ -1147,7 +1153,10 @@ def procedure(c):
         kept = [pins.index(s) + 1 for s in pins if s not in plan.cut]
         cut_n = [pins.index(s) + 1 for s in plan.cut]
         cut_who = number_list(cut_n)
-        out.extend([f"#### The {connector} cable ({conn['what']})", ""])
+        target = parts.setdefault(connector, [])
+        if restart and not target:
+            n = 0
+        target.extend([f"#### The {connector} cable ({conn['what']})", ""])
         half = "one" if connector == next(iter(wiring.CONNECTORS)) else "the other"
         flag = [
             f"Press the plug of {half} half into socket {connector} on the underside of the Acorn. Hold the card "
@@ -1218,7 +1227,10 @@ def procedure(c):
             ("A meter between the plug and the housing", "acorn-cable-check.png"),
             (*cavity[connector], f"The {connector} cavity picture again, to read each wire's cavity from:"),
         )
-    out.extend(["#### Fit the cables", ""])
+    target = parts["fit"] = []
+    if restart:
+        n = 0
+    target.extend(["#### Fit the cables", ""])
     fits = []
     for connector in wiring.CONNECTORS:
         plan = housing(c, connector)
@@ -1251,8 +1263,91 @@ def procedure(c):
         "it is in the slot.\n\n" + fit_block(c).rstrip(),
         sheet,
     )
-    out.extend([CREDITS[c.key] + ".", ""])
-    return "\n".join(out)
+    parts["tail"] = [CREDITS[c.key] + ".", ""]
+    return parts
+
+
+def procedure(c):
+    """Building both cables for one carrier, complete in itself: every step has its picture under it."""
+    return "\n".join(line for part in procedure_parts(c).values() for line in part)
+
+
+# ----------------------------------------------------------------------------------------------
+# The building guide as pages: an overview, then one page for each connector's cable, then the fitting
+# ----------------------------------------------------------------------------------------------
+# connector -> (file name part, the page's name). The parts list is tables.bom(), a page of its own.
+GUIDE = {"P1": ("jtag", "JTAG connector"), "P2": ("uart", "UART connector")}
+
+
+def guide_name(c, part):
+    return f"acorn-build-{c.key}-{part}.md"
+
+
+def needs(c, connector):
+    """What one cable takes from the parts list, as a sentence: so its page can be started without the list."""
+    plan = housing(c, connector)
+    data = c.headers[plan.header]
+    pins = wiring.CONNECTORS[connector]["pins"]
+    wired = [s for s in pins if s not in plan.cut]
+    shape = f"{data.columns}×{(plan.last - plan.first + 1) // data.columns}"
+    items = [
+        "one half of the Molex Pico-EZmate cable (a plug with six black wires)",
+        f"the {shape} Dupont housing",
+        f"{len(wired)} Dupont crimp terminals, and a few spare",
+        f"{wiring.LENGTHS['tube']} mm heat-shrink tube",
+    ]
+    if has_resistor(c, connector):
+        items += [f"the {c.resistor_value} resistor", f"{wiring.LENGTHS['resistor_tube']} mm heat-shrink tube"]
+    tools = "a multimeter with a continuity buzzer, side cutters, wire strippers, the crimping tool, a hot-air tool"
+    if has_resistor(c, connector):
+        tools += ", a soldering iron"
+    return (
+        f"For this cable: {'; '.join(items)}. Tools: {tools}, masking tape and a fine pen. The Acorn itself, out of "
+        "any slot, is needed for the first steps."
+    )
+
+
+def guide(c):
+    """{file name: page body} of the building guide for one carrier. Each page is complete in itself."""
+    if list(wiring.CONNECTORS) != list(GUIDE):
+        raise wiring.WiringError(f"the building guide has pages for {list(GUIDE)}, not for {list(wiring.CONNECTORS)}")
+    parts = procedure_parts(c, restart=True)
+    head = parts["head"]
+    will_have = head[head.index("### What you will have") + 2 : head.index("### Parts and tools")]
+    not_run = "Not yet run by us on this hardware: written from the design."
+    order = [
+        "Parts and tools: the list to tick off before starting.",
+        *(
+            f"{title}: the {connector} cable, from the bought cable to a checked housing."
+            for connector, (_, title) in GUIDE.items()
+        ),
+        "Bench check and fitting: a check with the power off, then the cables and the card go in.",
+        "Verifying: the check run on the host, and what a failing line means.",
+    ]
+    out = {
+        guide_name(c, "overview"): "\n".join([
+            tables.BANNER.strip(), "", not_run, "", "## What you will have", "", *will_have,
+            "## The order of work", "", *(f"{i}. {line}" for i, line in enumerate(order, 1)), "",
+            *parts["tail"],
+        ]),
+    }  # fmt: skip
+    for connector, (part, _title) in GUIDE.items():
+        steps_ = [line for line in parts[connector] if not line.startswith("#### ")]
+        while steps_ and not steps_[0]:
+            steps_.pop(0)
+        out[guide_name(c, part)] = "\n".join([
+            tables.BANNER.strip(), "", not_run, "", "## What you need", "", needs(c, connector), "",
+            "## Steps", "", *steps_, *parts["tail"],
+        ])  # fmt: skip
+    fit_steps = [line for line in parts["fit"] if not line.startswith("#### ")]
+    while fit_steps and not fit_steps[0]:
+        fit_steps.pop(0)
+    out[guide_name(c, "fit")] = "\n".join([
+        tables.BANNER.strip(), "", not_run, "", "## What you need", "",
+        f"Both finished cables, the Acorn, the {c.name}, and a multimeter with a continuity buzzer.", "",
+        "## Steps", "", *fit_steps, *parts["tail"],
+    ])  # fmt: skip
+    return out
 
 
 # Where the M.2 slot is in each host's photo, in photo pixels: blade.jpg, hat-ccw.jpg.
@@ -1502,4 +1597,5 @@ def build():
         out[shell_check_name(c)] = shell_check(c)
         out[f"acorn-fit-{key}.md"] = tables.BANNER + fit_block(c)
         out[f"acorn-cables-{key}.md"] = procedure(c)
+        out.update(guide(c))
     return out
