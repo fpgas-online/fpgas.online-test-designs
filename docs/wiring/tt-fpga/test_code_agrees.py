@@ -27,6 +27,17 @@ LOOPBACK = REPO / "designs/pmod-loopback/host/test_pmod_loopback.py"
 PLATFORM = REPO / "designs/_shared/tt_fpga_platform.py"
 LOADER = REPO / "designs/_host/tt_fpga_program.py"
 BRIDGE = REPO / "designs/_host/tt_test_wrapper.py"
+DISPLAY = REPO / "designs/tt-display/gateware/tt_display.py"
+CLOCK = next(o for o in W.other if "hz" in o)
+
+
+def clock_as_started(path):
+    """(the GPIOs a script starts a PWM clock on, the frequencies it sets on one), each as a set of numbers:
+    every `PWM(Pin(n))` and every `<name>.freq(n)` in the MicroPython the file sends to the board."""
+    text = path.read_text()
+    pins = {int(n) for n in re.findall(r"PWM\(Pin\((\d+)\)\)", text)}
+    rates = {int(n.replace("_", "")) for n in re.findall(r"\b\w+\.freq\(([\d_]+)\)", text)}
+    return pins, rates
 
 
 def assigned(path, name):
@@ -76,6 +87,8 @@ def test_the_pin_identification_design_gives_turns_to_exactly_the_wires_that_sha
     """pmod_pin_id_tt.SHARED: {(platform connector, bit): turn}. Its keys are the shared wires, and two wires
     on one GPIO never have the same turn."""
     node = assigned(PIN_ID_GATEWARE, "SHARED")
+    # SHARED is two dict comprehensions joined with `|`, not a literal, so ast.literal_eval refuses it. It is
+    # this repository's own expression, it uses no name, and it is evaluated with no builtins to reach.
     turns = eval(compile(ast.Expression(node), PIN_ID_GATEWARE.name, "eval"), {"__builtins__": {}})
     ours = {(W.groups[w.group]["connector"], w.bit): w for w in W.shared()}
     assert set(turns) == set(ours)
@@ -107,14 +120,44 @@ def test_the_loader_drives_the_microcontroller_pins_the_wiring_names():
     for name, variable in (("sck", "sck_pin"), ("mosi", "mosi_pin"), ("ss", "ss_pin"), ("reset", "reset_pin")):
         found = set(re.findall(rf"^{variable} = Pin\((\d+), Pin\.OUT\)", text, re.M))
         assert found == {str(mcu[name])}, (name, found)
-    clock = next(o for o in W.other if o["signal"] == "clk_rp2040")
-    assert clock["mcu_source"] == "code"
-    assert set(re.findall(r"PWM\(Pin\((\d+)\)\)", text)) == {str(clock["mcu_gpio"])}
-    assert set(re.findall(r"\.freq\((50_000_000)\)", text)) == {"50_000_000"} and "50 MHz" in clock["what"]
+    # The default way of sending (PIO) does not use sck_pin and mosi_pin: its state machine is given the pins.
+    assert set(re.findall(r"sideset_base=Pin\((\d+)\)", text)) == {str(mcu["sck"])}
+    assert set(re.findall(r"out_base=Pin\((\d+)\)", text)) == {str(mcu["mosi"])}
     # --gpio-release sets every GPIO of the 24 signals to an input: one unbroken range
     gpios = sorted(w.mcu_gpio for w in W.wires)
     assert gpios == list(range(gpios[0], gpios[-1] + 1))
     assert f"for g in list(range({gpios[0]}, {gpios[-1] + 1})):" in text
+
+
+def test_the_loader_and_the_serial_bridge_start_the_wirings_clock_on_the_wirings_pin():
+    """Both scripts start the clock (the bridge starts it again after its own reset of the board)."""
+    assert CLOCK["mcu_source"] == "code"
+    for path in (LOADER, BRIDGE):
+        pins, rates = clock_as_started(path)
+        assert pins == {CLOCK["mcu_gpio"]}, path.name
+        assert rates == {CLOCK["hz"]}, path.name
+
+
+def test_the_gateware_expects_the_clock_the_wiring_gives():
+    text = PLATFORM.read_text()
+    assert {float(n) for n in re.findall(r"1e9 / ([0-9.e]+)", text)} == {float(CLOCK["hz"])}
+    assert literal(PIN_ID_GATEWARE, "SYS_CLK_FREQ") == CLOCK["hz"]
+
+
+def test_the_fpga_named_on_the_pages_is_the_device_the_platform_builds_for():
+    assert f'"{W.board["fpga_device"]}"' in PLATFORM.read_text()
+    family, part, package = W.board["fpga_device"].split("-")
+    assert f"{family}{part}".lower() in W.board["fpga"].lower()  # iCE40UP5K
+    assert package.lower() in W.board["fpga"].lower()  # SG48
+
+
+def test_the_display_design_puts_the_ring_the_middle_bar_and_the_dot_where_the_wiring_does():
+    """tt_display.py drives uo_out with the ring's segments on its first RING bits, then the middle bar, then
+    the dot. It holds no segment names, so this ties the places of g and the dot, not the order a to f."""
+    assert "uo_out.eq(Cat(*[ring == i for i in range(RING)], middle, dot))" in DISPLAY.read_text()
+    ring = literal(DISPLAY, "RING")
+    segments = W.display["segments"]
+    assert segments[:ring] == ["a", "b", "c", "d", "e", "f"] and segments[ring:] == ["g", "dot"]
 
 
 def test_the_serial_bridge_is_on_the_two_microcontroller_pins_of_the_wirings_serial_port():
