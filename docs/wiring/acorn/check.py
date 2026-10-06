@@ -297,10 +297,8 @@ def pages(c):
             "",
             transcript(BLADE_FAIL).strip(),
             "",
-            "What a pass looks like, for comparison, on an Acorn on a Raspberry Pi 5 (pi-sw2-p47 at welland, "
-            "2 October 2026). On a Compute Blade `p2-gpio` will read `not run`:",
-            "",
-            transcript(PASS).strip(),
+            "A pass will list every test with `pass` and end there, with no `RESULT:` part; on a Compute Blade "
+            "`p2-gpio` stays `not run`, because J5 and H5 are not wired.",
             "",
         ]
     out += [

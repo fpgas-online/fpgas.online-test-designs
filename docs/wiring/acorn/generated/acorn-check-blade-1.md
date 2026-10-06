@@ -85,27 +85,7 @@ The whole report, for a program to read (JSON): /run/fpgas-online/verify.json
 ******************************************************************************
 ```
 
-What a pass looks like, for comparison, on an Acorn on a Raspberry Pi 5 (pi-sw2-p47 at welland, 2 October 2026). On a Compute Blade `p2-gpio` will read `not run`:
-
-```text
-$ sudo fpgas-verify --no-publish
-fpgas-verify: pass (mode auto, auto: USB/PCI IDs)
-  not published: --no-publish
-  acorn cle-215+: pass
-    pcie-link  pass
-    pcie-bar0  pass
-    rp1-pio    pass
-    jtag       pass
-    flash      pass
-    ddr        pass
-    p2-uart    pass
-    p2-serial  pass
-    scratch    pass
-    p2-gpio    pass
-    flash 0x000000 match
-    flash 0x400000 match
-  state recorded (first run) in /var/lib/fpgas-online/verify-state.json
-```
+A pass will list every test with `pass` and end there, with no `RESULT:` part; on a Compute Blade `p2-gpio` stays `not run`, because J5 and H5 are not wired.
 
 ## Which test uses which wire
 
