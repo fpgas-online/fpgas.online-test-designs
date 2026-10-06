@@ -15,6 +15,7 @@ from dataclasses import dataclass
 import tomllib
 
 HERE = pathlib.Path(__file__).parent
+FACT_GROUPS = ("demo", "hat", "cables", "finding", "sources")  # where a maker's fact is printed
 DRIVES = {"pi": "the Raspberry Pi", "fpga": "the FPGA", "both": "either end"}
 
 
@@ -192,6 +193,7 @@ def build(data):
             errors.append(f"[uart] {end}: {u['group']}[{u['bit']}] is not a signal")
         elif groups[u["group"]]["drive"] != drive:
             errors.append(f"[uart] {end} is on {u['group']}, which {DRIVES[groups[u['group']]['drive']]} drives")
+    _need(uart.get("checked", {}), ("date", "where"), "[uart] checked", errors)
     display = data["display"]
     if display["group"] not in groups or len(display["segments"]) != 8:
         errors.append("[display] needs a group and the eight segments its bits light")
@@ -214,7 +216,9 @@ def build(data):
     _need(data.get("unmeasured", {}), ("why",), "[unmeasured]", errors)
     facts = {}
     for fact in data.get("facts", []):
-        if _need(fact, ("key", "says", "source"), "a fact", errors):
+        if _need(fact, ("key", "group", "says", "source"), "a fact", errors):
+            if fact["group"] not in FACT_GROUPS:
+                errors.append(f"fact {fact['key']!r}: group must be one of {', '.join(FACT_GROUPS)}")
             if fact["key"] in facts:
                 errors.append(f"two facts have the key {fact['key']!r}")
             facts[fact["key"]] = fact

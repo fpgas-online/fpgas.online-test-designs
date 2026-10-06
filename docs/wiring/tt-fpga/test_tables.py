@@ -96,7 +96,6 @@ def test_a_page_with_a_wire_table_repeats_the_picture_and_how_to_find_the_header
         shown = re.findall(r"\[!\[[^\]]+\]\((tt-fpga-pmod-cables[a-z-]*)\.png\)\]\(\1\.svg\)", text)
         assert shown and set(shown) <= set(picture.PICTURES), name
         assert "**Finding the headers.**" in text, name
-        assert "**Pin 1 and the cables: from the makers' documents, not checked by us on a board.**" in text, name
         assert "pin 1 to pin 1" in text, name
     # the picture of each page picks out the headers that page is about
     assert "tt-fpga-pmod-cables-ui-uo.png" in FILES["tt-fpga-pins-ui-uo.md"]
@@ -110,7 +109,7 @@ def test_a_measured_wire_has_its_dates_under_its_table_and_its_place_once_on_the
     for name in ("tt-fpga-cables.md", "tt-fpga-pins-ui-uo.md", "tt-fpga-pins-uio-uart.md", "tt-fpga-pins-other.md"):
         text = FILES[name]
         assert line in text and "(`tt-fpga-sources.md`)" in text, name
-        assert m.where not in text and "sw2" not in text.replace(W.uart["checked"], ""), name
+        assert m.where not in text and "sw2" not in text, name
     for name in ("tt-fpga-cables.md", "tt-fpga-pins-ui-uo.md", "tt-fpga-pins-uio-uart.md"):
         text = FILES[name]
         assert "*from the design*: not read on a board;" in text and "not measured by us" in text, name
@@ -138,22 +137,47 @@ def test_the_pin_1_warning_is_under_every_picture():
             assert text[shown.end() :].startswith(warning), name
 
 
-def test_the_cables_are_described_with_what_the_makers_say_and_what_is_not_recorded():
-    for name in WIRE_PAGES:
+def test_the_cables_page_lists_what_the_makers_say_one_fact_to_a_bullet_under_three_leads():
+    text = FILES["tt-fpga-cables.md"]
+    assert "**From the makers' documents, not checked by us on a board.**" in text
+    leads = ["**The demo board's sockets**", "**The Pmod HAT's ports**", "**The cables**"]
+    assert [text.index(lead) for lead in leads] == sorted(text.index(lead) for lead in leads)
+    bullets = [line for line in text.splitlines() if line.startswith("- ")]
+    order = list(tables.MAKERS_LISTS)
+    listed = sorted((f for f in W.facts.values() if f["group"] in order), key=lambda f: order.index(f["group"]))
+    assert bullets == [f"- {f['says']}." for f in listed]
+    assert all(bullet.count(". ") <= 1 for bullet in bullets)  # one or two sentences each
+    assert "- A twelve-wire straight cable joins the two boards' 3.3 V supplies." in bullets
+    assert (
+        "- What cable is fitted on our boards, and whether its pins 6 and 12 are connected, is not recorded; "
+        "asked on 6 October 2026."
+    ) in bullets
+    assert "the boards shown as fpga-1 and fpga-3 on tinytapeout.fpgas.online on 6 October 2026" in text
+    assert "mirrored" not in text  # Digilent's sentence on numbering is on the sources page only
+    assert "measured, except the wires on shared GPIOs" in text
+
+
+def test_a_pin_table_page_points_at_the_cables_page_instead_of_repeating_the_makers_list():
+    for name in ("tt-fpga-pins-ui-uo.md", "tt-fpga-pins-uio-uart.md", "tt-fpga-pins-other.md"):
         text = FILES[name]
-        for fact in W.facts.values():
-            assert f"{fact['says']}." in text, (name, fact["key"])
-        assert "are printed INPUT (`ui_in`), BIDIR (`uio`) and OUTPUT (`uo_out`)" in text, name
-        assert "a twelve-wire straight cable joins the two boards' 3.3 V supplies" in text, name
-        assert "whether its pins 6 and 12 are connected, is not recorded; asked on 6 October 2026" in text, name
-        assert "Neither the wires nor any pin 1 mark can be made out" in text, name
-    assert "measured, except the wires on shared GPIOs" in FILES["tt-fpga-cables.md"]
+        assert tables.SEE_CABLES.strip() in text, name
+        assert "see the cables page (`tt-fpga-cables.md`)" in text, name
+        assert not [line for line in text.splitlines() if line.startswith("- ")], name
+        assert "From the makers' documents" not in text and "rainbow" not in text, name
+        assert "are printed INPUT (`ui_in`), BIDIR (`uio`) and OUTPUT (`uo_out`)." in text, name
+
+
+def test_the_serial_ports_test_has_its_date_on_the_page_and_its_place_on_the_sources_page():
+    text = FILES["tt-fpga-pins-uio-uart.md"]
+    assert "That test passed on 2 October 2026; for where, see Sources (`tt-fpga-sources.md`)." in text
+    assert f"It passed on 2 October 2026 on {W.uart['checked']['where']}." in FILES["tt-fpga-sources.md"]
 
 
 def test_every_makers_fact_has_its_source_on_the_sources_page_and_none_is_called_verified():
     text = FILES["tt-fpga-sources.md"]
     for fact in W.facts.values():
         assert f"- {fact['says']}: {fact['source']}." in text, fact["key"]
+    assert "mirrored between the host connector and the peripheral board connector" in text
     assert "github.com/TinyTapeout/tt-demo-pcb" in text and text.count("read from a copy on 6 October 2026") >= 3
     assert "verified by us on" not in text.replace("not verified by us on", "")
 

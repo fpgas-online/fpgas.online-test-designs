@@ -44,6 +44,7 @@ STREAMING = (
 
 NUMBER = {1: "one", 2: "two", 3: "three", 4: "four"}
 SOURCES_PAGE = "tt-fpga-sources.md"
+CABLES_PAGE = "tt-fpga-cables.md"
 
 
 def code(s):
@@ -78,20 +79,37 @@ def says(*keys):
 
 
 def finding(keys=None):
-    """The sentences a reader needs to find the headers `keys` (all of them by default) and their ports, and
-    what the makers' documents say about the connectors, pin 1 and the cables."""
+    """The two sentences a reader needs to find the headers `keys` (all of them by default) and their ports."""
     keys = list(W.headers) if keys is None else keys
     joins = spoken(f"{header_name(k)} to {W.cables[k]}" for k in keys)
     which = "each header to its port" if len(keys) > 1 else "the header to its port"
     return (
-        f"**Finding the headers.** {says('printed', 'hat-ports')} A 12-pin Pmod cable joins {which}, pin 1 to "
-        f"pin 1: {joins}. A USB-C cable joins the demo board to a USB port of the Raspberry Pi.\n\n"
-        "**Pin 1 and the cables: from the makers' documents, not checked by us on a board.** "
-        f"{says('sockets', 'pin-1-demo-board', 'pin-1-hat', 'mirrored', 'cameras', 'cable')} On a Pmod connector "
-        f"pins 1 to 6 are one row and pins 7 to 12 the other; pins {spoken(W.pmod['ground_pins'])} are ground and "
-        f"pins {spoken(W.pmod['power_pins'])} are {W.pmod['power']}. Where each of these statements comes from: "
-        f"Sources ({code(SOURCES_PAGE)}).\n"
+        f"**Finding the headers.** {says('printed', 'edge')} A 12-pin Pmod cable joins {which} on the "
+        f"{W.board['hat']}, pin 1 to pin 1: {joins}. A USB-C cable joins the demo board to a USB port of the "
+        "Raspberry Pi.\n"
     )
+
+
+# On a pin table's page, in place of the makers' list: its reader is looking up a GPIO, not plugging a cable.
+SEE_CABLES = (
+    "How the sockets and cables are made, and what is not yet known about the cables: see the cables page "
+    f"({code(CABLES_PAGE)}).\n"
+)
+MAKERS_LISTS = {"demo": "The demo board's sockets", "hat": "The Pmod HAT's ports", "cables": "The cables"}
+
+
+def makers():
+    """What the makers' documents say, as three short lists, one fact to a bullet: on the cables page only."""
+    out = ["**From the makers' documents, not checked by us on a board.**"]
+    for group, lead in MAKERS_LISTS.items():
+        facts = [f for f in W.facts.values() if f["group"] == group]
+        out.append(f"**{lead}**\n\n" + "\n".join(f"- {f['says']}." for f in facts))
+    out.append(
+        f"On a Pmod connector pins 1 to 6 are one row and pins 7 to 12 the other; pins "
+        f"{spoken(W.pmod['ground_pins'])} are ground and pins {spoken(W.pmod['power_pins'])} are "
+        f"{W.pmod['power']}. Where each of these statements comes from: Sources ({code(SOURCES_PAGE)})."
+    )
+    return "\n\n".join(out) + "\n"
 
 
 READING = (
@@ -203,6 +221,7 @@ def cables():
         f"{LEAD} This part shows which cable goes where.",
         image("tt-fpga-pmod-cables", "Which Pmod header of the demo board goes to which port of the Pmod HAT"),
         finding(),
+        makers(),
         table(["Demo board header", "Signals", "Pmod HAT port", "Driven by", "Checked"], rows),
         checked(W.wires),
         shared(W.wires),
@@ -219,6 +238,7 @@ def ui_uo():
         f"{W.groups['uo_out']['what']} ({code('uo_out')}), wire by wire.",
         image("tt-fpga-pmod-cables-ui-uo", "The INPUT header goes to port JA and the OUTPUT header to port JC"),
         finding(keys),
+        SEE_CABLES,
         READING,
         group_section("ui_in"),
         group_section("uo_out"),
@@ -243,7 +263,8 @@ def uart_section():
         f"The demo board's microcontroller (an {mcu} on a version 3 demo board) is on the same two signals: its "
         f"GPIO{rx.mcu_gpio} sends to {code(rx.signal)} and its GPIO{tx.mcu_gpio} receives from "
         f"{code(tx.signal)}. Our {code('uart')} test talks to the design through the microcontroller and the "
-        f"USB-C cable, not through the Pmod HAT. {u['checked']}. Nobody has used these two signals as a serial "
+        f"USB-C cable, not through the Pmod HAT. That test passed on {u['checked']['date']}; for where, see "
+        f"Sources ({code(SOURCES_PAGE)}). Nobody has used these two signals as a serial "
         f"port from the Raspberry Pi's own GPIOs, which would mean sending on GPIO{rx.gpio} and receiving on "
         f"GPIO{tx.gpio}.",
     ]
@@ -257,6 +278,7 @@ def uio_uart():
         f"{LEAD} This part covers the {code('uio')} signals, wire by wire, and the serial port.",
         image("tt-fpga-pmod-cables", "Which Pmod header of the demo board goes to which port of the Pmod HAT"),
         finding(),
+        SEE_CABLES,
         READING,
         group_section("uio"),
         uart_section(),
@@ -302,6 +324,7 @@ def display_section():
             "not recorded and not verified by us. g is the middle bar and the dot is the decimal point.",
             image("tt-fpga-pmod-cables-uo", f"The {header_name(key)} header goes to port {W.cables[key]}").strip(),
             finding([key]).strip(),
+            SEE_CABLES.strip(),
             table(["Segment", "Signal", "iCE40 pin", *CHAIN[2:]], rows).strip(),
             checked(wires).strip()
             + " Which segment each signal lights is from Tiny Tapeout's board specification; not verified by "
@@ -377,7 +400,8 @@ def sources():
     for fact in W.facts.values():
         out[fact["says"]] = fact["source"]
     for claim, source in W.sources.items():
-        out[claim] = source.replace("{uart.checked}", W.uart["checked"])
+        checked = W.uart["checked"]
+        out[claim] = source.replace("{uart.date}", checked["date"]).replace("{uart.where}", checked["where"])
     return out
 
 
@@ -394,7 +418,7 @@ def sources_page():
 
 def build():
     return {
-        "tt-fpga-cables.md": BANNER + cables(),
+        CABLES_PAGE: BANNER + cables(),
         "tt-fpga-pins-ui-uo.md": BANNER + ui_uo(),
         "tt-fpga-pins-uio-uart.md": BANNER + uio_uart(),
         "tt-fpga-pins-other.md": BANNER + other(),
