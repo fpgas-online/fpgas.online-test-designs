@@ -14,9 +14,9 @@ The P2 cable with its wires flagged and a terminal crimped on each (the page bef
 
 ![Which way round a terminal goes in, and the pull test](acorn-cable-push.png)
 
-**2.** Check each wire with a meter on continuity. For each wire: one probe on its contact on the plug, the other on the terminal in the cavity the picture gives for that wire number, through the opening on the pin side of the housing: it must beep. Every other cavity must stay silent for that contact. **Wire 2 is the exception: it has the 470 Ω resistor in it, and through that most meters do not beep.** For wire 2 set the meter to ohms: between its contact on the plug and its terminal it must read about 470 Ω; to every other cavity it must read open (no reading). Then set the meter back to continuity. The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.
+**2.** Check each wire with a meter on continuity. For each wire: one probe on its contact on the plug, the other on the terminal in the cavity the picture gives for that wire number, through the opening on the pin side of the housing: it must beep. Every other cavity must stay silent for that contact. **Wire 2 is the exception: it has the 470 Ω resistor in it. Leave wire 2 until last and read it in ohms, not by the buzzer.** A continuity buzzer usually sounds only below some tens of ohms, so through the resistor it will usually stay silent (we have not tried your meter). Set the meter to ohms, on auto-range or the 2 kΩ range, and touch the two probes together first: it must read close to 0. Then, between wire 2's contact on the plug and its terminal, it must read close to 470 Ω. Close to 0 there means the resistor is bridged or was left out. Over-range (OL, or a lone 1 at the left of the display) or a value far from 470 Ω means a bad joint or the wrong wire. Between wire 2's contact and every other cavity it must show over-range. The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.
 
-![A meter between the plug and the housing](acorn-cable-check.png)
+![A meter between the plug and the housing](acorn-cable-check-blade-p2.png)
 
 The P2 cavity picture again, to read each wire's cavity from:
 
