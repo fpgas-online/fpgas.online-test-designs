@@ -73,7 +73,7 @@ The microcontroller pins the loader drives, and the iCE40's configuration pins:
 
 ### openFPGALoader Support (work in progress)
 
-Direct programming of the iCE40 via openFPGALoader (bypassing the MicroPython REPL) is being developed. This would allow faster, more reliable programming without needing `mpremote` or the RP2350 filesystem.
+Direct programming of the iCE40 via openFPGALoader (bypassing the MicroPython REPL) is being developed. This would allow faster, more reliable programming without needing `mpremote`.
 
 - openFPGALoader fork with TT FPGA support: [mithro/openFPGALoader (tt-fpga-support)](https://github.com/mithro/openFPGALoader/tree/tt-fpga-support)
 
@@ -129,7 +129,7 @@ The RP2350 connects to the same FPGA pins via GPIO20/GPIO37 and can bridge UART 
 | Device    | `/dev/ttyACM0` (via RP2350 USB CDC)                     |
 | Baud rate | 115200                                                  |
 | Test args | `--port /dev/ttyACM0 --board tt --skip-banner`          |
-| Requires  | RP2350 firmware configured to bridge UART0 on GPIO20/37 |
+| Requires  | the RP2350's UART1 bridged on GPIO20/37 (`tt_test_wrapper.py`: `UART(1, 115200, tx=Pin(20), rx=Pin(37))`); these two signals are what Tiny Tapeout's convention calls UART0 ([pmod-tt.md](pmod-tt.md#uart-via-rp2040rp2350-built-in-usb-bridge-no-pmod-needed)) |
 
 ### Access via RPi GPIO (not currently feasible)
 

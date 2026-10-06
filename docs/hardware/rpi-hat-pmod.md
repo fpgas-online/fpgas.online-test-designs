@@ -118,13 +118,15 @@ The PMOD HAT is installed on RPi hosts that have **Arty A7** or **Tiny Tapeout F
 
 ### Wiring
 
-Ribbon cables connect straight through between matching port names:
+On an Arty A7, ribbon cables connect straight through between matching port names:
 
 | HAT Port | FPGA Board Port | Cable       |
 | -------- | --------------- | ----------- |
 | JA       | JA              | 12-pin PMOD |
 | JB       | JB              | 12-pin PMOD |
 | JC       | JC              | 12-pin PMOD |
+
+A Tiny Tapeout FPGA demo board has no ports of those names: its Input, Bidirectional and Output headers are cabled to JA, JB and JC ([tt-fpga-cables.md](../wiring/tt-fpga/generated/tt-fpga-cables.md)).
 
 The full RPi GPIO → PMOD pin → FPGA pin mappings for each board are documented in:
 
