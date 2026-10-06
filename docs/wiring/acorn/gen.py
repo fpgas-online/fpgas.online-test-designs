@@ -8,19 +8,18 @@
 Run:  uv run gen.py           (writes generated/; --check compares instead, for CI)
 The sheets are generated/acorn-wiring-*.svg, the tables generated/*.md (tables.py). See GOALS.md for
 what the sheets have to show, and sheetlib.py for the layout checks that fail the build. Pillow and
-fontTools are pinned, and the fonts are in fonts/, so the output is the same on every machine.
+fontTools are pinned, and the fonts are in ../wiringlib/fonts/, so the output is the same on every machine.
 
 Wires whose pad is in the header column AWAY from the plugs reach it through the gap between two
 rows of pins, the way a trace escapes a connector. That keeps every wire to two bends outside the
 header and removes the long loops around it.
 """
 
-import hashlib
 import itertools
 import random
 import sys
 
-import tables
+import tables  # it puts docs/wiring on the import path, which wiringlib (below) is found on
 import wiring
 from PIL import Image
 from sheetlib import (
@@ -41,6 +40,7 @@ from sheetlib import (
     W,
     label_of,
 )
+from wiringlib import output
 
 # The header placement each sheet was laid out with: the one with the fewest crossings, found by
 # `gen.py --search`, which tries every nudge again (a few minutes).
@@ -863,23 +863,9 @@ def build(search=False):
 def main(argv):
     files = build(search="--search" in argv)
     if "--check" in argv:
-        stale = [f for f, text in files.items() if not (OUT / f).exists() or (OUT / f).read_text() != text]
-        stale += [p.name for p in OUT.glob("*") if p.suffix in (".svg", ".md") and p.name not in files]
-        rendered = (OUT / "png-sources.sha256").read_text() if (OUT / "png-sources.sha256").exists() else ""
-        for f, text in files.items():
-            if f.endswith(".svg") and f"{hashlib.sha256(text.encode()).hexdigest()}  {f}" not in rendered.splitlines():
-                stale.append(f"{f[:-4]}.png (rendered from an older {f}; run render.py)")
-        if stale:
-            raise SystemExit(
-                "generated/ is out of date with wiring.toml or the generator; run `uv run gen.py` and commit:\n  "
-                + "\n  ".join(sorted(stale))
-            )
-        print("generated/ is up to date")
+        output.check(files, OUT)
         return
-    OUT.mkdir(exist_ok=True)
-    for f, text in files.items():
-        (OUT / f).write_text(text)
-    print(f"wrote {len(files)} files to {OUT.relative_to(HERE)}/; run render.py for the PNGs")
+    output.write(files, OUT)
 
 
 if __name__ == "__main__":

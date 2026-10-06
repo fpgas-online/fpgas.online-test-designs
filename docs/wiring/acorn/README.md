@@ -14,7 +14,7 @@ host, kept as one table and turned into everything that shows it.
 | `generated/` | The output, committed. [fpgas.online-docs](https://github.com/fpgas-online/fpgas.online-docs) copies it onto [docs.fpgas.online](https://docs.fpgas.online/en/latest/boards/acorn/wiring.html); do not edit it by hand. |
 | `GOALS.md` | What the sheets have to show, and what must not be on them. |
 | `photos/`, `prep_photos.py` | The board photos the sheets use, and the script that cut them from the vendors' originals. |
-| `fonts/` | Liberation Sans and Mono (SIL Open Font License, `fonts/COPYRIGHT`), drawn as outlines in the sheets. |
+| [`../wiringlib/`](../wiringlib/__init__.py) | What this generator shares with the others under `docs/wiring/`: the canvas the sheets are drawn on (`canvas.py`; `sheetlib.py` here adds the Acorn's photos and signals), the banner and the Markdown table (`fragments.py`), writing and checking `generated/` (`output.py`), the rendering `render.py` runs (`chrome.py`), and `fonts/`: Liberation Sans and Mono (SIL Open Font License, `fonts/COPYRIGHT`), drawn as outlines in the sheets. |
 
 ## Changing the wiring
 
@@ -30,7 +30,7 @@ not what `wiring.toml` produces, or if a PNG was rendered from an older SVG.
 
 The sheet generator fails the build if any label leaves its box or the canvas,
 overlaps another label, sits on a wire, or a pad leaves its header. Pillow and
-fontTools are pinned in `gen.py` and the fonts are here, so the output is the
+fontTools are pinned in `gen.py` and the fonts are in this repository, so the output is the
 same byte for byte on every machine. `gen.py --search` tries every header
 placement again (a few minutes) and reports the one with the fewest wire
 crossings; the placements in use are `NUDGE` in `gen.py`.
