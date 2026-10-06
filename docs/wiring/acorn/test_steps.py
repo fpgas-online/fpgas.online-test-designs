@@ -346,6 +346,12 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
     for part in ("jtag-1", "uart-1", "bench", "fit"):  # the photo credit is not left to be the last line of a page
         assert pages[steps.guide_name(c, part)].count("Photos: ") == 1
         assert not pages[steps.guide_name(c, part)].rstrip().endswith("same PCB).")
+    # a fitted card comes out, with the power off, before a cable's first step; the cuts the guide does make are named
+    for part in ("jtag-1", "uart-1"):
+        need = pages[steps.guide_name(c, part)]
+        assert f"if it is fitted, {c.power_off[0].lower()}{c.power_off[1:]} Then take the card out." in need
+    assert "cut in half, once" in overview
+    assert ("the one wire that is cut to take the resistor" in overview) == bool(c.resistors)
     if c.resistors:
         assert f"lands on GPIO14, which is also JTAG TMS: with {c.resistor_value} in the wire" in steps.procedure(c)
     # the meter check of wire 1 is on the page that cuts wires, before the cut
