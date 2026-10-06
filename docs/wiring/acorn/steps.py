@@ -985,6 +985,44 @@ def ground_check(connector):
     return sh.svg()
 
 
+def card():
+    """The connector end of the card's underside, labelled: what the device-info page shows of the card itself."""
+    sh = Sheet(W, 100)
+    title(sh, "The Acorn's connector end, seen from the underside", "a LiteFury in the photograph: the same PCB")
+    crop = (0, 0, 522, 640)
+    _sockets, (px, py, pw, ph) = acorn_photo_down(sh, 30, 132, W - 60, T, crop=crop)
+    k = pw / (crop[3] - crop[1])
+    x0, y0, x1, y1 = ACORN_PAD  # in acorn-cw.jpg; a quarter turn clockwise takes (x, y) to (crop height - y, x)
+    pad = (px + (crop[3] - y1) * k, py + (x0 - crop[0]) * k, px + (crop[3] - y0) * k, py + (x1 - crop[0]) * k)
+    highlight(sh, pad)
+    y = py + ph + 30
+    rows = (
+        (
+            "P1 and P2",
+            "the two 6-pin Molex Pico-EZmate sockets: P1 is JTAG, P2 the serial pair and two spare pins. "
+            "Pin 1 of each is the end nearest the M.2 edge connector.",
+        ),
+        (
+            "The half-round plated pad",
+            "at the end of the card (boxed, right): the card's mounting pad, taken to be "
+            "ground from the M.2 standard, not measured on this card.",
+        ),
+        ("The M.2 edge connector", "is off the picture to the left: this is the end of the card away from it."),
+        (
+            "Not in this photograph",
+            "the other face of the card, the one with the FPGA: no photograph of it is in these pages yet, and "
+            "where the LEDs are has not been read off a card by us.",
+        ),
+    )
+    for name, words in rows:
+        sh.text(30, y, name, T, "bold")
+        y = para(sh, 30, y + LINE, words, W - 40) + 6
+    y = para(sh, 30, y + 2, "Photo: RHS Research (LiteFury underside; the Acorn is the same PCB).", W - 40, fill=MUTED)
+    sh.h = math.ceil(y - LINE + 14)
+    sh.check("card")
+    return sh.svg()
+
+
 def push():
     """Which way round a terminal goes into its cavity, and the pull that tests it."""
     sh = Sheet(W, 100)
@@ -1048,6 +1086,7 @@ def check_picture():
 
 
 SHARED = {
+    "acorn-card-underside.svg": card,
     "acorn-cable-cut.svg": cut,
     "acorn-cable-crimp.svg": crimp,
     "acorn-cable-push.svg": push,
@@ -1325,7 +1364,8 @@ def needs(c, connector):
         tools += ", a soldering iron"
     return (
         f"For this cable: {'; '.join(items)}. Tools: {tools}, masking tape and a fine pen. The Acorn itself, out of "
-        "any slot, is needed for the first steps."
+        f"any slot, is needed for the first steps: if it is fitted, {c.power_off[0].lower()}{c.power_off[1:]} Then "
+        "take the card out."
     )
 
 
@@ -1377,19 +1417,22 @@ def guide(c):
         lines = [line for line in lines if not line.startswith("#### ")]
         while lines and not lines[0]:
             lines.pop(0)
-        head = [tables.BANNER.strip(), "", not_run, "", "## What you need", "", need, "", "## Steps", ""]
-        return "\n".join([*head, *lines, *(line for extra in after for line in (extra, "")), *parts["tail"]])
+        head = [tables.BANNER.strip(), "", f"{not_run} {parts['tail'][0]}", "", "## What you need", "", need, ""]
+        return "\n".join([*head, "## Steps", "", *lines, *(line for extra in after for line in (extra, ""))])
 
     out = {
         guide_name(c, "overview"): "\n".join([
             tables.BANNER.strip(), "", not_run, "", "## What you will have", "", *will_have,
-            "Nothing in this guide cuts a wire to length: each half of the bought cable is used at the length it "
-            "has, apart from the wires that are cut back at the plug. Whether a half reaches from the card in its "
+            "Nothing in this guide cuts a wire to length. The bought cable is cut in half, once, as the first step "
+            "(before the meter check, which needs the cut faces); each half is then used at the length it has, "
+            "apart from the wires that are cut back at the plug"
+            + (" and the one wire that is cut to take the resistor" if c.resistors else "")
+            + ". Whether a half reaches from the card in its "
             f"slot to the {c.name}'s headers has not been measured by us: hold a half cable against the host before "
             "you cut anything.", "",
             "## The order of work", "", *(f"{i}. {line}" for i, line in enumerate(order, 1)), "",
             "## Where the facts come from", "",
-            *(f"- {claim}: {source}." for claim, source in wiring.SOURCES.items()), "",
+            *(f"- {s['claim']}: {s['source']}." for s in wiring.SOURCES if s.get("carrier", c.key) == c.key), "",
             *parts["tail"],
         ]),
     }  # fmt: skip

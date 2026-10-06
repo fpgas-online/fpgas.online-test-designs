@@ -81,15 +81,36 @@ note = "over each cut-back wire end"
 #   resistor: how far from its free end a wire is cut to take a series resistor.
 #   strip: how much insulation comes off for a crimp terminal.
 # sources: where a statement of fact on the generated pages comes from, said once here and printed on each
-#   carrier's overview page. A statement nobody has checked says so.
-[sources]
-"The order of the pins in the Acorn's two sockets (P1: GND, TCK, TDO, TMS, TDI, VCC; P2: GND, J2, K2, J5, H5, VCC), and that pin 1 is the end nearest the M.2 edge" = "the \"Pico-EZmate connectors pinout on Acorn, Nite/LiteFury\" legend on the LiteX Acorn CLE-215 wiki, and the silkscreen of RHS Research's JTAG adapter. Which end of a plug is wire 1 is checked with a meter in the guide before anything is cut"
-"That pin 6 (VCC) carries 3.3 V from the Acorn" = "not verified by us: taken from the same legend's name for the pin. The guide cuts that wire back whatever it carries"
-"The wiring on a Raspberry Pi 5 (which wire to which header pin)" = "Raspberry Pi's 40-pin header numbering; every wire of it carried in the check that passed on the Acorn and Raspberry Pi 5 seen at welland's sw2 p47 on 2 October 2026 (on 6 October 2026 that port had acorn-holly, device DNA `0x00200c8664b04854`, on the Pi 5 2 GB `285df3f84af242d0`): jtag, p2-uart, p2-serial and p2-gpio pass"
-"The Compute Blade's Extension Port and UART header (which pin is which)" = "read off Uptime Lab's board photo and their GPIO table; no Compute Blade has been wired this way by us yet"
-"The Molex cable (part 0369200601: six circuits, a plug at each end, all six wires black, contacts 1.2 mm apart)" = "not verified by us for this guide: from the part's description and the cables in use at welland"
-"That an Acorn CLE-215+, CLE-215 and CLE-101 are the same card, also sold as NiteFury and LiteFury, so that a LiteFury photo can stand for an Acorn" = "RHS Research's NiteFury-and-LiteFury repository for the family; not verified by us card against card"
-"The lengths (how far a wire is cut back, stripped, flagged)" = "our choice, not measured"
+#   carrier's overview page (`carrier`: on that carrier's only). A statement nobody has checked says so.
+[[sources]]
+claim = "The order of the pins in the Acorn's two sockets (P1: GND, TCK, TDO, TMS, TDI, VCC; P2: GND, J2, K2, J5, H5, VCC), and that pin 1 is the end nearest the M.2 edge"
+source = "the \"Pico-EZmate connectors pinout on Acorn, Nite/LiteFury\" legend on the LiteX Acorn CLE-215 wiki, and the silkscreen of RHS Research's JTAG adapter. Which end of a plug is wire 1 is checked with a meter in the guide before anything is cut"
+
+[[sources]]
+claim = "That pin 6 (VCC) carries 3.3 V from the Acorn"
+source = "not verified by us: taken from the same legend's name for the pin. The guide cuts that wire back whatever it carries"
+
+[[sources]]
+carrier = "pi5"
+claim = "The wiring on a Raspberry Pi 5 (which wire to which header pin)"
+source = "Raspberry Pi's 40-pin header numbering; every wire of it carried in the check that passed on the Acorn and Raspberry Pi 5 seen at welland's sw2 p47 on 2 October 2026 (on 6 October 2026 that port had acorn-holly, device DNA `0x00200c8664b04854`, on the Pi 5 2 GB `285df3f84af242d0`): jtag, p2-uart, p2-serial and p2-gpio pass"
+
+[[sources]]
+carrier = "blade"
+claim = "The Compute Blade's Extension Port and UART header (which pin is which)"
+source = "read off Uptime Lab's board photo and their GPIO table; no Compute Blade has been wired this way by us yet"
+
+[[sources]]
+claim = "The Molex cable (part 0369200601: six circuits, a plug at each end, all six wires black, contacts 1.2 mm apart)"
+source = "not verified by us for this guide: from the part's description and the cables in use at welland"
+
+[[sources]]
+claim = "That an Acorn CLE-215+, CLE-215 and CLE-101 are the same card, also sold as NiteFury and LiteFury, so that a LiteFury photo can stand for an Acorn"
+source = "RHS Research's NiteFury-and-LiteFury repository for the family; not verified by us card against card"
+
+[[sources]]
+claim = "The lengths (how far a wire is cut back, stripped, flagged)"
+source = "our choice, not measured"
 
 [lengths]
 cut_back = 10
