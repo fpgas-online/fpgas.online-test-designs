@@ -985,6 +985,44 @@ def ground_check(connector):
     return sh.svg()
 
 
+def card():
+    """The connector end of the card's underside, labelled: what the device-info page shows of the card itself."""
+    sh = Sheet(W, 100)
+    title(sh, "The Acorn's connector end, seen from the underside", "a LiteFury in the photograph: the same PCB")
+    crop = (0, 0, 522, 640)
+    _sockets, (px, py, pw, ph) = acorn_photo_down(sh, 30, 132, W - 60, T, crop=crop)
+    k = pw / (crop[3] - crop[1])
+    x0, y0, x1, y1 = ACORN_PAD  # in acorn-cw.jpg; a quarter turn clockwise takes (x, y) to (crop height - y, x)
+    pad = (px + (crop[3] - y1) * k, py + (x0 - crop[0]) * k, px + (crop[3] - y0) * k, py + (x1 - crop[0]) * k)
+    highlight(sh, pad)
+    y = py + ph + 30
+    rows = (
+        (
+            "P1 and P2",
+            "the two 6-pin Molex Pico-EZmate sockets: P1 is JTAG, P2 the serial pair and two spare pins. "
+            "Pin 1 of each is the end nearest the M.2 edge connector.",
+        ),
+        (
+            "The half-round plated pad",
+            "at the end of the card (boxed, right): the card's mounting pad, taken to be "
+            "ground from the M.2 standard, not measured on this card.",
+        ),
+        ("The M.2 edge connector", "is off the picture to the left: this is the end away from it, the fan end."),
+        (
+            "Not in this photograph",
+            "the FPGA with its heatsink and fan, which are on the other face. Where the LEDs are has not been read "
+            "off a card by us. No photograph of the other face is in these pages yet.",
+        ),
+    )
+    for name, words in rows:
+        sh.text(30, y, name, T, "bold")
+        y = para(sh, 30, y + LINE, words, W - 40) + 6
+    y = para(sh, 30, y + 2, "Photo: RHS Research (LiteFury underside; the Acorn is the same PCB).", W - 40, fill=MUTED)
+    sh.h = math.ceil(y - LINE + 14)
+    sh.check("card")
+    return sh.svg()
+
+
 def push():
     """Which way round a terminal goes into its cavity, and the pull that tests it."""
     sh = Sheet(W, 100)
@@ -1048,6 +1086,7 @@ def check_picture():
 
 
 SHARED = {
+    "acorn-card-underside.svg": card,
     "acorn-cable-cut.svg": cut,
     "acorn-cable-crimp.svg": crimp,
     "acorn-cable-push.svg": push,
