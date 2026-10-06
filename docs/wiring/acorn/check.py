@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Checking an Acorn's wiring with fpgas-verify: one page for each carrier, and its picture.
+"""Checking an Acorn's wiring with fpgas-verify: the "verifying" pages of each carrier, and their picture.
 
-A page is for one reader: someone with an Acorn on that carrier who has built the cables and wants to
-know whether they are right. It is assembled from
+The pages of a carrier are for one reader: someone with an Acorn on that carrier who has built the cables
+and wants to know whether they are right. Part 1 is running the check and reading its result, part 2 going
+from a failing line to the wire, part 2b the messages that are not about a wire, and on a blade part 3 what
+has been run on one. They are assembled from
 
 * the words in check/*.md, which both pages share. A line starting `<!-- pi5 -->` or `<!-- blade -->` is
   for that carrier only, and so is a block between `<!-- pi5:begin -->` and `<!-- pi5:end -->`;
@@ -63,11 +65,20 @@ ACORN_FAILURES = [
     "`error`: `… does not match its manifest`",
     "`changed`",
 ]
-ONLY = {"blade": ["GPIO14 (TMS) is held by", "gpiod_line_request_set_values_subset"], "pi5": ["`J5 -> GPIO3:"]}
+# A row that can only be met on one carrier: the marks are looked for in the row's start above.
+ONLY = {
+    "blade": ["GPIO14 (TMS) is held by", "gpiod_line_request_set_values_subset"],
+    "pi5": ["`J5 -> GPIO3:", "power-cycle fail:"],  # the power-cycle check was measured on a Pi 5 only
+}
+if set(ONLY) - set(wiring.CARRIERS) or any(
+    sum(m in s for s in ACORN_FAILURES) != 1 for ms in ONLY.values() for m in ms
+):
+    raise wiring.WiringError("check.py: ONLY names a carrier or a row that is not there")
 
 
 def name(c, part):
-    """The file of one page: part 1 run and read, 2 when a test fails, 3 (a blade) what has been run."""
+    """The file of one page: part 1 run and read, 2 a failing line to its wire, 2b the other messages, 3 (a
+    blade) what has been run."""
     return f"acorn-check-{c.key}-{part}.md"
 
 
@@ -80,15 +91,19 @@ def picture_name(c):
 # ----------------------------------------------------------------------------------------------
 def fragment(file, c):
     """check/<file> as it reads for carrier `c`: the other carrier's lines and blocks are left out."""
-    out, skipping = [], False
+    out, open_block = [], None
     for line in (FRAGMENTS / file).read_text().splitlines():
         block = re.fullmatch(r"<!-- (\w+):(begin|end) -->", line.strip())
         if block:
             if block[1] not in wiring.CARRIERS:
                 raise wiring.WiringError(f"check/{file}: no carrier {block[1]!r}")
-            skipping = block[2] == "begin" and block[1] != c.key
+            if (block[2] == "begin") == (open_block is not None) or (block[2] == "end" and block[1] != open_block):
+                raise wiring.WiringError(
+                    f"check/{file}: {line.strip()} does not pair with the block open ({open_block})"
+                )
+            open_block = block[1] if block[2] == "begin" else None
             continue
-        if skipping:
+        if open_block not in (None, c.key):
             continue
         mark = re.match(r"<!-- (\w+) -->", line)
         if mark:
@@ -98,20 +113,31 @@ def fragment(file, c):
                 continue
             line = line[mark.end() :]
         out.append(line)
-    if skipping:
-        raise wiring.WiringError(f"check/{file}: a block is not closed")
-    return "\n".join(out).strip() + "\n"
+    if open_block:
+        raise wiring.WiringError(f"check/{file}: the block {open_block} is not closed")
+    text = "\n".join(out).strip() + "\n"
+    if "<!--" in text:
+        raise wiring.WiringError(f"check/{file}: a mark is not understood: {text[text.index('<!--') :][:40]!r}")
+    return text
 
 
-def transcript(marker):
-    """The ```text block of verify.md that follows the line starting with `marker`."""
+def transcript(marker, *said):
+    """The ```text block of verify.md under the paragraph starting with `marker`.
+
+    said: words the caption here repeats (a host, a date): they must be in that paragraph, so that a caption
+    cannot outlive a change of the transcript it stands over.
+    """
     text = VERIFY.read_text()
     if text.count("\n" + marker) != 1:
         raise wiring.WiringError(f"docs/verify.md: {marker!r} starts {text.count(chr(10) + marker)} lines, not one")
     after = text[text.index("\n" + marker) :]
     block = re.search(r"```text\n.*?\n```\n", after, re.S)
-    if not block or "\n**" in after[1 : block.start()]:
-        raise wiring.WiringError(f"docs/verify.md: no transcript straight after {marker!r}")
+    between = after[1 : block.start()] if block else ""
+    if not block or any(mark in between for mark in ("\n**", "\n#", "```", "\n\n\n")) or between.count("\n\n") != 1:
+        raise wiring.WiringError(f"docs/verify.md: no transcript straight after the paragraph starting {marker!r}")
+    missing = [word for word in said if word not in between]
+    if missing:
+        raise wiring.WiringError(f"docs/verify.md: the paragraph starting {marker!r} no longer says {missing}")
     return block[0]
 
 
@@ -133,15 +159,15 @@ def failures(c):
 
 def site_links(text):
     """verify.md's links, written from docs/, as they have to read from a page of the site."""
-    text = text.replace("](hardware/acorn-pcie-programming.md)", f"]({CONVERTING})")
     text = text.replace(
-        "([acorn-pcie-programming.md](hardware/acorn-pcie-programming.md))", f"([converting a card]({CONVERTING}))"
+        "[acorn-pcie-programming.md](hardware/acorn-pcie-programming.md)", f"[converting a card]({CONVERTING})"
     )
+    text = text.replace("](hardware/acorn-pcie-programming.md)", f"]({CONVERTING})")
     text = re.sub(r"\]\(#([a-z0-9-]+)\)", rf"]({SITE}/verify/fpgas-verify.html#\1)", text)
     return text
 
 
-def wire_of(c, sig):
+def wire_of(sig):
     """(connector, wire number) of a signal."""
     for connector, conn in wiring.CONNECTORS.items():
         if sig in conn["pins"]:
@@ -151,15 +177,16 @@ def wire_of(c, sig):
 
 def swap(c, a, b):
     """What to do when the wires of signals a and b are in each other's cavity."""
-    (connector, na), (_, nb) = wire_of(c, a), wire_of(c, b)
+    (connector, na), (other, nb) = wire_of(a), wire_of(b)
+    if connector != other:
+        raise wiring.WiringError(f"{a} and {b} are on different cables: they cannot be in each other's cavity")
     words = (
         f"wires {na} and {nb} of the {connector} cable are in each other's cavity. Take both terminals out of the "
         f"housing and put each in the other's cavity (the {connector} cavity picture below)"
     )
-    kept = [s for s in (a, b) if s in c.resistors]
-    if kept:
-        n = wire_of(c, kept[0])[1]
-        words += f". The {c.resistor_value} resistor stays in wire {n} ({label_of(kept[0])})"
+    for sig in (a, b):
+        if sig in c.resistors:
+            words += f". The {c.resistor_value} resistor stays in wire {wire_of(sig)[1]} ({label_of(sig)})"
     return words
 
 
@@ -263,6 +290,9 @@ def pages(c):
     after_boot = fragment("after-a-boot.md", c)
     install = after_boot[after_boot.index("```bash") : after_boot.index("```\n", after_boot.index("```bash") + 7) + 4]
     wire_table, wire_examples = site_links(fragment("to-the-wire.md", c)).split("\n\n", 1)
+    wire_table = wire_table.replace("{crossed_serial}", swap(c, "J2", "K2"))
+    if "{crossed_spare}" in wire_table:  # only a carrier whose cable carries the two spare wires has that row
+        wire_table = wire_table.replace("{crossed_spare}", swap(c, "J5", "H5"))
     cavity = {k: steps.png(steps.file_name(c, k)) for k in wiring.CONNECTORS}
     out = [
         tables.BANNER.strip(),
@@ -301,7 +331,7 @@ def pages(c):
         out += [
             "A pass, on an Acorn on a Raspberry Pi 5 at welland (pi-sw2-p47, 2 October 2026):",
             "",
-            transcript(PASS).strip(),
+            transcript(PASS, "pi-sw2-p47", "2026-10-02").strip(),
             "",
         ]
     else:
@@ -312,7 +342,7 @@ def pages(c):
             "not been converted to the fpgas.online design, and in this boot the JTAG test cannot have its TMS "
             "pin, which the header's serial port holds.",
             "",
-            transcript(BLADE_FAIL).strip(),
+            transcript(BLADE_FAIL, "pi16", "2026-10-05", "CLE-101").strip(),
             "",
             "That run was made with version 0.0.post1100 of the check. From 0.0.post1111 the `jtag` line says "
             "what holds the pin instead: `P1 JTAG could not be probed: GPIO14 (TMS) is held by … (uart0)`.",
@@ -342,9 +372,7 @@ def pages(c):
         "test can be run on its own, `sudo fpgas-acorn-verify --test jtag` or `--test p2-serial`; its report "
         "is then JSON on the terminal.",
         "",
-        wire_table.replace("{crossed_serial}", swap(c, "J2", "K2"))
-        .replace("{crossed_spare}", swap(c, "J5", "H5") if "J5" in c.wires else "")
-        .strip(),
+        wire_table.strip(),
         "",
         "The two cavity pictures are the ones the cables were built from, shown again to find a wire's "
         "cavity. Their notes about cutting, marking and the meter check belong to building the cables.",
@@ -352,17 +380,26 @@ def pages(c):
     ]
     for connector in wiring.CONNECTORS:
         fails += [f"![Which wire goes in which cavity, {connector} cable]({cavity[connector]})", ""]
-    fails += [wire_examples.strip(), ""]
     fails += [
+        wire_examples.strip(),
+        "",
+        'A failing line that is not in the table above is not about a wire of the cables: the page "verifying 2b" '
+        "has every other message the check gives about an Acorn.",
+        "",
+    ]
+    others = [
+        tables.BANNER.strip(),
+        "",
         "## Every other message about an Acorn",
         "",
         f"The check's own words, from the tool's list of [common failures]({FAILURES}), which has the other "
-        "boards' too.",
+        "boards' too. A wire of the cables is behind the `jtag` and `p2-…` lines only; for those, the page "
+        '"verifying 2" goes from the line to the wire.',
         "",
         failures(c).strip(),
         "",
     ]
-    parts = {1: out, 2: fails}
+    parts = {1: out, 2: fails, "2b": others}
     if c.key == "blade":
         parts[3] = [
             tables.BANNER.strip(),
@@ -377,8 +414,11 @@ def pages(c):
     for part, lines in parts.items():
         page = site_links("\n".join(lines))
         stray = re.findall(r"(?<!!)\[[^\]]*\]\((?!https?://)[^)]*\)", page)
-        if stray or "{" in re.sub(r"```.*?```", "", page, flags=re.S).replace("{port, mac, sn}", ""):
-            raise wiring.WiringError(f"{name(c, part)}: a link that is not absolute, or an unfilled place: {stray}")
+        unfilled = re.findall(r"\{[a-z_]+\}", page)
+        if stray or unfilled or page.count("<!--") != 1:
+            raise wiring.WiringError(
+                f"{name(c, part)}: a relative link, an unfilled place or a mark left over: {stray} {unfilled}"
+            )
         done[part] = page
     return done
 

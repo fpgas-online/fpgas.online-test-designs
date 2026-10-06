@@ -118,7 +118,7 @@ The P2 cavity picture again, to read each wire's cavity from:
 
 #### Fit the cables
 
-**12.** This is a bench check; the housings come off again in the next step. Fit the P1 housing on the 40-pin header pins 19 to 26 with its marked corner on pin 19, counted as in the picture, and the P2 housing on the 40-pin header pins 5 to 10 with its marked corner on pin 5, counted as in the picture. The Acorn is not in its slot and the plugs are free. With the host unplugged from power, put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Raspberry Pi 5: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent.
+**12.** This is a bench check; the housings come off again before the cables are fitted. Fit the P1 housing on the 40-pin header pins 19 to 26 with its marked corner on pin 19, counted as in the picture, and the P2 housing on the 40-pin header pins 5 to 10 with its marked corner on pin 5, counted as in the picture. The Acorn is not in its slot and the plugs are free. With the host unplugged from power, put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Raspberry Pi 5: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent.
 
 ![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check.png)
 
@@ -132,7 +132,7 @@ The P2 cavity picture again, for where its housing sits and which corner is mark
 
 **13.** Fit the cables, in this order. The sockets are on the underside of the card and may not be reachable once it is in the slot.
 
-1. Power off the Raspberry Pi 5 and unplug its power.
+1. Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE.
 2. If the housings are on the headers (after the bench check), take them off.
 3. Press the P1 plug into socket P1 and the P2 plug into socket P2 on the underside of the Acorn, each the way round it was when you put the flags on, until fully seated.
 4. Put the Acorn in the M.2 slot and fit its screw.

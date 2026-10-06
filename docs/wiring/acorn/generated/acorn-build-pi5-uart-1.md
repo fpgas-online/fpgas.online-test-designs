@@ -4,7 +4,7 @@ Not yet run by us on this hardware: written from the design.
 
 ## What you need
 
-For this cable: one half of the Molex Pico-EZmate cable (a plug with six black wires); the 2×3 Dupont housing; 5 Dupont crimp terminals, and a few spare; 2 mm heat-shrink tube. Tools: a multimeter with a continuity buzzer, side cutters, wire strippers, the crimping tool, a hot-air tool, masking tape and a fine pen. The Acorn itself, out of any slot, is needed for the first steps.
+For this cable: the other half of the Molex Pico-EZmate cable, which was cut in half on the page "JTAG connector 1" (if it is still whole: cut it in the middle with side cutters; each half is one cable); the 2×3 Dupont housing; 5 Dupont crimp terminals, and a few spare; 2 mm heat-shrink tube. Tools: a multimeter with a continuity buzzer, side cutters, wire strippers, the crimping tool, a hot-air tool, masking tape and a fine pen. The Acorn itself, out of any slot, is needed for the first steps.
 
 ## Steps
 

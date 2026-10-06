@@ -101,7 +101,7 @@ The P1 cavity picture again, to read each wire's cavity from:
 
 ![The P2 cable: its wires prepared](acorn-cable-blade-p2-prepare.png)
 
-**9.** Cut wire 2 (J2) about 15 mm from its free end. Slide a piece of the 3 mm tube onto the wire, clear of the cut. Strip about 3 mm from each cut end. Trim the resistor's leads to about 5 mm each. Solder the 470 Ω resistor between the two cut ends. Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this. The resistor is there because the pin this wire lands on is shared with JTAG: with 470 Ω in the wire, JTAG still gets through if the FPGA drives it (designed so, not yet measured).
+**9.** Cut wire 2 (J2) about 15 mm from its free end. Slide a piece of the 3 mm tube onto the wire, clear of the cut. Strip about 3 mm from each cut end. Trim the resistor's leads to about 5 mm each. Solder the 470 Ω resistor between the two cut ends. Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this. The resistor is there because J2 lands on GPIO14, which is also JTAG TMS: with 470 Ω in the wire, JTAG still gets through if the FPGA drives J2 (designed so, not yet measured).
 
 ![The resistor fitted into wire 2](acorn-cable-blade-p2-resistor.png)
 
@@ -125,7 +125,7 @@ The P2 cavity picture again, to read each wire's cavity from:
 
 #### Fit the cables
 
-**13.** This is a bench check; the housings come off again in the next step. Fit the P1 housing on the Extension Port with its marked corner on the pin printed 1 beside the header, and the P2 housing on the UART with its marked corner on the pin printed 1 beside the header. The Acorn is not in its slot and the plugs are free. With the host unplugged from power, put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Compute Blade: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent.
+**13.** This is a bench check; the housings come off again before the cables are fitted. Fit the P1 housing on the Extension Port with its marked corner on the pin printed 1 beside the header, and the P2 housing on the UART with its marked corner on the pin printed 1 beside the header. The Acorn is not in its slot and the plugs are free. With the host unplugged from power, put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Compute Blade: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent.
 
 ![The bench check on a Compute Blade](acorn-cable-blade-shell-check.png)
 

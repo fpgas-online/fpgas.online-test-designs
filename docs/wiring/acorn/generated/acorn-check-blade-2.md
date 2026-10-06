@@ -44,26 +44,4 @@ should arrive on GPIO14; it arrives on GPIO15:
 A correctly wired pair reads back what was driven: `FPGA drives 01: Pi reads GPIO14=1 GPIO15=0`, `Pi drives 01:
 FPGA reads 01`, and so on for every pattern.
 
-## Every other message about an Acorn
-
-The check's own words, from the tool's list of [common failures](https://docs.fpgas.online/en/latest/verify/fpgas-verify.html#common-failures), which has the other boards' too.
-
-| It says | Meaning, and what to do |
-|---|---|
-| `fail`: `unconverted: …` | an Acorn on SQRL's factory image (or the XDMA sample): convert it ([acorn-pcie-programming.md](https://docs.fpgas.online/en/latest/boards/acorn/pcie-programming.html)) |
-| `fail`: `… is not a design we built` | a Xilinx PCIe design the Acorn check does not know; its flash is not read |
-| `fail`: `running the golden image` | the Acorn's operational slot did not boot; it fell back to golden |
-| `fail`: `link is x2, expected x1` | the Acorn's PCIe link is not the setup's (`expected.toml`) |
-| `fail`: `no device on the P1 JTAG chain` / `no UARTBone reply on /dev/ttyAMA0` | an Acorn's JTAG or P2 UART cable is off or miswired |
-| `fail`: `P1 JTAG could not be probed: GPIO14 (TMS) is held by 1f00030000.serial (uart0): the kernel does not hand out a pin that is held…` | an Acorn's JTAG pin is in use by another driver, so the scan was not tried. Seen on a Compute Blade with a CM5 (kernel 6.18): TMS and the serial port's TX are both GPIO14, and with the serial port on the kernel does not lend the pin. JTAG cannot be tested there while the serial port is on; booting with it off should free the pin, which is not yet confirmed on hardware ([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)) |
-| `fail`: `… gpiod_line_request_set_values_subset: Assertion 'request' failed` | openFPGALoader could not have one of the JTAG pins, because a driver holds it. Seen on a Compute Blade with a CM5 (kernel 6.18), where the serial port holds GPIO14, which is also JTAG TMS: the JTAG test cannot run there yet ([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)) |
-| `fail`: `openFPGALoader printed no raw IDCODE scan (needs --verbose-level 2 output)` | the tool's version, not the board: openFPGALoader exited 0 but printed no `- 0 -> 0x...` lines at `--verbose-level 2`, so it is older than v0.9.0. Its last lines are in the report's `output` |
-| `fail`: `… failed (exit N) before scanning the JTAG chain: …` | the scan tool exited with an error and printed no scan: the cable or gpiochip would not open, say. The reason ends with its last line of output; more is in the report's `output` |
-| `fail`: `device DNA over P1 JTAG reads 0x…: the DNA port is not being read` | the DNA read over JTAG is all zeros or all ones, which is no chip's DNA. The IDCODE read worked without TDI, so check the P1 TDI wire first; then run `openFPGALoader --read-dna` by hand |
-| `fail`: `device DNA over JTAG … is not the one over BAR0` | the P1 TDI wire does not carry, or the DNA readout is wrong. Only a good BAR0 DNA is compared: one of all zeros or all ones is pcie-bar0's own fault (`device DNA over BAR0 reads 0x0: the DNA port is not being read`) |
-| `fail`: `K2 -> GPIO15: …` / `GPIO14 -> J2: …` | a P2 serial wire is cut or miswired |
-| `fail`: `DRAM write … MB/s, below the … MB/s expected` / `… words wrong in the … half` | the DRAM is slow or broken; `selftest.py` shows more |
-| `fail`: `power-cycle fail: the FPGA has not restarted since an earlier boot's check` | the Acorn kept its configuration across the Pi's restart (not seen after a soft reboot on the one Pi 5 measured): power-cycle the Pi (PoE). [The power-cycle check](https://docs.fpgas.online/en/latest/verify/fpgas-verify.html#the-acorns-power-cycle-check-opt-in) |
-| `error`: `this host (…) is not an Acorn setup in wiring.toml` | an Acorn on a host neither setup has: add the host to `wiring.toml` if it is a real setup |
-| `error`: `… does not match its manifest` / `manifest.json is missing` | `sudo apt install --reinstall fpgas-online-<board>-bitstreams` |
-| `changed` | the board or its flash differs from the recorded state. Meant it? `sudo fpgas-verify --update` |
+A failing line that is not in the table above is not about a wire of the cables: the page "verifying 2b" has every other message the check gives about an Acorn.

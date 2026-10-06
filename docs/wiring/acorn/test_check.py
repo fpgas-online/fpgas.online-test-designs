@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The two "Checking an Acorn" pages: each is for one carrier, complete in itself, and says only what is true there."""
+"""The "verifying" pages: each carrier's are for it only, complete in themselves, and say only what is true there."""
 
 import re
 
@@ -86,7 +86,7 @@ def test_the_picture_names_every_wire_of_both_cables_with_where_it_lands(key):
     assert set(check.USES) == {s for conn in wiring.CONNECTORS.values() for s in conn["pins"]} - {"GND1", "GND2", "VCC"}
     svg = check.picture(c)
     assert svg.startswith("<svg") and check.picture_name(c) in check.build()
-    assert sorted(check.pages(c)) == ([1, 2, 3] if key == "blade" else [1, 2])
+    assert list(check.pages(c)) == ([1, 2, "2b", 3] if key == "blade" else [1, 2, "2b"])
     assert all(check.name(c, part) in check.build() for part in check.pages(c))
 
 
@@ -95,3 +95,37 @@ def test_a_fragment_keeps_only_its_carriers_lines():
     assert "One open wire" in pi5 and "One open wire" not in blade
     assert "A crossed pair" in blade and "A crossed pair" in pi5
     assert "<!--" not in blade + pi5
+
+
+def test_a_fragment_with_marks_that_do_not_pair_or_are_not_understood_stops_the_run(tmp_path, monkeypatch):
+    monkeypatch.setattr(check, "FRAGMENTS", tmp_path)
+    blade = wiring.CARRIERS["blade"]
+    good = "both\n<!-- pi5:begin -->\npi5 only\n<!-- pi5:end -->\n<!-- blade -->blade only\n"
+    (tmp_path / "f.md").write_text(good)
+    assert check.fragment("f.md", blade) == "both\nblade only\n"
+    for bad in (
+        "<!-- pi5:begin -->\na\n<!-- blade:begin -->\nb\n<!-- blade:end -->\n<!-- pi5:end -->\n",  # nested
+        "<!-- pi5:begin -->\na\n<!-- blade:end -->\n",  # closed by another's end
+        "a\n<!-- pi5:end -->\n",  # an end with no begin
+        "<!-- pi5:begin -->\na\n",  # never closed
+        "<!-- pi-5 -->a\n",  # a mark that is not understood
+        "  <!--blade-->a\n",
+        "<!-- cm4 -->a\n",  # no such carrier
+    ):
+        (tmp_path / "f.md").write_text(bad)
+        with pytest.raises(wiring.WiringError):
+            check.fragment("f.md", blade)
+
+
+def test_a_caption_cannot_outlive_its_transcript_and_a_swap_stays_on_one_cable():
+    with pytest.raises(wiring.WiringError):
+        check.transcript(check.PASS, "a host that paragraph does not name")
+    with pytest.raises(wiring.WiringError):
+        check.swap(wiring.CARRIERS["pi5"], "TCK", "J2")
+    blade = wiring.CARRIERS["blade"]
+    assert "power-cycle fail" not in check.failures(blade) and "power-cycle fail" in check.failures(
+        wiring.CARRIERS["pi5"]
+    )
+    assert "[converting a card](https://" in check.failures(
+        blade
+    ) and "acorn-pcie-programming.md]" not in check.failures(blade)

@@ -870,6 +870,8 @@ def flagged(sh, connector, sockets, x1, y, mark=True):
         sh.add(f'<line x1="{x}" y1="{y0}" x2="{x}" y2="{end}" stroke="{BODY}" stroke-width="{WIRE}"/>')
         sh.add(f'<g id="flag-wire-{n}">')  # test_steps.py reads this back
         token(sh, x + 15, end - FLAG_AT, n)
+        if n == 1:  # the cable's name, written on wire 1's flag: off the card the two halves look alike
+            sh.text(x - 12, end - FLAG_AT + 6, connector, T, "bold", INK, "end")
         sh.add("</g>")
         ends[sig] = (x, end)
     if mark:
@@ -1079,6 +1081,21 @@ def has_resistor(c, connector):
 SHEETS = {"pi5": "acorn-wiring-pi5", "blade": "acorn-wiring-computeblade"}
 
 
+def resistor_reason(c, sig):
+    """Why a wire has a series resistor, from the wiring: its host pin is also a JTAG wire's."""
+    gpio = c.headers[c.wires[sig][0]].pins[c.wires[sig][1]].get("gpio")
+    shared = [
+        s for s in ("TDI", "TDO", "TCK", "TMS") if c.headers[c.wires[s][0]].pins[c.wires[s][1]].get("gpio") == gpio
+    ]
+    if not gpio or not shared:
+        raise wiring.WiringError(f"{c.key}: {sig} has a series resistor and shares its pin with no JTAG wire: say why")
+    return (
+        f"The resistor is there because {label_of(sig)} lands on {gpio}, which is also JTAG {shared[0]}: with "
+        f"{c.resistor_value} in the wire, JTAG still gets through if the FPGA drives {label_of(sig)} (designed so, "
+        "not yet measured)."
+    )
+
+
 def procedure_parts(c, restart=False):
     """Building both cables for one carrier, as parts: {"head", one per connector, "fit", "tail": lines}.
 
@@ -1199,9 +1216,7 @@ def procedure_parts(c, restart=False):
                 f"Trim the resistor's leads to about {lengths['resistor_lead']} mm each. "
                 f"Solder the {c.resistor_value} resistor between the two cut ends. "
                 "Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this. "
-                f"The resistor is there because the pin this wire lands on is shared with JTAG: with "
-                f"{c.resistor_value} in the wire, JTAG still gets through if the FPGA drives it (designed so, not "
-                "yet measured).",
+                + resistor_reason(c, sig),
                 (f"The resistor fitted into wire {pins.index(sig) + 1}", png(resistor_name(c, connector))),
             )
         step(
@@ -1249,7 +1264,7 @@ def procedure_parts(c, restart=False):
         fits.append(f"the {connector} housing on the {on} with its marked corner on {pin}")
     first = next(iter(wiring.CONNECTORS.values()))["pins"][0]
     step(
-        "This is a bench check; the housings come off again in the next step. "
+        "This is a bench check; the housings come off again before the cables are fitted. "
         f"Fit {fits[0]}, and {fits[1]}. The Acorn is not in its slot and the plugs are free. With the host unplugged "
         "from power, "
         "put one meter probe "
@@ -1295,7 +1310,10 @@ def needs(c, connector):
     wired = [s for s in pins if s not in plan.cut]
     shape = f"{data.columns}×{(plan.last - plan.first + 1) // data.columns}"
     items = [
-        "one half of the Molex Pico-EZmate cable (a plug with six black wires)",
+        "one half of the Molex Pico-EZmate cable (a plug with six black wires)"
+        if connector == next(iter(wiring.CONNECTORS))
+        else 'the other half of the Molex Pico-EZmate cable, which was cut in half on the page "JTAG connector 1" '
+        "(if it is still whole: cut it in the middle with side cutters; each half is one cable)",
         f"the {shape} Dupont housing",
         f"{len(wired)} Dupont crimp terminals, and a few spare",
         f"{wiring.LENGTHS['tube']} mm heat-shrink tube",
@@ -1365,7 +1383,13 @@ def guide(c):
     out = {
         guide_name(c, "overview"): "\n".join([
             tables.BANNER.strip(), "", not_run, "", "## What you will have", "", *will_have,
+            "Nothing in this guide cuts a wire to length: each half of the bought cable is used at the length it "
+            "has, apart from the wires that are cut back at the plug. Whether a half reaches from the card in its "
+            f"slot to the {c.name}'s headers has not been measured by us: hold a half cable against the host before "
+            "you cut anything.", "",
             "## The order of work", "", *(f"{i}. {line}" for i, line in enumerate(order, 1)), "",
+            "## Where the facts come from", "",
+            *(f"- {claim}: {source}." for claim, source in wiring.SOURCES.items()), "",
             *parts["tail"],
         ]),
     }  # fmt: skip

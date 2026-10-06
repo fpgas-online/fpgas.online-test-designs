@@ -29,11 +29,13 @@ documentation does not say that it frees GPIO14 on a Compute Module 5:
   port is switched on by a `dtoverlay=uart0…` or `dtparam=uart0` line, that line has to go instead;
 * in `cmdline.txt`, the word `console=serial0,115200` deleted from the one line, if it is there.
 
-On a netbooted host those files may not be on the host: where the firmware reads `config.txt` and
-`cmdline.txt` from is not something we have read, and if it fetches them from a boot server, they are changed
-there, by whoever keeps that server, for every host booting from that tree. At ps1 the blades' root is the
-gateway's `/srv/nfs/rpi/trixie/root` (read from the kernel command line of pi16 and pi20 at ps1, 5 October 2026);
-where the firmware's copies come from was not read by us.
+**These two files are not on the blade, and the change is not yours to make from the blade.** At ps1 every
+netbooted host fetches them from one directory on the gateway, `/srv/nfs/rpi/trixie/boot/`: the gateway's TFTP
+root has one entry for each host's serial number, and every one of them points at that same directory (read on
+the ps1 gateway, 6 October 2026). So one `config.txt` and one `cmdline.txt` serve every host that boots from it,
+and a change there reaches all of them at their next boot. The gateway is Carl's: ask him. The blades' root file
+system is the gateway's `/srv/nfs/rpi/trixie/root` (read from the kernel command line of pi16 and pi20 at ps1,
+5 October 2026).
 
 Then check that the pin is free (the commands below) before trying JTAG. With the serial port off, `/dev/ttyAMA0` is not there, so the
 `p2-uart`, `p2-serial` and `scratch` tests cannot pass in that boot; what a Compute Blade's check should

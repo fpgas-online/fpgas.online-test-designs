@@ -4,7 +4,7 @@ Not yet run by us on this hardware: written from the design.
 
 ## What you need
 
-For this cable: one half of the Molex Pico-EZmate cable (a plug with six black wires); the 1×4 Dupont housing; 3 Dupont crimp terminals, and a few spare; 2 mm heat-shrink tube; the 470 Ω resistor; 3 mm heat-shrink tube. Tools: a multimeter with a continuity buzzer, side cutters, wire strippers, the crimping tool, a hot-air tool, a soldering iron, masking tape and a fine pen. The Acorn itself, out of any slot, is needed for the first steps.
+For this cable: the other half of the Molex Pico-EZmate cable, which was cut in half on the page "JTAG connector 1" (if it is still whole: cut it in the middle with side cutters; each half is one cable); the 1×4 Dupont housing; 3 Dupont crimp terminals, and a few spare; 2 mm heat-shrink tube; the 470 Ω resistor; 3 mm heat-shrink tube. Tools: a multimeter with a continuity buzzer, side cutters, wire strippers, the crimping tool, a hot-air tool, a soldering iron, masking tape and a fine pen. The Acorn itself, out of any slot, is needed for the first steps.
 
 ## Steps
 
@@ -25,7 +25,7 @@ For this cable: one half of the Molex Pico-EZmate cable (a plug with six black w
 
 ![The P2 cable: its wires prepared](acorn-cable-blade-p2-prepare.png)
 
-**3.** Cut wire 2 (J2) about 15 mm from its free end. Slide a piece of the 3 mm tube onto the wire, clear of the cut. Strip about 3 mm from each cut end. Trim the resistor's leads to about 5 mm each. Solder the 470 Ω resistor between the two cut ends. Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this. The resistor is there because the pin this wire lands on is shared with JTAG: with 470 Ω in the wire, JTAG still gets through if the FPGA drives it (designed so, not yet measured).
+**3.** Cut wire 2 (J2) about 15 mm from its free end. Slide a piece of the 3 mm tube onto the wire, clear of the cut. Strip about 3 mm from each cut end. Trim the resistor's leads to about 5 mm each. Solder the 470 Ω resistor between the two cut ends. Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this. The resistor is there because J2 lands on GPIO14, which is also JTAG TMS: with 470 Ω in the wire, JTAG still gets through if the FPGA drives J2 (designed so, not yet measured).
 
 ![The resistor fitted into wire 2](acorn-cable-blade-p2-resistor.png)
 
