@@ -54,7 +54,8 @@ The tools to build its two cables, once for any number of hosts:
 3. With the plug still in the socket (the Acorn out of any slot, unpowered), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: it must beep.
 4. Do the same with the wire flagged 6: it must stay silent.
 5. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again; if still neither beeps, stop: the ground point is not confirmed.
-6. Take the plug out again.
+6. If both wires beep, first see that the two probes do not touch each other and that the cut faces of wires 1 and 6 do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires apart. Leave the flags on and take the plug out. Wire 6 is the card's 3.3 V; that it stays silent to ground on a card with no power is expected and has not been measured by us. Set the meter to ohms, write down what each of the two wires reads to the pad, and send both readings to whoever gave you this guide.
+7. Take the plug out again.
 
 ![The P1 cable's plug in socket P1, all 6 wires whole, a flag on each](acorn-cable-p1-flag.png)
 
@@ -91,7 +92,8 @@ The P1 cavity picture again, to read each wire's cavity from:
 3. With the plug still in the socket (the Acorn out of any slot, unpowered), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: it must beep.
 4. Do the same with the wire flagged 6: it must stay silent.
 5. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again; if still neither beeps, stop: the ground point is not confirmed.
-6. Take the plug out again.
+6. If both wires beep, first see that the two probes do not touch each other and that the cut faces of wires 1 and 6 do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires apart. Leave the flags on and take the plug out. Wire 6 is the card's 3.3 V; that it stays silent to ground on a card with no power is expected and has not been measured by us. Set the meter to ohms, write down what each of the two wires reads to the pad, and send both readings to whoever gave you this guide.
+7. Take the plug out again.
 
 ![The P2 cable's plug in socket P2, all 6 wires whole, a flag on each](acorn-cable-p2-flag.png)
 
@@ -115,9 +117,9 @@ The P1 cavity picture again, to read each wire's cavity from:
 
 ![Which way round a terminal goes in, and the pull test](acorn-cable-push.png)
 
-**12.** Check each wire with a meter on continuity. For each wire: one probe on its contact on the plug, the other on the terminal in the cavity the picture gives for that wire number, through the opening on the pin side of the housing: it must beep. Every other cavity must stay silent for that contact. The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.
+**12.** Check each wire with a meter on continuity. For each wire: one probe on its contact on the plug, the other on the terminal in the cavity the picture gives for that wire number, through the opening on the pin side of the housing: it must beep. Every other cavity must stay silent for that contact. **Wire 2 is the exception: it has the 470 Ω resistor in it. Leave wire 2 until last and read it in ohms, not by the buzzer.** A continuity buzzer usually sounds only below some tens of ohms, so through the resistor it will usually stay silent (we have not tried your meter). Set the meter to ohms, on auto-range or the 2 kΩ range, and touch the two probes together first: it must read close to 0. Then, between wire 2's contact on the plug and its terminal, it must read close to 470 Ω. Close to 0 there means the resistor is bridged or was left out. Over-range (OL, or a lone 1 at the left of the display) or a value far from 470 Ω means a bad joint or the wrong wire. Between wire 2's contact and every other cavity it must show over-range. The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.
 
-![A meter between the plug and the housing](acorn-cable-check.png)
+![A meter between the plug and the housing](acorn-cable-check-blade-p2.png)
 
 The P2 cavity picture again, to read each wire's cavity from:
 

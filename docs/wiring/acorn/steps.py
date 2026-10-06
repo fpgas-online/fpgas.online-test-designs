@@ -49,6 +49,15 @@ NEITHER = (
     "If neither wire beeps, strip about {strip} mm from wires 1 and {last} and try again; "
     "if still neither beeps, stop: the ground point is not confirmed."
 )
+# The other result that proves nothing. That the last wire is silent rests on something nobody has measured.
+BOTH = (
+    "If both wires beep, first see that the two probes do not touch each other and that the cut faces of wires "
+    "1 and {last} do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires "
+    "apart. Leave the flags on and take the plug out. Wire {last} is the card's 3.3 V; that it stays silent "
+    "to ground on a card with no power is expected and has not been measured by us. Set the meter to ohms, "
+    "write down what each of the two wires reads to the pad, and send both readings to whoever gave you "
+    "this guide."
+)
 
 ASSUMPTIONS = [
     "the wire-side view is not mirrored",
@@ -971,6 +980,7 @@ def ground_check(connector):
         W - 40,
         "bold",
     )
+    y = para(sh, 30, y + 4, BOTH.format(last=len(pins)), W - 40, "bold")
     y = para(
         sh,
         30,
@@ -1046,8 +1056,10 @@ def push():
     return sh.svg()
 
 
-def check_picture():
-    """Buzzing a wire through: one probe on a plug contact, the other on the terminal in its cavity."""
+def check_picture(exception=None):
+    """Buzzing a wire through: one probe on a plug contact, the other on the terminal in its cavity.
+
+    exception: (wire number, resistor value) of a wire the buzzer does not check, for that cable's own picture."""
     pins = wiring.CONNECTORS["P1"]["pins"]
     sh = Sheet(W, 100)
     title(sh, "Check every wire with a meter", SKETCHED)
@@ -1080,6 +1092,9 @@ def check_picture():
     y = para(sh, 30, y, "Set the meter to continuity. For each wire, touch its contact on the plug and "
              "its terminal in the housing: the meter must beep.", W - 40, "bold")  # fmt: skip
     y = para(sh, 30, y + 4, "Then try every other cavity: silent.", W - 40, "bold")
+    if exception:
+        words = CHECK_EXCEPTION.format(n=exception[0], value=exception[1])
+        y = para(sh, 30, y + 4, words, W - 40, "bold", RED)
     sh.h = math.ceil(y - LINE + 14)
     sh.check("check")
     return sh.svg()
@@ -1118,6 +1133,44 @@ def has_resistor(c, connector):
 # The procedure, as Markdown
 # ----------------------------------------------------------------------------------------------
 SHEETS = {"pi5": "acorn-wiring-pi5", "blade": "acorn-wiring-computeblade"}
+
+
+def resistor_wire(c, connector):
+    """The number of the wire of this cable that has the series resistor in it, or None."""
+    pins = wiring.CONNECTORS[connector]["pins"]
+    signals = [s for s in pins if s in c.resistors]
+    if not signals:
+        return None
+    assert len(signals) == 1, signals  # the pages are written for one
+    assert signals[0] not in housing(c, connector).cut, signals  # a resistor in a wire that is cut back: bad data
+    return pins.index(signals[0]) + 1
+
+
+def through_resistor(c, connector):
+    """What the meter shows on a wire that has the series resistor in it: said where every wire "must beep"."""
+    n = resistor_wire(c, connector)
+    if n is None:
+        return ""
+    return (
+        f"**Wire {n} is the exception: it has the {c.resistor_value} resistor in it. Leave wire {n} until last and "
+        "read it in ohms, not by the buzzer.** A continuity buzzer usually sounds only below some tens of ohms, so "
+        "through the resistor it will usually stay silent (we have not tried your meter). Set the meter to ohms, on "
+        "auto-range or the 2 kΩ range, and touch the two probes together first: it must read close to 0. Then, "
+        f"between wire {n}'s contact on the plug and its terminal, it must read close to {c.resistor_value}. Close "
+        "to 0 there means the resistor is bridged or was left out. Over-range (OL, or a lone 1 at the left of the "
+        f"display) or a value far from {c.resistor_value} means a bad joint or the wrong wire. Between wire {n}'s "
+        "contact and every other cavity it must show over-range. "
+    )
+
+
+CHECK_EXCEPTION = "Wire {n} has the {value} resistor in it: read it in ohms, last, as the step says. It will not beep."
+
+
+def check_name(c, connector):
+    """The meter picture for this cable: the shared one, or its own when one wire is not checked by the buzzer."""
+    if resistor_wire(c, connector) is None:
+        return "acorn-cable-check.svg"
+    return f"acorn-cable-check-{c.key}-{connector.lower()}.svg"
 
 
 def resistor_reason(c, sig):
@@ -1227,6 +1280,7 @@ def procedure_parts(c, restart=False):
             f"Do the same with the wire flagged {len(pins)}: it must stay silent.",
             f"If wire {len(pins)} beeps instead, stop: the numbering is reversed; take the flags off and number from "
             "the other end. " + NEITHER.format(strip=lengths["strip"], last=len(pins)),
+            BOTH.format(last=len(pins)),
             "Take the plug out again.",
         ]
         step(
@@ -1281,8 +1335,9 @@ def procedure_parts(c, restart=False):
             "Check each wire with a meter on continuity. For each wire: one probe on its contact on the plug, the "
             "other on the terminal in the cavity the picture gives for that wire number, through the opening on the "
             "pin side of the housing: it must beep. Every other cavity must stay silent for that contact. "
-            "The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.",
-            ("A meter between the plug and the housing", "acorn-cable-check.png"),
+            + through_resistor(c, connector)
+            + "The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.",
+            ("A meter between the plug and the housing", png(check_name(c, connector))),
             (*cavity[connector], f"The {connector} cavity picture again, to read each wire's cavity from:"),
         )
     target = parts["fit"] = []
@@ -1428,8 +1483,9 @@ def guide(c):
             "apart from the wires that are cut back at the plug"
             + (" and the one wire that is cut to take the resistor" if c.resistors else "")
             + ". Whether a half reaches from the card in its "
-            f"slot to the {c.name}'s headers has not been measured by us: hold a half cable against the host before "
-            "you cut anything.", "",
+            f"slot to the {c.name}'s headers has not been measured by us: once the cable is cut in half, and before "
+            "any wire is cut back or crimped, hold a half against the host from the card's socket to the header, with "
+            "the power off. If it does not reach, stop and tell whoever gave you this guide.", "",
             "## The order of work", "", *(f"{i}. {line}" for i, line in enumerate(order, 1)), "",
             "## Where the facts come from", "",
             *(f"- {s['claim']}: {s['source']}." for s in wiring.SOURCES if s.get("carrier", c.key) == c.key), "",
@@ -1692,7 +1748,7 @@ def build_names():
         c = wiring.CARRIERS[key]
         names += [file_name(c, connector), prepare_name(c, connector)]
         if has_resistor(c, connector):
-            names.append(resistor_name(c, connector))
+            names += [resistor_name(c, connector), check_name(c, connector)]
     names += [f(connector) for connector in wiring.CONNECTORS for f in (flag_name, ground_check_name)]
     return [*names, *SHARED, *(f(c) for c in wiring.CARRIERS.values() for f in (fit_name, shell_check_name))]
 
@@ -1708,6 +1764,7 @@ def build():
         out[prepare_name(c, connector)] = prepare(c, connector)
         if has_resistor(c, connector):
             out[resistor_name(c, connector)] = resistor_picture(c, connector)
+            out[check_name(c, connector)] = check_picture((resistor_wire(c, connector), c.resistor_value))
     for connector in wiring.CONNECTORS:
         out[flag_name(connector)] = flag(connector)
         out[ground_check_name(connector)] = ground_check(connector)
