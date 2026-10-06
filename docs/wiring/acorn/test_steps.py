@@ -351,6 +351,8 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
         need = pages[steps.guide_name(c, part)]
         assert f"if it is fitted, {c.power_off[0].lower()}{c.power_off[1:]} Then take the card out." in need
     assert "cut in half, once" in overview
+    # the reach check is asked for at a moment the guide has: after the one cut, before any wire is cut back
+    assert "before you cut anything" not in overview and "once the cable is cut in half, and before any" in overview
     # the wire-1 check has an outcome for every result, and says what the last wire's silence rests on
     for part in ("jtag-1", "uart-1"):
         body = pages[steps.guide_name(c, part)]

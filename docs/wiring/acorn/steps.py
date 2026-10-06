@@ -1483,8 +1483,9 @@ def guide(c):
             "apart from the wires that are cut back at the plug"
             + (" and the one wire that is cut to take the resistor" if c.resistors else "")
             + ". Whether a half reaches from the card in its "
-            f"slot to the {c.name}'s headers has not been measured by us: hold a half cable against the host before "
-            "you cut anything.", "",
+            f"slot to the {c.name}'s headers has not been measured by us: once the cable is cut in half, and before any "
+            "wire is cut back or crimped, hold a half against the host from the card's socket to the header, with "
+            "the power off. If it does not reach, stop and tell whoever gave you this guide.", "",
             "## The order of work", "", *(f"{i}. {line}" for i, line in enumerate(order, 1)), "",
             "## Where the facts come from", "",
             *(f"- {s['claim']}: {s['source']}." for s in wiring.SOURCES if s.get("carrier", c.key) == c.key), "",
