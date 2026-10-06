@@ -315,3 +315,30 @@ def test_a_repeated_cavity_picture_says_why_it_is_there_again():
             assert len(at) == 3
             for i in at[1:]:
                 assert lines[i - 2].startswith(f"The {connector} cavity picture again")
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_from_one(key):
+    c = wiring.CARRIERS[key]
+    pages = steps.guide(c)
+    names = ["overview", "jtag-1", "jtag-2", "uart-1", "uart-2", "bench", "fit"]
+    assert list(pages) == [steps.guide_name(c, n) for n in names]
+    whole = [re.sub(r"^\*\*\d+\.\*\* ", "", line) for line in steps.procedure(c).splitlines() if line.startswith("**")]
+    paged = []
+    for name, body in pages.items():
+        numbered = re.findall(r"^\*\*(\d+)\.\*\* (.*)$", body, re.M)
+        assert [int(n) for n, _ in numbered] == list(range(1, len(numbered) + 1)), name  # from 1, no gap
+        paged += [words for _, words in numbered]
+        assert body.startswith(tables.BANNER.strip()) and "Not yet run by us on this hardware" in body
+        assert not re.search(r"^#{1,1} |^#### ", body, re.M), name  # headings from level 2; no cable heading left over
+        for image in re.findall(r"!\[[^\]]*\]\(([^)]+)\)", body):
+            assert "/" not in image, image
+    assert paged == whole  # every step, in order, nothing twice
+    # the meter check of wire 1 is on the page that cuts wires, before the cut
+    for part in ("jtag-1", "uart-1"):
+        body = pages[steps.guide_name(c, part)]
+        assert body.index("ground-check.png") < body.index("off about") and "## What you need" in body
+    for part in ("jtag-2", "uart-2"):
+        assert "Hold the empty" in pages[steps.guide_name(c, part)]
+    assert "Fit the cables, in this order" in pages[steps.guide_name(c, "fit")]
+    assert "This is a bench check" in pages[steps.guide_name(c, "bench")]

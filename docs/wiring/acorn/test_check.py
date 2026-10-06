@@ -15,7 +15,7 @@ CARRIERS = list(wiring.CARRIERS)
 def test_the_page_is_for_one_carrier_only(key):
     c = wiring.CARRIERS[key]
     text = check.page(c)
-    assert "<!--" not in text.split("\n", 1)[1]  # no carrier mark is left in the page
+    assert text.count("<!--") == len(check.pages(c))  # only each page's banner: no carrier mark is left
     if key == "blade":
         # nothing about the two spare wires, which a blade's cable does not carry
         assert "J5 -> GPIO3" not in text and "acorn-sycamore" not in text and "{" not in text.split("```")[0]
@@ -70,7 +70,10 @@ def test_the_transcripts_and_failure_rows_come_from_the_tool_reference():
     with pytest.raises(wiring.WiringError):
         check.transcript("**no such transcript**")
     # the tool's own reference still points at both pages, and keeps the anchor its summary prints
-    assert "boards/acorn/building/compute-blade/verifying.html" in verify and "boards/acorn/building/rpi-5/verifying.html" in verify
+    assert (
+        "boards/acorn/building/compute-blade/verifying-1.html" in verify
+        and "boards/acorn/building/rpi-5/verifying-1.html" in verify
+    )
     assert "\n### Common failures\n" in verify and "#### On a Compute Blade" not in verify
 
 
@@ -83,6 +86,8 @@ def test_the_picture_names_every_wire_of_both_cables_with_where_it_lands(key):
     assert set(check.USES) == {s for conn in wiring.CONNECTORS.values() for s in conn["pins"]} - {"GND1", "GND2", "VCC"}
     svg = check.picture(c)
     assert svg.startswith("<svg") and check.picture_name(c) in check.build()
+    assert sorted(check.pages(c)) == ([1, 2, 3] if key == "blade" else [1, 2])
+    assert all(check.name(c, part) in check.build() for part in check.pages(c))
 
 
 def test_a_fragment_keeps_only_its_carriers_lines():

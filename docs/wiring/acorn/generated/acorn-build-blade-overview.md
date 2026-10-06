@@ -13,9 +13,12 @@ GND, TCK, TDO, TMS, TDI, J2 and K2 are the names on the pictures for each wire; 
 ## The order of work
 
 1. Parts and tools: the list to tick off before starting.
-2. JTAG connector: the P1 cable, from the bought cable to a checked housing.
-3. UART connector: the P2 cable, from the bought cable to a checked housing.
-4. Bench check and fitting: a check with the power off, then the cables and the card go in.
-5. Verifying: the check run on the host, and what a failing line means.
+2. JTAG connector 1: the P1 cable's wires flagged, checked with a meter, cut back and crimped.
+3. JTAG connector 2: the P1 cable's housing filled and checked.
+4. UART connector 1: the P2 cable's wires flagged, checked with a meter, cut back and crimped.
+5. UART connector 2: the P2 cable's housing filled and checked.
+6. Bench check: both cables checked on the host with the power off.
+7. Fitting: the plugs, the card and the housings go in.
+8. Verifying: the check run on the host, and what a failing line means.
 
 Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn is the same PCB).

@@ -66,8 +66,9 @@ ACORN_FAILURES = [
 ONLY = {"blade": ["GPIO14 (TMS) is held by", "gpiod_line_request_set_values_subset"], "pi5": ["`J5 -> GPIO3:"]}
 
 
-def name(c):
-    return f"acorn-check-{c.key}.md"
+def name(c, part):
+    """The file of one page: part 1 run and read, 2 when a test fails, 3 (a blade) what has been run."""
+    return f"acorn-check-{c.key}-{part}.md"
 
 
 def picture_name(c):
@@ -243,8 +244,8 @@ PASS = "**pass**: an Acorn on the Pi 5 setup"
 BLADE_FAIL = "**fail, a first install on someone's own hardware**"
 
 
-def page(c):
-    """The whole page for one carrier, headings from level 2, to be included under a page's title."""
+def pages(c):
+    """{part: page body} for one carrier, headings from level 2, each to be included under a page's title."""
     after_boot = fragment("after-a-boot.md", c)
     install = after_boot[after_boot.index("```bash") : after_boot.index("```\n", after_boot.index("```bash") + 7) + 4]
     notes = after_boot[after_boot.index("* The check never writes") :]
@@ -261,7 +262,7 @@ def page(c):
         "CLE-215+ and as a CLE-101; the check covers both, and its summary names the one it found (`acorn "
         "cle-101`).",
         "",
-        "## 1. Install it and run it",
+        "## Install it and run it",
         "",
         INSTALL[c.key],
         "",
@@ -271,7 +272,7 @@ def page(c):
         "`fpgas-acorn-verify` checks the Acorn whatever the host is set up for. On a host set up for an Acorn "
         "the two print the same.",
         "",
-        "## 2. Read the result",
+        "## Read the result",
         "",
         "There is one result, **pass** or **fail**, and only a pass exits 0. The summary on the terminal lists "
         "every test in the order it ran with its result; for a check that did not pass it ends with `RESULT:`, a "
@@ -292,7 +293,7 @@ def page(c):
             "with a Compute Module 5 and an Acorn CLE-101 still on the image it was sold with (pi16 at ps1, "
             "5 October 2026). Two things are wrong and neither is the wiring or the installation: the card has "
             "not been converted to the fpgas.online design, and in this boot the JTAG test cannot have its TMS "
-            "pin (the last part of this page).",
+            "pin, which the header's serial port holds.",
             "",
             transcript(BLADE_FAIL).strip(),
             "",
@@ -303,14 +304,22 @@ def page(c):
             "",
         ]
     out += [
-        "## 3. Which test uses which wire",
+        "## Which test uses which wire",
         "",
         f"![Both cables of an Acorn on a {c.name}: each wire, where it lands, and the test that proves it]"
         f"({steps.png(picture_name(c))})",
         "",
         site_links(fragment("which-test.md", c)).strip(),
         "",
-        "## 4. From a failing line to the wire",
+        "## What the check does to the card and the host",
+        "",
+        notes.strip(),
+        "",
+    ]
+    fails = [
+        tables.BANNER.strip(),
+        "",
+        "## From a failing line to the wire",
         "",
         "Find the failing line in the table, then the wire in the two cavity pictures under it: the number in a "
         "cavity is the number on the wire's flag.",
@@ -328,34 +337,40 @@ def page(c):
         "",
     ]
     for connector in wiring.CONNECTORS:
-        out += [f"![Which wire goes in which cavity, {connector} cable]({cavity[connector]})", ""]
-    out += [wire_examples.strip(), ""]
+        fails += [f"![Which wire goes in which cavity, {connector} cable]({cavity[connector]})", ""]
+    fails += [wire_examples.strip(), ""]
+    fails += [
+        "## Every other message about an Acorn",
+        "",
+        f"The check's own words, from the tool's list of [common failures]({FAILURES}), which has the other "
+        "boards' too.",
+        "",
+        failures(c).strip(),
+        "",
+    ]
+    parts = {1: out, 2: fails}
     if c.key == "blade":
-        out += [
-            "## 5. What has been run on a Compute Blade, and JTAG's shared pin",
+        parts[3] = [
+            tables.BANNER.strip(),
+            "",
+            "## What has been run on a Compute Blade",
             "",
             site_links(fragment("compute-blade.md", c)).strip(),
             "",
         ]
-    out += [
-        f"## {6 if c.key == 'blade' else 5}. Every other message about an Acorn",
-        "",
-        "The check's own words, from the tool's list of [common failures]"
-        f"({FAILURES}), which has the other boards' too.",
-        "",
-        failures(c).strip(),
-        "",
-        "## What the check does to the card and the host",
-        "",
-        notes.strip(),
-        "",
-    ]
-    text = "\n".join(out)
-    text = site_links(text)
-    stray = re.findall(r"(?<!!)\[[^\]]*\]\((?!https?://)[^)]*\)", text)
-    if stray or "{" in re.sub(r"```.*?```", "", text, flags=re.S).replace("{port, mac, sn}", ""):
-        raise wiring.WiringError(f"{name(c)}: a link that is not absolute, or an unfilled place: {stray}")
-    return text
+    done = {}
+    for part, lines in parts.items():
+        page = site_links("\n".join(lines))
+        stray = re.findall(r"(?<!!)\[[^\]]*\]\((?!https?://)[^)]*\)", page)
+        if stray or "{" in re.sub(r"```.*?```", "", page, flags=re.S).replace("{port, mac, sn}", ""):
+            raise wiring.WiringError(f"{name(c, part)}: a link that is not absolute, or an unfilled place: {stray}")
+        done[part] = page
+    return done
+
+
+def page(c):
+    """Every page of one carrier, joined: what a reader meets, in order."""
+    return "\n".join(pages(c).values())
 
 
 def build():
@@ -363,5 +378,6 @@ def build():
     out = {}
     for c in wiring.CARRIERS.values():
         out[picture_name(c)] = picture(c)
-        out[name(c)] = page(c)
+        for part, body in pages(c).items():
+            out[name(c, part)] = body
     return out

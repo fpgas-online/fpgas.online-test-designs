@@ -461,7 +461,7 @@ Compute Blade with these steps. Two things are known to stand in the way:
 
 - Steps 1 and 4 need JTAG, and on a CM5 with kernel 6.18 JTAG cannot have its
   TMS pin (GPIO14) while the header's serial port is on
-  ([Checking an Acorn on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/building/compute-blade/verifying.html)).
+  ([Checking an Acorn on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/building/compute-blade/verifying-1.html)).
   Check that the pin is free before step 1.
 - The boot check reads each setup's pins from `wiring.toml`, so on a Blade it
   probes `2:3:4:14`; but no Compute Blade has passed the whole check yet, so

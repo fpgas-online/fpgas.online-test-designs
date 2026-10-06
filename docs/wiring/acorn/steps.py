@@ -1307,23 +1307,70 @@ def needs(c, connector):
     )
 
 
+def renumbered(lines):
+    """The lines of some steps, numbered from 1 again."""
+    out, n = [], 0
+    for line in lines:
+        if re.match(r"\*\*\d+\.\*\* ", line):
+            n += 1
+            line = re.sub(r"^\*\*\d+\.\*\* ", f"**{n}.** ", line)
+        out.append(line)
+    return out
+
+
+def cut_at(lines, start):
+    """(the steps before the one whose words start `start`, that step and the rest numbered from 1)."""
+    at = [i for i, line in enumerate(lines) if re.match(r"\*\*\d+\.\*\* " + re.escape(start), line)]
+    if len(at) != 1:
+        raise wiring.WiringError(f"the building guide: {len(at)} steps start {start!r}, not one")
+    return lines[: at[0]], renumbered(lines[at[0] :])
+
+
 def guide(c):
-    """{file name: page body} of the building guide for one carrier. Each page is complete in itself."""
+    """{file name: page body} of the building guide for one carrier. Each page is complete in itself.
+
+    overview; for each connector `<part>-1` (prepare the wires) and `<part>-2` (fill and check the housing);
+    bench (the check with the power off); fit.
+    """
     if list(wiring.CONNECTORS) != list(GUIDE):
         raise wiring.WiringError(f"the building guide has pages for {list(GUIDE)}, not for {list(wiring.CONNECTORS)}")
     parts = procedure_parts(c, restart=True)
     head = parts["head"]
     will_have = head[head.index("### What you will have") + 2 : head.index("### Parts and tools")]
     not_run = "Not yet run by us on this hardware: written from the design."
-    order = [
-        "Parts and tools: the list to tick off before starting.",
-        *(
-            f"{title}: the {connector} cable, from the bought cable to a checked housing."
-            for connector, (_, title) in GUIDE.items()
-        ),
-        "Bench check and fitting: a check with the power off, then the cables and the card go in.",
+    order = ["Parts and tools: the list to tick off before starting."]
+    for connector, (_, title) in GUIDE.items():
+        order += [
+            f"{title} 1: the {connector} cable's wires flagged, checked with a meter, cut back and crimped.",
+            f"{title} 2: the {connector} cable's housing filled and checked.",
+        ]
+    order += [
+        "Bench check: both cables checked on the host with the power off.",
+        "Fitting: the plugs, the card and the housings go in.",
         "Verifying: the check run on the host, and what a failing line means.",
     ]
+
+    def body(need, lines):
+        lines = [line for line in lines if not line.startswith("#### ")]
+        while lines and not lines[0]:
+            lines.pop(0)
+        return "\n".join(
+            [
+                tables.BANNER.strip(),
+                "",
+                not_run,
+                "",
+                "## What you need",
+                "",
+                need,
+                "",
+                "## Steps",
+                "",
+                *lines,
+                *parts["tail"],
+            ]
+        )
+
     out = {
         guide_name(c, "overview"): "\n".join([
             tables.BANNER.strip(), "", not_run, "", "## What you will have", "", *will_have,
@@ -1332,21 +1379,26 @@ def guide(c):
         ]),
     }  # fmt: skip
     for connector, (part, _title) in GUIDE.items():
-        steps_ = [line for line in parts[connector] if not line.startswith("#### ")]
-        while steps_ and not steps_[0]:
-            steps_.pop(0)
-        out[guide_name(c, part)] = "\n".join([
-            tables.BANNER.strip(), "", not_run, "", "## What you need", "", needs(c, connector), "",
-            "## Steps", "", *steps_, *parts["tail"],
-        ])  # fmt: skip
-    fit_steps = [line for line in parts["fit"] if not line.startswith("#### ")]
-    while fit_steps and not fit_steps[0]:
-        fit_steps.pop(0)
-    out[guide_name(c, "fit")] = "\n".join([
-        tables.BANNER.strip(), "", not_run, "", "## What you need", "",
-        f"Both finished cables, the Acorn, the {c.name}, and a multimeter with a continuity buzzer.", "",
-        "## Steps", "", *fit_steps, *parts["tail"],
-    ])  # fmt: skip
+        plan = housing(c, connector)
+        data = c.headers[plan.header]
+        shape = f"{data.columns}×{(plan.last - plan.first + 1) // data.columns}"
+        prepare, fill = cut_at(parts[connector], "Hold the empty")
+        out[guide_name(c, f"{part}-1")] = body(needs(c, connector), prepare)
+        out[guide_name(c, f"{part}-2")] = body(
+            f"The {connector} cable with its wires flagged and a terminal crimped on each (the page before this one), "
+            f"the empty {shape} Dupont housing, a paint pen or a dot of tape, and a multimeter with a continuity "
+            "buzzer and a fine probe or a sewing pin.",
+            fill,
+        )
+    bench, fit_ = cut_at(parts["fit"], "Fit the cables, in this order")
+    out[guide_name(c, "bench")] = body(
+        f"Both finished cables, the {c.name} unplugged from power, and a multimeter with a continuity buzzer. The "
+        "Acorn stays out of its slot.",
+        bench,
+    )
+    out[guide_name(c, "fit")] = body(
+        f"Both cables, checked on the bench (the page before this one), the Acorn and the {c.name}.", fit_
+    )
     return out
 
 

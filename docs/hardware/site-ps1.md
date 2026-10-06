@@ -82,7 +82,7 @@ x1); `jtag` cannot run, because the serial port has GPIO14 (TMS) and that kernel
 ([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)), so no scan has run there since, and the
 "P1 unmated" above for pi16 rests on the earlier pull-up reading alone; every other test waits for the card to be converted. How to read that result,
 and what has and has not been run on a Compute Blade:
-[Checking an Acorn on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/building/compute-blade/verifying.html). pi14, pi18 and pi20 were not read that day.
+[Checking an Acorn on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/building/compute-blade/verifying-1.html). pi14, pi18 and pi20 were not read that day.
 
 ### Other Hosts
 
