@@ -81,11 +81,11 @@ ADVICE = (
      "loaded into it. The reason above says what stopped the read; if rpi-hwid is not installed, install it "
      f"(sudo apt install python3-rpi-hwid, from https://github.com/mithro/rpi-hwid): {DOCS}"
      "/tt-fpga.html#which-tiny-tapeout-board-it-is"),
-    (r"Pmod wiring test is not yet part of the boot check",
-     "This demo board carries a Tiny Tapeout chip. It was identified and its other tests are above, but the "
-     "check cannot yet test its cabling to the Pi, and a board is not passed untested. Nothing is known to be "
-     "wrong with the board (fpgas.online-test-designs issue 132, a healthy demo board with a Tiny Tapeout chip "
-     f"cannot pass the boot check): {ISSUES}/132"),
+    (r"the u\w+ ribbon \(HAT J[ABC]\)|the ribbons look cabled as",
+     "A ribbon cable between the demo board's Pmod connectors and the Pi's Pmod HAT is not where it should be. "
+     "The reason names the ribbon (by the demo board's ui_in, uio or uo_out Pmod, and the HAT port it should "
+     "go to: ui_in to JA, uio to JB, uo_out to JC) and the pins that did not arrive. Seat it, or move it to its "
+     f"port, and run the check again: {DOCS}/tt-fpga.html#the-wiring-test"),
     (r"and the board runs SDK|no SDK release is recorded as supporting",
      "The Tiny Tapeout SDK on the demo board is not a release known to work with the chip it carries, so the "
      "board could not select a project on that chip. The board's firmware is installed by whoever looks after "
