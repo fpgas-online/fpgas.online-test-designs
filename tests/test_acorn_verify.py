@@ -15,7 +15,7 @@ import json
 import pathlib
 
 import pytest
-from fpgas_online_verify import core, identity
+from fpgas_online_verify import conclusion, core, identity, runner
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
 from fpgas_online_verify.boards.acorn import check as av
 from fpgas_online_verify.boards.acorn import suite
@@ -272,6 +272,14 @@ def test_xilinx_boards_that_are_not_acorns_are_named_and_fail_with_no_bar_traffi
     assert report["reason"] == f"{title}: fpgas.online has no test design for this board yet"
     assert report["tests"] == [] and "unconverted" not in report["reason"]
     assert events == ["fpga-board-identified"]
+    # told to people, and to the registry, as a Xilinx PCIe card, not as an Acorn; no Acorn debug tool offered
+    whole = {"result": "fail", "mode": "auto", "boards": [report]}
+    assert runner.details(whole)["board0"] == "xilinx-pcie - fail"
+    told = runner.summary(whole)
+    assert f"  xilinx-pcie {title}: fail" in told and "  acorn" not in told
+    assert f"  xilinx-pcie, {title}: fail (no test ran)" in conclusion.lines(whole)
+    assert "fpgas-acorn-debug" not in told
+    assert report["board"] == "acorn"  # the key the state file and the identity use is unchanged
 
 
 def test_a_design_we_did_not_build_fails_as_such(tmp_path, images):

@@ -29,6 +29,10 @@ VERDICT = {
 # Board names that are not their package and command names (fpgas-<slug>-debug, fpgas-online-<slug>-debug).
 SLUGS = {"tt": "tt-fpga"}
 BOARDS = "acorn, arty, fomu, netv2 or tt-fpga"  # what <board> stands for, when the report does not say which
+# A Xilinx PCIe card that the Acorn's check found but whose IDs name another board (a PCIe Screamer, a PicoEVB:
+# boards/acorn/check.py OTHER_BOARDS) is told to people under this name, not as an Acorn. The report's "board"
+# stays the key of the check that found it, which the state file and the registry's identity use.
+OTHER_PCIE = "xilinx-pcie"
 WIDTH = 78  # of the advice, which is sentences; a reason is one line however long, so it can be searched for
 
 # (what a reason says, what to do about it). Every entry whose pattern is found in any reason of the report is
@@ -168,6 +172,15 @@ def _plural(n, word):
     return f"{n} {word}" if n == 1 else f"{n} {word}s"
 
 
+def shown(board):
+    """(name, variant) a person is told for one board's report: the other board a card's IDs name is
+    xilinx-pcie with what the IDs say it is; every other board is its check's name and its variant."""
+    title = (board.get("found") or {}).get("title")
+    if title:
+        return OTHER_PCIE, title
+    return board["board"], board.get("variant")
+
+
 def _not_run(board):
     """[(the tests, why)]: the tests not run, those with one reason together."""
     by_reason = {}
@@ -216,7 +229,8 @@ def lines(report, kept_in=None):
         counts = [_plural(len(tests) - len(failed), "test") + " passed", f"{len(failed)} failed"] if tests else []
         if b.get("not_run"):
             counts.append(f"{len(b['not_run'])} not run")
-        name = " ".join(filter(None, [b["board"], b.get("variant")]))
+        name, variant = shown(b)
+        name = f"{name}, {variant}" if name == OTHER_PCIE else " ".join(filter(None, [name, variant]))
         out.append(f"  {name}: {b['result']} ({', '.join(counts) or 'no test ran'})")
         out += [f"    fault: {reason}" for reason in own_reasons(b)]
         out += [f"    failed: {t['test']}: {t.get('reason') or t['result']}" for t in failed]
@@ -232,7 +246,7 @@ def lines(report, kept_in=None):
         todo.append("If the change was meant (a board flashed or swapped on purpose), accept it: "
                     "sudo fpgas-verify --update")  # fmt: skip
     for b in report["boards"]:
-        if b["result"] != "pass":
+        if b["result"] != "pass" and shown(b)[0] != OTHER_PCIE:  # no debug tool is ours for another board
             todo.append(f"To look at the {b['board']} board yourself: sudo fpgas-{slug(b['board'])}-debug --help "
                         f"(sudo apt install fpgas-online-{slug(b['board'])}-debug)")  # fmt: skip
     todo.append(f"What each message means: {DOCS}/common-failures.html#common-failures")
