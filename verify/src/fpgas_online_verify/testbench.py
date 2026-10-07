@@ -200,7 +200,7 @@ class TestBoard(Board):
         if rc != 0:
             found["reason"] = f"the test exited {rc}"
             prefix = t.get("says")
-            said = [line[len(prefix):].strip() for line in text.splitlines() if prefix and line.startswith(prefix)]
+            said = [line[len(prefix) :].strip() for line in text.splitlines() if prefix and line.startswith(prefix)]
             if said and said[-1]:  # the script's own last word on why
                 found["reason"] = said[-1]
                 if rc == 2:  # it could not make its reading at all

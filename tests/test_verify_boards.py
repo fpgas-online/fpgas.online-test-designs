@@ -1455,12 +1455,16 @@ def test_the_dip_switches_are_read_first_under_the_display_design_and_one_on_fai
     load = next(c for c in run.calls if "tt_fpga_program.py" in " ".join(c))
     read = next(c for c in run.calls if "tt_dip_switches.py" in " ".join(c))
     assert load[3].endswith(DISPLAY) and load[4:] == ["--gpio-release"] and read[2:] == ["/dev/ttyACM0"]
-    assert run.calls.index(load) < run.calls.index(read) < run.calls.index(
-        next(c for c in run.calls if "pmod-pin-id" in " ".join(c)))
+    assert (
+        run.calls.index(load)
+        < run.calls.index(read)
+        < run.calls.index(next(c for c in run.calls if "pmod-pin-id" in " ".join(c)))
+    )
     # nothing is stopped for its port: the RP2350's USB serial has no login console
     assert not any("serial-getty" in " ".join(c) for c in run.calls)
     assert "dip-switches fail: switch 4 is on: set all DIP switches off" in runner.summary(
-        {"result": "fail", "mode": "tt", "boards": [report]})
+        {"result": "fail", "mode": "tt", "boards": [report]}
+    )
 
 
 def test_dip_switches_that_could_not_be_read_are_an_error_with_the_scripts_reason(tmp_path, monkeypatch):

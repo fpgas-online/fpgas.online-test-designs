@@ -485,16 +485,21 @@ def _load_pin_id():
 # pinctrl get in the form a Raspberry Pi 4 prints it (core.PIN_RE's comment: no drive on an output, "--"), with
 # the SPI driver loaded: its chip select on GPIO8 as a GPIO output (cs-gpios), GPIO9 to 11 SPI0, the rest
 # inputs. Made up in that form, not a recorded read.
-PINCTRL_GET = "\n".join([
-    " 8: op -- pu | hi // GPIO8 = output",
-    "10: a0    pd | lo // GPIO10 = SPI0_MOSI",
-    " 9: a0    pd | lo // GPIO9 = SPI0_MISO",
-    "11: a0    pd | lo // GPIO11 = SPI0_SCLK",
-    "19: ip    pd | lo // GPIO19 = input",
-    "21: ip    pd | lo // GPIO21 = input",
-    "20: ip    pd | lo // GPIO20 = input",
-    "18: ip    pd | lo // GPIO18 = input",
-]) + "\n"
+PINCTRL_GET = (
+    "\n".join(
+        [
+            " 8: op -- pu | hi // GPIO8 = output",
+            "10: a0    pd | lo // GPIO10 = SPI0_MOSI",
+            " 9: a0    pd | lo // GPIO9 = SPI0_MISO",
+            "11: a0    pd | lo // GPIO11 = SPI0_SCLK",
+            "19: ip    pd | lo // GPIO19 = input",
+            "21: ip    pd | lo // GPIO21 = input",
+            "20: ip    pd | lo // GPIO20 = input",
+            "18: ip    pd | lo // GPIO18 = input",
+        ]
+    )
+    + "\n"
+)
 
 
 class FakeRun:
@@ -578,7 +583,8 @@ def test_pins_that_could_not_be_put_back_turn_a_pass_into_an_error():
     code, line = dip.check("/dev/ttyACM0", run)
     assert code == 2 and line.startswith(
         "all 8 DIP switches are off; and the Pi's GPIOs on HAT JA were not put back as they were "
-        "(GPIO8 could not be set to op pu dh: pinctrl: busy")
+        "(GPIO8 could not be set to op pu dh: pinctrl: busy"
+    )
 
 
 def test_a_switch_that_is_on_and_pins_not_put_back_says_both():
@@ -619,12 +625,14 @@ def test_a_check_stopped_during_the_read_puts_the_pis_pins_back_and_says_so_as_a
 
     before = (signal.getsignal(signal.SIGTERM), signal.getsignal(signal.SIGINT))
     assert dip.check("/dev/ttyACM0", stopped) == (
-        2, "the check was stopped (signal 15) during the read: the DIP switches were not read")
+        2,
+        "the check was stopped (signal 15) during the read: the DIP switches were not read",
+    )
     read = next(i for i, c in enumerate(run.calls) if c[0] == "mpremote")
     assert len([c for c in run.calls[read:] if c[:2] == ["pinctrl", "set"]]) == len(dip.PI_GPIOS)
     # changing the pins runs under the handler, putting them back with SIGTERM ignored; then it is as it was
     assert handlers[: len(dip.PI_GPIOS)] == [(dip._stop, dip._stop)] * len(dip.PI_GPIOS)
-    assert handlers[len(dip.PI_GPIOS):] == [(signal.SIG_IGN, signal.SIG_IGN)] * len(dip.PI_GPIOS)
+    assert handlers[len(dip.PI_GPIOS) :] == [(signal.SIG_IGN, signal.SIG_IGN)] * len(dip.PI_GPIOS)
     assert (signal.getsignal(signal.SIGTERM), signal.getsignal(signal.SIGINT)) == before
 
 
@@ -692,8 +700,11 @@ def test_the_read_on_the_board_drives_each_line_low_then_reads_it_with_the_pull_
     assert not board_writes(dip.READ)
     assert dip.FIRST_GPIO == 17 and dip.SWITCHES == 8  # ui_in[0] is the RP2350's GPIO17 (tt-demo-pcb README)
     namespace = {}
-    exec(compile("def f():\n" + "".join("    " + line + "\n" for line in dip.READ.splitlines()), "READ", "exec"),
-         {}, namespace)  # it is Python the board can run (compiled here, not run)
+    exec(
+        compile("def f():\n" + "".join("    " + line + "\n" for line in dip.READ.splitlines()), "READ", "exec"),
+        {},
+        namespace,
+    )  # it is Python the board can run (compiled here, not run)
 
 
 def test_the_pi_gpios_are_hat_ja_as_the_pin_id_scan_has_ui_in():
