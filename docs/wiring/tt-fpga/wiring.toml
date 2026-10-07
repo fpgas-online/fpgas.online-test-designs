@@ -41,7 +41,7 @@ what = "the design's eight inputs"
 drive = "pi"
 fpga_pins = [13, 19, 18, 21, 23, 25, 26, 27]
 connector = "tt_input"
-note = "The demo board's DIP switches are on these signals too (from `docs/hardware/tt-fpga.md`; not verified by us). How the switches must be set while the Raspberry Pi drives these signals is not recorded."
+note = "The demo board's DIP switches are on these signals too: each switch, when on, pulls its `ui_in` line up to 3.3 V through 1 kΩ; when off it leaves the line alone. So set every switch off while the Raspberry Pi drives these signals (from Tiny Tapeout's KiCad files for the board, SW1 and R3 to R10; not verified by us on a board)."
 header = "input"
 mcu_first_gpio = 17
 colour = "#b4491f"
@@ -247,8 +247,8 @@ source = "Tiny Tapeout's published demo board design (github.com/TinyTapeout/tt-
 [[facts]]
 key = "pin-1-demo-board"
 group = "demo"
-says = "In the maker's drawing of the board, pin 1 is the square pad under the label i0, b0 or o0, at the right-hand end of the row farther from the board edge. No \"1\" is printed there"
-source = "Tiny Tapeout's published demo board design (github.com/TinyTapeout/tt-demo-pcb: README, doc/img/pmods-io.png, doc/img/tt-etr-dbv3p2-pinout.png, doc/img/tt-etr-dbv3-board.jpg), read 6 October 2026 (the render of the board); not checked by us on a board"
+says = "Pin 1 is the square pad under the label i0, b0 or o0, at the right-hand end of the row farther from the board edge, seen from above with the Pmod edge toward you; no \"1\" is printed. The small L-shaped corner mark on the socket's outline is beside pin 6 (3.3 V), not pin 1"
+source = "Tiny Tapeout's KiCad files for the demo board v3.2 (github.com/TinyTapeout/tt-demo-pcb at commit 0277545, tinytapeout-demo.kicad_pcb and .kicad_sch), read 7 October 2026: footprint PinSocket_2x06_P2.54mm_PMODHost1A, whose pad 1 is its only rectangular pad and whose outline's corner mark sits beside pad 6 (KiCad's stock socket mirrored to Digilent's numbering); not yet looked at on our boards"
 
 [[facts]]
 key = "hat-ports"
@@ -265,8 +265,8 @@ source = "Digilent's Pmod HAT Adapter Reference Manual, read from a copy on 6 Oc
 [[facts]]
 key = "pin-1-hat"
 group = "hat"
-says = "Digilent's product photograph of the HAT shows a printed \"1\" beside one end of each port's inner row, and \"3V3\" and \"GND\" at the other end. This is legible for JA and JB; JC's label is not legible in the photograph"
-source = "Digilent's Pmod HAT Adapter Reference Manual, read from a copy on 6 October 2026 (its product photograph); not checked by us on a board"
+says = "On each of JA, JB and JC, pin 1 is a square pad with a printed \"1\" beside it, at one end of the row nearer the middle of the HAT; \"3V3\" and \"GND\" are printed at the other end of that row"
+source = "Digilent's Pmod HAT Adapter Reference Manual, Rev. B (page 4), and its 1000 px top photograph (pmod-hat-adapter-top-1000.png on Digilent's reference site, as archived on 27 January 2025), read 7 October 2026, JC's \"1\" included; not yet looked at on our boards"
 
 [[facts]]
 key = "cable-fitted"
@@ -313,4 +313,4 @@ source = "Digilent's Pmod Interface Specification, revised 28 October 2020, read
 "The other RP2350 GPIO numbers (those on the 24 signals, and the one on the reset)" = "Tiny Tapeout's pinout documents for the version 3 demo board, as `docs/hardware/pmod-tt.md` summarises them. Our loader, run with `--gpio-release`, starts the clock and then sets the GPIOs of the 24 signals to inputs; without that flag it starts no clock and leaves GPIO17 to GPIO40 as they were. Our serial bridge starts the clock itself and uses two of the signals; the rest, and the reset's, are not verified by us"
 "Which segment of the display each bit of `uo_out` lights, and that a to f are the outer ring in that order" = "Tiny Tapeout's board specification, as `docs/hardware/tt-fpga.md` gives it, and `designs/tt-display`, which is written to it and describes its pattern as one segment running round the outer ring, a to f (a test holds the place of g and of the dot to that design). Where a is, and which way round the ring runs, is not recorded; none of it is verified by us segment by segment"
 "That the three-colour LED lights when its pin is low" = "a comment in `designs/_shared/tt_fpga_platform.py`; not verified by us"
-"That the demo board's DIP switches are on the `ui_in` signals" = "`docs/hardware/tt-fpga.md`, which gives no source for it; not verified by us. How the switches must be set while the Raspberry Pi drives `ui_in` is not recorded"
+"That the demo board's DIP switches are on the `ui_in` signals, each pulling its line up to 3.3 V through 1 kΩ when on" = "Tiny Tapeout's KiCad files for the demo board v3.2 (github.com/TinyTapeout/tt-demo-pcb at commit 0277545, tinytapeout-demo.kicad_pcb and .kicad_sch), read 7 October 2026: SW1 (8-way DIP) with R3 to R10 (1 kΩ to +3V3), switch 1 to ui_in0 through switch 8 to ui_in7; the ui_in nets have no other pull on the demo board; not verified by us on a board"

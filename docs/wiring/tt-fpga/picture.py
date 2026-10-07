@@ -34,22 +34,23 @@ from wiringlib.canvas import BOX, FAINT, GOLD, INK, MUTED, RED, Sheet
 from wiringlib.palette import role, wire
 
 W, H = 1040, 830
-# Said on the picture and, by tables.py, under it on every page, until where pin 1 is has been read off a
-# board. That a cable turned round puts the ground pins on signal pins follows from the numbering:
+# Said on the picture and, by tables.py, under it on every page: where pin 1 is, from the makers' files.
+# That a cable turned round puts the ground pins on signal pins follows from the numbering:
 # turned_round() works it out from wiring.toml and draw() refuses to say it if it is not so. Our cables
 # are expected to carry ground but not 3.3 V (wiring.toml, fact cable-fitted), so ground is what the warning names.
 PIN_1 = (
-    "Pin 1 (gold) is drawn where Tiny Tapeout's drawing of the demo board puts it, not checked by us:",
+    "Pin 1 (gold) is where Tiny Tapeout's KiCad files put it: the square pad under i0, b0 or o0,",
     "seen from above, Pmod edge toward you, the right-hand end of the row farther from the edge.",
-    "The HAT's ports are drawn the same way; where their printed 1 is has not been checked by us.",
+    "The small L on the socket's outline is beside pin 6 (3.3 V), not pin 1.",
+    "On the HAT, pin 1 is the square pad with a printed 1 beside it; 3V3 and GND are at the other end.",
     "Find pin 1 on each connector by its marking before plugging a cable in.",
     "A cable turned round puts ground on signal pins.",
 )
 # The same, short enough for the picture itself; the whole of PIN_1 is printed under it on every page.
 PIN_1_SHORT = (
-    "Pin 1 (gold) as in Tiny Tapeout's drawing of the board, seen from above; not checked by us.",
-    "HAT ports drawn the same way, not checked. Find each pin 1 by its marking first: turned round, "
-    "a cable puts ground on signal pins.",
+    "Pin 1 (gold): the square pad under i0, b0 or o0; the L on the socket outline is pin 6, not 1.",
+    "On the HAT: the square pad with a printed 1. Find each pin 1 first: turned round, a cable puts "
+    "ground on signal pins.",
 )
 SMALLEST = 15  # px: no text on the picture is smaller
 CELL = 34  # a pin of a connector

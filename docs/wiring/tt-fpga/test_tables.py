@@ -138,11 +138,11 @@ def test_the_serial_ports_table_says_which_of_its_two_wires_is_measured():
 
 def test_the_pin_1_warning_is_under_every_picture():
     warning = (
-        "**Pin 1 on the picture.** Pin 1 (gold) is drawn where Tiny Tapeout's drawing of the demo board puts it, "
-        "not checked by us: seen from above, Pmod edge toward you, the right-hand end of the row farther from the "
-        "edge. The HAT's ports are drawn the same way; where their printed 1 is has not been checked by us. Find "
-        "pin 1 on each connector by its marking before plugging a cable in. A cable turned round puts ground on "
-        "signal pins."
+        "**Pin 1 on the picture.** Pin 1 (gold) is where Tiny Tapeout's KiCad files put it: the square pad under "
+        "i0, b0 or o0, seen from above, Pmod edge toward you, the right-hand end of the row farther from the edge. "
+        "The small L on the socket's outline is beside pin 6 (3.3 V), not pin 1. On the HAT, pin 1 is the square "
+        "pad with a printed 1 beside it; 3V3 and GND are at the other end. Find pin 1 on each connector by its "
+        "marking before plugging a cable in. A cable turned round puts ground on signal pins."
     )
     for name in WIRE_PAGES:  # the display's picture is no picture of cables, so has no pin 1 to warn about
         text = FILES[name]
@@ -207,14 +207,16 @@ def test_every_makers_fact_has_its_source_on_the_sources_page_and_none_is_called
     for fact in W.facts.values():
         assert f"- {fact['says']}: {tables.linked_paths(fact['source'])}." in text, fact["key"]
     assert "mirrored between the host connector and the peripheral board connector" in text
-    assert "github.com/TinyTapeout/tt-demo-pcb" in text and text.count("read from a copy on 6 October 2026") >= 3
+    assert "github.com/TinyTapeout/tt-demo-pcb" in text and text.count("read from a copy on 6 October 2026") >= 2
+    # pin 1, from the makers' own files (Tim, 7 October 2026: find it in photos, schematics and renders)
+    assert "tt-demo-pcb at commit 0277545" in text and "1000 px top photograph" in text
     assert "verified by us on" not in text.replace("not verified by us on", "")
 
 
-def test_the_ui_in_page_says_the_dip_switches_are_there_and_that_their_setting_is_not_recorded():
+def test_the_ui_in_page_says_the_dip_switches_are_there_and_to_set_them_off():
     text = FILES["tt-fpga-pins-ui-uo.md"]
     assert "The demo board's DIP switches are on these signals too" in text
-    assert "How the switches must be set while the Raspberry Pi drives these signals is not recorded." in text
+    assert "So set every switch off while the Raspberry Pi drives these signals" in text
 
 
 def test_the_shared_gpios_are_explained_on_every_page_that_has_one():
