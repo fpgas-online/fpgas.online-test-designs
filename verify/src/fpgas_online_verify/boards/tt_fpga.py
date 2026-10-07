@@ -249,9 +249,15 @@ class TTFPGA(TestBoard):
     services = ("fpgas-tt.service",)  # the TT site's bridge keeps the RP2350's port open while it runs
     flash_note = ("none: nothing on the demo board is read back; the FPGA breakout has no SPI flash, and its "
                   "RP2350 loads each bitstream from the Pi")  # fmt: skip
-    # Run in this order: the pin-ID scan comes first, so the UART-bridge design (one TX pin) is the last test
-    # design, not one driving every Pmod line. What the board is left running is `left_running`, below.
+    # Run in this order: the DIP switches first (#166), read under the display design, which drives only uo_out
+    # and holds ui_in and uio as inputs without the iCE40's pull-up (tt_dip_switches.py says why); then the
+    # pin-ID scan, so the UART-bridge design (one TX pin) is the last test design, not one driving every Pmod
+    # line. What the board is left running is `left_running`, below.
     tests: ClassVar[dict] = {
+        # Each of the demo board's DIP switches on ui_in is off: one that is on fails the board, named.
+        "dip-switches": {"artifact": "tt-display-{v}/tt_fpga_platform.bin", "script": "tt_dip_switches.py",
+                         "args": ["{port}"], "program_args": ["--gpio-release"], "says": "DIP_SWITCHES:",
+                         "verify": True},
         # The Pmod HAT cabling, against identify_pmod_pins.BOARDS["tt"] (ui_in on HAT JA, uio JB, uo_out JC).
         "pin-id": {"artifact": "pmod-pin-id-{v}/tt_fpga_platform.bin", "script": "identify_pmod_pins.py",
                    "args": ["--board", "tt"], "pre": PMOD_PRE, "program_args": ["--gpio-release"],
@@ -317,6 +323,10 @@ class TTFPGA(TestBoard):
         if why_not:
             return {"tinytapeout_error": why_not}
         return tinytapeout_fields(found["serial"], runner)
+
+    def uart_pre(self, host):
+        """Nothing: the board's port is its RP2350's USB serial, which carries no login console to stop."""
+        return []
 
     def program_argv(self, bitstream, host, test):
         extra = self.tests.get(test, {}).get("program_args", [])

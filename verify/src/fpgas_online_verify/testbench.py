@@ -20,6 +20,8 @@ programmer and its tests; `tests` maps a test to:
   runner        "tt-bridge": the script runs through the TT board's RP2350, which also loads the design
   listen        True if the script must have the UART open before the design starts (listen.py)
   program_args  extra arguments to the programmer
+  says          a prefix: when the script fails, its last line starting with it is the reason (else "the test
+                exited N"), and an exit of 2 under it is an error (it could not read), not a fail
 """
 
 import contextlib
@@ -197,6 +199,12 @@ class TestBoard(Board):
         found = {"result": "pass" if rc == 0 else "fail", "output": tail(text)}
         if rc != 0:
             found["reason"] = f"the test exited {rc}"
+            prefix = t.get("says")
+            said = [line[len(prefix):].strip() for line in text.splitlines() if prefix and line.startswith(prefix)]
+            if said and said[-1]:  # the script's own last word on why
+                found["reason"] = said[-1]
+                if rc == 2:  # it could not make its reading at all
+                    found["result"] = "error"
         m = JEDEC_RE.search(text)
         if m:
             found["flash_jedec"] = "0x" + "".join(m.groups()).lower()
