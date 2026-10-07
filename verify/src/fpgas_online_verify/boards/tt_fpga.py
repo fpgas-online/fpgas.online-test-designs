@@ -183,7 +183,7 @@ SDK_SUPPORTED = (
 # wiring test of a board with a Tiny Tapeout chip was the last (`wiring`, below).
 PENDING = {}
 # tt_pmod_wiring.py's own limit is the boot check's: it stops and puts the Pi back on SIGTERM, but a timeout
-# here kills it. A run on a TT07 board takes WIRING_TIME s (measured 8 Oct 2026); this leaves room.
+# here kills it. Not yet timed on a board in this form: the live run before the merge times it.
 WIRING_TIMEOUT = 240
 
 
