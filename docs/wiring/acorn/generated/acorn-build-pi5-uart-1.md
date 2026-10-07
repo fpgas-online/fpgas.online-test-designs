@@ -18,14 +18,18 @@ For this cable: the other half of the Molex Pico-EZmate cable, which was cut in 
 6. If both wires beep, first see that the two probes do not touch each other and that the cut faces of wires 1 and 6 do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires apart. Leave the flags on and take the plug out. Wire 6 is the card's 3.3 V; that it stays silent to ground on a card with no power is expected and has not been measured by us. Set the meter to ohms, write down what each of the two wires reads to the pad, and send both readings to whoever gave you this guide.
 7. Take the plug out again.
 
-![The P2 cable's plug in socket P2, all 6 wires whole, a flag on each](acorn-cable-p2-flag.png)
+![The P2 cable's plug in socket P2, all 6 wires whole, a flag on each](acorn-cable-p2-flag.png){.only-light}
+![The P2 cable's plug in socket P2, all 6 wires whole, a flag on each](acorn-cable-p2-flag-dark.png){.only-dark}
 
-![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check.png)
+![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check.png){.only-light}
+![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check-dark.png){.only-dark}
 
 **2.** Cut wire 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over the cut end. It goes in no cavity. Wire 6 is VCC, 3.3 V from the Acorn: it must never reach the host. Leave wires 1 to 5 at full length.
 
-![The P2 cable: its wires prepared](acorn-cable-pi5-p2-prepare.png)
+![The P2 cable: its wires prepared](acorn-cable-pi5-p2-prepare.png){.only-light}
+![The P2 cable: its wires prepared](acorn-cable-pi5-p2-prepare-dark.png){.only-dark}
 
 **3.** Strip about 3 mm from wires 1 to 5. Crimp a Dupont terminal on each.
 
-![Stripping and crimping](acorn-cable-crimp.png)
+![Stripping and crimping](acorn-cable-crimp.png){.only-light}
+![Stripping and crimping](acorn-cable-crimp-dark.png){.only-dark}

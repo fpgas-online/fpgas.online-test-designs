@@ -6,4 +6,5 @@
 4. Put the Acorn in the M.2 slot and fit its screw.
 5. Fit the P1 housing on the Extension Port, marked corner on pin 1, and the P2 housing on the UART, marked corner on pin 1.
 
-![Fitting the cables on a Compute Blade, in order](acorn-cable-blade-fit.png)
+![Fitting the cables on a Compute Blade, in order](acorn-cable-blade-fit.png){.only-light}
+![Fitting the cables on a Compute Blade, in order](acorn-cable-blade-fit-dark.png){.only-dark}
