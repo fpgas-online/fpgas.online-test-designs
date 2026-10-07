@@ -99,7 +99,8 @@ A pass will list every test with `pass` and end there, with no `RESULT:` part; o
 
 ## Which test uses which wire
 
-![Both cables of an Acorn on a Compute Blade: each wire, where it lands, and the test that proves it](acorn-check-blade-wires.png)
+![Both cables of an Acorn on a Compute Blade: each wire, where it lands, and the test that proves it](acorn-check-blade-wires.png){.only-light}
+![Both cables of an Acorn on a Compute Blade: each wire, where it lands, and the test that proves it](acorn-check-blade-wires-dark.png){.only-dark}
 
 | Test | Wires it uses | A pass shows | Runs on a card still on SQRL's image |
 |---|---|---|---|

@@ -366,8 +366,10 @@ def pages(c):
     out += [
         "## Which test uses which wire",
         "",
-        f"![Both cables of an Acorn on a {c.name}: each wire, where it lands, and the test that proves it]"
-        f"({steps.png(picture_name(c))})",
+        steps.markdown_image(
+            f"Both cables of an Acorn on a {c.name}: each wire, where it lands, and the test that proves it",
+            steps.png(picture_name(c)),
+        ),
         "",
         site_links(fragment("which-test.md", c)).strip(),
         "",
@@ -391,7 +393,7 @@ def pages(c):
         "",
     ]
     for connector in wiring.CONNECTORS:
-        fails += [f"![Which wire goes in which cavity, {connector} cable]({cavity[connector]})", ""]
+        fails += [steps.markdown_image(f"Which wire goes in which cavity, {connector} cable", cavity[connector]), ""]
     fails += [
         wire_examples.strip(),
         "",

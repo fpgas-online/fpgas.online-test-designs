@@ -24,6 +24,11 @@ def picture(key, connector):
     return steps.cable(wiring.CARRIERS[key], connector)[0]
 
 
+def light_images(text):
+    """The pictures of Markdown text, each once: the light PNG of every light and dark pair (test_palette.py)."""
+    return [i for i in re.findall(r"!\[[^\]]*\]\(([^)]+)\)", text) if not i.endswith("-dark.png")]
+
+
 def words(svg):
     """Every piece of text in a picture, in the order it was drawn."""
     return re.findall(r'aria-label="([^"]*)"', svg)
@@ -179,7 +184,7 @@ def test_the_procedure_is_complete_in_itself(key):
     c = wiring.CARRIERS[key]
     text = steps.procedure(c)
     built = set(steps.build_names())
-    images = re.findall(r"!\[[^\]]*\]\(([^)]+)\)", text)
+    images = light_images(text)
     for image in images:
         assert "/" not in image  # by bare file name, in the same directory
         assert image.replace(".png", ".svg") in built or image.startswith("acorn-wiring-"), image
@@ -280,7 +285,7 @@ def test_the_flag_step_shows_whole_wires_and_the_cut_picture_comes_only_after_th
     text = steps.procedure(c)
     for connector in wiring.CONNECTORS:
         flag_step = text.split(f"Find wire 1 of the {connector} cable")[1].split("\n**")[0]
-        images = re.findall(r"!\[[^\]]*\]\(([^)]+)\)", flag_step)
+        images = light_images(flag_step)
         assert images == [steps.png(steps.flag_name(connector)), steps.png(steps.ground_check_name(connector))]
         prepared = steps.png(steps.prepare_name(c, connector))
         assert text.count(prepared) == 1
@@ -298,7 +303,7 @@ def test_the_flag_and_meter_pictures_draw_every_wire_whole_with_its_flag(connect
         assert "terminal-wire-" not in svg and "resistor-wire-" not in svg
         # six wires of one length, from the plug to their cut faces
         wires = re.findall(
-            rf'<line x1="([\d.]+)" y1="([\d.]+)" x2="\1" y2="([\d.]+)" stroke="{steps.BODY}" '
+            rf'<line x1="([\d.]+)" y1="([\d.]+)" x2="\1" y2="([\d.]+)" stroke="{steps.BLACK_WIRE}" '
             rf'stroke-width="{steps.WIRE}"/>',
             svg,
         )
@@ -331,7 +336,7 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
         paged += [words for _, words in numbered]
         assert body.startswith(tables.BANNER.strip()) and "Not yet run by us on this hardware" in body
         assert not re.search(r"^#{1,1} |^#### ", body, re.M), name  # headings from level 2; no cable heading left over
-        for image in re.findall(r"!\[[^\]]*\]\(([^)]+)\)", body):
+        for image in light_images(body):
             assert "/" not in image, image
     assert paged == whole  # every step, in order, nothing twice
     # no page points at a step that is on another page

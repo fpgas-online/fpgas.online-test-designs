@@ -69,7 +69,8 @@ fpgas-verify: pass (mode auto, auto: USB/PCI IDs)
 
 ## Which test uses which wire
 
-![Both cables of an Acorn on a Raspberry Pi 5: each wire, where it lands, and the test that proves it](acorn-check-pi5-wires.png)
+![Both cables of an Acorn on a Raspberry Pi 5: each wire, where it lands, and the test that proves it](acorn-check-pi5-wires.png){.only-light}
+![Both cables of an Acorn on a Raspberry Pi 5: each wire, where it lands, and the test that proves it](acorn-check-pi5-wires-dark.png){.only-dark}
 
 | Test | Wires it uses | A pass shows | Runs on a card still on SQRL's image |
 |---|---|---|---|
