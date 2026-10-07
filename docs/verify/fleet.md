@@ -33,6 +33,8 @@ The check tells the site what it is doing as it goes. `fleet-event` (from
 | `fpga-verified` | the check is done | the report, flattened: `result`, `mode`, `reason`; per board `board0` (`netv2 a7-35 fail`), `board0_reason`, `board0_tests` (`uart=pass ddr=fail spiflash=pass`), `board0_not_run` (the names in `not_run`, when there are any), `board0_left_running` (the design's name) or `board0_warnings`, `board0_bitstreams`, `board0_state_*`, `board0_identity_*` |
 
 * `board` is the board's name, or `name@where` when there are two of a kind.
+* In `board0`, a Xilinx PCIe card that the Acorn's check found but whose IDs name another board (a PCIe Screamer, a
+  PicoEVB) is `xilinx-pcie - <result>`; what it is, is in `board0_reason`. The progress events still say `acorn`.
 * `fpga-verifying` and the progress events each wait at most 15 s, so a broker that is down does not hold up
   the check; `fpga-verified` waits at most 60 s.
 * If an event before `fpga-verified` cannot be sent, no more progress events are tried that run, but
