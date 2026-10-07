@@ -1058,20 +1058,68 @@ def test_every_hat_gpio_is_set_back_to_its_function_and_pull(monkeypatch):
     pinctrl = Pinctrl(BEFORE)
     env, _calls = _env(monkeypatch, pinctrl)
     env.enter()
-    assert pinctrl.sets == [] and env.left_pulled_down == []
+    assert pinctrl.sets == [] and env.assumed_pulls == {}
     assert env.leave() == []
     assert sorted(pinctrl.sets) == sorted([str(g), f, p] for g, (f, p, _) in BEFORE.items())
     assert ["14", "a0", "pn"] in pinctrl.sets
 
 
-def test_a_pi_3_s_pulls_cannot_be_read_back_so_they_are_left_pulled_down_and_said(monkeypatch):
+def _dt_node(path, **props):
+    """A device-tree node under `path`, its properties as /proc/device-tree has them (cells big-endian u32)."""
+    path.mkdir(parents=True)
+    for name, value in props.items():
+        name = name.replace("_", ",", 1) if name.startswith("brcm_") else name.replace("_", "-")
+        data = value if isinstance(value, bytes) else b"".join(v.to_bytes(4, "big") for v in value)
+        (path / name).write_bytes(data)
+
+
+def fake_device_tree(root):
+    """A Pi 3's: the GPIO controller with uart0's pins (TX no pull, RX up) and spi0's (no pull given), uart0
+    enabled, spi0 enabled, i2c1 disabled with a pull-up group."""
+    gpio = root / "soc" / "gpio@7e200000"
+    _dt_node(gpio / "uart0_pins", brcm_pins=[14, 15], brcm_function=[4, 4], brcm_pull=[0, 2], phandle=[1])
+    _dt_node(gpio / "spi0_pins", brcm_pins=[9, 10, 11], brcm_function=[4], phandle=[2])
+    _dt_node(gpio / "i2c1_pins", brcm_pins=[2, 3], brcm_function=[4], brcm_pull=[2], phandle=[3])
+    _dt_node(root / "soc" / "serial@7e201000", pinctrl_0=[1], pinctrl_names=b"default\0", status=b"okay\0")
+    _dt_node(root / "soc" / "spi@7e204000", pinctrl_0=[2], status=b"okay\0")
+    _dt_node(root / "soc" / "i2c@7e804000", pinctrl_0=[3], status=b"disabled\0")
+    return root
+
+
+def test_the_running_device_tree_says_the_pulls_of_the_pins_its_enabled_nodes_take(tmp_path):
+    found = ttw.device_tree_pulls(fake_device_tree(tmp_path / "dt"))
+    assert found == {14: ("pn", "the device tree's uart0_pins pins of serial@7e201000"),
+                     15: ("pu", "the device tree's uart0_pins pins of serial@7e201000")}  # fmt: skip
+
+
+def test_a_pull_no_enabled_node_sets_is_the_bcm2835_power_on_default(tmp_path):
+    pulls = ttw.known_pulls([2, 8, 9, 14, 15, 26], fake_device_tree(tmp_path / "dt"))
+    assert {g: p for g, (p, _why) in pulls.items()} == {2: "pu", 8: "pu", 9: "pd", 14: "pn", 15: "pu", 26: "pd"}
+    assert pulls[2][1] == pulls[26][1] == "the BCM2835 power-on default"
+    # no device tree to read: every pin its default
+    assert ttw.known_pulls([3, 10], tmp_path / "none") == {3: ("pu", "the BCM2835 power-on default"),
+                                                            10: ("pd", "the BCM2835 power-on default")}  # fmt: skip
+
+
+def test_a_pi_3_s_unreadable_pulls_are_set_to_known_ones_and_said(monkeypatch, tmp_path):
+    monkeypatch.setattr(ttw, "DEVICE_TREE", fake_device_tree(tmp_path / "dt"))
+    monkeypatch.setattr(ttw.known_pulls, "__defaults__", (ttw.DEVICE_TREE,))
     pinctrl = Pinctrl(BEFORE, unreadable_pull=True)
     env, _calls = _env(monkeypatch, pinctrl)
+    logged = []
+    env.log = logged.append
     env.enter()
-    assert env.left_pulled_down == sorted(ttw.ALL_HAT_GPIOS)
+    assert set(env.assumed_pulls) == set(ttw.ALL_HAT_GPIOS)
     assert env.leave() == []
-    assert all(len(s) == 2 for s in pinctrl.sets)  # the function only: no pull given
-    assert ["14", "a0"] in pinctrl.sets
+    pull = {int(s[0]): s[2] for s in pinctrl.sets}
+    assert pull == {g: ("pu" if g <= 8 else "pd") for g in ttw.ALL_HAT_GPIOS if g not in (14, 15)} | {
+        14: "pn",
+        15: "pu",
+    }
+    assert ["14", "a0", "pn"] in pinctrl.sets and ["15", "a0", "pu"] in pinctrl.sets
+    (said,) = [line for line in logged if line.startswith("PULLS: ")]
+    assert "the BCM2835 power-on default: GPIO2 pu, GPIO3 pu" in said
+    assert "the device tree's uart0_pins pins of serial@7e201000: GPIO14 pn, GPIO15 pu" in said
 
 
 def test_an_output_whose_level_cannot_be_read_is_refused_before_anything_changes(monkeypatch):

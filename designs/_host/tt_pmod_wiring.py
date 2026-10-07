@@ -1268,6 +1268,60 @@ def run_quiet(cmd, check=False):
     return result
 
 
+# -- Pulls a Pi 3 cannot read back ----------------------------------------------------------------------
+
+
+# The BCM2835's pulls at power-on: GPIO0 to GPIO8 pulled up, GPIO9 to GPIO27 pulled down (Broadcom, "BCM2835
+# ARM Peripherals", section 6.2, table 6-31, the "Pull" column; the BCM2837 of a Pi 3 has the same GPIO block).
+def power_on_pull(gpio):
+    return "pu" if gpio <= 8 else "pd"
+
+
+DEVICE_TREE = pathlib.Path("/proc/device-tree")
+_DT_PULL = {0: "pn", 1: "pd", 2: "pu"}  # brcm,pull (the bcm2835 pinctrl binding): 0 none, 1 down, 2 up
+
+
+def _cells(path):
+    data = path.read_bytes()
+    return [int.from_bytes(data[i : i + 4], "big") for i in range(0, len(data) - 3, 4)]
+
+
+def device_tree_pulls(root=DEVICE_TREE):
+    """{gpio: (pull, the node that sets it)}: the pulls the running device tree gives a pin, where an enabled node
+    (no status, or "okay") names in a pinctrl-N a pin group that has brcm,pull. That is what the kernel set on
+    those pins when the node's driver took them. A pin no such group names is not in it."""
+    root = root.resolve()
+    groups, users = {}, []
+    for here, _dirs, files in os.walk(root):
+        node = pathlib.Path(here)
+        if "brcm,pins" in files and "phandle" in files:
+            pulls = _cells(node / "brcm,pull") if "brcm,pull" in files else None
+            groups[_cells(node / "phandle")[0]] = (_cells(node / "brcm,pins"), pulls, node.name)
+        status = (node / "status").read_bytes().rstrip(b"\0").decode() if "status" in files else "okay"
+        if status in ("okay", "ok"):
+            for f in files:
+                if f.startswith("pinctrl-") and f[len("pinctrl-") :].isdigit():
+                    users += [(ph, node.name) for ph in _cells(node / f)]
+    found = {}
+    for phandle, user in users:
+        pins, pulls, name = groups.get(phandle, ((), None, ""))
+        for i, gpio in enumerate(pins if pulls else ()):
+            value = pulls[i] if len(pulls) > 1 else pulls[0]
+            if value in _DT_PULL:
+                found[gpio] = (_DT_PULL[value], f"the device tree's {name} pins of {user}")
+    return found
+
+
+def known_pulls(gpios, root=DEVICE_TREE):
+    """{gpio: (pull, why)} for pins whose pull pinctrl cannot read: the running device tree's, else the SoC's
+    power-on default."""
+    try:
+        from_tree = device_tree_pulls(root)
+    except OSError:
+        from_tree = {}
+    return {g: from_tree.get(g, (power_on_pull(g), "the BCM2835 power-on default")) for g in gpios}
+
+
 class PiEnvironment:
     """Take over the serial port and the HAT GPIOs for the test; undo it after.
 
@@ -1283,9 +1337,10 @@ class PiEnvironment:
     * Every HAT GPIO's state (its function, its pull, an output's level: the UART
       function of GPIO14/15 among them) is read with pinctrl before anything is
       changed and set back afterwards. A pull pinctrl cannot read (a Pi 3 and
-      older print ``--``) cannot be set back: such a line is left with the
-      pull-down the test reads it with, and `left_pulled_down` says which. An
-      output whose level cannot be read is refused before anything is changed.
+      older print ``--``) is set to a known one instead (known_pulls: the
+      running device tree's for the pin, else the SoC's power-on default), and
+      `assumed_pulls` says which and why. An output whose level cannot be read
+      is refused before anything is changed.
     """
 
     SPI_MODULES = ("spidev", "spi_bcm2835")
@@ -1299,7 +1354,7 @@ class PiEnvironment:
         self.daemon_was_active = False
         self.sysrq_before = None
         self.saved_pins = None
-        self.left_pulled_down = []
+        self.assumed_pulls = {}
         self.gettys = []
 
     def read_pins(self):
@@ -1321,8 +1376,9 @@ class PiEnvironment:
                 f"pinctrl cannot read the level of output GPIO{', GPIO'.join(map(str, unreadable))}, so it could "
                 "not be put back after the test"
             )
-        self.saved_pins = saved
-        self.left_pulled_down = sorted(g for g, (_f, pull, _level) in saved.items() if pull == "--")
+        self.assumed_pulls = known_pulls(sorted(g for g, (_f, pull, _level) in saved.items() if pull == "--"))
+        self.saved_pins = {g: (f, self.assumed_pulls[g][0] if g in self.assumed_pulls else pull, level)
+                           for g, (f, pull, level) in saved.items()}  # fmt: skip
         if self.manage_daemon:
             active = run_quiet(["systemctl", "is-active", "fpgas-tt"]).stdout.strip()
             self.daemon_was_active = active == "active"
@@ -1372,11 +1428,12 @@ class PiEnvironment:
             faults += self.pins.set_pins(self.saved_pins)
             if not faults:
                 self.log(f"Put back the state of the {len(self.saved_pins)} HAT GPIOs")
-            if self.left_pulled_down:
-                self.log(
-                    "pinctrl cannot read this Pi's pulls, so these are left with the pull-down the test read "
-                    f"them with: {describe_gpios(self.left_pulled_down)}"
-                )
+            if self.assumed_pulls:
+                by_why = {}
+                for g, (pull, why) in sorted(self.assumed_pulls.items()):
+                    by_why.setdefault(why, []).append(f"GPIO{g} {pull}")
+                self.log("PULLS: pinctrl cannot read this Pi's pulls, so they were set to known ones: "
+                         + "; ".join(f"{why}: {', '.join(pins)}" for why, pins in by_why.items()))  # fmt: skip
         put_back = ["sysctl", "-q", "-w", f"kernel.sysrq={self.sysrq_before}"]
         if self.sysrq_before not in (None, "0") and run_quiet(put_back).returncode != 0:
             faults.append(f"kernel.sysrq was not set back to {self.sysrq_before}")

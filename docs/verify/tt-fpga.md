@@ -160,8 +160,11 @@ How it tests:
   follows.
 * On the Pi, for the test only: the serial getty is stopped and SysRq is off (the console's GPIO14/15 are HAT
   JC2/JC3), and the SPI drivers are unloaded (they hold GPIO7 to 11). Every HAT GPIO's function, pull and
-  output level is read with `pinctrl` first and set back afterwards. A Pi 3 cannot read back its pulls: there
-  the 21 lines are left with the pull-down the test reads them with, and the test's output says so.
+  output level is read with `pinctrl` first and set back afterwards. A Pi 3 cannot read back its pulls, so there
+  each line's pull is set to a known one: the pull the running device tree gives that pin (an enabled node's
+  pin group with `brcm,pull`, such as the UART's on GPIO14/15), else the chip's power-on default (GPIO0 to 8
+  pulled up, GPIO9 to 27 pulled down: Broadcom's *BCM2835 ARM Peripherals*, table 6-31). The test's
+  `PULLS:` line says which pull each line was given, and why.
 * **Afterwards the board's SDK is started again** (`tt_sdk_start.py`, as before rpi-hwid), so the chip is back
   on the project the board starts with. The SDK rewrites its own `boot.log` then, as at every power-on. An SDK
   that does not start again is a warning in the report, not the board's result.
