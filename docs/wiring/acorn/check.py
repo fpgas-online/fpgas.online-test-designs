@@ -282,7 +282,7 @@ TODAY = {
     ]
 }
 PASS = "**pass**: an Acorn on the Pi 5 setup"
-BLADE_FAIL = "**fail, a first install on someone's own hardware**"
+BLADE_FAIL = "**fail, the docs' install steps run on a Compute Blade**"
 
 
 def pages(c):
@@ -340,14 +340,22 @@ def pages(c):
         out += [
             "**No Compute Blade has passed the whole check yet.** This is what one prints today: a Compute Blade "
             "with a Compute Module 5 and an Acorn CLE-101 still on the image it was sold with (pi16 at ps1, "
-            "5 October 2026). Two things are wrong and neither is the wiring or the installation: the card has "
+            "7 October 2026, installed by the steps above). Two things are wrong and neither is the wiring or the "
+            "installation: the card has "
             "not been converted to the fpgas.online design, and in this boot the JTAG test cannot have its TMS "
             "pin, which the header's serial port holds.",
             "",
-            transcript(BLADE_FAIL, "pi16", "2026-10-05", "CLE-101").strip(),
+            transcript(BLADE_FAIL, "pi16", "2026-10-07", "CLE-101").strip(),
             "",
-            "That run was made with version 0.0.post1100 of the check. From 0.0.post1111 the `jtag` line says "
-            "what holds the pin instead: `P1 JTAG could not be probed: GPIO14 (TMS) is held by … (uart0)`.",
+            "On the blades at ps1 every `sudo` first prints `sudo: unable to resolve host pi16: Name or service "
+            "not known` (with the blade's own name): the blade's root does not list its name. It is harmless and "
+            "is left out above.",
+            "",
+            "**A card still on the vendor's XDMA sample image gets no test at all** (pi20 at ps1, 7 October 2026): "
+            "the check prints `unconverted: runs the vendor XDMA sample image, not the fpgas.online design` and "
+            "`acorn: fail (no test ran)`. That is expected for now and says nothing about the cables "
+            "([#155](https://github.com/fpgas-online/fpgas.online-test-designs/issues/155)); the bench check with "
+            "a meter is what such a card's cables rest on until it is converted.",
             "",
             "A pass will list every test with `pass` and end there, with no `RESULT:` part; on a Compute Blade "
             "`p2-gpio` stays `not run`, because J5 and H5 are not wired.",
@@ -371,8 +379,8 @@ def pages(c):
         "cavity is the number on the wire's flag.",
         "",
         f"**Before you touch a cable: {c.power_off}** After moving a wire, boot and run the check again. One "
-        "test can be run on its own, `sudo fpgas-acorn-verify --test jtag` or `--test p2-serial`; its report "
-        "is then JSON on the terminal.",
+        "test can be run on its own, `sudo fpgas-acorn-verify --test jtag` or `--test p2-serial`; it prints "
+        "the usual summary, then the whole report as JSON.",
         "",
         wire_table.strip(),
         "",

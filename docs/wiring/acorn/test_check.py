@@ -63,7 +63,9 @@ def test_the_transcripts_and_failure_rows_come_from_the_tool_reference():
     verify = check.VERIFY.read_text()
     for marker in (check.PASS, check.BLADE_FAIL):
         block = check.transcript(marker)
-        assert block in verify and block.startswith("```text\n$ sudo fpgas-verify --no-publish")
+        assert block in verify and block.startswith(
+            ("```text\n$ sudo fpgas-verify --no-publish", "```text\n$ sudo fpgas-acorn-verify --no-publish")
+        )
     for c in wiring.CARRIERS.values():
         rows = check.failures(c).splitlines()[2:]
         assert len(rows) >= 14 and all(r.startswith("| `") for r in rows)
