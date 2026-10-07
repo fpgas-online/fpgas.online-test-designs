@@ -1721,35 +1721,42 @@ def hat_pins(gpios):
 
 
 def row_faults(row, cabling):
-    """[(group, text)] for a required row that is not ok: each fault on the ribbon it is on."""
+    """The faults of a required row that is not ok, each on the ribbon it is on: [{"group", "signal", "absent",
+    "via", "text"}]. absent: the signal's own HAT line was not reached, and no wrong line was; via: for a uo_out
+    line the chip drives from this row's signal, that signal."""
     name, lines = row["signal"], profile_lines(cabling)
     group = name.split("[")[0]
     own = lines[name]
     port = CABLINGS[cabling][group]
     where = f"{name} (pin {ribbon_pin(name)})"
+
+    def fault(text, g=group, s=name, absent=False, via=None):
+        return {"group": g, "signal": s, "absent": absent, "via": via, "text": text}
+
     if row["status"] == "contention":
-        return [(group, f"{where} could not be driven by the demo board: something else drives it")]
+        return [fault(f"{where} could not be driven by the demo board: something else drives it")]
     if row["status"] == "untested":
-        return [(group, f"{where} could not be tested")]
+        return [fault(f"{where} could not be tested")]
     expected, observed = set(row["expected"]), set(row["observed"])
     missing, extra = expected - observed, observed - expected
     faults = []
     if own in missing:
-        faults.append((group, f"{where} did not reach {port}{ribbon_pin(name)}"
-                              + (f": it reached {hat_pins(extra)}" if extra else "")))  # fmt: skip
+        reached = f": it reached {hat_pins(extra)}" if extra else ""
+        faults.append(fault(f"{where} did not reach {port}{ribbon_pin(name)}{reached}", absent=not extra))
     elif extra:
-        faults.append((group, f"{where} also reached {hat_pins(extra)} (a short)"))
+        faults.append(fault(f"{where} also reached {hat_pins(extra)} (a short)"))
     for gpio in sorted(missing - {own}):  # the uo_out line the chip's factory test drives from this signal
         out = next(s for s, g in lines.items() if s.startswith("uo_out") and g == gpio)
-        faults.append(("uo_out", f"{out} (pin {ribbon_pin(out)}) did not reach {CABLINGS[cabling]['uo_out']}"
-                                 f"{ribbon_pin(out)} (driven by the chip from {name})"))  # fmt: skip
+        text = (f"{out} (pin {ribbon_pin(out)}) did not reach {CABLINGS[cabling]['uo_out']}{ribbon_pin(out)} "
+                f"(driven by the chip from {name})")  # fmt: skip
+        faults.append(fault(text, "uo_out", out, absent=not extra, via=name))
     if not faults:
-        faults.append((group, f"{where}: {row['detail'] or row['status']}"))
+        faults.append(fault(f"{where}: {row['detail'] or row['status']}"))
     return faults
 
 
 def pin_id_faults(result):
-    """[(group, text)] for the lines a pin-id round did not hear as expected."""
+    """The lines a pin-id round did not hear as expected, as row_faults gives them."""
     lines = profile_lines(result["cabling"])
     faults = []
     for data in result.get("pin_id", {}).values():
@@ -1758,17 +1765,19 @@ def pin_id_faults(result):
             if r["status"] in ("ok", "idle"):
                 continue
             heard = "nothing" if r["decoded"] is None else pin_id_display(r["decoded"])
+            hat = HAT_GPIO_LABELS[r["gpio"]]
             if r["expected"] is None:
-                faults.append(("", f"{HAT_GPIO_LABELS[r['gpio']]} heard {heard}, where nothing was sent"))
+                faults.append({"group": "", "signal": None, "absent": False, "via": None,
+                               "text": f"{hat} heard {heard}, where nothing was sent"})  # fmt: skip
                 continue
             name = sent[r["expected"]]
             if lines[name] == r["gpio"]:
-                group, what = name.split("[")[0], name
+                what = name
             else:  # a uo_out line, which the chip drives from `name`
                 what = next(s for s, g in lines.items() if s.startswith("uo_out") and g == r["gpio"])
-                group = "uo_out"
-            faults.append((group, f"{what} (pin {ribbon_pin(what)}): its name was not read on "
-                                  f"{HAT_GPIO_LABELS[r['gpio']]} (read: {heard})"))  # fmt: skip
+            faults.append({"group": what.split("[")[0], "signal": what, "absent": False, "via": None,
+                           "text": f"{what} (pin {ribbon_pin(what)}): its name was not read on {hat} "
+                                   f"(read: {heard})"})  # fmt: skip
     return faults
 
 
@@ -1781,23 +1790,36 @@ def verdict(result, strict=True):
         if result["asic_loopback"]:
             return 0, f"all 24 Pmod signals reached the Pi where they should: {where} (uo_out through the chip)"
         return 0, f"the signals tested reached the Pi where they should ({where}); uo_out was not tested"
-    faults = [f for r in result["rows"] if r["required"] and r["status"] != "ok" for f in row_faults(r, cabling)]
+    found_profile = result.get("cabling_found")
+    if found_profile and found_profile != cabling:  # the ribbons are on each other's ports: that is the fault
+        other = ", ".join(f"{g} on HAT {CABLINGS[found_profile][g]}" for g in GROUPS)
+        return 1, f"the ribbons look cabled as {other}, not as {where}: move each to its port"
+    bad = [r for r in result["rows"] if r["required"] and r["status"] != "ok"]
+    faults = [f for r in bad for f in row_faults(r, cabling)]
+    # A uo_out line missed from a ui_in row comes through that ui_in signal's shared HAT line, the uio ribbon and
+    # the chip: when the uio signal on that line is at fault itself, that is the explanation, not the uo_out
+    # ribbon (a uio ribbon not plugged in, say).
+    bad_uio = {r["signal"] for r in bad if r["signal"].startswith("uio[")}
+    partner = {n: f"uio[{j}]" for n in expected_direct(cabling) for j in connected_uio(cabling, n)}
+    faults = [f for f in faults if not (f["via"] or "").startswith("ui_in[") or partner.get(f["via"]) not in bad_uio]
     faults += pin_id_faults(result)
     parts = []
-    found_profile = result.get("cabling_found")
-    if found_profile and found_profile != cabling:
-        other = ", ".join(f"{g} on HAT {CABLINGS[found_profile][g]}" for g in GROUPS)
-        parts.append(f"the ribbons look cabled as {other}, not as {where}")
     for group in GROUPS:
-        mine = list(dict.fromkeys(text for g, text in faults if g == group))
-        rows = [r for r in result["rows"] if r["signal"].startswith(group + "[") and r["required"]]
-        if rows and all(r["status"] == "open" for r in rows):
-            parts.append(f"{ribbon(group, cabling)}: none of its {len(rows)} signals reached the Pi "
-                         "(not plugged in, or on another port)")  # fmt: skip
-        elif mine:
-            more = f"; and {len(mine) - NAMED_PER_RIBBON} more" if len(mine) > NAMED_PER_RIBBON else ""
-            parts.append(f"{ribbon(group, cabling)}: {'; '.join(mine[:NAMED_PER_RIBBON])}{more}")
-    parts += list(dict.fromkeys(text for g, text in faults if g == ""))
+        mine = [f for f in faults if f["group"] == group]
+        absent = {f["signal"] for f in mine if f["absent"]}
+        if len(absent) == 8:
+            parts.append(f"{ribbon(group, cabling)}: none of its 8 signals reached the Pi (not plugged in, or on "
+                         "another port)")  # fmt: skip
+            continue
+        texts, seen = [], set()
+        for f in mine:  # one fault per signal: a uo_out line missed from two rows is one missing wire
+            if f["signal"] not in seen:
+                seen.add(f["signal"])
+                texts.append(f["text"])
+        if texts:
+            more = f"; and {len(texts) - NAMED_PER_RIBBON} more" if len(texts) > NAMED_PER_RIBBON else ""
+            parts.append(f"{ribbon(group, cabling)}: {'; '.join(texts[:NAMED_PER_RIBBON])}{more}")
+    parts += list(dict.fromkeys(f["text"] for f in faults if f["group"] == ""))
     if strict and not result["asic_loopback"]:
         why = next((n for n in result["notes"] if "factory" in n or "could not select" in n), "")
         parts.append("uo_out was not tested: the chip's factory test project was not confirmed"

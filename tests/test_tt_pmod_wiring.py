@@ -895,3 +895,289 @@ def test_discover_mode_reports_without_verdict(capsys):
     out = capsys.readouterr().out
     assert "signals reached a Pi GPIO" in out
     assert "Wiring check" not in out
+
+
+# -- The boot check's line: WIRING: names the ribbon and the pin -----------------------------------------
+
+ASIC = ["--cabling", "asic"]  # as the boot check runs it: the cabling the boards have
+WHERE = "ui_in on HAT JA, uio on HAT JB, uo_out on HAT JC"
+
+
+def asic_verdict(wires, argv=ASIC, pin_id=False, **model):
+    result, _log = run_simulated(BoardModel(wires, **model), argv=argv, pin_id=pin_id)
+    return ttw.verdict(result)
+
+
+def test_the_boards_cabling_passes_and_says_where_every_ribbon_is():
+    code, line = asic_verdict(asic_wires(), project="drives_uio", pin_id=True)
+    assert (code, line) == (
+        0,
+        f"all 24 Pmod signals reached the Pi where they should: {WHERE} (uo_out through the chip)",
+    )
+
+
+def test_a_broken_wire_is_named_by_its_ribbon_signal_and_pins():
+    code, line = asic_verdict(standard_wires(cabling="asic", drop=(RP2040["ui_in"][5],)))
+    assert code == 1 and line == "the ui_in ribbon (HAT JA): ui_in[5] (pin 8) did not reach JA8"
+
+
+def test_two_crossed_wires_say_where_each_went():
+    code, line = asic_verdict(standard_wires(cabling="asic", swap=(RP2040["ui_in"][4], RP2040["ui_in"][5])))
+    assert code == 1 and line.startswith("the ui_in ribbon (HAT JA): ")
+    assert "ui_in[4] (pin 7) did not reach JA7: it reached JA8" in line
+    assert "ui_in[5] (pin 8) did not reach JA8: it reached JA7" in line
+
+
+def test_a_ribbon_that_is_not_plugged_in_is_said_as_that():
+    for group, port in (("ui_in", "JA"), ("uo_out", "JC")):
+        code, line = asic_verdict(standard_wires(cabling="asic", unplug=(group,)))
+        assert code == 1
+        assert f"the {group} ribbon (HAT {port}): none of its 8 signals reached the Pi" in line, line
+
+
+def test_a_uo_out_wire_is_named_on_the_uo_out_ribbon_though_the_chip_drives_it():
+    code, line = asic_verdict(standard_wires(cabling="asic", drop=(RP2040["uo_out"][5],)))
+    assert code == 1 and line == (
+        "the uo_out ribbon (HAT JC): uo_out[5] (pin 8) did not reach JC8 (driven by the chip from uio[5])"
+    )
+
+
+def test_ribbons_cabled_the_other_way_round_are_said_to_be():
+    code, line = asic_verdict(standard_wires(cabling="fpga"))
+    assert (code, line) == (1, "the ribbons look cabled as ui_in on HAT JC, uio on HAT JB, uo_out on HAT JA, "
+                               f"not as {WHERE}: move each to its port")  # fmt: skip
+
+
+def test_the_uio_ribbon_unplugged_is_not_also_blamed_on_the_uo_out_ribbon():
+    """ui_in[1..3] share their HAT lines with uio[1..3], so with the uio ribbon out the chip no longer sees them
+    and uo_out[1..3] stay still: the uio ribbon is the fault, and the uo_out ribbon is not named."""
+    code, line = asic_verdict(standard_wires(cabling="asic", unplug=("uio",)))
+    assert (code, line) == (1, "the uio ribbon (HAT JB): none of its 8 signals reached the Pi (not plugged in, or "
+                               "on another port)")  # fmt: skip
+
+
+def test_more_than_four_faults_on_a_ribbon_are_counted():
+    wires = standard_wires(cabling="asic", drop=(RP2040["ui_in"][0], *RP2040["ui_in"][4:8]))
+    code, line = asic_verdict(wires)
+    assert code == 1 and line.startswith("the ui_in ribbon (HAT JA): ui_in[0] (pin 1) did not reach JA1; ")
+    assert line.endswith("; and 1 more") and line.count("did not reach") == 4
+
+
+def test_no_factory_test_means_uo_out_is_not_tested_and_the_board_does_not_pass():
+    result, _log = run_simulated(BoardModel(asic_wires(), project="drives_uio"), argv=ASIC, projects=())
+    code, line = ttw.verdict(result)
+    assert code == 1 and "uo_out was not tested: the chip's factory test project was not confirmed" in line
+
+
+def test_a_name_not_read_on_a_line_is_named_by_the_signal_that_sent_it():
+    result = {"cabling": "asic", "pin_id": {"uio": {"transmitting": {"uio[4]": "IO4"}, "rows": [
+        {"gpio": 26, "expected": "IO4", "decoded": None, "status": "open"},
+        {"gpio": 4, "expected": "IO4", "decoded": "?xy", "status": "garbled"},
+        {"gpio": 7, "expected": None, "decoded": "IO4", "status": "unexpected"},
+    ]}}}  # fmt: skip
+    assert [(f["group"], f["text"]) for f in ttw.pin_id_faults(result)] == [
+        ("uio", "uio[4] (pin 7): its name was not read on JB7 (read: nothing)"),
+        ("uo_out", "uo_out[4] (pin 7): its name was not read on JC7 (read: (garbled))"),
+        ("", "JB1 heard IO4, where nothing was sent"),
+    ]
+
+
+# -- The pin-id decoder is the one the package installs -----------------------------------------------
+
+
+def test_the_pin_id_scanner_calls_the_real_decoder_as_it_is_now(monkeypatch):
+    """PR #15 called identify_pin(reader, attempts=5), which the decoder no longer takes: a fake scanner hid it."""
+    pinid = ttw.load_sibling("identify_pmod_pins")
+    assert pinid is not None and pinid.__file__.endswith("designs/pmod-pin-id/host/identify_pmod_pins.py")
+    opened = []
+
+    class Reader:
+        def __init__(self, gpio, chip):
+            self.gpio = gpio
+
+        def open(self):
+            opened.append(self.gpio)
+
+        def capture_edges(self, seconds):
+            return []  # a silent line
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(pinid, "GpioReader", Reader)
+    monkeypatch.setattr(pinid, "detect_gpio_chip", lambda: "/dev/gpiochip0")
+    assert ttw.make_pin_id_scanner(pinid)() == dict.fromkeys(ttw.ALL_HAT_GPIOS)
+    assert opened == ttw.ALL_HAT_GPIOS
+
+
+def test_the_pinctrl_helpers_are_found_next_to_the_script():
+    pins = ttw.load_sibling("tt_dip_switches")
+    assert pins is not None and callable(pins.set_pins) and callable(pins.pinctrl)
+
+
+# -- The Pi is put back as it was -------------------------------------------------------------------------
+
+
+class Pinctrl:
+    """pinctrl as tt_dip_switches calls it: `get` answers from `state`, `set` changes it and is recorded."""
+
+    def __init__(self, state, unreadable_pull=False):
+        self.state, self.sets, self.unreadable_pull = dict(state), [], unreadable_pull
+
+    def __call__(self, args, run=None):
+        if args[0] == "get":
+            lines = []
+            for g in map(int, args[1].split(",")):
+                func, pull, level = self.state[g]
+                pull = "--" if self.unreadable_pull else pull
+                lines.append(f"{g}: {func}    {pull} | {level} // GPIO{g} = x")
+            return 0, "\n".join(lines) + "\n"
+        self.sets.append(args[1:])
+        return 0, ""
+
+
+def _env(monkeypatch, pinctrl):
+    pins = ttw.load_sibling("tt_dip_switches")
+    monkeypatch.setattr(pins, "pinctrl", pinctrl)
+    calls = []
+    monkeypatch.setattr(ttw, "run_quiet", lambda cmd, check=False: calls.append(cmd) or _Done())
+    monkeypatch.setattr(ttw.os, "geteuid", lambda: 0)
+    env = ttw.PiEnvironment(manage_daemon=False, log=lambda *_: None, pins=pins)
+    return env, calls
+
+
+class _Done:
+    returncode, stdout, stderr = 0, "", ""
+
+
+BEFORE = {g: ("ip", "pu" if g < 9 else "pd", "hi" if g < 9 else "lo") for g in ttw.ALL_HAT_GPIOS}
+BEFORE[14] = BEFORE[15] = ("a0", "pn", "hi")  # the console UART
+
+
+def test_every_hat_gpio_is_set_back_to_its_function_and_pull(monkeypatch):
+    pinctrl = Pinctrl(BEFORE)
+    env, _calls = _env(monkeypatch, pinctrl)
+    env.enter()
+    assert pinctrl.sets == [] and env.left_pulled_down == []
+    assert env.leave() == []
+    assert sorted(pinctrl.sets) == sorted([str(g), f, p] for g, (f, p, _) in BEFORE.items())
+    assert ["14", "a0", "pn"] in pinctrl.sets
+
+
+def test_a_pi_3_s_pulls_cannot_be_read_back_so_they_are_left_pulled_down_and_said(monkeypatch):
+    pinctrl = Pinctrl(BEFORE, unreadable_pull=True)
+    env, _calls = _env(monkeypatch, pinctrl)
+    env.enter()
+    assert env.left_pulled_down == sorted(ttw.ALL_HAT_GPIOS)
+    assert env.leave() == []
+    assert all(len(s) == 2 for s in pinctrl.sets)  # the function only: no pull given
+    assert ["14", "a0"] in pinctrl.sets
+
+
+def test_an_output_whose_level_cannot_be_read_is_refused_before_anything_changes(monkeypatch):
+    pinctrl = Pinctrl({**BEFORE, 26: ("op", "pd", "--")})
+    env, calls = _env(monkeypatch, pinctrl)
+    with pytest.raises(RuntimeError, match="cannot read the level of output GPIO26"):
+        env.enter()
+    assert calls == [] and pinctrl.sets == []
+    assert env.leave() == []  # nothing to put back
+
+
+def test_what_cannot_be_put_back_is_said(monkeypatch):
+    pinctrl = Pinctrl(BEFORE)
+    env, _calls = _env(monkeypatch, pinctrl)
+    env.enter()
+    monkeypatch.setattr(env.pins, "pinctrl", lambda args, run=None: (1, "pinctrl: no such pin"))
+    assert all(f.startswith("GPIO") and "could not be set" in f for f in env.leave())
+
+
+# -- main: the line, the exit, and a stop ------------------------------------------------------------
+
+
+class _Env:
+    def __init__(self, *a, **k):
+        self.pins, self.left = object(), []
+
+    def enter(self):
+        pass
+
+    def leave(self):
+        self.left.append(True)
+        return _Env.faults
+
+
+class _Hat:
+    chip_path = "/dev/gpiochip-fake"
+
+    def __init__(self, gpios):
+        pass
+
+    def open(self, bias):
+        pass
+
+    def close(self):
+        pass
+
+
+def _main(monkeypatch, capsys, measure, faults=()):
+    """main() with the Pi and the board replaced: `measure` stands in for run_wiring_test."""
+    _Env.faults = list(faults)
+    envs = []
+    monkeypatch.setattr(ttw, "PiEnvironment", lambda *a, **k: envs.append(_Env()) or envs[-1])
+    monkeypatch.setattr(ttw, "HatGpio", _Hat)
+    monkeypatch.setattr(ttw, "load_sibling", lambda name: object())
+    monkeypatch.setattr(ttw, "make_pin_id_scanner", lambda pinid: None)
+    monkeypatch.setattr(ttw, "open_raw_serial", lambda port: 99)
+    monkeypatch.setattr(ttw.os, "close", lambda fd: None)
+    monkeypatch.setattr(ttw, "start_firmware", lambda link, fw: None)
+    monkeypatch.setattr(ttw, "stop_firmware", lambda link: None)
+    monkeypatch.setattr(ttw.Rp2Link, "cmd", lambda self, text, timeout=None: ["OK"])
+    monkeypatch.setattr(ttw, "run_wiring_test", lambda *a, **k: measure())
+    monkeypatch.setattr(ttw, "report", lambda result, discover: None)
+    before = {sig: ttw.signal.getsignal(sig) for sig in ttw.STOPS}
+    code = ttw.main(["--port", "/dev/ttyACM0", *ASIC, "--no-daemon"])
+    assert {sig: ttw.signal.getsignal(sig) for sig in ttw.STOPS} == before  # handlers given back
+    out = capsys.readouterr().out.splitlines()
+    assert envs[0].left == [True]  # the Pi is put back whatever happened
+    said = [line for line in out if line.startswith("WIRING: ")]
+    assert said and out[-1] == f"RESULT: {'PASS' if code == 0 else 'FAIL'}"
+    return code, said[-1][len("WIRING: ") :]
+
+
+def _passed():
+    return {"pass": True, "asic_loopback": True, "cabling": "asic", "observed": {}}
+
+
+def test_main_says_the_verdict_and_exits_with_it(monkeypatch, capsys):
+    assert _main(monkeypatch, capsys, _passed)[0] == 0
+
+
+def test_a_stop_during_the_test_puts_the_pi_back_and_is_exit_2(monkeypatch, capsys):
+    def stopped():
+        ttw.signal.raise_signal(ttw.signal.SIGTERM)  # the boot check's unit being stopped
+        raise AssertionError("not reached: the handler raises")
+
+    code, line = _main(monkeypatch, capsys, stopped)
+    assert (
+        code == 2
+        and line == f"the wiring test was stopped (signal {int(ttw.signal.SIGTERM)}): the wiring was not tested"
+    )
+
+
+def test_unsteady_readings_fail_and_a_board_that_does_not_answer_is_exit_2(monkeypatch, capsys):
+    def unsteady():
+        raise ttw.UnstableReading("the two ui_in passes disagree on ui_in[3] (intermittent contact?)")
+
+    def silent():
+        raise ttw.ProtocolError("timeout waiting for the RP2")
+
+    assert _main(monkeypatch, capsys, unsteady) == (
+        1, "the readings were not steady, so the wiring is not known to be right: the two ui_in passes disagree "
+           "on ui_in[3] (intermittent contact?)")  # fmt: skip
+    assert _main(monkeypatch, capsys, silent) == (2, "the wiring could not be tested: timeout waiting for the RP2")
+
+
+def test_a_pi_not_put_back_is_exit_2_after_the_verdict(monkeypatch, capsys):
+    code, line = _main(monkeypatch, capsys, _passed, faults=["GPIO8 could not be set to ip pu: x"])
+    assert code == 2 and line.endswith("; and the Pi was not put back as it was (GPIO8 could not be set to ip pu: x)")
+    assert line.startswith("all 24 Pmod signals reached the Pi where they should")
