@@ -13,6 +13,7 @@ the ASIC loopback, and on the shorted bits.
 """
 
 import importlib.util
+import itertools
 import pathlib
 import socket
 import threading
@@ -43,13 +44,14 @@ class BoardModel:
 
     UI, UIO, UO = RP2040["ui_in"], RP2040["uio"], RP2040["uo_out"]
 
-    def __init__(self, wires, project="factory", extra_shorts=(), held_ui_in=(), hard_ui_in=()):
+    def __init__(self, wires, project="factory", extra_shorts=(), held_ui_in=(), hard_ui_in=(), dip_level=0):
         self.wires = wires
         self.project = project  # what the chip is running right now
         self.rp2 = {g: ("in", None) for g in self.UI + self.UIO + self.UO}
         self.pi_bias = "down"
         self.pi_pull_up = set()
-        self.held_ui_in = set(held_ui_in)  # ui_in bits a DIP switch pulls low through a resistor
+        self.held_ui_in = set(held_ui_in)  # ui_in bits a DIP switch pulls to dip_level through a resistor
+        self.dip_level = dip_level  # 1: a switch that is on ties its line to 3.3 V (the demo board's own)
         self.hard_ui_in = set(hard_ui_in)  # ui_in bits shorted to a rail (low)
         self.levels = {}
         self.contentions = []
@@ -132,7 +134,7 @@ class BoardModel:
             if kind == "rp2":
                 mode, val = self.rp2[gpio]
                 if gpio in self.UI and self.UI.index(gpio) in self.held_ui_in:
-                    medium[net] = 0
+                    medium[net] = self.dip_level
                 if gpio in self.UI and self.UI.index(gpio) in self.hard_ui_in:
                     strong.setdefault(net, []).insert(0, ("rail", gpio, 0))  # a rail always wins
                 if mode == "out":
@@ -919,14 +921,18 @@ def wiring_line(wires, pin_id=True):
     (placed({"ui_in": "JB", "uio": "JA", "uo_out": "JC"}),
      "the ui_in and uio ribbons are on each other's HAT ports (JB and JA): swap them"),
     (placed({"ui_in": "JA", "uio": "JC", "uo_out": "JB"}),
-     "the uio and uo_out ribbons are on each other's HAT ports (JC and JB): swap them"),
+     # ui_in[1:3] are then held by the chip's uo_out (the HAT joins JB2-4 to JA2-4): not driven, said
+     "the uio and uo_out ribbons are on each other's HAT ports (JC and JB): swap them; and some ui_in signals could "
+     "not be tested until then"),
     (placed({"ui_in": "JC", "uio": "JB", "uo_out": "JA"}),
-     "the ui_in and uo_out ribbons are on each other's HAT ports (JC and JA): swap them"),
-    # the TT04 board of 4 Sep: all three one position off, and ui_in and uo_out on each other's ports
+     "the ui_in and uo_out ribbons are on each other's HAT ports (JC and JA): swap them; and some uio signals could "
+     "not be tested until then"),
+    # the TT04 board of 4 Sep: all three turned round, ui_in and uo_out on each other's ports. The chip's uo_out
+    # then drives the uio lines it lands on, so those are not driven: ui_in is named, the rest after its reseat
     (placed({"ui_in": "JC", "uio": "JB", "uo_out": "JA"}, offset=("ui_in", "uio", "uo_out")),
-     "these ribbons are plugged in turned round and one position over (ui_in on HAT JC (it goes on JA), uio on "
-     "HAT JB, uo_out on HAT JA (it goes on JC)): Pmod pin n arrives on HAT pin 12-n, and Pmod pins 1 and 7 are on "
-     "the HAT's ground; plug each in the right way round, Pmod pin 1 to HAT pin 1"),
+     "the ui_in ribbon is plugged in turned round and one position over (ui_in on HAT JC (it goes on JA)): Pmod "
+     "pin n arrives on HAT pin 12-n, and Pmod pins 1 and 7 are on the HAT's ground; plug it in the right way "
+     "round, Pmod pin 1 to HAT pin 1; and some uio signals could not be tested until then"),
     # review 2: uo_out alone, and with ui_in, turned round (its lines are what uio reaches through the chip)
     (placed({"ui_in": "JA", "uio": "JB", "uo_out": "JC"}, offset=("uo_out",)),
      "the uo_out ribbon is plugged in turned round and one position over (uo_out on HAT JC): Pmod pin n arrives on "
@@ -1425,3 +1431,56 @@ def test_the_sdk_s_config_is_off_for_our_project_enable_and_on_again_for_the_res
     assert project.index("t.apply_configs = False") < project.index("p.enable()")
     restore = fw[fw.index("project, freq, was = _saved") :]
     assert restore.index("t.apply_configs = _saved_apply") < restore.index("project.enable()")
+
+
+PLACEMENTS = [
+    (dict(zip(ttw.GROUPS, order)), turned)
+    for order in itertools.permutations(ttw.PORTS)
+    for n in range(4)
+    for turned in itertools.combinations(ttw.GROUPS, n)
+]
+
+
+@pytest.mark.parametrize("ports, turned", PLACEMENTS, ids=lambda v: str(v))
+def test_no_ribbon_placement_makes_two_parties_drive_one_net(ports, turned):
+    """Review 3's sweep: the 6 orders of the three ribbons over JA, JB and JC, each with every set of them turned
+    round. No placement may make the RP2040 drive a net the chip drives, and only the right one passes."""
+    code, line, fights = wiring_line(placed(ports, offset=turned))
+    assert fights == [], line
+    right = ports == {"ui_in": "JA", "uio": "JB", "uo_out": "JC"} and not turned
+    assert (code == 0) == right, line
+
+
+def test_a_dip_switch_that_is_on_is_named_and_on_ui_in0_blames_no_ribbon():
+    for bit, pin in ((4, 7), (0, 1)):
+        model = BoardModel(asic_wires(), project="drives_uio", held_ui_in={bit}, dip_level=1)
+        result, _log = run_simulated(model, argv=ASIC)
+        assert model.contentions == []
+        code, line = ttw.verdict(result)
+        said = f"the ui_in ribbon (to HAT JA): ui_in[{bit}] (Pmod pin {pin}) is held high on the demo board (a DIP " \
+               "switch that is on? set all DIP switches off)"  # fmt: skip
+        assert code == 1 and line.startswith(said), line
+        assert "uio ribbon" not in line and "ui_in[1]" not in line  # nothing the held ui_in[0] explains is blamed
+
+
+def test_a_resync_that_fails_trusts_no_reply_and_the_board_gets_the_fallback(monkeypatch, capsys):
+    restored = []
+    fallbacks = []
+
+    def no_pong(self, timeout=5.0):
+        raise ttw.ProtocolError("no PONG from the RP2 while bringing its replies back in step")
+
+    def measure():
+        monkeypatch.setattr(ttw.Rp2Link, "resync", no_pong)
+        return _passed()
+
+    monkeypatch.setattr(ttw.Rp2Link, "cmd", lambda self, text, timeout=None: restored.append(text) or ["OK"])
+    code, line = _main(monkeypatch, capsys, measure, fallbacks=fallbacks)
+    assert code == 2 and fallbacks == ["/dev/ttyACM0"]
+    assert "; and the board's replies were out of step (no PONG" in line
+
+
+def test_the_command_server_does_not_use_an_sdk_still_logging_to_its_boot_log():
+    fw = ttw.build_firmware("rp2040")
+    find = fw[fw.index("def _find_tt():") : fw.index("def _sdk(args):")]
+    assert "Logger" in find and "OutFile" in find and "RuntimeError" in find

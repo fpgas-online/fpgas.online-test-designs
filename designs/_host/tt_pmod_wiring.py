@@ -40,7 +40,9 @@ restarts it afterwards, disables SysRq for the duration (the serial console
 shares GPIO14/15 with HAT port JC), and unloads the SPI kernel modules that
 claim GPIO7-11. Requirements: python3-libgpiod (v1.6+ or v2.x).
 
-Prints ``RESULT: PASS`` or ``RESULT: FAIL`` as the last line and exits 0/1.
+The ``WIRING:`` line is the result, named by ribbon and Pmod pin; ``RESULT: PASS`` or ``RESULT: FAIL`` is the
+last line. Exit 0: the wiring is right; 1: it is not, or readings were not steady; 2: the test could not be
+made, or did not put the Pi or the board back (the boot check's `error`).
 """
 
 import argparse
@@ -268,6 +270,11 @@ def _find_tt():
         t = globals().get('tt')
         if t is None:
             raise RuntimeError('the SDK is not running on the board (no tt object): start it first')
+        # The SDK's main.py logs to /boot.log until it has finished starting (it closes the file at its end): while
+        # that is open, anything the SDK logs for us would be written to it. So not used then.
+        lg = sys.modules.get('ttboard.log')
+        if getattr(getattr(lg, 'Logger', None), 'OutFile', None) is not None:
+            raise RuntimeError('the SDK is still logging to its boot.log (its start-up did not finish): not used')
         _tt = t
     return _tt
 
@@ -1336,8 +1343,16 @@ def _sudo(cmd):
     return cmd if os.geteuid() == 0 else ["sudo", "-n", *cmd]
 
 
+# Every command the test runs on the Pi is bounded, so the teardown is (TEARDOWN_SECONDS).
+COMMAND_TIMEOUT = 5
+PINCTRL_TIMEOUT = 2
+
+
 def run_quiet(cmd, check=False):
-    result = subprocess.run(_sudo(cmd), capture_output=True, text=True)
+    try:
+        result = subprocess.run(_sudo(cmd), capture_output=True, text=True, timeout=COMMAND_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        result = subprocess.CompletedProcess(cmd, 124, "", f"{cmd[0]} did not finish within {COMMAND_TIMEOUT} s")
     if check and result.returncode != 0:
         raise RuntimeError(f"{' '.join(cmd)} failed: {result.stderr.strip()}")
     return result
@@ -1426,6 +1441,8 @@ class PiEnvironment:
         self.unload_modules = unload_modules
         self.log = log
         self.pins = pins or load_sibling("tt_dip_switches")  # pinctrl, PIN_RE and set_pins
+        if self.pins is not None:
+            self.pins.PINCTRL_TIMEOUT = PINCTRL_TIMEOUT  # its own is 10 s: 22 calls in the teardown
         self.daemon_was_active = False
         self.sysrq_before = None
         self.saved_pins = None
@@ -1670,10 +1687,34 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
         partners[name] = sorted(set(partners.get(name, [])) | set(ps))
 
     if asic_loopback:
-        # Confirmed uio_oe = 0: every uio bit is safe to drive, including the
-        # ones sharing a line with the chip's uo_out, where the chip agrees
-        # with the RP2 once it has propagated. Drive strongly for that hand-over.
-        drivable = set(range(8))
+        # Confirmed uio_oe = 0: the chip does not drive uio. But a wrong ribbon can join a uio net to a line the
+        # chip's uo_out drives, so a uio bit is driven only where nothing else can be driving its net: the reverse
+        # walk found its line (a driven line does not follow the Pi's pull), it followed the RP2's weak pulls, or
+        # the cabling puts it on the line of its own uo_out copy (which agrees with it: the hand-over is driven
+        # strongly). uio[6:7] sit on the Pi's fixed I2C pull-ups, which neither test can see past: they are driven
+        # when the rest of the uio ribbon was found in place, as only that ribbon reaches those HAT pins.
+        lines = profile_lines(cabling)
+        # found on its own line, and the only uio bit found there: two on one line means one of them follows the
+        # other through the chip (a uo_out copy landing on its net), so neither is known safe
+        uio_at = {}
+        for n, ps in reverse.items():
+            if n.startswith("uio["):
+                for g in ps:
+                    uio_at.setdefault(g, set()).add(n)
+        found = {k for k in range(8)
+                 if set(reverse.get(signal_name("uio", k), ())) == {lines[signal_name("uio", k)]}
+                 and uio_at.get(lines[signal_name("uio", k)]) == {signal_name("uio", k)}}  # fmt: skip
+        floats = {signal_bit(n) for n, ok in uio_floating.items() if ok}
+        latched = set(latch_bits(cabling))
+        fixed = {k for k in range(8) if lines[signal_name("uio", k)] in PI_FIXED_PULLUP_GPIOS}
+        judged = [set(reverse.get(signal_name("uio", k), ())) for k in range(8) if k not in fixed | latched]
+        own = [lines[signal_name("uio", k)] for k in range(8) if k not in fixed | latched]
+        # in place: no uio bit found on another line, and most found on their own (an open wire finds none)
+        in_place = all(not ps or ps == {line} for ps, line in zip(judged, own)) and \
+            2 * sum(ps == {line} for ps, line in zip(judged, own)) >= len(own)  # fmt: skip
+        drivable = found | floats | latched | (fixed if in_place else set())
+        for k in sorted(set(range(8)) - drivable):
+            notes.append(f"uio[{k}] is not driven: its line may be driven by something else (a wrong ribbon?)")
         strength = 3
     else:
         if not uio_floating:
@@ -2054,9 +2095,11 @@ def verdict(result, strict=True):
         return 0, f"the signals tested reached the Pi where they should ({where}); uo_out was not tested"
     held = result.get("held_inputs", {})
     bad = [r for r in result["rows"] if r["required"] and r["status"] != "ok"]
-    if "ui_in[0]" in held:  # with ui_in[0] held, the factory test drives uio, which holds ui_in[1:3] too: said once
-        explained = {f"ui_in[{k}]" for k in (1, 2, 3)}
-        bad = [r for r in bad if r["signal"] not in explained or r["signal"] not in held]
+    if held.get("ui_in[0]") == "high":
+        # With ui_in[0] high the factory test drives uio (its counter), which holds ui_in[1:3] through the HAT and
+        # leaves uio untested: all of that follows from ui_in[0], which alone is said. Held low it explains nothing.
+        bad = [r for r in bad if not (r["signal"] in {"ui_in[1]", "ui_in[2]", "ui_in[3]"} and r["signal"] in held)
+               and not (r["signal"].startswith("uio[") and r["status"] == "untested")]  # fmt: skip
     walk = [f for r in bad for f in row_faults(r, cabling, held)]
     whole, _place = ribbon_findings(result)
     # A signal whose own wire is at fault explains what the chip copies from it, and what pin-id heard of it.
@@ -2108,6 +2151,11 @@ def verdict(result, strict=True):
         if texts:
             more = f"; and {len(texts) - NAMED_PER_RIBBON} more" if len(texts) > NAMED_PER_RIBBON else ""
             parts.append(f"{ribbon(group, port)}: {'; '.join(texts[:NAMED_PER_RIBBON])}{more}")
+    if whole:  # ribbons a misplaced one leaves untestable (not driven: a chip output may be on their lines)
+        untested = [g for g in GROUPS if g not in whole and any(
+            r["signal"].startswith(g + "[") and r["status"] == "untested" for r in bad)]  # fmt: skip
+        if untested:
+            parts.append(f"and some {' and '.join(untested)} signals could not be tested until then")
     stray = list(dict.fromkeys(f["text"] for f in faults if f["group"] == ""))
     if stray and not parts:
         parts.append("; ".join(stray[:NAMED_PER_RIBBON]) + (f"; and {len(stray) - NAMED_PER_RIBBON} more"
@@ -2190,10 +2238,11 @@ class Stopped(Exception):
 STOPS = (signal.SIGTERM, signal.SIGINT, signal.SIGALRM)
 # The test's own limit, inside the boot check's (tt_fpga.WIRING_TIMEOUT), which kills it outright: at this limit it
 # still stops cleanly and puts everything back (and has time left for the SDK fallback below).
-TIME_LIMIT = 100
-# The most the teardown after the limit takes: mem 5 s, creset 5 s, sdk restore 30 s, leaving the command server and
-# putting the Pi back about 10 s; then, only if the board was not put back, the SDK fallback, at most 75 s.
-TEARDOWN_SECONDS = 50
+TIME_LIMIT = 90
+# The most the teardown after the limit takes, every step bounded: resync 5 s, mem 5 s, sdk restore 30 s, leaving the
+# command server 6 s; putting the Pi back: 22 pinctrl calls at PINCTRL_TIMEOUT (44 s) and 6 commands at
+# COMMAND_TIMEOUT (30 s). Then, only if the board was not put back, the SDK fallback, at most FALLBACK_SECONDS.
+TEARDOWN_SECONDS = 5 + 5 + 30 + 6 + 22 * 2 + 6 * 5
 FALLBACK_SECONDS = 75
 # Lines a reader of the boot report needs, which keeps only the end of the output: said again after the report.
 KEPT = ("MEM:", "PULLS:", "FALLBACK:", "RESTORE:")
@@ -2278,21 +2327,25 @@ def main(argv=None):
             signal.alarm(0)
             try:
                 link.resync()  # a command a stop cut short may still have its reply on the way
-                out(f"MEM: {mem_free(link.cmd('mem', timeout=5))} bytes of the RP2's heap free after the test")
-            except ProtocolError as e:
-                out(f"MEM: not read after the test: {e}")
-            if args.fpga_reset:
+            except ProtocolError as e:  # nothing it answers now can be trusted: the fallback puts the board back
+                board_back = f"the board's replies were out of step ({e})"
+            if board_back is None:
                 try:
-                    link.cmd("creset 1", timeout=5)
+                    out(f"MEM: {mem_free(link.cmd('mem', timeout=5))} bytes of the RP2's heap free after the test")
                 except ProtocolError as e:
-                    board_back = f"the FPGA reset was not released: {e}"
-            if args.sdk:
+                    out(f"MEM: not read after the test: {e}")
+                if args.fpga_reset:
+                    try:
+                        link.cmd("creset 1", timeout=5)
+                    except ProtocolError as e:
+                        board_back = f"the FPGA reset was not released: {e}"
+            if args.sdk and board_back is None:
                 try:
                     out(f"RESTORE: {' '.join(link.cmd('sdk restore', timeout=30)[1:])}")
                 except ProtocolError as e:
                     board_back = f"the board's SDK state could not be put back from RAM: {e}"
             stop_firmware(link)
-            served = False
+            served = board_back is not None
     except UnstableReading as e:
         code, line = 1, f"the readings were not steady, so the wiring is not known to be right: {e}"
     except Stopped as e:
@@ -2314,7 +2367,10 @@ def main(argv=None):
             if hat is not None:
                 hat.close()
         finally:
-            back = env.leave()
+            try:
+                back = env.leave()
+            except Exception as e:
+                back = [f"putting the Pi back failed: {type(e).__name__}: {e}"]
             if link is not None and (served or board_back):
                 why_not = sdk_fallback(args.port)
                 started = "it was started again" if why_not is None else f"starting it again failed too ({why_not})"
