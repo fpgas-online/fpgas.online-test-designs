@@ -87,7 +87,7 @@ repository.
 ### Sqrl's factory firmware
 
 What each Welland Acorn runs is in the
-[current verify results](../verify.md#current-results);
+[current verify results](../verify/current-results.md#current-results);
 [#53](https://github.com/fpgas-online/fpgas.online-test-designs/issues/53)
 tracks moving them all to the pinned release. A board still on Sqrl's factory
 (cryptocurrency mining) firmware cannot be programmed over PCIe.

@@ -89,7 +89,7 @@ so an IPv6 client may hang; over WireGuard the `10.21.0.1` A record works.
 ## FPGA Board Inventory
 
 What each board runs and whether it passes its boot check is in the
-[current verify results](../verify.md#current-results) (and, for the Acorns,
+[current verify results](../verify/current-results.md#current-results) (and, for the Acorns,
 [#53](https://github.com/fpgas-online/fpgas.online-test-designs/issues/53)).
 The tables here hold what is recorded nowhere else: the Pis' MACs and revision
 codes, and the FPGAs' serials and DNAs.

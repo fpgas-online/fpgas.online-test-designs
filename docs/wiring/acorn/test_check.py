@@ -77,7 +77,7 @@ def test_the_blade_pages_stop_the_check_on_the_cm4_blades_where_it_is_typed_and_
 
 
 def test_the_transcripts_and_failure_rows_come_from_the_tool_reference():
-    verify = check.VERIFY.read_text()
+    verify = check.RESULTS.read_text()
     command = {check.PASS: "fpgas-verify", check.BLADE_FAIL: "fpgas-acorn-verify"}  # as each was run
     for marker, tool in command.items():
         block = check.transcript(marker)
@@ -88,11 +88,13 @@ def test_the_transcripts_and_failure_rows_come_from_the_tool_reference():
     with pytest.raises(wiring.WiringError):
         check.transcript("**no such transcript**")
     # the tool's own reference still points at both pages, and keeps the anchor its summary prints
+    wiring_page = (check.VERIFY / "acorn-wiring.md").read_text()
     assert (
-        "boards/acorn/building/compute-blade/verifying-1.html" in verify
-        and "boards/acorn/building/rpi-5/verifying-1.html" in verify
+        "boards/acorn/building/compute-blade/verifying-1.html" in wiring_page
+        and "boards/acorn/building/rpi-5/verifying-1.html" in wiring_page
     )
-    assert "\n### Common failures\n" in verify and "#### On a Compute Blade" not in verify
+    assert "\n## Common failures\n" in check.COMMON_FAILURES.read_text()
+    assert not any("# On a Compute Blade" in page.read_text() for page in check.VERIFY.glob("*.md"))
 
 
 @pytest.mark.parametrize("key", CARRIERS)
