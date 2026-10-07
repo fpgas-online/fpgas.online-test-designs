@@ -341,6 +341,21 @@ TODAY = {
         "",
     ]
 }
+# When JTAG may be run on a blade, in the words of the page "verifying 3" (check/compute-blade.md): its last list's
+# steps 2 and 3. Said wherever a blade page gives a command that runs the `jtag` test.
+JTAG_CONDITIONS = (
+    "in a boot with the header's serial port off, and only after steps 2 and 3 of the last list on the page "
+    '"verifying 3" pass (check that GPIO14 is free; check that nothing on the card drives GPIO14)'
+)
+JTAG_FIRST = {
+    "blade": (
+        "**The check runs `jtag` too, whose TMS wire is GPIO14.** In a boot with the header's serial port on, "
+        "`jtag` fails without running the JTAG tool (the result printed below). In a boot with the header's "
+        'serial port off (the page "verifying 3"), run the check only after steps 2 and 3 of the last list on '
+        "that page pass (check that GPIO14 is free; check that nothing on the card drives GPIO14). If either "
+        "fails, do not run the check in that boot: something holds or drives the TMS wire."
+    )
+}
 PASS = "**pass**: an Acorn on the Pi 5 setup"
 BLADE_FAIL = "**fail, the docs' install steps run on a Compute Blade**"
 
@@ -375,6 +390,7 @@ def pages(c):
         "",
         install.strip(),
         "",
+        *([JTAG_FIRST["blade"], ""] if c.key == "blade" else []),
         "`fpgas-verify` checks whichever board this host is set up for, as the check at boot does; "
         "`fpgas-acorn-verify` checks the Acorn whatever the host is set up for. On a host set up for an Acorn "
         "the two print the same.",
@@ -458,9 +474,16 @@ def pages(c):
             if c.key == "blade"
             else ""
         )
-        + ". One "
-        "test can be run on its own, `sudo fpgas-acorn-verify --test jtag` or `--test p2-serial`; it prints "
-        "the usual summary, then the whole report as JSON.",
+        + ". One test can be run on its own, "
+        + (
+            "`sudo fpgas-acorn-verify --no-publish --test p2-serial` or `sudo fpgas-acorn-verify --no-publish "
+            "--test jtag`; it prints the usual summary, then the whole report as JSON. Run `--test jtag` only "
+            f'as the page "verifying 3" says: {JTAG_CONDITIONS}. In a boot with the header\'s serial port off, '
+            'the same goes for the whole check, which runs `jtag` too (the page "verifying 1").'
+            if c.key == "blade"
+            else "`sudo fpgas-acorn-verify --test jtag` or `--test p2-serial`; it prints the usual summary, then "
+            "the whole report as JSON."
+        ),
         "",
         wire_table.strip(),
         "",
