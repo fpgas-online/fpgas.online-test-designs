@@ -131,6 +131,16 @@ source = "Uptime Lab's assembly guide names both as modules for the Compute Blad
 claim = "The lengths (how far a wire is cut back, stripped, flagged)"
 source = "our choice, not measured"
 
+
+[[sources]]
+claim = "That a 2.54 mm Dupont crimp terminal crimps onto the Molex cable's wire and holds"
+source = "not verified by us: the wire's gauge has not been measured or read from Molex's drawing by us, and no cable has been crimped this way by us yet"
+
+[[sources]]
+carrier = "blade"
+claim = "That the 2×5 housing on the Extension Port and the 1×4 housing on the UART header fit side by side"
+source = "not verified by us: Uptime Lab's board photo shows the two headers next to each other; no housings have been fitted there by us"
+
 [lengths]
 cut_back = 10
 resistor = 15

@@ -153,6 +153,26 @@ def turned_harms(c, plan):
     return any(label_of(s) != "GND" for sigs in turned_rails(c, plan).values() for s in sigs)
 
 
+def ground_shows_way_round(c):
+    """What the bench check's ground beep says about which way round each housing is, from the wiring: it shows it
+    where the housing turned round puts its GND wire on a pin that is not ground."""
+    out = []
+    for connector, conn in wiring.CONNECTORS.items():
+        plan = housing(c, connector)
+        on = turned(c, plan)[conn["pins"][0]]
+        if on == "GND":
+            out.append(
+                f"The beep does not show which way round the {connector} housing is: turned round, its GND wire "
+                "still sits on a ground pin, so look at its marked corner."
+            )
+        else:
+            out.append(
+                f"The beep also shows that the {connector} housing is the right way round: turned round, its GND "
+                f"wire would sit on {on}, not a ground pin (that it would then stay silent is not tried by us)."
+            )
+    return " ".join(out)
+
+
 # Said after a warning that names a rail on a signal wire.
 HARM = (
     "above the most AMD's Artix 7 data sheet allows on an FPGA pin (DS181, Table 1: VCCO + 0.55 V, with VCCO at "
@@ -1435,7 +1455,7 @@ def procedure_parts(c, restart=False):
         f"on contact 1 ({label_of(first)}) of a plug and the other on {c.shell}: it must "
         f"beep. Do the same for the other plug. Then contact {len(pins)} of each plug ({label_of(pins[-1])}, the wire "
         "you cut back): against the shell and against every other contact it must be silent. That the shell is the "
-        "host's ground is not measured by us; contact 1's beep is what shows it.",
+        "host's ground is not measured by us; contact 1's beep is what shows it. " + ground_shows_way_round(c),
         (f"The bench check on a {c.name}", png(shell_check_name(c))),
         *(
             (*picture, f"The {connector} cavity picture again, for where its housing sits and which corner is marked:")
@@ -1650,7 +1670,9 @@ def fit_actions(c):
         "Put the Acorn in the M.2 slot and fit its screw.",
         f"Fit {on[0]}, and {on[1]}.",
         f"Before powering on, look at both housings again, as on the bench check: the {c1} housing's marked corner "
-        f"is on {at1}, and the {c2} housing's on {at2}. Turned round, {turned}" + (f", {HARM}." if harms else "."),
+        f"is on {at1}, and the {c2} housing's on {at2}. Turned round, {turned}"
+        + (f", {HARM}." if harms else ".")
+        + " Fitted, the housings get only this look; the meter check was the bench check's.",
     ]
 
 
