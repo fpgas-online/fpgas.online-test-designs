@@ -18,7 +18,7 @@ The parts for **one** Raspberry Pi 5 host; for several hosts, that many of each.
 | Have it | Qty | Part | Part number | What it is for |
 |---|---|---|---|---|
 | ☐ | 1 | Raspberry Pi 5 | — | the host |
-| ☐ | 1 | M.2 M-key PCIe HAT for the Raspberry Pi 5 that leaves the 40-pin header free | — | the sheet shows a Waveshare PoE M.2 HAT+ |
+| ☐ | 1 | Waveshare PoE M.2 HAT+ (B) | — | the M.2 M-key PCIe HAT the pictures show: it takes cards up to 2280 and leaves the 40-pin header free |
 | ☐ | 1 | SQRL Acorn CLE-215+, CLE-215 or CLE-101 (the same card is sold as LiteFury and NiteFury) | — | M.2 M-key, 2280 |
 | ☐ | 1 | Molex Pico-EZmate cable assembly, 6 circuits, a plug at each end | Molex 0369200601 | cut in half: one half is the P1 cable, the other the P2 cable. All six wires are black |
 | ☐ | 1 | heat-shrink tube, about 2 mm, a few centimetres | — | over each cut-back wire end |
@@ -161,11 +161,11 @@ The P2 cavity picture again, for where its housing sits and which corner is mark
 1. Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE.
 2. If the housings are on the headers (after the bench check), take them off.
 3. Press the P1 plug into socket P1 and the P2 plug into socket P2 on the underside of the Acorn, each the way round it was when you put the flags on, until fully seated.
-4. Put the Acorn in the M.2 slot and fit its screw.
+4. Put the Acorn in the M.2 slot and fit its screw, in the standoff marked 2280 at the far end of the Waveshare PoE M.2 HAT+ (B).
 5. Fit the P1 housing on the 40-pin header pins 19 to 26, marked corner on pin 19, and the P2 housing on the 40-pin header pins 5 to 10, marked corner on pin 5.
 6. Before powering on, look at both housings again, as on the bench check: the P1 housing's marked corner is on pin 19 of the 40-pin header, and the P2 housing's on pin 5 of the 40-pin header. Turned round, either housing puts its wires on the wrong pins. Fitted, the housings get only this look; the meter check was the bench check's.
 
 ![Fitting the cables on a Raspberry Pi 5, in order](acorn-cable-pi5-fit.png){.only-light}
 ![Fitting the cables on a Raspberry Pi 5, in order](acorn-cable-pi5-fit-dark.png){.only-dark}
 
-Photos: Waveshare (PoE M.2 HAT+), RHS Research (LiteFury underside; the Acorn is the same PCB).
+Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acorn is the same PCB).

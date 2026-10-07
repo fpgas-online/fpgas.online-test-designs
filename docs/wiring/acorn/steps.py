@@ -78,10 +78,6 @@ ASSUMED = (
 BOX_LINE = 20  # from line to line in the box of assumptions
 ACORN_PAD = (188, 0, 308, 80)  # the plated half-round mounting pad at the end of the card, in acorn-cw.jpg
 
-# hat-ccw.jpg, in photo pixels: the part shown, the centres of the header's two columns, the centre of
-# its first row, and from one row to the next.
-HAT = {"crop": (260, 40, 510, 520), "columns": (449, 471), "row": 84, "pitch": 21.68}
-
 
 @dataclass
 class Housing:
@@ -422,21 +418,21 @@ def host_blade(sh, c, plan, x, y, w):
 
 
 def host_pi5(sh, c, plan, x, y, w):
-    data = c.headers[plan.header]
-    crop, (left, right) = HAT["crop"], HAT["columns"]
+    data, hat = c.headers[plan.header], c.hat
+    crop, (left, right) = hat.crop, hat.columns
     photo = 119  # the photo's width
     tw = w - photo - 62  # the pin numbers are either side of the header, which is at the photo's right edge
-    (px, py, _pw, ph), k = sh.photo("hat-ccw.jpg", x + tw + 22, y, photo, crop=crop)
+    (px, py, _pw, ph), k = sh.photo(hat.photo, x + tw + 22, y, photo, crop=crop)
     rows = data.grid(1, data.count)
     r0, r1 = (next(r for r, row in enumerate(rows) if n in row) for n in (plan.first, plan.last))
     if rows[0][0] != 1 or len(rows[0]) != 2:
         raise wiring.WiringError(f"{c.key}: the photo of the {data.name} is of two columns with pin 1 top left")
 
     def row_y(r):
-        return py + (HAT["row"] + HAT["pitch"] * r - crop[1]) * k
+        return py + (hat.row + hat.pitch * r - crop[1]) * k
 
-    half = HAT["pitch"] * k / 2
-    frame = (px + (left - crop[0] - 11) * k, row_y(r0) - half, px + (right - crop[0] + 11) * k, row_y(r1) + half)
+    half = hat.pitch * k / 2
+    frame = (px + (left - crop[0]) * k - half, row_y(r0) - half, px + (right - crop[0]) * k + half, row_y(r1) + half)
     highlight(sh, frame)
     # the housing's first pin beside its first row, its last pin beside its last row, and pin 1 if there is room
     style = {"size": T, "h": 20, "fg": INK, "stroke": INK, "pad": 4}
@@ -450,7 +446,7 @@ def host_pi5(sh, c, plan, x, y, w):
             f'<path d="M{frame[0] - 5:.1f},{row_y(0) - 12:.1f} L{pin1:.1f},{row_y(0):.1f}" stroke="{INK}" '
             'stroke-width="2"/>'
         )
-    ty = para(sh, x, y + 14, "Pi 5 with the PoE M.2 HAT+, from above", tw, "bold")
+    ty = para(sh, x, y + 14, f"Pi 5 with the {hat.name}, from above", tw, "bold")
     ty = para(
         sh,
         x,
@@ -1626,8 +1622,8 @@ def guide(c):
     return out
 
 
-# Where the M.2 slot is in each host's photo, in photo pixels: blade.jpg, hat-ccw.jpg.
-M2_SLOT = {"blade": (1736, 44, 1846, 322), "pi5": (22, 74, 214, 162)}
+# Where the M.2 slot is in blade.jpg, in photo pixels. A HAT's is in wiring.toml.
+M2_SLOT = {"blade": (1736, 44, 1846, 322)}
 
 
 def order(sh, x, y, n):
@@ -1668,7 +1664,8 @@ def fit_actions(c):
         "If the housings are on the headers (after the bench check), take them off.",
         "Press the P1 plug into socket P1 and the P2 plug into socket P2 on the underside of the Acorn, each the way "
         "round it was when you put the flags on, until fully seated.",
-        "Put the Acorn in the M.2 slot and fit its screw.",
+        "Put the Acorn in the M.2 slot and fit its screw"
+        + (f", in the standoff marked {c.hat.largest_card} at the far end of the {c.hat.name}." if c.hat else "."),
         f"Fit {on[0]}, and {on[1]}.",
         f"Before powering on, look at both housings again, as on the bench check: the {c1} housing's marked corner "
         f"is on {at1}, and the {c2} housing's on {at2}. Turned round, {turned}"
@@ -1761,22 +1758,22 @@ def fit_host_blade(sh, c, y):
 
 def fit_host_pi5(sh, c, y):
     """The HAT with its M.2 slot boxed and the rows of both housings boxed, each with its marked corner."""
-    w = 250
-    (px, py, _pw, ph), k = sh.photo("hat-ccw.jpg", 30, y, w)
-    x0, y0, x1, y1 = M2_SLOT["pi5"]
+    w, hat = 250, c.hat
+    (px, py, _pw, ph), k = sh.photo(hat.photo, 30, y, w)
+    x0, y0, x1, y1 = hat.m2_slot
     slot = (px + x0 * k, py + y0 * k, px + x1 * k, py + y1 * k)
     highlight(sh, slot)
     tx = px + w + 70
-    sh.text(tx, py + 16, "Pi 5 with the PoE M.2 HAT+, from above.", T, "bold")
-    sh.text(tx, py + 40, "M.2 slot: the yellow box at the top left", T)
-    left, right = HAT["columns"]
-    half = HAT["pitch"] * k / 2
+    ty = para(sh, tx, py + 16, f"Pi 5 with the {hat.name}, from above.", W - 10 - tx, "bold")
+    sh.text(tx, ty, "M.2 slot: the yellow box at the top left", T)
+    left, right = hat.columns
+    half = hat.pitch * k / 2
     for connector in wiring.CONNECTORS:
         plan = housing(c, connector)
         rows = c.headers[plan.header].grid(1, c.headers[plan.header].count)
         r0, r1 = (next(r for r, row in enumerate(rows) if n in row) for n in (plan.first, plan.last))
-        top, bottom = (py + (HAT["row"] + HAT["pitch"] * r) * k for r in (r0, r1))
-        frame = (px + (left - 11) * k, top - half, px + (right + 11) * k, bottom + half)
+        top, bottom = (py + (hat.row + hat.pitch * r) * k for r in (r0, r1))
+        frame = (px + left * k - half, top - half, px + right * k + half, bottom + half)
         highlight(sh, frame)
         corner(sh, frame)
         sh.tag(frame[2] + 8, (frame[1] + frame[3]) / 2, connector, BOX, size=T, h=22, fg=INK, stroke=INK, pad=5)

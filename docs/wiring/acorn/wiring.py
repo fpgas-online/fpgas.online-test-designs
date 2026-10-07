@@ -59,6 +59,48 @@ class Header:
 
 
 @dataclass
+class Hat:
+    """The HAT a carrier's pictures draw the host with (wiring.toml [carriers.<key>.hat]): its facts, and where
+    things are in its photo, in photo pixels, as measure_hat.py measures them."""
+
+    name: str  # as the pages print it
+    product: str  # the product string of its HAT EEPROM
+    page: str  # the maker's product page
+    drawing: str  # the dimension drawing `photo` is cut from
+    largest_card: str  # the longest M.2 card it takes: "2280"
+    credit: str  # the photo credit
+    photo: str  # in photos/: header on the right edge, pin 1 at the top
+    columns: tuple  # the centres of the header's two columns, pin 1's first
+    row: float  # the centre of the header's first row
+    pitch: float  # from one row to the next
+    pin1_box: tuple  # pins 1 to 26, boxed on the wiring sheet
+    crop: tuple  # the part of the photo a cable picture shows
+    m2_slot: tuple  # the M.2 socket
+
+
+HAT_FIELDS = tuple(Hat.__dataclass_fields__)
+
+
+def _hat(key, raw):
+    """The carrier's HAT, or None. Refuses a table that lacks a field or has one more."""
+    if raw is None:
+        return None
+    if set(raw) != set(HAT_FIELDS):
+        missing, extra = sorted(set(HAT_FIELDS) - set(raw)), sorted(set(raw) - set(HAT_FIELDS))
+        raise WiringError(f"wiring.toml: {key}: the hat table lacks {missing} or has {extra} besides")
+    boxes = ("pin1_box", "crop", "m2_slot")
+    for f in boxes:
+        x0, y0, x1, y1 = raw[f]
+        if not (x0 < x1 and y0 < y1):
+            raise WiringError(f"wiring.toml: {key}: hat {f} {raw[f]} is not a box (x0, y0, x1, y1)")
+    if not (raw["columns"][0] < raw["columns"][1] and raw["pitch"] > 0):
+        raise WiringError(f"wiring.toml: {key}: hat columns must run left to right, and pitch be more than 0")
+    if not (HERE / "photos" / raw["photo"]).is_file():
+        raise WiringError(f"wiring.toml: {key}: hat photo photos/{raw['photo']} is not there")
+    return Hat(**{f: tuple(raw[f]) if isinstance(raw[f], list) else raw[f] for f in HAT_FIELDS})
+
+
+@dataclass
 class Carrier:
     key: str
     name: str
@@ -72,6 +114,7 @@ class Carrier:
     shell: str = ""  # bare metal of the host that is its ground, for a meter probe
     power_off: str = ""  # how the host is made dead before the cables are fitted, as a sentence
     contact: str = ""  # whom the reader tells what the guide cannot settle: "Tell {contact}."
+    hat: Hat | None = None  # the HAT the pictures draw on the host, if it has one
 
     def tag(self, sig):
         """The host's name for the pin a signal lands on, as the sheet prints it; None for none."""
@@ -128,7 +171,7 @@ def _carrier(key, raw):
     c = Carrier(
         key, raw["name"], raw["jtag_pins"], set(raw.get("resistors", [])), raw.get("resistor_value", ""), headers,
         wires, parts, raw.get("host", raw["name"]), raw["shell"], raw.get("power_off", "Power off the host."),
-        raw.get("contact", CONTACT),
+        raw.get("contact", CONTACT), _hat(key, raw.get("hat")),
     )  # fmt: skip
     _check(c)
     return c
@@ -173,6 +216,8 @@ def _check(c):
             errors.append(f"{c.key}: a part needs a whole `qty` of 1 or more and a `part`: {part}")
         if set(part) - {"qty", "part", "number", "note"}:
             errors.append(f"{c.key}: part {part.get('part')!r} has keys other than qty, part, number, note")
+    if c.hat and not any(c.hat.name in part["part"] for part in c.parts):
+        errors.append(f"{c.key}: no part names the HAT the pictures draw, {c.hat.name}")
     if c.resistors and not c.resistor_value:
         errors.append(f"{c.key}: resistors listed but no resistor_value")
     for r in c.resistors:

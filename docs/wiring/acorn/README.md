@@ -15,6 +15,7 @@ host, kept as one table and turned into everything that shows it.
 | `generated/` | The output, committed. [fpgas.online-docs](https://github.com/fpgas-online/fpgas.online-docs) copies it onto [docs.fpgas.online](https://docs.fpgas.online/en/latest/boards/acorn/wiring.html); do not edit it by hand. |
 | `GOALS.md` | What the sheets have to show, and what must not be on them. |
 | `photos/`, `prep_photos.py` | The board photos the sheets use, and the script that cut them from the vendors' originals. |
+| `measure_hat.py` | Measures where the HAT's header, pin 1 and M.2 slot are in its photo; `--check` compares with `wiring.toml`. |
 | `fonts/` | Liberation Sans and Mono (SIL Open Font License, `fonts/COPYRIGHT`), drawn as outlines in the sheets. |
 
 ## Changing the wiring
@@ -67,7 +68,15 @@ them; the docs enable it). The printed booklet keeps the light one.
 ## Photos
 
 `prep_photos.py` made `photos/` from the vendors' originals, which are not in
-this repository: the Compute Blade top view is Uptime Lab's
-(docs.computeblade.com), the HAT is Waveshare's dimension drawing of the PoE
-M.2 HAT+, and the card underside is RHS Research's LiteFury photo (the Acorn is
-the same PCB). Each sheet credits them.
+this repository (put them in `ref/` to run it again): the Compute Blade top view
+is Uptime Lab's (docs.computeblade.com), the HAT is Waveshare's dimension
+drawing of the PoE M.2 HAT+ (B), and the card underside is RHS Research's
+LiteFury photo (the Acorn is the same PCB). Each sheet credits them.
+
+The HAT is the one table `[carriers.pi5.hat]` in `wiring.toml`: its name, the
+product string of its HAT EEPROM, Waveshare's page and drawing, the largest card
+it takes, and where its header, pin 1 and M.2 slot are in the photo.
+`measure_hat.py` measures those places in the photo, scaled by the drawing's
+mounting holes; `measure_hat.py --check` (and the tests) fail if `wiring.toml`
+says otherwise. Only the (B) is drawn: the PoE M.2 HAT+ without the (B) takes
+2230 and 2242 cards only, and an Acorn is a 2280.
