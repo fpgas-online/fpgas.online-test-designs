@@ -98,7 +98,8 @@ def finding(keys=None):
     joins = spoken(f"{header_name(k)} to {W.cables[k]}" for k in keys)
     which = "each header to its port" if len(keys) > 1 else "the header to its port"
     return (
-        f"**Finding the headers.** {says('printed', 'edge')} A 12-pin Pmod cable joins {which} on the "
+        f"**Finding the headers.** {says('printed', 'edge')} A 10-pin ribbon cable, its 3.3 V pin left out, "
+        f"joins {which} on the "
         f"{W.board['hat']}, pin 1 to pin 1: {joins}. A USB-C cable joins the demo board to a USB port of the "
         "Raspberry Pi.\n"
     )
@@ -113,8 +114,12 @@ MAKERS_LISTS = {"demo": "The demo board's sockets", "hat": "The Pmod HAT's ports
 
 
 def makers():
-    """What the makers' documents say, as three short lists, one fact to a bullet: on the cables page only."""
-    out = ["**From the makers' documents, not checked by us on a board.**"]
+    """What the makers' documents, Tim and the cameras say, as three short lists, one fact to a bullet: on the
+    cables page only."""
+    out = [
+        "**Not checked by us on a board:** from the makers' documents, from Tim Ansell's answer of 7 October "
+        "2026, and from the boards' cameras."
+    ]
     for group, lead in MAKERS_LISTS.items():
         facts = [f for f in W.facts.values() if f["group"] == group]
         out.append(f"**{lead}**\n\n" + "\n".join(f"- {f['says']}." for f in facts))

@@ -66,7 +66,7 @@ class Wiring:
     measurements: tuple
     unmeasured: dict
     sources: dict
-    facts: dict  # key -> {says, source}: what the makers' documents say
+    facts: dict  # key -> {says, source}: what the makers' documents, Tim and the cameras say
 
     def wire(self, group, bit):
         return next(w for w in self.wires if w.group == group and w.bit == bit)

@@ -141,8 +141,8 @@ def test_the_pin_1_warning_is_under_every_picture():
         "**Pin 1 on the picture.** Pin 1 (gold) is drawn where Tiny Tapeout's drawing of the demo board puts it, "
         "not checked by us: seen from above, Pmod edge toward you, the right-hand end of the row farther from the "
         "edge. The HAT's ports are drawn the same way; where their printed 1 is has not been checked by us. Find "
-        "pin 1 on each connector by its marking before plugging a cable in. A 2x6 cable turned round puts 3.3 V "
-        "on signal pins."
+        "pin 1 on each connector by its marking before plugging a cable in. A cable turned round puts ground on "
+        "signal pins."
     )
     for name in WIRE_PAGES:  # the display's picture is no picture of cables, so has no pin 1 to warn about
         text = FILES[name]
@@ -158,7 +158,10 @@ def test_the_pin_1_warning_is_under_every_picture():
 
 def test_the_cables_page_lists_what_the_makers_say_one_fact_to_a_bullet_under_three_leads():
     text = FILES["tt-fpga-cables.md"]
-    assert "**From the makers' documents, not checked by us on a board.**" in text
+    assert (
+        "**Not checked by us on a board:** from the makers' documents, from Tim Ansell's answer of 7 October "
+        "2026, and from the boards' cameras."
+    ) in text
     leads = ["**The demo board's sockets**", "**The Pmod HAT's ports**", "**The cables**"]
     assert [text.index(lead) for lead in leads] == sorted(text.index(lead) for lead in leads)
     bullets = [line for line in text.splitlines() if line.startswith("- ")]
@@ -166,7 +169,9 @@ def test_the_cables_page_lists_what_the_makers_say_one_fact_to_a_bullet_under_th
     listed = sorted((f for f in W.facts.values() if f["group"] in order), key=lambda f: order.index(f["group"]))
     assert bullets == [f"- {f['says']}." for f in listed]
     assert all(bullet.count(". ") <= 1 for bullet in bullets)  # one or two sentences each
-    assert "- If a straight twelve-wire cable is used, it joins the two boards' 3.3 V supplies." in bullets
+    assert "- If a straight twelve-wire cable is used instead, it joins the two boards' 3.3 V supplies." in bullets
+    cables = [b for b in bullets if b[2:] in {f["says"] + "." for f in W.facts.values() if f["group"] == "cables"}]
+    assert cables[0].startswith("- On our boards each cable is a female-to-female 10-pin ribbon cable")
     # Tim's answer of 7 October 2026: the cable fitted at welland, its 3.3 V pin left out
     assert any(
         b.startswith("- On our boards each cable is a female-to-female 10-pin ribbon cable")
@@ -184,7 +189,9 @@ def test_a_pin_table_page_points_at_the_cables_page_instead_of_repeating_the_mak
         assert tables.SEE_CABLES.strip() in text, name
         assert "see [the cables page](tt-fpga-cables.md)" in text, name
         assert not [line for line in text.splitlines() if line.startswith("- ")], name
-        assert "From the makers' documents" not in text and "rainbow" not in text, name
+        assert "Not checked by us on a board:" not in text and "rainbow" not in text, name
+        assert "A 10-pin ribbon cable, its 3.3 V pin left out, joins" in text, name
+        assert "12-pin Pmod cable" not in text, name
         assert "are printed INPUT (`ui_in`), BIDIR (`uio`) and OUTPUT (`uo_out`)." in text, name
 
 

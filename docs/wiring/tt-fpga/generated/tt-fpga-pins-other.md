@@ -33,7 +33,7 @@ The display is on the eight `uo_out` signals, the same ones that go to the OUTPU
 [![The seven-segment display: each segment lettered, with the uo_out bit that lights it](tt-fpga-display.png)](tt-fpga-display.svg){.only-light}
 [![The seven-segment display: each segment lettered, with the uo_out bit that lights it](tt-fpga-display-dark.png)](tt-fpga-display-dark.svg){.only-dark}
 
-**Finding the headers.** The demo board's three Pmod connectors are printed INPUT (`ui_in`), BIDIR (`uio`) and OUTPUT (`uo_out`). They are on the bottom edge, in that order from left to right, with the board held so that its "Tiny Tapeout Demoboard" text reads upright. A 12-pin Pmod cable joins the header to its port on the Digilent Pmod HAT, pin 1 to pin 1: OUTPUT to JC. A USB-C cable joins the demo board to a USB port of the Raspberry Pi.
+**Finding the headers.** The demo board's three Pmod connectors are printed INPUT (`ui_in`), BIDIR (`uio`) and OUTPUT (`uo_out`). They are on the bottom edge, in that order from left to right, with the board held so that its "Tiny Tapeout Demoboard" text reads upright. A 10-pin ribbon cable, its 3.3 V pin left out, joins the header to its port on the Digilent Pmod HAT, pin 1 to pin 1: OUTPUT to JC. A USB-C cable joins the demo board to a USB port of the Raspberry Pi.
 
 How the sockets and cables are made, and what is not yet known about the cables: see [the cables page](tt-fpga-cables.md).
 

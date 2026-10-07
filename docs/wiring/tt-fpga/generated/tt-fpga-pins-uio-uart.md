@@ -5,9 +5,9 @@ For the person at the bench with a Tiny Tapeout demo board that has the FPGA bre
 [![Which Pmod header of the demo board goes to which port of the Pmod HAT](tt-fpga-pmod-cables.png)](tt-fpga-pmod-cables.svg){.only-light}
 [![Which Pmod header of the demo board goes to which port of the Pmod HAT](tt-fpga-pmod-cables-dark.png)](tt-fpga-pmod-cables-dark.svg){.only-dark}
 
-**Pin 1 on the picture.** Pin 1 (gold) is drawn where Tiny Tapeout's drawing of the demo board puts it, not checked by us: seen from above, Pmod edge toward you, the right-hand end of the row farther from the edge. The HAT's ports are drawn the same way; where their printed 1 is has not been checked by us. Find pin 1 on each connector by its marking before plugging a cable in. A 2x6 cable turned round puts 3.3 V on signal pins.
+**Pin 1 on the picture.** Pin 1 (gold) is drawn where Tiny Tapeout's drawing of the demo board puts it, not checked by us: seen from above, Pmod edge toward you, the right-hand end of the row farther from the edge. The HAT's ports are drawn the same way; where their printed 1 is has not been checked by us. Find pin 1 on each connector by its marking before plugging a cable in. A cable turned round puts ground on signal pins.
 
-**Finding the headers.** The demo board's three Pmod connectors are printed INPUT (`ui_in`), BIDIR (`uio`) and OUTPUT (`uo_out`). They are on the bottom edge, in that order from left to right, with the board held so that its "Tiny Tapeout Demoboard" text reads upright. A 12-pin Pmod cable joins each header to its port on the Digilent Pmod HAT, pin 1 to pin 1: INPUT to JA, BIDIR to JB and OUTPUT to JC. A USB-C cable joins the demo board to a USB port of the Raspberry Pi.
+**Finding the headers.** The demo board's three Pmod connectors are printed INPUT (`ui_in`), BIDIR (`uio`) and OUTPUT (`uo_out`). They are on the bottom edge, in that order from left to right, with the board held so that its "Tiny Tapeout Demoboard" text reads upright. A 10-pin ribbon cable, its 3.3 V pin left out, joins each header to its port on the Digilent Pmod HAT, pin 1 to pin 1: INPUT to JA, BIDIR to JB and OUTPUT to JC. A USB-C cable joins the demo board to a USB port of the Raspberry Pi.
 
 How the sockets and cables are made, and what is not yet known about the cables: see [the cables page](tt-fpga-cables.md).
 

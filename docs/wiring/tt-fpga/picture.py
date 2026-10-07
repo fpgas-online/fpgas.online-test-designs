@@ -35,20 +35,21 @@ from wiringlib.palette import role, wire
 
 W, H = 1040, 830
 # Said on the picture and, by tables.py, under it on every page, until where pin 1 is has been read off a
-# board. That a cable turned round puts the power pins on signal pins follows from the numbering:
-# turned_round() works it out from wiring.toml and draw() refuses to say it if it is not so.
+# board. That a cable turned round puts the ground pins on signal pins follows from the numbering:
+# turned_round() works it out from wiring.toml and draw() refuses to say it if it is not so. Our cables
+# carry ground but not 3.3 V (wiring.toml, fact cable-fitted), so ground is what the warning names.
 PIN_1 = (
     "Pin 1 (gold) is drawn where Tiny Tapeout's drawing of the demo board puts it, not checked by us:",
     "seen from above, Pmod edge toward you, the right-hand end of the row farther from the edge.",
     "The HAT's ports are drawn the same way; where their printed 1 is has not been checked by us.",
     "Find pin 1 on each connector by its marking before plugging a cable in.",
-    "A 2x6 cable turned round puts {power} on signal pins.",
+    "A cable turned round puts ground on signal pins.",
 )
 # The same, short enough for the picture itself; the whole of PIN_1 is printed under it on every page.
 PIN_1_SHORT = (
     "Pin 1 (gold) as in Tiny Tapeout's drawing of the board, seen from above; not checked by us.",
     "HAT ports drawn the same way, not checked. Find each pin 1 by its marking first: turned round, "
-    "a cable puts {power} on signal pins.",
+    "a cable puts ground on signal pins.",
 )
 SMALLEST = 15  # px: no text on the picture is smaller
 CELL = 34  # a pin of a connector
@@ -94,14 +95,14 @@ def shared_note(w):
 
 
 def turned_round(w):
-    """The pins the power pins land on when a 2x6 plug is turned half a turn: pin n goes to pin 13 - n."""
-    return sorted(13 - pin for pin in w.pmod["power_pins"])
+    """The pins the ground pins land on when a 2x6 plug is turned half a turn: pin n goes to pin 13 - n."""
+    return sorted(13 - pin for pin in w.pmod["ground_pins"])
 
 
 def pin_1_warning(w):
     """PIN_1 as the three sentences to print, or SystemExit if the wiring no longer makes the last one true."""
     if not set(turned_round(w)) <= set(w.pmod["signal_pins"]):
-        raise SystemExit("picture.py: PIN_1 says a cable turned round puts power on signal pins; it no longer does")
+        raise SystemExit("picture.py: PIN_1 says a cable turned round puts ground on signal pins; it no longer does")
     return [line.format(power=w.pmod["power"]) for line in PIN_1]
 
 
@@ -146,8 +147,8 @@ def draw(w, name):
         raise SystemExit("picture.py is laid out for three headers and three ports")
 
     sh.text(left, 40, f"Tiny Tapeout FPGA demo board to Pmod HAT: {title_end}", 22, "bold")
-    sh.text(left, 66, "Three 12-pin Pmod cables, each pin 1 to pin 1, and one USB-C cable. A diagram, not to scale.",
-            SMALLEST, fill=MUTED)  # fmt: skip
+    cables = "Three 10-pin ribbon cables (no 3.3 V wire), each pin 1 to pin 1, and one USB-C cable. Not to scale."
+    sh.text(left, 66, cables, SMALLEST, fill=MUTED)
 
     sh.rect(left, board_top, right - left, board_bottom - board_top, fill=BOARD_FILL, stroke=INK, sw=2, rx=10)
     sh.text(left + 16, board_top + 28, "Tiny Tapeout demo board", 17, "bold")

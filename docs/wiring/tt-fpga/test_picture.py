@@ -96,7 +96,7 @@ def test_every_picture_says_in_words_that_the_gold_square_is_a_number_not_a_plac
 
 
 def test_the_warning_about_a_cable_turned_round_is_worked_out_from_the_numbering():
-    assert picture.turned_round(W) == [1, 7]  # where pins 12 and 6, the 3.3 V pins, land
+    assert picture.turned_round(W) == [2, 8]  # where pins 11 and 5, the ground pins, land
     d = copy.deepcopy(wiring.DATA)
     d["pmod"].update(signal_pins=[2, 3, 4, 5, 8, 9, 10, 11], ground_pins=[6, 12], power_pins=[1, 7])
     with pytest.raises(SystemExit, match="it no longer does"):
