@@ -52,8 +52,9 @@ ADVICE = (
     (r"GPIO14 \(TMS\) is held by [0-9a-f]+\.serial \(.*the JTAG chain cannot be scanned",
      "The serial port has a pin JTAG needs, so the JTAG test could not run. On a Compute Blade the JTAG TMS "
      "wire and the serial port's TX are the same pin (GPIO14): while the serial port is on, JTAG cannot be "
-     "tested there. Booting with it off (enable_uart in config.txt) should free the pin; that is not yet "
-     f"confirmed on hardware: {ISSUES}/127"),
+     "tested there. Boot with the header's serial port off (enable_uart=0 in config.txt, no console=serial0 in "
+     "cmdline.txt): on a Compute Blade with a CM5 that freed the pin and the JTAG test passed: "
+     f"{ISSUES}/127"),
     # any other holder: not the serial port's own case above, which has its own words
     (r"^(?!.*GPIO14 \(TMS\) is held by [0-9a-f]+\.serial \().*is held by .*the JTAG chain cannot be scanned",
      "A JTAG pin is in use by a driver or by another program (the reason above names it), so the JTAG test "
