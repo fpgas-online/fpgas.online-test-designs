@@ -6,4 +6,5 @@
 4. Put the Acorn in the M.2 slot and fit its screw.
 5. Fit the P1 housing on the 40-pin header pins 19 to 26, marked corner on pin 19, and the P2 housing on the 40-pin header pins 5 to 10, marked corner on pin 5.
 
-![Fitting the cables on a Raspberry Pi 5, in order](acorn-cable-pi5-fit.png)
+![Fitting the cables on a Raspberry Pi 5, in order](acorn-cable-pi5-fit.png){.only-light}
+![Fitting the cables on a Raspberry Pi 5, in order](acorn-cable-pi5-fit-dark.png){.only-dark}

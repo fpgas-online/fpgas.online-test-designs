@@ -18,18 +18,23 @@ For this cable: the other half of the Molex Pico-EZmate cable, which was cut in 
 6. If both wires beep, first see that the two probes do not touch each other and that the cut faces of wires 1 and 6 do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires apart. Leave the flags on and take the plug out. Wire 6 is the card's 3.3 V; that it stays silent to ground on a card with no power is expected and has not been measured by us. Set the meter to ohms, write down what each of the two wires reads to the pad, and send both readings to whoever gave you this guide.
 7. Take the plug out again.
 
-![The P2 cable's plug in socket P2, all 6 wires whole, a flag on each](acorn-cable-p2-flag.png)
+![The P2 cable's plug in socket P2, all 6 wires whole, a flag on each](acorn-cable-p2-flag.png){.only-light}
+![The P2 cable's plug in socket P2, all 6 wires whole, a flag on each](acorn-cable-p2-flag-dark.png){.only-dark}
 
-![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check.png)
+![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check.png){.only-light}
+![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check-dark.png){.only-dark}
 
 **2.** Cut wires 4, 5 and 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over each cut end. They go in no cavity. Wire 6 is VCC, 3.3 V from the Acorn: it must never reach the host. Leave wires 1, 2 and 3 at full length.
 
-![The P2 cable: its wires prepared](acorn-cable-blade-p2-prepare.png)
+![The P2 cable: its wires prepared](acorn-cable-blade-p2-prepare.png){.only-light}
+![The P2 cable: its wires prepared](acorn-cable-blade-p2-prepare-dark.png){.only-dark}
 
 **3.** Cut wire 2 (J2) about 15 mm from its free end. Slide a piece of the 3 mm tube onto the wire, clear of the cut. Strip about 3 mm from each cut end. Trim the resistor's leads to about 5 mm each. Solder the 470 Ω resistor between the two cut ends. Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this. The resistor is there because J2 lands on GPIO14, which is also JTAG TMS: with 470 Ω in the wire, JTAG still gets through if the FPGA drives J2 (designed so, not yet measured).
 
-![The resistor fitted into wire 2](acorn-cable-blade-p2-resistor.png)
+![The resistor fitted into wire 2](acorn-cable-blade-p2-resistor.png){.only-light}
+![The resistor fitted into wire 2](acorn-cable-blade-p2-resistor-dark.png){.only-dark}
 
 **4.** Strip about 3 mm from wires 1, 2 and 3. Crimp a Dupont terminal on each.
 
-![Stripping and crimping](acorn-cable-crimp.png)
+![Stripping and crimping](acorn-cable-crimp.png){.only-light}
+![Stripping and crimping](acorn-cable-crimp-dark.png){.only-dark}
