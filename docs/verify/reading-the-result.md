@@ -147,9 +147,12 @@ What to do:
     https://github.com/fpgas-online/fpgas.online-test-designs/blob/main/docs/hardware/acorn-pcie-programming.md
   * The serial port has a pin JTAG needs, so the JTAG test could not run. On a
     Compute Blade the JTAG TMS wire and the serial port's TX are the same pin
-    (GPIO14): while the serial port is on, JTAG cannot be tested there.
-    Booting with it off (enable_uart in config.txt) should free the pin; that
-    is not yet confirmed on hardware:
+    (GPIO14): while the serial port is on, JTAG cannot be tested there. Boot
+    with the header's serial port off: in config.txt enable_uart=0 and no
+    uart_2ndstage=1, in cmdline.txt no console=serial0 (on a netbooted blade
+    these files are on the gateway: change one blade's own copy, as several
+    hosts may share them). With all three, on one Compute Blade with a CM5,
+    the pin was free and the JTAG test passed:
     https://github.com/fpgas-online/fpgas.online-test-designs/issues/127
   * To look at the acorn board yourself: sudo fpgas-acorn-debug --help (sudo
     apt install fpgas-online-acorn-debug)
