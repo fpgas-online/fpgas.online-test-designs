@@ -14,7 +14,7 @@ chosen.
 
 | The board says (rpi-hwid's `chip`) | Variant | What the check does |
 |---|---|---|
-| `fpga` | `tt-fpga` | runs [`sdk`](#the-sdk-test), then loads and runs `pin-id` and `uart` |
+| `fpga` | `tt-fpga` | runs [`sdk`](#the-sdk-test), then loads and runs [`dip-switches`](#the-dip-switches), `pin-id` and `uart` |
 | `asic`, and a shuttle | `tt-asic` | runs [`sdk`](#the-sdk-test); nothing is loaded. The result is `fail`: its Pmod cabling cannot be tested yet (the report's `not_run`), and a board is not passed untested |
 | nothing usable: rpi-hwid is not installed, could not read the board, or gave no shuttle for a chip | none | nothing is loaded and no test runs: the result is `error`, and the reason says what could not be read |
 | (an RP2 in its USB boot loader, `2e8a:0003`) | none | `fail`: `a Raspberry Pi RP2 is on USB but is not running the Tiny Tapeout firmware` |
@@ -38,6 +38,28 @@ chosen.
   that named neither is an `error`); a chip board that named no microcontroller then fails the `sdk` test.
 * `variant` in the report, in `fpga-board-identified` and in `fpga-verified` is the decided one; it is absent
   when the board did not say.
+
+## The DIP switches
+
+The demo board has eight DIP switches on the design's inputs, `ui_in`: switch 1 on `ui_in[0]` to switch 8 on
+`ui_in[7]`. A switch that is on ties its line to 3.3 V through 1 kΩ (Tiny Tapeout's
+[demo board schematic](https://github.com/TinyTapeout/tt-demo-pcb)). The check drives and reads `ui_in` from
+the Pi and from the board's microcontroller, so it needs every switch off, as Tiny Tapeout's own guides say.
+The `dip-switches` test checks it, before any other test loads a design
+([#166](https://github.com/fpgas-online/fpgas.online-test-designs/issues/166)).
+
+* **Set every DIP switch off.** A switch that is on fails the board, named:
+  `dip-switches fail: switch 4 is on: set all DIP switches off`.
+* The board's microcontroller reads the switches, over its REPL and in its memory only: nothing is written to
+  the board. For each line it drives the pin low for a moment, then reads it as an input with its pull-down,
+  so a switch that is on reads high and one that is off reads low.
+* Nothing else may hold the lines while they are read. So the check first streams
+  [`tt-display`](../../designs/tt-display/README.md) with `--gpio-release`: it drives only `uo_out`, and holds
+  `ui_in` and `uio` as inputs with the FPGA's pull-up off. The Pi's eight GPIOs on HAT JA are made inputs with
+  their pull-down for the read, and are then put back as they were (with `pinctrl`). JA pins 2 to 4 are also
+  JB's, `uio[1]` to `uio[3]`.
+* The test is an `error`, not a `fail`, when it could not make the read: the board did not answer
+  (`the DIP switches could not be read from the board …`), or `pinctrl` could not set the Pi's GPIOs.
 
 ## What the TT FPGA is left running
 
