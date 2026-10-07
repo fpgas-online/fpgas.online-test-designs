@@ -5,7 +5,7 @@ What has been run on a Compute Blade, and what has not, as of 7 October 2026:
 | Installing the packages and running the check (Raspberry Pi OS trixie, CM5) | run at ps1, by the page's own steps (pi16 and pi20 at ps1, 7 October 2026, 0.0.post1216): the failing run printed on the page "verifying 1" is the result from pi16 at ps1. An install lasts until the blade's next boot |
 | `pcie-link` | run at ps1: passes (5.0 GT/s, x1); on a card on the vendor's XDMA sample image too, from version 0.0.post1220 (pi20 at ps1, 7 October 2026) |
 | `jtag` with the serial port on, kernel 6.18 | run at ps1: **cannot work**. TMS is GPIO14, which is also the serial port's TX; that kernel does not lend a pin a driver has, and the serial driver cannot be detached while the system runs. From 0.0.post1111 the test fails saying so, without running the tool ([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)). Seen on the two CM5 blades, where `gpioinfo` names the kernel as line 14's user; on the two CM4 blades `gpioinfo` names no user for line 14 although the pin is the serial port's TXD0 (7 October 2026): whether JTAG can have it there is **not yet run by us** |
-| `jtag` with the serial port off | run at ps1 on a CM5 (pi20 at ps1, 7 October 2026, with the two changes below): **passes**: the test reads the IDCODE, `0x13631093` (XC7A100T), and the device DNA, `0x0028e5c45e304854` (the same DNA as on Acorns at ps1 for that card); no bitstream was loaded and the flash was not written. **Not yet run on a CM4 blade** |
+| `jtag` with the serial port off | run at ps1 on a CM5 (pi20 at ps1, 7 October 2026, with the two changes below): **passes**: the test reads the IDCODE, `0x13631093` (XC7A100T), and the device DNA, `0x0028e5c45e304854` (the same as read from this card on 20 September 2026); no bitstream was loaded and the flash was not written. **Not yet run on a CM4 blade** |
 | `jtag` under kernel 6.12, serial port on | recorded as working on one ps1 blade (`--pins 2:3:4:14`), before these packages existed; not run with them |
 | The `p2-uart` and `p2-serial` tests | **not yet run by us on this hardware**: they need a converted card |
 | Converting a card on a Compute Blade | **not yet run by us on this hardware**; the [written steps](hardware/acorn-pcie-programming.md) are for the Pi 5 setup |
@@ -40,14 +40,15 @@ are two ways, and the choice belongs to whoever runs the gateway (at ps1: Carl):
 
 1. **Change the one shared directory.** Every host that boots from it, all twelve, loses its console and
    login on the header's serial pins, and the firmware's boot messages there, from its next boot. To undo it,
-   put the two files back as they were; the hosts go back at their next boot.
+   put the two files back as they were (keep a copy of both before the change); the hosts go back at their
+   next boot.
 2. **Give one blade its own copy.** Copy the directory (any name), make the two changes in the copy, and point
    that blade's link in `/srv/tftp/` at the copy. Only that blade is changed, from its next boot. To undo it,
    point the link back at `/srv/nfs/rpi/trixie/boot` and boot the blade again. This is how pi20 at ps1 was
    tested on 7 October 2026 (its link is `/srv/tftp/de59093d`), and the shared directory was not touched; the
    copy was for that test and is not the site's setup.
 
-Then, on the blade, in the boot that has the serial port off:
+Then boot the blade again, and in that boot (the one with the serial port off):
 
 1. Install the packages again, as on the page "verifying 1": the install is gone after the boot.
 2. Check that GPIO14 is free, with the commands at the end of this page: it must show no consumer.
