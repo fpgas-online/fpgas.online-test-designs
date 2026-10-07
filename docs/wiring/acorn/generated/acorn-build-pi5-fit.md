@@ -4,7 +4,7 @@ Not yet run by us on this hardware: written from the design. Photos: Waveshare (
 
 ## What you need
 
-Both cables, checked on the bench (the page before this one), the Acorn and the Raspberry Pi 5. The Acorn is a bare circuit board: before you pick it up, touch bare metal of the unplugged host (or wear an anti-static wrist strap), and hold the card by its edges.
+Both cables, checked on the bench (the page before this one), the Acorn and the Raspberry Pi 5. As before: touch bare metal of the unplugged host before you pick up the card, and hold it by its edges.
 
 ## Steps
 

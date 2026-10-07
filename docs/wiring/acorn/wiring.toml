@@ -314,7 +314,7 @@ GND1 = ["gpio", 25]
 name = "Compute Blade"
 host = "blade"
 shell = "the metal shell of a USB socket on the Compute Blade"
-power_off = "Power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in."
+power_off = "Ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in."
 # The only Compute Blades this guide is written for are at ps1, whose builder's one line to us is Tim (the
 # coordinator, 7 October 2026); the Raspberry Pi 5 guide is public and keeps the general wording.
 contact = "Tim"

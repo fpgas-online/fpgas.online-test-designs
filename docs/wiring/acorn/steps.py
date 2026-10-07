@@ -1483,6 +1483,13 @@ def guide_name(c, part):
     return f"acorn-build-{c.key}-{part}.md"
 
 
+# Where the reader first picks up the card (each cable's first page): the one full note on static.
+STATIC = (
+    "The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the unplugged host, or wear an "
+    "anti-static wrist strap; hold the card by its edges."
+)
+
+
 def needs(c, connector):
     """What one cable takes from the parts list, as a sentence: so its page can be started without the list."""
     plan = housing(c, connector)
@@ -1510,7 +1517,7 @@ def needs(c, connector):
     return (
         f"For this cable: {'; '.join(items)}. Tools: {tools}, masking tape and a fine pen. The Acorn itself, out of "
         f"any slot, is needed for the first steps: if it is fitted, {c.power_off[0].lower()}{c.power_off[1:]} Then "
-        "take the card out."
+        f"take the card out. {STATIC}"
     )
 
 
@@ -1609,9 +1616,8 @@ def guide(c):
         'cable\'s page "fill and check the housing" and check every wire again.',
     )
     out[guide_name(c, "fit")] = body(
-        f"Both cables, checked on the bench (the page before this one), the Acorn and the {c.name}. The Acorn is a "
-        "bare circuit board: before you pick it up, touch bare metal of the unplugged host (or wear an anti-static "
-        "wrist strap), and hold the card by its edges.",
+        f"Both cables, checked on the bench (the page before this one), the Acorn and the {c.name}. As before: "
+        "touch bare metal of the unplugged host before you pick up the card, and hold it by its edges.",
         fit_,
         "## Next",
         'Power the host on and run the check: the page "verifying 1".'
