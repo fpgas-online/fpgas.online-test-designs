@@ -167,10 +167,12 @@ def test_the_cables_page_lists_what_the_makers_say_one_fact_to_a_bullet_under_th
     assert bullets == [f"- {f['says']}." for f in listed]
     assert all(bullet.count(". ") <= 1 for bullet in bullets)  # one or two sentences each
     assert "- If a straight twelve-wire cable is used, it joins the two boards' 3.3 V supplies." in bullets
-    assert (
-        "- What cable is fitted on our boards, and whether its pins 6 and 12 are connected, is not recorded; "
-        "asked on 6 October 2026."
-    ) in bullets
+    # Tim's answer of 7 October 2026: the cable fitted at welland, its 3.3 V pin left out
+    assert any(
+        b.startswith("- On our boards each cable is a female-to-female 10-pin ribbon cable")
+        and "pins 6 and 12 are not carried" in b
+        for b in bullets
+    )
     assert "the boards shown as fpga-1 and fpga-3 on tinytapeout.fpgas.online on 6 October 2026" in text
     assert "mirrored" not in text  # Digilent's sentence on numbering is on the sources page only
     assert "measured, except the wires on shared GPIOs" in text

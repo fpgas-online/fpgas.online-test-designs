@@ -281,10 +281,10 @@ says = "If a straight twelve-wire cable is used, it joins the two boards' 3.3 V 
 source = "it follows from the two makers' statements that pins 6 and 12 are each board's 3.3 V supply. That the cables are straight through is from `docs/hardware/rpi-hat-pmod.md`, and the measured wires are where a straight-through cable puts them"
 
 [[facts]]
-key = "cable-unknown"
+key = "cable-fitted"
 group = "cables"
-says = "What cable is fitted on our boards, and whether its pins 6 and 12 are connected, is not recorded; asked on 6 October 2026"
-source = "an open question, asked on 6 October 2026 and not yet answered"
+says = "On our boards each cable is a female-to-female 10-pin ribbon cable (0.1 inch pitch), joined to the female socket at each end through a strip of pin header, with the 3.3 V pin left out: pins 6 and 12 are not carried, so the two boards' 3.3 V supplies are not joined"
+source = "Tim Ansell, 7 October 2026, answering our question of 6 October; he believes the ribbon cables are whiteeeen 10-pin flat ribbon cables, 0.1 inch pitch, female to female sockets, about 7.87 inch (200 mm), IDC connectors (Amazon product B094RGMBS9). How the 10-pin cable sits on the 12-pin socket (which row ends are left free) is not recorded by us"
 
 [[facts]]
 key = "cameras"

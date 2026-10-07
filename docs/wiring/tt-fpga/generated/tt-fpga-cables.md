@@ -28,7 +28,7 @@ For the person at the bench with a Tiny Tapeout demo board that has the FPGA bre
 
 - Both ends are female sockets, so each cable needs a male end at each board.
 - If a straight twelve-wire cable is used, it joins the two boards' 3.3 V supplies.
-- What cable is fitted on our boards, and whether its pins 6 and 12 are connected, is not recorded; asked on 6 October 2026.
+- On our boards each cable is a female-to-female 10-pin ribbon cable (0.1 inch pitch), joined to the female socket at each end through a strip of pin header, with the 3.3 V pin left out: pins 6 and 12 are not carried, so the two boards' 3.3 V supplies are not joined.
 - Seen on the cameras of the boards shown as fpga-1 and fpga-3 on tinytapeout.fpgas.online on 6 October 2026: a black two-row housing is plugged on each of the demo board's three connectors, and a rainbow ribbon runs from them on fpga-1. Neither the wires nor any pin 1 mark can be made out.
 
 On a Pmod connector pins 1 to 6 are one row and pins 7 to 12 the other; pins 5 and 11 are ground and pins 6 and 12 are 3.3 V. Where each of these statements comes from: [Sources](tt-fpga-sources.md).
