@@ -1172,8 +1172,8 @@ def test_a_ribbon_that_is_not_where_it_should_be_fails_the_board_and_is_named(tm
     # a script that printed no WIRING: line
     ((WIRING, (1, "Traceback (most recent call last):\nKeyError: 'x'\n")), "fail", "the test exited 1"),
     # killed at the check's limit: it could not finish, nor put back what it changed
-    ((WIRING, core.Problem("fail", "tt_pmod_wiring.py did not finish within 240 s: ")), "error",
-     "tt_pmod_wiring.py did not finish within 240 s: "),
+    ((WIRING, core.Problem("fail", "python3.11 did not finish within 300 s: ")), "error",
+     "the wiring test did not finish within 300 s"),
 ])  # fmt: skip
 def test_a_wiring_test_that_could_not_finish_is_said_as_that(tmp_path, monkeypatch, answer, result, reason):
     _installed(monkeypatch)

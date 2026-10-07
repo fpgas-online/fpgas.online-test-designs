@@ -184,15 +184,15 @@ How it tests:
   (`tt_sdk_start.py`), so the board is never left in the command server; the `FALLBACK:` line says so. The
   board's own `main.py` rewrites its `boot.log` when it starts: on the good path that happens once per boot
   check, at the identification start, and not again.
-* The test stops itself after 100 s (`--time-limit`) and puts everything back (up to 50 s, and 75 s more for the
-  fallback); the boot check's own limit, 240 s, which kills it, is beyond all of that. The figures are
+* The test stops itself after 90 s (`--time-limit`) and puts everything back (up to 120 s, every step bounded, and 75 s more for the
+  fallback); the boot check's own limit, 300 s, which kills it, is beyond all of that. The figures are
   provisional until the live run has timed the test.
 * The chip's factory test is enabled with the SDK's `config.ini` turned off (`apply_configs`): applied, it would
   set `ui_in = 1` and a 10 Hz clock, and the chip would drive its counter onto `uio[1:3]`, which the HAT joins to
   `ui_in[1:3]`. The restore turns it on again, as the board had it. The board as it starts drives those three nets
   from both ends: [#181](https://github.com/fpgas-online/fpgas.online-test-designs/issues/181).
 
-The test is an `error`, not a `fail`, when it could not make its reading, and then it drives no pin at all: the
+The test is an `error`, not a `fail`, when it could not make its reading, and stops there: the
 board did not answer its raw REPL; the board's SDK is not running (no `tt` object) or could not select
 `tt_um_factory_test`, or that project did not confirm; the RP2040 has too little heap free with the command
 server loaded (`RP2040 heap too low: N bytes free …`); gpiod or `pinctrl` is missing or could not read the HAT
@@ -206,9 +206,9 @@ The output's `MEM:` lines say how much of the RP2040's heap was free with the co
 pin-id round sends, and after the test. `MEM:`, `PULLS:`, `RESTORE:` and `FALLBACK:` are said again just before
 the `WIRING:` line, where the boot report keeps them.
 
-It has run in this form on one board with a TT07 chip (see the pull request that brought it into the check);
-[PR #15](https://github.com/fpgas-online/fpgas.online-test-designs/pull/15)'s form of it ran on every Tiny
-Tapeout host at Welland on 4 September 2026.
+[PR #15](https://github.com/fpgas-online/fpgas.online-test-designs/pull/15)'s form of it ran on every Tiny Tapeout
+host at Welland on 4 September 2026. This form's own runs on a board are recorded in the pull request that brought
+it into the check.
 
 
 ## TT FPGA identity

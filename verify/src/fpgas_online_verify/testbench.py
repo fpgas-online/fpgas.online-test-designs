@@ -231,7 +231,10 @@ class TestBoard(Board):
                     runner(step, 30)
             rc, text = runner(argv, t.get("timeout", TEST_TIMEOUT))
         except Problem as p:
-            return {"test": test, "result": "error", "reason": p.reason}
+            reason = p.reason
+            if "did not finish within" in reason:  # core.run names the interpreter: say which test it was
+                reason = f"the {test} test did not finish within {t.get('timeout', TEST_TIMEOUT)} s"
+            return {"test": test, "result": "error", "reason": reason}
         return {"test": test, **self.judged(t, rc, text)}
 
     # -- JTAG ------------------------------------------------------------------------------------------------

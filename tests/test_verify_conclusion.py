@@ -208,7 +208,10 @@ def test_every_advice_pattern_matches_a_reason_the_code_gives():
         tt_fpga.sdk_check("tt-asic", {"chip": "asic", "shuttle": "tt09", "mcu": "RP2040", "sdk": "2.0.4"})[1],
         "wiring fail: the ui_in ribbon (to HAT JA): ui_in[2] (Pmod pin 3) did not reach HAT JA/JB pin 3",
         "wiring fail: the ui_in and uio ribbons are on each other's HAT ports (JB and JA): swap them",
-        "wiring fail: these ribbons are seated one position off (ui_in on HAT JC (it goes on JA), ...): reseat",
+        "wiring fail: these ribbons are plugged in turned round and one position over (ui_in on HAT JC ...)",
+        "wiring fail: the ui_in ribbon (to HAT JA): ui_in[4] (Pmod pin 7) is held high on the demo board (a DIP ...",
+        "wiring fail: the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) is held low on the demo board (some ...",
+        "wiring fail: the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) is held against the pulls on the demo board",
         "openocd is not installed",
         "x does not match its manifest",
         "manifest.json is missing",
@@ -298,3 +301,13 @@ def test_the_conversion_advice_follows_the_setup_the_report_names():
         assert conclusion.ACORN_PROGRAMMING in on_pi5 and "On a Compute Blade" not in on_pi5
         assert conclusion.ACORN_PROGRAMMING not in on_blade and "On a Compute Blade, do not load" in on_blade
         assert conclusion.ACORN_PROGRAMMING in unknown and "On a Compute Blade, do not load" in unknown
+
+
+def test_a_held_line_gets_the_advice_for_it_and_not_the_ribbon_s():
+    held = "wiring fail: the ui_in ribbon (to HAT JA): ui_in[4] (Pmod pin 7) is held high on the demo board (a DIP"
+    wrong = "wiring fail: the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) did not reach HAT JA pin 8"
+    advice = {pattern: text for pattern, text in conclusion.ADVICE}
+    held_says = [text for pattern, text in advice.items() if conclusion.re.search(pattern, held)]
+    wrong_says = [text for pattern, text in advice.items() if conclusion.re.search(pattern, wrong)]
+    assert len(held_says) == 1 and "DIP switches off" in held_says[0]
+    assert len(wrong_says) == 1 and "not where it should be" in wrong_says[0]
