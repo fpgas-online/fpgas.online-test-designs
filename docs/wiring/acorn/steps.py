@@ -59,8 +59,7 @@ BOTH = (
     "apart. Leave the flags on and take the plug out. Wire {last} is the card's 3.3 V by the LiteX wiki's legend; "
     "that it stays silent "
     "to ground on a card with no power is expected and has not been measured by us. Set the meter to ohms, "
-    "write down what each of the two wires reads to the pad, and send both readings to whoever gave you "
-    "this guide."
+    "write down what each of the two wires reads to the pad, and send both readings to {contact}."
 )
 
 ASSUMPTIONS = [
@@ -1048,7 +1047,9 @@ def ground_check(connector):
         W - 40,
         "bold",
     )
-    y = para(sh, 30, y + 4, BOTH.format(last=len(pins)), W - 40, "bold")
+    y = para(
+        sh, 30, y + 4, BOTH.format(last=len(pins), contact=wiring.CONTACT), W - 40, "bold"
+    )  # one sheet for every carrier
     y = para(
         sh,
         30,
@@ -1334,7 +1335,7 @@ def procedure_parts(c, restart=False):
         + ", along the way each cable will run. Its cut end must reach the header with some slack left to "
         "bend into the housing; how much is needed has not been measured by us. If a half does not reach, "
         "stop: this guide uses each half at the length it has, and a longer cable is not written here. Tell "
-        "whoever gave you this guide. **Not yet done by us on this hardware.**"
+        f"{c.contact}. **Not yet done by us on this hardware.**"
     )
     cavity = {}
     for connector, conn in wiring.CONNECTORS.items():
@@ -1369,7 +1370,7 @@ def procedure_parts(c, restart=False):
             f"Do the same with the wire flagged {len(pins)}: it must stay silent.",
             f"If wire {len(pins)} beeps instead, stop: the numbering is reversed; take the flags off and number from "
             "the other end. " + NEITHER.format(strip=lengths["strip"], last=len(pins)),
-            BOTH.format(last=len(pins)),
+            BOTH.format(last=len(pins), contact=c.contact),
             "Take the plug out again.",
         ]
         step(

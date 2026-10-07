@@ -71,6 +71,7 @@ class Carrier:
     host: str = ""  # the host in a word, for a pin name that needs its owner: "blade TX"
     shell: str = ""  # bare metal of the host that is its ground, for a meter probe
     power_off: str = ""  # how the host is made dead before the cables are fitted, as a sentence
+    contact: str = ""  # whom the reader tells what the guide cannot settle: "Tell {contact}."
 
     def tag(self, sig):
         """The host's name for the pin a signal lands on, as the sheet prints it; None for none."""
@@ -101,6 +102,10 @@ class WiringError(Exception):
     pass
 
 
+# Whom a reader tells what the guide cannot settle, unless a carrier names someone (the public guide's wording).
+CONTACT = "whoever gave you this guide"
+
+
 def _carrier(key, raw):
     headers = {}
     for hk, h in raw["headers"].items():
@@ -123,6 +128,7 @@ def _carrier(key, raw):
     c = Carrier(
         key, raw["name"], raw["jtag_pins"], set(raw.get("resistors", [])), raw.get("resistor_value", ""), headers,
         wires, parts, raw.get("host", raw["name"]), raw["shell"], raw.get("power_off", "Power off the host."),
+        raw.get("contact", CONTACT),
     )  # fmt: skip
     _check(c)
     return c
