@@ -1311,9 +1311,7 @@ def procedure_parts(c, restart=False):
         nonlocal n
         n += 1
         target.extend([f"**{n}.** {text}", ""])
-        for alt, name, *lead in images:
-            for line in lead:  # why this picture is here again
-                target.extend([line, ""])
+        for alt, name in images:  # a picture shown again says why in the step's words (again)
             target.extend([markdown_image(alt, name), ""])
 
     step(
@@ -1465,20 +1463,22 @@ def procedure_parts(c, restart=False):
         )
         fits.append(f"the {connector} housing on the {on} with its marked corner on {pin}")
     first = next(iter(wiring.CONNECTORS.values()))["pins"][0]
+    # The bench check, one picture to a step: each housing fitted with its cavity picture again, then the beeps.
+    why = "for where its housing sits and which corner is marked"
+    for i, (connector, picture) in enumerate(cavity.items()):
+        step(
+            (f"{BENCH_START} {power_off_if_on(c)} Then fit {fits[i]}." if i == 0 else f"Fit {fits[i]}.")
+            + " "
+            + again(connector, why),
+            picture,
+        )
     step(
-        "This is a bench check; the housings come off again before the cables are fitted. "
-        + power_off_if_on(c)
-        + f" Then fit {fits[0]}, and {fits[1]}. The Acorn is not in its slot and the plugs are free. "
-        "Put one meter probe "
+        f"{BENCH_BEEP} Put one meter probe "
         f"on contact 1 ({label_of(first)}) of a plug and the other on {c.shell}: it must "
         f"beep. Do the same for the other plug. Then contact {len(pins)} of each plug ({label_of(pins[-1])}, the wire "
         "you cut back): against the shell and against every other contact it must be silent. That the shell is the "
         "host's ground is not measured by us; contact 1's beep is what shows it. " + ground_shows_way_round(c),
         (f"The bench check on a {c.name}", png(shell_check_name(c))),
-        *(
-            (*picture, f"The {connector} cavity picture again, for where its housing sits and which corner is marked:")
-            for connector, picture in cavity.items()
-        ),
     )
     actions = fit_actions(c)
     for half, (words, numbers) in enumerate(zip(FIT_STEPS, FIT_HALVES), 1):
@@ -1691,6 +1691,11 @@ CHECK_EACH = "Check each wire with a meter on continuity."
 CHECK_CAVITY = "Now check each wire against its cavity."
 
 
+# The words the bench check's steps start with: fitting the first housing, and the beeps once both are fitted.
+BENCH_START = "This is a bench check; the housings come off again before the cables are fitted."
+BENCH_BEEP = "The Acorn is not in its slot and the plugs are free."
+
+
 def again(connector, why, where="below"):
     """The words that say why a step shows the cavity picture of `connector` again."""
     return f"The {connector} cavity picture is shown again {where}, {why}."
@@ -1713,6 +1718,12 @@ def fit_step(c, half):
     """The number of the fitting page's step for half 1 (the plugs into the card) or 2 (the card, then the
     housings), as other pages quote it."""
     return step_number(c, "fit", FIT_STEPS[half - 1])
+
+
+def bench_step(c, start):
+    """The number of the bench check's step whose words start `start` (BENCH_START, BENCH_BEEP), as other pages
+    quote it."""
+    return step_number(c, "bench", start)
 
 
 def meter_check_steps(c):

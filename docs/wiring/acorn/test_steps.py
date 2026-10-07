@@ -383,13 +383,11 @@ def test_a_repeated_cavity_picture_says_why_it_is_there_again():
         for connector in wiring.CONNECTORS:
             cavity = steps.png(steps.file_name(c, connector))
             at = [i for i, line in enumerate(lines) if f"]({cavity})" in line]
-            assert len(at) == 4
+            assert len(at) == 4  # filled, pushed in, checked, and fitted on the bench check
             for i in at[1:]:
-                # the step's own words say why, or the line over it on the bench check
-                words = next(line for line in reversed(lines[:i]) if line and not line.startswith("!["))
-                assert f"The {connector} cavity picture is shown again" in words or words.startswith(
-                    f"The {connector} cavity picture again"
-                ), words
+                # the step's own words say why
+                words = next(line for line in reversed(lines[:i]) if line.startswith("**"))
+                assert f"The {connector} cavity picture is shown again" in words, words
 
 
 @pytest.mark.parametrize("key", list(wiring.CARRIERS))
@@ -530,8 +528,29 @@ def test_every_step_of_the_building_pages_has_one_picture_of_its_own(key):
                         fresh.append(image)
                     seen.add(image)
             assert len(fresh) <= 1, (name, n, fresh)
-    fit = steps.guide(c)[steps.guide_name(c, "fit")]
+    pages = steps.guide(c)
+    fit = pages[steps.guide_name(c, "fit")]
     assert [light_images(block) for _, block in step_blocks(fit)] == [[steps.png(f)] for f in steps.fit_names(c)]
+    # the bench check: each housing with its cavity picture, then the beeps with theirs, one picture to a step
+    bench = pages[steps.guide_name(c, "bench")]
+    assert [light_images(block) for _, block in step_blocks(bench)] == [
+        *([steps.png(steps.file_name(c, k))] for k in wiring.CONNECTORS),
+        [steps.png(steps.shell_check_name(c))],
+    ]
+    assert [steps.bench_step(c, steps.BENCH_START), steps.bench_step(c, steps.BENCH_BEEP)] == [1, 3]
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_no_words_stand_between_a_steps_pictures(key):
+    """A step is its words (a paragraph and any list), then its pictures, with nothing between or after them: the
+    print tool keeps on one sheet only the pictures that follow a step's words directly (fpgas.online-docs #102)."""
+    c = wiring.CARRIERS[key]
+    for name, body in steps.guide(c).items():
+        for n, block in step_blocks(body):
+            lines = [line for line in block.splitlines() if line]
+            first = next((i for i, line in enumerate(lines) if line.startswith("![")), len(lines))
+            assert all(line.startswith("![") for line in lines[first:]), (name, n)
+            assert all(re.match(r"\d+\. ", line) for line in lines[1:first]), (name, n)
 
 
 def quotes(c):
@@ -541,7 +560,9 @@ def quotes(c):
     texts = [*sorted((docs / "verify").glob("*.md")), *sorted((wiring.HERE / "check").glob("*.md"))]
     texts += sorted((wiring.HERE / "generated").glob("*.md"))
     texts += sorted((wiring.HERE / "generated").glob(f"acorn-cable-{c.key}-*.svg"))
-    quote = r'steps? (\d+)(?: and (\d+))? of (?:"|&quot;)((?:JTAG|UART) connector [12]|Fitting)(?:"|&quot;)'
+    quote = (
+        r'steps? (\d+)(?: and (\d+))? of (?:"|&quot;)((?:JTAG|UART) connector [12]|Fitting|[Bb]ench check)(?:"|&quot;)'
+    )
     return [
         (f.name, page, [int(a)] + ([int(b)] if b else []))
         for f in texts
@@ -571,6 +592,8 @@ def test_a_quoted_step_number_is_the_step_it_means(key):
     meant = {f"{title} 2": [[n, n + 1]] for _, title in steps.GUIDE.values()}
     meant |= {f"{steps.GUIDE[k][1]} 1": [[steps.wire_one_step(c, k)[0]]] for k in wiring.CONNECTORS}
     meant["Fitting"] = [[f] for f in fit]
+    bench = [steps.bench_step(c, w) for w in (steps.BENCH_START, steps.BENCH_BEEP)]
+    meant["Bench check"] = meant["bench check"] = [[b] for b in bench]
     quoted = quotes(c)
     assert {page for _, page, _ in quoted} >= {"JTAG connector 1", "UART connector 1", "JTAG connector 2"}
     for name, page, numbers in quoted:
