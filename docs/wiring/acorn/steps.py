@@ -1367,7 +1367,7 @@ def procedure_parts(c, restart=False):
         )
         warning = turned_warning(c, plan)
         if any(label_of(s) != "GND" for sigs in turned_rails(c, plan).values() for s in sigs):
-            warning = warning[:-1] + ", which can destroy the host."
+            warning = warning[:-1] + ", which can destroy the Acorn's FPGA pin it reaches."
         step(
             f"Hold the empty {shape} housing with the wire openings facing you and its long side upright, as in "
             "the picture. Until it is marked, either way up is the same. "
@@ -1614,6 +1614,8 @@ def fit_actions(c):
         "round it was when you put the flags on, until fully seated.",
         "Put the Acorn in the M.2 slot and fit its screw.",
         f"Fit {on[0]}, and {on[1]}.",
+        "Before powering on, look at both housings again: each marked corner is on its header's pin 1, as on the "
+        "bench check. A housing turned round puts 5 V on a signal wire into the Acorn.",
     ]
 
 

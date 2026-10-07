@@ -200,7 +200,7 @@ def test_the_procedure_is_complete_in_itself(key):
     assert text.rstrip().endswith(gen_credits(key) + ".")
     assert ("Solder the 470 Ω resistor between the two cut ends." in text) == bool(RAW[key].get("resistors"))
     assert ("heat-shrink tube, about 3 mm" in text) == bool(RAW[key].get("resistors"))
-    assert text.count("which can destroy the host") == sum(
+    assert text.count("which can destroy the Acorn's FPGA pin it reaches") == sum(
         "puts 5 V on" in steps.turned_warning(c, steps.housing(c, conn)) for conn in wiring.CONNECTORS
     )
     assert f"about {CUT} mm from the plug" in text and "buy a few more than this, as spares" in text
