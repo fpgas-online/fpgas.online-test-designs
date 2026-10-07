@@ -174,6 +174,24 @@ class TestBoard(Board):
         entry = bitstreams.entry_for(manifest, self.artifact(test, variant), self.bitstreams_package)
         return bitstreams.checked(images, entry)[0]
 
+    @staticmethod
+    def judged(t, rc, text):
+        """A host script's result from its exit and output: {result, output, reason?, flash_jedec?}. With `says`,
+        its last line starting with that prefix is the reason, and an exit of 2 is an error."""
+        found = {"result": "pass" if rc == 0 else "fail", "output": tail(text)}
+        if rc != 0:
+            found["reason"] = f"the test exited {rc}"
+            prefix = t.get("says")
+            said = [line[len(prefix) :].strip() for line in text.splitlines() if prefix and line.startswith(prefix)]
+            if said and said[-1]:  # the script's own last word on why
+                found["reason"] = said[-1]
+                if rc == 2:  # it could not make its reading at all
+                    found["result"] = "error"
+        m = JEDEC_RE.search(text)
+        if m:
+            found["flash_jedec"] = "0x" + "".join(m.groups()).lower()
+        return found
+
     def run_test(self, test, variant, host, images, manifest, runner=run):
         t = self.tests[test]
         out = {"test": test, "bitstream": self.artifact(test, variant)}
@@ -196,19 +214,28 @@ class TestBoard(Board):
                 rc, text = runner(self.test_argv(test, host, bitstream), TEST_TIMEOUT)
         except Problem as p:
             return {**out, "result": p.result, "reason": p.reason}
-        found = {"result": "pass" if rc == 0 else "fail", "output": tail(text)}
-        if rc != 0:
-            found["reason"] = f"the test exited {rc}"
-            prefix = t.get("says")
-            said = [line[len(prefix) :].strip() for line in text.splitlines() if prefix and line.startswith(prefix)]
-            if said and said[-1]:  # the script's own last word on why
-                found["reason"] = said[-1]
-                if rc == 2:  # it could not make its reading at all
-                    found["result"] = "error"
-        m = JEDEC_RE.search(text)
-        if m:
-            found["flash_jedec"] = "0x" + "".join(m.groups()).lower()
-        return {**out, **found}
+        return {**out, **self.judged(t, rc, text)}
+
+    def script_tests_for(self, variant):
+        return [name for name, t in self.script_tests.items() if variant in t["variants"]]
+
+    def run_script_test(self, test, host, runner=run):
+        """A script test (script_tests): its `pre` steps, then its script on the board's port; nothing is loaded.
+        A script the check had to kill at its limit could not finish, and could not put back what it changed: an
+        error, not a fail."""
+        t = self.script_tests[test]
+        argv = [sys.executable, host_tests.path(t["script"]), *(a.format(port=host["port"]) for a in t["args"])]
+        try:
+            for step in t.get("pre", []):
+                with contextlib.suppress(Problem):
+                    runner(step, 30)
+            rc, text = runner(argv, t.get("timeout", TEST_TIMEOUT))
+        except Problem as p:
+            reason = p.reason
+            if "did not finish within" in reason:  # core.run names the interpreter: say which test it was
+                reason = f"the {test} test did not finish within {t.get('timeout', TEST_TIMEOUT)} s"
+            return {"test": test, "result": "error", "reason": reason}
+        return {"test": test, **self.judged(t, rc, text)}
 
     # -- JTAG ------------------------------------------------------------------------------------------------
 
@@ -330,6 +357,13 @@ class TestBoard(Board):
     # They run first, in the whole boot check only (not when single tests were asked for), and are the whole
     # check of a variant that no bitstream here is for (a demo board with a Tiny Tapeout chip).
     fact_tests: ClassVar[dict] = {}
+    # Tests that run a host script against the board's port and load nothing (the Pmod wiring test of a demo
+    # board with a Tiny Tapeout chip): test -> {"variants": the variants it is for, "script", "args" ({port} is
+    # the board's port), "pre" (commands run first, each may fail), "says" and "timeout" as a test's, and
+    # "needs": fact tests that must have passed for it to mean anything (when one did not, it is not run, and
+    # the report's not_run says why)}. They run after the fact tests, in the whole boot check only, with the
+    # board's `services` stopped.
+    script_tests: ClassVar[dict] = {}
     # variant -> {test: why}: a test that variant must have and the boot check does not run yet. It goes in the
     # report's `not_run`, and the board FAILS with that reason: a board is not passed on a check that leaves
     # out a test it needs (Tim, 2026-10-05: "Fail until wiring is tested"). Its other tests still run and are
@@ -451,8 +485,22 @@ class TestBoard(Board):
                 report["tests"].append(self.run_fact_test(test, variant, facts))
                 done = report["tests"][-1]
                 event("fpga-test-finished", {"test": test, "result": done["result"], "reason": done.get("reason", "")})
-            if not refused and self.pending.get(variant):
-                report["not_run"] = dict(self.pending[variant])
+            not_run = dict(self.pending.get(variant, {})) if not refused else {}
+            for test in self.script_tests_for(variant) if not options.get("tests") and not refused else ():
+                failed = [
+                    t["test"]
+                    for t in report["tests"]
+                    if t["test"] in self.script_tests[test].get("needs", ()) and t["result"] != "pass"
+                ]
+                if failed:
+                    not_run[test] = f"it needs {' and '.join(failed)} to pass first"
+                    continue
+                event("fpga-test-started", {"test": test})
+                report["tests"].append(self.run_script_test(test, host, runner))
+                done = report["tests"][-1]
+                event("fpga-test-finished", {"test": test, "result": done["result"], "reason": done.get("reason", "")})
+            if not_run:
+                report["not_run"] = not_run
             for test in tests:
                 event("fpga-test-started", {"test": test})
                 report["tests"].append(self.run_test(test, variant, host, images, manifest, runner))
@@ -464,8 +512,9 @@ class TestBoard(Board):
                     report["left_running"] = left
                 else:
                     name = self.left_running[variant]["design"]
-                    report["warnings"] = [f"the {name} design, which the check leaves running, could not be loaded "
-                                          f"({why_not}): the board is left as its last test left it"]  # fmt: skip
+                    report.setdefault("warnings", []).append(
+                        f"the {name} design, which the check leaves running, could not be loaded ({why_not}): the "
+                        "board is left as its last test left it")  # fmt: skip
         if held["stopped"]:
             report["services_stopped"] = held["stopped"]
         jtag = report.get("jtag", {})
