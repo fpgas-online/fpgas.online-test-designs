@@ -375,17 +375,18 @@ def test_the_routing_line_names_the_arty_connector_each_hat_connector_reads():
     assert ident.routing("arty", rows) == "HAT JA reads Arty JC, HAT JB reads Arty JD, HAT JC reads Arty JB"
     _ok, rows = ident.evaluate_board("arty", WELLAND_8415)
     assert ident.routing("arty", rows) == (
-        "HAT JA reads Arty JC, HAT JB reads Arty JB, HAT JC reads Arty JD; no signal on HAT JA.10")
+        "HAT JA reads Arty JC, HAT JB reads Arty JB, HAT JC reads Arty JD (no signal on HAT JA.10)")
 
 
 def test_the_routing_line_names_mixed_unknown_garbled_and_silent_wires():
     mixed = {**_decoded("arty"), 8: "E15", 19: "W12", 21: "?\x93", 20: None, 18: None}
     _ok, rows = ident.evaluate_board("arty", mixed)
     assert ident.routing("arty", rows) == (
-        "HAT JA reads Arty JB and W12 and garbled, HAT JB reads Arty JB, HAT JC reads Arty JC; "
-        "no signal on HAT JA.9, HAT JA.10")
+        "HAT JA reads Arty JB and W12 and garbled, HAT JB reads Arty JB, HAT JC reads Arty JC "
+        "(no signal on HAT JA.9, HAT JA.10)")
     _ok, rows = ident.evaluate_board("arty", {})
-    assert ident.routing("arty", rows).startswith("HAT JA reads nothing, HAT JB reads nothing, HAT JC reads nothing;")
+    nothing = "HAT JA reads nothing, HAT JB reads nothing, HAT JC reads nothing (no signal on"
+    assert ident.routing("arty", rows).startswith(nothing)
 
 
 def test_the_routing_line_for_the_tt_counts_a_shared_gpio_as_each_wire_heard_alone():

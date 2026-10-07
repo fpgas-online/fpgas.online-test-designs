@@ -188,9 +188,10 @@ def sources(board_name):
 
 def routing(board_name, rows):
     """One line saying where each HAT connector's wires come from, as read: "HAT JA reads Arty JC, HAT JB reads
-    Arty JD, HAT JC reads Arty JB; no signal on HAT JA.10". None for a map that is not of HAT connectors (the
-    Acorn's P2 header). A connector whose wires come from more than one place names each, most wires first; a
-    ball no connector has is named as itself, and a garbled decode as "garbled"."""
+    Arty JD, HAT JC reads Arty JB (no signal on HAT JA.10)". It has no "; ": the board's reason joins its tests'
+    reasons with that. None for a map that is not of HAT connectors (the Acorn's P2 header). A connector whose
+    wires come from more than one place names each, most wires first; a ball no connector has is named as
+    itself, and a garbled decode as "garbled"."""
     known = sources(board_name)
     heard, silent = {}, []
     for r in rows:
@@ -209,7 +210,7 @@ def routing(board_name, rows):
     for hat, from_ in heard.items():
         ranked = sorted(from_, key=lambda where: -from_[where])  # stable: first heard first among equals
         said.append(f"{hat} reads {' and '.join(ranked) if ranked else 'nothing'}")
-    return ", ".join(said) + (f"; no signal on {', '.join(silent)}" if silent else "")
+    return ", ".join(said) + (f" (no signal on {', '.join(silent)})" if silent else "")
 
 
 def evaluate_board(board_name, results):
