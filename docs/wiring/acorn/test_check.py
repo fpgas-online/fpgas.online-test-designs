@@ -167,3 +167,18 @@ def test_a_caption_cannot_outlive_its_transcript_and_a_swap_stays_on_one_cable()
     assert "[converting a card](https://" in check.failures(
         blade
     ) and "acorn-pcie-programming.md]" not in check.failures(blade)
+
+
+def test_a_blade_page_prints_no_older_advice_and_no_convert_in_its_transcripts():
+    block = "```text\nresult\nWhat to do:\n  * convert it\n```\n"
+    assert check.without_advice(block) == "```text\nresult\nWhat to do: (left out here; see the text above)\n```"
+    with pytest.raises(wiring.WiringError):
+        check.without_advice("```text\nno advice\n```\n")
+    fenced = [
+        b
+        for page in check.pages(wiring.CARRIERS["blade"]).values()
+        for b in re.findall(r"```text\n(.*?)```", page, re.S)
+    ]
+    assert fenced  # the blade pages do print transcripts: the check below is not empty
+    for block in fenced:
+        assert "convert" not in block.replace("unconverted", "")

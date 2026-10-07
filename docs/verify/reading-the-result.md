@@ -115,9 +115,9 @@ The whole report, for a program to read (JSON): /run/fpgas-online/verify.json
 CLE-101 on SQRL's factory image) on 2026-10-07, version 0.0.post1216, installed by the steps of the docs'
 "verifying 1" page as printed. The lines `sudo: unable to resolve host pi16: Name or service not known`, which
 sudo printed first, are left out. From 0.0.post1111 the `jtag` line names what holds the pin. Its advice to
-"change one blade's own copy" of the gateway's boot files is that version's; later versions say that changing the
+"change one blade's own copy" of the gateway's boot files is that version's; from 0.0.post1284 the check says that changing the
 shared files or giving one blade its own copy is the gateway owner's choice. So is its advice to convert the card:
-later versions say not to load or convert a card on a Compute Blade, as the first transcript above shows.
+from 0.0.post1284 it says not to load or convert a card on a Compute Blade, as the first transcript above shows.
 
 ```text
 $ sudo fpgas-acorn-verify --no-publish
