@@ -178,9 +178,11 @@ def not_ours(dev):
     return f"{dev['ids']} subsystem {dev['subsystem']} is not a design we built"
 
 
-def is_acorn(dev):
-    """True for a board known to be an Acorn, whatever it runs."""
-    return dev["kind"] in ("fpgas-online", "sqrl-factory")
+def is_acorn(dev, configured=False):
+    """True for a board taken to be an Acorn, whatever it runs: one whose IDs say so, and, on a host set up for
+    an Acorn (`configured`), one on the vendor XDMA sample. That sample's 10ee:7011 runs on a NeTV2 too, so with
+    `auto` it is not taken to be an Acorn and the Acorn's pins are not driven for it (#155)."""
+    return dev["kind"] in ("fpgas-online", "sqrl-factory") or (configured and dev["kind"] == "vendor-xdma")
 
 
 # -- the PCIe link -------------------------------------------------------------------------------------

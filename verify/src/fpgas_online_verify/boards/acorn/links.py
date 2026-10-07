@@ -48,6 +48,10 @@ from . import bist, check, uartbone_link
 JTAG_TIMEOUT = 60
 # The IDCODE of each variant's FPGA at version 0 (check.py's variants); compared without the version.
 IDCODES = {"cle-215+": 0x03636093, "cle-215": 0x03636093, "cle-101": 0x03631093}
+# With no variant known (a card on the vendor XDMA sample, #155) the jtag test takes either Acorn FPGA: what each
+# part is in, and the variant it names, if only one variant has it (the XC7A200T is in the CLE-215 and the CLE-215+).
+ACORN_PARTS = {code: "/".join(sorted(v for v, c in IDCODES.items() if c == code)) for code in set(IDCODES.values())}
+VARIANT_BY_PART = {code: names for code, names in ACORN_PARTS.items() if "/" not in names}
 # openFPGALoader's libgpiod cable opens /dev/gpiochip0. The header's chip is found by its device-tree
 # compatible (wiring.toml), not by number: a Pi 5 can have gpiochip11-15, 15 the RP1.
 GPIOCHIP = "/dev/gpiochip0"
@@ -218,7 +222,7 @@ def pins_held(setup, holders):
 
 
 def jtag(setup, variant, run, bar0_dna=None, gpiochip=None, held=held_pins):
-    want = IDCODES[variant]
+    wants = [IDCODES[variant]] if variant else sorted(ACORN_PARTS)
     base = ["openFPGALoader", "--cable", setup.jtag_cable, "--pins", setup.jtag_pins]
     faults, output, seen = [], [], {}
     try:
@@ -253,12 +257,22 @@ def jtag(setup, variant, run, bar0_dna=None, gpiochip=None, held=held_pins):
             faults.append(("fail", f"P1 JTAG: {idcode.NO_RAW_SCAN}"))
         elif not found:
             faults.append(("fail", "no device on the P1 JTAG chain"))
-        elif len(found) != 1 or not idcode.same_part(found[0], want):
+        elif len(found) != 1 or not any(idcode.same_part(found[0], w) for w in wants):
             has = seen["idcode"] + (f" ({seen['idcode_device']})" if len(found) == 1 else "")
-            faults.append(("fail", f"P1 JTAG chain has {has}, expected one {idcode.device(want)} "
-                                   f"(IDCODE {want:#010x}, any version) for {variant}"))  # fmt: skip
+            if variant:
+                (want,) = wants
+                faults.append(("fail", f"P1 JTAG chain has {has}, expected one {idcode.device(want)} "
+                                       f"(IDCODE {want:#010x}, any version) for {variant}"))  # fmt: skip
+            else:
+                parts = " or ".join(f"{idcode.device(w)} ({ACORN_PARTS[w]})" for w in wants)
+                faults.append(("fail", f"P1 JTAG chain has {has}, expected one {parts}, an Acorn's FPGA "
+                                       "(the variant is not known from the PCI IDs)"))  # fmt: skip
         else:
             chain_ok = True
+            if not variant:  # the card's IDs did not say: the part may
+                part = next(w for w in wants if idcode.same_part(found[0], w))
+                if part in VARIANT_BY_PART:
+                    seen["variant"] = VARIANT_BY_PART[part]
         if rc != 0 and scanned:  # whatever it printed, a scan that failed is not trusted
             faults.append(("fail", f"openFPGALoader --detect exited {rc} on the P1 JTAG chain"))
             if chain_ok:  # it found the one FPGA expected, so that is not why the DNA was not read
