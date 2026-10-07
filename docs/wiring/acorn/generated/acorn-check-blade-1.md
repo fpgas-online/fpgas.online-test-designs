@@ -43,7 +43,7 @@ sudo fpgas-acorn-verify --no-publish
 
 There is one result, **pass** or **fail**, and only a pass exits 0. The summary on the terminal lists every test in the order it ran with its result; for a check that did not pass it ends with `RESULT:`, a `failed:` line for each failed test, a `not run:` line for the tests that did not run and why, and `What to do:`.
 
-**No Compute Blade has passed the whole check yet.** This is what one prints today: a Compute Blade with a Compute Module 5 and an Acorn CLE-101 still on the image it was sold with (pi16 at ps1, 7 October 2026, installed by the steps above). Two things are wrong and neither is the wiring or the installation: the card has not been converted to the fpgas.online design, and in this boot the JTAG test cannot have its TMS pin, which the header's serial port holds. **Do not follow its first `What to do:` line on a Compute Blade:** it says to convert the card, and converting or loading a card on a blade is not in this guide yet (the page "verifying 3" says why). That line is as version 0.0.post1216 printed it; from version 0.0.post1284 the check says not to on a Compute Blade.
+**No Compute Blade has passed the whole check yet.** This is what one prints today: a Compute Blade with a Compute Module 5 and an Acorn CLE-101 still on the image it was sold with (pi16 at ps1, 7 October 2026, installed by the steps above, version 0.0.post1216). Two things are wrong and neither is the wiring or the installation: the card has not been converted to the fpgas.online design, and in this boot the JTAG test cannot have its TMS pin, which the header's serial port holds. Its `What to do:` lines are left out here: that version's advice was for a Raspberry Pi 5. **On a Compute Blade, do not load a design into the card or convert it; that is not in this guide yet** (the page "verifying 3" says why). From version 0.0.post1284 the check says so itself, and says that changing the gateway's shared boot files or giving one blade its own copy is the gateway owner's choice.
 
 ```text
 $ sudo fpgas-acorn-verify --no-publish
@@ -73,32 +73,10 @@ RESULT: FAIL: a board did not pass.
     not run: pcie-bar0, flash, ddr, p2-serial, scratch: unconverted: runs SQRL's factory image, not the fpgas.online design
     not run: p2-uart: the board does not run a known build
     not run: p2-gpio: J5 and H5 are not wired on the Compute Blade setup
-What to do:
-  * The Acorn still runs the image it was sold with, not the fpgas.online one,
-    so only its PCIe link and its JTAG could be tested. It has to be converted
-    once (the fpgas.online image loaded over JTAG, then written to its flash
-    with fpgas-acorn-flash):
-    https://github.com/fpgas-online/fpgas.online-test-designs/blob/main/docs/hardware/acorn-pcie-programming.md
-  * The serial port has a pin JTAG needs, so the JTAG test could not run. On a
-    Compute Blade the JTAG TMS wire and the serial port's TX are the same pin
-    (GPIO14): while the serial port is on, JTAG cannot be tested there. Boot
-    with the header's serial port off: in config.txt enable_uart=0 and no
-    uart_2ndstage=1, in cmdline.txt no console=serial0 (on a netbooted blade
-    these files are on the gateway: change one blade's own copy, as several
-    hosts may share them). With all three, on one Compute Blade with a CM5,
-    the pin was free and the JTAG test passed:
-    https://github.com/fpgas-online/fpgas.online-test-designs/issues/127
-  * To look at the acorn board yourself: sudo fpgas-acorn-debug --help (sudo
-    apt install fpgas-online-acorn-debug)
-  * What each message means:
-    https://docs.fpgas.online/en/latest/verify/common-failures.html#common-failures
-The whole report, for a program to read (JSON): /run/fpgas-online/verify.json
-******************************************************************************
+What to do: (left out here; see the text above)
 ```
 
-**On a Compute Blade, do not follow the first `What to do:` line above:** do not load a design into the card or convert it; that is not in this guide yet (the page "verifying 3" says why).
-
-On the blades at ps1 every `sudo` first prints `sudo: unable to resolve host pi16: Name or service not known` (with the blade's own name). It did no harm on the blades it was seen on (7 October 2026), and is left out above. The advice above to "change one blade's own copy" of the boot files is as version 0.0.post1216 printed it; from version 0.0.post1284 the check says what the page "verifying 3" says: changing the shared files or giving one blade its own copy is the gateway owner's choice.
+On the blades at ps1 every `sudo` first prints `sudo: unable to resolve host pi16: Name or service not known` (with the blade's own name). It did no harm on the blades it was seen on (7 October 2026), and is left out above.
 
 **A card still on the vendor's XDMA sample image** (pi20 at ps1, 7 October 2026, version 0.0.post1220) gets the same tests as one on SQRL's image: `pcie-link` and `rp1-pio` pass, `jtag` fails on GPIO14 as above, the rest are `not run`. Its summary line reads `acorn -: fail` (no variant is named), and the first `What to do:` line says the board runs Xilinx's XDMA sample design (on a Compute Blade, from version 0.0.post1284, not to convert it). That was on pi20 at ps1, installed by the steps above as version 0.0.post1216 and updated to 0.0.post1220 the same day; version 0.0.post1216 printed `acorn: fail (no test ran)` there ([fpgas.online-test-designs issue 155, a card on the vendor XDMA sample image got no test at all](https://github.com/fpgas-online/fpgas.online-test-designs/issues/155)).
 
