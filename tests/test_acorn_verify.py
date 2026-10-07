@@ -15,7 +15,7 @@ import json
 import pathlib
 
 import pytest
-from fpgas_online_verify import core, identity
+from fpgas_online_verify import conclusion, core, identity, runner
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
 from fpgas_online_verify.boards.acorn import check as av
 from fpgas_online_verify.boards.acorn import suite
@@ -272,6 +272,19 @@ def test_xilinx_boards_that_are_not_acorns_are_named_and_fail_with_no_bar_traffi
     assert report["reason"] == f"{title}: fpgas.online has no test design for this board yet"
     assert report["tests"] == [] and "unconverted" not in report["reason"]
     assert events == ["fpga-board-identified"]
+    # told to people, and to the registry, as a Xilinx PCIe card, not as an Acorn; no Acorn debug tool offered
+    whole = {"result": "fail", "mode": "auto", "boards": [report]}
+    assert runner.details(whole)["board0"] == "xilinx-pcie - fail"
+    told = runner.summary(whole)
+    assert f"  xilinx-pcie {title}: fail" in told and "  acorn" not in told
+    assert f"  xilinx-pcie {title}: fail (no test ran)" in conclusion.lines(whole)
+    assert "fpgas-acorn" not in told and "fpgas-xilinx" not in told
+    # an Acorn tool named for the BAR0 error such a card can still have is not offered for it either
+    bar0 = {**report, "reason": "BAR0 could not be mapped: PermissionError"}
+    assert not [a for a in conclusion.advice({"result": "error", "boards": [bar0]}) if "fpgas-" in a]
+    plain = {"board": "acorn", "variant": "cle-215+", "found": {"kind": "fpgas-online"}, "result": "fail"}
+    assert conclusion.shown(plain) == ("acorn", "cle-215+") and conclusion.shown({"board": "tt"}) == ("tt", None)
+    assert report["board"] == "acorn"  # the key the state file and the identity use is unchanged
 
 
 def test_a_design_we_did_not_build_fails_as_such(tmp_path, images):

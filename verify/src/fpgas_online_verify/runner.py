@@ -303,7 +303,9 @@ def details(report):
     if "reason" in report:
         out["reason"] = report["reason"]
     for i, b in enumerate(report["boards"]):
-        out[f"board{i}"] = f"{b['board']} {b.get('variant') or '-'} {b['result']}"
+        # three words (the site reads them so); another board's title is in the reason
+        name, variant = conclusion.shown(b)
+        out[f"board{i}"] = f"{name} {'-' if name == conclusion.OTHER_PCIE else variant or '-'} {b['result']}"
         if "reason" in b:
             out[f"board{i}_reason"] = b["reason"]
         if b.get("tests"):
@@ -351,7 +353,8 @@ def summary(report, kept_in=None):
     if report.get("not_checked"):
         lines.append(f"  not checked (none of the tests asked for): {', '.join(report['not_checked'])}")
     for b in report["boards"]:
-        lines.append(f"  {b['board']} {b.get('variant') or '-'}: {b['result']}")
+        name, variant = conclusion.shown(b)
+        lines.append(f"  {name} {variant or '-'}: {b['result']}")
         lines += [f"    {reason}" for reason in conclusion.own_reasons(b)]  # a test's reason is on its own line
         for t in b.get("tests", []):
             lines.append(f"    {t['test']:<10} {t['result']}" + (f": {t['reason']}" if "reason" in t else ""))
