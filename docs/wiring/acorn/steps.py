@@ -1664,7 +1664,8 @@ def fit_actions(c):
         "If the housings are on the headers (after the bench check), take them off.",
         "Press the P1 plug into socket P1 and the P2 plug into socket P2 on the underside of the Acorn, each the way "
         "round it was when you put the flags on, until fully seated.",
-        "Put the Acorn in the M.2 slot and fit its screw.",
+        "Put the Acorn in the M.2 slot and fit its screw"
+        + (f", in the standoff marked {c.hat.largest_card} at the far end of the {c.hat.name}." if c.hat else "."),
         f"Fit {on[0]}, and {on[1]}.",
         f"Before powering on, look at both housings again, as on the bench check: the {c1} housing's marked corner "
         f"is on {at1}, and the {c2} housing's on {at2}. Turned round, {turned}"
