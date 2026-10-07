@@ -201,5 +201,7 @@ def test_a_row_split_by_host_keeps_only_this_carriers_clause():
 def test_moving_a_wire_sends_the_cable_through_the_new_cables_checks_before_a_boot():
     for c in wiring.CARRIERS.values():
         body = "\n".join(check.pages(c).values())
-        rework = body[body.index("After moving a wire") :][:600]
-        assert "take the card out" in rework and "bench check" in rework and "Then boot" in rework
+        rework = body[body.index("After moving a wire") :].split("\n", 1)[0]
+        order = ["take the card out and pull both plugs", "with the meter", "the bench check", "Fitting", "Then boot"]
+        at = [rework.index(words) for words in order]  # each named, in this order
+        assert at == sorted(at)
