@@ -130,16 +130,30 @@ def turned_rails(c, plan):
     return rails
 
 
-def turned_warning(c, plan):
-    """What turning the housing round does, in a sentence; it names a supply rail only if a wire lands on one."""
+def turned_effect(c, plan):
+    """What turning the housing round does, as the words after "the housing"; a rail only if a wire lands on one."""
     rails = turned_rails(c, plan)
     if rails:
         hits = " and ".join(
             f"{rail} on the {' and '.join(label_of(s) for s in sigs)} wire{'s' if len(sigs) > 1 else ''}"
             for rail, sigs in rails.items()
         )
-        return f"Turned round, the housing puts {hits}."
-    return "Turned round, the housing puts its wires on the wrong pins."
+        return f"puts {hits}"
+    return "puts its wires on the wrong pins"
+
+
+def turned_warning(c, plan):
+    """What turning the housing round does, in a sentence; it names a supply rail only if a wire lands on one."""
+    return f"Turned round, the housing {turned_effect(c, plan)}."
+
+
+def turned_harms(c, plan):
+    """Whether turning the housing round puts a supply rail on a wire that reaches an FPGA pin."""
+    return any(label_of(s) != "GND" for sigs in turned_rails(c, plan).values() for s in sigs)
+
+
+# Said after a warning that names a rail on a signal wire.
+HARM = "which can destroy the FPGA pin on the Acorn that wire reaches"
 
 
 # The cable's wires are all black (the note on the cable in wiring.toml's parts): the drawn colours are the signals'.
@@ -1366,8 +1380,8 @@ def procedure_parts(c, restart=False):
             ("Stripping and crimping", "acorn-cable-crimp.png"),
         )
         warning = turned_warning(c, plan)
-        if any(label_of(s) != "GND" for sigs in turned_rails(c, plan).values() for s in sigs):
-            warning = warning[:-1] + ", which can destroy the Acorn's FPGA pin it reaches."
+        if turned_harms(c, plan):
+            warning = f"{warning[:-1]}, {HARM}."
         step(
             f"Hold the empty {shape} housing with the wire openings facing you and its long side upright, as in "
             "the picture. Until it is marked, either way up is the same. "
@@ -1423,7 +1437,6 @@ def procedure_parts(c, restart=False):
     step(
         "Fit the cables, in this order. The sockets are on the underside of the card and may not be reachable once "
         "it is in the slot.\n\n" + fit_block(c).rstrip(),
-        sheet,
     )
     parts["tail"] = [CREDITS[c.key] + ".", ""]
     return parts
@@ -1587,7 +1600,7 @@ M2_SLOT = {"blade": (1736, 44, 1846, 322), "pi5": (22, 74, 214, 162)}
 
 def order(sh, x, y, n):
     """The number of one of the fitting step's actions, in a dark disc."""
-    sh.add(f'<circle cx="{x}" cy="{y}" r="14" fill="{BODY}"/>')
+    sh.add(f'<circle id="action-{n}" cx="{x}" cy="{y}" r="14" fill="{BODY}"/>')
     sh.text(x, y + 6.5, str(n), 19, "bold", ON_BODY, "middle", bg=BODY)
 
 
@@ -1599,14 +1612,25 @@ def corner(sh, rect):
 
 
 def fit_actions(c):
-    """The five actions of fitting the cables, in order: one wording, for the procedure and the wiring page."""
-    on = []
+    """The six actions of fitting the cables, in order: one wording, for the procedure and the wiring page.
+
+    The last one names each housing's marked pin and says what a turned housing does, from the wiring.
+    """
+    on, marked, effects, harms = [], [], {}, False
     for connector in wiring.CONNECTORS:
         plan = housing(c, connector)
         data = c.headers[plan.header]
         whole = (plan.first, plan.last) == (1, data.count)
         where = data.name if whole else f"{data.name} pins {plan.first} to {plan.last}"
         on.append(f"the {connector} housing on the {where}, marked corner on pin {plan.first}")
+        marked.append((connector, f"pin {plan.first} of the {data.name}"))
+        effects[connector] = turned_effect(c, plan)
+        harms = harms or turned_harms(c, plan)
+    (c1, at1), (c2, at2) = marked
+    if any(turned_rails(c, housing(c, k)) for k in effects) or len(set(effects.values())) > 1:
+        turned = " and ".join(f"the {k} housing {effect}" for k, effect in effects.items())
+    else:
+        turned = f"either housing {next(iter(effects.values()))}"
     return [
         c.power_off,
         "If the housings are on the headers (after the bench check), take them off.",
@@ -1614,8 +1638,8 @@ def fit_actions(c):
         "round it was when you put the flags on, until fully seated.",
         "Put the Acorn in the M.2 slot and fit its screw.",
         f"Fit {on[0]}, and {on[1]}.",
-        "Before powering on, look at both housings again: each marked corner is on its header's pin 1, as on the "
-        "bench check. A housing turned round puts 5 V on a signal wire into the Acorn.",
+        f"Before powering on, look at both housings again, as on the bench check: the {c1} housing's marked corner "
+        f"is on {at1}, and the {c2} housing's on {at2}. Turned round, {turned}" + (f", {HARM}." if harms else "."),
     ]
 
 
@@ -1632,6 +1656,8 @@ def fit_block(c):
 def fit(c):
     """Fitting both cables: plugs into the card, the card into its slot, the housings onto their headers."""
     actions = fit_actions(c)
+    if len(actions) != 6:
+        raise wiring.WiringError(f"fit {c.key}: the picture draws six actions, the list has {len(actions)}")
     pins = wiring.CONNECTORS["P1"]["pins"]
     sh = Sheet(W, 100)
     title(sh, f"Fit the cables on a {c.name}", "in this order: the sockets may not be reachable once the card is in")
@@ -1660,6 +1686,8 @@ def fit(c):
     y = FIT_HOSTS[c.key](sh, c, y + 44)
     order(sh, 44, y + 16, 5)
     y = para(sh, 68, y + 22, actions[4], W - 78, "bold")
+    order(sh, 44, y + 10, 6)
+    y = para(sh, 68, y + 16, actions[5], W - 78, "bold")
     sh.h = math.ceil(y - LINE + 14)
     sh.check(f"fit {c.key}")
     return sh.svg()
