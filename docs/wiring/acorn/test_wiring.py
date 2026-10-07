@@ -131,3 +131,58 @@ def test_a_list_says_it_is_for_one_host_and_names_the_tools_the_cables_take():
 def test_a_part_without_a_quantity_is_refused():
     rejects(lambda d: d["parts"].append({"part": "a thing"}), "a part needs a whole `qty`")
     rejects(lambda d: d["parts"].append({"qty": 1, "part": "a thing", "price": 3}), "keys other than")
+
+
+HAT_NAME = "Waveshare PoE M.2 HAT+ (B)"
+
+
+def test_the_pictures_draw_the_poe_m2_hat_plus_b_and_it_takes_the_acorn():
+    # Tim, 7 October 2026: only the (B) is drawn. The PoE M.2 HAT+ without the (B) takes 2230 and 2242 cards only.
+    hat = wiring.CARRIERS["pi5"].hat
+    assert hat.name == hat.product == HAT_NAME
+    assert hat.page == "https://www.waveshare.com/poe-m.2-hat-plus-b.htm"
+    assert "PoE-M.2-HAT-Plus-B" in hat.drawing and hat.photo == "hat-plus-b-ccw.jpg"
+    assert hat.largest_card == "2280" and "2280" in next(
+        p["note"] for p in wiring.DATA["parts"] if "Acorn" in p["part"]
+    )
+    assert wiring.CARRIERS["blade"].hat is None
+
+
+def test_every_pi5_page_and_picture_names_the_hat_and_none_names_another():
+    import re
+
+    import gen
+
+    pi5 = {n: t for n, t in gen.build().items() if "pi5" in n}
+    for name in ("acorn-pi5-bom.md", "acorn-build-pi5-overview.md", "acorn-cables-pi5.md"):
+        assert HAT_NAME in pi5[name], name
+    for name in ("acorn-wiring-pi5.svg", "acorn-cable-pi5-p1.svg", "acorn-cable-pi5-p2.svg", "acorn-cable-pi5-fit.svg"):
+        said = re.findall(r'aria-label="([^"]*)"', pi5[name])  # the words drawn, each line of text once
+        assert any("HAT+ (B)" in line for line in said), name
+    # "HAT+" alone is the other HAT, named only to say it is not this guide's
+    for name, text in pi5.items():
+        for m in re.finditer(r"HAT\+(?! \(B\))", text):
+            assert "without the (B)" in text[m.start() : m.end() + 40], (name, text[m.start() - 60 : m.end() + 40])
+
+
+@pytest.mark.parametrize("field", wiring.HAT_FIELDS)
+def test_a_hat_that_lacks_a_field_is_refused(field):
+    raw = copy.deepcopy(wiring.DATA["carriers"]["pi5"])
+    del raw["hat"][field]
+    with pytest.raises(wiring.WiringError, match=f"the hat table lacks \\['{field}'\\]"):
+        wiring._carrier("pi5", raw)
+
+
+def test_no_part_naming_the_hat_is_refused():
+    raw = copy.deepcopy(wiring.DATA["carriers"]["pi5"])
+    raw["parts"] = [p for p in raw["parts"] if HAT_NAME not in p["part"]]
+    with pytest.raises(wiring.WiringError, match="no part names the HAT"):
+        wiring._carrier("pi5", raw)
+
+
+def test_where_things_are_in_the_hat_photo_is_what_measure_hat_measures():
+    import measure_hat
+
+    hat = wiring.DATA["carriers"]["pi5"]["hat"]
+    got = measure_hat.measure(wiring.HERE / "photos" / hat["photo"])
+    assert {k: hat[k] for k in measure_hat.STORED} == {k: got[k] for k in measure_hat.STORED}
