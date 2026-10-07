@@ -271,8 +271,8 @@ source = "Digilent's Pmod HAT Adapter Reference Manual, read from a copy on 6 Oc
 [[facts]]
 key = "cable-fitted"
 group = "cables"
-says = "On our boards each cable is a female-to-female 10-pin ribbon cable (0.1 inch pitch), joined to the female socket at each end through a strip of pin header, with the 3.3 V pin left out: pins 6 and 12 are not carried, so the two boards' 3.3 V supplies are not joined. As we read his answer, each cable sits on pins 1 to 5 and 7 to 11 and leaves the 3.3 V column free"
-source = "Tim Ansell, 7 October 2026, answering our question of 6 October; he believes the ribbon cables are whiteeeen 10-pin flat ribbon cables, 0.1 inch pitch, female to female sockets, about 7.87 inch (200 mm), IDC connectors (Amazon product B094RGMBS9). That the column left free is the 3.3 V one, pins 6 and 12, is our reading of his words \"with the 3v3 pin missing\"; asked to confirm on 7 October 2026 (question docs-2), not checked by us on a board"
+says = "On our boards the 3.3 V pins (6 and 12) are expected not to be connected, so the two boards' 3.3 V supplies are not joined; each cable is a female-to-female ribbon cable joined to the socket at each end through a strip of pin header, and whether it has 10 or 12 wires is not known. A 10-wire cable on pins 1 to 5 and 7 to 11 would carry both grounds (pins 5 and 11) and leave only the 3.3 V pins free"
+source = "Tim Ansell, 7 October 2026, answering our question of 6 October; he believes the ribbon cables are whiteeeen 10-pin flat ribbon cables, 0.1 inch pitch, female to female sockets, about 7.87 inch (200 mm), IDC connectors (Amazon product B094RGMBS9). Asked again on 7 October 2026 (question docs-2), he answered: \"The expectation is that the 3v3 pin is not connected. I'm unsure if we are using 10-pin or 12-pin cables?\" Not checked by us on a board. That a 10-wire cable on pins 1 to 5 and 7 to 11 carries both grounds follows from the Pmod numbering"
 
 [[facts]]
 key = "cable-ends"

@@ -171,11 +171,11 @@ def test_the_cables_page_lists_what_the_makers_say_one_fact_to_a_bullet_under_th
     assert all(bullet.count(". ") <= 1 for bullet in bullets)  # one or two sentences each
     assert "- If a straight twelve-wire cable is used instead, it joins the two boards' 3.3 V supplies." in bullets
     cables = [b for b in bullets if b[2:] in {f["says"] + "." for f in W.facts.values() if f["group"] == "cables"}]
-    assert cables[0].startswith("- On our boards each cable is a female-to-female 10-pin ribbon cable")
+    assert cables[0].startswith("- On our boards the 3.3 V pins (6 and 12) are expected not to be connected")
     # Tim's answer of 7 October 2026: the cable fitted at welland, its 3.3 V pin left out
     assert any(
-        b.startswith("- On our boards each cable is a female-to-female 10-pin ribbon cable")
-        and "pins 6 and 12 are not carried" in b
+        b.startswith("- On our boards the 3.3 V pins (6 and 12) are expected not to be connected")
+        and "whether it has 10 or 12 wires is not known" in b
         for b in bullets
     )
     assert "the boards shown as fpga-1 and fpga-3 on tinytapeout.fpgas.online on 6 October 2026" in text
@@ -190,7 +190,7 @@ def test_a_pin_table_page_points_at_the_cables_page_instead_of_repeating_the_mak
         assert "see [the cables page](tt-fpga-cables.md)" in text, name
         assert not [line for line in text.splitlines() if line.startswith("- ")], name
         assert "Not checked by us on a board:" not in text and "rainbow" not in text, name
-        assert "A 10-pin ribbon cable, its 3.3 V pin left out, joins" in text, name
+        assert "A ribbon cable, its 3.3 V pins expected not to be connected, joins" in text, name
         assert "12-pin Pmod cable" not in text, name
         assert "are printed INPUT (`ui_in`), BIDIR (`uio`) and OUTPUT (`uo_out`)." in text, name
 

@@ -37,7 +37,7 @@ W, H = 1040, 830
 # Said on the picture and, by tables.py, under it on every page, until where pin 1 is has been read off a
 # board. That a cable turned round puts the ground pins on signal pins follows from the numbering:
 # turned_round() works it out from wiring.toml and draw() refuses to say it if it is not so. Our cables
-# carry ground but not 3.3 V (wiring.toml, fact cable-fitted), so ground is what the warning names.
+# are expected to carry ground but not 3.3 V (wiring.toml, fact cable-fitted), so ground is what the warning names.
 PIN_1 = (
     "Pin 1 (gold) is drawn where Tiny Tapeout's drawing of the demo board puts it, not checked by us:",
     "seen from above, Pmod edge toward you, the right-hand end of the row farther from the edge.",
@@ -155,7 +155,7 @@ def draw(w, name):
         raise SystemExit("picture.py is laid out for three headers and three ports")
 
     sh.text(left, 40, f"Tiny Tapeout FPGA demo board to Pmod HAT: {title_end}", 22, "bold")
-    cables = "Three 10-pin ribbon cables, 3.3 V pins 6 and 12 left free (as we read Tim's answer); one USB-C cable."
+    cables = "Three ribbon cables, 3.3 V pins 6 and 12 expected not connected (Tim's word); one USB-C cable."
     sh.text(left, 66, cables, SMALLEST, fill=MUTED)
 
     sh.rect(left, board_top, right - left, board_bottom - board_top, fill=BOARD_FILL, stroke=INK, sw=2, rx=10)
@@ -190,7 +190,8 @@ def draw(w, name):
         sh.text(cx, port_end + 30, port, 22, "bold", ink, "middle")
 
         # the cable: a band over the columns it carries, from the header to the port, and a gold line from pin 1
-        # to pin 1. Our cables leave the 3.3 V pins free (wiring.toml, fact cable-fitted), so the band does too.
+        # to pin 1. Our cables are expected to leave the 3.3 V pins unconnected (wiring.toml, fact cable-fitted),
+        # so the band leaves them out.
         cols = carried_columns(w)
         bx0, bx1 = x0 + cols[0] * CELL, x0 + (cols[-1] + 1) * CELL
         sh.rect(bx0, top_end, bx1 - bx0, port_top - top_end, fill=colour, stroke=colour, sw=2, opacity=BAND)

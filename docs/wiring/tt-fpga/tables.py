@@ -98,8 +98,8 @@ def finding(keys=None):
     joins = spoken(f"{header_name(k)} to {W.cables[k]}" for k in keys)
     which = "each header to its port" if len(keys) > 1 else "the header to its port"
     return (
-        f"**Finding the headers.** {says('printed', 'edge')} A 10-pin ribbon cable, its 3.3 V pin left out, "
-        f"joins {which} on the "
+        f"**Finding the headers.** {says('printed', 'edge')} A ribbon cable, its 3.3 V pins expected not to be "
+        f"connected, joins {which} on the "
         f"{W.board['hat']}, pin 1 to pin 1: {joins}. A USB-C cable joins the demo board to a USB port of the "
         "Raspberry Pi.\n"
     )
