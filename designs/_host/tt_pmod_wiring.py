@@ -449,7 +449,7 @@ def build_firmware(controller):
 
 # The least free heap the RP2's command server must find once it is loaded, beside the SDK's own objects. The
 # largest thing it builds is txid's table for one pin-id round (8 pins; a frame of 50 bits each): see the MEM:
-# lines a run prints, and the pull request that set this figure.
+# lines a run prints. PROVISIONAL: not yet measured on a board; the second live run of PR #179 sets it.
 MIN_HEAP_FREE = 20000
 
 
