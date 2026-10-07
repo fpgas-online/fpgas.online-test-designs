@@ -1454,9 +1454,9 @@ def procedure_parts(c, restart=False):
     first = next(iter(wiring.CONNECTORS.values()))["pins"][0]
     step(
         "This is a bench check; the housings come off again before the cables are fitted. "
-        f"Fit {fits[0]}, and {fits[1]}. The Acorn is not in its slot and the plugs are free. "
         + power_off_if_on(c)
-        + " Then put one meter probe "
+        + f" Then fit {fits[0]}, and {fits[1]}. The Acorn is not in its slot and the plugs are free. "
+        "Put one meter probe "
         f"on contact 1 ({label_of(first)}) of a plug and the other on {c.shell}: it must "
         f"beep. Do the same for the other plug. Then contact {len(pins)} of each plug ({label_of(pins[-1])}, the wire "
         "you cut back): against the shell and against every other contact it must be silent. That the shell is the "
@@ -1621,7 +1621,8 @@ def guide(c):
         "## If it fails",
         "Do not fit the cables. A contact 1 that does not beep means that cable's ground wire is open or in the wrong "
         "cavity; a contact 6 that beeps anywhere means the 3.3 V wire was not the one cut back. Go back to that "
-        'cable\'s page "fill and check the housing" and check every wire again.',
+        'cable\'s second page, "JTAG connector 2" or "UART connector 2" (fill and check the housing), and check every '
+        "wire again.",
     )
     out[guide_name(c, "fit")] = body(
         f"Both cables, checked on the bench (the page before this one), the Acorn and the {c.name}. As before: "
