@@ -1104,7 +1104,7 @@ def test_a_board_that_says_it_is_an_fpga_board_is_a_tt_fpga_and_only_then_is_a_d
 
 
 WIRING = "tt_pmod_wiring.py"
-WRONG_RIBBON = "the ui_in ribbon (HAT JA): ui_in[2] (pin 3) did not reach JA3: it reached JA4/JB4"
+WRONG_RIBBON = "the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) did not reach HAT JA pin 8"
 
 
 def _wiring_said(rc, line):
@@ -1122,7 +1122,8 @@ def _sdk_starts(run):
 
 def test_a_board_with_a_tiny_tapeout_chip_has_its_wiring_tested_and_passes_with_nothing_loaded(tmp_path, monkeypatch):
     """#132, and Tim on 2026-10-05: "Fail until wiring is tested". The `sdk` test, then the `wiring` test
-    (tt_pmod_wiring.py, no bitstream) while the bridge is stopped; then the board's SDK is started again."""
+    (tt_pmod_wiring.py, no bitstream) while the bridge is stopped. The script puts the board back from RAM itself:
+    the check starts the SDK once only, before it asks the board who it is."""
     _installed(monkeypatch)
     events = []
     run = Runner([_rpi_hwid(TT_CHIP_BOARD), _wiring_said(0, "all 24 Pmod signals reached the Pi where they should")])
@@ -1139,13 +1140,13 @@ def test_a_board_with_a_tiny_tapeout_chip_has_its_wiring_tested_and_passes_with_
     # the wiring test runs on the board's port, against the cabling the boards have, after the board was asked
     argv = run.calls[_index(run, WIRING)]
     assert argv[0] == sys.executable and argv[1].endswith(WIRING)
-    assert argv[2:] == ["--port", "/dev/ttyACM0", "--controller", "rp2040", "--cabling", "asic", "--no-daemon"]
+    assert argv[2:] == ["--port", "/dev/ttyACM0", "--controller", "rp2040", "--cabling", "asic", "--no-daemon",
+                        "--time-limit", str(tt_fpga.WIRING_TIME_LIMIT)]  # fmt: skip
     stop = run.calls.index(["systemctl", "stop", "fpgas-tt.service"])
     assert stop < run.calls.index(RPI_HWID_TT) < _index(run, WIRING)
-    # and the SDK is started again after it: once before rpi-hwid asks the board, once after the wiring test
-    first, again = _sdk_starts(run)
-    assert first < run.calls.index(RPI_HWID_TT) and _index(run, WIRING) < again < len(run.calls) - 1
-    assert run.calls[again][2:] == ["/dev/ttyACM0"]
+    # one SDK start, before rpi-hwid asks the board; none after the wiring test (no second boot.log rewrite)
+    (first,) = _sdk_starts(run)
+    assert first < run.calls.index(RPI_HWID_TT)
     assert [stage for stage, _ in events] == ["fpga-board-identified", *["fpga-test-started", "fpga-test-finished"] * 2]
     assert events[4][1] == {"test": "wiring", "result": "pass", "reason": ""}
     assert report["state"] == {"variant": "tt-asic", "serial": "E661"} and "warnings" not in report
@@ -1160,7 +1161,7 @@ def test_a_ribbon_that_is_not_where_it_should_be_fails_the_board_and_is_named(tm
     report = _check(TT, tmp_path, TT_FOUND, run)
     assert report["result"] == "fail" and report["reason"] == f"wiring fail: {WRONG_RIBBON}"
     assert report["tests"][-1]["reason"] == WRONG_RIBBON
-    assert len(_sdk_starts(run)) == 2 and _restarted_last(run)  # the SDK is started again whatever it found
+    assert len(_sdk_starts(run)) == 1 and _restarted_last(run)
 
 
 @pytest.mark.parametrize("answer, result, reason", [
@@ -1169,38 +1170,28 @@ def test_a_ribbon_that_is_not_where_it_should_be_fails_the_board_and_is_named(tm
      "the wiring could not be tested: no raw REPL banner"),
     # a script that printed no WIRING: line
     ((WIRING, (1, "Traceback (most recent call last):\nKeyError: 'x'\n")), "fail", "the test exited 1"),
-    # killed at its limit
-    ((WIRING, core.Problem("fail", "tt_pmod_wiring.py did not finish within 240 s: ")), "fail",
+    # killed at the check's limit: it could not finish, nor put back what it changed
+    ((WIRING, core.Problem("fail", "tt_pmod_wiring.py did not finish within 240 s: ")), "error",
      "tt_pmod_wiring.py did not finish within 240 s: "),
 ])  # fmt: skip
-def test_a_wiring_test_that_could_not_finish_is_said_as_that_and_the_sdk_is_still_started(
-    tmp_path, monkeypatch, answer, result, reason
-):
+def test_a_wiring_test_that_could_not_finish_is_said_as_that(tmp_path, monkeypatch, answer, result, reason):
     _installed(monkeypatch)
     run = Runner([_rpi_hwid(TT_CHIP_BOARD), answer])
     report = _check(TT, tmp_path, TT_FOUND, run)
     assert report["result"] == result and report["tests"][-1] == {**report["tests"][-1], "result": result}
     assert report["tests"][-1]["reason"] == reason and report["reason"] == f"wiring {result}: {reason}"
-    assert len(_sdk_starts(run)) == 2 and _restarted_last(run)
+    assert len(_sdk_starts(run)) == 1 and _restarted_last(run)
 
 
-def test_a_wiring_test_runs_with_the_check_s_time_limit_for_it():
-    assert tt_fpga.WIRING_TIMEOUT < testbench.PROGRAM_TIMEOUT + testbench.TEST_TIMEOUT
+def test_the_wiring_test_stops_itself_well_before_the_check_would_kill_it():
+    """It stops at WIRING_TIME_LIMIT and puts everything back, with up to 75 s for its SDK fallback: all inside the
+    check's own limit, which kills it outright."""
+    assert tt_fpga.WIRING_TIME_LIMIT + tt_fpga.SDK_START_TIMEOUT <= tt_fpga.WIRING_TIMEOUT
     run = Runner([_wiring_said(0, "ok")])
     seen = []
-    TT.run_script_test("wiring", _host(TT), lambda argv, timeout: seen.append(timeout) or run(argv, timeout))
-    assert seen == [tt_fpga.WIRING_TIMEOUT, tt_fpga.SDK_START_TIMEOUT]
-
-
-def test_an_sdk_that_does_not_start_again_after_the_wiring_test_is_a_warning_not_the_result(tmp_path, monkeypatch):
-    _installed(monkeypatch)
-    starts = [(0, "tt.sdk_version=2.0.4\n"), (1, "SDK_START: the board's main.py raised: OSError\n")]
-    run = Runner([_rpi_hwid(TT_CHIP_BOARD), _wiring_said(0, "all 24"), (SDK_START, starts)])
-    report = _check(TT, tmp_path, TT_FOUND, run)
-    assert report["result"] == "pass" and [t["result"] for t in report["tests"]] == ["pass", "pass"]
-    (warning,) = report["warnings"]
-    assert warning.startswith("tt_sdk_start.py, which the check runs after the wiring test, did not succeed (it "
-                              "exited 1: SDK_START: the board's main.py raised: OSError")  # fmt: skip
+    TT.run_script_test("wiring", _host(TT), lambda argv, timeout: seen.append((argv, timeout)) or run(argv, timeout))
+    ((argv, timeout),) = seen
+    assert timeout == tt_fpga.WIRING_TIMEOUT and argv[-2:] == ["--time-limit", str(tt_fpga.WIRING_TIME_LIMIT)]
 
 
 def test_a_chip_board_with_another_fault_says_both_and_an_fpga_board_has_no_wiring_test_of_this_kind(
@@ -1210,8 +1201,11 @@ def test_a_chip_board_with_another_fault_says_both_and_an_fpga_board_has_no_wiri
     run = Runner([_rpi_hwid({**TT_CHIP_BOARD, "sdk": "1.2.2"}), _wiring_said(1, WRONG_RIBBON)])
     report = _check(TT, tmp_path, TT_FOUND, run)
     assert report["result"] == "fail"
-    assert report["reason"] == f"sdk fail: a tt06 chip needs SDK 2.0.x on an RP2040, and the board runs SDK 1.2.2 " \
-                               f"on an RP2040; wiring fail: {WRONG_RIBBON}"  # fmt: skip
+    # a board whose SDK is not one for its chip cannot select the chip's factory test: wiring is not run
+    assert report["reason"] == "sdk fail: a tt06 chip needs SDK 2.0.x on an RP2040, and the board runs SDK 1.2.2 " \
+                               "on an RP2040; wiring not run: it needs sdk to pass first"  # fmt: skip
+    assert report["not_run"] == {"wiring": "it needs sdk to pass first"} and not any(WIRING in " ".join(c)
+                                                                                      for c in run.calls)  # fmt: skip
     # the FPGA board's wiring test is pin-id, which loads its design: the chip board's script is not run there
     fpga_run = Runner([_rpi_hwid(TT_BOARD)])
     fpga = _check(TT, tmp_path / "fpga", TT_FOUND, fpga_run)

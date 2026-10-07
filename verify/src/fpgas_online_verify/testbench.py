@@ -221,7 +221,8 @@ class TestBoard(Board):
 
     def run_script_test(self, test, host, runner=run):
         """A script test (script_tests): its `pre` steps, then its script on the board's port; nothing is loaded.
-        Returns (the test's entry, a warning or None): the warning says its `then` script failed."""
+        A script the check had to kill at its limit could not finish, and could not put back what it changed: an
+        error, not a fail."""
         t = self.script_tests[test]
         argv = [sys.executable, host_tests.path(t["script"]), *(a.format(port=host["port"]) for a in t["args"])]
         try:
@@ -229,20 +230,9 @@ class TestBoard(Board):
                 with contextlib.suppress(Problem):
                     runner(step, 30)
             rc, text = runner(argv, t.get("timeout", TEST_TIMEOUT))
-            entry = {"test": test, **self.judged(t, rc, text)}
         except Problem as p:
-            entry = {"test": test, "result": p.result, "reason": p.reason}
-        if not t.get("then"):
-            return entry, None
-        then = [sys.executable, host_tests.path(t["then"]), host["port"]]
-        try:
-            rc, text = runner(then, t.get("then_timeout", TEST_TIMEOUT))
-            why_not = None if rc == 0 else f"it exited {rc}: {' '.join(tail(text, 2))}"
-        except Problem as p:
-            why_not = p.reason
-        if why_not is None:
-            return entry, None
-        return entry, f"{t['then']}, which the check runs after the {test} test, did not succeed ({why_not})"
+            return {"test": test, "result": "error", "reason": p.reason}
+        return {"test": test, **self.judged(t, rc, text)}
 
     # -- JTAG ------------------------------------------------------------------------------------------------
 
@@ -366,9 +356,10 @@ class TestBoard(Board):
     fact_tests: ClassVar[dict] = {}
     # Tests that run a host script against the board's port and load nothing (the Pmod wiring test of a demo
     # board with a Tiny Tapeout chip): test -> {"variants": the variants it is for, "script", "args" ({port} is
-    # the board's port), "pre" (commands run first, each may fail), "says" and "timeout" as a test's, and "then":
-    # a host script run afterwards with the port, whatever the test found, whose failure is a warning in the
-    # report}. They run after the fact tests, in the whole boot check only, with the board's `services` stopped.
+    # the board's port), "pre" (commands run first, each may fail), "says" and "timeout" as a test's, and
+    # "needs": fact tests that must have passed for it to mean anything (when one did not, it is not run, and
+    # the report's not_run says why)}. They run after the fact tests, in the whole boot check only, with the
+    # board's `services` stopped.
     script_tests: ClassVar[dict] = {}
     # variant -> {test: why}: a test that variant must have and the boot check does not run yet. It goes in the
     # report's `not_run`, and the board FAILS with that reason: a board is not passed on a check that leaves
@@ -491,15 +482,22 @@ class TestBoard(Board):
                 report["tests"].append(self.run_fact_test(test, variant, facts))
                 done = report["tests"][-1]
                 event("fpga-test-finished", {"test": test, "result": done["result"], "reason": done.get("reason", "")})
+            not_run = dict(self.pending.get(variant, {})) if not refused else {}
             for test in self.script_tests_for(variant) if not options.get("tests") and not refused else ():
+                failed = [
+                    t["test"]
+                    for t in report["tests"]
+                    if t["test"] in self.script_tests[test].get("needs", ()) and t["result"] != "pass"
+                ]
+                if failed:
+                    not_run[test] = f"it needs {' and '.join(failed)} to pass first"
+                    continue
                 event("fpga-test-started", {"test": test})
-                done, warning = self.run_script_test(test, host, runner)
-                report["tests"].append(done)
-                if warning:
-                    report.setdefault("warnings", []).append(warning)
+                report["tests"].append(self.run_script_test(test, host, runner))
+                done = report["tests"][-1]
                 event("fpga-test-finished", {"test": test, "result": done["result"], "reason": done.get("reason", "")})
-            if not refused and self.pending.get(variant):
-                report["not_run"] = dict(self.pending[variant])
+            if not_run:
+                report["not_run"] = not_run
             for test in tests:
                 event("fpga-test-started", {"test": test})
                 report["tests"].append(self.run_test(test, variant, host, images, manifest, runner))

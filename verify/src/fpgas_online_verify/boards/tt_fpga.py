@@ -24,7 +24,7 @@ The `wiring` test of a board with a Tiny Tapeout chip (tt_pmod_wiring.py, a scri
 its three Pmod ribbons to the Pi's Pmod HAT bit for bit: the board's RP2040 drives each ui_in and uio signal
 from a command server run in RAM over its raw REPL, the Pi reads every HAT line, and the chip's own
 tt_um_factory_test (uo_out = uio_in) carries the uio walk out on uo_out. A fault is named by its ribbon and
-pin. Then the board's SDK is started again (tt_sdk_start.py), so the board is left as it starts. Until this
+pin. The script then puts the board back from RAM as its SDK had it (tt_sdk_start.py only if that fails). Until this
 test was here such a board failed as untested (Tim, 2026-10-05: "Fail until wiring is tested and prioritize
 landing the setup which properly tests the wiring"). The FPGA board's wiring test is `pin-id`.
 
@@ -182,8 +182,10 @@ SDK_SUPPORTED = (
 # What the boot check of a variant must do and does not yet (a board fails until it does): nothing now. The
 # wiring test of a board with a Tiny Tapeout chip was the last (`wiring`, below).
 PENDING = {}
-# tt_pmod_wiring.py's own limit is the boot check's: it stops and puts the Pi back on SIGTERM, but a timeout
-# here kills it. Not yet timed on a board in this form: the live run before the merge times it.
+# tt_pmod_wiring.py stops itself at WIRING_TIME_LIMIT and puts everything back (with time left for its SDK
+# fallback, at most 75 s); the boot check's own limit, which kills it, is beyond that. Both to be set from the
+# live run's timing.
+WIRING_TIME_LIMIT = 150
 WIRING_TIMEOUT = 240
 
 
@@ -241,13 +243,15 @@ class TTFPGA(TestBoard):
     fact_tests: ClassVar[dict] = {"sdk": {"variants": ("tt-fpga", "tt-asic"), "check": sdk_check}}
     # The Pmod cabling of a board with a Tiny Tapeout chip, against the cabling the boards have (ui_in on HAT
     # JA, uio JB, uo_out JC: identify_pmod_pins.BOARDS["tt"]). The check has stopped fpgas-tt itself, so
-    # --no-daemon; tt_pmod_wiring.py unloads the SPI drivers itself. Afterwards the SDK is started again: the
-    # test leaves the chip's factory-test project selected and its clock stopped.
+    # --no-daemon; tt_pmod_wiring.py unloads the SPI drivers itself and loads them again. It puts the board back
+    # as the SDK left it from RAM (its mode, project and clock), and starts the SDK again by a soft reset only
+    # when that fails. It needs `sdk` to have passed: a board whose SDK cannot select the chip's project cannot
+    # be wiring-tested.
     script_tests: ClassVar[dict] = {
         "wiring": {"variants": ("tt-asic",), "script": "tt_pmod_wiring.py",
-                   "args": ["--port", "{port}", "--controller", "rp2040", "--cabling", "asic", "--no-daemon"],
-                   "says": "WIRING:", "timeout": WIRING_TIMEOUT,
-                   "then": "tt_sdk_start.py", "then_timeout": SDK_START_TIMEOUT},
+                   "args": ["--port", "{port}", "--controller", "rp2040", "--cabling", "asic", "--no-daemon",
+                            "--time-limit", str(WIRING_TIME_LIMIT)],
+                   "says": "WIRING:", "timeout": WIRING_TIMEOUT, "needs": ("sdk",)},
     }  # fmt: skip
     pending: ClassVar[dict] = PENDING
     # rpi-hwid's Tiny Tapeout label (its LABEL-CONTRACT.md, sections 1 and 7). Only the boot check reads the
