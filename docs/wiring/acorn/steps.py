@@ -174,12 +174,26 @@ def wrap(sh, text, width, size=T, face="regular"):
     return [*lines, line]
 
 
-def para(sh, x, y, text, width, face="regular", fill=INK, size=T):
-    """`text` in lines no wider than `width`, the first with its baseline at y. Returns the next baseline."""
-    for line in wrap(sh, text, width, size, face):
+def para(sh, x, y, text, width, face="regular", fill=INK, size=T, dark_tail=""):
+    """`text` in lines no wider than `width`, the first with its baseline at y. Returns the next baseline.
+
+    dark_tail: words shown on the dark sheet only, after the text: on its last line where they fit, else on a line
+    of their own (which the light sheet leaves empty)."""
+    lines = wrap(sh, text, width, size, face)
+    for line in lines:
         sh.text(x, y, line, size, face, fill)
         y += LINE
+    if dark_tail:
+        after = x + sh.width(lines[-1] + " ", size, face)
+        fits = after + sh.width(dark_tail, size, face) <= x + width
+        with sh.dark_only():
+            sh.text(after if fits else x, y - LINE if fits else y, dark_tail, size, face, fill)
+        y += 0 if fits else LINE
     return y
+
+
+# On the dark sheet a black wire or plug is drawn light, so a caption that calls them black says so there.
+DRAWN_LIGHT = "(Black is drawn light on this dark page.)"
 
 
 def token(sh, cx, cy, n, s=30):
@@ -825,7 +839,7 @@ def cut():
     sh.text(tx, bottom + 24 + LINE, "this half: the other cable", T)
     y = bottom + 58 + 36
     y = para(sh, 30, y, "The two halves are alike. Either one can be the P1 cable or the P2 cable.", W - 40, "bold")
-    y = para(sh, 30, y + 4, "All six wires are black. " + SKETCHED, W - 40, fill=MUTED)
+    y = para(sh, 30, y + 4, "All six wires are black. " + SKETCHED, W - 40, fill=MUTED, dark_tail=DRAWN_LIGHT)
     sh.h = math.ceil(y - LINE + 14)
     sh.check("cut")
     return sh.svg()
@@ -915,7 +929,15 @@ def flag(connector):
     ends, _body = flagged(sh, connector, sockets, 164, max(py + ph + 30, ty - LINE + 14))
     y = max(e[1] for e in ends.values()) + 40
     y = para(sh, 30, y, f"All {count} wires stay whole in this step. Next: the meter check of wire 1.", W - 40, "bold")
-    y = para(sh, 30, y + 4, f"All {count} wires are black. The plug and the flags are sketched.", W - 40, fill=MUTED)
+    y = para(
+        sh,
+        30,
+        y + 4,
+        f"All {count} wires are black. The plug and the flags are sketched.",
+        W - 40,
+        fill=MUTED,
+        dark_tail=DRAWN_LIGHT,
+    )
     sh.h = math.ceil(y - LINE + 14)
     sh.check(f"flag {connector}")
     return sh.svg()

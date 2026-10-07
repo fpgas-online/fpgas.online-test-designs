@@ -48,12 +48,14 @@ from their `raw.githubusercontent.com` URLs, which are served with
 Every drawing is written twice: `<name>.svg` on light paper and
 `<name>-dark.svg` beside it for the dark theme of docs.fpgas.online (its paper
 is the theme's background, `#131416`), each with its PNG. The two differ only
-in their colours. `palette.py` holds every colour the drawings use, named by
+in their colours, and in a few words for the dark sheet only (`Sheet.dark_only()`:
+a caption that calls the wires black says there that black is drawn light). `palette.py` holds every colour the drawings use, named by
 what it is and what it stands on, with its light and its dark value; the
 drawing code writes those names as tokens and `palette.resolve()` turns them
-into the two SVGs. A colour written anywhere else stops the build, and so does
-any text short of 7:1 contrast straight on the dark paper or 4.5:1 on a tag or
-box (`sheetlib.py`). Photographs keep their own colours on both; only the
+into the two SVGs. A colour written anywhere else (an attribute, a hex value, a
+style) stops the build, and so does any text short of 7:1 contrast straight on
+the dark paper or 4.5:1 on a tag or box (`sheetlib.py`). Text of the light
+sheets under 4.5:1 is printed by `gen.py` as a report, not a failure. Photographs keep their own colours on both; only the
 background `prep_photos.py` painted round a board, joined to the photo's edge,
 is left out, so the sheet shows through it.
 
