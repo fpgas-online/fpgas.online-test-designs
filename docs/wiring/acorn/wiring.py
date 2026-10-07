@@ -15,15 +15,18 @@ DATA = tomllib.loads((HERE / "wiring.toml").read_text())
 
 CONNECTORS = DATA["connectors"]
 SIGNALS = DATA["signals"]
-# [{tool, note?, when?}]: what building the cables takes. `when = "resistor"`: only where a wire has one.
+# [{tool, note?, when?, carrier?}]: what building and fitting the cables takes. `when = "resistor"`: only where a
+# wire has one. `carrier`: on that carrier's list only.
 TOOLS = DATA.get("tools", [])
 for _tool in TOOLS:
     if (
         not _tool.get("tool")
-        or set(_tool) - {"tool", "note", "note_resistor", "when"}
+        or set(_tool) - {"tool", "note", "note_resistor", "when", "carrier"}
         or _tool.get("when", "resistor") != "resistor"
     ):
-        raise ValueError(f'wiring.toml: a tool needs a `tool`, and may have `note` and `when = "resistor"`: {_tool}')
+        raise ValueError(
+            f'wiring.toml: a tool needs a `tool`, and may have `note`, `when = "resistor"` and `carrier`: {_tool}'
+        )
 SOURCES = DATA["sources"]  # [{claim, source, carrier (optional)}]: where a fact on the pages comes from
 LENGTHS = DATA["lengths"]  # {cut_back, resistor, strip, tube, resistor_tube, flag_back, resistor_lead} in mm
 if LENGTHS["flag_back"] <= LENGTHS["resistor"]:
@@ -174,3 +177,6 @@ def _check(c):
 
 
 CARRIERS = {k: _carrier(k, v) for k, v in DATA["carriers"].items()}
+for _tool in TOOLS:
+    if _tool.get("carrier", next(iter(CARRIERS))) not in CARRIERS:
+        raise WiringError(f"wiring.toml: a tool names a carrier there is none of: {_tool}")

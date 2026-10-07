@@ -266,7 +266,8 @@ def test_the_last_step_fits_plugs_then_card_then_both_housings_on_their_headers(
 
 def test_the_look_before_power_names_each_marked_pin_and_says_what_a_turned_housing_does():
     """The last fitting action, per carrier, from the wiring: a Pi 5 housing has no 5 V to turn onto."""
-    assert steps.HARM == "which can destroy the FPGA pin on the Acorn that wire reaches"
+    assert steps.HARM.endswith("which can destroy the FPGA pin on the Acorn that wire reaches")
+    assert "DS181, Table 1" in steps.HARM  # the limit it is over, with its source
     for c in wiring.CARRIERS.values():
         last = steps.fit_actions(c)[-1]
         assert last.startswith("Before powering on, look at both housings again")

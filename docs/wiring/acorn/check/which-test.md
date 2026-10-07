@@ -7,7 +7,7 @@
 | `p2-serial` | the same two wires, driven and read as plain pins in both directions | each of J2 and K2 on its own, so a crossed pair or one open wire is told apart | no |
 <!-- pi5 -->| `p2-gpio` | P2: J5 to GPIO3, H5 to GPIO4, in both directions | the two spare wires | no |
 <!-- blade -->| `p2-gpio` | none: J5 and H5 are not wired on a Compute Blade | nothing: it is listed as `not run` | never runs |
-| `rp1-pio` | no wire: `/dev/pio0` on a Pi 5 or CM5 | nothing about the wiring (not run on other hosts) | yes |
+| `rp1-pio` | no wire: `/dev/pio0` on a Pi 5 or CM5 (the test passed on a Pi 5 at welland, 2 October 2026, and on pi16 and pi20 at ps1, 7 October 2026) | nothing about the wiring (not run on other hosts) | yes |
 | `flash`, `ddr`, `scratch` | no wire of the cable, except that `scratch` also goes over the serial pair | nothing about the wiring | no |
 
 So on a card that has not been converted yet, `pcie-link` and `jtag` are the wiring tests; the P2 wires can

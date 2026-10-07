@@ -56,7 +56,8 @@ NEITHER = (
 BOTH = (
     "If both wires beep, first see that the two probes do not touch each other and that the cut faces of wires "
     "1 and {last} do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires "
-    "apart. Leave the flags on and take the plug out. Wire {last} is the card's 3.3 V; that it stays silent "
+    "apart. Leave the flags on and take the plug out. Wire {last} is the card's 3.3 V by the LiteX wiki's legend; "
+    "that it stays silent "
     "to ground on a card with no power is expected and has not been measured by us. Set the meter to ohms, "
     "write down what each of the two wires reads to the pad, and send both readings to whoever gave you "
     "this guide."
@@ -69,7 +70,7 @@ ASSUMPTIONS = [
     "the plug's shape, drawn from a photo",
     "where the housing's windows are",
     "which face of the plug shows its contacts",
-    "the card's mounting pad is ground (from the M.2 standard, not measured on this card)",
+    "the card's mounting pad is ground (not measured by us: wire 1's beep shows it)",
 ]
 ASSUMED = (
     "Not yet checked against a cable in the hand:",
@@ -153,7 +154,10 @@ def turned_harms(c, plan):
 
 
 # Said after a warning that names a rail on a signal wire.
-HARM = "which can destroy the FPGA pin on the Acorn that wire reaches"
+HARM = (
+    "above the most AMD's Artix 7 data sheet allows on an FPGA pin (DS181, Table 1: VCCO + 0.55 V, with VCCO at "
+    "most 3.6 V), which can destroy the FPGA pin on the Acorn that wire reaches"
+)
 
 
 # The cable's wires are all black (the note on the cable in wiring.toml's parts): the drawn colours are the signals'.
@@ -1029,7 +1033,7 @@ def ground_check(connector):
         sh,
         30,
         y + 4,
-        "The pad is taken to be ground from the M.2 standard: not measured on this card. The plug, the flags and "
+        "The pad is taken to be ground, not measured by us: wire 1's beep is what shows it. The plug, the flags and "
         "the meter are sketched.",
         W - 40,
         fill=MUTED,
@@ -1059,7 +1063,7 @@ def card():
         (
             "The half-round plated pad",
             "at the end of the card (boxed, right): the card's mounting pad, taken to be "
-            "ground from the M.2 standard, not measured on this card.",
+            "ground; not measured by us: the beep of wire 1 in the meter check is what shows it.",
         ),
         ("The M.2 edge connector", "is off the picture to the left: this is the end of the card away from it."),
         (
@@ -1294,7 +1298,9 @@ def procedure_parts(c, restart=False):
             target.extend([markdown_image(alt, name), ""])
 
     step(
-        "Cut the Molex cable in half with side cutters. Each half is one cable.",
+        "Cut the Molex cable in half with side cutters. Each half is one cable. The cut comes before the reach "
+        f"check on purpose: a half is what goes between the card and the {c.name}, so a half is what is "
+        "checked for reach, below.",
         ("The cable, cut in the middle", "acorn-cable-cut.png"),
     )
     pairs = [
@@ -1360,7 +1366,8 @@ def procedure_parts(c, restart=False):
             f"Cut {cut_who} off about {lengths['cut_back']} mm from the plug and shrink a piece of the "
             f"{lengths['tube']} mm tube over "
             f"{'the cut end' if one else 'each cut end'}. {'It goes' if one else 'They go'} in no cavity. "
-            f"Wire {len(pins)} is VCC, 3.3 V from the Acorn: it must never reach the host. "
+            f"Wire {len(pins)} is VCC, 3.3 V from the Acorn (the LiteX wiki's legend names it so; not measured "
+            "by us): it must never reach the host. "
             f"Leave {number_list(kept)} at full length.",
             prep,
         )
@@ -1427,7 +1434,8 @@ def procedure_parts(c, restart=False):
         "put one meter probe "
         f"on contact 1 ({label_of(first)}) of a plug and the other on {c.shell}: it must "
         f"beep. Do the same for the other plug. Then contact {len(pins)} of each plug ({label_of(pins[-1])}, the wire "
-        "you cut back): against the shell and against every other contact it must be silent.",
+        "you cut back): against the shell and against every other contact it must be silent. That the shell is the "
+        "host's ground is not measured by us; contact 1's beep is what shows it.",
         (f"The bench check on a {c.name}", png(shell_check_name(c))),
         *(
             (*picture, f"The {connector} cavity picture again, for where its housing sits and which corner is marked:")
@@ -1476,7 +1484,10 @@ def needs(c, connector):
     ]
     if has_resistor(c, connector):
         items += [f"the {c.resistor_value} resistor", f"{wiring.LENGTHS['resistor_tube']} mm heat-shrink tube"]
-    tools = "a multimeter with a continuity buzzer, side cutters, wire strippers, the crimping tool, a hot-air tool"
+    tools = (
+        "a multimeter with a continuity buzzer, a fine probe tip for it or a sewing pin to hold against a probe, a "
+        "ruler marked in millimetres, side cutters, wire strippers, the crimping tool, a hot-air tool"
+    )
     if has_resistor(c, connector):
         tools += ", a soldering iron"
     return (

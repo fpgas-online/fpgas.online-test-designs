@@ -119,7 +119,7 @@ def test_every_line_of_a_parts_list_can_be_ticked_and_names_the_cable_by_its_par
 def test_a_list_says_it_is_for_one_host_and_names_the_tools_the_cables_take():
     blade, pi5 = tables.bom(wiring.CARRIERS["blade"]), tables.bom(wiring.CARRIERS["pi5"])
     assert blade.startswith("The parts for **one** Compute Blade host; for several hosts, that many of each.\n\n|")
-    assert "The tools to build its two cables, once for any number of hosts:" in blade
+    assert "The tools to build, fit and check its two cables, once for any number of hosts:" in blade
     tools = {row[1] for row in _tables("blade")[1][2:]}
     assert {"multimeter with a continuity buzzer", "crimping tool for 2.54 mm Dupont terminals"} <= tools
     # the iron is for the series resistor, which only the Compute Blade's wiring has

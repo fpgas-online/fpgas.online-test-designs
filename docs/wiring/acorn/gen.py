@@ -208,7 +208,7 @@ def title_block(sh, kicker, title, subtitle, pins, numbering):
 
 
 def footer(sh, credit):
-    msg = "Cut the VCC wire (pin 6) of BOTH cables. 3.3 V from the Acorn into the header can destroy the host."
+    msg = "Cut the VCC wire (pin 6) of BOTH cables: the Acorn's 3.3 V must never reach the host's header."
     w = sh.width(msg, 14, "bold") + 40
     sh.rect(30, H - 52, w, 30, fill=role("warn-fill"), stroke=RED, sw=1.5, rx=6)
     sh.text(50, H - 32, msg, 14, "bold", RED, box=(30, H - 52, 30 + w, H - 22))
@@ -767,8 +767,8 @@ def blade(nudge=0):
         sh,
         "ACORN WIRING  ·  COMPUTE BLADE",
         "SQRL Acorn to Compute Blade",
-        "CM4 or CM5. Pins carry the numbers printed on the blade: Extension Port 1 to 5 left, 6 to 10 right; "
-        "UART 1 to 4.",
+        "JTAG on these pins run by us on a CM5, not yet on a CM4. Pins carry the numbers printed on the blade: "
+        "Extension Port 1 to 5 left, 6 to 10 right; UART 1 to 4.",
         f"--pins {c.jtag_pins}",
         "These are GPIO (IO) numbers, not the printed pin numbers",
     )

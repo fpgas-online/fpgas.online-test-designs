@@ -106,7 +106,26 @@ source = "not verified by us for this guide: from the part's description and the
 
 [[sources]]
 claim = "That an Acorn CLE-215+, CLE-215 and CLE-101 are the same card, also sold as NiteFury and LiteFury, so that a LiteFury photo can stand for an Acorn"
-source = "RHS Research's NiteFury-and-LiteFury repository for the family; not verified by us card against card"
+source = "the LiteX Acorn CLE-215 wiki (\"The Acorn CLE215+ is in fact the NiteFury board with more memory\"), and RHS Research's NiteFury-and-LiteFury repository, which gives the two boards' FPGAs (NiteFury-II XC7A200T, LiteFury XC7A100T) and their size, 22 × 80 mm, but does not name the Acorn. That the CLE-101 is the LiteFury's card: its FPGA answers as an XC7A100T (pi20 at ps1, 7 October 2026). That the CLE-215 is the same card as the CLE-215+: not verified by us. Not verified by us card against card"
+
+[[sources]]
+claim = "The card's form, M.2 2280 with an M key"
+source = "22 × 80 mm from RHS Research's repository (above); the M key: the Acorns at ps1 sit in the Compute Blades' M.2 M-key slots (Uptime Lab's M.2 guide) and their PCIe links come up (read on pi14, pi16 and pi20 at ps1, 7 October 2026)"
+
+[[sources]]
+carrier = "blade"
+claim = "The 2.54 mm pitch of the housings"
+source = "Uptime Lab's GPIO guide says the Extension Port carries pins 1 to 10 of the Raspberry Pi GPIO pinout, a header of 2.54 mm (0.1 inch) pitch; not measured by us on a blade"
+
+[[sources]]
+carrier = "blade"
+claim = "The resistor's 470 Ω and 1/8 W"
+source = "our choice, not measured: 3.3 V across 470 Ω is at most 7 mA and 23 mW, well under 1/8 W (125 mW)"
+
+[[sources]]
+carrier = "blade"
+claim = "That a Compute Module 4 takes the same wiring as a Compute Module 5"
+source = "Uptime Lab's assembly guide names both as modules for the Compute Blade, and its GPIO guide gives the blade's pins by GPIO number and names no difference between the two; the wiring's JTAG has been run by us on a CM5 only (pi20 at ps1, 7 October 2026). On a CM4: not run by us"
 
 [[sources]]
 claim = "The lengths (how far a wire is cut back, stripped, flagged)"
@@ -156,6 +175,20 @@ note = "the plug's contacts are 1.2 mm apart, and a terminal is reached through 
 [[tools]]
 tool = "masking tape and a fine marker pen, or a paint pen"
 note = "to flag the six wires with their numbers, and to mark the pin 1 corner of each housing"
+
+[[tools]]
+tool = "a ruler marked in millimetres"
+note = "the steps give lengths in millimetres: where a flag goes, how much of a wire is left, cut back or stripped"
+
+[[tools]]
+carrier = "blade"
+tool = "a PH1 (Phillips size 1) screwdriver"
+note = "for the M2x2.5 screw that holds the card in the M.2 slot. Uptime Lab's assembly guide for the Compute Blade names a PH1 driver for that screw (and a 5 mm hex driver for its standoff, if that is not fitted yet); not verified by us on the blades"
+
+[[tools]]
+carrier = "blade"
+tool = "a computer with ssh, on a network that reaches the blade"
+note = "to log in to the blade and run the check (the page \"verifying 1\")"
 
 [carriers.pi5]
 name = "Raspberry Pi 5"
@@ -244,7 +277,7 @@ note = "its M.2 slot takes the card"
 [[carriers.blade.parts]]
 qty = 1
 part = "Raspberry Pi Compute Module 4 or 5"
-note = "the host: it sits on the Compute Blade"
+note = "the host: it sits on the Compute Blade. JTAG on this wiring's pins has been run by us on a CM5 only, not yet on a CM4"
 
 [carriers.blade.hosts]
 "Raspberry Pi Compute Module 4" = { gpiochip = "brcm,bcm2711-gpio" }
