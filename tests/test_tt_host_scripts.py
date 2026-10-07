@@ -481,15 +481,17 @@ def _load_pin_id():
 
 # -- the DIP switches (#166) -----------------------------------------------------------------------------------
 
-# pinctrl get on a Raspberry Pi 4 with the SPI driver loaded: GPIO8 to 11 are SPI0, the rest inputs.
+# pinctrl get in the form a Raspberry Pi 4 prints it (core.PIN_RE's comment: no drive on an output, "--"), with
+# the SPI driver loaded: its chip select on GPIO8 as a GPIO output (cs-gpios), GPIO9 to 11 SPI0, the rest
+# inputs. Made up in that form, not a recorded read.
 PINCTRL_GET = "\n".join([
-    " 8: a0    pu | hi // GPIO8 = SPI0_CE0_N",
+    " 8: op -- pu | hi // GPIO8 = output",
     "10: a0    pd | lo // GPIO10 = SPI0_MOSI",
     " 9: a0    pd | lo // GPIO9 = SPI0_MISO",
     "11: a0    pd | lo // GPIO11 = SPI0_SCLK",
     "19: ip    pd | lo // GPIO19 = input",
     "21: ip    pd | lo // GPIO21 = input",
-    "20: op dh pd | hi // GPIO20 = output",
+    "20: ip    pd | lo // GPIO20 = input",
     "18: ip    pd | lo // GPIO18 = input",
 ]) + "\n"
 
@@ -540,8 +542,8 @@ def test_the_pi_pins_are_made_inputs_with_their_pull_down_for_the_read_and_put_b
     before, after = [c for i, c in sets if i < read], [c for i, c in sets if i > read]
     assert sorted(c[2] for c in before) == sorted(str(g) for g in dip.PI_GPIOS)
     assert all(c[3:] == ["ip", "pd"] for c in before)
-    assert ["pinctrl", "set", "8", "a0", "pu"] in after and ["pinctrl", "set", "18", "ip", "pd"] in after
-    assert ["pinctrl", "set", "20", "op", "pd", "dh"] in after  # an output goes back at its level
+    assert ["pinctrl", "set", "10", "a0", "pd"] in after and ["pinctrl", "set", "18", "ip", "pd"] in after
+    assert ["pinctrl", "set", "8", "op", "pu", "dh"] in after  # an output goes back at its level
     assert len(after) == len(dip.PI_GPIOS)
     assert run.calls[read][:4] == ["mpremote", "connect", "/dev/ttyACM0", "exec"]
 
@@ -573,12 +575,54 @@ def test_pins_that_could_not_be_put_back_turn_a_pass_into_an_error():
         return subprocess.CompletedProcess(argv, 1 if back else 0, "", "pinctrl: busy" if back else "")
 
     code, line = dip.check("/dev/ttyACM0", run)
-    assert code == 2 and line == ("all 8 DIP switches are off, but the Pi's GPIOs on HAT JA were not put back "
-                                  "as they were")  # fmt: skip
+    assert code == 2 and line.startswith(
+        "all 8 DIP switches are off; and the Pi's GPIOs on HAT JA were not put back as they were "
+        "(GPIO8 could not be set to op pu dh: pinctrl: busy")
+
+
+def test_a_switch_that_is_on_and_pins_not_put_back_says_both():
+    calls = []
+
+    def run(argv, **kw):
+        calls.append(argv)
+        if argv[:2] == ["pinctrl", "get"]:
+            return subprocess.CompletedProcess(argv, 0, PINCTRL_GET, "")
+        if argv[0] == "mpremote":
+            return subprocess.CompletedProcess(argv, 0, "DIP 01000000\n", "")
+        back = any(c[0] == "mpremote" for c in calls)
+        return subprocess.CompletedProcess(argv, 1 if back else 0, "", "pinctrl: busy" if back else "")
+
+    code, line = dip.check("/dev/ttyACM0", run)
+    assert code == 2 and line.startswith("switch 2 is on: set all DIP switches off; and the Pi's GPIOs on HAT JA")
+
+
+def test_a_pi_whose_pinctrl_cannot_read_a_pull_is_refused_before_anything_is_changed():
+    """A Pi 3 prints "--" for every pull (core.PIN_RE's comment): the pull-down set for the read could not be undone."""
+    run = FakeRun(get=(0, PINCTRL_GET.replace(" pd |", " -- |").replace(" pu |", " -- |")))
+    code, line = dip.check("/dev/ttyACM0", run)
+    assert code == 2 and "cannot read the pull of GPIO8, GPIO9" in line and line.endswith("were not read")
+    assert run.calls == [["pinctrl", "get", ",".join(map(str, dip.PI_GPIOS))]]
+
+
+def test_a_check_stopped_during_the_read_still_puts_the_pis_pins_back():
+    run = FakeRun()
+
+    def stopped(argv, **kw):
+        if argv[0] == "mpremote":
+            run.calls.append(list(argv))
+            raise SystemExit("stopped by signal 15")
+        return run(argv, **kw)
+
+    with pytest.raises(SystemExit):
+        dip.check("/dev/ttyACM0", stopped)
+    read = next(i for i, c in enumerate(run.calls) if c[0] == "mpremote")
+    assert len([c for c in run.calls[read:] if c[:2] == ["pinctrl", "set"]]) == len(dip.PI_GPIOS)
 
 
 def test_the_read_on_the_board_drives_each_line_low_then_reads_it_with_the_pull_down_and_writes_no_file():
     assert "Pin.PULL_DOWN" in dip.READ and "Pin.OUT, value=0" in dip.READ
+    # ui_in[1..3] are joined to uio[1..3] at the HAT: their RP2350 pads (GPIO26 to 28) are set the same way
+    assert dip.JOINED == {1: 26, 2: 27, 3: 28} and "joined = {1: 26, 2: 27, 3: 28}" in dip.READ
     assert not board_writes(dip.READ)
     assert dip.FIRST_GPIO == 17 and dip.SWITCHES == 8  # ui_in[0] is the RP2350's GPIO17 (tt-demo-pcb README)
     namespace = {}

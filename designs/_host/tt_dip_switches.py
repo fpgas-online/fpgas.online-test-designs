@@ -16,11 +16,16 @@ pull-down, which is how the Tiny Tapeout SDK sets them on a board with the FPGA 
 
 Nothing else may hold the lines while they are read, so it runs:
   - after the check has loaded the display design (designs/tt-display) with --gpio-release: that design
-    drives only uo_out and keeps ui_in and uio as inputs with the iCE40's pull-up off (an unused iCE40 pin
+    drives only uo_out and leaves ui_in and uio undriven with the iCE40's pull-up off (an unused iCE40 pin
     keeps a weak pull-up, which would stand against the pull-down), and --gpio-release has made the RP2350's
     signal pins inputs;
-  - with the Raspberry Pi's eight GPIOs on HAT JA (ui_in; pins 2 to 4 are also JB's, uio[1] to uio[3]) set
-    to inputs with their pull-down, for the read only, then put back as they were, with pinctrl.
+  - with the Raspberry Pi's eight GPIOs on HAT JA (ui_in) set to inputs with their pull-down, for the read
+    only, then put back as they were, with pinctrl. JA pins 2 to 4 are also JB's: the HAT joins ui_in[1..3]
+    to uio[1..3]. On the demo board the uio[1..3] nets carry only the BIDIR Pmod, the breakout, a pin header
+    and the RP2350's GPIO26 to GPIO28, no resistor (tt-demo-pcb's schematic, rev 3.3 at bbf3dd1, its exported
+    netlist), so those three RP2350 pads are driven low and given the pull-down too, with their ui_in partner.
+A Pi whose pinctrl cannot read a pin's pull (a Pi 3 and older) is refused before anything is changed: the pull
+could not be put back.
 
 Exit 0: every switch is off. Exit 1: names each switch that is on. Exit 2: the switches could not be read,
 and why. The last line starting DIP_SWITCHES: is the result.
@@ -31,11 +36,15 @@ Usage (on the Pi, with fpgas-tt.service stopped):
 
 import argparse
 import re
+import signal
 import subprocess
 import sys
 
 SWITCHES = 8
 FIRST_GPIO = 17  # the RP2350's GPIO17 is ui_in[0] (switch 1), to GPIO24, ui_in[7] (switch 8)
+# ui_in[n] -> the RP2350 GPIO of the uio signal the Pmod HAT joins it to (JA and JB pins 2 to 4 are one Pi GPIO):
+# uio[1] to uio[3] are the RP2350's GPIO26 to GPIO28 (GPIO25 + n).
+JOINED = {1: 26, 2: 27, 3: 28}
 # The Raspberry Pi GPIOs on Pmod HAT JA, ui_in[0] to ui_in[7] as the boards are cabled (identify_pmod_pins.py,
 # BOARDS["tt"]): JA pins 1, 2, 3, 4, 7, 8, 9, 10.
 PI_GPIOS = (8, 10, 9, 11, 19, 21, 20, 18)
@@ -46,13 +55,15 @@ PINCTRL_TIMEOUT = 10
 READ = (
     "from machine import Pin\n"
     "import time\n"
+    f"joined = {JOINED!r}\n"
     "r = ''\n"
     f"for n in range({SWITCHES}):\n"
-    f"    p = Pin({FIRST_GPIO} + n, Pin.OUT, value=0)\n"
+    f"    pins = [Pin(g, Pin.OUT, value=0) for g in [{FIRST_GPIO} + n] + ([joined[n]] if n in joined else [])]\n"
     "    time.sleep_ms(1)\n"
-    "    p.init(Pin.IN, Pin.PULL_DOWN)\n"
+    "    for q in pins:\n"
+    "        q.init(Pin.IN, Pin.PULL_DOWN)\n"
     "    time.sleep_ms(5)\n"
-    "    r += str(p.value())\n"
+    "    r += str(pins[0].value())\n"
     "print('DIP', r)\n"
 )
 # pinctrl get: "8: ip    pu | hi // GPIO8 = input", "10: a0    pn | lo // GPIO10 = SPI0_MOSI": the function, the
@@ -132,18 +143,29 @@ def check(port, run=subprocess.run):
     saved = pi_pins(run)
     if isinstance(saved, str):
         return 2, f"{saved}: the DIP switches were not read"
-    faults = set_pins({g: ("ip", "pd", "--") for g in PI_GPIOS}, run)
-    if faults:
-        why = "; ".join(faults)
-        code, line = 2, f"the Pi's GPIOs on HAT JA could not be made inputs ({why}): the DIP switches were not read"
-    else:
-        code, line = verdict(*read_board(port, run=run))
-    back = set_pins(saved, run)
+    unread = sorted(g for g, (_f, pull, _l) in saved.items() if pull == "--")
+    if unread:
+        return 2, (f"this Pi's pinctrl cannot read the pull of GPIO{', GPIO'.join(map(str, unread))}, so it could "
+                   "not be put back after the read: the DIP switches were not read")  # fmt: skip
+    signal.signal(signal.SIGTERM, _stop)  # a stopped check still puts the Pi's pins back (the finally below)
+    try:
+        faults = set_pins({g: ("ip", "pd", "--") for g in PI_GPIOS}, run)
+        if faults:
+            why = "; ".join(faults)
+            code, line = 2, f"the Pi's GPIOs on HAT JA could not be made inputs ({why}): the DIP switches were not read"
+        else:
+            code, line = verdict(*read_board(port, run=run))
+    finally:
+        back = set_pins(saved, run)
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
     if back:
         print("Not put back: " + "; ".join(back))
-        if code == 0:
-            code, line = 2, f"{line}, but the Pi's GPIOs on HAT JA were not put back as they were"
+        code, line = 2, f"{line}; and the Pi's GPIOs on HAT JA were not put back as they were ({'; '.join(back)})"
     return code, line
+
+
+def _stop(signum, frame):
+    raise SystemExit(f"stopped by signal {signum}")
 
 
 def main():
