@@ -47,7 +47,9 @@ CABLES = [("blade", "P1"), ("blade", "P2"), ("pi5", "P1"), ("pi5", "P2")]
 
 # What every picture rests on that nobody has yet checked with the parts in the hand. One list: when a
 # photograph or a built cable settles a line, remove it here and it leaves every picture.
-# What to do when the ground check proves nothing; the same words in the step and on its picture.
+# What to do when the ground check proves nothing: in the step's words only. Its picture, on the same printed sheet,
+# says NOT_TOLD_APART, so that the step and its picture fit one sheet (and the picture, shared by both carriers,
+# names no one to send readings to).
 NEITHER = (
     "If neither wire beeps, strip about {strip} mm from wires 1 and {last} and try again; "
     "if still neither beeps, stop: the ground point is not confirmed."
@@ -61,6 +63,7 @@ BOTH = (
     "to ground on a card with no power is expected and has not been measured by us. Set the meter to ohms, "
     "write down what each of the two wires reads to the pad, and send both readings to {contact}."
 )
+NOT_TOLD_APART = "If neither wire beeps, or both do, cut nothing: the step's words above say what to do in each case."
 
 ASSUMPTIONS = [
     "the wire-side view is not mirrored",
@@ -73,7 +76,7 @@ ASSUMPTIONS = [
 ]
 ASSUMED = (
     "Not yet checked against a cable in the hand:",
-    "Check wire 1 with a meter before cutting any wire back: the wire 1 check shows how.",
+    'Check wire 1 with a meter before cutting: step {n} of "{page}".',  # the step as its page shows it
 )
 BOX_LINE = 20  # from line to line in the box of assumptions
 ACORN_PAD = (188, 0, 308, 80)  # the plated half-round mounting pad at the end of the card, in acorn-cw.jpg
@@ -240,8 +243,8 @@ def token(sh, cx, cy, n, s=30):
 # ----------------------------------------------------------------------------------------------
 # Pieces
 # ----------------------------------------------------------------------------------------------
-def assumptions(sh, x, y, w):
-    """The box of what is not yet checked. Returns its bottom."""
+def assumptions(sh, x, y, w, c, connector):
+    """The box of what is not yet checked, for the cable of `connector` on carrier `c`. Returns its bottom."""
     pad, gap = 8, 24
     col_w = (w - 2 * pad - gap) / 2
     items = [wrap(sh, item, col_w - 14) for item in ASSUMPTIONS]
@@ -261,7 +264,7 @@ def assumptions(sh, x, y, w):
             for line in item:
                 sh.text(cx + 14, ty, line, T, "regular", INK, box=box)
                 ty += BOX_LINE
-    sh.text(x + pad, top + (1 + rows) * BOX_LINE, ASSUMED[1], T, "bold", INK, box=box)
+    sh.text(x + pad, top + (1 + rows) * BOX_LINE, assumed_check(c, connector), T, "bold", INK, box=box)
     return y + h
 
 
@@ -645,7 +648,7 @@ def cable(c, connector):
         "bold",
         RED,
     )
-    ty = assumptions(sh, 30, ty - LINE + 5, W - 40) + LINE
+    ty = assumptions(sh, 30, ty - LINE + 5, W - 40, c, connector) + LINE
     sh.h = math.ceil(ty - LINE + 4)
     sh.check(file_name(c, connector))
     return sh.svg(), score
@@ -1036,17 +1039,7 @@ def ground_check(connector):
         "bold",
         RED,
     )
-    y = para(
-        sh,
-        30,
-        y + 4,
-        NEITHER.format(strip=wiring.LENGTHS["strip"], last=len(pins)),
-        W - 40,
-        "bold",
-    )
-    y = para(
-        sh, 30, y + 4, BOTH.format(last=len(pins), contact=wiring.CONTACT), W - 40, "bold"
-    )  # one sheet for every carrier
+    y = para(sh, 30, y + 4, NOT_TOLD_APART, W - 40, "bold")
     y = para(
         sh,
         30,
@@ -1241,7 +1234,9 @@ def through_resistor(c, connector):
     )
 
 
-CHECK_EXCEPTION = "Wire {n} has the {value} resistor in it: read it in ohms, last, as the step says. It will not beep."
+CHECK_EXCEPTION = (
+    "Wire {n} has the {value} resistor in it. It will not beep: read it in ohms, last, as the next step says."
+)
 
 
 def check_name(c, connector):
@@ -1385,7 +1380,7 @@ def procedure_parts(c, restart=False):
             flags,
         )
         step(
-            f"Check which wire of the {connector} cable is wire 1, with a meter, before cutting any wire back.\n\n"
+            f"{wire_one_check(connector)}, with a meter, before cutting any wire back.\n\n"
             + "\n".join(f"{i}. {line}" for i, line in enumerate(check, 1)),
             (
                 f"Checking which wire is wire 1 with a meter, the plug in socket {connector}",
@@ -1430,19 +1425,28 @@ def procedure_parts(c, restart=False):
             f"{cut_who[0].upper()}{cut_who[1:]} {'goes' if one else 'go'} in no cavity.",
             cavity[connector],
         )
+        # A step quotes its cavity picture again where the reader needs it, as a picture of the step itself (its
+        # words say why it is there again): a printed step keeps its words and its pictures on one sheet.
         step(
             "Push each terminal into its cavity, latch tab towards the window, until it clicks. "
-            "Pull each wire gently: the terminal must stay in.",
+            "Pull each wire gently: the terminal must stay in. "
+            + again(connector, "to read each wire's cavity from", "under the picture of how a terminal goes in"),
             ("Which way round a terminal goes in, and the pull test", "acorn-cable-push.png"),
+            cavity[connector],
         )
         step(
-            f"{CHECK_EACH} For each wire: one probe on its contact on the plug, the "
-            "other on the terminal in the cavity the picture gives for that wire number, through the opening on the "
-            "pin side of the housing: it must beep. Every other cavity must stay silent for that contact. "
-            + through_resistor(c, connector)
-            + "The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.",
+            f"{CHECK_EACH} Set the meter to continuity. The probes go as in the picture: one on a contact of the "
+            "plug, the other on a terminal, through the opening on the pin side of the housing. "
+            "The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.",
             ("A meter between the plug and the housing", png(check_name(c, connector))),
-            (*cavity[connector], f"The {connector} cavity picture again, to read each wire's cavity from:"),
+        )
+        step(
+            f"{CHECK_CAVITY} For each wire: read the number on its flag and find it in the picture; one probe on "
+            "that wire's contact on the plug, the other on the terminal in that cavity: it must beep. Every other "
+            "cavity must stay silent for that contact. "
+            + through_resistor(c, connector)
+            + again(connector, "to read each wire's cavity from"),
+            cavity[connector],
         )
     target = parts["fit"] = []
     if restart:
@@ -1476,10 +1480,12 @@ def procedure_parts(c, restart=False):
             for connector, picture in cavity.items()
         ),
     )
-    step(
-        "Fit the cables, in this order. The sockets are on the underside of the card and may not be reachable once "
-        "it is in the slot.\n\n" + fit_block(c).rstrip(),
-    )
+    actions = fit_actions(c)
+    for half, (words, numbers) in enumerate(zip(FIT_STEPS, FIT_HALVES), 1):
+        step(
+            words + "\n\n" + "\n".join(f"{n}. {actions[n - 1]}" for n in numbers),  # a list from 4 starts at 4
+            (fit_alt(c, numbers), png(fit_name(c, half))),
+        )
     parts["tail"] = [CREDITS[c.key] + ".", ""]
     return parts
 
@@ -1622,7 +1628,7 @@ def guide(c):
             "a little with a pin and pull the wire gently: the terminal comes out, and can be pushed into the right "
             "cavity. (How these housings release; not yet done by us on these cables.)",
         )
-    bench, fit_ = cut_at(parts["fit"], "Fit the cables, in this order")
+    bench, fit_ = cut_at(parts["fit"], FIT_STEPS[0])
     out[guide_name(c, "bench")] = body(
         f"Both finished cables, the {c.name}, and a multimeter with a continuity buzzer. The Acorn stays out of "
         f"its slot. {power_off_if_on(c)}",
@@ -1635,8 +1641,8 @@ def guide(c):
     )
     out[guide_name(c, "fit")] = body(
         f"Both cables, checked on the bench (the page before this one), the Acorn and the {c.name}. As before: "
-        "after action 1 of the list below, touch bare metal of the host before you pick up the card, and hold it by "
-        "its edges.",
+        f"after action 1 (step {numbered(fit_, FIT_STEPS[0])} below), touch bare metal of the host before you pick "
+        "up the card, and hold it by its edges.",
         fit_,
         "## Next",
         'Power the host on and run the check: the page "verifying 1".'
@@ -1651,23 +1657,68 @@ def guide(c):
 
 def step_number(c, part, start):
     """The number of the step on the guide page `part` of carrier `c` whose words start `start`."""
-    body = guide(c)[guide_name(c, part)]
-    found = re.findall(r"^\*\*(\d+)\.\*\* " + re.escape(start), body, re.M)
+    return numbered(guide(c)[guide_name(c, part)].splitlines(), start, guide_name(c, part))
+
+
+def numbered(lines, start, where="the building guide"):
+    """The number of the one step of `lines` (a page's Markdown lines) whose words start `start`."""
+    found = [m.group(1) for line in lines if (m := re.match(r"\*\*(\d+)\.\*\* " + re.escape(start), line))]
     if len(found) != 1:
-        raise wiring.WiringError(f"{guide_name(c, part)}: {len(found)} steps start {start!r}, not one")
+        raise wiring.WiringError(f"{where}: {len(found)} steps start {start!r}, not one")
     return int(found[0])
 
 
-# The words the meter check of a finished cable starts with, on each connector's second page.
+def wire_one_check(connector):
+    """The words the meter check of wire 1 starts with, on the connector's first page."""
+    return f"Check which wire of the {connector} cable is wire 1"
+
+
+def wire_one_step(c, connector):
+    """(the number of the meter check of wire 1, the title of its page as the page shows it): "JTAG connector 1"."""
+    part, title = GUIDE[connector]
+    return step_number(c, f"{part}-1", wire_one_check(connector)), f"{title} 1"
+
+
+def assumed_check(c, connector):
+    """The box's last line: where the check that settles its last item is, by step number and page."""
+    n, page = wire_one_step(c, connector)
+    return ASSUMED[1].format(n=n, page=page)
+
+
+# The words the meter check of a finished cable starts with, on each connector's second page: how the probes go,
+# then the check of each wire against the cavity picture, the next step.
 CHECK_EACH = "Check each wire with a meter on continuity."
+CHECK_CAVITY = "Now check each wire against its cavity."
+
+
+def again(connector, why, where="below"):
+    """The words that say why a step shows the cavity picture of `connector` again."""
+    return f"The {connector} cavity picture is shown again {where}, {why}."
 
 
 def meter_check_step(c):
-    """The number of the meter check on the second page of every connector: one number, as other pages quote it."""
+    """The number of the meter check's first step on the second page of every connector: one number, as other
+    pages quote it. Its second step is the next one (meter_check_steps)."""
     numbers = {step_number(c, f"{part}-2", CHECK_EACH) for part, _ in GUIDE.values()}
     if len(numbers) != 1:
         raise wiring.WiringError(f"{c.key}: the meter check is step {sorted(numbers)} of the connector 2 pages")
-    return numbers.pop()
+    n = numbers.pop()
+    for part, _ in GUIDE.values():
+        if step_number(c, f"{part}-2", CHECK_CAVITY) != n + 1:
+            raise wiring.WiringError(f"{c.key}: the meter check's second step is not step {n + 1} of {part}-2")
+    return n
+
+
+def fit_step(c, half):
+    """The number of the fitting page's step for half 1 (the plugs into the card) or 2 (the card, then the
+    housings), as other pages quote it."""
+    return step_number(c, "fit", FIT_STEPS[half - 1])
+
+
+def meter_check_steps(c):
+    """The meter check of a finished cable as other pages quote it: "steps 3 and 4"."""
+    n = meter_check_step(c)
+    return f"steps {n} and {n + 1}"
 
 
 # Where the M.2 slot is in blade.jpg, in photo pixels. A HAT's is in wiring.toml.
@@ -1727,6 +1778,17 @@ def fit_actions(c):
 # with its own three actions, so that a half and its words fit on one printed sheet.
 FIT_HALVES = ((1, 2, 3), (4, 5, 6))
 FIT_SECOND = "Then the card and the housings:"
+# The two halves as two steps of the fitting page, one picture each; their actions keep the numbers 1 to 6 the
+# pictures print.
+FIT_STEPS = (
+    "Fit the plugs into the card. The sockets are on the underside of the card and may not be reachable once it is "
+    "in the slot, so the plugs go in first, in this order.",
+    "Fit the card, then the housings, in this order.",
+)
+
+
+def fit_alt(c, numbers):
+    return f"Fitting the cables on a {c.name}, actions {numbers[0]} to {numbers[-1]}"
 
 
 def fit_name(c, half):
@@ -1745,8 +1807,7 @@ def fit_block(c):
         if half == 2:
             out.append(FIT_SECOND)
         out.append("\n".join(f"{n}. {actions[n - 1]}" for n in numbers))
-        alt = f"Fitting the cables on a {c.name}, actions {numbers[0]} to {numbers[-1]}"
-        out.append(markdown_image(alt, png(fit_name(c, half))))
+        out.append(markdown_image(fit_alt(c, numbers), png(fit_name(c, half))))
     return "\n\n".join(out) + "\n"
 
 

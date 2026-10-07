@@ -6,6 +6,7 @@ Run: uv run --no-project --with pytest --with pillow==12.3.0 --with fonttools==4
 
 import copy
 import functools
+import html
 import re
 
 import pytest
@@ -125,7 +126,8 @@ def test_every_picture_states_the_view_and_what_is_not_checked(key, connector):
     text = " ".join(drawn)
     assert "Dupont housing, seen from the wire side," in text
     assert "You are looking down" in drawn
-    assert steps.ASSUMED[0] in drawn and steps.ASSUMED[1] in drawn
+    assert steps.ASSUMED[0] in drawn
+    assert html.escape(steps.assumed_check(wiring.CARRIERS[key], connector)) in drawn
     assert re.search(r'viewBox="0 0 780 \d+"', picture(key, connector))
 
 
@@ -190,7 +192,8 @@ def test_the_procedure_is_complete_in_itself(key):
         assert image.replace(".png", ".svg") in built or image.startswith("acorn-wiring-"), image
     for connector in wiring.CONNECTORS:
         cavity = steps.file_name(c, connector).replace(".svg", ".png")
-        assert images.count(cavity) == 3  # where the housing is filled, where it is checked, where it is fitted
+        # where the housing is filled, where its terminals are pushed in, where it is checked, where it is fitted
+        assert images.count(cavity) == 4
         assert steps.prepare_name(c, connector).replace(".svg", ".png") in images
         assert steps.turned_warning(c, steps.housing(c, connector))[:-1] in text
     assert tables.bom(c).strip() in text  # the parts list itself, not a link to it
@@ -200,7 +203,7 @@ def test_the_procedure_is_complete_in_itself(key):
     assert text.rstrip().endswith(gen_credits(key) + ".")
     assert ("Solder the 470 Ω resistor between the two cut ends." in text) == bool(RAW[key].get("resistors"))
     assert ("heat-shrink tube, about 3 mm" in text) == bool(RAW[key].get("resistors"))
-    building = text.replace(steps.fit_block(c).rstrip(), "")  # the fitting step says it again, for both
+    building = text.replace(steps.fit_actions(c)[-1], "")  # the fitting look says it again, for both
     assert building.count(f", {steps.HARM}.") == sum(
         "puts 5 V on" in steps.turned_warning(c, steps.housing(c, conn)) for conn in wiring.CONNECTORS
     )
@@ -249,8 +252,10 @@ def test_cavities_are_drawn_where_the_header_has_them_and_each_wire_ends_at_its_
 @pytest.mark.parametrize("key", list(wiring.CARRIERS))
 def test_the_last_step_fits_plugs_then_card_then_both_housings_on_their_headers(key):
     c = wiring.CARRIERS[key]
-    last = steps.procedure(c).split("Fit the cables, in this order.")[1]
-    assert steps.fit_block(c).rstrip() in last and all(steps.png(n) in last for n in steps.fit_names(c))
+    last = steps.procedure(c).split(steps.FIT_STEPS[0])[1]
+    assert all(steps.png(n) in last for n in steps.fit_names(c))
+    actions = steps.fit_actions(c)
+    assert all(f"\n{n}. {action}\n" in last for n, action in enumerate(actions, 1))
     assert "ground-check.png" not in last
     assert (wiring.HERE / "generated" / f"acorn-fit-{key}.md").read_text().endswith(steps.fit_block(c))
     order = [
@@ -378,9 +383,13 @@ def test_a_repeated_cavity_picture_says_why_it_is_there_again():
         for connector in wiring.CONNECTORS:
             cavity = steps.png(steps.file_name(c, connector))
             at = [i for i, line in enumerate(lines) if f"]({cavity})" in line]
-            assert len(at) == 3
+            assert len(at) == 4
             for i in at[1:]:
-                assert lines[i - 2].startswith(f"The {connector} cavity picture again")
+                # the step's own words say why, or the line over it on the bench check
+                words = next(line for line in reversed(lines[:i]) if line and not line.startswith("!["))
+                assert f"The {connector} cavity picture is shown again" in words or words.startswith(
+                    f"The {connector} cavity picture again"
+                ), words
 
 
 @pytest.mark.parametrize("key", list(wiring.CARRIERS))
@@ -458,8 +467,11 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
             picture = steps.build()[steps.check_name(c, connector)]
             assert f"Wire {j2} has the" in picture and "It will not beep" in picture
     assert "resistor" not in steps.check_picture()  # the shared picture names no exception
-    for connector in wiring.CONNECTORS:  # the wire-1 picture carries the same words as its step
-        assert "If both still beep, stop and cut" in steps.ground_check(connector)
+    for connector in wiring.CONNECTORS:
+        # the wire-1 picture leaves what to do when the check proves nothing to its step's words, on its sheet
+        picture = " ".join(words(steps.ground_check(connector)))
+        assert steps.NOT_TOLD_APART in picture and "If both still beep" not in picture and "send" not in picture
+        assert "not measured by us" in picture
     assert ("the one wire that is cut to take the resistor" in overview) == bool(c.resistors)
     if c.resistors:
         assert f"lands on GPIO14, which is also JTAG TMS: with {c.resistor_value} in the wire" in steps.procedure(c)
@@ -469,7 +481,10 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
         assert body.index("ground-check.png") < body.index("off about") and "## What you need" in body
     for part in ("jtag-2", "uart-2"):
         assert "Hold the empty" in pages[steps.guide_name(c, part)]
-    assert "Fit the cables, in this order" in pages[steps.guide_name(c, "fit")]
+    assert all(
+        f"**{steps.fit_step(c, half)}.** {words}" in pages[steps.guide_name(c, "fit")]
+        for half, words in enumerate(steps.FIT_STEPS, 1)
+    )
     assert "This is a bench check" in pages[steps.guide_name(c, "bench")]
     # what the ground beep shows about a turned housing is what it is meant to show: the silence is not tried
     bench = pages[steps.guide_name(c, "bench")]
@@ -496,37 +511,67 @@ def step_blocks(body):
 def test_every_step_of_the_building_pages_has_one_picture_of_its_own(key):
     """A printed step keeps its words and its picture on one sheet, so a step has one new picture.
 
-    The one exception: a cavity picture shown again, with its own line saying why (the meter check and the bench
-    check, to read each wire's cavity from). The fitting step's two halves are its own numbered lists, each with
-    its half of the picture."""
+    The one exception: a cavity picture shown again, with words saying why (pushing the terminals in and the meter
+    check, to read each wire's cavity from, and the bench check). Fitting is two steps, one picture each."""
     c = wiring.CARRIERS[key]
+    cavities = {steps.png(steps.file_name(c, k)): k for k in wiring.CONNECTORS}
+    seen = set()
     for name, body in steps.guide(c).items():
         for n, block in step_blocks(body):
             lines = block.splitlines()
-            fresh = [
-                image
-                for i, line in enumerate(lines)
-                for image in light_images(line)
-                if not (i >= 2 and lines[i - 2].startswith("The ") and " cavity picture again" in lines[i - 2])
-            ]
-            if name == steps.guide_name(c, "fit"):
-                assert fresh == [steps.png(f) for f in steps.fit_names(c)], (name, n)
-            else:
-                assert len(fresh) <= 1, (name, n, fresh)
+            fresh = []
+            for i, line in enumerate(lines):
+                for image in light_images(line):
+                    k = cavities.get(image)
+                    said = f"The {k} cavity picture is shown again" in lines[0] or (
+                        i >= 2 and lines[i - 2].startswith(f"The {k} cavity picture again")
+                    )
+                    if not (image in seen and said):
+                        fresh.append(image)
+                    seen.add(image)
+            assert len(fresh) <= 1, (name, n, fresh)
+    fit = steps.guide(c)[steps.guide_name(c, "fit")]
+    assert [light_images(block) for _, block in step_blocks(fit)] == [[steps.png(f)] for f in steps.fit_names(c)]
+
+
+def quotes(c):
+    """[(file, the page quoted, the step numbers)] of every quote of a building page's step by its number: in the
+    check's and the verify pages, in the generated pages and in the pictures of carrier `c`."""
+    docs = wiring.HERE.parent.parent
+    texts = [*sorted((docs / "verify").glob("*.md")), *sorted((wiring.HERE / "check").glob("*.md"))]
+    texts += sorted((wiring.HERE / "generated").glob("*.md"))
+    texts += sorted((wiring.HERE / "generated").glob(f"acorn-cable-{c.key}-*.svg"))
+    quote = r'steps? (\d+)(?: and (\d+))? of (?:"|&quot;)((?:JTAG|UART) connector [12]|Fitting)(?:"|&quot;)'
+    return [
+        (f.name, page, [int(a)] + ([int(b)] if b else []))
+        for f in texts
+        if not f.name.startswith("acorn-check-") or f"-{c.key}-" in f.name
+        for a, b, page in re.findall(quote, f.read_text())
+    ]
 
 
 @pytest.mark.parametrize("key", list(wiring.CARRIERS))
 def test_a_quoted_step_number_is_the_step_it_means(key):
-    """Pages that send the reader back to the meter check of connector 2 quote its number: it is that step."""
+    """Pages and pictures that send the reader to a step of a building page quote its number: it is that step.
+
+    The meter check of a finished cable (connector 2), the meter check of wire 1 (connector 1) and the fitting
+    steps."""
     c = wiring.CARRIERS[key]
     n = steps.meter_check_step(c)
     pages = steps.guide(c)
-    for part, _ in steps.GUIDE.values():
+    for connector, (part, title) in steps.GUIDE.items():
         assert steps.step_number(c, f"{part}-2", steps.CHECK_EACH) == n
+        assert steps.step_number(c, f"{part}-2", steps.CHECK_CAVITY) == n + 1
         assert f"**{n}.** {steps.CHECK_EACH}" in pages[steps.guide_name(c, f"{part}-2")]
-    docs = wiring.HERE.parent.parent
-    texts = [*sorted((docs / "verify").glob("*.md")), *sorted((wiring.HERE / "check").glob("*.md"))]
-    texts += sorted((wiring.HERE / "generated").glob("acorn-check-*.md"))
-    quote = r'step (\d+) of "(?:JTAG|UART) connector 2"'
-    quoted = [(f.name, m) for f in texts for m in re.findall(quote, f.read_text())]
-    assert quoted and all(int(m) == n for _, m in quoted), quoted
+        w1, page = steps.wire_one_step(c, connector)
+        assert page == f"{title} 1"
+        assert f"**{w1}.** {steps.wire_one_check(connector)}" in pages[steps.guide_name(c, f"{part}-1")]
+    fit = [steps.fit_step(c, half) for half in (1, 2)]
+    assert fit == [1, 2]
+    meant = {f"{title} 2": [[n, n + 1]] for _, title in steps.GUIDE.values()}
+    meant |= {f"{steps.GUIDE[k][1]} 1": [[steps.wire_one_step(c, k)[0]]] for k in wiring.CONNECTORS}
+    meant["Fitting"] = [[f] for f in fit]
+    quoted = quotes(c)
+    assert {page for _, page, _ in quoted} >= {"JTAG connector 1", "UART connector 1", "JTAG connector 2"}
+    for name, page, numbers in quoted:
+        assert numbers in meant[page], (name, page, numbers)
