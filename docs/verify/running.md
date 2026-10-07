@@ -20,7 +20,9 @@ sudo fpgas-arty-debug test ddr             # load the DDR design and run its tes
 sudo fpgas-acorn-debug identify            # the same as fpgas-acorn-verify --identify
 ```
 
-* Run them with `sudo`; `--help`, `--list` and `fpgas-<board>-debug list` do not need it.
+`--identify` and `--label` are described in [Identity and labels](identity-and-labels.md#identity-and-labels).
+
+* Run them with `sudo`; [`--help`](help.md#--help), `--list` and `fpgas-<board>-debug list` do not need it.
 * Nothing is sent anywhere unless a file says `[verify] publish = on` (next to `fpga-board`, below). A host that
   only has the packages installed publishes nothing, at boot or by hand; its summary says so in one line
   (`not published: no file says ...`), and there is no error. The
@@ -53,4 +55,4 @@ sudo fpgas-acorn-debug identify            # the same as fpgas-acorn-verify --id
   file with every line a comment (it is what `EnvironmentFile=` in `systemctl cat fpgas-verify` names), so
   the boot run is plain `fpgas-verify` until you edit it. It is a configuration file: an upgrade keeps your
   edit.
-* From a checkout, without installing: `PYTHONPATH=verify/src python3 -m fpgas_online_verify --help`.
+* From a checkout, without installing: `PYTHONPATH=verify/src python3 -m fpgas_online_verify --help` (its output: [`--help`](help.md#--help)).

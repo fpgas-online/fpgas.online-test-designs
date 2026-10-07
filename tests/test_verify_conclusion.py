@@ -8,6 +8,7 @@ it after following docs/verify.md.
 
 import json
 import pathlib
+import re
 
 from fpgas_online_verify import conclusion, runner
 from fpgas_online_verify.boards import fomu, tt_fpga
@@ -239,3 +240,30 @@ def test_a_jtag_pin_the_serial_port_has_gets_the_blades_advice_and_any_other_hol
     for holders in ({2: '"spi0 CS0"'}, {14: '"serial-test"'}):  # a program that asked for the line, whatever its name
         other = todo(holders)
         assert "serial port" not in other and "Stop what has the pin" in other
+
+
+def _headings(page):
+    """The anchors of a page's headings, as the docs make them (lower case, punctuation dropped, spaces to -)."""
+    out, fenced = set(), False
+    for line in page.read_text().splitlines():
+        if line.startswith("```"):
+            fenced = not fenced
+        elif not fenced and re.match(r"#{1,6} ", line):
+            out.add(re.sub(r"\s", "-", re.sub(r"[^\w\s-]", "", line.lstrip("#").strip().lower())))
+    return out
+
+
+def test_every_docs_link_the_tool_prints_names_a_page_of_docs_verify_and_a_heading_on_it():
+    """The site publishes docs/verify/<page>.md as <DOCS>/<page>.html: each link the check prints (its advice and
+    its last line), and the one in /etc/default/fpgas-verify, must name such a page and a heading on it."""
+    repo = pathlib.Path(__file__).parents[1]
+    texts = [text for _, text in conclusion.ADVICE]
+    texts += conclusion.lines(_report("fail", [_acorn("fail", [("ddr", "fail", "the test exited 1")])]))
+    texts.append((repo / "packaging" / "debs" / "fpgas-verify.default").read_text())
+    links = re.findall(re.escape(conclusion.DOCS) + r"/([^\s#]*)#(\S*?)\)?\.?(?=\s|$)", "\n".join(texts))
+    assert {page for page, _ in links} >= {"common-failures.html", "tt-fpga.html", "running.html"}, links
+    for page, anchor in links:
+        assert page.endswith(".html"), page
+        source = repo / "docs" / "verify" / page.replace(".html", ".md")
+        assert source.is_file(), f"{conclusion.DOCS}/{page}: no {source}"
+        assert anchor in _headings(source), f"{conclusion.DOCS}/{page}#{anchor}: no such heading in {source}"

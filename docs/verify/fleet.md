@@ -84,7 +84,7 @@ uv run --no-project python scripts/collect_verify_status.py --host 10.21.2.47 --
 ```
 
 * It goes through tweed (`ansible@10.99.21.2`) as `root` to `10.21.<switch>.<port>`: switch 1 ports 1-40 and
-  switch 2 ports 1-48, except sw2 p30 (not on the fpgas root). See `--help` for `--jump`, `--ports`, `--host`, ….
+  switch 2 ports 1-48, except sw2 p30 (not on the fpgas root). See the script's `--help` for `--jump`, `--ports`, `--host`, ….
 * Exit: 2 if the jump host is unreachable; 1 if no Pi, or some Pi, could not be read; else 0.
 * The Pis share one host key, kept as `fpgas-netboot-pi` in `~/.config/fpgas-online/netboot_known_hosts`
   (learnt on first use). After a deliberate rekey:

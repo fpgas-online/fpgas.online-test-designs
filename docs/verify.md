@@ -1,5 +1,7 @@
 # fpgas-verify: checking an FPGA board from its Raspberry Pi
 
+**You use fpgas-verify, or look after Pis that run it, and want the page for what you are doing.**
+
 `fpgas-verify` answers one question per Pi: **is this Pi and its FPGA board ready for users?** It finds the
 board, tests the board and its wiring to the Pi, and gives one result, pass or fail, with every fault it found.
 

@@ -1,6 +1,7 @@
 # fpgas-verify: what an Acorn check tests
 
-You have an Acorn and want to know what its check does, test by test.
+You have an Acorn and want to know what its check does, test by test. The details of the tests (`ddr` step
+by step, `not_run`, the driver unbound, the pins put back) are in [the Acorn's tests in detail](acorn-power-cycle.md#the-acorns-tests-in-detail).
 Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
 
 ## Acorn
@@ -58,7 +59,7 @@ From a checkout, the check reads them from the repository.
 | `rp1-pio` | the Pi's kernel | Pi 5 / CM5 (BCM2712) only, not run elsewhere: `/dev/pio0` is a character device that opens read-write, which openfpgaloader-rp1pio needs. No bootloader or `config.txt` setting is read. When it does not, the test also says whether `rp1_fw` and `rp1_pio` are loaded, and the kernel's own `rp1-pio` / RP1 firmware lines say why, e.g. `failed to contact RP1 firmware` on a bootloader rp1_pio cannot talk to (pi-sw2-p47 and p48, bootloader 2024/11/05, 2026-10-03) |
 | `jtag` | P1 | `openFPGALoader --detect` finds one device, the variant's part in any silicon version ([the JTAG IDCODE](idcode-and-dna.md#the-jtag-idcode)), and `openFPGALoader --read-dna` reads a device DNA that is neither all zeros nor all ones. When BAR0's DNA is good, the two must match; otherwise the JTAG DNA is not compared. The IDCODE read does not use TDI; the DNA read does |
 | `flash` | BAR0 | both 4 MiB slots (golden at `0x000000`, operational at `0x400000`), read whole with read opcodes only, hold the release's images |
-| `ddr` | BAR0 | after the BIOS console is read out, the DRAM BIST makes two passes over the whole DRAM: no errors, and write and read bandwidth at least the variant's minimum |
+| `ddr` | BAR0 | after the BIOS console is read out, the DRAM BIST makes two passes over the whole DRAM: no errors, and write and read bandwidth at least the variant's minimum; details: [the `ddr` test in detail](acorn-power-cycle.md#the-acorns-tests-in-detail) |
 | `p2-uart` | P2 | the UARTBone identifier at 1200 baud is BAR0's; at 921600 baud the identifier, DNA and XADC readings are right and the DNA is BAR0's. The link is left at 1200 baud |
 | `p2-serial` | BAR0 and the Pi's GPIO | J2/K2, borrowed from the UART by the `p2_serial` switch, carry 0 and 1 both ways; the switch goes back to serial by itself; the UARTBone then answers with BAR0's identifier |
 | `scratch` | BAR0 and P2 | the `ctrl` scratch register holds two patterns written over each bridge; its value is put back |
