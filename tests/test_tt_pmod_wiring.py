@@ -1312,7 +1312,9 @@ def test_the_rp2_heap_is_said_and_a_heap_too_low_stops_the_test_before_it_starts
 def test_each_pin_id_round_says_the_heap_free_while_it_sends():
     _result, log = run_simulated(BoardModel(asic_wires(), project="drives_uio"), argv=ASIC, pin_id=True)
     rounds = [line for line in log if line.startswith("MEM: ")]
-    assert rounds and all(line.startswith("MEM: 51000 bytes of the RP2's heap free while it sends ") for line in rounds)
+    sends = [line for line in rounds if "while it sends" in line]
+    assert sends and all(line.startswith("MEM: 51000 bytes of the RP2's heap free while it sends ") for line in sends)
+    assert "MEM: 60000 bytes of the RP2's heap free (collected) before the walks" in rounds
 
 
 def test_the_command_server_never_imports_the_sdk_and_reports_its_heap():

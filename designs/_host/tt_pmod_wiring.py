@@ -354,6 +354,8 @@ def _txid(args):
     # pin-id design, until a line arrives on stdin. All pins step together
     # once per bit period; setting them one after another costs a few
     # microseconds of constant skew per pin, well inside the 833 us bit.
+    # The walks before it leave garbage: collected first, so the mem_free it reports is what the round holds.
+    gc.collect()
     import select
     pins = []
     frames = []
@@ -1733,6 +1735,8 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
                     raise Unclear(reason)
                 raise ProtocolError(f"the chip's {args.asic_project} could not be confirmed: {reason}")
 
+    # The heap after a collection just before the walks, to compare with the pin-id rounds' (collected too).
+    log(f"MEM: {mem_free(rp2.cmd('mem'))} bytes of the RP2's heap free (collected) before the walks")
     log("\n== ui_in: RP2 drives, Pi reads ==")
     if asic_loopback or 0 not in ui_bits:
         observed, follows = probe.walk_twice("ui_in", ui_bits, partners=measured_partners)
