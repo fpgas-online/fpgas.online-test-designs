@@ -149,7 +149,8 @@ def check(port, run=subprocess.run):
         return 2, (f"this Pi's pinctrl cannot read the state of GPIO{', GPIO'.join(map(str, unread))} (its pull, or "
                    "an output's level), so it could not be put back after the read: the DIP switches were not "
                    "read")  # fmt: skip
-    before = signal.signal(signal.SIGTERM, _stop)  # a stopped check still puts the Pi's pins back (below)
+    # A stopped check (SIGTERM, or Ctrl-C by hand) still puts the Pi's pins back, and says so (below).
+    before = {sig: signal.signal(sig, _stop) for sig in STOPS}
     try:
         faults = set_pins({g: ("ip", "pd", "--") for g in PI_GPIOS}, run)
         if faults:
@@ -160,17 +161,22 @@ def check(port, run=subprocess.run):
     except Stopped as stop:
         code, line = 2, f"the check was stopped ({stop}) during the read: the DIP switches were not read"
     finally:
-        signal.signal(signal.SIGTERM, signal.SIG_IGN)  # the restore is not cut short by another stop
+        for sig in STOPS:  # the restore is not cut short by another stop
+            signal.signal(sig, signal.SIG_IGN)
         back = set_pins(saved, run)
-        signal.signal(signal.SIGTERM, before)
+        for sig, handler in before.items():
+            signal.signal(sig, handler)
     if back:
         print("Not put back: " + "; ".join(back))
         code, line = 2, f"{line}; and the Pi's GPIOs on HAT JA were not put back as they were ({'; '.join(back)})"
     return code, line
 
 
+STOPS = (signal.SIGTERM, signal.SIGINT)
+
+
 class Stopped(Exception):
-    """SIGTERM arrived while the Pi's pins were changed."""
+    """SIGTERM or SIGINT arrived while the Pi's pins were changed."""
 
 
 def _stop(signum, frame):

@@ -614,18 +614,18 @@ def test_a_check_stopped_during_the_read_puts_the_pis_pins_back_and_says_so_as_a
             run.calls.append(list(argv))
             dip._stop(15, None)  # what SIGTERM does while the board is read
         if argv[:2] == ["pinctrl", "set"]:
-            handlers.append(signal.getsignal(signal.SIGTERM))
+            handlers.append((signal.getsignal(signal.SIGTERM), signal.getsignal(signal.SIGINT)))
         return run(argv, **kw)
 
-    before = signal.getsignal(signal.SIGTERM)
+    before = (signal.getsignal(signal.SIGTERM), signal.getsignal(signal.SIGINT))
     assert dip.check("/dev/ttyACM0", stopped) == (
         2, "the check was stopped (signal 15) during the read: the DIP switches were not read")
     read = next(i for i, c in enumerate(run.calls) if c[0] == "mpremote")
     assert len([c for c in run.calls[read:] if c[:2] == ["pinctrl", "set"]]) == len(dip.PI_GPIOS)
     # changing the pins runs under the handler, putting them back with SIGTERM ignored; then it is as it was
-    assert handlers[: len(dip.PI_GPIOS)] == [dip._stop] * len(dip.PI_GPIOS)
-    assert handlers[len(dip.PI_GPIOS):] == [signal.SIG_IGN] * len(dip.PI_GPIOS)
-    assert signal.getsignal(signal.SIGTERM) == before
+    assert handlers[: len(dip.PI_GPIOS)] == [(dip._stop, dip._stop)] * len(dip.PI_GPIOS)
+    assert handlers[len(dip.PI_GPIOS):] == [(signal.SIG_IGN, signal.SIG_IGN)] * len(dip.PI_GPIOS)
+    assert (signal.getsignal(signal.SIGTERM), signal.getsignal(signal.SIGINT)) == before
 
 
 def test_a_pi_that_cannot_read_an_outputs_level_is_refused_too():
@@ -650,6 +650,7 @@ class FakePin:
         FakePin.log.append((self.gpio, mode, pull))
 
     def value(self):
+        FakePin.log.append((self.gpio, "read"))
         return int(self.gpio in FakePin.on)
 
 
@@ -668,16 +669,20 @@ def test_the_read_run_as_micropython_drives_each_line_and_its_joined_pad_low_the
         exec(dip.READ, {"print": lambda *a: out.append(" ".join(map(str, a)))})
     finally:
         for k, v in saved.items():
-            sys.modules[k] = v
+            if v is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
     assert out == ["DIP 01000010"]
     assert dip.verdict(0, out[0] + "\n", "") == (1, "switch 2 is on, switch 7 is on: set all DIP switches off")
-    # switch 2 (n = 1): ui_in[1] (GPIO18) and its joined uio[1] (GPIO26) driven low, a wait, both released
-    start = FakePin.log.index((18, "out", 0))
-    assert FakePin.log[start:start + 5] == [
-        (18, "out", 0), (26, "out", 0), ("sleep", 1), (18, "in", "pull-down"), (26, "in", "pull-down")]
-    # switch 1 and switches 5 to 8 have no joined pad
-    assert [e for e in FakePin.log if e[0] in (25, 29, 30, 31, 32)] == []
-    assert {e[0] for e in FakePin.log if e[1] == "out"} == {*range(17, 25), 26, 27, 28}
+    # For each switch, in order: its ui_in pad and (switches 2 to 4) the uio pad joined to it at the HAT driven
+    # low, 1 ms, both released to the pull-down, 5 ms to settle, then the ui_in pad read; nothing else.
+    expected = []
+    for n in range(8):
+        pads = [17 + n] + ([25 + n] if n in (1, 2, 3) else [])
+        expected += [(g, "out", 0) for g in pads] + [("sleep", 1)]
+        expected += [(g, "in", "pull-down") for g in pads] + [("sleep", 5), (17 + n, "read")]
+    assert FakePin.log == expected
 
 
 def test_the_read_on_the_board_drives_each_line_low_then_reads_it_with_the_pull_down_and_writes_no_file():
