@@ -185,8 +185,8 @@ How it tests:
   board's own `main.py` rewrites its `boot.log` when it starts: on the good path that happens once per boot
   check, at the identification start, and not again.
 * The test stops itself after 90 s (`--time-limit`) and puts everything back (up to 120 s, every step bounded, and 75 s more for the
-  fallback); the boot check's own limit, 300 s, which kills it, is beyond all of that. The figures are
-  provisional until the live run has timed the test.
+  fallback); the boot check's own limit, 300 s, which kills it, is beyond all of that. A passing run on the TT07
+  board took 22.7 s (8 October 2026).
 * The chip's factory test is enabled with the SDK's `config.ini` turned off (`apply_configs`): applied, it would
   set `ui_in = 1` and a 10 Hz clock, and the chip would drive its counter onto `uio[1:3]`, which the HAT joins to
   `ui_in[1:3]`. The restore turns it on again, as the board had it. The board as it starts drives those three nets
@@ -207,8 +207,10 @@ pin-id round sends, and after the test. `MEM:`, `PULLS:`, `RESTORE:` and `FALLBA
 the `WIRING:` line, where the boot report keeps them.
 
 [PR #15](https://github.com/fpgas-online/fpgas.online-test-designs/pull/15)'s form of it ran on every Tiny Tapeout
-host at Welland on 4 September 2026. This form's own runs on a board are recorded in the pull request that brought
-it into the check.
+host at Welland on 4 September 2026. This form passed on the board with a TT07 chip at Welland on 8 October 2026
+(RP2040, SDK 2.0.4, on a Pi 3B+): 22.7 s, the RP2040's heap 71568 bytes free at the start and 20752 at the lowest,
+the board's files the same before and after; the record is in
+[PR #179](https://github.com/fpgas-online/fpgas.online-test-designs/pull/179).
 
 
 ## TT FPGA identity

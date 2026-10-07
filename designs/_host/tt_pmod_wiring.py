@@ -460,10 +460,12 @@ def build_firmware(controller):
     return FIRMWARE.replace("__DATA__", repr(data))
 
 
-# The least free heap the RP2's command server must find once it is loaded, beside the SDK's own objects. The
-# largest thing it builds is txid's table for one pin-id round (8 pins; a frame of 50 bits each): see the MEM:
-# lines a run prints. PROVISIONAL: not yet measured on a board; the second live run of PR #179 sets it.
-MIN_HEAP_FREE = 20000
+# The least free heap the RP2's command server must find once it is loaded, beside the SDK's own objects. Measured
+# on the TT07 board (RP2040, SDK 2.0.4) on 8 Oct 2026: 71568 bytes free at load, 20752 at the lowest (sending the 8
+# uio names, the largest pin-id round), so the test used at most 50816 bytes, garbage the collector had not yet taken
+# back included. The floor is that drop plus about 9 kB of headroom, so a board at the floor still has some left at
+# the lowest point; a later measurement on another board or SDK release moves it.
+MIN_HEAP_FREE = 60000
 
 
 def mem_free(fields):
@@ -2237,7 +2239,8 @@ class Stopped(Exception):
 
 STOPS = (signal.SIGTERM, signal.SIGINT, signal.SIGALRM)
 # The test's own limit, inside the boot check's (tt_fpga.WIRING_TIMEOUT), which kills it outright: at this limit it
-# still stops cleanly and puts everything back (and has time left for the SDK fallback below).
+# still stops cleanly and puts everything back (and has time left for the SDK fallback below). A passing run on the
+# TT07 board took 22.7 s (8 Oct 2026): about four times that.
 TIME_LIMIT = 90
 # The most the teardown after the limit takes, every step bounded: resync 5 s, mem 5 s, sdk restore 30 s, leaving the
 # command server 6 s; putting the Pi back: 22 pinctrl calls at PINCTRL_TIMEOUT (44 s) and 6 commands at

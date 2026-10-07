@@ -185,7 +185,8 @@ PENDING = {}
 # tt_pmod_wiring.py stops itself at WIRING_TIME_LIMIT, then puts everything back (its TEARDOWN_SECONDS, 120) and, only
 # when the board could not be put back from RAM, starts the SDK by a soft reset (its FALLBACK_SECONDS, 75): all of it
 # inside the boot check's own limit, which kills it. That worst case is for a faulty board; the good path's time is
-# what a visitor waits for. PROVISIONAL, both limits: set from the live run's timing.
+# what a visitor waits for: 22.7 s, measured on the TT07 board on 8 Oct 2026, in a passing run. WIRING_TIME_LIMIT
+# is about four times that.
 WIRING_TIME_LIMIT = 90
 WIRING_TEARDOWN = 120 + 75
 WIRING_TIMEOUT = 300
