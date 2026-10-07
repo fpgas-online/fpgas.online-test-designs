@@ -68,6 +68,14 @@ def test_a_crossed_pair_is_told_by_the_wire_numbers_of_the_cable(key):
     assert (f"The {c.resistor_value} resistor stays in wire {a} (J2)" in words) == ("J2" in c.resistors)
 
 
+def test_the_blade_pages_stop_the_check_on_the_cm4_blades_where_it_is_typed_and_run_again():
+    pages = check.pages(wiring.CARRIERS["blade"])
+    assert "Not on pi14 at ps1 or pi18 at ps1 yet." in pages[1]
+    assert "not on pi14 or pi18 at ps1 yet" in pages[2]
+    for text in check.pages(wiring.CARRIERS["pi5"]).values():
+        assert "pi14" not in text
+
+
 def test_the_transcripts_and_failure_rows_come_from_the_tool_reference():
     verify = check.VERIFY.read_text()
     command = {check.PASS: "fpgas-verify", check.BLADE_FAIL: "fpgas-acorn-verify"}  # as each was run

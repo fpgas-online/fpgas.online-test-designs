@@ -1571,7 +1571,12 @@ def guide(c):
         f"Both cables, checked on the bench (the page before this one), the Acorn and the {c.name}.",
         fit_,
         "## Next",
-        'Power the host on and run the check: the page "verifying 1".',
+        'Power the host on and run the check: the page "verifying 1".'
+        + (
+            " At ps1: on pi16 and pi20 at ps1 only, not yet on the two Compute Module 4 blades."
+            if c.key == "blade"
+            else ""
+        ),
     )
     return out
 
