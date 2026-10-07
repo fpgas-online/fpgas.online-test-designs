@@ -28,6 +28,7 @@ program = _load("tt_fpga_program")
 wrapper = _load("tt_test_wrapper")
 _load("tt_pmod_wrapper")
 main_py = _load("tt_main_py")
+dip = _load("tt_dip_switches")
 
 # What a demo board prints on a soft reset from the friendly REPL: with the SDK's main.py (its first and last
 # boot lines, tt-micropython-firmware src/main.py), and with the no-op the test wrapper used to install.
@@ -403,6 +404,7 @@ def test_the_guard_covers_every_tiny_tapeout_host_script():
         "tt_pmod_wrapper.py",
         "tt_sdk_start.py",
         "tt_main_py.py",
+        "tt_dip_switches.py",
         "tt_fpga.py",
     } <= {p.name for p in GUARDED}
 
@@ -467,3 +469,124 @@ def test_a_failed_program_is_retried_once_after_a_usb_power_cycle(monkeypatch):
     assert wrapper.program_fpga("/dev/ttyACM0", "design.bin") is True and cycled == ["/dev/ttyACM0"]
     answers[:] = [(1, "", "x"), (1, "", "x")]
     assert wrapper.program_fpga("/dev/ttyACM0", "design.bin") is False
+
+
+def _load_pin_id():
+    path = _HOST.parent / "pmod-pin-id" / "host" / "identify_pmod_pins.py"
+    spec = importlib.util.spec_from_file_location("identify_pmod_pins", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+# -- the DIP switches (#166) -----------------------------------------------------------------------------------
+
+# pinctrl get on a Raspberry Pi 4 with the SPI driver loaded: GPIO8 to 11 are SPI0, the rest inputs.
+PINCTRL_GET = "\n".join([
+    " 8: a0    pu | hi // GPIO8 = SPI0_CE0_N",
+    "10: a0    pd | lo // GPIO10 = SPI0_MOSI",
+    " 9: a0    pd | lo // GPIO9 = SPI0_MISO",
+    "11: a0    pd | lo // GPIO11 = SPI0_SCLK",
+    "19: ip    pd | lo // GPIO19 = input",
+    "21: ip    pd | lo // GPIO21 = input",
+    "20: op dh pd | hi // GPIO20 = output",
+    "18: ip    pd | lo // GPIO18 = input",
+]) + "\n"
+
+
+class FakeRun:
+    """Stands in for subprocess.run: records argv; pinctrl get answers PINCTRL_GET, mpremote answers `board`."""
+
+    def __init__(self, board=(0, "DIP 00000000\n", ""), get=(0, PINCTRL_GET), set_rc=0):
+        self.calls, self.board, self.get, self.set_rc = [], board, get, set_rc
+
+    def __call__(self, argv, **kw):
+        self.calls.append(list(argv))
+        if argv[0] == "mpremote":
+            rc, out, err = self.board
+        elif argv[:2] == ["pinctrl", "get"]:
+            (rc, out), err = self.get, ""
+        else:
+            rc, out, err = self.set_rc, "", ""
+        return subprocess.CompletedProcess(argv, rc, out, err)
+
+
+@pytest.mark.parametrize("bits, code, line", [
+    ("00000000", 0, "all 8 DIP switches are off"),
+    ("00010000", 1, "switch 4 is on: set all DIP switches off"),
+    ("10010000", 1, "switch 1 is on, switch 4 is on: set all DIP switches off"),
+    ("11111111", 1, ", ".join(f"switch {n} is on" for n in range(1, 9)) + ": set all DIP switches off"),
+])  # fmt: skip
+def test_each_switch_that_reads_on_is_named_switch_1_first(bits, code, line):
+    assert dip.verdict(0, f"DIP {bits}\n", "") == (code, line)
+
+
+@pytest.mark.parametrize("rc, out, err, part", [
+    (1, "", "mpremote: no device found on /dev/ttyACM0", "(exit 1): mpremote: no device found"),
+    (0, "DIP 0101\n", "", "DIP 0101"),
+    (0, "", "", "it printed nothing"),
+    (124, "", "mpremote did not finish within 60 s", "(exit 124)"),
+])  # fmt: skip
+def test_a_read_that_did_not_give_eight_switches_is_an_error_not_a_pass(rc, out, err, part):
+    code, line = dip.verdict(rc, out, err)
+    assert code == 2 and line.startswith("the DIP switches could not be read from the board") and part in line
+
+
+def test_the_pi_pins_are_made_inputs_with_their_pull_down_for_the_read_and_put_back_as_they_were():
+    run = FakeRun(board=(0, "DIP 00010000\n", ""))
+    assert dip.check("/dev/ttyACM0", run) == (1, "switch 4 is on: set all DIP switches off")
+    sets = [(i, c) for i, c in enumerate(run.calls) if c[:2] == ["pinctrl", "set"]]
+    read = next(i for i, c in enumerate(run.calls) if c[0] == "mpremote")
+    before, after = [c for i, c in sets if i < read], [c for i, c in sets if i > read]
+    assert sorted(c[2] for c in before) == sorted(str(g) for g in dip.PI_GPIOS)
+    assert all(c[3:] == ["ip", "pd"] for c in before)
+    assert ["pinctrl", "set", "8", "a0", "pu"] in after and ["pinctrl", "set", "18", "ip", "pd"] in after
+    assert ["pinctrl", "set", "20", "op", "pd", "dh"] in after  # an output goes back at its level
+    assert len(after) == len(dip.PI_GPIOS)
+    assert run.calls[read][:4] == ["mpremote", "connect", "/dev/ttyACM0", "exec"]
+
+
+def test_without_pinctrl_nothing_is_read_and_it_is_an_error():
+    calls = []
+
+    def missing(argv, **kw):
+        calls.append(argv)
+        if argv[0] == "pinctrl":
+            raise FileNotFoundError(argv[0])
+        raise AssertionError(f"nothing else is run: {argv}")
+
+    code, line = dip.check("/dev/ttyACM0", missing)
+    assert code == 2 and "pinctrl is not installed" in line and line.endswith("the DIP switches were not read")
+    assert calls == [["pinctrl", "get", ",".join(map(str, dip.PI_GPIOS))]]
+
+
+def test_pins_that_could_not_be_put_back_turn_a_pass_into_an_error():
+    calls = []
+
+    def run(argv, **kw):
+        calls.append(argv)
+        if argv[:2] == ["pinctrl", "get"]:
+            return subprocess.CompletedProcess(argv, 0, PINCTRL_GET, "")
+        if argv[0] == "mpremote":
+            return subprocess.CompletedProcess(argv, 0, "DIP 00000000\n", "")
+        back = len([c for c in calls if c[0] == "mpremote"]) > 0
+        return subprocess.CompletedProcess(argv, 1 if back else 0, "", "pinctrl: busy" if back else "")
+
+    code, line = dip.check("/dev/ttyACM0", run)
+    assert code == 2 and line == ("all 8 DIP switches are off, but the Pi's GPIOs on HAT JA were not put back "
+                                  "as they were")  # fmt: skip
+
+
+def test_the_read_on_the_board_drives_each_line_low_then_reads_it_with_the_pull_down_and_writes_no_file():
+    assert "Pin.PULL_DOWN" in dip.READ and "Pin.OUT, value=0" in dip.READ
+    assert not board_writes(dip.READ)
+    assert dip.FIRST_GPIO == 17 and dip.SWITCHES == 8  # ui_in[0] is the RP2350's GPIO17 (tt-demo-pcb README)
+    namespace = {}
+    exec(compile("def f():\n" + "".join("    " + line + "\n" for line in dip.READ.splitlines()), "READ", "exec"),
+         {}, namespace)  # it is Python the board can run (compiled here, not run)
+
+
+def test_the_pi_gpios_are_hat_ja_as_the_pin_id_scan_has_ui_in():
+    pin_id = _load_pin_id()
+    ja = [gpio for gpio, _pin, where in pin_id.BOARDS["tt"]["pins"] if "ui_in[" in where]
+    assert tuple(ja) == dip.PI_GPIOS
