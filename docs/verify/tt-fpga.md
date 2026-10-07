@@ -64,6 +64,7 @@ The `dip-switches` test checks it, before any other test loads a design
   * `pinctrl` could not set the Pi's GPIOs, or cannot read their pull (a Pi 3 and older), so they could not
     be put back;
   * the Pi's GPIOs could not be put back afterwards (the reason says so, after the switches' result).
+  * the check was stopped during the read (the Pi's GPIOs are put back first).
 * A load of `tt-display` that fails is a `fail` of this test (`loading it failed (exit N)`), as for any test.
   A `tt-display` file that is damaged or missing in the bitstreams package makes the test an `error`: the
   switches cannot be read without it.

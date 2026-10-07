@@ -143,11 +143,13 @@ def check(port, run=subprocess.run):
     saved = pi_pins(run)
     if isinstance(saved, str):
         return 2, f"{saved}: the DIP switches were not read"
-    unread = sorted(g for g, (_f, pull, _l) in saved.items() if pull == "--")
+    # A pull, or an output's level, that pinctrl cannot read could not be put back after the read.
+    unread = sorted(g for g, (f, pull, level) in saved.items() if pull == "--" or (f == "op" and level == "--"))
     if unread:
-        return 2, (f"this Pi's pinctrl cannot read the pull of GPIO{', GPIO'.join(map(str, unread))}, so it could "
-                   "not be put back after the read: the DIP switches were not read")  # fmt: skip
-    signal.signal(signal.SIGTERM, _stop)  # a stopped check still puts the Pi's pins back (the finally below)
+        return 2, (f"this Pi's pinctrl cannot read the state of GPIO{', GPIO'.join(map(str, unread))} (its pull, or "
+                   "an output's level), so it could not be put back after the read: the DIP switches were not "
+                   "read")  # fmt: skip
+    before = signal.signal(signal.SIGTERM, _stop)  # a stopped check still puts the Pi's pins back (below)
     try:
         faults = set_pins({g: ("ip", "pd", "--") for g in PI_GPIOS}, run)
         if faults:
@@ -155,17 +157,24 @@ def check(port, run=subprocess.run):
             code, line = 2, f"the Pi's GPIOs on HAT JA could not be made inputs ({why}): the DIP switches were not read"
         else:
             code, line = verdict(*read_board(port, run=run))
+    except Stopped as stop:
+        code, line = 2, f"the check was stopped ({stop}) during the read: the DIP switches were not read"
     finally:
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)  # the restore is not cut short by another stop
         back = set_pins(saved, run)
-        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        signal.signal(signal.SIGTERM, before)
     if back:
         print("Not put back: " + "; ".join(back))
         code, line = 2, f"{line}; and the Pi's GPIOs on HAT JA were not put back as they were ({'; '.join(back)})"
     return code, line
 
 
+class Stopped(Exception):
+    """SIGTERM arrived while the Pi's pins were changed."""
+
+
 def _stop(signum, frame):
-    raise SystemExit(f"stopped by signal {signum}")
+    raise Stopped(f"signal {signum}")
 
 
 def main():

@@ -7,6 +7,7 @@ import importlib.util
 import os
 import pathlib
 import re
+import signal
 import subprocess
 import sys
 
@@ -600,23 +601,83 @@ def test_a_pi_whose_pinctrl_cannot_read_a_pull_is_refused_before_anything_is_cha
     """A Pi 3 prints "--" for every pull (core.PIN_RE's comment): the pull-down set for the read could not be undone."""
     run = FakeRun(get=(0, PINCTRL_GET.replace(" pd |", " -- |").replace(" pu |", " -- |")))
     code, line = dip.check("/dev/ttyACM0", run)
-    assert code == 2 and "cannot read the pull of GPIO8, GPIO9" in line and line.endswith("were not read")
+    assert code == 2 and "cannot read the state of GPIO8, GPIO9" in line and line.endswith("were not read")
     assert run.calls == [["pinctrl", "get", ",".join(map(str, dip.PI_GPIOS))]]
 
 
-def test_a_check_stopped_during_the_read_still_puts_the_pis_pins_back():
+def test_a_check_stopped_during_the_read_puts_the_pis_pins_back_and_says_so_as_an_error():
     run = FakeRun()
+    handlers = []
 
     def stopped(argv, **kw):
         if argv[0] == "mpremote":
             run.calls.append(list(argv))
-            raise SystemExit("stopped by signal 15")
+            dip._stop(15, None)  # what SIGTERM does while the board is read
+        if argv[:2] == ["pinctrl", "set"]:
+            handlers.append(signal.getsignal(signal.SIGTERM))
         return run(argv, **kw)
 
-    with pytest.raises(SystemExit):
-        dip.check("/dev/ttyACM0", stopped)
+    before = signal.getsignal(signal.SIGTERM)
+    assert dip.check("/dev/ttyACM0", stopped) == (
+        2, "the check was stopped (signal 15) during the read: the DIP switches were not read")
     read = next(i for i, c in enumerate(run.calls) if c[0] == "mpremote")
     assert len([c for c in run.calls[read:] if c[:2] == ["pinctrl", "set"]]) == len(dip.PI_GPIOS)
+    # changing the pins runs under the handler, putting them back with SIGTERM ignored; then it is as it was
+    assert handlers[: len(dip.PI_GPIOS)] == [dip._stop] * len(dip.PI_GPIOS)
+    assert handlers[len(dip.PI_GPIOS):] == [signal.SIG_IGN] * len(dip.PI_GPIOS)
+    assert signal.getsignal(signal.SIGTERM) == before
+
+
+def test_a_pi_that_cannot_read_an_outputs_level_is_refused_too():
+    run = FakeRun(get=(0, PINCTRL_GET.replace("op -- pu | hi", "op -- pu | --")))
+    code, line = dip.check("/dev/ttyACM0", run)
+    assert code == 2 and "cannot read the state of GPIO8" in line
+    assert run.calls == [["pinctrl", "get", ",".join(map(str, dip.PI_GPIOS))]]
+
+
+class FakePin:
+    """machine.Pin as far as READ uses it: records each pad's mode, pull and level; a pad reads 1 when the
+    switch on its line is on (`on`, the RP2350 GPIOs of ui_in lines whose switch is on)."""
+
+    log, on = [], set()
+    OUT, IN, PULL_DOWN = "out", "in", "pull-down"
+
+    def __init__(self, gpio, mode, value=None):
+        self.gpio = gpio
+        FakePin.log.append((gpio, mode, value))
+
+    def init(self, mode, pull):
+        FakePin.log.append((self.gpio, mode, pull))
+
+    def value(self):
+        return int(self.gpio in FakePin.on)
+
+
+def test_the_read_run_as_micropython_drives_each_line_and_its_joined_pad_low_then_releases_both_and_reads():
+    import types
+
+    machine = types.ModuleType("machine")
+    machine.Pin = FakePin
+    utime = types.ModuleType("time")
+    utime.sleep_ms = lambda ms: FakePin.log.append(("sleep", ms))
+    FakePin.log, FakePin.on = [], {17 + 1, 17 + 6}  # switches 2 and 7 on
+    out = []
+    saved = {k: sys.modules.get(k) for k in ("machine", "time")}
+    sys.modules.update(machine=machine, time=utime)
+    try:
+        exec(dip.READ, {"print": lambda *a: out.append(" ".join(map(str, a)))})
+    finally:
+        for k, v in saved.items():
+            sys.modules[k] = v
+    assert out == ["DIP 01000010"]
+    assert dip.verdict(0, out[0] + "\n", "") == (1, "switch 2 is on, switch 7 is on: set all DIP switches off")
+    # switch 2 (n = 1): ui_in[1] (GPIO18) and its joined uio[1] (GPIO26) driven low, a wait, both released
+    start = FakePin.log.index((18, "out", 0))
+    assert FakePin.log[start:start + 5] == [
+        (18, "out", 0), (26, "out", 0), ("sleep", 1), (18, "in", "pull-down"), (26, "in", "pull-down")]
+    # switch 1 and switches 5 to 8 have no joined pad
+    assert [e for e in FakePin.log if e[0] in (25, 29, 30, 31, 32)] == []
+    assert {e[0] for e in FakePin.log if e[1] == "out"} == {*range(17, 25), 26, 27, 28}
 
 
 def test_the_read_on_the_board_drives_each_line_low_then_reads_it_with_the_pull_down_and_writes_no_file():
