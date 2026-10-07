@@ -13,6 +13,12 @@ import wiring
 
 W = wiring.WIRING
 FILES = tables.build()
+# A picture on a page: the light PNG linking to its SVG, shown in the light theme, and the dark PNG linking to
+# its dark SVG, shown in the dark one (wiringlib.fragments.picture). Group 2 is the picture's name.
+PAIR = re.compile(
+    r"\[!\[([^\]]+)\]\((tt-fpga-[a-z-]*)\.png\)\]\(\2\.svg\)\{\.only-light\}\n"
+    r"\[!\[\1\]\(\2-dark\.png\)\]\(\2-dark\.svg\)\{\.only-dark\}"
+)
 WIRE_PAGES = ("tt-fpga-cables.md", "tt-fpga-pins-ui-uo.md", "tt-fpga-pins-uio-uart.md", "tt-fpga-pins-other.md")
 
 
@@ -93,7 +99,8 @@ def test_the_rows_the_hand_written_page_had_are_still_what_the_tables_say():
 def test_a_page_with_a_wire_table_repeats_the_picture_and_how_to_find_the_header_in_place():
     for name in WIRE_PAGES:
         text = FILES[name]
-        shown = re.findall(r"\[!\[[^\]]+\]\((tt-fpga-[a-z-]*)\.png\)\]\(\1\.svg\)", text)
+        shown = [m.group(2) for m in PAIR.finditer(text)]
+        assert len(shown) == text.count("{.only-light}") == text.count("{.only-dark}"), name
         if name == "tt-fpga-pins-other.md":  # its picture is the display's, in its own section
             assert shown == [picture.DISPLAY], name
         else:
@@ -143,8 +150,9 @@ def test_the_pin_1_warning_is_under_every_picture():
         if name == "tt-fpga-pins-other.md":
             assert pictures == 0 and warning not in text, name
             continue
-        assert text.count(warning) == pictures // 2 >= 1, name  # each picture names its PNG and its SVG
-        for shown in re.finditer(r"tt-fpga-pmod-cables[a-z-]*\.svg\)\n\n", text):
+        # each picture names its PNG and its SVG, light and dark
+        assert text.count(warning) == pictures // 4 >= 1, name
+        for shown in re.finditer(r"tt-fpga-pmod-cables[a-z-]*-dark\.svg\)\{\.only-dark\}\n\n", text):
             assert text[shown.end() :].startswith(warning), name
 
 

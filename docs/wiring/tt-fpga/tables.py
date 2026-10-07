@@ -24,6 +24,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))  # docs/wir
 
 import picture
 import wiring
+from wiringlib import fragments
 from wiringlib.fragments import banner, table
 
 BANNER = banner("tt-fpga")
@@ -77,11 +78,13 @@ def group_on(key):
 
 
 def image(name, alt):
-    """A picture of picture.PICTURES, as the PNG with a link to the SVG; both are beside this file."""
+    """A picture of picture.PICTURES: its PNG, light and dark (each shown in its own theme), each linking to its
+    SVG; all four are beside this file."""
     if name not in picture.PICTURES:
         raise KeyError(f"{name} is not a picture that picture.py draws")
     warning = " ".join(picture.pin_1_warning(W))
-    return f"[![{alt}]({name}.png)]({name}.svg)\n\n**Pin 1 on the picture.** {warning}\n"
+    shown = fragments.picture(alt, f"{name}.png", link=f"{name}.svg")
+    return f"{shown}\n\n**Pin 1 on the picture.** {warning}\n"
 
 
 def says(*keys):
@@ -332,8 +335,11 @@ def display_section():
             "reaches the Raspberry Pi too. Segments a to f are the six bars of the outer ring, in the order "
             "`designs/tt-display` runs round it; where a is, and which way round the ring that order goes, is "
             "not recorded and not verified by us. g is the middle bar and the dot is the decimal point.",
-            f"[![The seven-segment display: each segment lettered, with the {group} bit that lights it]"
-            f"({picture.DISPLAY}.png)]({picture.DISPLAY}.svg)",
+            fragments.picture(
+                f"The seven-segment display: each segment lettered, with the {group} bit that lights it",
+                f"{picture.DISPLAY}.png",
+                link=f"{picture.DISPLAY}.svg",
+            ),
             finding([key]).strip(),
             SEE_CABLES.strip(),
             table(["Segment", "Signal", "iCE40 pin", *CHAIN[2:]], rows).strip(),

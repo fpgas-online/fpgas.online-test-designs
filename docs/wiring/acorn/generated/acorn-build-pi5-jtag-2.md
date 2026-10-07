@@ -10,17 +10,21 @@ The P1 cable with its wires flagged and a terminal crimped on each (the page bef
 
 **1.** Hold the empty 2×4 housing with the wire openings facing you and its long side upright, as in the picture. Until it is marked, either way up is the same. Mark the top left corner with a paint pen or a dot of tape: that is the pin 19 corner. For each wire, read the number on its flag, find the same number in the picture, and push its terminal into that cavity, latch tab towards the window, until it clicks. Turned round, the housing puts its wires on the wrong pins. Wire 6 goes in no cavity. Pull each wire gently: the terminal must stay in.
 
-![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png)
+![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png){.only-light}
+![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1-dark.png){.only-dark}
 
-![Which way round a terminal goes in, and the pull test](acorn-cable-push.png)
+![Which way round a terminal goes in, and the pull test](acorn-cable-push.png){.only-light}
+![Which way round a terminal goes in, and the pull test](acorn-cable-push-dark.png){.only-dark}
 
 **2.** Check each wire with a meter on continuity. For each wire: one probe on its contact on the plug, the other on the terminal in the cavity the picture gives for that wire number, through the opening on the pin side of the housing: it must beep. Every other cavity must stay silent for that contact. The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.
 
-![A meter between the plug and the housing](acorn-cable-check.png)
+![A meter between the plug and the housing](acorn-cable-check.png){.only-light}
+![A meter between the plug and the housing](acorn-cable-check-dark.png){.only-dark}
 
 The P1 cavity picture again, to read each wire's cavity from:
 
-![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png)
+![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png){.only-light}
+![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1-dark.png){.only-dark}
 
 ## If a terminal is in the wrong cavity
 

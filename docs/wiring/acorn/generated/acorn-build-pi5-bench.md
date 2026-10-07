@@ -10,15 +10,18 @@ Both finished cables, the Raspberry Pi 5 unplugged from power, and a multimeter 
 
 **1.** This is a bench check; the housings come off again before the cables are fitted. Fit the P1 housing on the 40-pin header pins 19 to 26 with its marked corner on pin 19, counted as in the picture, and the P2 housing on the 40-pin header pins 5 to 10 with its marked corner on pin 5, counted as in the picture. The Acorn is not in its slot and the plugs are free. With the host unplugged from power, put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Raspberry Pi 5: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent.
 
-![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check.png)
+![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check.png){.only-light}
+![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check-dark.png){.only-dark}
 
 The P1 cavity picture again, for where its housing sits and which corner is marked:
 
-![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png)
+![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png){.only-light}
+![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1-dark.png){.only-dark}
 
 The P2 cavity picture again, for where its housing sits and which corner is marked:
 
-![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png)
+![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png){.only-light}
+![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2-dark.png){.only-dark}
 
 ## If it fails
 

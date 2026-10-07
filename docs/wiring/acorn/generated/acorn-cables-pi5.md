@@ -8,7 +8,8 @@ Two short cables from the Acorn's two connectors to the Raspberry Pi 5: the P1 c
 
 GND, TCK, TDO, TMS, TDI, J2, K2, J5 and H5 are the names on the pictures for each wire; J2, K2, J5 and H5 are the FPGA's pin names.
 
-![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5.png)
+![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5.png){.only-light}
+![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5-dark.png){.only-dark}
 
 ### Parts and tools
 
@@ -40,7 +41,8 @@ The tools to build its two cables, once for any number of hosts:
 
 **1.** Cut the Molex cable in half with side cutters. Each half is one cable.
 
-![The cable, cut in the middle](acorn-cable-cut.png)
+![The cable, cut in the middle](acorn-cable-cut.png){.only-light}
+![The cable, cut in the middle](acorn-cable-cut-dark.png){.only-dark}
 
 #### The P1 cable (JTAG)
 
@@ -51,33 +53,42 @@ The tools to build its two cables, once for any number of hosts:
 3. With the plug still in the socket (the Acorn out of any slot, unpowered), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: it must beep.
 4. Do the same with the wire flagged 6: it must stay silent.
 5. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again; if still neither beeps, stop: the ground point is not confirmed.
-6. Take the plug out again.
+6. If both wires beep, first see that the two probes do not touch each other and that the cut faces of wires 1 and 6 do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires apart. Leave the flags on and take the plug out. Wire 6 is the card's 3.3 V; that it stays silent to ground on a card with no power is expected and has not been measured by us. Set the meter to ohms, write down what each of the two wires reads to the pad, and send both readings to whoever gave you this guide.
+7. Take the plug out again.
 
-![The P1 cable's plug in socket P1, all 6 wires whole, a flag on each](acorn-cable-p1-flag.png)
+![The P1 cable's plug in socket P1, all 6 wires whole, a flag on each](acorn-cable-p1-flag.png){.only-light}
+![The P1 cable's plug in socket P1, all 6 wires whole, a flag on each](acorn-cable-p1-flag-dark.png){.only-dark}
 
-![Checking which wire is wire 1 with a meter, the plug in socket P1](acorn-cable-p1-ground-check.png)
+![Checking which wire is wire 1 with a meter, the plug in socket P1](acorn-cable-p1-ground-check.png){.only-light}
+![Checking which wire is wire 1 with a meter, the plug in socket P1](acorn-cable-p1-ground-check-dark.png){.only-dark}
 
 **3.** Cut wire 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over the cut end. It goes in no cavity. Wire 6 is VCC, 3.3 V from the Acorn: it must never reach the host. Leave wires 1 to 5 at full length.
 
-![The P1 cable: its wires prepared](acorn-cable-pi5-p1-prepare.png)
+![The P1 cable: its wires prepared](acorn-cable-pi5-p1-prepare.png){.only-light}
+![The P1 cable: its wires prepared](acorn-cable-pi5-p1-prepare-dark.png){.only-dark}
 
 **4.** Strip about 3 mm from wires 1 to 5. Crimp a Dupont terminal on each.
 
-![Stripping and crimping](acorn-cable-crimp.png)
+![Stripping and crimping](acorn-cable-crimp.png){.only-light}
+![Stripping and crimping](acorn-cable-crimp-dark.png){.only-dark}
 
 **5.** Hold the empty 2×4 housing with the wire openings facing you and its long side upright, as in the picture. Until it is marked, either way up is the same. Mark the top left corner with a paint pen or a dot of tape: that is the pin 19 corner. For each wire, read the number on its flag, find the same number in the picture, and push its terminal into that cavity, latch tab towards the window, until it clicks. Turned round, the housing puts its wires on the wrong pins. Wire 6 goes in no cavity. Pull each wire gently: the terminal must stay in.
 
-![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png)
+![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png){.only-light}
+![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1-dark.png){.only-dark}
 
-![Which way round a terminal goes in, and the pull test](acorn-cable-push.png)
+![Which way round a terminal goes in, and the pull test](acorn-cable-push.png){.only-light}
+![Which way round a terminal goes in, and the pull test](acorn-cable-push-dark.png){.only-dark}
 
 **6.** Check each wire with a meter on continuity. For each wire: one probe on its contact on the plug, the other on the terminal in the cavity the picture gives for that wire number, through the opening on the pin side of the housing: it must beep. Every other cavity must stay silent for that contact. The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.
 
-![A meter between the plug and the housing](acorn-cable-check.png)
+![A meter between the plug and the housing](acorn-cable-check.png){.only-light}
+![A meter between the plug and the housing](acorn-cable-check-dark.png){.only-dark}
 
 The P1 cavity picture again, to read each wire's cavity from:
 
-![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png)
+![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png){.only-light}
+![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1-dark.png){.only-dark}
 
 #### The P2 cable (I/O)
 
@@ -88,47 +99,59 @@ The P1 cavity picture again, to read each wire's cavity from:
 3. With the plug still in the socket (the Acorn out of any slot, unpowered), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: it must beep.
 4. Do the same with the wire flagged 6: it must stay silent.
 5. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again; if still neither beeps, stop: the ground point is not confirmed.
-6. Take the plug out again.
+6. If both wires beep, first see that the two probes do not touch each other and that the cut faces of wires 1 and 6 do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires apart. Leave the flags on and take the plug out. Wire 6 is the card's 3.3 V; that it stays silent to ground on a card with no power is expected and has not been measured by us. Set the meter to ohms, write down what each of the two wires reads to the pad, and send both readings to whoever gave you this guide.
+7. Take the plug out again.
 
-![The P2 cable's plug in socket P2, all 6 wires whole, a flag on each](acorn-cable-p2-flag.png)
+![The P2 cable's plug in socket P2, all 6 wires whole, a flag on each](acorn-cable-p2-flag.png){.only-light}
+![The P2 cable's plug in socket P2, all 6 wires whole, a flag on each](acorn-cable-p2-flag-dark.png){.only-dark}
 
-![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check.png)
+![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check.png){.only-light}
+![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check-dark.png){.only-dark}
 
 **8.** Cut wire 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over the cut end. It goes in no cavity. Wire 6 is VCC, 3.3 V from the Acorn: it must never reach the host. Leave wires 1 to 5 at full length.
 
-![The P2 cable: its wires prepared](acorn-cable-pi5-p2-prepare.png)
+![The P2 cable: its wires prepared](acorn-cable-pi5-p2-prepare.png){.only-light}
+![The P2 cable: its wires prepared](acorn-cable-pi5-p2-prepare-dark.png){.only-dark}
 
 **9.** Strip about 3 mm from wires 1 to 5. Crimp a Dupont terminal on each.
 
-![Stripping and crimping](acorn-cable-crimp.png)
+![Stripping and crimping](acorn-cable-crimp.png){.only-light}
+![Stripping and crimping](acorn-cable-crimp-dark.png){.only-dark}
 
 **10.** Hold the empty 2×3 housing with the wire openings facing you and its long side upright, as in the picture. Until it is marked, either way up is the same. Mark the top left corner with a paint pen or a dot of tape: that is the pin 5 corner. For each wire, read the number on its flag, find the same number in the picture, and push its terminal into that cavity, latch tab towards the window, until it clicks. Turned round, the housing puts its wires on the wrong pins. Wire 6 goes in no cavity. Pull each wire gently: the terminal must stay in.
 
-![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png)
+![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png){.only-light}
+![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2-dark.png){.only-dark}
 
-![Which way round a terminal goes in, and the pull test](acorn-cable-push.png)
+![Which way round a terminal goes in, and the pull test](acorn-cable-push.png){.only-light}
+![Which way round a terminal goes in, and the pull test](acorn-cable-push-dark.png){.only-dark}
 
 **11.** Check each wire with a meter on continuity. For each wire: one probe on its contact on the plug, the other on the terminal in the cavity the picture gives for that wire number, through the opening on the pin side of the housing: it must beep. Every other cavity must stay silent for that contact. The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.
 
-![A meter between the plug and the housing](acorn-cable-check.png)
+![A meter between the plug and the housing](acorn-cable-check.png){.only-light}
+![A meter between the plug and the housing](acorn-cable-check-dark.png){.only-dark}
 
 The P2 cavity picture again, to read each wire's cavity from:
 
-![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png)
+![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png){.only-light}
+![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2-dark.png){.only-dark}
 
 #### Fit the cables
 
 **12.** This is a bench check; the housings come off again before the cables are fitted. Fit the P1 housing on the 40-pin header pins 19 to 26 with its marked corner on pin 19, counted as in the picture, and the P2 housing on the 40-pin header pins 5 to 10 with its marked corner on pin 5, counted as in the picture. The Acorn is not in its slot and the plugs are free. With the host unplugged from power, put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Raspberry Pi 5: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent.
 
-![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check.png)
+![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check.png){.only-light}
+![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check-dark.png){.only-dark}
 
 The P1 cavity picture again, for where its housing sits and which corner is marked:
 
-![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png)
+![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png){.only-light}
+![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1-dark.png){.only-dark}
 
 The P2 cavity picture again, for where its housing sits and which corner is marked:
 
-![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png)
+![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png){.only-light}
+![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2-dark.png){.only-dark}
 
 **13.** Fit the cables, in this order. The sockets are on the underside of the card and may not be reachable once it is in the slot.
 
@@ -138,8 +161,10 @@ The P2 cavity picture again, for where its housing sits and which corner is mark
 4. Put the Acorn in the M.2 slot and fit its screw.
 5. Fit the P1 housing on the 40-pin header pins 19 to 26, marked corner on pin 19, and the P2 housing on the 40-pin header pins 5 to 10, marked corner on pin 5.
 
-![Fitting the cables on a Raspberry Pi 5, in order](acorn-cable-pi5-fit.png)
+![Fitting the cables on a Raspberry Pi 5, in order](acorn-cable-pi5-fit.png){.only-light}
+![Fitting the cables on a Raspberry Pi 5, in order](acorn-cable-pi5-fit-dark.png){.only-dark}
 
-![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5.png)
+![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5.png){.only-light}
+![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5-dark.png){.only-dark}
 
 Photos: Waveshare (PoE M.2 HAT+), RHS Research (LiteFury underside; the Acorn is the same PCB).

@@ -1,8 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """SVG canvas for the wiring pictures: measures its own text and checks the layout.
 
-check() FAILS the build if any text leaves its box or the canvas, overlaps other text, sits on a wire
-or on a keep-out shape, or if one rectangle that must contain another does not.
+check() FAILS the build if any text leaves its box or the canvas, overlaps other text, sits on a wire,
+or on a keep-out shape, if one rectangle that must contain another does not, or if any text is short of
+its contrast on the dark sheet (TEXT_ON_PAPER, TEXT_SMALL).
+
+Colours are palette.py's tokens: svg() returns the drawing with them, and palette.resolve() makes the
+light and the dark SVG of it (each gen.py writes both, through palette.themed()).
 
 The SVG loads nothing, not even a data: URI. raw.githubusercontent.com serves SVGs with
 `Content-Security-Policy: default-src 'none'`, which blocks embedded images and fonts, so text is
@@ -13,11 +17,16 @@ on a dark page.
 Every generator under docs/wiring/ draws with this one canvas (the Acorn's through its sheetlib.py).
 """
 
+import collections
+import contextlib
 import itertools
 import pathlib
 
 from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.ttLib import TTFont
+
+from wiringlib import palette
+from wiringlib.palette import role
 
 HERE = pathlib.Path(__file__).parent
 W, H = 1600, 900
@@ -29,8 +38,19 @@ FONT_FILES = {
     "mono": HERE / "fonts" / "LiberationMono-Bold.ttf",
 }
 
-INK, MUTED, FAINT, PAPER = "#15181d", "#5b6470", "#c9ced6", "#fbfaf7"
-RED, GOLD, BODY = "#c62828", "#e2b33c", "#1d1f23"
+# Colours are tokens of palette.py: a drawing is made once and resolved into its light and its dark SVG.
+INK, MUTED, FAINT, PAPER = role("ink"), role("muted"), role("faint"), role("paper")
+RED, GOLD, BODY = role("red"), role("gold"), role("body")
+BOX = role("box")  # a label box: white on the light sheet
+ON_WIRE = role("on-wire")  # the words on a tag filled with a wire's colour
+
+# Text directly on the sheet must reach this contrast on the dark sheet; any other text TEXT_SMALL.
+TEXT_ON_PAPER, TEXT_SMALL = 7.0, 4.5
+# (drawing, what) of every text on a LIGHT sheet short of those: reported by gen.py, not a failure.
+LIGHT_SHORT = []
+# How far (largest channel difference) a photo pixel joined to the background may be from the paper colour and still
+# be left out as background: the JPEG noise of prep_photos.py's painted background, and the blend at the board's edge.
+PAPER_NOISE = 24
 
 
 # ----------------------------------------------------------------------------------------------
@@ -49,6 +69,8 @@ class Sheet:
         self.keepouts = []  # (bbox, what): shapes no text may touch
         self.boxes = []  # (bbox, label): filled labels, which may not overlap each other
         self.glyphs = {}  # (face, glyph name): id of its outline in <defs>
+        self.fills = []  # (bbox, fill): every filled rectangle, in drawing order, for what text stands on
+        self.colours = []  # (string, size, its colour, what it stands on): checked for contrast
 
     def width(self, s, size, face="regular"):
         """Advance width of `s`: the same numbers text() lays the glyphs out with."""
@@ -58,19 +80,45 @@ class Sheet:
     def add(self, s):
         self.parts.append(s)
 
-    def rect(self, x, y, w, h, fill="none", stroke="none", sw=1, rx=0, extra=""):
+    @contextlib.contextmanager
+    def dark_only(self):
+        """What is drawn inside is on the dark sheet only; the light sheet leaves its place empty. It is laid out
+        and checked as on both, so it never overlaps anything on either."""
+        self.add(palette.DARK_START)
+        yield
+        self.add(palette.DARK_END)
+
+    def rect(self, x, y, w, h, fill="none", stroke="none", sw=1, rx=0, extra="", opacity=None):
+        """opacity: the fill's, in percent, for a translucent fill. Text on it is checked against the fill drawn at
+        that opacity over the paper (palette.wash()), so draw such a fill where the paper is under the text."""
+        if fill != "none":
+            self.fills.append(((x, y, x + w, y + h), fill if opacity is None else palette.wash(fill, opacity)))
+        if opacity is not None:
+            extra = f'fill-opacity="{opacity / 100:g}" {extra}'.strip()
         self.add(
             f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" rx="{rx}" fill="{fill}" '
             f'stroke="{stroke}" stroke-width="{sw}" {extra}/>'
         )
 
-    def text(self, x, y, s, size=13, face="regular", fill=INK, anchor="start", box=None, on_wire=False):
-        """Draw text with its baseline at y, as glyph outlines. `box` = (x0, y0, x1, y1) the text must stay inside."""
+    def under(self, bbox):
+        """The fill of the last rectangle drawn under the middle of bbox, or the paper."""
+        cx, cy = (bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2
+        for (x0, y0, x1, y1), fill in reversed(self.fills):
+            if x0 <= cx <= x1 and y0 <= cy <= y1:
+                return fill
+        return PAPER
+
+    def text(self, x, y, s, size=13, face="regular", fill=INK, anchor="start", box=None, on_wire=False, bg=None):
+        """Draw text with its baseline at y, as glyph outlines. `box` = (x0, y0, x1, y1) the text must stay inside.
+
+        bg: the colour the text stands on, for the contrast check, where that is not a rectangle drawn with
+        rect() (a disc): otherwise it is found."""
         f = FONTS[face]
         w = self.width(s, size, face)
         x0 = {"start": x, "middle": x - w / 2, "end": x - w}[anchor]
         bbox = (x0, y - size * 0.76, x0 + w, y + size * 0.24)
         self.texts.append((bbox, s, on_wire))
+        self.colours.append((s, size, fill, bg or self.under(bbox)))
         if box is not None:
             self.contain.append((bbox, box, f"text {s!r}"))
         uses, pen_x = [], 0
@@ -90,7 +138,7 @@ class Sheet:
         )
         return w
 
-    def tag(self, x, y, s, fill, size=12, h=20, anchor="start", pad=7, on_wire=False, fg="#fff", stroke="none"):
+    def tag(self, x, y, s, fill, size=12, h=20, anchor="start", pad=7, on_wire=False, fg=ON_WIRE, stroke="none"):
         """A filled label whose box is sized FROM the text. (x, y) = left/right/centre edge, vertical centre."""
         w = self.width(s, size, "bold") + 2 * pad
         x0 = {"start": x, "middle": x - w / 2, "end": x - w}[anchor]
@@ -127,11 +175,24 @@ class Sheet:
         h = w * im.height / im.width
         small = im.resize((round(w * density), round(h * density)), Image.LANCZOS)
         sw, shh = small.size
-        paper = tuple(int(PAPER[i : i + 2], 16) for i in (1, 3, 5))
+        paper = palette.rgb(palette.ROLES["paper"][0])  # prep_photos.py painted the background this colour
         src = small.load()
-        is_paper = [
-            [max(abs(a - b) for a, b in zip(src[i, j], paper, strict=True)) <= 6 for i in range(sw)] for j in range(shh)
+        near = [
+            [max(abs(a - b) for a, b in zip(src[i, j], paper, strict=True)) <= PAPER_NOISE for i in range(sw)]
+            for j in range(shh)
         ]
+        # Paper is what is near the paper colour AND joined to the photo's edge through such pixels: the
+        # background prep_photos.py painted round the board. A pale spot inside the board (the white of a
+        # mounting hole, silkscreen) is the photo's own and is drawn, so the photo looks the same on the
+        # dark sheet, with no speckle where JPEG noise put some of it on either side of a threshold.
+        is_paper = [[False] * sw for _ in range(shh)]
+        edge = [(i, j) for i in range(sw) for j in (0, shh - 1)] + [(i, j) for j in range(shh) for i in (0, sw - 1)]
+        queue = collections.deque(edge)
+        while queue:
+            i, j = queue.popleft()
+            if 0 <= i < sw and 0 <= j < shh and near[j][i] and not is_paper[j][i]:
+                is_paper[j][i] = True
+                queue.extend(((i + 1, j), (i - 1, j), (i, j + 1), (i, j - 1)))
         q = small.quantize(colors=colours, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
         pal = q.getpalette()[: 3 * colours]
         px = q.load()
@@ -155,9 +216,11 @@ class Sheet:
             for c, d in sorted(paths.items())
         )
         # square caps and a 1.1 stroke overlap each neighbour slightly, so no paper seams show between runs
+        # The photo's own colours, the same on the light and the dark sheet: palette.resolve() leaves them alone.
         self.add(
-            f'<g transform="translate({x} {y}) scale({1 / density:.6f})" fill="none" stroke-width="1.1" '
-            f'stroke-linecap="square">{body}</g>'
+            palette.PHOTO_START
+            + f'<g transform="translate({x} {y}) scale({1 / density:.6f})" fill="none" stroke-width="1.1" '
+            f'stroke-linecap="square">{body}</g>' + palette.PHOTO_END
         )
         return (x, y, w, h), w / im.width
 
@@ -200,8 +263,31 @@ class Sheet:
             for k, what in self.keepouts:
                 if bbox[0] < k[2] and k[0] < bbox[2] and bbox[1] < k[3] and k[1] < bbox[3]:
                     errors.append(f"text {s!r} touches {what}")
+        errors += self.contrast_errors()
+        # The light sheets are reported, not refused: their colours are those drawn before the dark sheets,
+        # and some of their text is short (light_report() prints the list; changing them is a change of its own).
+        LIGHT_SHORT.extend((name, *short) for short in self.short_text("light"))
         if errors:
             raise SystemExit(f"{name}: {len(errors)} layout errors\n  " + "\n  ".join(errors))
+
+    def short_text(self, theme="dark"):
+        """Text that does not reach its contrast on the sheet of `theme`: TEXT_ON_PAPER for text straight on the
+        sheet, TEXT_SMALL for text on anything else (a tag, a box, a pad). The light sheets, reported only, are held to
+        TEXT_SMALL (WCAG AA) everywhere: their own text on paper was not drawn to 7:1."""
+        out = []
+        for s, size, fill, bg in self.colours:
+            ratio = palette.contrast(palette.value(fill, theme), palette.value(bg, theme))
+            need = TEXT_ON_PAPER if bg == PAPER and theme == "dark" else TEXT_SMALL
+            if ratio < need:
+                out.append((s, size, fill, bg, ratio, need))
+        return out
+
+    def contrast_errors(self, theme="dark"):
+        """short_text() as the build's error lines."""
+        return [
+            f"{theme}: text {s!r} ({size} px, {fill} on {bg}) has contrast {ratio:.2f}, under {need}"
+            for s, size, fill, bg, ratio, need in self.short_text(theme)
+        ]
 
     def glyph_defs(self):
         out = []
@@ -210,6 +296,7 @@ class Sheet:
         return "<defs>" + "".join(out) + "</defs>"
 
     def svg(self):
+        """The drawing, its colours as palette.py tokens: palette.resolve() turns it into the light or dark SVG."""
         body = "".join(self.parts)  # glyph ids are allocated while the parts are drawn
         return (
             f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {self.w} {self.h}" width="{self.w}" '
@@ -219,6 +306,23 @@ class Sheet:
             + body
             + "</svg>"
         )
+
+
+def light_report():
+    """The text of the LIGHT sheets short of 4.5:1, one line per colour pair: reported, not a failure.
+
+    The dark sheets are held to their contrast by Sheet.check(); the light ones keep the colours they were drawn
+    with before there was a dark sheet, and changing those is a change of its own."""
+    pairs = {}
+    for name, s, _size, fill, bg, ratio, _need in LIGHT_SHORT:
+        pair = pairs.setdefault((round(ratio, 2), fill, bg), [0, set(), s])
+        pair[0] += 1
+        pair[1].add(name)
+    if not pairs:
+        return
+    print(f"light sheets: text under {TEXT_SMALL}:1 (reported, not a failure):")
+    for (ratio, fill, bg), (count, names, example) in sorted(pairs.items()):
+        print(f"  {ratio:5.2f}  {fill} on {bg}: {count} texts in {len(names)} drawings, e.g. {example!r}")
 
 
 class Font:

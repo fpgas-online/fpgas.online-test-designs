@@ -255,7 +255,9 @@ def read(options, boards=None, usb=None, pci=None):
                 gaps.append(f"{p.result}: {p.reason}")
         for (board, host, found), key in zip(targets, runner._keys(targets)):
             why = {}
-            board_options = {**{k: v for k, v in options.items() if k != "event"}, "board_key": key}
+            # configured as in runner.verify: the Acorn reads a card it cannot name by its IDs only then (#155)
+            board_options = {**{k: v for k, v in options.items() if k != "event"}, "board_key": key,
+                             "configured": mode != config.AUTO}  # fmt: skip
             try:
                 with hold_lock(board.lock, board.title, timeout=locks.wait):  # the only lock held meanwhile
                     ident = board.identify(host, found, board_options)

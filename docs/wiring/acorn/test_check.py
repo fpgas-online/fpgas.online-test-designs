@@ -11,6 +11,11 @@ import wiring
 CARRIERS = list(wiring.CARRIERS)
 
 
+def light_images(text):
+    """The pictures of Markdown text, each once: the light PNG of every light and dark pair (test_palette.py)."""
+    return [i for i in re.findall(r"!\[[^\]]*\]\(([^)]+)\)", text) if not i.endswith("-dark.png")]
+
+
 @pytest.mark.parametrize("key", CARRIERS)
 def test_the_page_is_for_one_carrier_only(key):
     c = wiring.CARRIERS[key]
@@ -18,7 +23,11 @@ def test_the_page_is_for_one_carrier_only(key):
     assert text.count("<!--") == len(check.pages(c))  # only each page's banner: no carrier mark is left
     if key == "blade":
         # nothing about the two spare wires, which a blade's cable does not carry
-        assert "J5 -> GPIO3" not in text and "acorn-sycamore" not in text and "{" not in text.split("```")[0]
+        assert (
+            "J5 -> GPIO3" not in text
+            and "acorn-sycamore" not in text
+            and "{" not in re.sub(r"\{\.only-(light|dark)\}", "", text).split("```")[0]
+        )
         assert "p2-gpio` | none: J5 and H5 are not wired on a Compute Blade" in text
         assert (
             "What has been run on a Compute Blade" in text and "No Compute Blade has passed the whole check yet" in text
@@ -34,7 +43,7 @@ def test_the_page_is_complete_in_itself(key):
     c = wiring.CARRIERS[key]
     text = check.page(c)
     built = set(steps.build_names()) | {check.picture_name(c)}
-    images = re.findall(r"!\[[^\]]*\]\(([^)]+)\)", text)
+    images = light_images(text)
     assert images[0] == steps.png(check.picture_name(c))
     for image in images:
         assert "/" not in image and image.replace(".png", ".svg") in built, image  # a picture beside the page
@@ -61,9 +70,10 @@ def test_a_crossed_pair_is_told_by_the_wire_numbers_of_the_cable(key):
 
 def test_the_transcripts_and_failure_rows_come_from_the_tool_reference():
     verify = check.VERIFY.read_text()
-    for marker in (check.PASS, check.BLADE_FAIL):
+    command = {check.PASS: "fpgas-verify", check.BLADE_FAIL: "fpgas-acorn-verify"}  # as each was run
+    for marker, tool in command.items():
         block = check.transcript(marker)
-        assert block in verify and block.startswith("```text\n$ sudo fpgas-verify --no-publish")
+        assert block in verify and block.startswith(f"```text\n$ sudo {tool} --no-publish\n")
     for c in wiring.CARRIERS.values():
         rows = check.failures(c).splitlines()[2:]
         assert len(rows) >= 14 and all(r.startswith("| `") for r in rows)

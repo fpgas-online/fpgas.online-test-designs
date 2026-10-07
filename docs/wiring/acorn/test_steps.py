@@ -24,6 +24,11 @@ def picture(key, connector):
     return steps.cable(wiring.CARRIERS[key], connector)[0]
 
 
+def light_images(text):
+    """The pictures of Markdown text, each once: the light PNG of every light and dark pair (test_palette.py)."""
+    return [i for i in re.findall(r"!\[[^\]]*\]\(([^)]+)\)", text) if not i.endswith("-dark.png")]
+
+
 def words(svg):
     """Every piece of text in a picture, in the order it was drawn."""
     return re.findall(r'aria-label="([^"]*)"', svg)
@@ -179,7 +184,7 @@ def test_the_procedure_is_complete_in_itself(key):
     c = wiring.CARRIERS[key]
     text = steps.procedure(c)
     built = set(steps.build_names())
-    images = re.findall(r"!\[[^\]]*\]\(([^)]+)\)", text)
+    images = light_images(text)
     for image in images:
         assert "/" not in image  # by bare file name, in the same directory
         assert image.replace(".png", ".svg") in built or image.startswith("acorn-wiring-"), image
@@ -280,7 +285,7 @@ def test_the_flag_step_shows_whole_wires_and_the_cut_picture_comes_only_after_th
     text = steps.procedure(c)
     for connector in wiring.CONNECTORS:
         flag_step = text.split(f"Find wire 1 of the {connector} cable")[1].split("\n**")[0]
-        images = re.findall(r"!\[[^\]]*\]\(([^)]+)\)", flag_step)
+        images = light_images(flag_step)
         assert images == [steps.png(steps.flag_name(connector)), steps.png(steps.ground_check_name(connector))]
         prepared = steps.png(steps.prepare_name(c, connector))
         assert text.count(prepared) == 1
@@ -298,7 +303,7 @@ def test_the_flag_and_meter_pictures_draw_every_wire_whole_with_its_flag(connect
         assert "terminal-wire-" not in svg and "resistor-wire-" not in svg
         # six wires of one length, from the plug to their cut faces
         wires = re.findall(
-            rf'<line x1="([\d.]+)" y1="([\d.]+)" x2="\1" y2="([\d.]+)" stroke="{steps.BODY}" '
+            rf'<line x1="([\d.]+)" y1="([\d.]+)" x2="\1" y2="([\d.]+)" stroke="{steps.BLACK_WIRE}" '
             rf'stroke-width="{steps.WIRE}"/>',
             svg,
         )
@@ -331,7 +336,7 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
         paged += [words for _, words in numbered]
         assert body.startswith(tables.BANNER.strip()) and "Not yet run by us on this hardware" in body
         assert not re.search(r"^#{1,1} |^#### ", body, re.M), name  # headings from level 2; no cable heading left over
-        for image in re.findall(r"!\[[^\]]*\]\(([^)]+)\)", body):
+        for image in light_images(body):
             assert "/" not in image, image
     assert paged == whole  # every step, in order, nothing twice
     # no page points at a step that is on another page
@@ -351,6 +356,33 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
         need = pages[steps.guide_name(c, part)]
         assert f"if it is fitted, {c.power_off[0].lower()}{c.power_off[1:]} Then take the card out." in need
     assert "cut in half, once" in overview
+    # the reach check is asked for at a moment the guide has: after the one cut, before any wire is cut back
+    assert "before you cut anything" not in overview and "once the cable is cut in half, and before any" in overview
+    # the wire-1 check has an outcome for every result, and says what the last wire's silence rests on
+    for part in ("jtag-1", "uart-1"):
+        body = pages[steps.guide_name(c, part)]
+        assert "If both still beep, stop and cut nothing" in body and "has not been measured by us" in body
+        assert "send both readings to whoever gave you this guide" in body
+        assert "If neither wire beeps" in body and "beeps instead, stop" in body
+    # a wire with the series resistor in it is not told to beep: its page gives the reading to expect
+    for part, connector in (("jtag-2", "P1"), ("uart-2", "P2")):
+        body = pages[steps.guide_name(c, part)]
+        has = steps.through_resistor(c, connector)
+        assert bool(has) == any(s in c.resistors for s in wiring.CONNECTORS[connector]["pins"])
+        n = steps.resistor_wire(c, connector)
+        assert (n is not None) == bool(has)
+        own = steps.png(f"acorn-cable-check-{key}-{connector.lower()}.svg")
+        assert (own in body) == bool(has) and ("(acorn-cable-check.png)" in body) != bool(has)
+        if has:
+            j2 = wiring.CONNECTORS[connector]["pins"].index("J2") + 1  # the resistor is in the J2 wire
+            assert n == j2 and f"Wire {j2} is the exception" in body and f"Leave wire {j2} until last" in body
+            assert f"it must read close to {c.resistor_value}" in body and "it must show over-range" in body
+            assert "touch the two probes together first" in body
+            picture = steps.build()[steps.check_name(c, connector)]
+            assert f"Wire {j2} has the" in picture and "It will not beep" in picture
+    assert "resistor" not in steps.check_picture()  # the shared picture names no exception
+    for connector in wiring.CONNECTORS:  # the wire-1 picture carries the same words as its step
+        assert "If both still beep, stop and cut" in steps.ground_check(connector)
     assert ("the one wire that is cut to take the resistor" in overview) == bool(c.resistors)
     if c.resistors:
         assert f"lands on GPIO14, which is also JTAG TMS: with {c.resistor_value} in the wire" in steps.procedure(c)

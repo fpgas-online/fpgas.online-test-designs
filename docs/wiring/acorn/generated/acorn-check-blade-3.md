@@ -2,15 +2,15 @@
 
 ## What has been run on a Compute Blade
 
-**What to expect on a Compute Blade today.** `pcie-link` passes when the card is seated. `jtag` cannot run in a boot that has the header's serial port on (kernel 6.18): the serial port holds GPIO14, which is also the JTAG TMS wire, so `jtag` fails there whatever the wiring. Every other test is `not run` until the card is converted to the fpgas.online design, and converting a card on a blade has not been done by us. So the result today is `fail` even with perfect cables: it shows that the card is seated and its PCIe link is up, and it cannot yet show that the two cables are right. The bench check with a meter, before fitting, is what the cables rest on until then.
+**What to expect on a Compute Blade today.** `pcie-link` passes when the card is seated and on SQRL's factory image (a card on the vendor's XDMA sample image gets no test at all: below). On a Compute Module 5 `jtag` cannot run in a boot that has the header's serial port on (kernel 6.18): the serial port holds GPIO14, which is also the JTAG TMS wire, so `jtag` fails there whatever the wiring; on a Compute Module 4 it has not been run by us. Every other test is `not run` until the card is converted to the fpgas.online design, and converting a card on a blade has not been done by us. So the result today is `fail` even with perfect cables: it shows that the card is seated and its PCIe link is up, and it cannot yet show that the two cables are right. The bench check with a meter, before fitting, is what the cables rest on until then.
 
-What has been run on a Compute Blade, and what has not, as of 5 October 2026:
+What has been run on a Compute Blade, and what has not, as of 7 October 2026:
 
 | | State |
 |---|---|
-| Installing the packages and running the check (Raspberry Pi OS trixie, CM5) | run at ps1: the failing run printed on the page "verifying 1" is that host's result, taken with 0.0.post1100, before the check named the pin's holder |
+| Installing the packages and running the check (Raspberry Pi OS trixie, CM5) | run at ps1, by the page's own steps (pi16 and pi20 at ps1, 7 October 2026, 0.0.post1216): the failing run printed on the page "verifying 1" is the result from pi16 at ps1. An install lasts until the blade's next boot |
 | `pcie-link` | run at ps1: passes (5.0 GT/s, x1) |
-| `jtag` with the serial port on, kernel 6.18 | run at ps1: **cannot work**. TMS is GPIO14, which is also the serial port's TX; that kernel does not lend a pin a driver has, and the serial driver cannot be detached while the system runs. From 0.0.post1111 the test fails saying so, without running the tool ([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)) |
+| `jtag` with the serial port on, kernel 6.18 | run at ps1: **cannot work**. TMS is GPIO14, which is also the serial port's TX; that kernel does not lend a pin a driver has, and the serial driver cannot be detached while the system runs. From 0.0.post1111 the test fails saying so, without running the tool ([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)). Seen on the two CM5 blades, where `gpioinfo` names the kernel as line 14's user; on the two CM4 blades `gpioinfo` names no user for line 14 although the pin is the serial port's TXD0 (7 October 2026): whether JTAG can have it there is **not yet run by us** |
 | `jtag` with the serial port off | **not yet run by us on this hardware** |
 | `jtag` under kernel 6.12, serial port on | recorded as working on one ps1 blade (`--pins 2:3:4:14`), before these packages existed; not run with them |
 | The `p2-uart` and `p2-serial` tests | **not yet run by us on this hardware**: they need a converted card |

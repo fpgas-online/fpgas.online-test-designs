@@ -7,12 +7,18 @@ Run: uv run --no-project --with pytest --with fonttools==4.65.0 pytest docs/wiri
 import copy
 import re
 
+import gen
 import picture
 import pytest
 import wiring
+from wiringlib import palette
 
 W = wiring.WIRING
-SVGS = picture.build()
+BUILT = gen.build()
+# the light SVGs, by name; each has its dark twin in BUILT
+SVGS = {n: t for n, t in BUILT.items() if n.endswith(".svg") and not n.endswith("-dark.svg")}
+FURO_DARK_BACKGROUND = "#131416"  # furo.css, body[data-theme=dark] --color-background-primary
+COLOUR_ATTRIBUTE = re.compile(r'\b(fill|stroke)="[^"]*"')
 
 
 def labels(svg):
@@ -48,14 +54,18 @@ def test_the_shared_gpios_are_said_on_the_picture_from_the_hat_table():
     assert "one GPIO, two ports" in words
 
 
-def test_it_brings_its_own_background_so_it_reads_on_a_light_and_a_dark_page():
+def test_it_brings_its_own_background_light_and_its_dark_twin_the_dark_themes():
     for name, svg in SVGS.items():
         root = re.match(r'<svg[^>]*width="(\d+)" height="(\d+)"', svg)
         assert f'<rect width="{root[1]}" height="{root[2]}" fill="#fbfaf7"/>' in svg, name
+        dark = BUILT[palette.dark_name(name)]
+        assert f'<rect width="{root[1]}" height="{root[2]}" fill="{FURO_DARK_BACKGROUND}"/>' in dark, name
 
 
 def test_it_loads_nothing_so_it_renders_from_its_raw_url():
-    for name, svg in SVGS.items():
+    for name, svg in BUILT.items():
+        if not name.endswith(".svg"):
+            continue
         assert set(re.findall(r'href="([^"]*)"', svg)) <= {h for h in re.findall(r'href="(#[^"]*)"', svg)}, name
         assert "data:" not in svg and "<image" not in svg and "<text" not in svg and "@font-face" not in svg, name
 
@@ -99,3 +109,60 @@ def test_the_display_picture_letters_each_segment_with_the_bit_that_lights_it_an
         assert seg in words or (seg == "dot" and "decimal point" in words and "dot" in words)
         assert wire.signal in words
     assert "Where a is, and which way round the ring runs, is not recorded." in words
+
+
+# ---- the dark twin of every picture, for the dark theme of docs.fpgas.online --------------------------------------
+def test_every_picture_has_a_dark_twin_and_nothing_else_is_dark():
+    assert {palette.dark_name(n) for n in SVGS} == {n for n in BUILT if n.endswith("-dark.svg")}
+
+
+@pytest.mark.parametrize("name", sorted(SVGS))
+def test_the_twins_differ_in_their_colours_only(name):
+    light, dark = SVGS[name], BUILT[palette.dark_name(name)]
+    assert light != dark
+    assert COLOUR_ATTRIBUTE.sub("", light) == COLOUR_ATTRIBUTE.sub("", dark)
+
+
+def test_no_colour_is_left_a_token_and_every_colour_is_the_palettes():
+    for name, svg in BUILT.items():
+        if name.endswith(".svg"):
+            assert "@@" not in svg, name
+    for svg in picture.build().values():  # the drawing itself: every colour a token
+        palette.resolve(svg, "dark")  # stops on any colour outside the palette
+
+
+def test_every_group_colour_of_wiring_toml_has_a_dark_counterpart():
+    for name, group in W.groups.items():
+        assert group["colour"].lower() in palette.WIRES, name
+
+
+def test_every_committed_picture_has_its_dark_svg_and_png_beside_it():
+    out = wiring.HERE / "generated"
+    for svg in out.glob("*.svg"):
+        if not svg.stem.endswith("-dark"):
+            for twin in (palette.dark_name(svg.name), palette.dark_name(svg.with_suffix(".png").name)):
+                assert (out / twin).exists(), twin
+
+
+def test_pin_1_stays_gold_and_the_warning_box_gold_edged_on_the_dark_picture():
+    gold = palette.ROLES["gold"]
+    assert gold[0] == gold[1]  # the same gold in both themes
+    dark = BUILT[palette.dark_name("tt-fpga-pmod-cables.svg")]
+    caution = palette.ROLES["caution-fill"][1]
+    assert f'fill="{caution}" stroke="{gold[1]}"' in dark
+    # the number on pin 1 and the words on the gold tag are dark on the gold in both themes
+    assert palette.contrast(palette.ROLES["on-gold"][1], gold[1]) >= 4.5
+
+
+def test_text_on_a_translucent_fill_is_checked_against_that_fill_over_the_paper():
+    from wiringlib.canvas import Sheet
+
+    sh = Sheet(200, 100)
+    teal = palette.wire("#0f766e")
+    sh.rect(10, 10, 180, 80, fill=teal, opacity=16)
+    sh.text(20, 50, "on the band", 15)
+    (*_, bg) = sh.colours[0]
+    assert bg == palette.wash(teal, 16) and 'fill-opacity="0.16"' in sh.svg()
+    assert palette.value(bg, "light") == "#d5e5e1"  # 16 % of #0f766e over the light paper
+    assert palette.value(bg, "dark") == "#1d3232"  # 16 % of its dark counterpart over the dark paper
+    assert sh.contrast_errors() == []

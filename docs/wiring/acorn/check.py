@@ -271,9 +271,11 @@ INSTALL = {
 TODAY = {
     "blade": [
         "",
-        "**What to expect on a Compute Blade today.** `pcie-link` passes when the card is seated. `jtag` cannot "
-        "run in a boot that has the header's serial port on (kernel 6.18): the serial port holds GPIO14, which "
-        "is also the JTAG TMS wire, so `jtag` fails there whatever the wiring. Every other test is `not run` "
+        "**What to expect on a Compute Blade today.** `pcie-link` passes when the card is seated and on SQRL's "
+        "factory image (a card on the vendor's XDMA sample image gets no test at all: below). On a Compute "
+        "Module 5 `jtag` cannot run in a boot that has the header's serial port on (kernel 6.18): the serial "
+        "port holds GPIO14, which is also the JTAG TMS wire, so `jtag` fails there whatever the wiring; on a "
+        "Compute Module 4 it has not been run by us. Every other test is `not run` "
         "until the card is converted to the fpgas.online design, and converting a card on a blade has not been "
         "done by us. So the result today is `fail` even with perfect cables: it shows that the card is seated "
         "and its PCIe link is up, and it cannot yet show that the two cables are right. The bench check with a "
@@ -282,7 +284,7 @@ TODAY = {
     ]
 }
 PASS = "**pass**: an Acorn on the Pi 5 setup"
-BLADE_FAIL = "**fail, a first install on someone's own hardware**"
+BLADE_FAIL = "**fail, the docs' install steps run on a Compute Blade**"
 
 
 def pages(c):
@@ -340,14 +342,22 @@ def pages(c):
         out += [
             "**No Compute Blade has passed the whole check yet.** This is what one prints today: a Compute Blade "
             "with a Compute Module 5 and an Acorn CLE-101 still on the image it was sold with (pi16 at ps1, "
-            "5 October 2026). Two things are wrong and neither is the wiring or the installation: the card has "
+            "7 October 2026, installed by the steps above). Two things are wrong and neither is the wiring or the "
+            "installation: the card has "
             "not been converted to the fpgas.online design, and in this boot the JTAG test cannot have its TMS "
             "pin, which the header's serial port holds.",
             "",
-            transcript(BLADE_FAIL, "pi16", "2026-10-05", "CLE-101").strip(),
+            transcript(BLADE_FAIL, "pi16", "2026-10-07", "CLE-101").strip(),
             "",
-            "That run was made with version 0.0.post1100 of the check. From 0.0.post1111 the `jtag` line says "
-            "what holds the pin instead: `P1 JTAG could not be probed: GPIO14 (TMS) is held by … (uart0)`.",
+            "On the blades at ps1 every `sudo` first prints `sudo: unable to resolve host pi16: Name or service "
+            "not known` (with the blade's own name). It did no harm on the blades it was seen on (7 October 2026), "
+            "and is left out above.",
+            "",
+            "**A card still on the vendor's XDMA sample image gets no test at all** (pi20 at ps1, 7 October 2026): "
+            "the check prints `unconverted: runs the vendor XDMA sample image, not the fpgas.online design` and "
+            "`acorn: fail (no test ran)`. That says nothing about the cables: it is a known gap in the check "
+            "([#155](https://github.com/fpgas-online/fpgas.online-test-designs/issues/155)); the bench check with "
+            "a meter is what such a card's cables rest on until it is converted.",
             "",
             "A pass will list every test with `pass` and end there, with no `RESULT:` part; on a Compute Blade "
             "`p2-gpio` stays `not run`, because J5 and H5 are not wired.",
@@ -356,8 +366,10 @@ def pages(c):
     out += [
         "## Which test uses which wire",
         "",
-        f"![Both cables of an Acorn on a {c.name}: each wire, where it lands, and the test that proves it]"
-        f"({steps.png(picture_name(c))})",
+        steps.markdown_image(
+            f"Both cables of an Acorn on a {c.name}: each wire, where it lands, and the test that proves it",
+            steps.png(picture_name(c)),
+        ),
         "",
         site_links(fragment("which-test.md", c)).strip(),
         "",
@@ -371,8 +383,8 @@ def pages(c):
         "cavity is the number on the wire's flag.",
         "",
         f"**Before you touch a cable: {c.power_off}** After moving a wire, boot and run the check again. One "
-        "test can be run on its own, `sudo fpgas-acorn-verify --test jtag` or `--test p2-serial`; its report "
-        "is then JSON on the terminal.",
+        "test can be run on its own, `sudo fpgas-acorn-verify --test jtag` or `--test p2-serial`; it prints "
+        "the usual summary, then the whole report as JSON.",
         "",
         wire_table.strip(),
         "",
@@ -381,7 +393,7 @@ def pages(c):
         "",
     ]
     for connector in wiring.CONNECTORS:
-        fails += [f"![Which wire goes in which cavity, {connector} cable]({cavity[connector]})", ""]
+        fails += [steps.markdown_image(f"Which wire goes in which cavity, {connector} cable", cavity[connector]), ""]
     fails += [
         wire_examples.strip(),
         "",

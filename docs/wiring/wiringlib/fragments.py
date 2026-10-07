@@ -1,6 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 """The pieces every generated Markdown fragment is made of."""
 
+from wiringlib.palette import dark_name
+
+
+def picture(alt, name, link=None):
+    """A picture on a page: its light PNG `name` in the light theme and its dark PNG in the dark one.
+
+    only-light and only-dark are the docs theme's (Furo's) classes for that, set with MyST's inline attributes;
+    printing keeps the light one only. The two are one paragraph, so the picture stays one block either way.
+    `link`: the file the picture links to (its SVG); then each picture is a link, the class is on the link, and
+    the dark picture links to the dark file."""
+    if link is None:
+        return f"![{alt}]({name}){{.only-light}}\n![{alt}]({dark_name(name)}){{.only-dark}}"
+    return f"[![{alt}]({name})]({link}){{.only-light}}\n[![{alt}]({dark_name(name)})]({dark_name(link)}){{.only-dark}}"
+
 
 def banner(generator):
     """The first line of a generated file: which generator wrote it, and where to change it instead.

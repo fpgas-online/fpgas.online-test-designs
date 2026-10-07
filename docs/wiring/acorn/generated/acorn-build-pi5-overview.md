@@ -8,9 +8,10 @@ Two short cables from the Acorn's two connectors to the Raspberry Pi 5: the P1 c
 
 GND, TCK, TDO, TMS, TDI, J2, K2, J5 and H5 are the names on the pictures for each wire; J2, K2, J5 and H5 are the FPGA's pin names.
 
-![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5.png)
+![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5.png){.only-light}
+![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5-dark.png){.only-dark}
 
-Nothing in this guide cuts a wire to length. The bought cable is cut in half, once, as the first step (before the meter check, which needs the cut faces); each half is then used at the length it has, apart from the wires that are cut back at the plug. Whether a half reaches from the card in its slot to the Raspberry Pi 5's headers has not been measured by us: hold a half cable against the host before you cut anything.
+Nothing in this guide cuts a wire to length. The bought cable is cut in half, once, as the first step (before the meter check, which needs the cut faces); each half is then used at the length it has, apart from the wires that are cut back at the plug. Whether a half reaches from the card in its slot to the Raspberry Pi 5's headers has not been measured by us: once the cable is cut in half, and before any wire is cut back or crimped, hold a half against the host from the card's socket to the header, with the power off. If it does not reach, stop and tell whoever gave you this guide.
 
 ## The order of work
 

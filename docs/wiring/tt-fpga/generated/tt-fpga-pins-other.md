@@ -30,7 +30,8 @@ Which microcontroller pin is wired to which of the four iCE40 pins is not record
 
 The display is on the eight `uo_out` signals, the same ones that go to the OUTPUT header: whatever a design puts on `uo_out` shows on the display and reaches the Raspberry Pi too. Segments a to f are the six bars of the outer ring, in the order `designs/tt-display` runs round it; where a is, and which way round the ring that order goes, is not recorded and not verified by us. g is the middle bar and the dot is the decimal point.
 
-[![The seven-segment display: each segment lettered, with the uo_out bit that lights it](tt-fpga-display.png)](tt-fpga-display.svg)
+[![The seven-segment display: each segment lettered, with the uo_out bit that lights it](tt-fpga-display.png)](tt-fpga-display.svg){.only-light}
+[![The seven-segment display: each segment lettered, with the uo_out bit that lights it](tt-fpga-display-dark.png)](tt-fpga-display-dark.svg){.only-dark}
 
 **Finding the headers.** The demo board's three Pmod connectors are printed INPUT (`ui_in`), BIDIR (`uio`) and OUTPUT (`uo_out`). They are on the bottom edge, in that order from left to right, with the board held so that its "Tiny Tapeout Demoboard" text reads upright. A 12-pin Pmod cable joins the header to its port on the Digilent Pmod HAT, pin 1 to pin 1: OUTPUT to JC. A USB-C cable joins the demo board to a USB port of the Raspberry Pi.
 

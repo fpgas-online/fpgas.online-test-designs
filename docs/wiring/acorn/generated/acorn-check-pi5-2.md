@@ -4,7 +4,7 @@
 
 Find the failing line in the table, then the wire in the two cavity pictures under it: the number in a cavity is the number on the wire's flag.
 
-**Before you touch a cable: Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE.** After moving a wire, boot and run the check again. One test can be run on its own, `sudo fpgas-acorn-verify --test jtag` or `--test p2-serial`; its report is then JSON on the terminal.
+**Before you touch a cable: Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE.** After moving a wire, boot and run the check again. One test can be run on its own, `sudo fpgas-acorn-verify --test jtag` or `--test p2-serial`; it prints the usual summary, then the whole report as JSON.
 
 | The failing line | Look at |
 |---|---|
@@ -19,9 +19,11 @@ Find the failing line in the table, then the wire in the two cavity pictures und
 
 The two cavity pictures are the ones the cables were built from, shown again to find a wire's cavity. Their notes about cutting, marking and the meter check belong to building the cables.
 
-![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png)
+![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png){.only-light}
+![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1-dark.png){.only-dark}
 
-![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png)
+![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png){.only-light}
+![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2-dark.png){.only-dark}
 
 `p2-serial` and `p2-gpio` print what was driven and what was read, eight lines for two wires. The two digits are the two signals: the right-hand digit is J2 (or J5), the left-hand one K2 (or H5).
 

@@ -319,6 +319,59 @@ The whole report, for a program to read (JSON): /run/fpgas-online/verify.json
 ******************************************************************************
 ```
 
+**fail, the docs' install steps run on a Compute Blade**: the same blade (pi16 at ps1, a CM5 and an Acorn
+CLE-101 on SQRL's factory image) on 2026-10-07, version 0.0.post1216, installed by the steps of the docs'
+"verifying 1" page as printed. The lines `sudo: unable to resolve host pi16: Name or service not known`, which
+sudo printed first, are left out. From 0.0.post1111 the `jtag` line names what holds the pin.
+
+```text
+$ sudo fpgas-acorn-verify --no-publish
+
+******************************************************************************
+*** FPGA VERIFY: FAIL ******************************************************
+fpgas-verify: fail (mode acorn, configured: acorn)
+  not published: --no-publish
+  acorn cle-101: fail
+    unconverted: runs SQRL's factory image, not the fpgas.online design
+    pcie-link  pass
+    rp1-pio    pass
+    jtag       fail: P1 JTAG could not be probed: GPIO14 (TMS) is held by 1f00030000.serial (uart0): the kernel does not hand out a pin that is held, so the JTAG chain cannot be scanned
+    pcie-bar0  not run: unconverted: runs SQRL's factory image, not the fpgas.online design
+    flash      not run: unconverted: runs SQRL's factory image, not the fpgas.online design
+    ddr        not run: unconverted: runs SQRL's factory image, not the fpgas.online design
+    p2-uart    not run: the board does not run a known build
+    p2-serial  not run: unconverted: runs SQRL's factory image, not the fpgas.online design
+    scratch    not run: unconverted: runs SQRL's factory image, not the fpgas.online design
+    p2-gpio    not run: J5 and H5 are not wired on the Compute Blade setup
+  state recorded (first run) in /var/lib/fpgas-online/verify-state.json
+
+RESULT: FAIL: a board did not pass.
+  acorn cle-101: fail (2 tests passed, 1 failed, 7 not run)
+    fault: unconverted: runs SQRL's factory image, not the fpgas.online design
+    failed: jtag: P1 JTAG could not be probed: GPIO14 (TMS) is held by 1f00030000.serial (uart0): the kernel does not hand out a pin that is held, so the JTAG chain cannot be scanned
+    not run: pcie-bar0, flash, ddr, p2-serial, scratch: unconverted: runs SQRL's factory image, not the fpgas.online design
+    not run: p2-uart: the board does not run a known build
+    not run: p2-gpio: J5 and H5 are not wired on the Compute Blade setup
+What to do:
+  * The Acorn still runs the image it was sold with, not the fpgas.online one,
+    so only its PCIe link and its JTAG could be tested. It has to be converted
+    once (the fpgas.online image loaded over JTAG, then written to its flash
+    with fpgas-acorn-flash):
+    https://github.com/fpgas-online/fpgas.online-test-designs/blob/main/docs/hardware/acorn-pcie-programming.md
+  * The serial port has a pin JTAG needs, so the JTAG test could not run. On a
+    Compute Blade the JTAG TMS wire and the serial port's TX are the same pin
+    (GPIO14): while the serial port is on, JTAG cannot be tested there.
+    Booting with it off (enable_uart in config.txt) should free the pin; that
+    is not yet confirmed on hardware:
+    https://github.com/fpgas-online/fpgas.online-test-designs/issues/127
+  * To look at the acorn board yourself: sudo fpgas-acorn-debug --help (sudo
+    apt install fpgas-online-acorn-debug)
+  * What each message means:
+    https://docs.fpgas.online/en/latest/verify/fpgas-verify.html#common-failures
+The whole report, for a program to read (JSON): /run/fpgas-online/verify.json
+******************************************************************************
+```
+
 **fail, with two faults**: the check run against the tests' fake Acorn
 ([`tests/acorn_fakes.py`](../tests/acorn_fakes.py)), with its PCIe link at x2 and a JTAG TDI wire that does not carry:
 
@@ -814,7 +867,7 @@ flash:
 |---|---|---|
 | `10ee:7021`, subsystem `1e24:021f` (CLE-215+) or `1e24:0101` (CLE-101) | the fpgas.online Acorn SoC | tested |
 | `1e24:021f` or `1e24:0101` as vendor:device | an Acorn on SQRL's factory image | `fail`, `unconverted: …`; only `pcie-link`, `rp1-pio` and `jtag` run |
-| `10ee:7011` | the vendor XDMA sample (an Acorn or a NeTV2) | `fail`, `unconverted: …` |
+| `10ee:7011` | the vendor XDMA sample (an Acorn or a NeTV2) | `fail`, `unconverted: …`; on a host set up for an Acorn (`fpga-board = acorn`, or `fpgas-acorn-verify`) `pcie-link`, `rp1-pio` and `jtag` run, and `jtag` takes either Acorn FPGA and names the variant from its IDCODE where only one variant has that part (an XC7A100T is a `cle-101`); with `auto` nothing runs, since it may be a NeTV2 |
 | `10ee:0666` | a PCIe Screamer running PCILeech | `fail`: fpgas.online has no test design for this board yet |
 | `10ee:7021`, subsystem `10ee:0007`, class `070001`, with a BAR2 | a stock Xilinx XDMA design (most likely a PicoEVB) | `fail`: fpgas.online has no test design for this board yet |
 | any other Xilinx or SQRL ID | not a design we built | `fail` |

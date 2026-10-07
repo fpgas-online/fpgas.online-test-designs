@@ -8,9 +8,10 @@ Two short cables from the Acorn's two connectors to the Compute Blade: the P1 ca
 
 GND, TCK, TDO, TMS, TDI, J2 and K2 are the names on the pictures for each wire; J2 and K2 are the FPGA's pin names.
 
-![The finished wiring: Acorn to Compute Blade](acorn-wiring-computeblade.png)
+![The finished wiring: Acorn to Compute Blade](acorn-wiring-computeblade.png){.only-light}
+![The finished wiring: Acorn to Compute Blade](acorn-wiring-computeblade-dark.png){.only-dark}
 
-Nothing in this guide cuts a wire to length. The bought cable is cut in half, once, as the first step (before the meter check, which needs the cut faces); each half is then used at the length it has, apart from the wires that are cut back at the plug and the one wire that is cut to take the resistor. Whether a half reaches from the card in its slot to the Compute Blade's headers has not been measured by us: hold a half cable against the host before you cut anything.
+Nothing in this guide cuts a wire to length. The bought cable is cut in half, once, as the first step (before the meter check, which needs the cut faces); each half is then used at the length it has, apart from the wires that are cut back at the plug and the one wire that is cut to take the resistor. Whether a half reaches from the card in its slot to the Compute Blade's headers has not been measured by us: once the cable is cut in half, and before any wire is cut back or crimped, hold a half against the host from the card's socket to the header, with the power off. If it does not reach, stop and tell whoever gave you this guide.
 
 ## The order of work
 

@@ -2,7 +2,8 @@
 
 For the person at the bench with a Tiny Tapeout demo board that has the FPGA breakout in its chip socket, joined to a Raspberry Pi carrying a Digilent Pmod HAT. This part covers the design's eight inputs (`ui_in`) and the design's eight outputs (`uo_out`), wire by wire.
 
-[![The INPUT header goes to port JA and the OUTPUT header to port JC](tt-fpga-pmod-cables-ui-uo.png)](tt-fpga-pmod-cables-ui-uo.svg)
+[![The INPUT header goes to port JA and the OUTPUT header to port JC](tt-fpga-pmod-cables-ui-uo.png)](tt-fpga-pmod-cables-ui-uo.svg){.only-light}
+[![The INPUT header goes to port JA and the OUTPUT header to port JC](tt-fpga-pmod-cables-ui-uo-dark.png)](tt-fpga-pmod-cables-ui-uo-dark.svg){.only-dark}
 
 **Pin 1 on the picture.** Pin 1 (gold) is drawn where Tiny Tapeout's drawing of the demo board puts it, not checked by us: seen from above, Pmod edge toward you, the right-hand end of the row farther from the edge. The HAT's ports are drawn the same way; where their printed 1 is has not been checked by us. Find pin 1 on each connector by its marking before plugging a cable in. A 2x6 cable turned round puts 3.3 V on signal pins.
 
