@@ -250,7 +250,7 @@ def test_cavities_are_drawn_where_the_header_has_them_and_each_wire_ends_at_its_
 def test_the_last_step_fits_plugs_then_card_then_both_housings_on_their_headers(key):
     c = wiring.CARRIERS[key]
     last = steps.procedure(c).split("Fit the cables, in this order.")[1]
-    assert steps.fit_block(c).rstrip() in last and steps.png(steps.fit_name(c)) in last
+    assert steps.fit_block(c).rstrip() in last and all(steps.png(n) in last for n in steps.fit_names(c))
     assert "ground-check.png" not in last
     assert (wiring.HERE / "generated" / f"acorn-fit-{key}.md").read_text().endswith(steps.fit_block(c))
     order = [
@@ -291,11 +291,23 @@ def test_the_look_before_power_names_each_marked_pin_and_says_what_a_turned_hous
 def test_the_fitting_picture_draws_every_action_of_the_list_beside_it_with_its_number(key):
     c = wiring.CARRIERS[key]
     actions = steps.fit_actions(c)
-    svg = steps.fit(c)
-    assert re.findall(r'<circle id="action-(\d+)"', svg) == [str(n) for n in range(1, len(actions) + 1)]
-    drawn = " ".join(words(svg))
-    for action in actions:
-        assert action in drawn, action
+    for half, numbers in enumerate(steps.FIT_HALVES, 1):
+        svg = steps.fit(c, half)
+        assert re.findall(r'<circle id="action-(\d+)"', svg) == [str(n) for n in numbers]
+        drawn = " ".join(words(svg))
+        for n in numbers:
+            assert actions[n - 1] in drawn, actions[n - 1]
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_each_half_of_the_fitting_picture_follows_its_own_three_actions(key):
+    """Each half is printed with its three actions, so that a half and its words fit on one sheet."""
+    c = wiring.CARRIERS[key]
+    block = steps.fit_block(c)
+    one, two = (block.index(steps.png(n)) for n in steps.fit_names(c))
+    actions = steps.fit_actions(c)
+    assert block.index("1. ") < block.index(f"3. {actions[2]}") < one < block.index(steps.FIT_SECOND)
+    assert block.index(steps.FIT_SECOND) < block.index(f"4. {actions[3]}") < block.index(f"6. {actions[5]}") < two
 
 
 @pytest.mark.parametrize("key", list(wiring.CARRIERS))
