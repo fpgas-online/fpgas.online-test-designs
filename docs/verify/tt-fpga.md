@@ -152,6 +152,9 @@ A ribbon names up to two of its faults, and counts the rest (`; and 3 more`). Wh
 from it. What to do: seat the ribbon named, move it to its port, or turn it the right way round (Pmod pin 1 to HAT
 pin 1); for a line held high, set all the DIP switches off. Then run the check again.
 
+A `uo_out` line shorted to ground is said as that (`that line is held low: a short to ground?`), and a `uo_out`
+bit that reads one level whatever its `uio` is set to is taken as held, not as the chip's fault.
+
 When the readings fit no single fault (an open wire, two crossed wires, one ribbon elsewhere, one held bit), the
 test does not guess which wire is wrong. That is most often a short between two neighbouring wires of a ribbon.
 It names the ribbon to look at and the HAT pins it saw joined, and the `READINGS:` lines under it give what each
@@ -211,7 +214,8 @@ How it tests:
 
 The test is an `error`, not a `fail`, when it could not make its reading, and stops there: the
 board did not answer its raw REPL; the board's SDK is not running (no `tt` object) or could not select
-`tt_um_factory_test`, or that project did not confirm; the RP2040 has too little heap free with the command
+`tt_um_factory_test`, or fewer than two `uo_out` bits followed their `uio` bit, so the loopback could not be
+confirmed (a ribbon on another port or turned round, or the chip); the RP2040 has too little heap free with the command
 server loaded (`RP2040 heap too low: N bytes free …`); gpiod or `pinctrl` is missing or could not read the HAT
 GPIOs; the test was stopped or reached its own time limit (the Pi is put back first); the test failed in a way it
 does not know (the exception is named); or what it changed on the Pi or the board was not put back (the reason
@@ -219,8 +223,8 @@ says what). It is not run when the `sdk` test failed (`wiring not run: it needs 
 an SDK release that is not one for its chip, a TT03p5 board on SDK 1.x for one, cannot select the project. It
 is a `fail` when the readings were not steady (a loose contact?).
 
-The output's `MEM:` lines say how much of the RP2040's heap was free with the command server loaded, while each
-pin-id round sends, and after the test. `MEM:`, `PULLS:`, `RESTORE:` and `FALLBACK:` are said again just before
+The output's `MEM:` lines say how much of the RP2040's heap was free with the command server loaded, before the
+walks, while each pin-id round sends, and after the test, each after a collection. `MEM:`, `PULLS:`, `RESTORE:` and `FALLBACK:` are said again just before
 the `WIRING:` line, where the boot report keeps them, and so are the `READINGS:` lines of a fail.
 
 **Not covered:**
@@ -233,14 +237,15 @@ the `WIRING:` line, where the boot report keeps them, and so are the `READINGS:`
   more: its shuttle file is bigger (TT06's is about twice TT07's), so its SDK leaves less heap. It then fails
   loudly (`RP2040 heap too low`) until it has been measured.
 * A short between neighbouring wires is said as one, with where to look, not as which two wires.
-* "The board's files the same before and after" is every file but `/boot.log`, which the board's own `main.py`
-  rewrites at every start (the identification start).
+* "The board's files the same before and after" is every file by its hash, and `/boot.log` by its size: the
+  board's own `main.py` rewrites it at every start (the identification start), so it is not hashed.
 
 [PR #15](https://github.com/fpgas-online/fpgas.online-test-designs/pull/15)'s form of it ran on every Tiny Tapeout
 host at Welland on 4 September 2026. This form passed on the board with a TT07 chip at Welland on 8 October 2026
 (RP2040, SDK 2.0.4, on a Pi 3B+), four times on its way in (the last at 06:08): about 22.5 s, the RP2040's heap
 69472 bytes free at the start and 52048 at the lowest after a collection, the board's files the same before and
-after (all but `/boot.log`); the record is in
+after (every file by its hash; `/boot.log`, which is not hashed because the board's own `main.py` rewrites it at
+each start, was the same size, 252 bytes); the record is in
 [PR #179](https://github.com/fpgas-online/fpgas.online-test-designs/pull/179).
 
 

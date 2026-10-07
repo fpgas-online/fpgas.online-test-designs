@@ -32,6 +32,9 @@ JA, JB, JC = (ttw.PMOD_HAT_PORTS[p] for p in ("JA", "JB", "JC"))
 # -- Electrical model ----------------------------------------------------------------
 
 
+HAT_GROUND = 0  # a node on the HAT's ground: Pi GPIO0 is on no HAT port, so it stands for ground in `wires`
+
+
 class BoardModel:
     """Nets between RP2 GPIOs, the ASIC and Pi GPIOs.
 
@@ -54,7 +57,7 @@ class BoardModel:
         self.pi_pull_up = set()
         self.held_ui_in = set(held_ui_in)  # ui_in bits a DIP switch pulls to dip_level through a resistor
         self.dip_level = dip_level  # 1: a switch that is on ties its line to 3.3 V (the demo board's own)
-        self.grounded = set(grounded)  # Pi GPIOs whose HAT line is shorted to ground
+        self.grounded = set(grounded) | {HAT_GROUND}  # Pi GPIOs whose HAT line is shorted to ground
         self.hard_ui_in = set(hard_ui_in)  # ui_in bits shorted to a rail (low)
         self.levels = {}
         self.contentions = []
@@ -893,8 +896,8 @@ def test_the_boards_cabling_passes_and_says_where_every_ribbon_is():
 
 
 def placed(ports, offset=()):
-    """Wires for ribbons on HAT `ports` ({group: port}); the groups in offset seated one position off (Pmod pin n on
-    HAT pin 12 - n; pins 1 and 7 on the HAT's ground, modelled as not connected)."""
+    """Wires for ribbons on HAT `ports` ({group: port}); the groups in offset turned round and one position over
+    (Pmod pin n on HAT pin 12 - n; pins 1 and 7 on the HAT's ground, as the 4 Sep fleet record found them)."""
     wires = {}
     for group, port in ports.items():
         for k in range(8):
@@ -902,16 +905,29 @@ def placed(ports, offset=()):
             if group in offset:
                 pin = 12 - pin
                 if pin not in ttw.PMOD_PIN_NUMBERS:
+                    wires[RP2040[group][k]] = {HAT_GROUND}
                     continue
             wires[RP2040[group][k]] = {ttw.PMOD_HAT_PORTS[port][ttw.PMOD_PIN_NUMBERS.index(pin)]}
     return wires
 
 
+def ours(contentions):
+    """The fights an RP2040 pin of ours is in: those of the chip's outputs against a wire's fault (one on ground,
+    two bridged) are the fault's, and happen whatever the test does."""
+    return [c for c in contentions if any(d[0] == "rp2" for d in c)]
+
+
 def wiring_line(wires, pin_id=True):
-    """(exit, WIRING: line, contentions) for `wires`, run as the boot check runs it, with pin-id."""
+    """(exit, WIRING: line, our fights) for `wires`, run as the boot check runs it, with pin-id."""
     model = BoardModel(wires, project="drives_uio")
-    result, _log = run_simulated(model, argv=ASIC, pin_id=pin_id)
-    return (*ttw.verdict(result), model.contentions)
+    try:
+        result, _log = run_simulated(model, argv=ASIC, pin_id=pin_id)
+        code, line = ttw.verdict(result)
+    except ttw.Unclear:
+        code, line = 1, "UNCLEAR"
+    except ttw.ProtocolError as e:
+        code, line = 2, f"the wiring could not be tested: {e}"
+    return code, line, ours(model.contentions)
 
 
 @pytest.mark.parametrize("wires, line", [
@@ -947,20 +963,21 @@ def wiring_line(wires, pin_id=True):
     (placed({"ui_in": "JC", "uio": "JB", "uo_out": "JA"}, offset=("ui_in", "uio", "uo_out")),
      "the ui_in ribbon is plugged in turned round and one position over (ui_in on HAT JC (it goes on JA)): Pmod "
      "pin n arrives on HAT pin 12-n, and Pmod pins 1 and 7 are on the HAT's ground; plug it in the right way "
-     "round, Pmod pin 1 to HAT pin 1; and some uio signals could not be tested until then"),
+     "round, Pmod pin 1 to HAT pin 1; and some uo_out signals could not be tested until then"),
     # review 2: uo_out alone, and with ui_in, turned round (its lines are what uio reaches through the chip)
     (placed({"ui_in": "JA", "uio": "JB", "uo_out": "JC"}, offset=("uo_out",)),
      "the uo_out ribbon is plugged in turned round and one position over (uo_out on HAT JC): Pmod pin n arrives on "
      "HAT pin 12-n, and Pmod pins 1 and 7 are on the HAT's ground; plug it in the right way round, Pmod pin 1 to "
      "HAT pin 1"),
+    # ui_in[0] then sits on ground, so the chip's loopback cannot be used: uo_out is said untested until then
     (placed({"ui_in": "JA", "uio": "JB", "uo_out": "JC"}, offset=("ui_in", "uo_out")),
-     "these ribbons are plugged in turned round and one position over (ui_in on HAT JA, uo_out on HAT JC): Pmod "
-     "pin n arrives on HAT pin 12-n, and Pmod pins 1 and 7 are on the HAT's ground; plug each in the right way "
-     "round, Pmod pin 1 to HAT pin 1"),
+     "the ui_in ribbon is plugged in turned round and one position over (ui_in on HAT JA): Pmod pin n arrives on "
+     "HAT pin 12-n, and Pmod pins 1 and 7 are on the HAT's ground; plug it in the right way round, Pmod pin 1 to "
+     "HAT pin 1; and some uo_out signals could not be tested until then"),
     (placed({"ui_in": "JA", "uio": "JB", "uo_out": "JC"}, offset=("ui_in",)),
      "the ui_in ribbon is plugged in turned round and one position over (ui_in on HAT JA): Pmod pin n arrives on "
      "HAT pin 12-n, and Pmod pins 1 and 7 are on the HAT's ground; plug it in the right way round, Pmod pin 1 to "
-     "HAT pin 1"),
+     "HAT pin 1; and some uo_out signals could not be tested until then"),
 ])  # fmt: skip
 def test_each_wrong_wiring_has_its_own_line_and_no_two_parties_ever_drive_one_net(wires, line):
     assert wiring_line(wires) == (1, line, [])
@@ -1001,8 +1018,8 @@ def test_a_factory_test_that_does_not_confirm_stops_the_test():
 
     # a uo_out that does not follow uio is a reading a bridge also gives (exit 1, the unclear line); a factory
     # test that could not even be tried is the chip's or the SDK's (exit 2)
-    for firmware, raised, why in ((StubbornFirmware, ttw.ProtocolError, "could not be confirmed: only 0 uio bits"),
-                                  (QuietFirmware, ttw.Unclear, "not uo_out = uio_in")):  # fmt: skip
+    for firmware, raised, why in ((StubbornFirmware, ttw.ProtocolError, "could not be confirmed: only 0 u"),
+                                  (QuietFirmware, ttw.ProtocolError, "only 0 uo_out bits followed")):  # fmt: skip
         model = BoardModel(asic_wires(), project="drives_uio")
         with pytest.raises(raised, match=why):
             run_simulated(model, argv=ASIC, firmware_cls=firmware)
@@ -1571,3 +1588,22 @@ def test_the_group_drive_is_refused_on_anything_but_an_rp2040():
     probe = ttw.WiringProbe(rp2=None, hat=None, controller="rp2350", log=lambda *_: None)
     with pytest.raises(ttw.ProtocolError, match="written for the RP2040 only"):
         probe.walk_together(["uio[6]", "uio[7]"])
+
+
+def test_ui_in0_held_low_says_nothing_of_uio_and_not_that_the_pi_s_pull_ups_hold_uio6_7():
+    """Review 6, finding 2: with ui_in[0] held at either level the loopback cannot be used, so uio is untested and
+    not named; and the Pi's own pull-ups on uio[6:7] are never given as "something holds its line"."""
+    model = BoardModel(asic_wires(), project="drives_uio", hard_ui_in={0})
+    result, _log = run_simulated(model, argv=ASIC)
+    code, line = ttw.verdict(result)
+    assert code == 1 and "uio[" not in line and "holds its line high" not in line, line
+
+
+@pytest.mark.parametrize("gpio, pin", [(5, 9), (6, 10)])
+def test_a_uo_out_line_shorted_to_ground_is_said_as_held_low_not_as_an_open_wire(gpio, pin):
+    """Review 6, finding 3: JC10 lies next to Pmod pin 5, ground, on the ribbon."""
+    model = BoardModel(asic_wires(), project="drives_uio", grounded={gpio})
+    result, _log = run_simulated(model, argv=ASIC, pin_id=True)
+    assert ours(model.contentions) == []
+    code, line = ttw.verdict(result)
+    assert code == 1 and f"did not reach HAT JC pin {pin} (that line is held low: a short to ground?)" in line, line

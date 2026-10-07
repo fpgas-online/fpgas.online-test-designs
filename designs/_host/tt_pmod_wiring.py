@@ -825,6 +825,8 @@ class WiringProbe:
         self.log = log
         self.drive_failures = {}  # signal -> what the RP2 read back
         self.held_level = {}  # signal -> how probe_floating found it held: high, low, against the pulls
+        self.uo_held = {}  # uo_out signal -> the level it read whatever its uio was set to (confirm_factory_test)
+        self.held_low = []  # Pi lines the reverse walk found not following the Pi's pull-up: driven low
         self.outputs = set()  # signals currently driven by the RP2
 
     # -- primitives --------------------------------------------------------------
@@ -1058,6 +1060,7 @@ class WiringProbe:
         self.hat.set_bias("up")
         time.sleep(self.settle)
         held_low = sorted(g for g, v in self.hat.read_all().items() if not v)
+        self.held_low = held_low
         self.hat.set_bias("down")
         for name in sorted(attributed):
             self.log(f"  {name:<10} <- {describe_gpios(sorted(attributed[name]))}")
@@ -1079,19 +1082,36 @@ class WiringProbe:
         """
         bits = [int(n[:-1].split("[")[1]) for n in uio_floating]
         if len(bits) < 2:
-            return f"only {len(bits)} uio bits float, cannot confirm the loopback"
+            return (
+                f"only {len(bits)} uio bits float, so the loopback cannot be confirmed (the others' lines are "
+                "held: by a ribbon on another port or turned round, or by the chip)"
+            )
         self.set_inputs("uio")
-        for bit in bits:
+        followed, wrong = [], []
+        for bit in bits:  # every candidate, one at a time (each floats: nothing else drives it)
+            got = {}
             for want in (1, 0):
                 if not self.drive(signal_name("uio", bit), want):
                     self.set_inputs("uio")
                     return f"uio[{bit}] could not be driven"
                 time.sleep(self.settle)
-                got = self.read_rp2()[signal_name("uo_out", bit)]
-                if got != want:
-                    self.set_inputs("uio")
-                    return f"uo_out[{bit}] reads {got} for uio[{bit}]={want}: not uo_out = uio_in"
+                got[want] = self.read_rp2()[signal_name("uo_out", bit)]
             self.set_inputs("uio", {bit})
+            if got == {1: 1, 0: 0}:
+                followed.append(bit)
+            elif got[1] == got[0]:
+                # held at one level whatever uio is: something on the uo_out line (a ribbon turned round puts
+                # Pmod pins 1 and 7 on the HAT's ground), not the chip's copy failing; the walks say where
+                self.uo_held[signal_name("uo_out", bit)] = "high" if got[1] else "low"
+            else:
+                wrong.append(f"uo_out[{bit}] reads {got[1]} for uio[{bit}]=1 and {got[0]} for 0")
+        if wrong:
+            return f"{'; '.join(wrong)}: not uo_out = uio_in"
+        if len(followed) < 2:
+            return (
+                f"only {len(followed)} uo_out bits followed their uio bit, so the loopback cannot be confirmed (a "
+                "ribbon on another port or turned round, or the chip)"
+            )
         # Counter check: ui_in[0]=1 puts cnt on uo_out and uio. The chip then drives uio, so every other ui_in bit
         # (ui_in[1:3] share HAT lines with uio[1:3]) is an input meanwhile.
         held = [n for n in self.outputs if n.startswith("ui_in[") and n != "ui_in[0]"]
@@ -1217,7 +1237,8 @@ def run_pin_id_round(rp2, probe, scanner, transmitting, partners, log):
     # "txid" answers OK once it is transmitting; any later line stops it and
     # is answered with a second OK.
     started = rp2.cmd("txid " + " ".join(f"{probe.gpio_of(n)}={label}" for n, label in transmitting.items()))
-    log(f"MEM: {mem_free(started)} bytes of the RP2's heap free while it sends {len(transmitting)} names")
+    names = f"{len(transmitting)} name{'' if len(transmitting) == 1 else 's'}"
+    log(f"MEM: {mem_free(started)} bytes of the RP2's heap free while it sends {names}")
     try:
         decoded = scanner()
     finally:
@@ -1967,6 +1988,7 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
         "cabling_found": found if score >= 8 else None,
         "held_inputs": held_ui,
         "held_levels": dict(probe.held_level),
+        "held_low_lines": list(probe.held_low),
         "asic_loopback": asic_loopback,
         "observed": {k: sorted(v) for k, v in observed.items()},
         "reverse": {k: sorted(v) for k, v in reverse.items()},
@@ -2154,7 +2176,7 @@ def ribbon_findings(result):
     return found, place
 
 
-def row_faults(row, cabling, held, levels=None):
+def row_faults(row, cabling, held, levels=None, held_low_lines=()):
     """The faults of a required row that is not ok, each on the ribbon it is on: [{"group", "signal", "own",
     "via", "text"}]. own: the signal's own HAT line was not reached; via: for a uo_out line the chip drives from
     this row's signal, that signal."""
@@ -2173,7 +2195,7 @@ def row_faults(row, cabling, held, levels=None):
         if name in held:
             return [fault(f"{where} is held {held[name]} on the demo board ({HELD_WHY[held[name]]})",
                           own_missing=True)]  # fmt: skip
-        if levels.get(name) in ("high", "low"):
+        if levels.get(name) == "low" or (levels.get(name) == "high" and own not in PI_FIXED_PULLUP_GPIOS):
             return [fault(f"{where} could not be tested: something holds its line {levels[name]}", own_missing=True)]
         return [fault(f"{where} could not be tested", own_missing=True)]
     expected, observed = set(row["expected"]), set(row["observed"])
@@ -2186,7 +2208,9 @@ def row_faults(row, cabling, held, levels=None):
         faults.append(fault(f"{where} also reached {hat_pins(extra)} (a short)"))
     for gpio in sorted(missing - {own}):  # the uo_out line the chip's factory test drives from this signal
         out = next(s for s, g in lines.items() if s.startswith("uo_out") and g == gpio)
-        faults.append(fault(f"{out} (Pmod pin {pmod_pin(out)}) did not reach {hat_pin(gpio)}", "uo_out", out, via=name))
+        low = " (that line is held low: a short to ground?)" if gpio in held_low_lines else ""
+        faults.append(fault(f"{out} (Pmod pin {pmod_pin(out)}) did not reach {hat_pin(gpio)}{low}", "uo_out", out,
+                            via=name))  # fmt: skip
     if not faults:
         faults.append(fault(f"{where}: {row['detail'] or row['status']}"))
     return faults
@@ -2300,11 +2324,16 @@ def verdict(result, strict=True):
     held = result.get("held_inputs", {})
     bad = [r for r in result["rows"] if r["required"] and r["status"] != "ok"]
     if held.get("ui_in[0]") == "high":
-        # With ui_in[0] high the factory test drives uio (its counter), which holds ui_in[1:3] through the HAT and
-        # leaves uio untested: all of that follows from ui_in[0], which alone is said. Held low it explains nothing.
-        bad = [r for r in bad if not (r["signal"] in {"ui_in[1]", "ui_in[2]", "ui_in[3]"} and r["signal"] in held)
-               and not (r["signal"].startswith("uio[") and r["status"] == "untested")]  # fmt: skip
-    walk = [f for r in bad for f in row_faults(r, cabling, held, result.get("held_levels"))]
+        # With ui_in[0] high the factory test drives uio (its counter), which holds ui_in[1:3] through the HAT: that
+        # follows from ui_in[0], which alone is said. Held low it explains no other held bit.
+        bad = [r for r in bad if not (r["signal"] in {"ui_in[1]", "ui_in[2]", "ui_in[3]"} and r["signal"] in held)]
+    if "ui_in[0]" in held:  # held at either level, the factory test cannot be used: uio is not tested
+        bad = [r for r in bad if not (r["signal"].startswith("uio[") and r["status"] == "untested")]
+    walk = [
+        f
+        for r in bad
+        for f in row_faults(r, cabling, held, result.get("held_levels"), result.get("held_low_lines", ()))
+    ]
     whole, _place = ribbon_findings(result)
     # A signal whose own wire is at fault explains what the chip copies from it, and what pin-id heard of it.
     at_fault = {f["signal"] for f in walk if f["own"]}
@@ -2361,13 +2390,15 @@ def verdict(result, strict=True):
     if whole:  # ribbons a misplaced one leaves untestable (not driven: a chip output may be on their lines)
         untested = [g for g in GROUPS if g not in whole and any(
             r["signal"].startswith(g + "[") and r["status"] == "untested" for r in bad)]  # fmt: skip
+        if strict and not result["asic_loopback"] and "uo_out" not in whole and "uo_out" not in untested:
+            untested.append("uo_out")  # no loopback (ui_in[0] on the misplaced ribbon's ground, say): untested
         if untested:
             parts.append(f"and some {' and '.join(untested)} signals could not be tested until then")
     stray = list(dict.fromkeys(f["text"] for f in faults if f["group"] == ""))
     if stray and not parts:
         parts.append("; ".join(stray[:NAMED_PER_RIBBON]) + (f"; and {len(stray) - NAMED_PER_RIBBON} more"
                                                              if len(stray) > NAMED_PER_RIBBON else ""))  # fmt: skip
-    if strict and not result["asic_loopback"] and "uo_out" not in whole:
+    if strict and not result["asic_loopback"] and not whole:  # a ribbon wholly elsewhere explains it
         parts.append(
             "uo_out was not tested: the chip's factory test could not be used (ui_in[0] is held)"
             if "ui_in[0]" in held
