@@ -11,6 +11,7 @@ import gen
 import palette
 import pytest
 import sheetlib
+import steps
 import wiring
 
 OUT = wiring.HERE / "generated"
@@ -43,11 +44,32 @@ def test_every_committed_drawing_has_its_dark_svg_and_png_beside_it():
             assert (OUT / twin).exists(), twin
 
 
-@pytest.mark.parametrize("name", ["acorn-wiring-pi5.svg", "acorn-cable-blade-p2-prepare.svg", "acorn-cable-check.svg"])
+@pytest.mark.parametrize("name", light_drawings())
 def test_the_twins_differ_in_their_colours_only(name):
+    """And in the words for the dark sheet only (Sheet.dark_only()), which the light sheet leaves out."""
     light, dark = built()[name], built()[palette.dark_name(name)]
     assert light != dark
-    assert COLOUR_ATTRIBUTE.sub("", light) == COLOUR_ATTRIBUTE.sub("", dark)
+    assert COLOUR_ATTRIBUTE.sub("", light) == COLOUR_ATTRIBUTE.sub("", palette.DARK_ONLY.sub("", dark))
+
+
+@pytest.mark.parametrize("name", ["acorn-cable-cut.svg", "acorn-cable-p1-flag.svg", "acorn-cable-p2-flag.svg"])
+def test_a_caption_that_calls_the_wires_black_says_on_the_dark_sheet_that_black_is_drawn_light(name):
+    light, dark = built()[name], built()[palette.dark_name(name)]
+    assert "are black" in light and "are black" in dark
+    assert steps.DRAWN_LIGHT not in light
+    assert f'aria-label="{steps.DRAWN_LIGHT}"' in dark
+
+
+def test_words_for_the_dark_sheet_only_leave_the_light_one():
+    sh = sheetlib.Sheet(300, 100)
+    sh.text(20, 40, "both", 13)
+    with sh.dark_only():
+        sh.text(20, 70, "dark only", 13)
+    sh.check("test")
+    svg = sh.svg()
+    assert 'aria-label="dark only"' not in palette.resolve(svg, "light")
+    assert 'aria-label="dark only"' in palette.resolve(svg, "dark")
+    assert 'aria-label="both"' in palette.resolve(svg, "light")
 
 
 def photos(svg):
@@ -84,6 +106,18 @@ def test_a_colour_outside_the_palette_stops_the_build():
         palette.resolve('<rect fill="#123456"/>', "dark")
     with pytest.raises(SystemExit, match=r"outside palette\.py"):
         palette.resolve('<path stroke="white"/>', "light")
+    for written in (
+        '<path style="stroke:#123456"/>',  # in CSS
+        '<path style="stroke:red"/>',  # any style attribute
+        "<style>path { fill: #abc }</style>",
+        '<stop offset="0" stop-color="#123456"/>',
+        '<rect fill="url(#g)" data-colour="#fff"/>',  # a hex value in any attribute
+    ):
+        with pytest.raises(SystemExit, match=r"outside palette\.py"):
+            palette.resolve(written, "dark")
+    # a reference to an element by its id is not a colour
+    glyph = '<use href="#b12"/><rect fill="@@ink@@"/>'
+    assert palette.resolve(glyph, "dark") == f'<use href="#b12"/><rect fill="{palette.ROLES["ink"][1]}"/>'
     with pytest.raises(KeyError):
         palette.resolve('<rect fill="@@no-such-role@@"/>', "dark")
     with pytest.raises(KeyError):

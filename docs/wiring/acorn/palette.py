@@ -2,8 +2,9 @@
 """Every colour the drawings use, for the light sheet and for the dark one, in one place.
 
 A drawing is made once, its colours written as tokens (`@@ink@@`, `@@wire-0f766e@@`), and resolve() turns it
-into the light SVG and the dark SVG, which differ only in their colours. The dark one is for the dark theme
-of docs.fpgas.online: its paper is the theme's own background, its ink light.
+into the light SVG and the dark SVG, which differ only in their colours (and in words drawn inside
+Sheet.dark_only()). The dark one is for the dark theme of docs.fpgas.online: its paper is the theme's own
+background, its ink light.
 
 A colour is named by what it is and what it stands on, not by its value, because one value can mean two
 things: "#fff" is the fill of a label box (dark on the dark sheet) and the text on a coloured tag (dark there
@@ -80,10 +81,19 @@ WIRES = {
 }
 THEMES = ("light", "dark")
 PHOTO_START, PHOTO_END = "<!--photo-->", "<!--/photo-->"
+# Words for the dark sheet only (Sheet.dark_only()): the light sheet leaves their place empty.
+DARK_START, DARK_END = "<!--dark-only-->", "<!--/dark-only-->"
 TOKEN = re.compile(r"@@([a-z0-9-]+)@@")
 # A colour attribute whose value is not a token and not "none": a colour the palette does not know.
 STRAY = re.compile(r'\b(?:fill|stroke|stop-color|color|flood-color)="(?!none"|@@[a-z0-9-]+@@")([^"]*)"')
 PHOTO = re.compile(re.escape(PHOTO_START) + "(.*?)" + re.escape(PHOTO_END), re.S)
+DARK_ONLY = re.compile(re.escape(DARK_START) + ".*?" + re.escape(DARK_END), re.S)
+# A colour written any other way: a hex value anywhere (an attribute, CSS, a comment), once the references to
+# elements by id (href="#r12", url(#g)) are taken out; and any style attribute or <style> element, since
+# colours go only through fill and stroke attributes and their tokens.
+HEX = re.compile(r"#[0-9a-fA-F]{3,8}\b")
+REFERENCE = re.compile(r'\b(?:xlink:)?href="#[^"]*"|url\(#[^)]*\)')
+STYLE = re.compile(r'\bstyle="[^"]*"|<style\b')
 
 
 def role(name):
@@ -150,6 +160,8 @@ def resolve(svg, theme):
     """
     if theme not in THEMES:
         raise ValueError(f"no theme {theme!r}")
+    if theme == "light":  # what is for the dark sheet only goes; the dark sheet keeps it, marks and all
+        svg = DARK_ONLY.sub("", svg)
     out, at = [], 0
     for m in PHOTO.finditer(svg):
         out.append(_tokens(svg[at : m.start()], theme))
@@ -160,7 +172,7 @@ def resolve(svg, theme):
 
 
 def _tokens(text, theme):
-    stray = STRAY.findall(text)
+    stray = STRAY.findall(text) + HEX.findall(REFERENCE.sub("", text)) + STYLE.findall(text)
     if stray:
         raise SystemExit(f"palette: colours outside palette.py in a drawing: {sorted(set(stray))}")
     if PHOTO_START in text or PHOTO_END in text:
