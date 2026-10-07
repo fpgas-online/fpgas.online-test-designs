@@ -11,12 +11,12 @@ GND, TCK, TDO, TMS, TDI, J2 and K2 are the names on the pictures for each wire; 
 ![The finished wiring: Acorn to Compute Blade](acorn-wiring-computeblade.png){.only-light}
 ![The finished wiring: Acorn to Compute Blade](acorn-wiring-computeblade-dark.png){.only-dark}
 
-Nothing in this guide cuts a wire to length. The bought cable is cut in half, once, as the first step (before the meter check, which needs the cut faces); each half is then used at the length it has, apart from the wires that are cut back at the plug and the one wire that is cut to take the resistor. Whether a half reaches from the card in its slot to the Compute Blade's headers has not been measured by us: once the cable is cut in half, and before any wire is cut back or crimped, hold a half against the host from the card's socket to the header, with the power off. If it does not reach, stop and tell whoever gave you this guide.
+Nothing in this guide cuts a wire to length. The bought cable is cut in half, once, as the first step (before the meter check, which needs the cut faces); each half is then used at the length it has, apart from the wires that are cut back at the plug and the one wire that is cut to take the resistor. Whether a half reaches from the card to the Compute Blade's headers has not been measured by us: the guide checks it as its second step, before any wire is cut back or crimped.
 
 ## The order of work
 
 1. Parts and tools: the list to tick off before starting.
-2. JTAG connector 1: the P1 cable's wires flagged, checked with a meter, cut back and crimped.
+2. JTAG connector 1: the cable cut in half and each half checked for reach; the P1 cable's wires flagged, checked with a meter, cut back and crimped.
 3. JTAG connector 2: the P1 cable's housing filled and checked.
 4. UART connector 1: the P2 cable's wires flagged, checked with a meter, cut back and crimped.
 5. UART connector 2: the P2 cable's housing filled and checked.

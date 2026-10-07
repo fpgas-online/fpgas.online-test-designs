@@ -6,7 +6,7 @@
 
 The check never writes the card's flash and never loads a design into the FPGA. It drives the P1 and P2 wires, which is how it tests them, and puts the host's pins back as it found them.
 
-**What to expect on a Compute Blade today.** `pcie-link` passes when the card is seated and on SQRL's factory image (a card on the vendor's XDMA sample image gets no test at all: below). On a Compute Module 5 `jtag` cannot run in a boot that has the header's serial port on (kernel 6.18): the serial port holds GPIO14, which is also the JTAG TMS wire, so `jtag` fails there whatever the wiring; on a Compute Module 4 it has not been run by us. Every other test is `not run` until the card is converted to the fpgas.online design, and converting a card on a blade has not been done by us. So the result today is `fail` even with perfect cables: it shows that the card is seated and its PCIe link is up, and it cannot yet show that the two cables are right. The bench check with a meter, before fitting, is what the cables rest on until then.
+**What to expect on a Compute Blade today.** `pcie-link` passes when the card is seated, on SQRL's factory image or on the vendor's XDMA sample image (version 0.0.post1220 or newer). On a Compute Module 5 `jtag` cannot run in a boot that has the header's serial port on (kernel 6.18): the serial port holds GPIO14, which is also the JTAG TMS wire, so `jtag` fails there whatever the wiring; on a Compute Module 4 it has not been run by us. Every other test but `rp1-pio` is `not run` until the card is converted to the fpgas.online design, and converting a card on a blade has not been done by us. So the result today is `fail` even with perfect cables: it shows that the card is seated and its PCIe link is up, and it cannot yet show that the two cables are right. The bench check with a meter, before fitting, is what the cables rest on until then.
 
 
 ## Install it and run it
@@ -93,7 +93,7 @@ The whole report, for a program to read (JSON): /run/fpgas-online/verify.json
 
 On the blades at ps1 every `sudo` first prints `sudo: unable to resolve host pi16: Name or service not known` (with the blade's own name). It did no harm on the blades it was seen on (7 October 2026), and is left out above.
 
-**A card still on the vendor's XDMA sample image gets no test at all** (pi20 at ps1, 7 October 2026): the check prints `unconverted: runs the vendor XDMA sample image, not the fpgas.online design` and `acorn: fail (no test ran)`. That says nothing about the cables: it is a known gap in the check ([#155](https://github.com/fpgas-online/fpgas.online-test-designs/issues/155)); the bench check with a meter is what such a card's cables rest on until it is converted.
+**A card still on the vendor's XDMA sample image** (pi20 at ps1, 7 October 2026, version 0.0.post1220) gets the same tests as one on SQRL's image: `pcie-link` and `rp1-pio` pass, `jtag` fails on GPIO14 as above, the rest are `not run`. Its summary line reads `acorn -: fail` (no variant is named), and the first `What to do:` line says the board runs Xilinx's XDMA sample design and is to be converted. That was on pi20 at ps1, installed by the steps above; with an earlier version the check printed `acorn: fail (no test ran)` ([#155](https://github.com/fpgas-online/fpgas.online-test-designs/issues/155)).
 
 A pass will list every test with `pass` and end there, with no `RESULT:` part; on a Compute Blade `p2-gpio` stays `not run`, because J5 and H5 are not wired.
 
