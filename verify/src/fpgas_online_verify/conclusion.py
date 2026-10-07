@@ -106,6 +106,36 @@ ADVICE = (
      "running the tests."),
 )  # fmt: skip
 
+# An Acorn on a Compute Blade (the report's `setup`, wiring.toml's carrier name) is not to be converted yet: the only
+# load into a card on a blade lost its PCIe endpoint. Where the report names that setup, the conversion advice above
+# is replaced; where it names no setup, the warning is added to it, as the host may be a blade.
+BLADE = "Compute Blade"
+VERIFYING_3 = "https://docs.fpgas.online/en/latest/boards/acorn/building/compute-blade/verifying-3.html"
+NOT_ON_A_BLADE = (
+    "On a Compute Blade, do not load a design into the card or convert it: that is not in the guide yet. The "
+    "only attempt (pi20 at ps1, 7 October 2026) lost the card's PCIe endpoint (a bus rescan did not bring it "
+    "back, and a root-complex re-probe failed), and the reboot after it was followed by about two hours of "
+    f"restarts, cause not known: {VERIFYING_3}"
+)
+ON_A_BLADE = {
+    r"unconverted: runs SQRL's factory image": "The Acorn still runs the image it was sold with, not the "
+    "fpgas.online one, so only its PCIe link and its JTAG could be tested. " + NOT_ON_A_BLADE,
+    r"unconverted: runs the vendor XDMA sample": "The board runs Xilinx's XDMA sample design, not the fpgas.online "
+    "one. " + NOT_ON_A_BLADE,
+}
+
+
+def _for_setup(pattern, text, setup):
+    """An entry's advice for the board's setup: the blade's own where the report says it is a blade, both where it
+    names no setup, and the entry's as it is on any other setup."""
+    if pattern not in ON_A_BLADE:
+        return text
+    if setup == BLADE:
+        return ON_A_BLADE[pattern]
+    if setup is None:
+        return f"{text} {NOT_ON_A_BLADE}"
+    return text
+
 
 def slug(board):
     return SLUGS.get(board, board)
@@ -164,6 +194,8 @@ def advice(report):
         if not about:
             continue
         board = about[0] or (mode if mode and mode != "auto" else None)
+        setup = next((b.get("setup") for b in report["boards"] if b["board"] == board), None)
+        text = _for_setup(pattern, text, setup)
         if "<board>" in text:
             text = text.replace("<board>", slug(board)) if board else f"{text} (<board> is {BOARDS})"
         out.append(text)
