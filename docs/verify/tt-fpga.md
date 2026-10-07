@@ -15,7 +15,7 @@ chosen.
 | The board says (rpi-hwid's `chip`) | Variant | What the check does |
 |---|---|---|
 | `fpga` | `tt-fpga` | runs [`sdk`](#the-sdk-test), then loads and runs [`dip-switches`](#the-dip-switches), `pin-id` and `uart` |
-| `asic`, and a shuttle | `tt-asic` | runs [`sdk`](#the-sdk-test), then [`wiring`](#the-wiring-test) (its three Pmod ribbons); nothing is loaded, and the board's SDK is started again afterwards |
+| `asic`, and a shuttle | `tt-asic` | runs [`sdk`](#the-sdk-test), then [`wiring`](#the-wiring-test) (its three Pmod ribbons); nothing is loaded, and the board is put back as its SDK had it |
 | nothing usable: rpi-hwid is not installed, could not read the board, or gave no shuttle for a chip | none | nothing is loaded and no test runs: the result is `error`, and the reason says what could not be read |
 | (an RP2 in its USB boot loader, `2e8a:0003`) | none | `fail`: `a Raspberry Pi RP2 is on USB but is not running the Tiny Tapeout firmware` |
 
@@ -92,7 +92,7 @@ reads it.
   (`tt_um_factory_test`), which on an FPGA board shows a still pattern. What the display shows after that is
   the SDK's and the site bridge's, not the check's.
 * A board with a Tiny Tapeout chip is not given it: the design is an FPGA bitstream, and goes only to a board
-  that said it carries the FPGA. Such a board is left with its SDK started again after
+  that said it carries the FPGA. Such a board is left as its SDK had it, put back from memory after
   [the wiring test](#the-wiring-test).
 
 ## The `sdk` test
@@ -134,54 +134,72 @@ the chip's own factory-test project make the signals
 FPGA board's `pin-id` expects too:
 
 * the demo board's `ui_in` Pmod to HAT **JA**, its `uio` Pmod to HAT **JB**, its `uo_out` Pmod to HAT **JC**;
-* pin for pin: Pmod pin 1 to HAT pin 1, and so on (pins 1 to 4 and 7 to 10 carry bits 0 to 7).
+* pin for pin: Pmod pin 1 to HAT pin 1, and so on (Pmod pins 1 to 4 and 7 to 10 carry bits 0 to 7).
 
-A wire that is wrong fails the board, named by its ribbon, its signal and its pins:
+A wire that is wrong fails the board, named by its ribbon, its signal and its pins. "Pmod pin" is the pin of the
+Pmod connector, the same number at the demo board's end and at the HAT's; "HAT JA pin 3" is pin 3 of the HAT's
+JA connector:
 
-* `wiring fail: the ui_in ribbon (HAT JA): ui_in[2] (pin 3) did not reach JA3: it reached JA4/JB4`
-* `wiring fail: the uo_out ribbon (HAT JC): none of its 8 signals reached the Pi (not plugged in, or on another port)`
-* `wiring fail: the ribbons look cabled as ui_in on HAT JC, uio on HAT JB, uo_out on HAT JA, not as …`
-* `wiring fail: the uo_out ribbon (HAT JC): uo_out[1] (pin 2) did not reach JC2 (driven by the chip from uio[1])`
+* `wiring fail: the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) did not reach HAT JA pin 8`
+* `wiring fail: the ui_in ribbon (to HAT JA): ui_in[4] (Pmod pin 7) did not reach HAT JA pin 7: it reached HAT JA pin 8; …`
+* `wiring fail: the uo_out ribbon (to HAT JC): none of its signals reached the Pi (not plugged in, or broken)`
+* `wiring fail: the uio and uo_out ribbons are on each other's HAT ports (JC and JB): swap them`
+* `wiring fail: these ribbons are seated one position off (ui_in on HAT JC (it goes on JA), …): Pmod pin n arrives on HAT pin 12-n, and Pmod pins 1 and 7 are on the HAT's ground; reseat`
+* `wiring fail: the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) is held low on the demo board (a DIP switch that is on, or a wrong ribbon joining it to a chip output: set all DIP switches off)`
 
-A ribbon names up to four of its faults, and counts the rest (`; and 3 more`). What to do: seat the ribbon
-named, or move it to its port, and run the check again.
+A ribbon names up to two of its faults, and counts the rest (`; and 3 more`). When a ribbon is wholly elsewhere
+(another port, one position off, not plugged in) only that is said: the single-wire faults around it follow
+from it. What to do: seat the ribbon named, or move it to its port, and run the check again.
 
 How it tests:
 
-* **Nothing is written to the board.** The board's RP2040 runs a small command server in its memory, sent over
-  its raw REPL. Through the SDK it selects the chip's `tt_um_factory_test` project, which on every shuttle
-  copies `uio` to `uo_out` while `ui_in[0]` is low, and resets it. The RP2040 then drives each `ui_in` and
-  `uio` signal in turn while the Pi reads all 21 HAT lines, so a swapped, open or shorted wire each show as
-  that. The `uio` walk reaches `uo_out` through the chip, which tests the `uo_out` ribbon. The RP2040 also
-  sends each signal's name at 1200 baud, and the Pi decodes it on every line, as `pin-id` does on the FPGA board.
-* HAT pins JA2 to JA4 and JB2 to JB4 are the same three Pi GPIOs (10, 9, 11), so `ui_in[1..3]` and `uio[1..3]`
-  share them: while one of a pair is driven, the other is an input. A ribbon swap between JA and JB is still
-  seen, by a second walk in which the Pi pulls each line up in turn and the RP2040 reads which of its pins
-  follows.
+* **Our code writes nothing to the board.** The board's RP2040 runs a small command server in its memory, sent
+  over its raw REPL; it never imports or builds the SDK (it needs the SDK's own `tt`, which the check's
+  identification start made). Through the SDK it selects the chip's `tt_um_factory_test` project, which copies
+  `uio` to `uo_out` while `ui_in[0]` is low, resets it, and confirms that on the board before relying on it. The
+  RP2040 then drives each `ui_in` and `uio` signal in turn while the Pi reads all 21 HAT lines, so a swapped,
+  open or shorted wire each show as that. The `uio` walk reaches `uo_out` through the chip, which tests the
+  `uo_out` ribbon. The RP2040 also sends each signal's name at 1200 baud, and the Pi decodes it on every line, as
+  `pin-id` does on the FPGA board.
+* **Only one party drives a net.** A `ui_in` line that something holds (a DIP switch that is on, or a chip output
+  a wrong ribbon joins to it) is never driven: it fails the board, named. A factory test that does not confirm
+  stops the test before the walks. HAT pins JA2 to JA4 and JB2 to JB4 are the same three Pi GPIOs (10, 9, 11), so
+  `ui_in[1..3]` and `uio[1..3]` share them: while one of a pair is driven, the other is an input. Which port each
+  ribbon is on is found by a second walk in which the Pi pulls each line up in turn and the RP2040 reads which of
+  its pins follows, which the chip's copies do not enter.
+* Every set of readings must agree the first time: a line that changes while nothing is switching fails the
+  test, named (a loose contact), with no retry.
 * On the Pi, for the test only: the serial getty is stopped and SysRq is off (the console's GPIO14/15 are HAT
-  JC2/JC3), and the SPI drivers are unloaded (they hold GPIO7 to 11). Every HAT GPIO's function, pull and
-  output level is read with `pinctrl` first and set back afterwards. A Pi 3 cannot read back its pulls, so there
-  each line's pull is set to a known one: the pull the running device tree gives that pin (an enabled node's
-  pin group with `brcm,pull`, such as the UART's on GPIO14/15), else the chip's power-on default (GPIO0 to 8
-  pulled up, GPIO9 to 27 pulled down: Broadcom's *BCM2835 ARM Peripherals*, table 6-31). The test's
-  `PULLS:` line says which pull each line was given, and why.
-* **Afterwards the board's SDK is started again** (`tt_sdk_start.py`, as before rpi-hwid), so the chip is back
-  on the project the board starts with. The SDK rewrites its own `boot.log` then, as at every power-on. An SDK
-  that does not start again is a warning in the report, not the board's result.
-* A DIP switch that is on does not change the result: the RP2040 drives `ui_in` as the SDK does, stronger than
-  a switch's 1 kΩ, and the test's output notes the line.
+  JC2/JC3), and the SPI drivers are unloaded (they hold GPIO7 to 11) and loaded again afterwards. Every HAT GPIO's
+  function, pull and output level is read with `pinctrl` first, set back afterwards, and read back. A Pi 3 cannot
+  read back its pulls, so there each line's pull is set to a known one: the pull the running device tree gives
+  that pin (an enabled node's pin group with `brcm,pull`, such as the UART's on GPIO14/15), else the chip's
+  power-on default (GPIO0 to 8 pulled up, GPIO9 to 27 pulled down: Broadcom's *BCM2835 ARM Peripherals*, table
+  6-31). The test's `PULLS:` line says which pull each line was given, and why.
+* **Afterwards the board is put back from its memory**, with no reset: the SDK's mode, the project it had
+  enabled (enabled again and reset), and its project clock, as the command server read them before the test.
+  The SDK's own one-line description of the board (`<DemoBoard in ASIC_RP_CONTROL, auto-clocking @ 10 tt07
+  project 'tt_um_factory_test (1) @ '>`) must then read as it did; the `RESTORE:` line shows it. When it does
+  not, or the test stopped part way, the test is an `error` and starts the board's SDK again by a soft reset
+  (`tt_sdk_start.py`), so the board is never left in the command server; the `FALLBACK:` line says so. The
+  board's own `main.py` rewrites its `boot.log` when it starts: on the good path that happens once per boot
+  check, at the identification start, and not again.
+* The test stops itself after 150 s (`--time-limit`) and puts everything back; the boot check's own limit,
+  which kills it, is beyond that and its fallback. Both are to be set from the live run's timing.
 
 The test is an `error`, not a `fail`, when it could not make its reading, and then it drives no pin at all: the
-board did not answer its raw REPL; the board's SDK is not running (no `tt` object: the command server never
-imports or builds the SDK itself) or could not select `tt_um_factory_test` (a board on SDK 1.x, a TT03p5 board,
-cannot be asked this way, so it is an `error` until the test learns that SDK); the RP2040 has too little heap
-free with the command server loaded (`RP2040 heap too low: N bytes free …`); gpiod or `pinctrl` is missing or
-could not read the HAT GPIOs; the test was stopped (the Pi is put back first); or what it changed on the Pi was
-not put back (the reason says what). It is a `fail` when the readings were not steady (a loose contact?), and
-when the chip's factory test was selected but does not behave as one, since `uo_out` is then not tested.
+board did not answer its raw REPL; the board's SDK is not running (no `tt` object) or could not select
+`tt_um_factory_test`, or that project did not confirm; the RP2040 has too little heap free with the command
+server loaded (`RP2040 heap too low: N bytes free …`); gpiod or `pinctrl` is missing or could not read the HAT
+GPIOs; the test was stopped or reached its own time limit (the Pi is put back first); the test failed in a way it
+does not know (the exception is named); or what it changed on the Pi or the board was not put back (the reason
+says what). It is not run when the `sdk` test failed (`wiring not run: it needs sdk to pass first`): a board on
+an SDK release that is not one for its chip, a TT03p5 board on SDK 1.x for one, cannot select the project. It
+is a `fail` when the readings were not steady (a loose contact?).
 
 The output's `MEM:` lines say how much of the RP2040's heap was free with the command server loaded, while each
-pin-id round sends, and after the test.
+pin-id round sends, and after the test. `MEM:`, `PULLS:`, `RESTORE:` and `FALLBACK:` are said again just before
+the `WIRING:` line, where the boot report keeps them.
 
 It has run in this form on one board with a TT07 chip (see the pull request that brought it into the check);
 [PR #15](https://github.com/fpgas-online/fpgas.online-test-designs/pull/15)'s form of it ran on every Tiny
