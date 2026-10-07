@@ -36,5 +36,7 @@ Nothing in this guide cuts a wire to length. The bought cable is cut in half, on
 - The resistor's 470 Ω and 1/8 W: our choice, not measured: 3.3 V across 470 Ω is at most 7 mA and 23 mW, well under 1/8 W (125 mW).
 - That a Compute Module 4 takes the same wiring as a Compute Module 5: Uptime Lab's assembly guide names both as modules for the Compute Blade, and its GPIO guide gives the blade's pins by GPIO number and names no difference between the two; the wiring's JTAG has been run by us on a CM5 only (pi20 at ps1, 7 October 2026). On a CM4: not run by us.
 - The lengths (how far a wire is cut back, stripped, flagged): our choice, not measured.
+- That a 2.54 mm Dupont crimp terminal crimps onto the Molex cable's wire and holds: not verified by us: the wire's gauge has not been measured or read from Molex's drawing by us, and no cable has been crimped this way by us yet.
+- That the 2×5 housing on the Extension Port and the 1×4 housing on the UART header fit side by side: not verified by us: Uptime Lab's board photo shows the two headers next to each other; no housings have been fitted there by us.
 
 Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn is the same PCB).

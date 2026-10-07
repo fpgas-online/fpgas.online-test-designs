@@ -6,7 +6,7 @@ The check's own words, from the tool's list of [common failures](https://docs.fp
 
 | It says | Meaning, and what to do |
 |---|---|
-| `fail`: `unconverted: …` | an Acorn on SQRL's factory image (or the XDMA sample): convert it ([converting a card](https://docs.fpgas.online/en/latest/boards/acorn/pcie-programming.html)) |
+| `fail`: `unconverted: …` | an Acorn on SQRL's factory image (or the XDMA sample). On a Raspberry Pi 5: convert it ([converting a card](https://docs.fpgas.online/en/latest/boards/acorn/pcie-programming.html)). On a Compute Blade: **do not** load a design into the card or convert it; that is not in the guide yet. The only attempt (pi20 at ps1, 7 October 2026) lost the card's PCIe endpoint (a bus rescan did not bring it back, and a root-complex re-probe failed), and the reboot after it was followed by about two hours of restarts, cause not known |
 | `fail`: `… is not a design we built` | a Xilinx PCIe design the Acorn check does not know; its flash is not read |
 | `fail`: `running the golden image` | the Acorn's operational slot did not boot; it fell back to golden |
 | `fail`: `link is x2, expected x1` | the Acorn's PCIe link is not the setup's (`expected.toml`) |
