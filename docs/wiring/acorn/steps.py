@@ -16,6 +16,7 @@ import math
 import re
 from dataclasses import dataclass
 
+import palette
 import tables
 import wiring
 from gen import (
@@ -28,7 +29,8 @@ from gen import (
     pin_label,
     wedge,
 )
-from sheetlib import BODY, GOLD, INK, MUTED, PAPER, RED, SIGNALS, Sheet, label_of
+from palette import role
+from sheetlib import BODY, BOX, GOLD, GREY, INK, MUTED, PAPER, RED, SIGNALS, Sheet, label_of
 
 W = 780  # canvas width; the height follows from what the cable needs
 T = 17  # body text: 15 px where the picture is shown 700 px wide
@@ -37,7 +39,8 @@ PITCH = 60  # between two wires at the plug, as drawn: a whole number of lanes, 
 LANE = 20  # between two wires running side by side
 CAV_W, CAV_H, ROWS = 118, 44, 52  # a cavity, and from one row of cavities to the next
 WIRE, HALO = 5.5, 11
-GREY = "#9aa0a8"  # a wire that is cut back and is not VCC
+BLACK_WIRE = role("black-wire")  # a real black wire, or the black probe lead
+ON_GOLD, ON_BODY = role("on-gold"), role("on-body")  # the words on a gold token, and on black plastic
 
 # (carrier, connector) of every cable picture.
 CABLES = [("blade", "P1"), ("blade", "P2"), ("pi5", "P1"), ("pi5", "P2")]
@@ -182,8 +185,8 @@ def para(sh, x, y, text, width, face="regular", fill=INK, size=T):
 def token(sh, cx, cy, n, s=30):
     """A wire's number, as it is shown wherever that wire is: in its place in the plug and in its cavity."""
     box = (cx - s / 2, cy - s / 2, cx + s / 2, cy + s / 2)
-    sh.rect(box[0], box[1], s, s, fill=GOLD, stroke=BODY, sw=1.5, rx=4)
-    sh.text(cx, cy + s * 0.25, str(n), s * 0.7, "bold", BODY, "middle", box=box, on_wire=True)
+    sh.rect(box[0], box[1], s, s, fill=GOLD, stroke=ON_GOLD, sw=1.5, rx=4)
+    sh.text(cx, cy + s * 0.25, str(n), s * 0.7, "bold", ON_GOLD, "middle", box=box, on_wire=True)
 
 
 # ----------------------------------------------------------------------------------------------
@@ -200,7 +203,7 @@ def assumptions(sh, x, y, w):
     rows = max(sum(map(len, col)) for col in columns)
     h = (2 + rows) * BOX_LINE + 2 * pad - 2
     box = (x, y, x + w, y + h)
-    sh.rect(x, y, w, h, fill="#fff8e1", stroke=INK, sw=1.5, rx=8)
+    sh.rect(x, y, w, h, fill=role("note-fill"), stroke=INK, sw=1.5, rx=8)
     top = y + pad + T * 0.8
     sh.text(x + pad, top, ASSUMED[0], T, "bold", INK, box=box)
     for i, col in enumerate(columns):
@@ -224,7 +227,9 @@ def plug(sh, x1, y, pins, numbers=True, flip=False, pitch=PITCH, size=30):
     """
     body = (x1 - 34, y, x1 + 5 * pitch + 34, y + 58)
     sh.rect(body[0], body[1], body[2] - body[0], 58, fill=BODY, rx=7)
-    sh.rect(body[0] + 8, y + (0 if flip else 46), body[2] - body[0] - 16, 12, fill="#3a3d42")  # where the wires leave
+    sh.rect(
+        body[0] + 8, y + (0 if flip else 46), body[2] - body[0] - 16, 12, fill=role("body-strip")
+    )  # where the wires leave
     out = {}
     for i, sig in enumerate(pins):
         if numbers:
@@ -319,19 +324,20 @@ def route(wires, lanes, top, cavity_edge):
 def view_sketch(sh, x, y):
     """ "Seen from the wire side", side on: a housing on header pins, its wires out of the top, and the eye
     above them. The same on every picture. Returns its bottom."""
-    sh.rect(x + 6, y + 100, 112, 7, fill="#c9ced6", stroke=MUTED, sw=1)  # the board
+    sh.rect(x + 6, y + 100, 112, 7, fill=role("sketch-board"), stroke=MUTED, sw=1)  # the board
     sh.rect(x + 30, y + 90, 64, 10, fill=BODY)  # the header's plastic base
     for px in (46, 62, 78):
         sh.rect(x + px - 2, y + 72, 4, 18, fill=GOLD)
-    sh.rect(x + 28, y + 46, 68, 36, fill="#3a3d42", stroke=INK, sw=1.5, rx=3)  # the housing
+    sh.rect(x + 28, y + 46, 68, 36, fill=role("body-strip"), stroke=INK, sw=1.5, rx=3)  # the housing
     sh.rect(x + 91, y + 62, 6, 12, fill=PAPER, stroke=INK, sw=1)  # a window in its side
     for px, bend in ((46, -1), (78, 1)):
         sh.add(
-            f'<path d="M{x + px},{y + 46} v-12 q0,-12 {12 * bend},-16 l{10 * bend},-4" fill="none" stroke="{BODY}" '
+            f'<path d="M{x + px},{y + 46} v-12 q0,-12 {12 * bend},-16 l{10 * bend},-4" fill="none" '
+            f'stroke="{BLACK_WIRE}" '
             f'stroke-width="4.5" stroke-linecap="round"/>'
         )
     ex, ey = x + 62, y + 9
-    sh.add(f'<path d="M{ex - 15},{ey} q15,-13 30,0 q-15,13 -30,0 z" fill="#fff" stroke="{INK}" stroke-width="1.8"/>')
+    sh.add(f'<path d="M{ex - 15},{ey} q15,-13 30,0 q-15,13 -30,0 z" fill="{BOX}" stroke="{INK}" stroke-width="1.8"/>')
     sh.add(f'<circle cx="{ex}" cy="{ey}" r="4" fill="{INK}"/>')
     sh.add(f'<path d="M{ex},{ey + 11} v20" stroke="{INK}" stroke-width="2.5"/>')
     sh.add(f'<path d="M{ex - 6},{ey + 27} l6,10 l6,-10 z" fill="{INK}"/>')
@@ -360,7 +366,7 @@ def host_blade(sh, c, plan, x, y, w):
     rect = hl[plan.header]
     name_w = sh.width(data.name, T, "bold") + 12
     centre = min((rect[0] + rect[2]) / 2, x + w - name_w / 2)
-    sh.tag(centre, iy + ih + 17, data.name, "#fff", size=T, h=24, anchor="middle", fg=INK, stroke=INK, pad=6)
+    sh.tag(centre, iy + ih + 17, data.name, BOX, size=T, h=24, anchor="middle", fg=INK, stroke=INK, pad=6)
     return max(ty - LINE + 8, iy + ih + 31)
 
 
@@ -383,11 +389,11 @@ def host_pi5(sh, c, plan, x, y, w):
     highlight(sh, frame)
     # the housing's first pin beside its first row, its last pin beside its last row, and pin 1 if there is room
     style = {"size": T, "h": 20, "fg": INK, "stroke": INK, "pad": 4}
-    sh.tag(frame[0] - 5, row_y(r0), str(plan.first), "#fff", anchor="end", **style)
-    sh.tag(frame[2] + 5, row_y(r1), str(plan.last), "#fff", **style)
+    sh.tag(frame[0] - 5, row_y(r0), str(plan.first), BOX, anchor="end", **style)
+    sh.tag(frame[2] + 5, row_y(r1), str(plan.last), BOX, **style)
     if r0 >= 2:
         # above its row, clear of the housing's own number, with a line to the pin
-        sh.tag(frame[0] - 5, row_y(0) - 12, "pin 1", "#fff", anchor="end", **style)
+        sh.tag(frame[0] - 5, row_y(0) - 12, "pin 1", BOX, anchor="end", **style)
         pin1 = px + (left - crop[0]) * k
         sh.add(
             f'<path d="M{frame[0] - 5:.1f},{row_y(0) - 12:.1f} L{pin1:.1f},{row_y(0):.1f}" stroke="{INK}" '
@@ -491,7 +497,7 @@ def cable(c, connector):
         raise SystemExit(f"{file_name(c, connector)}: {score[1]} wires share a track")
 
     body_h = len(grid) * ROWS + 10
-    sh.rect(body_x[0], hy, body_x[1] - body_x[0], body_h, fill="#f1f3f5", stroke=INK, sw=3, rx=10)
+    sh.rect(body_x[0], hy, body_x[1] - body_x[0], body_h, fill=role("housing"), stroke=INK, sw=3, rx=10)
     draw_wires(sh, wires, paths, WIRE, HALO)
     for w, path in zip(wires, paths, strict=True):  # where each wire ends, as drawn: test_steps.py reads it back
         number = pins.index(w["sig"]) + 1
@@ -511,14 +517,14 @@ def cable(c, connector):
         sh.rect(edge - 4, cy - 9, 8, 18, fill=INK, rx=2)  # its window
         sh.add(f'<g id="cavity-{n}">')  # what is in the cavity, as one group: test_steps.py reads it back
         if sig:
-            sh.rect(x, y, CAV_W, CAV_H, fill="#fff", stroke=SIGNALS[sig][0], sw=4, rx=6)
+            sh.rect(x, y, CAV_W, CAV_H, fill=BOX, stroke=SIGNALS[sig][0], sw=4, rx=6)
             token(sh, x + 24, cy, pins.index(sig) + 1)
             sh.tag(x + 46, cy + 9, label_of(sig), SIGNALS[sig][0], size=T, h=23, pad=5)
             sh.contain.append((sh.boxes[-1][0], box, f"the {label_of(sig)} tag of cavity {n}"))
         else:
             danger = name == "5 V"
             sh.rect(
-                x, y, CAV_W, CAV_H, fill="#fdecea" if danger else "#d9dbde", stroke=RED if danger else MUTED,
+                x, y, CAV_W, CAV_H, fill=role("warn-fill" if danger else "empty"), stroke=RED if danger else MUTED,
                 sw=3 if danger else 1.5, rx=6, extra="" if danger else 'stroke-dasharray="5 4"',
             )  # fmt: skip
             sh.text(x + 9, cy + 6, "empty", T, "bold" if danger else "regular", RED if danger else MUTED, box=box)
@@ -623,8 +629,8 @@ def wire_tags(sh, out, wired, tag_y):
 def resistor(sh, c, cx, cy, colour, label=None):
     """The series resistor in a wire, under its heat shrink, centred on (cx, cy). label: (x, y, anchor) of its words."""
     r_w = sh.width(c.resistor_value, T, "bold") + 16
-    sh.rect(cx - r_w / 2 - 12, cy - 19, r_w + 24, 38, fill="#fff", stroke=INK, sw=1.5, rx=12, extra='opacity="0.9"')
-    sh.rect(cx - r_w / 2, cy - 12, r_w, 24, fill="#fff", stroke=colour, sw=3, rx=3)
+    sh.rect(cx - r_w / 2 - 12, cy - 19, r_w + 24, 38, fill=BOX, stroke=INK, sw=1.5, rx=12, extra='opacity="0.9"')
+    sh.rect(cx - r_w / 2, cy - 12, r_w, 24, fill=BOX, stroke=colour, sw=3, rx=3)
     sh.text(cx, cy + 6, c.resistor_value, T, "bold", colour, "middle", on_wire=True)
     if label is False:
         return
@@ -632,14 +638,15 @@ def resistor(sh, c, cx, cy, colour, label=None):
     sh.text(lx, ly, "in heat shrink", T, "regular", INK, anchor)
 
 
-TERMINAL = "#c9a227"  # a crimp terminal's brass
+TERMINAL = role("brass")  # a crimp terminal's brass
+COPPER = role("copper")  # bare wire
 
 
 def terminal_down(sh, x, y, colour):
     """A wire end at (x, y) pointing down: the bare tip, and a crimped terminal on it, its latch tab to the right.
 
     Returns the bottom."""
-    sh.add(f'<line x1="{x}" y1="{y}" x2="{x}" y2="{y + 8}" stroke="#b87333" stroke-width="3"/>')
+    sh.add(f'<line x1="{x}" y1="{y}" x2="{x}" y2="{y + 8}" stroke="{COPPER}" stroke-width="3"/>')
     sh.rect(x - 5, y + 2, 10, 12, fill=TERMINAL, stroke=INK, sw=1.2, rx=2)  # the crimp
     sh.rect(x - 7, y + 14, 14, 30, fill=TERMINAL, stroke=INK, sw=1.2, rx=2)  # the box that takes the pin
     sh.add(f'<path d="M{x + 7},{y + 22} l5,3 v9 l-5,0 z" fill="{TERMINAL}" stroke="{INK}" stroke-width="1.2"/>')
@@ -777,11 +784,11 @@ def resistor_picture(c, connector):
             sh.text((cut_x + gap + x1) / 2, wy + 44, f"{mm} mm", T, "regular", INK, "middle")
             y += 30
         if i in (1, 2):  # the tube waiting on the wire
-            sh.rect(x0 + 80, wy - 14, 110, 28, fill="#fff", stroke=INK, sw=1.5, rx=10, extra='opacity="0.9"')
+            sh.rect(x0 + 80, wy - 14, 110, 28, fill=BOX, stroke=INK, sw=1.5, rx=10, extra='opacity="0.9"')
             sh.text(x0 + 135, wy - 22, "tube", T, "regular", MUTED, "middle")
         if i == 2:
             r_w = sh.width(c.resistor_value, T, "bold") + 16
-            sh.rect(cut_x - r_w / 2, wy - 12, r_w, 24, fill="#fff", stroke=colour, sw=3, rx=3)
+            sh.rect(cut_x - r_w / 2, wy - 12, r_w, 24, fill=BOX, stroke=colour, sw=3, rx=3)
             sh.text(cut_x, wy + 6, c.resistor_value, T, "bold", colour, "middle", on_wire=True)
         if i == 3:
             sh.add(f'<g id="resistor-wire-{n}">')
@@ -804,8 +811,8 @@ def cut():
     plug(sh, x1, bottom, pins, numbers=False, flip=True)
     middle = (top + 58 + bottom) / 2
     for x, y in out.values():
-        sh.add(f'<line x1="{x}" y1="{y}" x2="{x}" y2="{middle - 9}" stroke="{BODY}" stroke-width="{WIRE}"/>')
-        sh.add(f'<line x1="{x}" y1="{middle + 9}" x2="{x}" y2="{bottom}" stroke="{BODY}" stroke-width="{WIRE}"/>')
+        sh.add(f'<line x1="{x}" y1="{y}" x2="{x}" y2="{middle - 9}" stroke="{BLACK_WIRE}" stroke-width="{WIRE}"/>')
+        sh.add(f'<line x1="{x}" y1="{middle + 9}" x2="{x}" y2="{bottom}" stroke="{BLACK_WIRE}" stroke-width="{WIRE}"/>')
     sh.add(
         f'<line x1="{x1 - 60}" y1="{middle}" x2="{x1 + 5 * PITCH + 60}" y2="{middle}" stroke="{RED}" '
         f'stroke-width="3" stroke-dasharray="10 7"/>'
@@ -826,8 +833,8 @@ def cut():
 
 def terminal_side(sh, x, y):
     """A crimped terminal seen from the side, the wire coming from the left at (x, y), the latch tab on top."""
-    sh.add(f'<line x1="{x - 70}" y1="{y}" x2="{x}" y2="{y}" stroke="{BODY}" stroke-width="9"/>')
-    sh.add(f'<line x1="{x}" y1="{y}" x2="{x + 16}" y2="{y}" stroke="#b87333" stroke-width="5"/>')
+    sh.add(f'<line x1="{x - 70}" y1="{y}" x2="{x}" y2="{y}" stroke="{BLACK_WIRE}" stroke-width="9"/>')
+    sh.add(f'<line x1="{x}" y1="{y}" x2="{x + 16}" y2="{y}" stroke="{COPPER}" stroke-width="5"/>')
     sh.rect(x - 8, y - 9, 14, 18, fill=TERMINAL, stroke=INK, sw=1.5, rx=2)  # the crimp on the insulation
     sh.rect(x + 8, y - 7, 14, 14, fill=TERMINAL, stroke=INK, sw=1.5, rx=2)  # the crimp on the bare wire
     sh.rect(x + 22, y - 10, 64, 20, fill=TERMINAL, stroke=INK, sw=1.5, rx=2)  # the box
@@ -841,8 +848,8 @@ def crimp():
     title(sh, "Crimp a terminal on each wire", SKETCHED)
     # 1: strip
     sh.text(30, 100, f"1. Strip about {wiring.LENGTHS['strip']} mm.", T, "bold")
-    sh.add(f'<line x1="40" y1="150" x2="150" y2="150" stroke="{BODY}" stroke-width="9"/>')
-    sh.add('<line x1="150" y1="150" x2="172" y2="150" stroke="#b87333" stroke-width="5"/>')
+    sh.add(f'<line x1="40" y1="150" x2="150" y2="150" stroke="{BLACK_WIRE}" stroke-width="9"/>')
+    sh.add(f'<line x1="150" y1="150" x2="172" y2="150" stroke="{COPPER}" stroke-width="5"/>')
     sh.add(f'<path d="M150,166 v12 M172,166 v12 M150,172 h22" stroke="{INK}" stroke-width="1.5" fill="none"/>')
     sh.text(161, 198, f"{wiring.LENGTHS['strip']} mm", T, "regular", INK, "middle")
     # 2: crimp
@@ -876,7 +883,7 @@ def flagged(sh, connector, sockets, x1, y, mark=True):
     ends = {}
     for sig, (x, y0) in out.items():
         n = pins.index(sig) + 1
-        sh.add(f'<line x1="{x}" y1="{y0}" x2="{x}" y2="{end}" stroke="{BODY}" stroke-width="{WIRE}"/>')
+        sh.add(f'<line x1="{x}" y1="{y0}" x2="{x}" y2="{end}" stroke="{BLACK_WIRE}" stroke-width="{WIRE}"/>')
         sh.add(f'<g id="flag-wire-{n}">')  # test_steps.py reads this back
         token(sh, x + 15, end - FLAG_AT, n)
         if n == 1:  # the cable's name, written on wire 1's flag: off the card the two halves look alike
@@ -947,10 +954,11 @@ def ground_check(connector):
     pc = ((pad[0] + pad[2]) / 2, (pad[1] + pad[3]) / 2)
     sh.add(
         f'<path d="M{mx + 100},{my} C{mx + 100},{my - 60} {pc[0] + 40},{pc[1] + 70} {pc[0]},{pc[1]}" fill="none" '
-        f'stroke="{BODY}" stroke-width="4"/>'
+        f'stroke="{BLACK_WIRE}" stroke-width="4"/>'
     )
     sh.add(
-        f'<circle cx="{w1[0]}" cy="{w1[1]}" r="5" fill="{RED}"/><circle cx="{pc[0]}" cy="{pc[1]}" r="5" fill="{BODY}"/>'
+        f'<circle cx="{w1[0]}" cy="{w1[1]}" r="5" fill="{RED}"/>'
+        f'<circle cx="{pc[0]}" cy="{pc[1]}" r="5" fill="{BLACK_WIRE}"/>'
     )
     y = w1[1] + 78
     y = para(
@@ -1039,7 +1047,7 @@ def push():
     title(sh, "Push each terminal into its cavity", SKETCHED)
     sh.text(30, 100, "1. Push it in, latch tab towards the window, until it clicks.", T, "bold")
     hx, hy = 250, 150
-    sh.rect(hx, hy, 150, 60, fill="#f1f3f5", stroke=INK, sw=3, rx=6)  # the housing, cut through one cavity
+    sh.rect(hx, hy, 150, 60, fill=role("housing"), stroke=INK, sw=3, rx=6)  # the housing, cut through one cavity
     sh.rect(hx + 46, hy - 4, 18, 8, fill=INK, rx=2)  # its window: the mark the cavity pictures use
     end = terminal_side(sh, hx - 30, hy + 30)
     sh.add(f'<path d="M{hx - 150},{hy + 62} h60" stroke="{INK}" stroke-width="2.5"/>')
@@ -1064,14 +1072,14 @@ def check_picture(exception=None):
     sh = Sheet(W, 100)
     title(sh, "Check every wire with a meter", SKETCHED)
     mx, my = 40, 96
-    sh.rect(mx, my, 130, 170, fill="#f3c623", stroke=INK, sw=3, rx=12)  # the meter
-    sh.rect(mx + 14, my + 14, 102, 44, fill="#dfe8d8", stroke=INK, sw=1.5, rx=4)
-    sh.text(mx + 65, my + 43, "beep", T, "bold", INK, "middle")
-    sh.add(f'<circle cx="{mx + 65}" cy="{my + 110}" r="30" fill="{BODY}"/>')
-    sh.add(f'<path d="M{mx + 65},{my + 110} l0,-26" stroke="#fff" stroke-width="4"/>')
+    sh.rect(mx, my, 130, 170, fill=role("meter"), stroke=INK, sw=3, rx=12)  # the meter
+    sh.rect(mx + 14, my + 14, 102, 44, fill=role("meter-display"), stroke=INK, sw=1.5, rx=4)
+    sh.text(mx + 65, my + 43, "beep", T, "bold", role("on-meter"), "middle")
+    sh.add(f'<circle cx="{mx + 65}" cy="{my + 110}" r="30" fill="{role("knob")}"/>')
+    sh.add(f'<path d="M{mx + 65},{my + 110} l0,-26" stroke="{ON_BODY}" stroke-width="4"/>')
     out, body = plug(sh, 330, 96, pins)
     cx, cy = 400, 250  # a cavity
-    sh.rect(cx - 59, cy - 22, 118, 44, fill="#fff", stroke=INK, sw=3, rx=6)
+    sh.rect(cx - 59, cy - 22, 118, 44, fill=BOX, stroke=INK, sw=3, rx=6)
     token(sh, cx + 35, cy, 1)
     px = out[pins[0]][0] - 12  # contact 1, reached from the meter's side
     sh.add(
@@ -1080,10 +1088,11 @@ def check_picture(exception=None):
     )
     sh.add(
         f'<path d="M{mx + 130},{my + 130} C{mx + 210},{my + 130} {cx - 140},{cy} {cx - 20},{cy}" fill="none" '
-        f'stroke="{BODY}" stroke-width="4"/>'
+        f'stroke="{BLACK_WIRE}" stroke-width="4"/>'
     )
     sh.add(
-        f'<circle cx="{px}" cy="{my + 24}" r="5" fill="{RED}"/><circle cx="{cx - 20}" cy="{cy}" r="5" fill="{BODY}"/>'
+        f'<circle cx="{px}" cy="{my + 24}" r="5" fill="{RED}"/>'
+        f'<circle cx="{cx - 20}" cy="{cy}" r="5" fill="{BLACK_WIRE}"/>'
     )
     sh.text(body[0], body[3] + 26, "one probe on the metal contact of the plug", T)
     sh.text(cx - 59, cy + 46, "the other probe on the metal terminal,", T)
@@ -1221,7 +1230,7 @@ def procedure_parts(c, restart=False):
         "",
         f"{listed(labels)} are the names on the pictures for each wire; {listed(balls)} are the FPGA's pin names.",
         "",
-        f"![{sheet[0]}]({sheet[1]})",
+        markdown_image(*sheet),
         "",
         "### Parts and tools",
         "",
@@ -1241,7 +1250,7 @@ def procedure_parts(c, restart=False):
         for alt, name, *lead in images:
             for line in lead:  # why this picture is here again
                 target.extend([line, ""])
-            target.extend([f"![{alt}]({name})", ""])
+            target.extend([markdown_image(alt, name), ""])
 
     step(
         "Cut the Molex cable in half with side cutters. Each half is one cable.",
@@ -1534,13 +1543,14 @@ M2_SLOT = {"blade": (1736, 44, 1846, 322), "pi5": (22, 74, 214, 162)}
 def order(sh, x, y, n):
     """The number of one of the fitting step's actions, in a dark disc."""
     sh.add(f'<circle cx="{x}" cy="{y}" r="14" fill="{BODY}"/>')
-    sh.text(x, y + 6.5, str(n), 19, "bold", "#fff", "middle")
+    sh.text(x, y + 6.5, str(n), 19, "bold", ON_BODY, "middle", bg=BODY)
 
 
 def corner(sh, rect):
     """A housing's marked corner, on the top left of where it sits."""
     x, y = rect[0], rect[1]
-    sh.add(f'<polygon points="{x},{y} {x + 16},{y} {x},{y + 16}" fill="{RED}" stroke="#fff" stroke-width="1.5"/>')
+    edge = role("photo-edge")  # on a photo: white on both sheets
+    sh.add(f'<polygon points="{x},{y} {x + 16},{y} {x},{y + 16}" fill="{RED}" stroke="{edge}" stroke-width="1.5"/>')
 
 
 def fit_actions(c):
@@ -1569,7 +1579,7 @@ def fit_name(c):
 def fit_block(c):
     """The fitting actions as a numbered list, and their picture: Markdown."""
     items = "\n".join(f"{i}. {action}" for i, action in enumerate(fit_actions(c), 1))
-    return f"{items}\n\n![Fitting the cables on a {c.name}, in order]({png(fit_name(c))})\n"
+    return f"{items}\n\n{markdown_image(f'Fitting the cables on a {c.name}, in order', png(fit_name(c)))}\n"
 
 
 def fit(c):
@@ -1589,7 +1599,7 @@ def fit(c):
         out, body = plug(sh, centre - 2.5 * 28, plug_y, pins, pitch=28, size=25)
         wedge(sh, rect, (rect[0], body[1], rect[2], body[3]), down=True)
         for x, y0 in out.values():
-            sh.add(f'<line x1="{x}" y1="{y0}" x2="{x}" y2="{y0 + 18}" stroke="{BODY}" stroke-width="4"/>')
+            sh.add(f'<line x1="{x}" y1="{y0}" x2="{x}" y2="{y0 + 18}" stroke="{BLACK_WIRE}" stroke-width="4"/>')
         sh.text(centre, body[3] + 40, f"{connector} plug", T, "bold", INK, "middle")
     tx = px + pw + 16
     same = "Wire 1 at the pin 1 end of each socket: the same way round as when you put the flags on."
@@ -1616,7 +1626,7 @@ def fit_host_blade(sh, c, y):
     x0, y0, x1, y1 = M2_SLOT["blade"]
     slot = (30 + x0 * k, y + 26 + y0 * k, 30 + x1 * k, y + 26 + y1 * k)
     highlight(sh, slot)
-    sh.tag((slot[0] + slot[2]) / 2, y + 8, "M.2 slot", "#fff", size=T, h=24, anchor="middle", fg=INK, stroke=INK, pad=6)
+    sh.tag((slot[0] + slot[2]) / 2, y + 8, "M.2 slot", BOX, size=T, h=24, anchor="middle", fg=INK, stroke=INK, pad=6)
     for connector in wiring.CONNECTORS:
         plan = housing(c, connector)
         rect = hl[plan.header]
@@ -1627,7 +1637,7 @@ def fit_host_blade(sh, c, y):
             centre,
             iy + ih + 16,
             f"{connector} housing",
-            "#fff",
+            BOX,
             size=T,
             h=24,
             anchor="middle",
@@ -1660,7 +1670,7 @@ def fit_host_pi5(sh, c, y):
         frame = (px + (left - 11) * k, top - half, px + (right + 11) * k, bottom + half)
         highlight(sh, frame)
         corner(sh, frame)
-        sh.tag(frame[2] + 8, (frame[1] + frame[3]) / 2, connector, "#fff", size=T, h=22, fg=INK, stroke=INK, pad=5)
+        sh.tag(frame[2] + 8, (frame[1] + frame[3]) / 2, connector, BOX, size=T, h=22, fg=INK, stroke=INK, pad=5)
         sh.text(tx, (frame[1] + frame[3]) / 2 + 6, f"{connector} housing: pins {plan.first} to {plan.last}", T)
     ty = para(sh, tx, py + ph - 70, "The red corner of each box is the housing's marked corner.", W - 10 - tx)
     para(sh, tx, ty + 2, "The photo shows the HAT without its stacking header.", W - 10 - tx, fill=MUTED)
@@ -1676,11 +1686,11 @@ USB_SHELL = {"blade": (1560, 160, 1712, 250)}
 
 def meter(sh, mx, my):
     """The meter, sketched: 130 wide, 150 high."""
-    sh.rect(mx, my, 130, 150, fill="#f3c623", stroke=INK, sw=3, rx=12)
-    sh.rect(mx + 14, my + 14, 102, 44, fill="#dfe8d8", stroke=INK, sw=1.5, rx=4)
-    sh.text(mx + 65, my + 43, "beep", T, "bold", INK, "middle")
-    sh.add(f'<circle cx="{mx + 65}" cy="{my + 102}" r="26" fill="{BODY}"/>')
-    sh.add(f'<path d="M{mx + 65},{my + 102} l0,-22" stroke="#fff" stroke-width="4"/>')
+    sh.rect(mx, my, 130, 150, fill=role("meter"), stroke=INK, sw=3, rx=12)
+    sh.rect(mx + 14, my + 14, 102, 44, fill=role("meter-display"), stroke=INK, sw=1.5, rx=4)
+    sh.text(mx + 65, my + 43, "beep", T, "bold", role("on-meter"), "middle")
+    sh.add(f'<circle cx="{mx + 65}" cy="{my + 102}" r="26" fill="{role("knob")}"/>')
+    sh.add(f'<path d="M{mx + 65},{my + 102} l0,-22" stroke="{ON_BODY}" stroke-width="4"/>')
 
 
 def shell_check_name(c):
@@ -1698,7 +1708,7 @@ def shell_check(c):
         x0, y0, x1, y1 = USB_SHELL[c.key]
         shell = (px + x0 * k, py + y0 * k, px + x1 * k, py + y1 * k)
         highlight(sh, shell)
-        sh.tag((shell[0] + shell[2]) / 2, y + 14, "a USB socket's metal shell", "#fff", size=T, h=24,
+        sh.tag((shell[0] + shell[2]) / 2, y + 14, "a USB socket's metal shell", BOX, size=T, h=24,
                anchor="middle", fg=INK, stroke=INK, pad=6)  # fmt: skip
         target = ((shell[0] + shell[2]) / 2, (shell[1] + shell[3]) / 2)
         y = py + ph + 40
@@ -1707,7 +1717,7 @@ def shell_check(c):
         ty = para(
             sh, 30, ty, "The USB socket is not in this photograph: it is on the Pi itself, under the HAT.", W - 40
         )
-        a, _ = sh.tag(420, ty + 22, "USB socket's metal shell", "#fff", size=T, h=24, fg=INK, stroke=INK, pad=6)
+        a, _ = sh.tag(420, ty + 22, "USB socket's metal shell", BOX, size=T, h=24, fg=INK, stroke=INK, pad=6)
         target = (a, ty + 22)
         y = ty + 84
     out, body = plug(sh, 90, y, pins)
@@ -1722,10 +1732,10 @@ def shell_check(c):
     )
     sh.add(
         f'<path d="M{mx + 65},{my} C{mx + 65},{my - 50} {target[0] + 60},{target[1] + 50} {target[0]},{target[1]}" '
-        f'fill="none" stroke="{BODY}" stroke-width="4"/>'
+        f'fill="none" stroke="{BLACK_WIRE}" stroke-width="4"/>'
     )
     sh.add(f'<circle cx="{p1[0]}" cy="{p1[1]}" r="5" fill="{RED}"/>')
-    sh.add(f'<circle cx="{target[0]}" cy="{target[1]}" r="5" fill="{BODY}"/>')
+    sh.add(f'<circle cx="{target[0]}" cy="{target[1]}" r="5" fill="{BLACK_WIRE}"/>')
     y = my + 150 + 60
     y = para(sh, 30, y, "Contact 1 of each plug to the shell: the meter must beep.", W - 40, "bold")
     y = para(sh, 30, y + 4, "Contact 6 of each plug (VCC, cut back): silent to the shell and to every other contact.",
@@ -1739,6 +1749,14 @@ def shell_check(c):
 
 def png(name):
     return name.replace(".svg", ".png")
+
+
+def markdown_image(alt, name):
+    """A picture on a page: its light PNG in the light theme and its dark PNG in the dark one.
+
+    only-light and only-dark are the docs theme's (Furo's) classes for that, set with MyST's inline attributes;
+    printing keeps the light one only. The two are one paragraph, so the picture stays one block either way."""
+    return f"![{alt}]({name}){{.only-light}}\n![{alt}]({palette.dark_name(name)}){{.only-dark}}"
 
 
 def build_names():

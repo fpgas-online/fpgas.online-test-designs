@@ -20,13 +20,17 @@ import itertools
 import random
 import sys
 
+import palette
 import tables
 import wiring
+from palette import role
 from PIL import Image
 from sheetlib import (
     BODY,
+    BOX,
     FAINT,
     GOLD,
+    GREY,
     HERE,
     INK,
     MUTED,
@@ -46,7 +50,8 @@ from sheetlib import (
 # `gen.py --search`, which tries every nudge again (a few minutes).
 NUDGE = {"pi5": 8, "blade": 8}
 
-MARK = "#ffd60a"  # highlight on photos: not a wire colour
+MARK = role("mark")  # highlight on photos: not a wire colour
+MARK_EDGE, ON_MARK = role("mark-edge"), role("on-mark")  # its dark edge, and the words on a yellow tag
 LANE = 22
 WIRE, HALO = 4.5, 9
 CLEAR = 18  # a crossing stays this far from any corner; parallel runs stay this far apart
@@ -188,12 +193,12 @@ def arrow(sh, x, y, colour, direction):
 # Pieces
 # ----------------------------------------------------------------------------------------------
 def title_block(sh, kicker, title, subtitle, pins, numbering):
-    sh.text(30, 34, kicker, 12, "bold", "#0f766e")
+    sh.text(30, 34, kicker, 12, "bold", role("kicker"))
     sh.text(30, 66, title, 30, "bold")
     sh.text(30, 88, subtitle, 13, "regular", MUTED)
     w = sh.width(pins, 19, "mono") + 36
     sh.rect(W - 30 - w, 22, w, 38, fill=BODY, rx=7)
-    sh.text(W - 30 - w / 2, 48, pins, 19, "mono", "#fff", "middle", box=(W - 30 - w, 22, W - 30, 60))
+    sh.text(W - 30 - w / 2, 48, pins, 19, "mono", role("on-body"), "middle", box=(W - 30 - w, 22, W - 30, 60))
     sh.text(W - 30, 76, numbering, 12, "bold", INK, "end")
     sh.text(
         W - 30, 92, "openFPGALoader --cable libgpiod, in the order TDI : TDO : TCK : TMS", 11.5, "regular", MUTED, "end"
@@ -204,7 +209,7 @@ def title_block(sh, kicker, title, subtitle, pins, numbering):
 def footer(sh, credit):
     msg = "Cut the VCC wire (pin 6) of BOTH cables. 3.3 V from the Acorn into the header can destroy the host."
     w = sh.width(msg, 14, "bold") + 40
-    sh.rect(30, H - 52, w, 30, fill="#fdecea", stroke=RED, sw=1.5, rx=6)
+    sh.rect(30, H - 52, w, 30, fill=role("warn-fill"), stroke=RED, sw=1.5, rx=6)
     sh.text(50, H - 32, msg, 14, "bold", RED, box=(30, H - 52, 30 + w, H - 22))
     sh.text(W - 30, H - 38, "Every wire in the Molex cables is black: count from pin 1.", 12, "bold", INK, "end")
     sh.text(W - 30, H - 22, credit, 10, "regular", MUTED, "end")
@@ -212,7 +217,7 @@ def footer(sh, credit):
 
 def highlight(sh, rect):
     x, y, w, h = rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1]
-    sh.rect(x, y, w, h, stroke=INK, sw=5.5, rx=4)
+    sh.rect(x, y, w, h, stroke=MARK_EDGE, sw=5.5, rx=4)
     sh.rect(x, y, w, h, stroke=MARK, sw=3, rx=4)
 
 
@@ -250,7 +255,7 @@ def plug_box(sh, x, y, w, name, what, pins, wire_side, pin1_at_top, note, row=31
     Returns ({signal: attach point}, box rect).
     """
     h = head + 6 * row + 10
-    sh.rect(x, y, w, h, fill="#fff", stroke=FAINT, sw=1.5, rx=8)
+    sh.rect(x, y, w, h, fill=BOX, stroke=FAINT, sw=1.5, rx=8)
     sh.text(x + 14, y + 22, name, 15, "bold", box=(x, y, x + w, y + head))
     sh.text(x + 14 + sh.width(name, 15, "bold") + 8, y + 22, what, 13, "regular", MUTED, box=(x, y, x + w, y + head))
     sh.text(
@@ -278,7 +283,7 @@ def plug_box(sh, x, y, w, name, what, pins, wire_side, pin1_at_top, note, row=31
             str(n),
             12.5,
             "bold",
-            BODY,
+            role("on-gold"),
             "middle",
             box=(shell_x + 6, cy - 9, shell_x + 34, cy + 9),
         )
@@ -307,7 +312,7 @@ def plug_box(sh, x, y, w, name, what, pins, wire_side, pin1_at_top, note, row=31
             continue
         colour, _, desc = SIGNALS[sig]
         if sig in unused:
-            a, b = sh.tag(inner, cy, label_of(sig), "#9aa0a8", anchor=anchor)
+            a, b = sh.tag(inner, cy, label_of(sig), GREY, anchor=anchor)
             sh.text(
                 b + 8 if wire_side == "left" else a - 8,
                 cy + 4,
@@ -319,7 +324,7 @@ def plug_box(sh, x, y, w, name, what, pins, wire_side, pin1_at_top, note, row=31
                 box=rowbox,
             )
             stub = edge - 26 if wire_side == "left" else edge + 26
-            sh.add(f'<line x1="{edge}" y1="{cy}" x2="{stub}" y2="{cy}" stroke="#9aa0a8" stroke-width="4"/>')
+            sh.add(f'<line x1="{edge}" y1="{cy}" x2="{stub}" y2="{cy}" stroke="{GREY}" stroke-width="4"/>')
             sh.add(
                 f'<path d="M{stub - 7},{cy - 7} L{stub + 7},{cy + 7} M{stub - 7},{cy + 7} L{stub + 7},{cy - 7}" '
                 f'stroke="{MUTED}" stroke-width="3"/>'
@@ -358,7 +363,7 @@ class Header:
             cx, cy = self.centre(n)
             rect = (cx - pad / 2, cy - pad / 2, cx + pad / 2, cy + pad / 2)
             sh.contain.append((rect, self.body, f"pad {n}"))
-            fill = GOLD if n in used else ("#ef9a9a" if n in danger else "#6d6a5f")
+            fill = GOLD if n in used else (role("pad-danger") if n in danger else role("pad-unused"))
             sh.rect(rect[0], rect[1], pad, pad, fill=fill, rx=3, stroke=RED if n in danger else "none", sw=2)
             sh.text(
                 cx,
@@ -366,7 +371,7 @@ class Header:
                 str(n),
                 pad * 0.5,
                 "bold",
-                BODY if n in used or n in danger else "#d8d5cb",
+                role("on-gold") if n in used or n in danger else role("on-pad-unused"),
                 "middle",
                 box=rect,
             )
@@ -429,7 +434,8 @@ def terminate(sh, hdr, wires):
 def draw_inside(sh, inside):
     for w, pts in inside:
         d = rounded(pts, r=5)
-        sh.add(f'<path d="{d}" fill="none" stroke="#f1f3f5" stroke-width="{WIRE + 4}" stroke-linejoin="round"/>')
+        halo = role("halo-on-body")
+        sh.add(f'<path d="{d}" fill="none" stroke="{halo}" stroke-width="{WIRE + 4}" stroke-linejoin="round"/>')
         sh.add(f'<path d="{d}" fill="none" stroke="{w["colour"]}" stroke-width="{WIRE}" stroke-linejoin="round"/>')
 
 
@@ -446,20 +452,20 @@ def wire_ends(sh, hdr, wires, names, plugs_side):  # names: {signal: what the ho
                 edge + side * 5,
                 ey,
                 names[w["sig"]],
-                "#fff",
+                BOX,
                 anchor=anchor,
                 on_wire=True,
                 h=18,
                 size=10.5,
                 fg=INK,
-                stroke="#9aa0a8",
+                stroke=role("box-edge"),
                 pad=5,
             )
             edge = a if side < 0 else b
         if w["resistor"]:
             rw = sh.width(w["resistor"], 11, "bold") + 14
             rx0 = edge - 12 - rw if side < 0 else edge + 12
-            sh.rect(rx0, ey - 9, rw, 18, fill="#fff", stroke=w["colour"], sw=2.5, rx=3)
+            sh.rect(rx0, ey - 9, rw, 18, fill=BOX, stroke=w["colour"], sw=2.5, rx=3)
             sh.text(
                 rx0 + rw / 2,
                 ey + 4,
@@ -500,7 +506,7 @@ def make_wires(plug_attach, mapping, carrier):
 
 def legend(sh, x, y, resistor):  # resistor: the value to show in the key, or "" for none
     sh.text(x, y, "Reading the wires", 13, "bold")
-    grey = "#5b6470"
+    grey = MUTED  # a sample wire, of no colour of its own
     yy = y + 24
     sh.add(f'<line x1="{x}" y1="{yy}" x2="{x + 64}" y2="{yy}" stroke="{grey}" stroke-width="{WIRE}"/>')
     arrow(sh, x + 32, yy, grey, 1)
@@ -525,7 +531,7 @@ def legend(sh, x, y, resistor):  # resistor: the value to show in the key, or ""
     if resistor:
         yy += 24
         rw = sh.width(resistor, 11, "bold") + 14
-        sh.rect(x + 32 - rw / 2, yy - 9, rw, 18, fill="#fff", stroke=grey, sw=2.5, rx=3)
+        sh.rect(x + 32 - rw / 2, yy - 9, rw, 18, fill=BOX, stroke=grey, sw=2.5, rx=3)
         sh.text(x + 32, yy + 4, resistor, 11, "bold", grey, "middle")
         sh.text(x + 76, yy + 4, "resistor in that wire,", 12)
         sh.text(x + 76, yy + 19, "at the housing end", 12)
@@ -557,8 +563,8 @@ def acorn_photo_down(sh, x, y, w, size, crop=(0, 60, 290, 590)):
         rect = (px + (crop[3] - y1) * k, py + (x0 - crop[0]) * k, px + (crop[3] - y0) * k, py + (x1 - crop[0]) * k)
         sockets[name] = rect
         highlight(sh, rect)
-        _, b = sh.tag(rect[0], py - row / 2 - 5, "pin 1", "#fff", size=size, h=row, fg=INK, stroke=INK, pad=5)
-        sh.tag(b + 6, py - row / 2 - 5, name, MARK, size=size, h=row, fg=INK, stroke=INK, pad=7)
+        _, b = sh.tag(rect[0], py - row / 2 - 5, "pin 1", BOX, size=size, h=row, fg=INK, stroke=INK, pad=5)
+        sh.tag(b + 6, py - row / 2 - 5, name, MARK, size=size, h=row, fg=ON_MARK, stroke=MARK_EDGE, pad=7)
         sh.add(f'<path d="M{rect[0] + 4},{py - 5} v9" stroke="{INK}" stroke-width="2.5"/>')  # pin 1 is at this end
     ty = py - row - 14
     sh.add(f'<path d="M{px},{ty - size * 0.32} l{size * 0.7},{-size * 0.4} l0,{size * 0.8} z" fill="{MUTED}"/>')
@@ -590,9 +596,9 @@ def acorn_photo(sh, x, centre_y, w, rotation):
         highlight(sh, rect)
         inward = rect[2] + 5 if rotation == "cw" else rect[0] - 5
         anchor = "start" if rotation == "cw" else "end"
-        sh.tag(inward, (rect[1] + rect[3]) / 2, name, MARK, size=12, h=19, anchor=anchor, fg=INK, stroke=INK)
+        sh.tag(inward, (rect[1] + rect[3]) / 2, name, MARK, size=12, h=19, anchor=anchor, fg=ON_MARK, stroke=MARK_EDGE)
         pin1_y = rect[3] - 9 if rotation == "cw" else rect[1] + 9
-        sh.tag(inward, pin1_y, "1", "#fff", size=10, h=15, anchor=anchor, fg=INK, stroke=INK, pad=4)
+        sh.tag(inward, pin1_y, "1", BOX, size=10, h=15, anchor=anchor, fg=INK, stroke=INK, pad=4)
     return p1, p2
 
 
@@ -715,7 +721,7 @@ def pi5(nudge=0):
     sh.text(30, py + ph + 33, "(shown here without the stacking header fitted).", 11.5, "regular", MUTED)
     hl = (px + 436 * k, py + 64 * k, px + 487 * k, py + 355 * k)
     highlight(sh, hl)
-    sh.tag(hl[0] - 5, hl[1] + 10, "pin 1", "#fff", size=10, h=15, anchor="end", fg=INK, stroke=INK, pad=4)
+    sh.tag(hl[0] - 5, hl[1] + 10, "pin 1", BOX, size=10, h=15, anchor="end", fg=INK, stroke=INK, pad=4)
 
     pitch, pad, rows = 48, 26, 13
     numbers = [(2 * r + 1, 2 * r + 2) for r in range(rows)]
@@ -779,7 +785,7 @@ def blade(nudge=0):
         (port_hl[0] + port_hl[2]) / 2,
         iy + ih + 14,
         "Extension Port",
-        "#fff",
+        BOX,
         size=10.5,
         h=17,
         anchor="middle",
@@ -787,7 +793,7 @@ def blade(nudge=0):
         stroke=INK,
         pad=6,
     )
-    sh.tag(uart_hl[2], iy + ih + 14, "UART", "#fff", size=10.5, h=17, anchor="end", fg=INK, stroke=INK, pad=6)
+    sh.tag(uart_hl[2], iy + ih + 14, "UART", BOX, size=10.5, h=17, anchor="end", fg=INK, stroke=INK, pad=6)
     # Full-length housings (wiring.toml): a shorter one fits shifted along the header, and shifted,
     # a GND wire meets 5 V.
     draw_header(uart, c, "uart", set(c.headers["uart"].pins))
@@ -857,6 +863,20 @@ def build(search=False):
     import check  # the same: it shows steps' cavity pictures again and draws with their pieces
 
     out.update(check.build())
+    return themed(out)
+
+
+def themed(files):
+    """Every drawing twice: its light SVG under its own name, its dark SVG beside it as <name>-dark.svg.
+
+    The drawings come with their colours as palette.py's tokens; the two differ only in the colours."""
+    out = {}
+    for name, text in files.items():
+        if name.endswith(".svg"):
+            out[name] = palette.resolve(text, "light")
+            out[palette.dark_name(name)] = palette.resolve(text, "dark")
+        else:
+            out[name] = text
     return out
 
 
