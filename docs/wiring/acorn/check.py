@@ -253,7 +253,11 @@ INSTALL = {
     "blade": (
         "The Compute Blades at ps1 boot from the network with their root file system in memory "
         "(`overlayroot=tmpfs`): what you install is gone at the next boot, and so is the check that would run at "
-        "boot. So after each boot, install and run by hand:"
+        "boot. So after each boot, install and run by hand.\n\n"
+        "**Not on pi14 at ps1 or pi18 at ps1 yet.** Those two carry a Compute Module 4; the check has been "
+        "run as written only on the two Compute Module 5 blades (pi16 and pi20 at ps1, 7 October 2026), and "
+        "`vcgencmd` hung for good on both CM4 blades that day. Until the check has been tried on a CM4 blade, "
+        "run it on pi16 at ps1 and pi20 at ps1 only."
     ),
     "pi5": (
         "**On a Raspberry Pi 5 of the fleet (welland) there is nothing to install.** The root it boots from "
@@ -386,7 +390,8 @@ def pages(c):
         "",
         f"**Before you touch a cable: {c.power_off}** After moving a wire, boot and run the check again"
         + (
-            " (on a blade at ps1 the install is gone after the boot: install again, as on verifying 1)"
+            " (on a blade at ps1 the install is gone after the boot: install again, as on verifying 1; and "
+            "not on pi14 or pi18 at ps1 yet, as verifying 1 says)"
             if c.key == "blade"
             else ""
         )
