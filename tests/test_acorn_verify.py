@@ -277,8 +277,13 @@ def test_xilinx_boards_that_are_not_acorns_are_named_and_fail_with_no_bar_traffi
     assert runner.details(whole)["board0"] == "xilinx-pcie - fail"
     told = runner.summary(whole)
     assert f"  xilinx-pcie {title}: fail" in told and "  acorn" not in told
-    assert f"  xilinx-pcie, {title}: fail (no test ran)" in conclusion.lines(whole)
-    assert "fpgas-acorn-debug" not in told
+    assert f"  xilinx-pcie {title}: fail (no test ran)" in conclusion.lines(whole)
+    assert "fpgas-acorn" not in told and "fpgas-xilinx" not in told
+    # an Acorn tool named for the BAR0 error such a card can still have is not offered for it either
+    bar0 = {**report, "reason": "BAR0 could not be mapped: PermissionError"}
+    assert not [a for a in conclusion.advice({"result": "error", "boards": [bar0]}) if "fpgas-" in a]
+    plain = {"board": "acorn", "variant": "cle-215+", "found": {"kind": "fpgas-online"}, "result": "fail"}
+    assert conclusion.shown(plain) == ("acorn", "cle-215+") and conclusion.shown({"board": "tt"}) == ("tt", None)
     assert report["board"] == "acorn"  # the key the state file and the identity use is unchanged
 
 

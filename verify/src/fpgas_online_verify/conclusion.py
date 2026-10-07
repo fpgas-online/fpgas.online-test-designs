@@ -194,7 +194,7 @@ def _reasons(report):
     out = [(None, report.get("reason", ""))]
     for b in report["boards"]:
         mine = [*own_reasons(b), *(t.get("reason", "") for t in _failed(b)), *(b.get("not_run") or {}).values()]
-        out += [(b["board"], r) for r in mine]
+        out += [(shown(b)[0], r) for r in mine]
     return [(board, r) for board, r in out if r]
 
 
@@ -209,6 +209,8 @@ def advice(report):
         if not about:
             continue
         board = about[0] or (mode if mode and mode != "auto" else None)
+        if board == OTHER_PCIE and "<board>" in text:  # an Acorn tool is not for another board, nor is one ours
+            continue
         setup = next((b.get("setup") for b in report["boards"] if b["board"] == board), None)
         text = _for_setup(pattern, text, setup)
         if "<board>" in text:
@@ -229,8 +231,7 @@ def lines(report, kept_in=None):
         counts = [_plural(len(tests) - len(failed), "test") + " passed", f"{len(failed)} failed"] if tests else []
         if b.get("not_run"):
             counts.append(f"{len(b['not_run'])} not run")
-        name, variant = shown(b)
-        name = f"{name}, {variant}" if name == OTHER_PCIE else " ".join(filter(None, [name, variant]))
+        name = " ".join(filter(None, shown(b)))
         out.append(f"  {name}: {b['result']} ({', '.join(counts) or 'no test ran'})")
         out += [f"    fault: {reason}" for reason in own_reasons(b)]
         out += [f"    failed: {t['test']}: {t.get('reason') or t['result']}" for t in failed]
