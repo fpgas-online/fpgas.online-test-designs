@@ -1,7 +1,7 @@
 # fpgas-verify: the Tiny Tapeout demo boards
 
 You have a Tiny Tapeout demo board and want to know how the check tells which board it is, what it leaves
-running, what its `sdk` test judges, and how its identity is read.
+running, what its `sdk` and `wiring` tests judge, and how its identity is read.
 Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
 
 ## Which Tiny Tapeout board it is
@@ -15,7 +15,7 @@ chosen.
 | The board says (rpi-hwid's `chip`) | Variant | What the check does |
 |---|---|---|
 | `fpga` | `tt-fpga` | runs [`sdk`](#the-sdk-test), then loads and runs [`dip-switches`](#the-dip-switches), `pin-id` and `uart` |
-| `asic`, and a shuttle | `tt-asic` | runs [`sdk`](#the-sdk-test); nothing is loaded. The result is `fail`: its Pmod cabling cannot be tested yet (the report's `not_run`), and a board is not passed untested |
+| `asic`, and a shuttle | `tt-asic` | runs [`sdk`](#the-sdk-test), then [`wiring`](#the-wiring-test) (its three Pmod ribbons); nothing is loaded, and the board's SDK is started again afterwards |
 | nothing usable: rpi-hwid is not installed, could not read the board, or gave no shuttle for a chip | none | nothing is loaded and no test runs: the result is `error`, and the reason says what could not be read |
 | (an RP2 in its USB boot loader, `2e8a:0003`) | none | `fail`: `a Raspberry Pi RP2 is on USB but is not running the Tiny Tapeout firmware` |
 
@@ -91,12 +91,13 @@ reads it.
   connects or a design is run from the site. SDK 3.1.0 then loads its own default project
   (`tt_um_factory_test`), which on an FPGA board shows a still pattern. What the display shows after that is
   the SDK's and the site bridge's, not the check's.
-* A board with a Tiny Tapeout chip is left as it was: the design is an FPGA bitstream, and goes only to a
-  board that said it carries the FPGA.
+* A board with a Tiny Tapeout chip is not given it: the design is an FPGA bitstream, and goes only to a board
+  that said it carries the FPGA. Such a board is left with its SDK started again after
+  [the wiring test](#the-wiring-test).
 
 ## The `sdk` test
 
-The first test of every Tiny Tapeout board, and so far the only test of a board with a Tiny Tapeout chip
+The first test of every Tiny Tapeout board
 ([#132](https://github.com/fpgas-online/fpgas.online-test-designs/issues/132)). It loads nothing and asks the
 board nothing more: it judges what the board said when it was asked what it is. The chip, the shuttle, the
 microcontroller and the SDK release must be a combination the SDK's releases support, since an SDK that does
@@ -117,17 +118,67 @@ not know the board's chip cannot select a project on it:
   support. It compares what the board said with a table; it measures nothing on the chip.
 * An FPGA board on another release line (3.0.x, or a later 3.2.x) fails `sdk` until its row is added; its
   designs are still loaded and tested, and the board's result is `fail`.
-* **What it does not test** on a board with a Tiny Tapeout chip: the chip itself, and the Pmod cabling between
-  the demo board and the Pi. The FPGA board's cabling is tested by `pin-id`; a chip board has no wiring test
-  in the boot check yet.
-* **So a board with a Tiny Tapeout chip does not pass yet, however healthy it is.** Its `sdk` test runs and is
-  reported, the report lists the cabling in `not_run` (`wiring`), and the board's result is `fail` with the
-  reason `wiring not run: the Pmod wiring test is not yet part of the boot check, …`. `fpga-verified` carries
-  `board0_not_run`. The report then shows a board that is identified and whose firmware is right, and that is
-  not yet fully tested. This ends when the wiring test
-  ([PR #15](https://github.com/fpgas-online/fpgas.online-test-designs/pull/15)) is a test of the boot check.
-* None of this has run on a board with a Tiny Tapeout chip: none was powered when it was written (5 October
-  2026). The FPGA board's row is what the three boards at Welland read.
+* **What it does not test**: the chip itself, and the Pmod cabling between the demo board and the Pi. The
+  cabling is the next test's: [`wiring`](#the-wiring-test) on a board with a Tiny Tapeout chip, `pin-id` on
+  the FPGA board.
+* It has passed on the one board with a Tiny Tapeout chip powered at Welland (a TT07 chip, an RP2040, SDK
+  2.0.4: 6 October 2026), and on the three FPGA boards there.
+
+## The wiring test
+
+The `wiring` test of a board with a Tiny Tapeout chip (`tt-asic`) checks the three ribbon cables between the demo
+board's Pmod connectors and the Pi's Pmod HAT, wire by wire. It loads nothing: the board's microcontroller and
+the chip's own factory-test project make the signals
+([#132](https://github.com/fpgas-online/fpgas.online-test-designs/issues/132), first written as
+[PR #15](https://github.com/fpgas-online/fpgas.online-test-designs/pull/15)). The cabling it expects is the one the
+FPGA board's `pin-id` expects too:
+
+* the demo board's `ui_in` Pmod to HAT **JA**, its `uio` Pmod to HAT **JB**, its `uo_out` Pmod to HAT **JC**;
+* pin for pin: Pmod pin 1 to HAT pin 1, and so on (pins 1 to 4 and 7 to 10 carry bits 0 to 7).
+
+A wire that is wrong fails the board, named by its ribbon, its signal and its pins:
+
+* `wiring fail: the ui_in ribbon (HAT JA): ui_in[2] (pin 3) did not reach JA3: it reached JA4/JB4`
+* `wiring fail: the uo_out ribbon (HAT JC): none of its 8 signals reached the Pi (not plugged in, or on another port)`
+* `wiring fail: the ribbons look cabled as ui_in on HAT JC, uio on HAT JB, uo_out on HAT JA, not as …`
+* `wiring fail: the uo_out ribbon (HAT JC): uo_out[1] (pin 2) did not reach JC2 (driven by the chip from uio[1])`
+
+A ribbon names up to four of its faults, and counts the rest (`; and 3 more`). What to do: seat the ribbon
+named, or move it to its port, and run the check again.
+
+How it tests:
+
+* **Nothing is written to the board.** The board's RP2040 runs a small command server in its memory, sent over
+  its raw REPL. Through the SDK it selects the chip's `tt_um_factory_test` project, which on every shuttle
+  copies `uio` to `uo_out` while `ui_in[0]` is low, and resets it. The RP2040 then drives each `ui_in` and
+  `uio` signal in turn while the Pi reads all 21 HAT lines, so a swapped, open or shorted wire each show as
+  that. The `uio` walk reaches `uo_out` through the chip, which tests the `uo_out` ribbon. The RP2040 also
+  sends each signal's name at 1200 baud, and the Pi decodes it on every line, as `pin-id` does on the FPGA board.
+* HAT pins JA2 to JA4 and JB2 to JB4 are the same three Pi GPIOs (10, 9, 11), so `ui_in[1..3]` and `uio[1..3]`
+  share them: while one of a pair is driven, the other is an input. A ribbon swap between JA and JB is still
+  seen, by a second walk in which the Pi pulls each line up in turn and the RP2040 reads which of its pins
+  follows.
+* On the Pi, for the test only: the serial getty is stopped and SysRq is off (the console's GPIO14/15 are HAT
+  JC2/JC3), and the SPI drivers are unloaded (they hold GPIO7 to 11). Every HAT GPIO's function, pull and
+  output level is read with `pinctrl` first and set back afterwards. A Pi 3 cannot read back its pulls: there
+  the 21 lines are left with the pull-down the test reads them with, and the test's output says so.
+* **Afterwards the board's SDK is started again** (`tt_sdk_start.py`, as before rpi-hwid), so the chip is back
+  on the project the board starts with. The SDK rewrites its own `boot.log` then, as at every power-on. An SDK
+  that does not start again is a warning in the report, not the board's result.
+* A DIP switch that is on does not change the result: the RP2040 drives `ui_in` as the SDK does, stronger than
+  a switch's 1 kΩ, and the test's output notes the line.
+
+The test is an `error`, not a `fail`, when it could not make its reading: the board did not answer its raw REPL,
+gpiod or `pinctrl` is missing or could not read the HAT GPIOs, the test was stopped (the Pi is put back first),
+or what it changed on the Pi was not put back (the reason says what). It is a `fail` when the readings were not
+steady (a loose contact?), and when the chip's factory test could not be confirmed, since `uo_out` is then not
+tested: a board on SDK 1.x (a TT03p5 board) cannot select it this way, so it fails there until the test learns
+that SDK's interface.
+
+It has run in this form on one board with a TT07 chip (see the pull request that brought it into the check);
+[PR #15](https://github.com/fpgas-online/fpgas.online-test-designs/pull/15)'s form of it ran on every Tiny
+Tapeout host at Welland on 4 September 2026.
+
 
 ## TT FPGA identity
 
