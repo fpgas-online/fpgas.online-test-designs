@@ -17,6 +17,7 @@ SCRIPTS = {
     "tt_sdk_start.py": "designs/_host/tt_sdk_start.py",
     "tt_main_py.py": "designs/_host/tt_main_py.py",
     "tt_dip_switches.py": "designs/_host/tt_dip_switches.py",
+    "tt_pmod_wiring.py": "designs/_host/tt_pmod_wiring.py",
 }
 PACKAGED = pathlib.Path(__file__).resolve().parent / "scripts"
 REPO = pathlib.Path(__file__).resolve().parents[3]

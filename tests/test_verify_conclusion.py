@@ -206,7 +206,16 @@ def test_every_advice_pattern_matches_a_reason_the_code_gives():
         f"{tt_fpga.NOT_TT_FIRMWARE}: it is in its USB boot loader (2e8a:0003)",
         tt_fpga.sdk_check("tt-asic", {"chip": "asic", "shuttle": "tt06", "mcu": "RP2040", "sdk": "1.2.2"})[1],
         tt_fpga.sdk_check("tt-asic", {"chip": "asic", "shuttle": "tt09", "mcu": "RP2040", "sdk": "2.0.4"})[1],
-        tt_fpga.PENDING["tt-asic"]["wiring"],
+        "wiring fail: the ui_in ribbon (to HAT JA): ui_in[2] (Pmod pin 3) did not reach HAT JA/JB pin 3",
+        "wiring fail: the ui_in and uio ribbons are on each other's HAT ports (JB and JA): swap them",
+        "wiring fail: these ribbons are plugged in turned round and one position over (ui_in on HAT JC ...)",
+        "wiring fail: the readings fit no single open wire, swapped or turned ribbon: a short between neighbouring ...",
+        "wiring fail: the ui_in ribbon (to HAT JA): ui_in[4] (Pmod pin 7) is held high on the demo board (a DIP ...",
+        "wiring fail: the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) is held low on the demo board (some ...",
+        "wiring fail: the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) is held against the pulls on the demo board",
+        "wiring fail: the uo_out ribbon (to HAT JC): uo_out[6] … (that line is held low: a short to ground?)",
+        "wiring fail: the uio ribbon (to HAT JB): uio[6] … could not be tested: something holds its line low",
+        "wiring error: … only 1 uio bit floats, so the loopback cannot be confirmed (the others' lines are held: …)",
         "openocd is not installed",
         "x does not match its manifest",
         "manifest.json is missing",
@@ -296,3 +305,55 @@ def test_the_conversion_advice_follows_the_setup_the_report_names():
         assert conclusion.ACORN_PROGRAMMING in on_pi5 and "On a Compute Blade" not in on_pi5
         assert conclusion.ACORN_PROGRAMMING not in on_blade and "On a Compute Blade, do not load" in on_blade
         assert conclusion.ACORN_PROGRAMMING in unknown and "On a Compute Blade, do not load" in unknown
+
+
+def test_a_held_line_gets_the_advice_for_it_and_not_the_ribbon_s():
+    held = "wiring fail: the ui_in ribbon (to HAT JA): ui_in[4] (Pmod pin 7) is held high on the demo board (a DIP"
+    wrong = "wiring fail: the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) did not reach HAT JA pin 8"
+    advice = {pattern: text for pattern, text in conclusion.ADVICE}
+    held_says = [text for pattern, text in advice.items() if conclusion.re.search(pattern, held)]
+    wrong_says = [text for pattern, text in advice.items() if conclusion.re.search(pattern, wrong)]
+    assert len(held_says) == 1 and "DIP switches off" in held_says[0]
+    assert len(wrong_says) == 1 and "not where it should be" in wrong_says[0]
+
+
+def test_a_held_line_is_not_told_to_reseat_a_ribbon():
+    held_low = ("wiring fail: the uo_out ribbon (to HAT JC): uo_out[6] (Pmod pin 9) did not reach HAT JC pin 9 (that "
+                "line is held low: a short to ground?)")  # fmt: skip
+    says = [text for pattern, text in conclusion.ADVICE if conclusion.re.search(pattern, held_low)]
+    assert len(says) == 1 and "for a short" in says[0]
+
+
+def advice_for(reason):
+    return [text for pattern, text in conclusion.ADVICE if conclusion.re.search(pattern, reason)]
+
+
+def test_a_line_something_holds_is_not_told_to_reseat_a_ribbon():
+    """Review 8, finding 1: "holds its line" is a held line too."""
+    says = advice_for("wiring fail: the uio ribbon (to HAT JB): uio[0] (Pmod pin 1) could not be tested: something "
+                      "holds its line low")  # fmt: skip
+    assert len(says) == 1 and "for a short" in says[0]
+
+
+def test_a_ribbon_gets_the_ribbon_advice_for_any_fault_that_is_not_a_held_line():
+    """Review 8, finding 4: a held line named first does not hide an open wire after it on the same ribbon."""
+    says = advice_for("wiring fail: the uio ribbon (to HAT JB): uio[0] (Pmod pin 1) could not be tested: something "
+                      "holds its line low; uio[4] (Pmod pin 7) did not reach HAT JB pin 7")  # fmt: skip
+    assert any("Seat it" in s for s in says) and any("for a short" in s for s in says)
+    held_then_untested_list = (
+        "wiring fail: the ui_in ribbon (to HAT JA): ui_in[0] (Pmod pin 1) is held low on the demo board (something "
+        "drives it low: a short to ground, or a chip output a wrong ribbon joins to it); uio[6] (Pmod pin 9), "
+        "uio[7] (Pmod pin 10) and uo_out were not tested: the chip's factory test could not be used (ui_in[0] is held)"
+    )
+    assert not any("Seat it" in s for s in advice_for(held_then_untested_list))
+
+
+def test_a_uio_bit_sharing_a_held_ui_in_line_gets_only_the_dip_switch_advice():
+    """Review 8, finding 3."""
+    reason = (
+        "wiring fail: the ui_in ribbon (to HAT JA): ui_in[1] (Pmod pin 2) is held high on the demo board (a DIP "
+        "switch that is on? set all DIP switches off); the uio ribbon (to HAT JB): uio[1] (Pmod pin 2) could not be "
+        "tested: it shares its HAT line with ui_in[1], which is held high"
+    )
+    says = advice_for(reason)
+    assert len(says) == 1 and "DIP switches off" in says[0]

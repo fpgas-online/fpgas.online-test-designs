@@ -9,7 +9,7 @@ RP2350 and a chip board's RP2040 both read 2e8a:0005). So finding the board give
 once the check holds the board's port, from the `chip` rpi-hwid read there, before any design is chosen:
 
   chip "fpga"                      tt-fpga: the `sdk` test, then the designs below are loaded and tested
-  chip "asic" and a shuttle        tt-asic: the `sdk` test; nothing is loaded
+  chip "asic" and a shuttle        tt-asic: the `sdk` test, then the `wiring` test; nothing is loaded
   anything else                    no variant: an error saying what could not be read, and no test
 
 An FPGA bitstream only ever goes to a board that said it is an FPGA board. An RP2 that is in its USB boot
@@ -18,12 +18,15 @@ products (a debug probe, a Pico running something else) are not Tiny Tapeout boa
 
 The `sdk` test (sdk_check) loads nothing and asks the board nothing more: it judges what the board already
 said. Chip, shuttle, microcontroller and SDK release must be a combination the SDK's releases support
-(SDK_SUPPORTED), since an SDK that does not know the board's chip cannot select a project on it. That, with
-the board's main.py being that release's own (below), is the whole check of a board with a Tiny Tapeout chip
-today (#132). Its Pmod cabling is not tested yet, and until it is, such a board does not pass: the report
-says so in `not_run` (PENDING) and the board's result is `fail` with that reason, however healthy it is (Tim,
-2026-10-05: "Fail until wiring is tested and prioritize landing the setup which properly tests the wiring").
-The FPGA board is not affected: `pin-id` is its wiring test.
+(SDK_SUPPORTED), since an SDK that does not know the board's chip cannot select a project on it.
+
+The `wiring` test of a board with a Tiny Tapeout chip (tt_pmod_wiring.py, a script test: no bitstream) checks
+its three Pmod ribbons to the Pi's Pmod HAT bit for bit: the board's RP2040 drives each ui_in and uio signal
+from a command server run in RAM over its raw REPL, the Pi reads every HAT line, and the chip's own
+tt_um_factory_test (uo_out = uio_in) carries the uio walk out on uo_out. A fault is named by its ribbon and
+pin. The script then puts the board back from RAM as its SDK had it (tt_sdk_start.py only if that fails). Until this
+test was here such a board failed as untested (Tim, 2026-10-05: "Fail until wiring is tested and prioritize
+landing the setup which properly tests the wiring"). The FPGA board's wiring test is `pin-id`.
 
 Nothing is written to the demo board: for every load the RP2350 reads the bitstream from the Pi over the serial
 link (tt_fpga_program.py, `mpremote mount`). The board has no flash of its own to compare, so the state is the
@@ -176,14 +179,17 @@ SDK_SUPPORTED = (
     ("asic", ("tt03p5",), "RP2040", "1.2"),
     ("asic", ("tt04", "tt05", "tt06", "tt07", "tt08"), "RP2040", "2.0"),
 )
-# What the boot check of a board with a Tiny Tapeout chip must do and does not yet: the board fails until it
-# does. The entry goes when the wiring test (fpgas.online-test-designs PR #15) is a test of this check.
-PENDING = {
-    "tt-asic": {
-        "wiring": "the Pmod wiring test is not yet part of the boot check, so the cabling between the demo board "
-                  "and the Pi was not tested, and a board with a Tiny Tapeout chip is not passed until it is",
-    },
-}  # fmt: skip
+# What the boot check of a variant must do and does not yet (a board fails until it does): nothing now. The
+# wiring test of a board with a Tiny Tapeout chip was the last (`wiring`, below).
+PENDING = {}
+# tt_pmod_wiring.py stops itself at WIRING_TIME_LIMIT, then puts everything back (its TEARDOWN_SECONDS, 130) and, only
+# when the board could not be put back from RAM, starts the SDK by a soft reset (its FALLBACK_SECONDS, 75): all of it
+# inside the boot check's own limit, which kills it. That worst case is for a faulty board; the good path's time is
+# what a visitor waits for: 22.7 s, measured on the TT07 board on 8 Oct 2026, in a passing run. WIRING_TIME_LIMIT
+# is about four times that.
+WIRING_TIME_LIMIT = 90
+WIRING_TEARDOWN = 130 + 75
+WIRING_TIMEOUT = 300
 
 
 def sdk_line(release):
@@ -238,6 +244,18 @@ class TTFPGA(TestBoard):
     variants: ClassVar[dict] = {"tt-fpga": "tt-fpga"}  # the variants there are bitstreams for
     variant_from_board = True
     fact_tests: ClassVar[dict] = {"sdk": {"variants": ("tt-fpga", "tt-asic"), "check": sdk_check}}
+    # The Pmod cabling of a board with a Tiny Tapeout chip, against the cabling the boards have (ui_in on HAT
+    # JA, uio JB, uo_out JC: identify_pmod_pins.BOARDS["tt"]). The check has stopped fpgas-tt itself, so
+    # --no-daemon; tt_pmod_wiring.py unloads the SPI drivers itself and loads them again. It puts the board back
+    # as the SDK left it from RAM (its mode, project and clock), and starts the SDK again by a soft reset only
+    # when that fails. It needs `sdk` to have passed: a board whose SDK cannot select the chip's project cannot
+    # be wiring-tested.
+    script_tests: ClassVar[dict] = {
+        "wiring": {"variants": ("tt-asic",), "script": "tt_pmod_wiring.py",
+                   "args": ["--port", "{port}", "--controller", "rp2040", "--cabling", "asic", "--no-daemon",
+                            "--time-limit", str(WIRING_TIME_LIMIT)],
+                   "says": "WIRING:", "timeout": WIRING_TIMEOUT, "needs": ("sdk",)},
+    }  # fmt: skip
     pending: ClassVar[dict] = PENDING
     # rpi-hwid's Tiny Tapeout label (its LABEL-CONTRACT.md, sections 1 and 7). Only the boot check reads the
     # fields rpi-hwid gives (it owns the port then): --identify takes them, and why they are missing, from the

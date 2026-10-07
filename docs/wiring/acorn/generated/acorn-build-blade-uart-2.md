@@ -8,20 +8,25 @@ The P2 cable with its wires flagged and a terminal crimped on each (the page bef
 
 ## Steps
 
-**1.** Hold the empty 1×4 housing with the wire openings facing you and its long side upright, as in the picture. Until it is marked, either way up is the same. Mark the top end with a paint pen or a dot of tape: that is the pin 1 corner. For each wire, read the number on its flag, find the same number in the picture, and push its terminal into that cavity, latch tab towards the window, until it clicks. Turned round, the housing puts 5 V on the K2 wire, above the most AMD's Artix 7 data sheet allows on an FPGA pin (DS181, Table 1: VCCO + 0.55 V, with VCCO at most 3.6 V), which can destroy the FPGA pin on the Acorn that wire reaches. Wires 4, 5 and 6 go in no cavity. Pull each wire gently: the terminal must stay in.
+**1.** Hold the empty 1×4 housing with the wire openings facing you and its long side upright, as in the picture. Until it is marked, either way up is the same. Mark the top end with a paint pen or a dot of tape: that is the pin 1 corner. For each wire, read the number on its flag and find the same number in the picture: that is the cavity its terminal goes in. Turned round, the housing puts 5 V on the K2 wire, above the most AMD's Artix 7 data sheet allows on an FPGA pin (DS181, Table 1: VCCO + 0.55 V, with VCCO at most 3.6 V), which can destroy the FPGA pin on the Acorn that wire reaches. Wires 4, 5 and 6 go in no cavity.
 
 ![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2.png){.only-light}
 ![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2-dark.png){.only-dark}
 
+**2.** Push each terminal into its cavity, latch tab towards the window, until it clicks. Pull each wire gently: the terminal must stay in. The P2 cavity picture is shown again under the picture of how a terminal goes in, to read each wire's cavity from.
+
 ![Which way round a terminal goes in, and the pull test](acorn-cable-push.png){.only-light}
 ![Which way round a terminal goes in, and the pull test](acorn-cable-push-dark.png){.only-dark}
 
-**2.** Check each wire with a meter on continuity. For each wire: one probe on its contact on the plug, the other on the terminal in the cavity the picture gives for that wire number, through the opening on the pin side of the housing: it must beep. Every other cavity must stay silent for that contact. **Wire 2 is the exception: it has the 470 Ω resistor in it. Leave wire 2 until last and read it in ohms, not by the buzzer.** A continuity buzzer usually sounds only below some tens of ohms, so through the resistor it will usually stay silent (we have not tried your meter). Set the meter to ohms, on auto-range or the 2 kΩ range, and touch the two probes together first: it must read close to 0. Then, between wire 2's contact on the plug and its terminal, it must read close to 470 Ω. Close to 0 there means the resistor is bridged or was left out. Over-range (OL, or a lone 1 at the left of the display) or a value far from 470 Ω means a bad joint or the wrong wire. Between wire 2's contact and every other cavity it must show over-range. The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.
+![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2.png){.only-light}
+![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2-dark.png){.only-dark}
+
+**3.** Check each wire with a meter on continuity. Set the meter to continuity. The probes go as in the picture: one on a contact of the plug, the other on a terminal, through the opening on the pin side of the housing. The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.
 
 ![A meter between the plug and the housing](acorn-cable-check-blade-p2.png){.only-light}
 ![A meter between the plug and the housing](acorn-cable-check-blade-p2-dark.png){.only-dark}
 
-The P2 cavity picture again, to read each wire's cavity from:
+**4.** Now check each wire against its cavity. For each wire: read the number on its flag and find it in the picture; one probe on that wire's contact on the plug, the other on the terminal in that cavity: it must beep. Every other cavity must stay silent for that contact. **Wire 2 is the exception: it has the 470 Ω resistor in it. Leave wire 2 until last and read it in ohms, not by the buzzer.** A continuity buzzer usually sounds only below some tens of ohms, so through the resistor it will usually stay silent (we have not tried your meter). Set the meter to ohms, on auto-range or the 2 kΩ range, and touch the two probes together first: it must read close to 0. Then, between wire 2's contact on the plug and its terminal, it must read close to 470 Ω. Close to 0 there means the resistor is bridged or was left out. Over-range (OL, or a lone 1 at the left of the display) or a value far from 470 Ω means a bad joint or the wrong wire. Between wire 2's contact and every other cavity it must show over-range. The P2 cavity picture is shown again below, to read each wire's cavity from.
 
 ![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2.png){.only-light}
 ![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2-dark.png){.only-dark}

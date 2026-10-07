@@ -4,21 +4,27 @@ Not yet run by us on this hardware: written from the design. Photos: Waveshare (
 
 ## What you need
 
-Both cables, checked on the bench (the page before this one), the Acorn and the Raspberry Pi 5. As before: after action 1 of the list below, touch bare metal of the host before you pick up the card, and hold it by its edges.
+Both cables, checked on the bench (the page before this one), the Acorn and the Raspberry Pi 5. As before: after action 1 (step 1 below), touch bare metal of the host before you pick up the card, and hold it by its edges.
 
 ## Steps
 
-**1.** Fit the cables, in this order. The sockets are on the underside of the card and may not be reachable once it is in the slot.
+**1.** Fit the plugs into the card. The sockets are on the underside of the card and may not be reachable once it is in the slot, so the plugs go in first, in this order.
 
 1. Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE.
 2. If the housings are on the headers (after the bench check), take them off.
 3. Press the P1 plug into socket P1 and the P2 plug into socket P2 on the underside of the Acorn, each the way round it was when you put the flags on, until fully seated.
+
+![Fitting the cables on a Raspberry Pi 5, actions 1 to 3](acorn-cable-pi5-fit-1.png){.only-light}
+![Fitting the cables on a Raspberry Pi 5, actions 1 to 3](acorn-cable-pi5-fit-1-dark.png){.only-dark}
+
+**2.** Fit the card, then the housings, in this order.
+
 4. Put the Acorn in the M.2 slot and fit its screw, in the standoff marked 2280 at the far end of the Waveshare PoE M.2 HAT+ (B).
 5. Fit the P1 housing on the 40-pin header pins 19 to 26, marked corner on pin 19, and the P2 housing on the 40-pin header pins 5 to 10, marked corner on pin 5.
 6. Before powering on, look at both housings again, as on the bench check: the P1 housing's marked corner is on pin 19 of the 40-pin header, and the P2 housing's on pin 5 of the 40-pin header. Turned round, either housing puts its wires on the wrong pins. Fitted, the housings get only this look; the meter check was the bench check's.
 
-![Fitting the cables on a Raspberry Pi 5, in order](acorn-cable-pi5-fit.png){.only-light}
-![Fitting the cables on a Raspberry Pi 5, in order](acorn-cable-pi5-fit-dark.png){.only-dark}
+![Fitting the cables on a Raspberry Pi 5, actions 4 to 6](acorn-cable-pi5-fit-2.png){.only-light}
+![Fitting the cables on a Raspberry Pi 5, actions 4 to 6](acorn-cable-pi5-fit-2-dark.png){.only-dark}
 
 ## Next
 
