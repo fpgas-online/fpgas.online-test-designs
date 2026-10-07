@@ -4,11 +4,11 @@ Not yet run by us on this hardware: written from the design. Photos: Waveshare (
 
 ## What you need
 
-Both cables, checked on the bench (the page before this one), the Acorn and the Raspberry Pi 5. As before: after action 1 of the list below, touch bare metal of the host before you pick up the card, and hold it by its edges.
+Both cables, checked on the bench (the page before this one), the Acorn and the Raspberry Pi 5. As before: after action 1 (step 1 below), touch bare metal of the host before you pick up the card, and hold it by its edges.
 
 ## Steps
 
-**1.** Fit the cables, in this order. The sockets are on the underside of the card and may not be reachable once it is in the slot.
+**1.** Fit the plugs into the card. The sockets are on the underside of the card and may not be reachable once it is in the slot, so the plugs go in first, in this order.
 
 1. Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE.
 2. If the housings are on the headers (after the bench check), take them off.
@@ -17,7 +17,7 @@ Both cables, checked on the bench (the page before this one), the Acorn and the 
 ![Fitting the cables on a Raspberry Pi 5, actions 1 to 3](acorn-cable-pi5-fit-1.png){.only-light}
 ![Fitting the cables on a Raspberry Pi 5, actions 1 to 3](acorn-cable-pi5-fit-1-dark.png){.only-dark}
 
-Then the card and the housings:
+**2.** Fit the card, then the housings, in this order.
 
 4. Put the Acorn in the M.2 slot and fit its screw, in the standoff marked 2280 at the far end of the Waveshare PoE M.2 HAT+ (B).
 5. Fit the P1 housing on the 40-pin header pins 19 to 26, marked corner on pin 19, and the P2 housing on the 40-pin header pins 5 to 10, marked corner on pin 5.
