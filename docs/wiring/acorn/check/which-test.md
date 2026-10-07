@@ -12,5 +12,6 @@
 
 So on a card that has not been converted yet, `pcie-link` and `jtag` are the wiring tests; the P2 wires can
 only be tested once the card runs the fpgas.online design
-([converting a card](hardware/acorn-pcie-programming.md)).
+([converting a card](hardware/acorn-pcie-programming.md); on a Compute Blade that is not in this guide yet:
+do not).
 

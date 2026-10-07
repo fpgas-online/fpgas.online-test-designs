@@ -122,6 +122,8 @@ ON_A_BLADE = {
     "fpgas.online one, so only its PCIe link and its JTAG could be tested. " + NOT_ON_A_BLADE,
     r"unconverted: runs the vendor XDMA sample": "The board runs Xilinx's XDMA sample design, not the fpgas.online "
     "one. " + NOT_ON_A_BLADE,
+    r"running the golden image": "The Acorn fell back to its golden image: the operational image in its flash did "
+    "not start. " + NOT_ON_A_BLADE,
 }
 
 

@@ -287,7 +287,11 @@ def test_the_conversion_advice_follows_the_setup_the_report_names():
         return " ".join(line.strip() for line in conclusion.lines(_report("fail", [board])))
 
     pi5 = setup.detect("Raspberry Pi 5 Model B Rev 1.0").name
-    for reason in (UNCONVERTED, "unconverted: runs the vendor XDMA sample image, not the fpgas.online design"):
+    for reason in (
+        UNCONVERTED,
+        "unconverted: runs the vendor XDMA sample image, not the fpgas.online design",
+        "pcie-bar0 fail: running the golden image: the operational slot did not boot",
+    ):
         on_pi5, on_blade, unknown = todo(pi5, reason), todo(conclusion.BLADE, reason), todo(None, reason)
         assert conclusion.ACORN_PROGRAMMING in on_pi5 and "On a Compute Blade" not in on_pi5
         assert conclusion.ACORN_PROGRAMMING not in on_blade and "On a Compute Blade, do not load" in on_blade

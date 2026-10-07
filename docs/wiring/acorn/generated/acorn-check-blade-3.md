@@ -27,9 +27,9 @@ loaded into the FPGA's SRAM over JTAG; the load worked. A bus rescan did not bri
 the root-complex re-probe (unbind and bind of the blade's PCIe controller) failed: the bind answered "No such
 device", and the PCIe root port was gone too. The run stopped there, and the blade was rebooted at 15:52. From
 then on it restarted by itself every 2 to 3 minutes until about 18:09 (one boot, from about 17:06, stayed up
-for at least 12 minutes); the cause is not known, and no power cycle was run by us. At 17:19 an
+until we rebooted it at 17:20:12); the cause is not known, and no power cycle was run by us. At 17:19 an
 `openFPGALoader --reset` over JTAG made the FPGA reload the vendor's sample image from its flash, which was never
-written; in the boot from about 18:09 the card was back as before (`10ee:7011`, 5 GT/s x1). So a bus rescan and
+written, and at 17:20:12 we rebooted the blade into the shared boot files; in the boot from about 18:09 the card was back as before (`10ee:7011`, 5 GT/s x1). So a bus rescan and
 a root-complex re-probe both failed to restore the endpoint after a load on a blade, and a reboot was followed by
 the restarts: **do not load a design into a card on a blade or convert it; that is not in this guide yet.** A
 flash write over JTAG has **not been run** on a blade.
@@ -68,8 +68,8 @@ are two ways, and the choice belongs to whoever runs the gateway (at ps1: Carl):
 2. **Give one blade its own copy.** Copy the directory (any name), make the two changes in the copy, and point
    that blade's link in `/srv/tftp/` at the copy. Only that blade is changed, from its next boot. To undo it,
    point the link back at `/srv/nfs/rpi/trixie/boot` and boot the blade again. This is how pi20 at ps1 was
-   tested on 7 October 2026: its link, `/srv/tftp/de59093d`, was pointed at a copy for the test, and the shared
-   directory was not touched. The link was put back at 17:19:48 and the copy was removed then, and the shared
+   tested on 7 October 2026: its link, `/srv/tftp/de59093d`, was pointed at a copy for the test, and the changes were
+   made in the copy only. The link was put back at 17:19:48 and the copy was removed then, and the shared
    `config.txt` and `cmdline.txt` read the same as before it.
    Every boot of pi20 at ps1 since 17:20 has come from the shared directory; at 18:10 its header's serial port
    was on (`serial0` was `ttyAMA0`).
