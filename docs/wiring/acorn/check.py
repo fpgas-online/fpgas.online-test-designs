@@ -373,22 +373,25 @@ def pages(c):
             "not been converted to the fpgas.online design, and in this boot the JTAG test cannot have its TMS "
             "pin, which the header's serial port holds. **Do not follow its first `What to do:` line on a "
             "Compute Blade:** it says to convert the card, and converting or loading a card on a blade is not in this "
-            'guide yet (the page "verifying 3" says why). That line is as version 0.0.post1216 printed it; later '
-            "versions say not to on a Compute Blade.",
+            'guide yet (the page "verifying 3" says why). That line is as version 0.0.post1216 printed it; from '
+            "version 0.0.post1284 the check says not to on a Compute Blade.",
             "",
             transcript(BLADE_FAIL, "pi16", "2026-10-07", "CLE-101", "0.0.post1216").strip(),
+            "",
+            "**On a Compute Blade, do not follow the first `What to do:` line above:** do not load a design "
+            'into the card or convert it; that is not in this guide yet (the page "verifying 3" says why).',
             "",
             "On the blades at ps1 every `sudo` first prints `sudo: unable to resolve host pi16: Name or service "
             "not known` (with the blade's own name). It did no harm on the blades it was seen on (7 October 2026), "
             'and is left out above. The advice above to "change one blade\'s own copy" of the boot files is as '
-            'version 0.0.post1216 printed it; later versions say what the page "verifying 3" says: changing the '
+            'version 0.0.post1216 printed it; from version 0.0.post1284 the check says what the page "verifying 3" says: changing the '
             "shared files or giving one blade its own copy is the gateway owner's choice.",
             "",
             "**A card still on the vendor's XDMA sample image** (pi20 at ps1, 7 October 2026, version "
             "0.0.post1220) gets the same tests as one on SQRL's image: `pcie-link` and `rp1-pio` pass, `jtag` "
             "fails on GPIO14 as above, the rest are `not run`. Its summary line reads `acorn -: fail` (no variant "
             "is named), and the first `What to do:` line says the board runs Xilinx's XDMA sample design (on a "
-            "Compute Blade, in versions after the one used there, not to convert it). That was on pi20 at ps1, "
+            "Compute Blade, from version 0.0.post1284, not to convert it). That was on pi20 at ps1, "
             "installed by the steps above as version 0.0.post1216 and updated "
             "to 0.0.post1220 the same day; version 0.0.post1216 printed `acorn: fail (no test ran)` there "
             "([fpgas.online-test-designs issue 155, a card on the vendor XDMA sample image got no test at "
