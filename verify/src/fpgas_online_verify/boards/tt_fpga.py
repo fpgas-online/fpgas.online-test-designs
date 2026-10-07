@@ -182,10 +182,11 @@ SDK_SUPPORTED = (
 # What the boot check of a variant must do and does not yet (a board fails until it does): nothing now. The
 # wiring test of a board with a Tiny Tapeout chip was the last (`wiring`, below).
 PENDING = {}
-# tt_pmod_wiring.py stops itself at WIRING_TIME_LIMIT and puts everything back (with time left for its SDK
-# fallback, at most 75 s); the boot check's own limit, which kills it, is beyond that. PROVISIONAL, both: set from the
-# live run's timing.
-WIRING_TIME_LIMIT = 150
+# tt_pmod_wiring.py stops itself at WIRING_TIME_LIMIT, then puts everything back (its TEARDOWN_SECONDS, 50) and, only
+# when the board could not be put back from RAM, starts the SDK by a soft reset (its FALLBACK_SECONDS, 75): all of it
+# inside the boot check's own limit, which kills it. PROVISIONAL, both: set from the live run's timing.
+WIRING_TIME_LIMIT = 100
+WIRING_TEARDOWN = 50 + 75
 WIRING_TIMEOUT = 240
 
 

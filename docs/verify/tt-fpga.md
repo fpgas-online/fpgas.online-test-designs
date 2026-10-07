@@ -144,11 +144,11 @@ JA connector:
 * `wiring fail: the ui_in ribbon (to HAT JA): ui_in[4] (Pmod pin 7) did not reach HAT JA pin 7: it reached HAT JA pin 8; …`
 * `wiring fail: the uo_out ribbon (to HAT JC): none of its signals reached the Pi (not plugged in, or broken)`
 * `wiring fail: the uio and uo_out ribbons are on each other's HAT ports (JC and JB): swap them`
-* `wiring fail: these ribbons are seated one position off (ui_in on HAT JC (it goes on JA), …): Pmod pin n arrives on HAT pin 12-n, and Pmod pins 1 and 7 are on the HAT's ground; reseat`
-* `wiring fail: the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) is held low on the demo board (a DIP switch that is on, or a wrong ribbon joining it to a chip output: set all DIP switches off)`
+* `wiring fail: these ribbons are plugged in turned round and one position over (ui_in on HAT JC (it goes on JA), …): Pmod pin n arrives on HAT pin 12-n, and Pmod pins 1 and 7 are on the HAT's ground; plug each in the right way round, Pmod pin 1 to HAT pin 1`
+* `wiring fail: the ui_in ribbon (to HAT JA): ui_in[4] (Pmod pin 7) is held high on the demo board (a DIP switch that is on? set all DIP switches off)`
 
 A ribbon names up to two of its faults, and counts the rest (`; and 3 more`). When a ribbon is wholly elsewhere
-(another port, one position off, not plugged in) only that is said: the single-wire faults around it follow
+(another port, turned round, not plugged in) only that is said: the single-wire faults around it follow
 from it. What to do: seat the ribbon named, or move it to its port, and run the check again.
 
 How it tests:
@@ -184,8 +184,13 @@ How it tests:
   (`tt_sdk_start.py`), so the board is never left in the command server; the `FALLBACK:` line says so. The
   board's own `main.py` rewrites its `boot.log` when it starts: on the good path that happens once per boot
   check, at the identification start, and not again.
-* The test stops itself after 150 s (`--time-limit`) and puts everything back; the boot check's own limit,
-  which kills it, is beyond that and its fallback. Both are to be set from the live run's timing.
+* The test stops itself after 100 s (`--time-limit`) and puts everything back (up to 50 s, and 75 s more for the
+  fallback); the boot check's own limit, 240 s, which kills it, is beyond all of that. The figures are
+  provisional until the live run has timed the test.
+* The chip's factory test is enabled with the SDK's `config.ini` turned off (`apply_configs`): applied, it would
+  set `ui_in = 1` and a 10 Hz clock, and the chip would drive its counter onto `uio[1:3]`, which the HAT joins to
+  `ui_in[1:3]`. The restore turns it on again, as the board had it. The board as it starts drives those three nets
+  from both ends: [#181](https://github.com/fpgas-online/fpgas.online-test-designs/issues/181).
 
 The test is an `error`, not a `fail`, when it could not make its reading, and then it drives no pin at all: the
 board did not answer its raw REPL; the board's SDK is not running (no `tt` object) or could not select

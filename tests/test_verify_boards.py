@@ -5,6 +5,7 @@ scripts) goes through a fake runner that records it and answers as the hardware 
 """
 
 import hashlib
+import importlib.util
 import json
 import struct
 import sys
@@ -1183,10 +1184,20 @@ def test_a_wiring_test_that_could_not_finish_is_said_as_that(tmp_path, monkeypat
     assert len(_sdk_starts(run)) == 1 and _restarted_last(run)
 
 
+def _tt_host_script(name):
+    spec = importlib.util.spec_from_file_location(name, host_tests.path(f"{name}.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_the_wiring_test_stops_itself_well_before_the_check_would_kill_it():
     """It stops at WIRING_TIME_LIMIT and puts everything back, with up to 75 s for its SDK fallback: all inside the
     check's own limit, which kills it outright."""
-    assert tt_fpga.WIRING_TIME_LIMIT + tt_fpga.SDK_START_TIMEOUT <= tt_fpga.WIRING_TIMEOUT
+    assert tt_fpga.WIRING_TIME_LIMIT + tt_fpga.WIRING_TEARDOWN <= tt_fpga.WIRING_TIMEOUT
+    wiring = _tt_host_script("tt_pmod_wiring")
+    assert tt_fpga.WIRING_TEARDOWN == wiring.TEARDOWN_SECONDS + wiring.FALLBACK_SECONDS
+    assert wiring.FALLBACK_SECONDS >= tt_fpga.SDK_START_TIMEOUT  # tt_sdk_start.py's own limit fits in it
     run = Runner([_wiring_said(0, "ok")])
     seen = []
     TT.run_script_test("wiring", _host(TT), lambda argv, timeout: seen.append((argv, timeout)) or run(argv, timeout))
