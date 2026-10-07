@@ -334,6 +334,16 @@ class FakeFirmware:
             if cmd == "creset":
                 self.creset = int(args[0])
                 return ["TTW OK"]
+            if cmd == "group":  # the pins change together: no state in between
+                value, gs = int(args[0]), [int(g) for g in args[1:]]
+                for g in gs:
+                    m.rp2[g] = ("out", value)
+                m.resolve()
+                return ["TTW VALS " + " ".join(str(m.rp2_read(g)) for g in gs)]
+            if cmd == "ungroup":
+                for g in args:
+                    m.rp2[int(g)] = ("in", None)
+                return ["TTW OK"]
             if cmd == "mem":
                 return ["TTW VAL mem 60000"]
             if cmd == "ping":
@@ -986,7 +996,7 @@ def test_a_factory_test_that_does_not_confirm_stops_the_test():
 
     for firmware, why in ((StubbornFirmware, "uio bits float"), (QuietFirmware, "not uo_out = uio_in")):
         model = BoardModel(asic_wires(), project="drives_uio")
-        with pytest.raises(ttw.ProtocolError, match=f"tt_um_factory_test did not behave as it should: .*{why}"):
+        with pytest.raises(ttw.Unclear, match=why):  # said as readings that fit no single fault (exit 1)
             run_simulated(model, argv=ASIC, firmware_cls=firmware)
         assert model.contentions == []
         # by hand, --no-strict, it goes on without the loopback, never driving ui_in[0] against the chip
@@ -1484,3 +1494,52 @@ def test_the_command_server_does_not_use_an_sdk_still_logging_to_its_boot_log():
     fw = ttw.build_firmware("rp2040")
     find = fw[fw.index("def _find_tt():") : fw.index("def _sdk(args):")]
     assert "Logger" in find and "OutFile" in find and "RuntimeError" in find
+
+
+# Shorts among HAT JB9, JB10, JC9 and JC10 join uio[6:7] to their own copies or each other's: uio[6:7] are walked
+# together, in phase, so those are not seen (said in the PR and the docs), and nothing fights.
+UNSEEN = {(3, 5), (2, 6), (3, 6), (2, 5)}
+SHORTS_TO_UO_OUT = [(fixed, jc) for fixed in (3, 2) for jc in ttw.PMOD_HAT_PORTS["JC"]]
+
+
+@pytest.mark.parametrize("fixed, jc", SHORTS_TO_UO_OUT)
+def test_a_short_from_an_i2c_pulled_up_line_to_a_uo_out_line_makes_no_fight(fixed, jc):
+    """Review 4: HAT JB9/JB10 (Pi GPIO3/2, with the Pi's 1.8 kOhm pull-ups, so neither probe can see past them)
+    shorted to a uo_out line on JC. uio[6:7] are driven only if the reverse walk did not reach them and neither
+    followed another uio bit's walk, and then together, in phase, switched at once."""
+    model = BoardModel(asic_wires(), project="drives_uio", extra_shorts=[(f"pi:{fixed}", f"pi:{jc}")])
+    result, _log = run_simulated(model, argv=ASIC, pin_id=True)
+    assert model.contentions == []
+    assert ttw.verdict(result)[0] == (0 if (fixed, jc) in UNSEEN else 1)
+
+
+NEIGHBOURS = [(1, 7), (7, 2), (2, 8), (8, 3), (3, 9), (9, 4), (4, 10)]  # Pmod pins next to each other on a ribbon
+
+
+@pytest.mark.parametrize("port", ttw.PORTS)
+@pytest.mark.parametrize("a, b", NEIGHBOURS)
+def test_a_short_between_neighbouring_wires_points_nowhere_wrong_and_makes_us_fight_nothing(port, a, b):
+    """Review 4, finding 2 (the coordinator's middle path): readings that fit no single fault say so, name the
+    ribbon to look at, and carry no DIP-switch advice and no blame on the factory test. The RP2040 never drives
+    against the chip or against itself; what the short makes the chip's own outputs do is the short's."""
+    ga, gb = (ttw.PMOD_HAT_PORTS[port][ttw.PMOD_PIN_NUMBERS.index(n)] for n in (a, b))
+    model = BoardModel(asic_wires(), project="drives_uio", extra_shorts=[(f"pi:{ga}", f"pi:{gb}")])
+    try:
+        result, _log = run_simulated(model, argv=ASIC, pin_id=True)
+        code, line = ttw.verdict(result)
+    except ttw.Unclear:  # stopped before the walks: main says the same line
+        code, line = 1, ttw.UNCLEAR.format(ribbons="")
+    assert code == 1 and line.startswith("the readings fit no single open wire, swapped or turned ribbon"), line
+    assert "DIP" not in line and "factory" not in line
+    ours = [c for c in model.contentions if any(d[0] == "rp2" for d in c)]
+    assert ours == [], ours
+
+
+def test_an_sdk_never_used_leaves_released_pins_so_the_board_gets_the_fallback(monkeypatch, capsys):
+    """Review 4, finding 7: the server released the SDK's pins, then the SDK was never used (init failed by hand,
+    --no-strict): the restore only says so, which is not the board as it started."""
+    fallbacks = []
+    code, line = _main(monkeypatch, capsys, _passed, restore=["OK", "pins", "released;", "the", "SDK", "was", "not",
+                                                              "changed"], fallbacks=fallbacks)  # fmt: skip
+    assert code == 2 and fallbacks == ["/dev/ttyACM0"]
+    assert "; and the board's SDK was not used, so its pins were left released; its SDK was started again" in line

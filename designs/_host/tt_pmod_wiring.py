@@ -437,6 +437,32 @@ try:
                 _emit('OK')
             elif cmd == 'sdk':
                 _sdk(args)
+            elif cmd == 'group':
+                # Drive several pins to one level at the same instant (RP2040 SIO, datasheet section 2.3.1:
+                # GPIO_OUT_SET 0xd0000014, GPIO_OUT_CLR 0xd0000018, GPIO_OE_SET 0xd0000024): the level is set while
+                # they are still inputs, then all their outputs are turned on in one write.
+                import machine
+                v, gs = int(args[0]), [int(a) for a in args[1:]]
+                mask = 0
+                for g in gs:
+                    if not isinstance(_pins.get(g), Pin):
+                        _pins[g] = Pin(g, Pin.IN, None)
+                    mask |= 1 << g
+                machine.mem32[0xd0000014 if v else 0xd0000018] = mask
+                machine.mem32[0xd0000024] = mask
+                time.sleep_us(50)
+                _emit('VALS ' + ' '.join(str(Pin(g).value()) for g in gs))
+            elif cmd == 'ungroup':
+                # All their outputs off in one write (GPIO_OE_CLR 0xd0000028), then plain inputs.
+                import machine
+                gs = [int(a) for a in args]
+                mask = 0
+                for g in gs:
+                    mask |= 1 << g
+                machine.mem32[0xd0000028] = mask
+                for g in gs:
+                    _pins[g] = Pin(g, Pin.IN, None)
+                _emit('OK')
             elif cmd == 'mem':
                 gc.collect()
                 _emit('VAL mem %d' % gc.mem_free())
@@ -769,6 +795,10 @@ class HatGpio:
 # -- Discovery ---------------------------------------------------------------------------
 
 
+# The one input held low through the walks: the factory test drives uio whenever it is high.
+KEPT_LOW = "ui_in[0]"
+
+
 class UnstableReading(ProtocolError):
     """Repeated samples of the Pi GPIOs did not agree."""
 
@@ -891,20 +921,22 @@ class WiringProbe:
     def walk(self, group, bits=None, strength=1, partners=None):
         """Walk a 1 across *group*; return ``({signal: set(pi_gpio)}, {signal: [rp2 signals]})``.
 
-        Every chosen signal is an output held low except the one under test,
-        which is taken high then low; a Pi GPIO that reads 1 in the high step
-        and 0 in the low step belongs to that signal. The second map lists
-        every RP2 *input* pin that followed the signal on the board side; the
-        caller decides which of those are legitimate. *partners* maps a
-        signal to RP2-driven signals known to share its HAT line; any of them
-        currently held low is released to input for the signal's step so two
-        RP2 outputs never fight through the HAT. The chosen signals are left
-        as outputs held low.
+        Only the signal under test is driven, high then low; every other chosen signal is an input meanwhile (a
+        short between two wires then shows as one following the other, and never as two RP2 outputs fighting),
+        except ui_in[0], which stays low throughout: the factory test's uio_oe follows it. A Pi GPIO that reads 1
+        in the high step and 0 in the low step belongs to that signal. The second map lists every RP2 *input* pin
+        that followed the signal on the board side; the caller decides which of those are legitimate. *partners*
+        maps a signal to RP2-driven signals known to share its HAT line; any of them still an output is released
+        to input for the signal's step. The chosen signals are left as inputs, ui_in[0] low.
         """
         chosen = self.signals(group, bits)
         partners = partners or {}
-        for name, _gpio in chosen:
-            self.drive(name, 0, strength)
+        for name, gpio in chosen:
+            if name == KEPT_LOW:
+                self.drive(name, 0, strength)
+            elif name in self.outputs:
+                self.rp2.cmd(f"in {gpio} none")
+                self.outputs.discard(name)
         baseline = self.sample()
         stuck = sorted(g for g, v in baseline.items() if v)
         if stuck:
@@ -934,9 +966,43 @@ class WiringProbe:
                     f"{describe_gpios(sorted(observed[name])) or '(nothing)'}"
                     + (f"; RP2 pins following: {', '.join(followers)}" if followers else "")
                 )
+            if name != KEPT_LOW:
+                self.rp2.cmd(f"in {self.gpio_of(name)} none")
+                self.outputs.discard(name)
             for p in released:
-                self.drive(p, 0, strength)
+                if p == KEPT_LOW:
+                    self.drive(p, 0, strength)
         return observed, follows
+
+    def walk_together(self, names, strength=1):
+        """Drive *names* high and low together (twice; both passes must agree) and return the Pi GPIOs that
+        followed them, as one set. For uio[6:7]: driven in phase, the chip's copy of either (uo_out[6:7]) agrees
+        with whatever a short joins it to among them, so no two drivers ever disagree on a net."""
+        gpios = " ".join(str(self.gpio_of(n)) for n in names)
+
+        def group(value):
+            vals = self.rp2.cmd(f"group {value} {gpios}")[1:]
+            failed = [n for n, v in zip(names, vals) if int(v) != value]
+            for n in failed:
+                self.drive_failures[n] = 1 - value
+            return not failed
+
+        seen = []
+        try:
+            for _ in range(2):
+                group(0)
+                self.sample()
+                took = group(1)
+                high = self.sample()
+                group(0)
+                low = self.sample()
+                seen.append({g for g in high if high[g] == 1 and low[g] == 0} if took else set())
+        finally:
+            self.rp2.cmd(f"ungroup {gpios}")
+        if seen[0] != seen[1]:
+            raise UnstableReading(f"the two passes of {', '.join(names)} disagree (intermittent contact?)")
+        self.log(f"  {' and '.join(names)} together -> {describe_gpios(sorted(seen[0])) or '(nothing)'}")
+        return seen[0]
 
     def walk_twice(self, group, bits=None, strength=1, partners=None):
         """Run :meth:`walk` twice; both passes must agree."""
@@ -1001,28 +1067,26 @@ class WiringProbe:
     def confirm_factory_test(self, uio_floating):
         """Prove ``uo_out = uio_in`` and ``cnt == 0`` on-board before trusting the loopback.
 
-        Drives patterns on the *uio_floating* bits (already known to be
-        undriven) and reads the RP2's own ``uo_out`` pins; then raises
-        ``ui_in[0]`` and checks ``uo_out`` (the counter) and ``uio`` read 0.
-        Returns None on success, else the reason.
+        Drives the *uio_floating* bits (already known to be undriven) one at a time, high then low, the rest
+        inputs (two bits a short joins are then never driven against each other), and reads the RP2's own
+        ``uo_out`` pin of that bit; then raises ``ui_in[0]`` and checks ``uo_out`` (the counter) and ``uio`` read
+        0. Returns None on success, else the reason.
         """
         bits = [int(n[:-1].split("[")[1]) for n in uio_floating]
         if len(bits) < 2:
             return f"only {len(bits)} uio bits float, cannot confirm the loopback"
-        for pattern in (0x5A, 0xA5, 0x00):
-            for bit in bits:
-                if not self.drive(signal_name("uio", bit), (pattern >> bit) & 1):
+        self.set_inputs("uio")
+        for bit in bits:
+            for want in (1, 0):
+                if not self.drive(signal_name("uio", bit), want):
                     self.set_inputs("uio")
                     return f"uio[{bit}] could not be driven"
-            time.sleep(self.settle)
-            rp2 = self.read_rp2()
-            for bit in bits:
-                want = (pattern >> bit) & 1
-                got = rp2[signal_name("uo_out", bit)]
+                time.sleep(self.settle)
+                got = self.read_rp2()[signal_name("uo_out", bit)]
                 if got != want:
                     self.set_inputs("uio")
                     return f"uo_out[{bit}] reads {got} for uio[{bit}]={want}: not uo_out = uio_in"
-        self.set_inputs("uio")
+            self.set_inputs("uio", {bit})
         # Counter check: ui_in[0]=1 puts cnt on uo_out and uio. The chip then drives uio, so every other ui_in bit
         # (ui_in[1:3] share HAT lines with uio[1:3]) is an input meanwhile.
         held = [n for n in self.outputs if n.startswith("ui_in[") and n != "ui_in[0]"]
@@ -1635,14 +1699,14 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
     if 0 not in ui_bits and project_selected:
         notes.append("ui_in[0] is held externally, so the factory-test loopback cannot be used")
         project_selected = False
-    probe.hold_low("ui_in", ui_bits)  # ui_in stays low from here on
+    probe.hold_low("ui_in", ui_bits & {0})  # ui_in[0] stays low from here on; the rest are inputs
 
     # Reverse walk: Pi pulls, RP2 reads. ui_in[0] stays driven so the chip's
     # uio_oe cannot flip while its inputs float.
     log("\n== reverse walk: Pi pulls one line up, RP2 reads its inputs ==")
     reverse_names = [n for n, _g in probe.signals("ui_in", ui_bits - {0})] + [n for n, _g in probe.signals("uio")]
     reverse, held = probe.reverse_walk(reverse_names)
-    probe.hold_low("ui_in", ui_bits)
+    probe.hold_low("ui_in", ui_bits & {0})
     # RP2-driven signals the reverse walk found on one and the same Pi line.
     measured_partners = {}
     for a, pa in reverse.items():
@@ -1663,7 +1727,7 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
             notes.append(f"factory test not confirmed: {reason}; uo_out loopback disabled")
             log(f"WARNING: {notes[-1]}")
             if required:  # the chip's uio_oe is then not known: walking ui_in[0] could make it drive uio
-                raise ProtocolError(f"the chip's {args.asic_project} did not behave as it should: {reason}")
+                raise Unclear(reason)
 
     log("\n== ui_in: RP2 drives, Pi reads ==")
     if asic_loopback or 0 not in ui_bits:
@@ -1676,7 +1740,7 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
         alone = probe.walk_twice("ui_in", {0}, partners=measured_partners)
         observed.update(alone[0])
         follows.update(alone[1])
-        probe.hold_low("ui_in", ui_bits)
+        probe.hold_low("ui_in", ui_bits & {0})
 
     # Which cabling profile are we looking at?
     found, score = choose_cabling(observed, reverse)
@@ -1692,9 +1756,11 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
         # Confirmed uio_oe = 0: the chip does not drive uio. But a wrong ribbon can join a uio net to a line the
         # chip's uo_out drives, so a uio bit is driven only where nothing else can be driving its net: the reverse
         # walk found its line (a driven line does not follow the Pi's pull), it followed the RP2's weak pulls, or
-        # the cabling puts it on the line of its own uo_out copy (which agrees with it: the hand-over is driven
-        # strongly). uio[6:7] sit on the Pi's fixed I2C pull-ups, which neither test can see past: they are driven
-        # when the rest of the uio ribbon was found in place, as only that ribbon reaches those HAT pins.
+        # the cabling puts it on the line of its own uo_out copy (which agrees with it). uio[6:7] sit on the Pi's
+        # fixed I2C pull-ups, which neither test can see past: they are driven when the rest of the uio ribbon was
+        # found in place, as only that ribbon reaches those HAT pins (and see `deferred`, below). The drive
+        # strengths asked for are only honoured by firmware that has them: the deployed RP2040 boards' MicroPython
+        # does not (it warns, and drives at its default), so no fight is ever relied on to be won.
         lines = profile_lines(cabling)
         # found on its own line, and the only uio bit found there: two on one line means one of them follows the
         # other through the chip (a uo_out copy landing on its net), so neither is known safe
@@ -1715,6 +1781,16 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
         in_place = all(not ps or ps == {line} for ps, line in zip(judged, own)) and \
             2 * sum(ps == {line} for ps, line in zip(judged, own)) >= len(own)  # fmt: skip
         drivable = found | floats | latched | (fixed if in_place else set())
+        # uio[6:7] are driven last, and only if neither followed another uio bit's walk: following one means a chip
+        # output (that bit's uo_out copy) is on its line, through a short or a wrong ribbon.
+        deferred = drivable - found - floats - latched
+        # Their own lines have the Pi's fixed pull-up, which the reverse walk cannot move: a line it found for one of
+        # them is reached through the chip, so that bit is not driven either.
+        for k in sorted(deferred):
+            if reverse.get(signal_name("uio", k)):
+                deferred.discard(k)
+                drivable.discard(k)
+                notes.append(f"uio[{k}] is not driven: the reverse walk reached it through something (a short?)")
         for k in sorted(set(range(8)) - drivable):
             notes.append(f"uio[{k}] is not driven: its line may be driven by something else (a wrong ribbon?)")
         strength = 3
@@ -1723,7 +1799,8 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
             log("\n== uio: probing which bits nothing else holds ==")
             uio_floating = probe.probe_floating("uio")
         drivable = {b for b, (n, _g) in enumerate(probe.signals("uio")) if uio_floating[n]}
-        strength = 0  # unknown project: keep any surprise fight current-limited
+        strength = 0  # asked for 2 mA where the firmware supports drive strengths (this board's does not)
+        deferred = set()
         for name, ok in uio_floating.items():
             if ok:
                 continue
@@ -1743,7 +1820,29 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
 
     log("\n== uio: RP2 drives, Pi reads" + (" (uo_out follows through the chip)" if asic_loopback else "") + " ==")
     if drivable:
-        uio_observed, uio_follows = probe.walk_twice("uio", drivable, strength, partners)
+        first = drivable - deferred
+        uio_observed, uio_follows = probe.walk_twice("uio", first, strength, partners) if first else ({}, {})
+        followed = {f for fs in uio_follows.values() for f in fs}
+        for k in sorted(deferred):
+            if signal_name("uio", k) in followed:
+                drivable.discard(k)
+                notes.append(f"uio[{k}] is not driven: it followed another uio bit's walk (a chip output on its line?)")
+        later = deferred & drivable
+        if later and later != deferred:  # one of the pair alone could meet the chip's copy of the other: neither
+            for k in sorted(later):
+                drivable.discard(k)
+                notes.append(f"uio[{k}] is not driven: its partner on the Pi's I2C pull-ups could not be")
+            later = set()
+        if later:
+            # Together, in phase (walk_together). Their lines cannot be told apart this way: each is given the lines
+            # it should reach that were reached, and a line neither should reach goes to both, so the rows show it.
+            # (Two wires of one ribbon cannot swap places.)
+            names = [signal_name("uio", k) for k in sorted(later)]
+            reached = probe.walk_together(names, strength)
+            exp = expected_map(cabling, asic_loopback)
+            stray = reached - set().union(*(exp[n] for n in names))
+            uio_observed.update({n: (reached & exp[n]) | stray for n in names})
+            notes.append(f"{' and '.join(names)} were walked together (the Pi's I2C pull-ups hide their lines)")
         observed.update(uio_observed)
         follows.update(uio_follows)
     latch = {}
@@ -1755,6 +1854,15 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
 
     # Pin-id rounds: the RP2 transmits names, the Pi decodes them per line.
     pin_id = {}
+    # Pin-id sends a different frame on every signal at once: with a short between two of them, two RP2 outputs
+    # would meet. It runs only when the walks found no line reached by a signal it should not be, and no RP2 pin
+    # following one it should not.
+    expect = expected_map(cabling, asic_loopback)
+    strays = [n for n, ps in observed.items() if set(ps) - expect.get(n, set())]
+    strays += [n for n, fs in follows.items() if set(fs) - expected_followers(cabling, asic_loopback, n)]
+    if pin_scanner is not None and strays:
+        notes.append(f"pin-id not run: the walks found a short or a stray line ({', '.join(sorted(set(strays)))})")
+        pin_scanner = None
     if pin_scanner is not None:
         ui_names = [n for n, _g in probe.signals("ui_in", ui_bits)]
         rounds = []
@@ -1771,14 +1879,16 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
         elif ui_names:
             rounds.append(("ui_in", {n: pin_id_label(n) for n in ui_names}))
         if drivable:
-            rounds.append(("uio", {n: pin_id_label(n) for n, _g in probe.signals("uio", drivable)}))
+            alone = drivable - deferred  # uio[6:7] send no names: different frames on them could meet (above)
+            if alone:
+                rounds.append(("uio", {n: pin_id_label(n) for n, _g in probe.signals("uio", alone)}))
         hat.close()  # the decoder requests lines one at a time
         for round_name, transmitting in rounds:
             log(f"\n== pin-id: RP2 transmits {round_name} names, Pi decodes every HAT line ==")
             decoded = run_pin_id_round(rp2, probe, pin_scanner, transmitting, partners, log)
             pin_id[round_name] = {"transmitting": transmitting, "decoded": decoded}
         probe.set_inputs("uio")
-        probe.hold_low("ui_in", ui_bits)
+        probe.hold_low("ui_in", ui_bits & {0})
 
     expected = expected_map(cabling, asic_loopback)
     direct = expected_direct(cabling)
@@ -2086,6 +2196,67 @@ def pin_id_faults(result):
     return faults
 
 
+UNCLEAR = (
+    "the readings fit no single open wire, swapped or turned ribbon: a short between neighbouring wires is "
+    "likely; look at {ribbons} for bridged pins"
+)
+
+
+def ribbons_at(ports, cabling):
+    """'the uio ribbon (to HAT JB) and the uo_out ribbon (to HAT JC)': the ribbons that go to `ports`."""
+    by_port = {port: group for group, port in CABLINGS[cabling].items()}
+    return " and ".join(ribbon(by_port[p], p) for p in PORTS if p in ports)
+
+
+def ports_of(gpio):
+    """{'JA', 'JB'} for GPIO10 (HAT JA2/JB2)."""
+    return {label[:2] for label in HAT_GPIO_LABELS.get(gpio, "").split("/") if label}
+
+
+def no_single_fault(result, bad, held, faults):
+    """The WIRING: line when the readings fit no single fault (an open wire, two crossed wires, a whole ribbon
+    elsewhere, one held bit): a signal reaching its own lines and others too (two wires bridged), a line two
+    drivers meet on, or a held bit among other faults. It points at no one wrong place, only at the ribbons whose
+    readings disagree and the HAT pins seen joined; the readings themselves go in result["readings"]. None when
+    a single fault fits."""
+    cabling = result["cabling"]
+    bridged = [r for r in bad if r["status"] in ("short", "contention")
+               or (set(r["expected"]) & set(r["observed"]) and set(r["observed"]) - set(r["expected"]))]  # fmt: skip
+    # a held bit among faults that are readings (a bit that could not be tested is no reading of its own)
+    held_among = bool(held) and any(f["signal"] not in held and "could not be tested" not in f["text"] for f in faults)
+    if not bridged and not held_among:
+        return None
+    pairs = []
+    for r in bridged:
+        for extra in sorted(set(r["observed"]) - set(r["expected"])):
+            mate = next((x for x in sorted(r["expected"]) if ports_of(x) & ports_of(extra)), None)
+            pair = tuple(sorted((mate, extra))) if mate is not None else None
+            if pair and pair not in pairs:
+                pairs.append(pair)
+    # A pair on the uo_out port can be only the chip copying a bridge between two wires of another ribbon: the
+    # pairs on the wires' own ports, if there are any, are where to look.
+    copies = CABLINGS[cabling]["uo_out"]
+    own = [(a, b) for a, b in pairs if (ports_of(a) & ports_of(b)) - {copies}]
+    pairs = own or pairs
+    ports = set()
+    for a, b in pairs:
+        ports |= (ports_of(a) & ports_of(b)) - ({copies} if own else set())
+    if not ports:
+        ports = {CABLINGS[cabling][f["group"]] for f in faults if f["group"]} or set(PORTS)
+    result["readings"] = [
+        f"{r['signal']} (Pmod pin {pmod_pin(r['signal'])}) reached {hat_pins(r['observed']) or 'nothing'}; it "
+        f"should reach {hat_pins(r['expected'])}" + (f"; held {held[r['signal']]}" if r["signal"] in held else "")
+        for r in bad
+    ][:8]  # fmt: skip
+    joined = "; ".join(f"{hat_pin(a)} and {hat_pin(b)} read as one" for a, b in pairs[:NAMED_PER_RIBBON])
+    return UNCLEAR.format(ribbons=ribbons_at(ports, cabling)) + (f" ({joined})" if joined else "")
+
+
+class Unclear(Exception):
+    """The test stopped on readings that fit no single fault (the chip's copies did not follow its inputs, which a
+    short between neighbouring uio or uo_out wires also does): exit 1, with what was read."""
+
+
 def verdict(result, strict=True):
     """(exit code, the line after WIRING:) from a finished test: 0 every required signal reached the Pi where the
     cabling says, 1 a ribbon is not as it should be (named, with its pins), or uo_out could not be tested."""
@@ -2118,6 +2289,9 @@ def verdict(result, strict=True):
         for f in walk + ids
         if f["group"] not in whole and not (f["via"] and (f["via"] in at_fault or f["via"].split("[")[0] in whole))
     ]
+    unclear = None if whole else no_single_fault(result, bad, held, faults)
+    if unclear:
+        return 1, unclear
     parts = []
     if whole:  # a ribbon wholly elsewhere explains the single-wire faults around it: it alone is said
         faults = []
@@ -2242,13 +2416,14 @@ STOPS = (signal.SIGTERM, signal.SIGINT, signal.SIGALRM)
 # still stops cleanly and puts everything back (and has time left for the SDK fallback below). A passing run on the
 # TT07 board took 22.7 s (8 Oct 2026): about four times that.
 TIME_LIMIT = 90
-# The most the teardown after the limit takes, every step bounded: resync 5 s, mem 5 s, sdk restore 30 s, leaving the
-# command server 6 s; putting the Pi back: 22 pinctrl calls at PINCTRL_TIMEOUT (44 s) and 6 commands at
-# COMMAND_TIMEOUT (30 s). Then, only if the board was not put back, the SDK fallback, at most FALLBACK_SECONDS.
-TEARDOWN_SECONDS = 5 + 5 + 30 + 6 + 22 * 2 + 6 * 5
+# The most the teardown after the limit takes, every step bounded: a pin-id round's stop 10 s (if the limit came while
+# it sent), resync 5 s, mem 5 s, sdk restore 30 s, leaving the command server 6 s; putting the Pi back: 22 pinctrl
+# calls at PINCTRL_TIMEOUT (44 s) and 6 commands at COMMAND_TIMEOUT (30 s). Then, only if the board was not put
+# back, the SDK fallback, at most FALLBACK_SECONDS.
+TEARDOWN_SECONDS = 10 + 5 + 5 + 30 + 6 + 22 * 2 + 6 * 5
 FALLBACK_SECONDS = 75
 # Lines a reader of the boot report needs, which keeps only the end of the output: said again after the report.
-KEPT = ("MEM:", "PULLS:", "FALLBACK:", "RESTORE:")
+KEPT = ("MEM:", "PULLS:", "FALLBACK:", "RESTORE:", "READINGS:")
 
 
 def _stop(signum, frame):
@@ -2344,11 +2519,24 @@ def main(argv=None):
                         board_back = f"the FPGA reset was not released: {e}"
             if args.sdk and board_back is None:
                 try:
-                    out(f"RESTORE: {' '.join(link.cmd('sdk restore', timeout=30)[1:])}")
+                    restored = " ".join(link.cmd("sdk restore", timeout=30)[1:])
+                    out(f"RESTORE: {restored}")
+                    if "not changed" in restored:  # the SDK was never used, but the server released its pins
+                        board_back = "the board's SDK was not used, so its pins were left released"
+
                 except ProtocolError as e:
                     board_back = f"the board's SDK state could not be put back from RAM: {e}"
             stop_firmware(link)
             served = board_back is not None
+    except Unclear as e:
+        code = 1
+        line = UNCLEAR.format(
+            ribbons=ribbons_at(
+                {CABLINGS[args.cabling if args.cabling != "auto" else "asic"][g] for g in ("uio", "uo_out")},
+                args.cabling if args.cabling != "auto" else "asic",
+            )
+        )
+        out(f"READINGS: the chip's uo_out did not follow uio before the walks: {e}")
     except UnstableReading as e:
         code, line = 1, f"the readings were not steady, so the wiring is not known to be right: {e}"
     except Stopped as e:
@@ -2404,6 +2592,9 @@ def main(argv=None):
     if board_back:
         code, line = 2, f"{line}; and {board_back}"
     print("")
+    if result is not None and code == 1:
+        for reading in result.get("readings", []):
+            out(f"READINGS: {reading}")
     for kept_line in kept:  # again, where the boot report keeps them
         print(kept_line)
     said(line)
