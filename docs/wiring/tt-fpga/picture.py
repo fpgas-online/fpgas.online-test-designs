@@ -6,14 +6,14 @@ headers a table is about picked out, the rest drawn faint, so that a table can s
 header is without sending them to another page. PICTURES lists them.
 
 It is a diagram, not a drawing of the boards: the headers are in the order, and under the printed names,
-that Tiny Tapeout's documents give, the ports in the order of their names, and every connector is drawn
-the way the Pmod standard numbers its pins (1 to 6 in one row, 7 to 12 in the other). Where pin 1 is on
-each real connector is known only from the makers' drawing and photograph (wiring.toml, [[facts]]), not
-from a board, and those do not settle which way up a socket's two rows are when you look into it. The
-gold square is therefore pin NUMBER 1, drawn where the numbering puts it and not where a board has it,
-and the picture says so in words (PIN_1), as does every page under the picture: a reader must not take
-the square's corner for a place on the board. When a board has been looked at, record where pin 1 is in
-wiring.toml, draw both sockets as seen looking into them, say so on the picture, and take the warning off.
+that Tiny Tapeout's documents give, the ports in the order of their names. Each connector is drawn as
+Tiny Tapeout's drawing of the demo board shows its sockets from above, the Pmod edge toward the reader:
+pins 1 to 6 in the row farther from the edge, pin 1 (a square pad) at its right-hand end (wiring.toml,
+[[facts]]). A reader takes a drawn place for a place, so the picture draws pin 1 there and not where the
+numbering alone would put it. The HAT's ports are drawn the same way, so that pin 1 to pin 1 is a straight
+line; where their printed 1 is has not been checked, and the words on the picture (PIN_1), and under it
+on every page, say that neither has been checked on a board. When one has been looked at, record it in
+wiring.toml, draw what was seen, and change the words.
 
 Drawn on the canvas the Acorn sheets use (docs/wiring/wiringlib/canvas.py): text as glyph outlines, its own
 paper background, and a build that fails if any text leaves the canvas, overlaps other text or sits on a
@@ -34,9 +34,17 @@ W, H = 1040, 830
 # board. That a cable turned round puts the power pins on signal pins follows from the numbering:
 # turned_round() works it out from wiring.toml and draw() refuses to say it if it is not so.
 PIN_1 = (
-    "The gold square is pin NUMBER 1 of the Pmod numbering. It is not a place on the board.",
+    "Pin 1 (gold) is drawn where Tiny Tapeout's drawing of the demo board puts it, not checked by us:",
+    "seen from above, Pmod edge toward you, the right-hand end of the row farther from the edge.",
+    "The HAT's ports are drawn the same way; where their printed 1 is has not been checked by us.",
     "Find pin 1 on each connector by its marking before plugging a cable in.",
     "A 2x6 cable turned round puts {power} on signal pins.",
+)
+# The same, short enough for the picture itself; the whole of PIN_1 is printed under it on every page.
+PIN_1_SHORT = (
+    "Pin 1 (gold) as in Tiny Tapeout's drawing of the board, seen from above; not checked by us.",
+    "HAT ports drawn the same way, not checked. Find each pin 1 by its marking first: turned round, "
+    "a cable puts {power} on signal pins.",
 )
 SMALLEST = 15  # px: no text on the picture is smaller
 CELL = 34  # a pin of a connector
@@ -89,10 +97,11 @@ def pin_1_warning(w):
 
 
 def connector(sh, w, cx, top, lit, ringed=()):
-    """A 12-pin Pmod connector, pins 1 to 6 over pins 7 to 12, centred on cx. `ringed`: pins to ring."""
+    """A 12-pin Pmod connector seen from above, pins 1 to 6 over pins 7 to 12, pin 1 at the right as Tiny
+    Tapeout's drawing has it (the module docstring), centred on cx. `ringed`: pins to ring."""
     x0 = cx - 3 * CELL
     for pin in range(1, 13):
-        col, row = (pin - 1) % 6, (pin - 1) // 6
+        col, row = 5 - (pin - 1) % 6, (pin - 1) // 6
         x, y = x0 + col * CELL, top + row * CELL
         fill, stroke, sw = "#ffffff", INK if lit else FAINT, 1.5
         if pin == 1:
@@ -164,7 +173,7 @@ def draw(w, name):
 
         # the cable: a band from the header to the port, and a gold line from pin 1 to pin 1
         sh.rect(x0, top_end, x1 - x0, port_top - top_end, fill=colour, stroke=colour, sw=2, extra='fill-opacity="0.16"')
-        pin1 = x0 + CELL / 2
+        pin1 = x0 + 5 * CELL + CELL / 2  # pin 1 is the right-hand cell of the upper row
         sh.add(f'<line x1="{pin1}" y1="{top_end}" x2="{pin1}" y2="{port_top}" stroke="{GOLD if lit else FAINT}" '
                'stroke-width="6"/>')  # fmt: skip
         sh.wire_segments.append((pin1, top_end, pin1, port_top))
@@ -178,11 +187,13 @@ def draw(w, name):
         sh.text(left + 16, hat_top + 148 + 20 * i, note, SMALLEST)
 
     # the warning about pin 1, in words on the picture itself
-    first, *rest = pin_1_warning(w)
-    box = (left, H - 122, W - left, H - 60)
+    pin_1_warning(w)  # refuses to draw if the last sentence is no longer true
+    first, *rest = [line.format(power=w.pmod["power"]) for line in PIN_1_SHORT]
+    box = (left, H - 60 - 26 - 22 * (1 + len(rest)), W - left, H - 60)
     sh.rect(box[0], box[1], box[2] - box[0], box[3] - box[1], fill="#fff4d6", stroke=GOLD, sw=2, rx=8)
-    sh.text(left + 16, H - 96, first, 16, "bold", box=box)
-    sh.text(left + 16, H - 73, " ".join(rest), 16, box=box)
+    sh.text(left + 16, box[1] + 26, first, 16, "bold", box=box)
+    for i, line in enumerate(rest, 1):
+        sh.text(left + 16, box[1] + 26 + 22 * i, line, 16, box=box)
 
     # the key
     x, y = left, H - 22

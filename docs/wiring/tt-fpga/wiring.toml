@@ -217,8 +217,8 @@ also = "Since issue 142 of fpgas.online-test-designs (two wires that end on one 
 #   demo board's sockets, the Pmod HAT's ports, the cables); "finding" only in "Finding the headers", which
 #   every page has, with the fact `printed`; "sources" only in the sources list.
 # None of these is verified by us on a board, and the pages say so.
-# Where pin 1 is comes from a drawing and a photograph. Until a board has been looked at, the picture keeps
-# its pin 1 square as a NUMBER, with the warning in picture.PIN_1.
+# Where pin 1 is comes from a drawing and a photograph. Until a board has been looked at, the picture draws
+# pin 1 where Tiny Tapeout's drawing puts it, with the words in picture.PIN_1 saying it is not checked.
 # ---------------------------------------------------------------------------------------------------
 [[facts]]
 key = "printed"

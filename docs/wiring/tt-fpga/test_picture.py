@@ -81,11 +81,8 @@ def test_every_picture_says_in_words_that_the_gold_square_is_a_number_not_a_plac
         if name == "tt-fpga-display.svg":  # not a picture of cables: no pin 1 on it
             continue
         words = labels(svg)
-        assert "The gold square is pin NUMBER 1 of the Pmod numbering. It is not a place on the board." in words, name
-        assert (
-            "Find pin 1 on each connector by its marking before plugging a cable in. "
-            "A 2x6 cable turned round puts 3.3 V on signal pins."
-        ) in words, name
+        for line in picture.PIN_1_SHORT:
+            assert line.format(power="3.3 V") in words, (name, line)
 
 
 def test_the_warning_about_a_cable_turned_round_is_worked_out_from_the_numbering():

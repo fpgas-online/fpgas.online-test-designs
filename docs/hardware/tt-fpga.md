@@ -6,7 +6,7 @@ The TinyTapeout (TT) FPGA Demo Board is a development platform that combines an 
 
 ## Installing the TT FPGA Packages
 
-Add the fpgas.online APT repository first ([verify.md: Installing](../verify.md#installing)), then on the demo board's Pi:
+Add the fpgas.online APT repository first (the steps under [Installing](../verify.md#installing) in the boot check's documentation), then on the demo board's Pi:
 
 ```bash
 sudo apt install fpgas-online-tt-fpga
@@ -26,9 +26,9 @@ The check, at each boot:
 1. It finds the board by its Raspberry Pi microcontroller on USB (`2e8a:0005` or `2e8a:000f`, MicroPython's serial port).
 2. That does not say whether the demo board carries the FPGA breakout or a Tiny Tapeout chip, so the check asks the board itself (below) and loads a design only into a board that said it is an FPGA board ([Which Tiny Tapeout board it is](../verify.md#which-tiny-tapeout-board-it-is)).
 3. Every board first has what it said judged by [the `sdk` test](../verify.md#the-sdk-test), which loads nothing; for a board with a Tiny Tapeout chip that is the only test so far, and such a board fails until its Pmod cabling can be tested (the report says so).
-4. On an FPGA board it then loads the PMOD pin identification design and checks the PMOD HAT cabling against the expected map (ui_in on HAT JA, uio on JB, uo_out on JC, [tt-fpga-pin-mapping.md](tt-fpga-pin-mapping.md)); a miswired HAT fails the board.
+4. On an FPGA board it then loads the PMOD pin identification design and checks the PMOD HAT cabling against the expected map (ui_in on HAT JA, uio on JB, uo_out on JC, the [pin mapping](tt-fpga-pin-mapping.md)); a miswired HAT fails the board.
 5. It then loads the UART test design through that microcontroller (`tt_fpga_program.py`, over `mpremote`), and runs its host test through the UART bridge on `/dev/ttyACM0`.
-6. There is no SPI flash test: the breakout has no flash (see [Programming](#programming)). Nothing is written to the demo board: for every load the microcontroller reads the bitstream from the Pi over the serial link (see [Programming](#programming)). The board has no flash to compare, so what `changed` compares is its USB serial number.
+6. There is no SPI flash test: the breakout has no flash. Nothing is written to the demo board: for every load the microcontroller reads the bitstream from the Pi over the serial link (see [Programming](#programming)). The board has no flash to compare, so what `changed` compares is its USB serial number.
 7. `mpremote` is `micropython-mpremote` in trixie, but only in bookworm-backports for bookworm: without it the check reports an `error`.
 8. Only the PMOD loopback test is left to `fpgas-tt-fpga-debug` (`sudo fpgas-tt-fpga-debug --variant tt-fpga test pmod`).
 9. When the tests are done the check streams one more design, which moves the seven-segment display and is left running ([what the TT FPGA is left running](../verify.md#what-the-tt-fpga-is-left-running)); if that load fails the board still passes, with a warning in the report.

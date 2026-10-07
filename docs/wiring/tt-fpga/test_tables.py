@@ -131,9 +131,11 @@ def test_the_serial_ports_table_says_which_of_its_two_wires_is_measured():
 
 def test_the_pin_1_warning_is_under_every_picture():
     warning = (
-        "**Pin 1 on the picture.** The gold square is pin NUMBER 1 of the Pmod numbering. It is not a place on "
-        "the board. Find pin 1 on each connector by its marking before plugging a cable in. A 2x6 cable turned "
-        "round puts 3.3 V on signal pins."
+        "**Pin 1 on the picture.** Pin 1 (gold) is drawn where Tiny Tapeout's drawing of the demo board puts it, "
+        "not checked by us: seen from above, Pmod edge toward you, the right-hand end of the row farther from the "
+        "edge. The HAT's ports are drawn the same way; where their printed 1 is has not been checked by us. Find "
+        "pin 1 on each connector by its marking before plugging a cable in. A 2x6 cable turned round puts 3.3 V "
+        "on signal pins."
     )
     for name in WIRE_PAGES:  # the display's picture is no picture of cables, so has no pin 1 to warn about
         text = FILES[name]
