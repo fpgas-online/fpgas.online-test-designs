@@ -150,6 +150,16 @@ def transcript(marker, *said):
     return block[0]
 
 
+def without_advice(block):
+    """A ```text transcript without its `What to do:` lines, marked as left out: the advice an older version printed
+    there must not be printed on a page whose reader it does not apply to."""
+    lines = block.strip().split("\n")
+    at = [n for n, line in enumerate(lines) if line == "What to do:"]
+    if len(at) != 1 or lines[-1] != "```":
+        raise wiring.WiringError("a transcript without exactly one `What to do:` line, or not closed by ```")
+    return "\n".join([*lines[: at[0]], "What to do: (left out here; see the text above)", "```"])
+
+
 def failures(c):
     """The Acorn rows of verify/common-failures.md's "Common failures" table that can be met on carrier `c`, as a
     table."""
@@ -368,27 +378,25 @@ def pages(c):
         out += [
             "**No Compute Blade has passed the whole check yet.** This is what one prints today: a Compute Blade "
             "with a Compute Module 5 and an Acorn CLE-101 still on the image it was sold with (pi16 at ps1, "
-            "7 October 2026, installed by the steps above). Two things are wrong and neither is the wiring or the "
-            "installation: the card has "
-            "not been converted to the fpgas.online design, and in this boot the JTAG test cannot have its TMS "
-            "pin, which the header's serial port holds. **Do not follow its first `What to do:` line on a "
-            "Compute Blade:** it says to convert the card, and converting or loading a card on a blade is not in this "
-            'guide yet (the page "verifying 3" says why). That line is as version 0.0.post1216 printed it; later '
-            "versions say not to on a Compute Blade.",
+            "7 October 2026, installed by the steps above, version 0.0.post1216). Two things are wrong and neither "
+            "is the wiring or the installation: the card has not been converted to the fpgas.online design, and in "
+            "this boot the JTAG test cannot have its TMS pin, which the header's serial port holds. Its "
+            "`What to do:` lines are left out here: that version's advice was for a Raspberry Pi 5. **On a Compute "
+            "Blade, do not load a design into the card or convert it; that is not in this guide yet** (the page "
+            '"verifying 3" says why). From version 0.0.post1284 the check says so itself, and says that changing '
+            "the gateway's shared boot files or giving one blade its own copy is the gateway owner's choice.",
             "",
-            transcript(BLADE_FAIL, "pi16", "2026-10-07", "CLE-101", "0.0.post1216").strip(),
+            without_advice(transcript(BLADE_FAIL, "pi16", "2026-10-07", "CLE-101", "0.0.post1216")),
             "",
             "On the blades at ps1 every `sudo` first prints `sudo: unable to resolve host pi16: Name or service "
             "not known` (with the blade's own name). It did no harm on the blades it was seen on (7 October 2026), "
-            'and is left out above. The advice above to "change one blade\'s own copy" of the boot files is as '
-            'version 0.0.post1216 printed it; later versions say what the page "verifying 3" says: changing the '
-            "shared files or giving one blade its own copy is the gateway owner's choice.",
+            "and is left out above.",
             "",
             "**A card still on the vendor's XDMA sample image** (pi20 at ps1, 7 October 2026, version "
             "0.0.post1220) gets the same tests as one on SQRL's image: `pcie-link` and `rp1-pio` pass, `jtag` "
             "fails on GPIO14 as above, the rest are `not run`. Its summary line reads `acorn -: fail` (no variant "
             "is named), and the first `What to do:` line says the board runs Xilinx's XDMA sample design (on a "
-            "Compute Blade, in versions after the one used there, not to convert it). That was on pi20 at ps1, "
+            "Compute Blade, from version 0.0.post1284, not to convert it). That was on pi20 at ps1, "
             "installed by the steps above as version 0.0.post1216 and updated "
             "to 0.0.post1220 the same day; version 0.0.post1216 printed `acorn: fail (no test ran)` there "
             "([fpgas.online-test-designs issue 155, a card on the vendor XDMA sample image got no test at "
