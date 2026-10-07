@@ -44,6 +44,7 @@ Prints ``RESULT: PASS`` or ``RESULT: FAIL`` as the last line and exits 0/1.
 """
 
 import argparse
+import contextlib
 import json
 import os
 import pathlib
@@ -113,13 +114,14 @@ CONTROLLERS = {
 }
 
 GROUPS = ("ui_in", "uio", "uo_out")
+PORTS = ("JA", "JB", "JC")
 
 # -- Expected cabling: TT group -> HAT port --------------------------------------
 
 CABLINGS = {
     # Measured on the TT FPGA hosts (docs/hardware/tt-fpga-pin-mapping.md).
     "fpga": {"ui_in": "JC", "uio": "JB", "uo_out": "JA"},
-    # Measured on the TT ASIC hosts on 2026-09-04 (pi-sw2-p6 first): the
+    # Measured on the TT ASIC hosts on 2026-09-04 (a TT06 board first): the
     # mirror image, which puts the HAT's shared JA2-4/JB2-4 lines between
     # ui_in[1:3] and uio[1:3] instead of between uio[1:3] and uo_out[1:3].
     "asic": {"ui_in": "JA", "uio": "JB", "uo_out": "JC"},
@@ -227,6 +229,7 @@ DATA = __DATA__
 _pins = {}
 _tt = None
 _saved_mode = None
+_saved = None
 _drive_warned = False
 _PULLS = {'none': None, 'up': Pin.PULL_UP, 'down': Pin.PULL_DOWN}
 
@@ -268,18 +271,23 @@ def _find_tt():
     return _tt
 
 def _sdk(args):
-    global _saved_mode
+    global _saved_mode, _saved
     op = args[0]
     if op == 'restore':
         _release_all()
-        if _tt is None or _saved_mode is None:
-            _emit('OK pins released; the SDK mode was not changed')
+        if _tt is None or _saved is None:
+            _emit('OK pins released; the SDK was not changed')
             return
     t = _find_tt()
     if op == 'init':
+        # What the board is running, to put back from RAM afterwards (no reset): its mode, its project, its
+        # project clock, and the SDK's own one-line description of all three, which restore must match.
         _saved_mode = t.mode
+        _saved = (getattr(t.shuttle, 'enabled', None), t.auto_clocking_freq if t.is_auto_clocking else None,
+                  repr(t))
         _clock_stop(t)
         _emit('OK mode=%s' % _saved_mode)
+        _emit('WARN board was: %s' % _saved[2])
     elif op == 'project':
         name = args[1]
         sh = t.shuttle
@@ -303,16 +311,28 @@ def _sdk(args):
         t.reset_project(False)
         _emit('OK')
     elif op == 'restore':
-        if _saved_mode is not None:
-            # Go through SAFE first in case the mode setter is a no-op for
-            # an unchanged value; the SDK must re-own its pins.
-            try:
-                from ttboard.mode import RPMode
-                t.mode = RPMode.SAFE
-            except Exception as e:
-                _emit('WARN mode SAFE: %r' % e)
-            t.mode = _saved_mode
-        _emit('OK mode=%s' % t.mode)
+        # Back as it was, from RAM: the mode (through SAFE, so the SDK re-owns its pins even when the setter would
+        # be a no-op), the project (enabled again and reset), its clock. The SDK's description must then match.
+        project, freq, was = _saved
+        try:
+            from ttboard.mode import RPMode
+            t.mode = RPMode.SAFE
+        except Exception as e:
+            _emit('WARN mode SAFE: %r' % e)
+        t.mode = _saved_mode
+        if project is not None:
+            project.enable()
+        _clock_stop(t)
+        t.reset_project(True)
+        time.sleep_ms(5)
+        t.reset_project(False)
+        if freq:
+            t.clock_project_PWM(freq)
+        now = repr(t)
+        if now != was:
+            _emit('ERR restore: the board was %s and is now %s' % (was, now))
+        else:
+            _emit('OK restored: %s' % now)
     else:
         _emit('ERR sdk: unknown op %s' % op)
 
@@ -745,21 +765,23 @@ class WiringProbe:
         self.settle = settle
         self.log = log
         self.drive_failures = {}  # signal -> what the RP2 read back
+        self.held_level = {}  # signal -> how probe_floating found it held: high, low, against the pulls
         self.outputs = set()  # signals currently driven by the RP2
 
     # -- primitives --------------------------------------------------------------
 
     def sample(self):
-        """Read the HAT lines *samples* times; they must all agree."""
-        for _attempt in range(5):
-            time.sleep(self.settle)
-            readings = []
-            for _ in range(self.samples):
-                readings.append(self.hat.read_all())
-                time.sleep(0.001)
-            if all(r == readings[0] for r in readings):
-                return readings[0]
-        raise UnstableReading("Pi GPIO samples keep changing while nothing is toggling")
+        """Read the HAT lines *samples* times; they must all agree, the first time (no retry: a line that flickers
+        is a contact to look at, and is named)."""
+        time.sleep(self.settle)
+        readings = []
+        for _ in range(self.samples):
+            readings.append(self.hat.read_all())
+            time.sleep(0.001)
+        changing = sorted(g for g in readings[0] if any(r[g] != readings[0][g] for r in readings))
+        if changing:
+            raise UnstableReading(f"{hat_pins(changing)} changed between readings while nothing was switching")
+        return readings[0]
 
     def signals(self, group, bits=None):
         return [
@@ -833,7 +855,8 @@ class WiringProbe:
                 self.rp2.cmd(f"in {gpio} none")
                 self.outputs.discard(name)
                 result[name] = up == 1 and down == 0
-                held = "floating" if result[name] else ("held high" if up == down == 1 else "held low")
+                self.held_level[name] = "high" if up == down == 1 else "low" if up == down == 0 else "against the pulls"
+                held = "floating" if result[name] else f"held {self.held_level[name]}"
                 self.log(f"  {name:<10} (RP2 GPIO{gpio:<2}) pull-up reads {up}, pull-down reads {down}: {held}")
             return result
         finally:
@@ -1383,6 +1406,7 @@ class PiEnvironment:
         self.sysrq_before = None
         self.saved_pins = None
         self.assumed_pulls = {}
+        self.unloaded = []
         self.gettys = []
 
     def read_pins(self):
@@ -1392,6 +1416,21 @@ class PiEnvironment:
         if rc != 0 or set(found) != set(ALL_HAT_GPIOS):
             raise RuntimeError(f"the Pi's HAT GPIOs could not be read with pinctrl: {out.strip()[:200]}")
         return found
+
+    def check_pins(self):
+        """What pinctrl reads now that differs from what was set back: an input's level is the board's, not ours;
+        a pull pinctrl cannot read is not compared."""
+        try:
+            now = self.read_pins()
+        except RuntimeError as e:
+            return [f"the HAT GPIOs could not be read back: {e}"]
+        faults = []
+        for g, (func, pull, level) in sorted(self.saved_pins.items()):
+            f2, p2, l2 = now[g]
+            if f2 != func or (p2 != "--" and p2 != pull) or (func == "op" and l2 != level):
+                wanted = f"{func} {pull}" + (f" {level}" if func == "op" else "")
+                faults.append(f"GPIO{g} reads back {f2} {p2} {l2}, not {wanted}")
+        return faults
 
     def enter(self):
         if os.geteuid() != 0 and subprocess.run(["sudo", "-n", "true"], capture_output=True).returncode != 0:
@@ -1445,9 +1484,9 @@ class PiEnvironment:
             self.log(f"Stopping {', '.join(self.gettys)} (restarted afterwards)")
             run_quiet(["systemctl", "stop", *self.gettys])
         if self.unload_modules:
-            unloaded = [m for m in self.SPI_MODULES if run_quiet(["rmmod", m]).returncode == 0]
-            if unloaded:
-                self.log(f"Unloaded kernel modules: {', '.join(unloaded)}")
+            self.unloaded = [m for m in self.SPI_MODULES if run_quiet(["rmmod", m]).returncode == 0]
+            if self.unloaded:
+                self.log(f"Unloaded kernel modules: {', '.join(self.unloaded)} (loaded again afterwards)")
 
     def leave(self):
         """Put back what enter() changed; return what could not be put back (empty when all was)."""
@@ -1455,13 +1494,18 @@ class PiEnvironment:
         if self.saved_pins is not None:
             faults += self.pins.set_pins(self.saved_pins)
             if not faults:
-                self.log(f"Put back the state of the {len(self.saved_pins)} HAT GPIOs")
+                faults += self.check_pins()
+            if not faults:
+                self.log(f"Put back the state of the {len(self.saved_pins)} HAT GPIOs (read back with pinctrl)")
             if self.assumed_pulls:
                 by_why = {}
                 for g, (pull, why) in sorted(self.assumed_pulls.items()):
                     by_why.setdefault(why, []).append(f"GPIO{g} {pull}")
                 self.log("PULLS: pinctrl cannot read this Pi's pulls, so they were set to known ones: "
                          + "; ".join(f"{why}: {', '.join(pins)}" for why, pins in by_why.items()))  # fmt: skip
+        for module in reversed(self.unloaded):  # spi_bcm2835 before spidev, which sits on it
+            if run_quiet(["modprobe", module]).returncode != 0:
+                faults.append(f"the {module} kernel module was not loaded again")
         put_back = ["sysctl", "-q", "-w", f"kernel.sysrq={self.sysrq_before}"]
         if self.sysrq_before not in (None, "0") and run_quiet(put_back).returncode != 0:
             faults.append(f"kernel.sysrq was not set back to {self.sysrq_before}")
@@ -1536,23 +1580,15 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
         probe.hold_low("ui_in", {0})
     ui_floating.update(probe.probe_floating("ui_in", bits=set(range(1, 8))))
     ui_bits = {b for b, (n, _g) in enumerate(probe.signals("ui_in")) if ui_floating[n]}
+    held_ui = {}
     for name, ok in ui_floating.items():
         if ok:
             continue
-        # ui_in is an input of the chip, so what holds it is a DIP switch (a
-        # resistor to a rail, which the RP2 out-drives every day in
-        # ASIC_RP_CONTROL mode), the console UART, or a wiring fault. Try to
-        # impose both levels; if the RP2 wins, test the bit and say so.
-        gpio = probe.gpio_of(name)
-        wins = probe.drive(name, 1) and probe.drive(name, 0)
-        probe.drive_failures.pop(name, None)
-        rp2.cmd(f"in {gpio} none")
-        probe.outputs.discard(name)
-        if wins:
-            ui_bits.add(signal_bit(name))
-            notes.append(f"{name} is held weakly by something (DIP switch on?); the RP2 out-drives it, tested anyway")
-        else:
-            notes.append(f"{name} is held hard by something else (shorted to a rail? console UART?): not driven")
+        # ui_in is an input of the chip, so what holds it is a DIP switch that is on (1 kOhm to 3.3 V), the chip's
+        # own output on a line a wrong ribbon joins to it, or a wiring fault. It is never driven: against a chip
+        # output that would be two drivers on one net. It fails the board, said.
+        held_ui[name] = probe.held_level[name]
+        notes.append(f"{name} is held {held_ui[name]} by something: not driven")
     if 0 not in ui_bits and project_selected:
         notes.append("ui_in[0] is held externally, so the factory-test loopback cannot be used")
         project_selected = False
@@ -1583,9 +1619,21 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
         else:
             notes.append(f"factory test not confirmed: {reason}; uo_out loopback disabled")
             log(f"WARNING: {notes[-1]}")
+            if required:  # the chip's uio_oe is then not known: walking ui_in[0] could make it drive uio
+                raise ProtocolError(f"the chip's {args.asic_project} did not behave as it should: {reason}")
 
     log("\n== ui_in: RP2 drives, Pi reads ==")
-    observed, follows = probe.walk_twice("ui_in", ui_bits, partners=measured_partners)
+    if asic_loopback or 0 not in ui_bits:
+        observed, follows = probe.walk_twice("ui_in", ui_bits, partners=measured_partners)
+    else:
+        # No confirmed loopback: the chip's project may drive uio when ui_in[0] goes high, and uio[1:3] share
+        # HAT lines with ui_in[1:3]. So ui_in[0] is walked alone, with every other ui_in bit an input.
+        observed, follows = probe.walk_twice("ui_in", ui_bits - {0}, partners=measured_partners)
+        probe.set_inputs("ui_in", ui_bits - {0})
+        alone = probe.walk_twice("ui_in", {0}, partners=measured_partners)
+        observed.update(alone[0])
+        follows.update(alone[1])
+        probe.hold_low("ui_in", ui_bits)
 
     # Which cabling profile are we looking at?
     found, score = choose_cabling(observed, reverse)
@@ -1722,6 +1770,7 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
         "controller": args.controller,
         "cabling": cabling,
         "cabling_found": found if score >= 8 else None,
+        "held_inputs": held_ui,
         "asic_loopback": asic_loopback,
         "observed": {k: sorted(v) for k, v in observed.items()},
         "reverse": {k: sorted(v) for k, v in reverse.items()},
@@ -1794,54 +1843,145 @@ def report(result, discover, log=print):
 
 SAYS = "WIRING:"
 # A ribbon's faults named in the line before "and N more" (the report above it has them all).
-NAMED_PER_RIBBON = 4
+NAMED_PER_RIBBON = 2
+HELD_ADVICE = "a DIP switch that is on, or a wrong ribbon joining it to a chip output: set all DIP switches off"
 
 
-def ribbon_pin(name):
-    """'ui_in[2]' -> 3: the Pmod pin (1-4, 7-10) a signal's bit is on, at the demo board and at the HAT alike."""
+def pmod_pin(name):
+    """'ui_in[5]' -> 8: the Pmod pin (1-4, 7-10) a signal's bit is on, at the demo board and at the HAT alike."""
     return PMOD_PIN_NUMBERS[signal_bit(name)]
 
 
-def ribbon(group, cabling):
-    """'the ui_in ribbon (HAT JA)': a ribbon named by the demo board's Pmod group and the HAT port it goes to."""
-    return f"the {group} ribbon (HAT {CABLINGS[cabling][group]})"
+def hat_pin(gpio):
+    """A Pi GPIO as the HAT's connectors name it: GPIO8 -> 'HAT JA pin 1', GPIO10 -> 'HAT JA/JB pin 2' (the HAT
+    joins JA and JB pins 2 to 4)."""
+    labels = HAT_GPIO_LABELS.get(gpio)
+    if labels is None:
+        return f"Pi GPIO{gpio}"
+    parts = labels.split("/")
+    return f"HAT {'/'.join(p[:2] for p in parts)} pin {parts[0][2:]}"
 
 
 def hat_pins(gpios):
-    """The HAT pins of Pi GPIOs, as the HAT is labelled: 'JA3/JB3, JC1'."""
-    return ", ".join(HAT_GPIO_LABELS.get(g, f"GPIO{g}") for g in sorted(gpios))
+    return ", ".join(hat_pin(g) for g in sorted(gpios))
 
 
-def row_faults(row, cabling):
-    """The faults of a required row that is not ok, each on the ribbon it is on: [{"group", "signal", "absent",
-    "via", "text"}]. absent: the signal's own HAT line was not reached, and no wrong line was; via: for a uo_out
-    line the chip drives from this row's signal, that signal."""
+def ribbon(group, port):
+    """'the ui_in ribbon (to HAT JA)': a ribbon named by the demo board's Pmod and the HAT port it goes to."""
+    return f"the {group} ribbon (to HAT {port})"
+
+
+def ribbon_reaches(result):
+    """{group: {bit: Pi GPIOs}}: the lines each tested bit of each ribbon is on.
+
+    ui_in[1..7] and uio: from the reverse walk (the Pi pulls a line, the RP2 reads: what the chip copies does not
+    enter it). Where it found nothing: the forward walk's lines if one of them is a line the reverse walk cannot
+    move (driven by the chip, or with the Pi's fixed I2C pull-up), else nothing. A uio bit that reached one line
+    only is left out (with the loopback the chip's copy is always one), unless no uio bit has a line of its own,
+    when none has. ui_in[0] (not in the reverse walk): from its forward walk. uo_out, with the chip's loopback:
+    from what each uio bit reached through the chip."""
+    rows = {r["signal"]: r for r in result["rows"]}
+    reverse = {k: set(v) for k, v in result.get("reverse", {}).items()}
+    seen = {g: {} for g in GROUPS}
+    ambiguous = set()
+    for name, r in rows.items():
+        if r["status"] in ("untested", "contention"):
+            continue
+        if name == "ui_in[0]":
+            seen["ui_in"][0] = set(r["observed"])
+        elif reverse.get(name):
+            seen[name.split("[")[0]][signal_bit(name)] = reverse[name]
+        elif name.startswith("uio[") and result["asic_loopback"] and len(r["observed"]) < 2:
+            ambiguous.add(signal_bit(name))  # one line, and the chip's copy is always one: not this ribbon's own
+        else:
+            unmovable = set(result.get("held", ())) | PI_FIXED_PULLUP_GPIOS
+            seen[name.split("[")[0]][signal_bit(name)] = set(r["observed"]) if set(r["observed"]) & unmovable else set()
+    if ambiguous and not any(seen["uio"].values()):  # no uio bit has a line of its own: the ribbon reaches nothing
+        seen["uio"].update({k: set() for k in ambiguous})
+    if result["asic_loopback"]:
+        seen["uo_out"] = {signal_bit(n): set(r["observed"]) for n, r in rows.items()
+                          if n.startswith("uio[") and r["status"] not in ("untested", "contention")}  # fmt: skip
+    return seen
+
+
+def ribbon_place(bits, port, offset=False):
+    """How many of `bits` ({bit: GPIOs}) are on HAT `port` pin for pin; with offset, one position off (Pmod pin n on
+    HAT pin 12 - n, which puts pins 1 and 7 on the HAT's ground)."""
+    found = 0
+    for k, gpios in bits.items():
+        pin = PMOD_PIN_NUMBERS[k]
+        if offset:
+            if 12 - pin not in PMOD_PIN_NUMBERS:
+                continue
+            pin = 12 - pin
+        if PMOD_HAT_PORTS[port][PMOD_PIN_NUMBERS.index(pin)] in gpios:
+            found += 1
+    return found
+
+
+def ribbon_findings(result):
+    """({group: (kind, what)}, {group: the port it is on}) for a ribbon that is wholly elsewhere: ("elsewhere", the
+    port it is on), ("offset", the port it is seated one position off on), ("none", its signals: it reached
+    nothing). A ribbon in place, or with only some wires wrong, is not in the first."""
+    cabling = result["cabling"]
+    seen = ribbon_reaches(result)
+    place, found = {}, {}
+    for group in GROUPS:  # uo_out last: it is on a port the uio ribbon is not on
+        bits = seen[group]
+        if not bits:
+            continue
+        expected = CABLINGS[cabling][group]
+        ports = [p for p in PORTS if group != "uo_out" or p != place.get("uio")]
+        best = max(ports, key=lambda p: (ribbon_place(bits, p), p == expected))
+        place[group] = best
+        n = len(bits)
+        if expected in ports and ribbon_place(bits, expected) == n:  # uo_out is never where the uio ribbon is
+            continue
+        # What reached the Pi at all: for uo_out, beyond the uio bit's own line (which the uio walk reached itself).
+        uio_port = place.get("uio", CABLINGS[cabling]["uio"])
+        rest = bits if group != "uo_out" else {k: g - {PMOD_HAT_PORTS[uio_port][k]} for k, g in bits.items()}
+        shifted = max(ports, key=lambda p: (ribbon_place(bits, p, offset=True), p == expected))
+        movable = sum(1 for k in bits if 12 - PMOD_PIN_NUMBERS[k] in PMOD_PIN_NUMBERS)
+        grounded = [bits[k] for k in bits if 12 - PMOD_PIN_NUMBERS[k] not in PMOD_PIN_NUMBERS]  # pins 1, 7
+        if ribbon_place(bits, best) == n:
+            found[group] = ("elsewhere", best)
+        elif movable >= 3 and ribbon_place(bits, shifted, offset=True) == movable and not any(grounded):
+            place[group] = shifted
+            found[group] = ("offset", shifted)
+        elif not any(rest.values()):
+            found[group] = ("none", None)
+    return found, place
+
+
+def row_faults(row, cabling, held):
+    """The faults of a required row that is not ok, each on the ribbon it is on: [{"group", "signal", "own",
+    "via", "text"}]. own: the signal's own HAT line was not reached; via: for a uo_out line the chip drives from
+    this row's signal, that signal."""
     name, lines = row["signal"], profile_lines(cabling)
     group = name.split("[")[0]
     own = lines[name]
-    port = CABLINGS[cabling][group]
-    where = f"{name} (pin {ribbon_pin(name)})"
+    where = f"{name} (Pmod pin {pmod_pin(name)})"
 
-    def fault(text, g=group, s=name, absent=False, via=None):
-        return {"group": g, "signal": s, "absent": absent, "via": via, "text": text}
+    def fault(text, g=group, s=name, own_missing=False, via=None):
+        return {"group": g, "signal": s, "own": own_missing, "via": via, "text": text}
 
     if row["status"] == "contention":
         return [fault(f"{where} could not be driven by the demo board: something else drives it")]
     if row["status"] == "untested":
-        return [fault(f"{where} could not be tested")]
+        if name in held:
+            return [fault(f"{where} is held {held[name]} on the demo board ({HELD_ADVICE})", own_missing=True)]
+        return [fault(f"{where} could not be tested", own_missing=True)]
     expected, observed = set(row["expected"]), set(row["observed"])
     missing, extra = expected - observed, observed - expected
     faults = []
     if own in missing:
         reached = f": it reached {hat_pins(extra)}" if extra else ""
-        faults.append(fault(f"{where} did not reach {port}{ribbon_pin(name)}{reached}", absent=not extra))
+        faults.append(fault(f"{where} did not reach {hat_pin(own)}{reached}", own_missing=True))
     elif extra:
         faults.append(fault(f"{where} also reached {hat_pins(extra)} (a short)"))
     for gpio in sorted(missing - {own}):  # the uo_out line the chip's factory test drives from this signal
         out = next(s for s, g in lines.items() if s.startswith("uo_out") and g == gpio)
-        text = (f"{out} (pin {ribbon_pin(out)}) did not reach {CABLINGS[cabling]['uo_out']}{ribbon_pin(out)} "
-                f"(driven by the chip from {name})")  # fmt: skip
-        faults.append(fault(text, "uo_out", out, absent=not extra, via=name))
+        faults.append(fault(f"{out} (Pmod pin {pmod_pin(out)}) did not reach {hat_pin(gpio)}", "uo_out", out, via=name))
     if not faults:
         faults.append(fault(f"{where}: {row['detail'] or row['status']}"))
     return faults
@@ -1857,19 +1997,19 @@ def pin_id_faults(result):
             if r["status"] in ("ok", "idle"):
                 continue
             heard = "nothing" if r["decoded"] is None else pin_id_display(r["decoded"])
-            hat = HAT_GPIO_LABELS[r["gpio"]]
             if r["expected"] is None:
-                faults.append({"group": "", "signal": None, "absent": False, "via": None,
-                               "text": f"{hat} heard {heard}, where nothing was sent"})  # fmt: skip
+                faults.append({"group": "", "signal": None, "own": False, "via": None,
+                               "text": f"{hat_pin(r['gpio'])} also heard {heard}"})  # fmt: skip
                 continue
             name = sent[r["expected"]]
             if lines[name] == r["gpio"]:
-                what = name
+                what, via = name, None
             else:  # a uo_out line, which the chip drives from `name`
                 what = next(s for s, g in lines.items() if s.startswith("uo_out") and g == r["gpio"])
-            faults.append({"group": what.split("[")[0], "signal": what, "absent": False, "via": None,
-                           "text": f"{what} (pin {ribbon_pin(what)}): its name was not read on {hat} "
-                                   f"(read: {heard})"})  # fmt: skip
+                via = name
+            faults.append({"group": what.split("[")[0], "signal": what, "own": via is None, "via": via,
+                           "text": f"{what} (Pmod pin {pmod_pin(what)}): its name was not read on "
+                                   f"{hat_pin(r['gpio'])} (read: {heard})"})  # fmt: skip
     return faults
 
 
@@ -1882,40 +2022,68 @@ def verdict(result, strict=True):
         if result["asic_loopback"]:
             return 0, f"all 24 Pmod signals reached the Pi where they should: {where} (uo_out through the chip)"
         return 0, f"the signals tested reached the Pi where they should ({where}); uo_out was not tested"
-    found_profile = result.get("cabling_found")
-    if found_profile and found_profile != cabling:  # the ribbons are on each other's ports: that is the fault
-        other = ", ".join(f"{g} on HAT {CABLINGS[found_profile][g]}" for g in GROUPS)
-        return 1, f"the ribbons look cabled as {other}, not as {where}: move each to its port"
+    held = result.get("held_inputs", {})
     bad = [r for r in result["rows"] if r["required"] and r["status"] != "ok"]
-    faults = [f for r in bad for f in row_faults(r, cabling)]
-    # A uo_out line missed from a ui_in row comes through that ui_in signal's shared HAT line, the uio ribbon and
-    # the chip: when the uio signal on that line is at fault itself, that is the explanation, not the uo_out
-    # ribbon (a uio ribbon not plugged in, say).
-    bad_uio = {r["signal"] for r in bad if r["signal"].startswith("uio[")}
-    partner = {n: f"uio[{j}]" for n in expected_direct(cabling) for j in connected_uio(cabling, n)}
-    faults = [f for f in faults if not (f["via"] or "").startswith("ui_in[") or partner.get(f["via"]) not in bad_uio]
-    faults += pin_id_faults(result)
+    walk = [f for r in bad for f in row_faults(r, cabling, held)]
+    whole, _place = ribbon_findings(result)
+    # A signal whose own wire is at fault explains what the chip copies from it, and what pin-id heard of it.
+    at_fault = {f["signal"] for f in walk if f["own"]}
+    # A uo_out line missed through ui_in[k] (on the line the HAT shares with uio[k]) reaches the chip by uio[k]'s
+    # wire: a fault on that wire explains it too.
+    shared = {n: f"uio[{j}]" for n in expected_direct(cabling) if n.startswith("ui_in[")
+              for j in connected_uio(cabling, n)}  # fmt: skip
+    at_fault |= {n for n, partner in shared.items() if partner in at_fault}
+    faulted = {f["signal"] for f in walk}
+    ids = [f for f in pin_id_faults(result) if f["signal"] not in faulted]
+    faults = [
+        f
+        for f in walk + ids
+        if f["group"] not in whole and not (f["via"] and (f["via"] in at_fault or f["via"].split("[")[0] in whole))
+    ]
     parts = []
+    if whole:  # a ribbon wholly elsewhere explains the single-wire faults around it: it alone is said
+        faults = []
+    swapped = [(a, b) for a in GROUPS for b in GROUPS if a < b
+               and whole.get(a) == ("elsewhere", CABLINGS[cabling][b])
+               and whole.get(b) == ("elsewhere", CABLINGS[cabling][a])]  # fmt: skip
+    for a, b in swapped:
+        parts.append(f"the {a} and {b} ribbons are on each other's HAT ports ({CABLINGS[cabling][b]} and "
+                     f"{CABLINGS[cabling][a]}): swap them")  # fmt: skip
+    offset = [g for g in GROUPS if whole.get(g, ("",))[0] == "offset"]
+    if offset:
+        which = ", ".join(f"{g} on HAT {whole[g][1]}"
+                          + (f" (it goes on {CABLINGS[cabling][g]})" if whole[g][1] != CABLINGS[cabling][g] else "")
+                          for g in offset)  # fmt: skip
+        parts.append(f"{'the ' + offset[0] + ' ribbon is' if len(offset) == 1 else 'these ribbons are'} seated one "
+                     f"position off ({which}): Pmod pin n arrives on HAT pin 12-n, and Pmod pins 1 and 7 are on the "
+                     "HAT's ground; reseat")  # fmt: skip
     for group in GROUPS:
-        mine = [f for f in faults if f["group"] == group]
-        absent = {f["signal"] for f in mine if f["absent"]}
-        if len(absent) == 8:
-            parts.append(f"{ribbon(group, cabling)}: none of its 8 signals reached the Pi (not plugged in, or on "
-                         "another port)")  # fmt: skip
+        port = CABLINGS[cabling][group]
+        if group in whole:
+            kind, what = whole[group]
+            if kind == "elsewhere" and not any(group in pair for pair in swapped):
+                parts.append(f"{ribbon(group, port)}: it is on HAT {what}, not {port}")
+            elif kind == "none":
+                parts.append(f"{ribbon(group, port)}: none of its signals reached the Pi (not plugged in, or broken)")
             continue
         texts, seen = [], set()
-        for f in mine:  # one fault per signal: a uo_out line missed from two rows is one missing wire
-            if f["signal"] not in seen:
+        for f in faults:  # one fault per signal: a uo_out line missed from two rows is one missing wire
+            if f["group"] == group and f["signal"] not in seen:
                 seen.add(f["signal"])
                 texts.append(f["text"])
         if texts:
             more = f"; and {len(texts) - NAMED_PER_RIBBON} more" if len(texts) > NAMED_PER_RIBBON else ""
-            parts.append(f"{ribbon(group, cabling)}: {'; '.join(texts[:NAMED_PER_RIBBON])}{more}")
-    parts += list(dict.fromkeys(f["text"] for f in faults if f["group"] == ""))
-    if strict and not result["asic_loopback"]:
-        why = next((n for n in result["notes"] if "factory" in n or "could not select" in n), "")
-        parts.append("uo_out was not tested: the chip's factory test project was not confirmed"
-                     + (f" ({why})" if why else ""))  # fmt: skip
+            parts.append(f"{ribbon(group, port)}: {'; '.join(texts[:NAMED_PER_RIBBON])}{more}")
+    stray = list(dict.fromkeys(f["text"] for f in faults if f["group"] == ""))
+    if stray and not parts:
+        parts.append("; ".join(stray[:NAMED_PER_RIBBON]) + (f"; and {len(stray) - NAMED_PER_RIBBON} more"
+                                                             if len(stray) > NAMED_PER_RIBBON else ""))  # fmt: skip
+    if strict and not result["asic_loopback"] and "uo_out" not in whole:
+        parts.append(
+            "uo_out was not tested: the chip's factory test could not be used (ui_in[0] is held)"
+            if "ui_in[0]" in held
+            else "uo_out was not tested: the chip's factory test was not confirmed"
+        )
     return 1, "; ".join(parts) or "the wiring did not pass (see the table above)"
 
 
@@ -1959,6 +2127,12 @@ def parse_args(argv=None):
     parser.add_argument("--no-daemon", dest="daemon", action="store_false", help="do not stop/start fpgas-tt")
     parser.add_argument("--no-unload", dest="unload", action="store_false", help="do not rmmod the SPI modules")
     parser.add_argument("--samples", type=int, default=3, help="agreeing samples per step (default 3)")
+    parser.add_argument(
+        "--time-limit",
+        type=int,
+        default=None,
+        help="seconds before the test stops itself and puts everything back (default TIME_LIMIT)",
+    )
     parser.add_argument("--json", help="also write the result as JSON to this path")
     args = parser.parse_args(argv)
     # Without the ASIC loopback, uio bits the chip drives cannot be tested and
@@ -1969,34 +2143,62 @@ def parse_args(argv=None):
         args.fpga_reset = args.controller == "rp2350"
     if args.port is None:
         args.port = "/dev/ttboard" if os.path.exists("/dev/ttboard") else "/dev/ttyACM0"
+    if args.time_limit is None:
+        args.time_limit = TIME_LIMIT
     return args
 
 
 class Stopped(Exception):
-    """SIGTERM or SIGINT arrived during the test: the run is ended and everything put back."""
+    """SIGTERM, SIGINT or the test's own time limit (SIGALRM) during the test: the run is ended and everything put
+    back."""
 
 
-STOPS = (signal.SIGTERM, signal.SIGINT)
+STOPS = (signal.SIGTERM, signal.SIGINT, signal.SIGALRM)
+# The test's own limit, inside the boot check's (tt_fpga.WIRING_TIMEOUT), which kills it outright: at this limit it
+# still stops cleanly and puts everything back (and has time left for the SDK fallback below).
+TIME_LIMIT = 150
+# Lines a reader of the boot report needs, which keeps only the end of the output: said again after the report.
+KEPT = ("MEM:", "PULLS:", "FALLBACK:", "RESTORE:")
 
 
 def _stop(signum, frame):
     # The first stop ends the run; the restore that follows is not cut short by another.
     for sig in STOPS:
         signal.signal(sig, signal.SIG_IGN)
-    raise Stopped(f"signal {signum}")
+    signal.alarm(0)
+    raise Stopped("its own time limit" if signum == signal.SIGALRM else f"signal {signum}")
 
 
 def said(line):
     print(f"{SAYS} {line}")
 
 
+def sdk_fallback(port):
+    """Start the board's SDK again by a soft reset (tt_sdk_start.py, next to this script): only when the board could
+    not be put back from RAM, so it is never left in the command server. None when it started, else why not."""
+    script = pathlib.Path(__file__).resolve().parent / "tt_sdk_start.py"
+    try:
+        p = subprocess.run([sys.executable, str(script), port], capture_output=True, text=True, timeout=75)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return repr(e)
+    said_lines = [ln for ln in p.stdout.splitlines() if ln.startswith("SDK_START:")]
+    return None if p.returncode == 0 else " ".join(said_lines[-1:]) or f"tt_sdk_start.py exited {p.returncode}"
+
+
 def main(argv=None):
     """Exit 0: the wiring is right. 1: it is not, or a reading was not steady (the WIRING: line says which
-    ribbon and pin). 2: the test could not be made, and why; or what it changed on the Pi was not put back."""
+    ribbon and pin). 2: the test could not be made, and why; or what it changed was not put back."""
     args = parse_args(argv)
+    kept = []
+
+    def out(line=""):
+        print(line)
+        if str(line).startswith(KEPT):
+            kept.append(line)
+
     print("=== TT PMOD wiring test ===")
     print(f"Port: {args.port}   Controller: {args.controller}   ASIC project: {args.asic_project}")
-    env = PiEnvironment(manage_daemon=args.daemon, unload_modules=args.unload)
+    env = PiEnvironment(manage_daemon=args.daemon, unload_modules=args.unload, log=out)
     if env.pins is None:
         said("the wiring was not tested: tt_dip_switches.py (its pinctrl helpers) is not next to this script")
         return 2
@@ -2008,9 +2210,10 @@ def main(argv=None):
             return 2
         pin_scanner = make_pin_id_scanner(pinid)
     result, code, line, back = None, 2, None, []
-    link = None
-    hat = None
+    board_back = None  # why the board could not be put back from RAM, or None
+    link, hat, served = None, None, False
     before = {sig: signal.signal(sig, _stop) for sig in STOPS}
+    signal.alarm(args.time_limit)
     try:
         env.enter()
         # All 21 lines in one request: nothing is driven until every line,
@@ -2020,57 +2223,73 @@ def main(argv=None):
         print(f"GPIO chip: {hat.chip_path}, {len(ALL_HAT_GPIOS)} HAT lines as inputs")
         fd = open_raw_serial(args.port)
         link = Rp2Link(fd, log=print)
-        try:
-            ready = start_firmware(link, build_firmware(args.controller))
-        except ProtocolError:
-            # Do not leave the board in the raw REPL for the daemon to find.
-            link.write(b"\r\x03\x02")
-            raise
+        served = True  # from here the board may be in the command server
+        ready = start_firmware(link, build_firmware(args.controller))
         print("RP2 command server running")
         try:
             free = mem_free(ready)
-            print(f"MEM: {free} bytes of the RP2's heap free with the command server loaded")
+            out(f"MEM: {free} bytes of the RP2's heap free with the command server loaded")
             if free is None or free < MIN_HEAP_FREE:
                 raise RuntimeError(f"RP2040 heap too low: {free} bytes free with the command server loaded (the "
                                    f"test needs {MIN_HEAP_FREE})")  # fmt: skip
-            result = run_wiring_test(link, hat, args, pin_scanner=pin_scanner)
+            result = run_wiring_test(link, hat, args, log=out, pin_scanner=pin_scanner)
         finally:
+            for sig in STOPS:  # the teardown is not cut short by a stop
+                signal.signal(sig, signal.SIG_IGN)
+            signal.alarm(0)
             try:
-                print(f"MEM: {mem_free(link.cmd('mem', timeout=5))} bytes of the RP2's heap free after the test")
+                out(f"MEM: {mem_free(link.cmd('mem', timeout=5))} bytes of the RP2's heap free after the test")
             except ProtocolError as e:
-                print(f"MEM: not read after the test: {e}")
+                out(f"MEM: not read after the test: {e}")
             if args.fpga_reset:
                 try:
                     link.cmd("creset 1", timeout=5)
                 except ProtocolError as e:
-                    print(f"WARNING: could not release the FPGA reset: {e}")
+                    board_back = f"the FPGA reset was not released: {e}"
             if args.sdk:
                 try:
-                    link.cmd("sdk restore", timeout=10)
+                    out(f"RESTORE: {' '.join(link.cmd('sdk restore', timeout=30)[1:])}")
                 except ProtocolError as e:
-                    print(f"WARNING: SDK restore failed: {e}")
+                    board_back = f"the board's SDK state could not be put back from RAM: {e}"
             stop_firmware(link)
+            served = False
     except UnstableReading as e:
         code, line = 1, f"the readings were not steady, so the wiring is not known to be right: {e}"
     except Stopped as e:
         code, line = 2, f"the wiring test was stopped ({e}): the wiring was not tested"
     except (ProtocolError, RuntimeError, OSError) as e:
         code, line = 2, f"the wiring could not be tested: {e}"
+    except Exception as e:
+        code, line = 2, f"the wiring test failed unexpectedly: {type(e).__name__}: {e}"
     finally:
         for sig in STOPS:  # the restore is not cut short by a stop
             signal.signal(sig, signal.SIG_IGN)
+        signal.alarm(0)
         try:
             if link is not None:
+                if served:  # stopped part way: leave the command server and the raw REPL, as start-up errors do
+                    with contextlib.suppress(OSError):
+                        link.write(b"\r\x03\x03\x02")
                 os.close(link.fd)
             if hat is not None:
                 hat.close()
         finally:
             back = env.leave()
+            if link is not None and (served or board_back):
+                why_not = sdk_fallback(args.port)
+                started = "it was started again" if why_not is None else f"starting it again failed too ({why_not})"
+                out(
+                    f"FALLBACK: the board was not put back from RAM, so its SDK was started by a soft reset "
+                    f"(tt_sdk_start.py): {started}; the board's own main.py rewrites /boot.log when it starts"
+                )
+                board_back = (board_back or "the board was left in the test's command server") + (
+                    "; its SDK was started again by a soft reset" if why_not is None
+                    else f"; its SDK did not start again ({why_not})")  # fmt: skip
             for sig, handler in before.items():
                 signal.signal(sig, handler)
 
     if result is not None:
-        report(result, args.discover)
+        report(result, args.discover, log=out)
         if args.json:
             pathlib.Path(args.json).write_text(json.dumps(result, indent=2))
         if args.discover:
@@ -2080,6 +2299,11 @@ def main(argv=None):
     if back:
         print("Not put back: " + "; ".join(back))
         code, line = 2, f"{line}; and the Pi was not put back as it was ({'; '.join(back)})"
+    if board_back:
+        code, line = 2, f"{line}; and {board_back}"
+    print("")
+    for kept_line in kept:  # again, where the boot report keeps them
+        print(kept_line)
     said(line)
     print(f"RESULT: {'PASS' if code == 0 else 'FAIL'}")
     return code

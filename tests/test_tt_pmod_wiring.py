@@ -673,39 +673,6 @@ def test_factory_project_unavailable_without_strict_is_noted():
     assert model.contentions == []
 
 
-def test_factory_selection_that_did_not_take_is_detected():
-    # The SDK says "enabled" but the chip keeps driving uio: nothing floats,
-    # the on-board confirmation cannot run, and the run fails strictly.
-    class StubbornFirmware(FakeFirmware):
-        def handle(self, line):
-            if line.startswith("sdk project"):
-                return ["TTW OK enabled=tt_um_factory_test"]
-            return super().handle(line)
-
-    model = BoardModel(standard_wires(), project="drives_uio")
-    result, _log = run_simulated(model, firmware_cls=StubbornFirmware)
-    assert result["asic_loopback"] is False
-    assert result["pass"] is False
-    assert any("factory test not confirmed" in n for n in result["notes"])
-    assert model.contentions == []
-
-
-def test_wrong_project_with_floating_uio_fails_confirmation():
-    # A quiet project lets uio float but does not loop it to uo_out.
-    class QuietFirmware(FakeFirmware):
-        def handle(self, line):
-            if line.startswith("sdk project"):
-                self.model.project = "quiet"
-                return ["TTW OK enabled=tt_um_factory_test"]
-            return super().handle(line)
-
-    model = BoardModel(standard_wires(), project="drives_uio")
-    result, _log = run_simulated(model, firmware_cls=QuietFirmware)
-    assert result["asic_loopback"] is False
-    assert any("not uo_out = uio_in" in n for n in result["notes"])
-    assert model.contentions == []
-
-
 def test_swapped_ui_in_bits_fail_as_miswired():
     model = BoardModel(standard_wires(swap=(RP2040["ui_in"][0], RP2040["ui_in"][1])))
     result, _log = run_simulated(model)
@@ -774,29 +741,6 @@ def test_short_between_ribbon_lines_is_reported():
     # inherent to any walking-1 test and harmless at the RP2040's drive.
     # The chip must never be one of the parties.
     assert all(d[0] == "rp2" for c in model.contentions for d in c)
-
-
-def test_dip_switch_holding_ui_in_bit_is_still_tested():
-    # A DIP switch pulls ui_in[5] low through its resistor (seen on TT08 and
-    # TT03p5): the RP2 out-drives it, as the SDK does every day, so the bit
-    # is tested and the switch is reported.
-    model = BoardModel(standard_wires(), held_ui_in={5})
-    result, _log = run_simulated(model)
-    rows = rows_by_name(result)
-    assert rows["ui_in[5]"]["status"] == "ok"
-    assert any("ui_in[5] is held weakly" in n for n in result["notes"])
-    assert result["pass"] is True
-    assert model.contentions == []
-
-
-def test_ui_in_bit_shorted_to_a_rail_is_skipped():
-    model = BoardModel(standard_wires(), hard_ui_in={5})
-    result, _log = run_simulated(model)
-    rows = rows_by_name(result)
-    assert rows["ui_in[5]"]["status"] == "untested"
-    assert any("ui_in[5] is held hard" in n for n in result["notes"])
-    assert all(rows[f"ui_in[{k}]"]["status"] == "ok" for k in range(8) if k != 5)
-    assert result["asic_loopback"] is True
 
 
 def test_hard_held_ui_in0_disables_loopback():
@@ -931,64 +875,107 @@ def test_the_boards_cabling_passes_and_says_where_every_ribbon_is():
     )
 
 
-def test_a_broken_wire_is_named_by_its_ribbon_signal_and_pins():
-    code, line = asic_verdict(standard_wires(cabling="asic", drop=(RP2040["ui_in"][5],)))
-    assert code == 1 and line == "the ui_in ribbon (HAT JA): ui_in[5] (pin 8) did not reach JA8"
+def placed(ports, offset=()):
+    """Wires for ribbons on HAT `ports` ({group: port}); the groups in offset seated one position off (Pmod pin n on
+    HAT pin 12 - n; pins 1 and 7 on the HAT's ground, modelled as not connected)."""
+    wires = {}
+    for group, port in ports.items():
+        for k in range(8):
+            pin = ttw.PMOD_PIN_NUMBERS[k]
+            if group in offset:
+                pin = 12 - pin
+                if pin not in ttw.PMOD_PIN_NUMBERS:
+                    continue
+            wires[RP2040[group][k]] = {ttw.PMOD_HAT_PORTS[port][ttw.PMOD_PIN_NUMBERS.index(pin)]}
+    return wires
 
 
-def test_two_crossed_wires_say_where_each_went():
-    code, line = asic_verdict(standard_wires(cabling="asic", swap=(RP2040["ui_in"][4], RP2040["ui_in"][5])))
-    assert code == 1 and line.startswith("the ui_in ribbon (HAT JA): ")
-    assert "ui_in[4] (pin 7) did not reach JA7: it reached JA8" in line
-    assert "ui_in[5] (pin 8) did not reach JA8: it reached JA7" in line
+def wiring_line(wires, pin_id=True):
+    """(exit, WIRING: line, contentions) for `wires`, run as the boot check runs it, with pin-id."""
+    model = BoardModel(wires, project="drives_uio")
+    result, _log = run_simulated(model, argv=ASIC, pin_id=pin_id)
+    return (*ttw.verdict(result), model.contentions)
 
 
-def test_a_ribbon_that_is_not_plugged_in_is_said_as_that():
-    for group, port in (("ui_in", "JA"), ("uo_out", "JC")):
-        code, line = asic_verdict(standard_wires(cabling="asic", unplug=(group,)))
-        assert code == 1
-        assert f"the {group} ribbon (HAT {port}): none of its 8 signals reached the Pi" in line, line
+@pytest.mark.parametrize("wires, line", [
+    (standard_wires(cabling="asic", drop=(RP2040["ui_in"][5],)),
+     "the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) did not reach HAT JA pin 8"),
+    # on a line the HAT shares (JA/JB pins 2-4): the uo_out wire it reaches through the chip is not blamed
+    (standard_wires(cabling="asic", drop=(RP2040["ui_in"][2],)),
+     "the ui_in ribbon (to HAT JA): ui_in[2] (Pmod pin 3) did not reach HAT JA/JB pin 3"),
+    (standard_wires(cabling="asic", drop=(RP2040["uio"][2],)),
+     "the uio ribbon (to HAT JB): uio[2] (Pmod pin 3) did not reach HAT JA/JB pin 3"),
+    (standard_wires(cabling="asic", drop=(RP2040["uo_out"][5],)),
+     "the uo_out ribbon (to HAT JC): uo_out[5] (Pmod pin 8) did not reach HAT JC pin 8"),
+    (standard_wires(cabling="asic", swap=(RP2040["ui_in"][4], RP2040["ui_in"][5])),
+     "the ui_in ribbon (to HAT JA): ui_in[4] (Pmod pin 7) did not reach HAT JA pin 7: it reached HAT JA pin 8; "
+     "ui_in[5] (Pmod pin 8) did not reach HAT JA pin 8: it reached HAT JA pin 7"),
+    (standard_wires(cabling="asic", drop=(RP2040["ui_in"][0], *RP2040["ui_in"][4:6])),
+     "the ui_in ribbon (to HAT JA): ui_in[0] (Pmod pin 1) did not reach HAT JA pin 1; ui_in[4] (Pmod pin 7) did "
+     "not reach HAT JA pin 7; and 1 more"),
+    *[(standard_wires(cabling="asic", unplug=(g,)),
+       f"the {g} ribbon (to HAT {p}): none of its signals reached the Pi (not plugged in, or broken)")
+      for g, p in (("ui_in", "JA"), ("uio", "JB"), ("uo_out", "JC"))],
+    (placed({"ui_in": "JB", "uio": "JA", "uo_out": "JC"}),
+     "the ui_in and uio ribbons are on each other's HAT ports (JB and JA): swap them"),
+    (placed({"ui_in": "JA", "uio": "JC", "uo_out": "JB"}),
+     "the uio and uo_out ribbons are on each other's HAT ports (JC and JB): swap them"),
+    (placed({"ui_in": "JC", "uio": "JB", "uo_out": "JA"}),
+     "the ui_in and uo_out ribbons are on each other's HAT ports (JC and JA): swap them"),
+    # the TT04 board of 4 Sep: all three one position off, and ui_in and uo_out on each other's ports
+    (placed({"ui_in": "JC", "uio": "JB", "uo_out": "JA"}, offset=("ui_in", "uio", "uo_out")),
+     "these ribbons are seated one position off (ui_in on HAT JC (it goes on JA), uio on HAT JB, uo_out on HAT "
+     "JA (it goes on JC)): Pmod pin n arrives on HAT pin 12-n, and Pmod pins 1 and 7 are on the HAT's ground; "
+     "reseat"),
+    (placed({"ui_in": "JA", "uio": "JB", "uo_out": "JC"}, offset=("ui_in",)),
+     "the ui_in ribbon is seated one position off (ui_in on HAT JA): Pmod pin n arrives on HAT pin 12-n, and "
+     "Pmod pins 1 and 7 are on the HAT's ground; reseat"),
+])  # fmt: skip
+def test_each_wrong_wiring_has_its_own_line_and_no_two_parties_ever_drive_one_net(wires, line):
+    assert wiring_line(wires) == (1, line, [])
 
 
-def test_a_uo_out_wire_is_named_on_the_uo_out_ribbon_though_the_chip_drives_it():
-    code, line = asic_verdict(standard_wires(cabling="asic", drop=(RP2040["uo_out"][5],)))
-    assert code == 1 and line == (
-        "the uo_out ribbon (HAT JC): uo_out[5] (pin 8) did not reach JC8 (driven by the chip from uio[5])"
-    )
+def test_the_boards_cabling_passes_with_pin_id_and_no_contention():
+    code, line, fights = wiring_line(asic_wires())
+    assert (code, fights) == (0, []) and line.startswith("all 24 Pmod signals reached the Pi where they should")
 
 
-def test_ribbons_cabled_the_other_way_round_are_said_to_be():
-    code, line = asic_verdict(standard_wires(cabling="fpga"))
-    assert (code, line) == (1, "the ribbons look cabled as ui_in on HAT JC, uio on HAT JB, uo_out on HAT JA, "
-                               f"not as {WHERE}: move each to its port")  # fmt: skip
+def test_a_bit_something_holds_is_never_driven_and_fails_the_board_named():
+    """A DIP switch that is on (TT08 and TT03p5 had some on 4 Sep) or a hard short holds a ui_in line: it is never
+    driven (it could be a chip output), and the board fails, naming the bit and the switch advice."""
+    for kind in ("held_ui_in", "hard_ui_in"):
+        model = BoardModel(asic_wires(), project="drives_uio", **{kind: {5}})
+        result, _log = run_simulated(model, argv=ASIC)
+        assert rows_by_name(result)["ui_in[5]"]["status"] == "untested" and model.contentions == []
+        assert all(rows_by_name(result)[f"ui_in[{k}]"]["status"] == "ok" for k in range(8) if k != 5)
+        code, line = ttw.verdict(result)
+        assert code == 1 and line == (
+            "the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) is held low on the demo board (a DIP switch that is "
+            "on, or a wrong ribbon joining it to a chip output: set all DIP switches off)")  # fmt: skip
 
 
-def test_the_uio_ribbon_unplugged_is_not_also_blamed_on_the_uo_out_ribbon():
-    """ui_in[1..3] share their HAT lines with uio[1..3], so with the uio ribbon out the chip no longer sees them
-    and uo_out[1..3] stay still: the uio ribbon is the fault, and the uo_out ribbon is not named."""
-    code, line = asic_verdict(standard_wires(cabling="asic", unplug=("uio",)))
-    assert (code, line) == (1, "the uio ribbon (HAT JB): none of its 8 signals reached the Pi (not plugged in, or "
-                               "on another port)")  # fmt: skip
-
-
-def test_more_than_four_faults_on_a_ribbon_are_counted():
-    wires = standard_wires(cabling="asic", drop=(RP2040["ui_in"][0], *RP2040["ui_in"][4:8]))
-    code, line = asic_verdict(wires)
-    assert code == 1 and line.startswith("the ui_in ribbon (HAT JA): ui_in[0] (pin 1) did not reach JA1; ")
-    assert line.endswith("; and 1 more") and line.count("did not reach") == 4
-
-
-def test_a_factory_test_that_does_not_confirm_means_uo_out_is_not_tested_and_the_board_does_not_pass():
+def test_a_factory_test_that_does_not_confirm_stops_the_test():
     class StubbornFirmware(FakeFirmware):  # says it selected the project; the chip keeps driving uio
         def handle(self, line):
             if line.startswith("sdk project"):
                 return ["TTW OK enabled=tt_um_factory_test"]
             return super().handle(line)
 
-    model = BoardModel(asic_wires(), project="drives_uio")
-    result, _log = run_simulated(model, argv=ASIC, firmware_cls=StubbornFirmware)
-    code, line = ttw.verdict(result)
-    assert code == 1 and "uo_out was not tested: the chip's factory test project was not confirmed" in line
+    class QuietFirmware(FakeFirmware):  # a project that lets uio float but does not loop it to uo_out
+        def handle(self, line):
+            if line.startswith("sdk project"):
+                self.model.project = "quiet"
+                return ["TTW OK enabled=tt_um_factory_test"]
+            return super().handle(line)
+
+    for firmware, why in ((StubbornFirmware, "uio bits float"), (QuietFirmware, "not uo_out = uio_in")):
+        model = BoardModel(asic_wires(), project="drives_uio")
+        with pytest.raises(ttw.ProtocolError, match=f"tt_um_factory_test did not behave as it should: .*{why}"):
+            run_simulated(model, argv=ASIC, firmware_cls=firmware)
+        assert model.contentions == []
+        # by hand, --no-strict, it goes on without the loopback, never driving ui_in[0] against the chip
+        result, _log = run_simulated(model, argv=[*ASIC, "--no-strict"], firmware_cls=firmware)
+        assert result["asic_loopback"] is False and model.contentions == []
 
 
 def test_a_name_not_read_on_a_line_is_named_by_the_signal_that_sent_it():
@@ -998,10 +985,16 @@ def test_a_name_not_read_on_a_line_is_named_by_the_signal_that_sent_it():
         {"gpio": 7, "expected": None, "decoded": "IO4", "status": "unexpected"},
     ]}}}  # fmt: skip
     assert [(f["group"], f["text"]) for f in ttw.pin_id_faults(result)] == [
-        ("uio", "uio[4] (pin 7): its name was not read on JB7 (read: nothing)"),
-        ("uo_out", "uo_out[4] (pin 7): its name was not read on JC7 (read: (garbled))"),
-        ("", "JB1 heard IO4, where nothing was sent"),
+        ("uio", "uio[4] (Pmod pin 7): its name was not read on HAT JB pin 7 (read: nothing)"),
+        ("uo_out", "uo_out[4] (Pmod pin 7): its name was not read on HAT JC pin 7 (read: (garbled))"),
+        ("", "HAT JB pin 1 also heard IO4"),
     ]
+
+
+def test_hat_pins_are_named_as_the_hat_s_connectors_are():
+    assert (
+        ttw.hat_pin(8) == "HAT JA pin 1" and ttw.hat_pin(10) == "HAT JA/JB pin 2" and ttw.hat_pin(6) == "HAT JC pin 10"
+    )
 
 
 # -- The pin-id decoder is the one the package installs -----------------------------------------------
@@ -1189,9 +1182,20 @@ class _Hat:
         pass
 
 
-def _main(monkeypatch, capsys, measure, faults=(), heap=60000, mem=None):
-    """main() with the Pi and the board replaced: `measure` stands in for run_wiring_test."""
+def _main(monkeypatch, capsys, measure, faults=(), heap=60000, mem=None, restore=None, fallbacks=None, start=None):
+    """main() with the Pi and the board replaced: `measure` stands in for run_wiring_test; `restore` is what
+    "sdk restore" answers (an exception is raised); `fallbacks` collects tt_sdk_start fallbacks."""
     _Env.faults = list(faults)
+    fallbacks = [] if fallbacks is None else fallbacks
+    monkeypatch.setattr(ttw, "sdk_fallback", lambda port: fallbacks.append(port))
+
+    def cmd(self, text, timeout=None):
+        if text == "mem":
+            return ["VAL", "mem", "41000"]
+        if text == "sdk restore" and isinstance(restore, Exception):
+            raise restore
+        return restore if text == "sdk restore" and restore else ["OK"]
+
     envs = []
     monkeypatch.setattr(ttw, "PiEnvironment", lambda *a, **k: envs.append(_Env()) or envs[-1])
     monkeypatch.setattr(ttw, "HatGpio", _Hat)
@@ -1199,13 +1203,12 @@ def _main(monkeypatch, capsys, measure, faults=(), heap=60000, mem=None):
     monkeypatch.setattr(ttw, "make_pin_id_scanner", lambda pinid: None)
     monkeypatch.setattr(ttw, "open_raw_serial", lambda port: 99)
     monkeypatch.setattr(ttw.os, "close", lambda fd: None)
-    monkeypatch.setattr(ttw, "start_firmware", lambda link, fw: ["READY", f"mem_free={heap}"])
+    monkeypatch.setattr(ttw, "start_firmware", start or (lambda link, fw: ["READY", f"mem_free={heap}"]))
     monkeypatch.setattr(ttw, "stop_firmware", lambda link: None)
-    monkeypatch.setattr(
-        ttw.Rp2Link, "cmd", lambda self, text, timeout=None: ["VAL", "mem", "41000"] if text == "mem" else ["OK"]
-    )
+    monkeypatch.setattr(ttw.Rp2Link, "cmd", cmd)
+    monkeypatch.setattr(ttw.Rp2Link, "write", lambda self, data: None)
     monkeypatch.setattr(ttw, "run_wiring_test", lambda *a, **k: measure())
-    monkeypatch.setattr(ttw, "report", lambda result, discover: None)
+    monkeypatch.setattr(ttw, "report", lambda result, discover, log=print: None)
     before = {sig: ttw.signal.getsignal(sig) for sig in ttw.STOPS}
     code = ttw.main(["--port", "/dev/ttyACM0", *ASIC, "--no-daemon"])
     assert {sig: ttw.signal.getsignal(sig) for sig in ttw.STOPS} == before  # handlers given back
@@ -1260,8 +1263,9 @@ def test_a_pi_not_put_back_is_exit_2_after_the_verdict(monkeypatch, capsys):
 def test_the_rp2_heap_is_said_and_a_heap_too_low_stops_the_test_before_it_starts(monkeypatch, capsys):
     mem = []
     assert _main(monkeypatch, capsys, _passed, mem=mem)[0] == 0
+    # said where they happen, and again just before the WIRING: line, where the boot report keeps them
     assert mem == ["MEM: 60000 bytes of the RP2's heap free with the command server loaded",
-                   "MEM: 41000 bytes of the RP2's heap free after the test"]  # fmt: skip
+                   "MEM: 41000 bytes of the RP2's heap free after the test"] * 2  # fmt: skip
     measured = []
     low = ttw.MIN_HEAP_FREE - 1
     code, line = _main(monkeypatch, capsys, lambda: measured.append(1) or _passed(), heap=low)
@@ -1282,3 +1286,77 @@ def test_the_command_server_never_imports_the_sdk_and_reports_its_heap():
     assert "the SDK is not running on the board (no tt object)" in fw
     assert "READY mem_free=" in fw and "VAL mem " in fw and "OK started mem_free=" in fw
     compile(fw, "firmware", "exec")  # it is valid Python, as MicroPython will parse it
+
+
+def test_the_board_is_put_back_from_ram_and_a_restore_that_does_not_match_falls_back_to_a_soft_reset(
+    monkeypatch, capsys
+):
+    fallbacks = []
+    code, line = _main(
+        monkeypatch, capsys, _passed, restore=["OK", "restored:", "<DemoBoard ...>"], fallbacks=fallbacks
+    )
+    assert code == 0 and fallbacks == []  # the good path: no reset, no boot.log
+    err = ttw.ProtocolError("'sdk restore' -> restore: the board was <A> and is now <B>")
+    code, line = _main(monkeypatch, capsys, _passed, restore=err, fallbacks=fallbacks)
+    assert code == 2 and fallbacks == ["/dev/ttyACM0"]
+    assert line.endswith("; and the board's SDK state could not be put back from RAM: 'sdk restore' -> restore: the "
+                         "board was <A> and is now <B>; its SDK was started again by a soft reset")  # fmt: skip
+
+
+def test_a_board_left_in_the_command_server_is_started_again(monkeypatch, capsys):
+    def no_banner(link, firmware):
+        raise ttw.ProtocolError("no raw REPL banner")
+
+    fallbacks = []
+    code, line = _main(monkeypatch, capsys, _passed, start=no_banner, fallbacks=fallbacks)
+    assert code == 2 and fallbacks == ["/dev/ttyACM0"]
+    assert line.startswith("the wiring could not be tested: no raw REPL banner; and the board was left in the test's "
+                           "command server; its SDK was started again by a soft reset")  # fmt: skip
+
+
+def test_its_own_time_limit_stops_the_test_and_puts_everything_back(monkeypatch, capsys):
+    def slow():
+        ttw.signal.raise_signal(ttw.signal.SIGALRM)
+        raise AssertionError("not reached")
+
+    code, line = _main(monkeypatch, capsys, slow)
+    assert (code, line) == (2, "the wiring test was stopped (its own time limit): the wiring was not tested")
+    assert ttw.signal.alarm(0) == 0  # no alarm left pending
+
+
+def test_an_unexpected_exception_is_the_test_s_failure_not_the_wiring_s(monkeypatch, capsys):
+    def broken():
+        raise ValueError("invalid literal for int() with base 10: 'x'")
+
+    assert _main(monkeypatch, capsys, broken) == (
+        2, "the wiring test failed unexpectedly: ValueError: invalid literal for int() with base 10: 'x'")  # fmt: skip
+
+
+def test_readings_that_disagree_fail_at_once_naming_the_lines(monkeypatch):
+    class Flicker:
+        def __init__(self):
+            self.n = 0
+
+        def read_all(self):
+            self.n += 1
+            return {8: 0, 10: self.n % 2, 26: 0}
+
+    probe = ttw.WiringProbe(rp2=None, hat=Flicker(), controller="rp2040", samples=3, settle=0, log=lambda *_: None)
+    with pytest.raises(ttw.UnstableReading, match=r"^HAT JA/JB pin 2 changed between readings"):
+        probe.sample()
+    assert probe.hat.n == 3  # one set of readings: no retry
+
+
+def test_the_spi_modules_are_loaded_again_and_the_restore_is_read_back(monkeypatch):
+    pinctrl = Pinctrl(BEFORE)
+    env, calls = _env(monkeypatch, pinctrl)
+    env.enter()
+    assert env.unloaded == ["spidev", "spi_bcm2835"]
+    assert env.leave() == []
+    assert calls[-2:] == [["modprobe", "spi_bcm2835"], ["modprobe", "spidev"]] or (
+        ["modprobe", "spi_bcm2835"] in calls and calls.index(["modprobe", "spi_bcm2835"]) < calls.index(
+            ["modprobe", "spidev"]))  # fmt: skip
+    # a pin that reads back otherwise is said
+    pinctrl.state[8] = ("op", "pu", "hi")
+    env.saved_pins = dict(env.saved_pins)
+    assert env.check_pins() == ["GPIO8 reads back op pu hi, not ip pu"]
