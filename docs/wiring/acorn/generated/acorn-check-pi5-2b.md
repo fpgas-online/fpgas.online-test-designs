@@ -21,4 +21,4 @@ The check's own words, from the tool's list of [common failures](https://docs.fp
 | `fail`: `power-cycle fail: the FPGA has not restarted since an earlier boot's check` | the Acorn kept its configuration across the Pi's restart (not seen after a soft reboot on the one Pi 5 measured): power-cycle the Pi (PoE). [The power-cycle check](https://docs.fpgas.online/en/latest/verify/acorn-power-cycle.html#the-acorns-power-cycle-check-opt-in) |
 | `error`: `this host (…) is not an Acorn setup in wiring.toml` | an Acorn on a host neither setup has: add the host to `wiring.toml` if it is a real setup |
 | `error`: `… does not match its manifest` / `manifest.json is missing` | `sudo apt install --reinstall fpgas-online-<board>-bitstreams` |
-| `changed` | the board or its flash differs from the recorded state. Meant it? `sudo fpgas-verify --update` |
+| `changed` | the board or its flash differs from the recorded state. Meant it? Run the check again with `--update` to record what it finds. Run `sudo fpgas-verify --update`. |

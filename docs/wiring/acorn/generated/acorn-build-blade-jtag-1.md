@@ -4,7 +4,7 @@ Not yet run by us on this hardware: written from the design. Photos: Uptime Lab 
 
 ## What you need
 
-For this cable: one half of the Molex Pico-EZmate cable (a plug with six black wires); the 2×5 Dupont housing; 5 Dupont crimp terminals, and a few spare; 2 mm heat-shrink tube. Tools: a multimeter with a continuity buzzer, a fine probe tip for it or a sewing pin to hold against a probe, a ruler marked in millimetres, side cutters, wire strippers, the crimping tool, a hot-air tool, masking tape and a fine pen. The Acorn itself, out of any slot, is needed for the first steps: if it is fitted, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Then take the card out. The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the unplugged host, or wear an anti-static wrist strap; hold the card by its edges.
+For this cable: one half of the Molex Pico-EZmate cable (a plug with six black wires); the 2×5 Dupont housing; 5 Dupont crimp terminals, and a few spare; 2 mm heat-shrink tube. Tools: a multimeter with a continuity buzzer, a fine probe tip for it or a sewing pin to hold against a probe, a ruler marked in millimetres, side cutters, wire strippers, the crimping tool, a hot-air tool, masking tape and a fine pen. The Acorn itself, out of any slot, is needed for the first steps: if it is fitted, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Then take the card out. The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges.
 
 ## Steps
 
@@ -13,7 +13,7 @@ For this cable: one half of the Molex Pico-EZmate cable (a plug with six black w
 ![The cable, cut in the middle](acorn-cable-cut.png){.only-light}
 ![The cable, cut in the middle](acorn-cable-cut-dark.png){.only-dark}
 
-**2.** Check that each half reaches, before any wire is cut back or crimped. With the host powered off and the card out of its slot, hold the card over the slot where it will sit, and lay the half for P1 from socket P1 to the Extension Port and the half for P2 from socket P2 to the UART header, along the way each cable will run. Its cut end must reach the header with some slack left to bend into the housing; how much is needed has not been measured by us. If a half does not reach, stop: this guide uses each half at the length it has, and a longer cable is not written here. Tell Tim. **Not yet done by us on this hardware.**
+**2.** Check that each half reaches, before any wire is cut back or crimped. If the Compute Blade is on, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. With the card out of its slot, hold the card over the slot where it will sit, and lay the half for P1 from socket P1 to the Extension Port and the half for P2 from socket P2 to the UART header, along the way each cable will run. Its cut end must reach the header with some slack left to bend into the housing; how much is needed has not been measured by us. If a half does not reach, stop: this guide uses each half at the length it has, and a longer cable is not written here. Tell Tim. **Not yet done by us on this hardware.**
 
 
 **3.** Find wire 1 of the P1 cable and flag the wires, before cutting any wire back.
@@ -26,7 +26,7 @@ For this cable: one half of the Molex Pico-EZmate cable (a plug with six black w
 
 **4.** Check which wire of the P1 cable is wire 1, with a meter, before cutting any wire back.
 
-1. With the plug still in the socket (the Acorn out of any slot, unpowered), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: it must beep.
+1. With the plug still in the socket (the Acorn out of any slot), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: it must beep.
 2. Do the same with the wire flagged 6: it must stay silent.
 3. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again; if still neither beeps, stop: the ground point is not confirmed.
 4. If both wires beep, first see that the two probes do not touch each other and that the cut faces of wires 1 and 6 do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires apart. Leave the flags on and take the plug out. Wire 6 is the card's 3.3 V by the LiteX wiki's legend; that it stays silent to ground on a card with no power is expected and has not been measured by us. Set the meter to ohms, write down what each of the two wires reads to the pad, and send both readings to Tim.

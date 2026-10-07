@@ -471,6 +471,13 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
         assert "Hold the empty" in pages[steps.guide_name(c, part)]
     assert "Fit the cables, in this order" in pages[steps.guide_name(c, "fit")]
     assert "This is a bench check" in pages[steps.guide_name(c, "bench")]
+    # what the ground beep shows about a turned housing is what it is meant to show: the silence is not tried
+    bench = pages[steps.guide_name(c, "bench")]
+    assert "The beep also shows" not in bench and "(that it would then stay silent" not in bench
+    for connector in wiring.CONNECTORS:
+        if f"The beep is also meant to show that the {connector} housing" in bench:
+            after = bench[bench.index(f"meant to show that the {connector} housing") :]
+            assert after.index("; that a turned housing would then stay silent is not tried by us.") < after.index("\n")
 
 
 def step_blocks(body):

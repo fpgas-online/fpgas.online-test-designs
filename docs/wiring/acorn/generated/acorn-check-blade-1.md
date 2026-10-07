@@ -37,6 +37,8 @@ fpgas-verify --list
 sudo fpgas-acorn-verify --no-publish
 ```
 
+**The check runs `jtag` too, whose TMS wire is GPIO14.** In a boot with the header's serial port on, `jtag` fails without running the JTAG tool (the result printed below). In a boot with the header's serial port off (the page "verifying 3"), run the check only after steps 2 and 3 of the last list on that page pass (check that GPIO14 is free; check that nothing on the card drives GPIO14). If either fails, do not run the check in that boot: something holds or drives the TMS wire.
+
 `fpgas-verify` checks whichever board this host is set up for, as the check at boot does; `fpgas-acorn-verify` checks the Acorn whatever the host is set up for. On a host set up for an Acorn the two print the same.
 
 ## Read the result
