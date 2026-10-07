@@ -47,7 +47,7 @@ The tools to build its two cables, once for any number of hosts:
 ![The cable, cut in the middle](acorn-cable-cut.png){.only-light}
 ![The cable, cut in the middle](acorn-cable-cut-dark.png){.only-dark}
 
-**2.** Check that a half reaches, before any wire is cut back or crimped. Power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Lay one half from where the card's two sockets are, with the card in its slot, along the way each cable will run to its header on the Compute Blade (Extension Port and the UART): its cut end must reach past that header's pins with at least 3 mm to spare. If it does not reach, stop: this guide uses each half at the length it has, and a longer cable is not written here. Tell whoever gave you this guide. **Not yet done by us on this hardware.**
+**2.** Check that each half reaches, before any wire is cut back or crimped. With the host powered off and the card out of its slot, hold the card over the slot where it will sit, and lay the half for P1 from socket P1 to the Extension Port and the half for P2 from socket P2 to the UART header, along the way each cable will run. Its cut end must reach the header with some slack left to bend into the housing; how much is needed has not been measured by us. If a half does not reach, stop: this guide uses each half at the length it has, and a longer cable is not written here. Tell whoever gave you this guide. **Not yet done by us on this hardware.**
 
 #### The P1 cable (JTAG)
 

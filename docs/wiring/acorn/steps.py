@@ -1166,6 +1166,11 @@ def has_resistor(c, connector):
 SHEETS = {"pi5": "acorn-wiring-pi5", "blade": "acorn-wiring-computeblade"}
 
 
+def header_words(name):
+    """A header's name as words in a sentence: \"UART\" becomes \"UART header\"."""
+    return name if any(w in name.lower() for w in ("header", "port")) else f"{name} header"
+
+
 def resistor_wire(c, connector):
     """The number of the wire of this cable that has the series resistor in it, or None."""
     pins = wiring.CONNECTORS[connector]["pins"]
@@ -1278,15 +1283,18 @@ def procedure_parts(c, restart=False):
         "Cut the Molex cable in half with side cutters. Each half is one cable.",
         ("The cable, cut in the middle", "acorn-cable-cut.png"),
     )
-    headers = " and the ".join(dict.fromkeys(c.headers[housing(c, k).header].name for k in wiring.CONNECTORS))
+    pairs = [
+        f"the half for {k} from socket {k} to the {header_words(c.headers[housing(c, k).header].name)}"
+        for k in wiring.CONNECTORS
+    ]
     step(
-        f"Check that a half reaches, before any wire is cut back or crimped. {c.power_off} Lay one half from "
-        f"where the card's two sockets are, with the card in its slot, along the way each cable will run to "
-        f"its header on the {c.name} ({headers}): its cut end must reach past that header's pins with at "
-        f"least {lengths['strip']} mm to spare. If it does not reach, stop: this guide uses each half at the "
-        "length it has, and a "
-        "longer cable is not written here. Tell whoever gave you this guide. **Not yet done by us on this "
-        "hardware.**"
+        "Check that each half reaches, before any wire is cut back or crimped. With the host powered off and "
+        "the card out of its slot, hold the card over the slot where it will sit, and lay "
+        + " and ".join(pairs)
+        + ", along the way each cable will run. Its cut end must reach the header with some slack left to "
+        "bend into the housing; how much is needed has not been measured by us. If a half does not reach, "
+        "stop: this guide uses each half at the length it has, and a longer cable is not written here. Tell "
+        "whoever gave you this guide. **Not yet done by us on this hardware.**"
     )
     cavity = {}
     for connector, conn in wiring.CONNECTORS.items():
@@ -1499,7 +1507,9 @@ def guide(c):
     order = ["Parts and tools: the list to tick off before starting."]
     for connector, (_, title) in GUIDE.items():
         order += [
-            f"{title} 1: the {connector} cable's wires flagged, checked with a meter, cut back and crimped.",
+            f"{title} 1: "
+            + ("the cable cut in half and each half checked for reach; " if connector == next(iter(GUIDE)) else "")
+            + f"the {connector} cable's wires flagged, checked with a meter, cut back and crimped.",
             f"{title} 2: the {connector} cable's housing filled and checked.",
         ]
     order += [
@@ -1523,10 +1533,8 @@ def guide(c):
             "(before the meter check, which needs the cut faces); each half is then used at the length it has, "
             "apart from the wires that are cut back at the plug"
             + (" and the one wire that is cut to take the resistor" if c.resistors else "")
-            + ". Whether a half reaches from the card in its "
-            f"slot to the {c.name}'s headers has not been measured by us: once the cable is cut in half, and before "
-            "any wire is cut back or crimped, hold a half against the host from the card's socket to the header, with "
-            "the power off. If it does not reach, stop and tell whoever gave you this guide.", "",
+            + f". Whether a half reaches from the card to the {c.name}'s headers has not been measured by us: "
+            "the guide checks it as its second step, before any wire is cut back or crimped.", "",
             "## The order of work", "", *(f"{i}. {line}" for i, line in enumerate(order, 1)), "",
             "## Where the facts come from", "",
             *(f"- {s['claim']}: {s['source']}." for s in wiring.SOURCES if s.get("carrier", c.key) == c.key), "",

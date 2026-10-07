@@ -357,7 +357,20 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
         assert f"if it is fitted, {c.power_off[0].lower()}{c.power_off[1:]} Then take the card out." in need
     assert "cut in half, once" in overview
     # the reach check is asked for at a moment the guide has: after the one cut, before any wire is cut back
-    assert "before you cut anything" not in overview and "once the cable is cut in half, and before any" in overview
+    assert "before you cut anything" not in overview and "as its second step, before any wire" in overview
+    first = pages[steps.guide_name(c, "jtag-1")]
+    cut, reach = first.index("Cut the Molex cable in half"), first.index("Check that each half reaches")
+    flag = first.index("flag the wires")
+    assert cut < reach < flag  # after the one cut, before the first wire is flagged, cut back or crimped
+    reach_step = first[reach : first.index("**3.**")]
+    assert "in its slot" not in reach_step.replace("out of its slot", "")  # the card is out of its slot then
+    for k in wiring.CONNECTORS:  # each half named with its own header
+        assert (
+            f"the half for {k} from socket {k} to the {steps.header_words(c.headers[steps.housing(c, k).header].name)}"
+            in reach_step
+        )
+    numbers = [int(n) for n in re.findall(r"^\*\*(\d+)\.\*\*", steps.procedure(c), re.M)]
+    assert numbers == list(range(1, len(numbers) + 1))  # the whole procedure numbered 1 to N
     # the wire-1 check has an outcome for every result, and says what the last wire's silence rests on
     for part in ("jtag-1", "uart-1"):
         body = pages[steps.guide_name(c, part)]

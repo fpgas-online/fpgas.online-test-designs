@@ -275,7 +275,7 @@ TODAY = {
         "factory image or on the vendor's XDMA sample image (version 0.0.post1220 or newer). On a Compute "
         "Module 5 `jtag` cannot run in a boot that has the header's serial port on (kernel 6.18): the serial "
         "port holds GPIO14, which is also the JTAG TMS wire, so `jtag` fails there whatever the wiring; on a "
-        "Compute Module 4 it has not been run by us. Every other test is `not run` "
+        "Compute Module 4 it has not been run by us. Every other test but `rp1-pio` is `not run` "
         "until the card is converted to the fpgas.online design, and converting a card on a blade has not been "
         "done by us. So the result today is `fail` even with perfect cables: it shows that the card is seated "
         "and its PCIe link is up, and it cannot yet show that the two cables are right. The bench check with a "
@@ -355,10 +355,9 @@ def pages(c):
             "",
             "**A card still on the vendor's XDMA sample image** (pi20 at ps1, 7 October 2026, version "
             "0.0.post1220) gets the same tests as one on SQRL's image: `pcie-link` and `rp1-pio` pass, `jtag` "
-            "fails on GPIO14 as above, the rest are `not run`. Its summary line reads `acorn -: fail` (the variant "
-            "is shown as `-`, because it is read over JTAG, which cannot run while the serial port is on), and the "
-            "first `What to do:` line says the board runs Xilinx's XDMA sample design and is to be converted. This "
-            "holds on a host set up for an Acorn, as the steps above set it up; with an earlier version the check "
+            "fails on GPIO14 as above, the rest are `not run`. Its summary line reads `acorn -: fail` (no variant "
+            "is named), and the first `What to do:` line says the board runs Xilinx's XDMA sample design and is to "
+            "be converted. That was on pi20 at ps1, installed by the steps above; with an earlier version the check "
             "printed `acorn: fail (no test ran)` "
             "([#155](https://github.com/fpgas-online/fpgas.online-test-designs/issues/155)).",
             "",
