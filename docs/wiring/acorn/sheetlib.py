@@ -14,6 +14,7 @@ exactly like the PNG.
 """
 
 import collections
+import contextlib
 import itertools
 import pathlib
 
@@ -46,6 +47,8 @@ GREY = wire("#9aa0a8")  # a wire that is cut back and is not VCC
 SIGNALS = {k: (wire(v["colour"]), v.get("drive"), v["what"]) for k, v in wiring.SIGNALS.items() if k != "VCC"}
 # Text directly on the sheet must reach this contrast on the dark sheet; any other text TEXT_SMALL.
 TEXT_ON_PAPER, TEXT_SMALL = 7.0, 4.5
+# (drawing, what) of every text on a LIGHT sheet short of those: reported by gen.py, not a failure.
+LIGHT_SHORT = []
 # How far (largest channel difference) a photo pixel joined to the background may be from the paper colour and still
 # be left out as background: the JPEG noise of prep_photos.py's painted background, and the blend at the board's edge.
 PAPER_NOISE = 24
@@ -81,6 +84,14 @@ class Sheet:
 
     def add(self, s):
         self.parts.append(s)
+
+    @contextlib.contextmanager
+    def dark_only(self):
+        """What is drawn inside is on the dark sheet only; the light sheet leaves its place empty. It is laid out
+        and checked as on both, so it never overlaps anything on either."""
+        self.add(palette.DARK_START)
+        yield
+        self.add(palette.DARK_END)
 
     def rect(self, x, y, w, h, fill="none", stroke="none", sw=1, rx=0, extra=""):
         if fill != "none":
@@ -252,19 +263,30 @@ class Sheet:
                 if bbox[0] < k[2] and k[0] < bbox[2] and bbox[1] < k[3] and k[1] < bbox[3]:
                     errors.append(f"text {s!r} touches {what}")
         errors += self.contrast_errors()
+        # The light sheets are reported, not refused: their colours are those drawn before the dark sheets,
+        # and some of their text is short (gen.py prints the list; changing them is a change of its own).
+        LIGHT_SHORT.extend((name, *short) for short in self.short_text("light"))
         if errors:
             raise SystemExit(f"{name}: {len(errors)} layout errors\n  " + "\n  ".join(errors))
 
-    def contrast_errors(self, theme="dark"):
+    def short_text(self, theme="dark"):
         """Text that does not reach its contrast on the sheet of `theme`: TEXT_ON_PAPER for text straight on the
-        sheet, TEXT_SMALL for text on anything else (a tag, a box, a pad)."""
-        errors = []
+        sheet, TEXT_SMALL for text on anything else (a tag, a box, a pad). The light sheets, reported only, are held to
+        TEXT_SMALL (WCAG AA) everywhere: their own text on paper was not drawn to 7:1."""
+        out = []
         for s, size, fill, bg in self.colours:
             ratio = palette.contrast(palette.value(fill, theme), palette.value(bg, theme))
-            need = TEXT_ON_PAPER if bg == PAPER else TEXT_SMALL
+            need = TEXT_ON_PAPER if bg == PAPER and theme == "dark" else TEXT_SMALL
             if ratio < need:
-                errors.append(f"{theme}: text {s!r} ({size} px, {fill} on {bg}) has contrast {ratio:.2f}, under {need}")
-        return errors
+                out.append((s, size, fill, bg, ratio, need))
+        return out
+
+    def contrast_errors(self, theme="dark"):
+        """short_text() as the build's error lines."""
+        return [
+            f"{theme}: text {s!r} ({size} px, {fill} on {bg}) has contrast {ratio:.2f}, under {need}"
+            for s, size, fill, bg, ratio, need in self.short_text(theme)
+        ]
 
     def glyph_defs(self):
         out = []

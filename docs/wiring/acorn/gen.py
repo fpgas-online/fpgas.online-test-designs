@@ -21,6 +21,7 @@ import random
 import sys
 
 import palette
+import sheetlib
 import tables
 import wiring
 from palette import role
@@ -869,7 +870,8 @@ def build(search=False):
 def themed(files):
     """Every drawing twice: its light SVG under its own name, its dark SVG beside it as <name>-dark.svg.
 
-    The drawings come with their colours as palette.py's tokens; the two differ only in the colours."""
+    The drawings come with their colours as palette.py's tokens; the two differ only in the colours and in
+    the words for the dark sheet only."""
     out = {}
     for name, text in files.items():
         if name.endswith(".svg"):
@@ -880,8 +882,26 @@ def themed(files):
     return out
 
 
+def light_report():
+    """The text of the LIGHT sheets short of 4.5:1, one line per colour pair: reported, not a failure.
+
+    The dark sheets are held to their contrast by Sheet.check(); the light ones keep the colours they were drawn
+    with before there was a dark sheet, and changing those is a change of its own."""
+    pairs = {}
+    for name, s, _size, fill, bg, ratio, _need in sheetlib.LIGHT_SHORT:
+        pair = pairs.setdefault((round(ratio, 2), fill, bg), [0, set(), s])
+        pair[0] += 1
+        pair[1].add(name)
+    if not pairs:
+        return
+    print(f"light sheets: text under {sheetlib.TEXT_SMALL}:1 (reported, not a failure):")
+    for (ratio, fill, bg), (count, names, example) in sorted(pairs.items()):
+        print(f"  {ratio:5.2f}  {fill} on {bg}: {count} texts in {len(names)} drawings, e.g. {example!r}")
+
+
 def main(argv):
     files = build(search="--search" in argv)
+    light_report()
     if "--check" in argv:
         stale = [f for f, text in files.items() if not (OUT / f).exists() or (OUT / f).read_text() != text]
         stale += [p.name for p in OUT.glob("*") if p.suffix in (".svg", ".md") and p.name not in files]
