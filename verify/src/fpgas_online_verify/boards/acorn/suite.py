@@ -75,6 +75,7 @@ def _problem(e, what):
 class _Suite:
     def __init__(self, found, options):
         self.found = found
+        self.acorn = check.is_acorn(found, options.get("configured", False))
         self.options = options
         self.images = options.get("images") or check.IMAGES
         self.root = options.get("sysfs_pci", check.SYSFS_PCI)
@@ -243,8 +244,11 @@ class _Suite:
         return self.options.get("rp1_pio", links.rp1_pio)(self.run)
 
     def jtag(self):
-        return links.jtag(self.setup, self.found["variant"], self.run, self._good_bar0_dna(),
-                          self.options.get("gpiochip"), self.options.get("held_pins", links.held_pins))  # fmt: skip
+        entry = links.jtag(self.setup, self.found["variant"], self.run, self._good_bar0_dna(),
+                           self.options.get("gpiochip"), self.options.get("held_pins", links.held_pins))  # fmt: skip
+        if not self.found["variant"] and entry.get("variant"):  # the PCI IDs did not say; the IDCODE did (#155)
+            self.report["variant"] = entry["variant"]
+        return entry
 
     def _good_bar0_dna(self):
         """BAR0's DNA, for the other paths to be compared with, unless it is stuck (check.dna_faults): that is
@@ -346,7 +350,8 @@ class _Suite:
     def identity(self):
         """Who the board is (identity.py), from what PCIe, BAR0 and JTAG read."""
         f, r = self.found, self.report
-        out = identity.base(self.options.get("board_key", "acorn"), "acorn", f)
+        jtag = next((t for t in r["tests"] if t["test"] == "jtag"), None)
+        out = identity.base(self.options.get("board_key", "acorn"), "acorn", f, (jtag or {}).get("variant"))
         running = r.get("running") or {}
         soc_model = check.soc_model(f["kind"], running.get("identifier"))
         if soc_model:
@@ -355,7 +360,6 @@ class _Suite:
             out["identifier"] = running["identifier"]
         if running.get("build"):
             out["build"] = running["build"]
-        jtag = next((t for t in r["tests"] if t["test"] == "jtag"), None)
         # A DNA of all zeros or all ones is a DNA port not being read (check.dna_faults), so not a DNA: the other
         # path's is used if it is good, and otherwise dna_error says why neither was.
         dna, dna_errors = None, []
@@ -401,21 +405,20 @@ class _Suite:
         reason = check.not_ours(self.found)
         if reason:
             self.faults.append(("fail", reason))
-        if not check.is_acorn(self.found):  # an FPGA we cannot name as an Acorn: nothing else is ours to test
+        if not self.acorn:  # an FPGA we cannot take to be an Acorn: nothing else is ours to test
             return self.finish()
         self._load()
         with contextlib.ExitStack() as stack:
             stack.callback(self._flush)  # whatever happens, the held events go out once the driver is back
             self._open_bar0(stack)
             no_bar0 = self._needs_bar0()
-            no_variant = None if self.found["variant"] else "the variant is not known"
             no_uart = self._needs_setup() or (None if self.uart_builds else "the board does not run a known build")
             self.test("pcie-link", self._needs_setup(), self.pcie_link)
             self.test("pcie-bar0", None if self.gate_problem else no_bar0, self.pcie_bar0)
             if self.power_cycle_check:
                 self.test(POWER_CYCLE, no_bar0, self.power_cycle)
             self.test("rp1-pio", self.options.get("rp1_host", links.not_rp1_host)(), self.rp1_pio)
-            self.test("jtag", self._needs_setup() or no_variant, self.jtag)
+            self.test("jtag", self._needs_setup(), self.jtag)
             self.identified()
             golden = "the golden image has no {}" if self.bar0.get("build") == "golden" else None
             if golden and "pcie-bar0" not in self.wanted:  # pcie-bar0 says so when it runs
@@ -448,7 +451,7 @@ class _Suite:
         if self.not_run:
             r["not_run"] = self.not_run
         asked = [t for t in self.wanted if t in self.tests]
-        if check.is_acorn(self.found) and asked and not r["tests"]:
+        if self.acorn and asked and not r["tests"]:
             # a check that tested nothing has not shown the board works, whatever else it found
             self.faults.append(("fail", f"none of the tests asked for ran ({', '.join(asked)})"))
         bad = [t for t in r["tests"] if t["result"] != "pass"]
