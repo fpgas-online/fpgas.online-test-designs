@@ -488,12 +488,13 @@ def test_a_netv2_on_a_pi3_loads_with_openocd_and_frees_its_uart(tmp_path):
 
 def test_the_netv2_ddr_and_spi_flash_tests_listen_before_their_designs_are_loaded(tmp_path):
     """Both print what their test needs once, at start, onto ttyAMA0, which keeps nothing while it is closed:
-    the SPI flash test its JEDEC ID (pi-sw1-p10, 2026-09-27), the DDR test's BIOS its SDRAM calibration (every
-    Welland NeTV2, 2026-10-06). listen.py; the test's timeout covers openocd's load on a Pi 3."""
+    the SPI flash test its JEDEC ID (pi-sw1-p10, 2026-09-27), the DDR test's BIOS "Switching SDRAM to software
+    control." (every Welland NeTV2, found 2026-10-08). listen.py; the test's timeout covers openocd's load on a
+    Pi 3. The UART test needs no listening: it skips the banner and echoes."""
     run = Runner(flash=b"\0" * NETV2.flash_region["a7-35"])
     _check(NETV2, tmp_path, _netv2_found("0x0362d093"), run)
     listened = [c for c in run.calls if "fpgas_online_verify.listen" in c]
-    assert len(listened) == 2
+    assert len(listened) == 2 and not any("test_uart.py" in a for c in listened for a in c)
     for argv, script, design in zip(listened, ("test_ddr.py", "test_spiflash.py"), ("ddr-test", "spiflash-test")):
         assert argv[3] == "/dev/ttyAMA0"
         test, program = argv[5 : 5 + int(argv[4])], argv[5 + int(argv[4]) :]

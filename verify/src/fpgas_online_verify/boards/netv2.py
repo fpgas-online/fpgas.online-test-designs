@@ -57,9 +57,10 @@ class NeTV2(TestBoard):
     tests: ClassVar[dict] = {
         "uart": {"artifact": "uart-test-netv2-{v}/kosagi_netv2.bit", "script": "test_uart.py",
                  "args": ["--port", "{port}", "--board", "netv2", "--skip-banner"], "verify": True},
-        # The BIOS prints its SDRAM calibration once, at start, before the memtest, and test_ddr.py needs both:
-        # opened after the load, the Pi's own UART has already dropped the calibration (every Welland NeTV2,
-        # 2026-10-06). So it listens from before the load, and its timeout covers the load, as spiflash's does.
+        # The BIOS prints "Switching SDRAM to software control." once, at start, before the memtest, and
+        # test_ddr.py needs that line and "Memtest OK": opened after the load, the Pi's own UART had already
+        # dropped it (every Welland NeTV2's boot check, found 2026-10-08). So it listens from before the load,
+        # and its timeout covers the load, as spiflash's does.
         "ddr": {"artifact": "ddr-test-netv2-{v}/kosagi_netv2.bit", "script": "test_ddr.py",
                 "args": ["--port", "{port}", "--board", "netv2", "--timeout", "180"], "verify": True,
                 "listen": True},
