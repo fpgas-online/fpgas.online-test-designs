@@ -277,7 +277,8 @@ TODAY = {
         "port holds GPIO14, which is also the JTAG TMS wire, so `jtag` fails there whatever the wiring. With "
         'the port off at boot (a change to the gateway\'s boot files, on the page "verifying 3"), `jtag` '
         "passes (it reads the IDCODE and device DNA): run on pi20 at ps1 on 7 October 2026. On a Compute "
-        "Module 4 it has not been run by us. Every other test but `rp1-pio` is `not run` until the card is converted to the fpgas.online design, and converting a card on a blade has not been "
+        "Module 4 it has not been run by us. Every other test but `rp1-pio` is `not run` until the card "
+        "is converted to the fpgas.online design, and converting a card on a blade has not been "
         "done by us. So the result today is `fail` even with perfect cables: it shows that the card is seated "
         "and its PCIe link is up, and it cannot yet show that the two cables are right. The bench check with a "
         "meter, before fitting, is what the cables rest on until then.",
