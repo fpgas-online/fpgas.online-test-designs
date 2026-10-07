@@ -23,28 +23,92 @@ This page has two parts:
 
 One page for each task, in this order:
 
-| Page | For you if you |
-|---|---|
-| [Installing](verify/installing.md#installing) | have a Pi with an FPGA board and want to install the check for it |
-| [Running it](verify/running.md#running-it) | have installed it and want to run the check, part of it, or set how the host runs it |
-| [Identity and labels](verify/identity-and-labels.md#identity-and-labels) | want to print who the board is, or make its labels with rpi-hwid |
-| [Reading the result](verify/reading-the-result.md#reading-the-result) | have run the check and want to know what its result and summary mean |
-| [More results](verify/more-results.md) | want to compare your summary with more failing and missing results |
-| [`--help`](verify/help.md#--help) | want the options and commands of each tool without installing it |
-| [What each board's check tests](verify/tests.md#what-each-boards-check-tests) | have an Arty, NeTV2, Fomu or TT FPGA and want to know what each test does |
-| [The Tiny Tapeout demo boards](verify/tt-fpga.md) | have a Tiny Tapeout demo board and want to know how it is told apart, what it is left running, its `sdk` test and its identity |
-| [What an Acorn check tests](verify/acorn.md#acorn) | have an Acorn and want to know what its check does, and its power-cycle check |
-| [The JTAG IDCODE and the device DNA](verify/idcode-and-dna.md) | have an Acorn, Arty or NeTV2 and want to know how its IDCODE and DNA are read and judged |
-| [Not done yet](verify/not-done-yet.md#not-done-yet) | want to know what the check does not do yet |
-| [Checking an Acorn's wiring](verify/acorn-wiring.md#checking-an-acorns-wiring) | have built an Acorn's cables and want the page that checks them |
-| [Common failures](verify/common-failures.md#common-failures) | have a result that is not `pass` and want to know what to do |
-| [The report and the recorded state](verify/report-and-state.md#the-report-and-the-recorded-state) | want to read the JSON report, or know when a board is `changed` |
+<a id="installing"></a>
+
+* [Installing](verify/installing.md#installing): for you if you have a Pi with an FPGA board and want to install the check for it.
+
+<a id="running-it"></a>
+
+* [Running it](verify/running.md#running-it): for you if you have installed it and want to run the check, part of it, or set how the host runs it.
+
+<a id="identity-and-labels"></a>
+
+* [Identity and labels](verify/identity-and-labels.md#identity-and-labels): for you if you want to print who the board is, or make its labels with rpi-hwid.
+
+<a id="reading-the-result"></a>
+
+* [Reading the result](verify/reading-the-result.md#reading-the-result): for you if you have run the check and want to know what its result and summary mean.
+
+* [More results](verify/more-results.md): for you if you want to compare your summary with more failing and missing results.
+
+<a id="help"></a>
+
+* [`--help`](verify/help.md#--help): for you if you want the options and commands of each tool without installing it.
+
+<a id="what-each-board-s-check-tests"></a>
+
+<a id="what-each-boards-check-tests"></a>
+
+<a id="arty-netv2-fomu-and-tt-fpga"></a>
+
+* [What each board's check tests](verify/tests.md#what-each-boards-check-tests): for you if you have an Arty, NeTV2, Fomu or TT FPGA and want to know what each test does.
+
+<a id="which-tiny-tapeout-board-it-is"></a>
+
+<a id="what-the-tt-fpga-is-left-running"></a>
+
+<a id="the-sdk-test"></a>
+
+<a id="tt-fpga-identity"></a>
+
+* [The Tiny Tapeout demo boards](verify/tt-fpga.md): for you if you have a Tiny Tapeout demo board and want to know how it is told apart, what it is left running, its `sdk` test and its identity.
+
+<a id="acorn"></a>
+
+<a id="the-acorn-s-power-cycle-check-opt-in"></a>
+
+<a id="the-acorns-power-cycle-check-opt-in"></a>
+
+* [What an Acorn check tests](verify/acorn.md#acorn): for you if you have an Acorn and want to know what its check does, and its power-cycle check.
+
+<a id="the-jtag-idcode"></a>
+
+<a id="the-device-dna"></a>
+
+* [The JTAG IDCODE and the device DNA](verify/idcode-and-dna.md): for you if you have an Acorn, Arty or NeTV2 and want to know how its IDCODE and DNA are read and judged.
+
+<a id="not-done-yet"></a>
+
+* [Not done yet](verify/not-done-yet.md#not-done-yet): for you if you want to know what the check does not do yet.
+
+<a id="checking-an-acorn-s-wiring"></a>
+
+<a id="checking-an-acorns-wiring"></a>
+
+* [Checking an Acorn's wiring](verify/acorn-wiring.md#checking-an-acorns-wiring): for you if you have built an Acorn's cables and want the page that checks them.
+
+<a id="common-failures"></a>
+
+* [Common failures](verify/common-failures.md#common-failures): for you if you have a result that is not `pass` and want to know what to do.
+
+<a id="the-report-and-the-recorded-state"></a>
+
+* [The report and the recorded state](verify/report-and-state.md#the-report-and-the-recorded-state): for you if you want to read the JSON report, or know when a board is `changed`.
 
 ---
 
 ## 2. How verify is used in fpgas.online
 
-| Page | For you if you |
-|---|---|
-| [How it is used in fpgas.online](verify/fleet.md) | run the fleet and want to know how the check is installed and run there, its events, how a deploy reaches it and how to collect every Pi's result |
-| [Current results](verify/current-results.md#current-results) | want the last collected results on the Welland Pis |
+<a id="events"></a>
+
+<a id="how-a-deploy-picks-up-new-packages"></a>
+
+<a id="collecting-every-pi-s-result"></a>
+
+<a id="collecting-every-pis-result"></a>
+
+* [How it is used in fpgas.online](verify/fleet.md): for you if you run the fleet and want to know how the check is installed and run there, its events, how a deploy reaches it and how to collect every Pi's result.
+
+<a id="current-results"></a>
+
+* [Current results](verify/current-results.md#current-results): for you if you want the last collected results on the Welland Pis.
