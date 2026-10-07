@@ -5,13 +5,14 @@ output. These lines say it again plainly, and last, so they are what is left on 
 words; each board with its faults and its failed tests, one line of reason each; what was not run and why;
 and what to do next, chosen from the faults found (ADVICE). The JSON report is for machines and is unchanged.
 
-ADVICE follows docs/verify.md's "Common failures": a line there that names something to do has its entry here.
+ADVICE follows docs/verify/common-failures.md's "Common failures": a line there that names something to do has
+its entry here.
 """
 
 import re
 import textwrap
 
-DOCS = "https://docs.fpgas.online/en/latest/verify/fpgas-verify.html"
+DOCS = "https://docs.fpgas.online/en/latest/verify"  # the pages of docs/verify/, as the site publishes them
 REPO_DOCS = "https://github.com/fpgas-online/fpgas.online-test-designs/blob/main/docs"
 ACORN_PROGRAMMING = f"{REPO_DOCS}/hardware/acorn-pcie-programming.md"
 ISSUES = "https://github.com/fpgas-online/fpgas.online-test-designs/issues"
@@ -69,7 +70,7 @@ ADVICE = (
      "The demo board could not be asked whether it carries an FPGA or a Tiny Tapeout chip, so nothing was "
      "loaded into it. The reason above says what stopped the read; if rpi-hwid is not installed, install it "
      f"(sudo apt install python3-rpi-hwid, from https://github.com/mithro/rpi-hwid): {DOCS}"
-     "#which-tiny-tapeout-board-it-is"),
+     "/tt-fpga.html#which-tiny-tapeout-board-it-is"),
     (r"Pmod wiring test is not yet part of the boot check",
      "This demo board carries a Tiny Tapeout chip. It was identified and its other tests are above, but the "
      "check cannot yet test its cabling to the Pi, and a board is not passed untested. Nothing is known to be "
@@ -193,7 +194,7 @@ def lines(report, kept_in=None):
         if b["result"] != "pass":
             todo.append(f"To look at the {b['board']} board yourself: sudo fpgas-{slug(b['board'])}-debug --help "
                         f"(sudo apt install fpgas-online-{slug(b['board'])}-debug)")  # fmt: skip
-    todo.append(f"What each message means: {DOCS}#common-failures")
+    todo.append(f"What each message means: {DOCS}/common-failures.html#common-failures")
     for text in todo:  # a URL is never broken
         out += textwrap.wrap(text, WIDTH, initial_indent="  * ", subsequent_indent="    ", break_long_words=False,
                              break_on_hyphens=False)  # fmt: skip

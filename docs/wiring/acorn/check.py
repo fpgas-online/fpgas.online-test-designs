@@ -10,8 +10,8 @@ has been run on one. They are assembled from
   for that carrier only, and so is a block between `<!-- pi5:begin -->` and `<!-- pi5:end -->`;
 * wiring.toml, for which wire of which cable goes to which pin of this carrier (the picture, and what to
   swap when a pair is crossed);
-* docs/verify.md, the tool's reference, for the transcripts of real runs and the Acorn rows of its
-  "Common failures" table, so that each exists once;
+* the tool's reference, docs/verify/: reading-the-result.md for the transcripts of real runs and
+  common-failures.md for the Acorn rows of its "Common failures" table, so that each exists once;
 * the cavity pictures steps.py draws, shown again where a failing line has to be taken to a wire.
 
 gen.py's build() calls build() here, so the pages are part of generated/ and of `gen.py --check`.
@@ -28,10 +28,12 @@ from sheetlib import INK, MUTED, RED, SIGNALS, Sheet, label_of
 from steps import GREY, LINE, WIRE, T, W
 
 FRAGMENTS = wiring.HERE / "check"
-VERIFY = wiring.HERE.parent.parent / "verify.md"  # docs/verify.md
+VERIFY = wiring.HERE.parent.parent / "verify"  # docs/verify/, the tool's reference
+RESULTS = VERIFY / "reading-the-result.md"  # the transcripts of real runs
+COMMON_FAILURES = VERIFY / "common-failures.md"  # the table of messages and what to do
 SITE = "https://docs.fpgas.online/en/latest"
 CONVERTING = f"{SITE}/boards/acorn/pcie-programming.html"
-FAILURES = f"{SITE}/verify/fpgas-verify.html#common-failures"
+FAILURES = f"{SITE}/verify/common-failures.html#common-failures"
 
 # Which test proves which wire. A ground wire is every test's return.
 USES = {
@@ -44,7 +46,8 @@ USES = {
     "J5": "p2-gpio",
     "H5": "p2-gpio",
 }
-# The rows of verify.md's "Common failures" that are about an Acorn: each named by the start of its first cell.
+# The rows of verify/common-failures.md's "Common failures" that are about an Acorn: each named by the start of
+# its first cell.
 ACORN_FAILURES = [
     "`fail`: `unconverted: …`",
     "`fail`: `… is not a design we built`",
@@ -122,49 +125,64 @@ def fragment(file, c):
 
 
 def transcript(marker, *said):
-    """The ```text block of verify.md under the paragraph starting with `marker`.
+    """The ```text block of verify/reading-the-result.md under the paragraph starting with `marker`.
 
     said: words the caption here repeats (a host, a date): they must be in that paragraph, so that a caption
     cannot outlive a change of the transcript it stands over.
     """
-    text = VERIFY.read_text()
+    text = RESULTS.read_text()
     if text.count("\n" + marker) != 1:
-        raise wiring.WiringError(f"docs/verify.md: {marker!r} starts {text.count(chr(10) + marker)} lines, not one")
+        raise wiring.WiringError(
+            f"docs/verify/reading-the-result.md: {marker!r} starts {text.count(chr(10) + marker)} lines, not one"
+        )
     after = text[text.index("\n" + marker) :]
     block = re.search(r"```text\n.*?\n```\n", after, re.S)
     between = after[1 : block.start()] if block else ""
     if not block or any(mark in between for mark in ("\n**", "\n#", "```", "\n\n\n")) or between.count("\n\n") != 1:
-        raise wiring.WiringError(f"docs/verify.md: no transcript straight after the paragraph starting {marker!r}")
+        raise wiring.WiringError(
+            f"docs/verify/reading-the-result.md: no transcript straight after the paragraph starting {marker!r}"
+        )
     missing = [word for word in said if word not in between]
     if missing:
-        raise wiring.WiringError(f"docs/verify.md: the paragraph starting {marker!r} no longer says {missing}")
+        raise wiring.WiringError(
+            f"docs/verify/reading-the-result.md: the paragraph starting {marker!r} no longer says {missing}"
+        )
     return block[0]
 
 
 def failures(c):
-    """The Acorn rows of verify.md's "Common failures" table that can be met on carrier `c`, as a table."""
-    text = VERIFY.read_text()
-    table = text[text.index("### Common failures\n") :].split("\n### ")[0]
+    """The Acorn rows of verify/common-failures.md's "Common failures" table that can be met on carrier `c`, as a
+    table."""
+    text = COMMON_FAILURES.read_text()
+    table = text[text.index("## Common failures\n") :].split("\n## ")[0]
     rows = [line for line in table.splitlines() if line.startswith("| `")]
     out = ["| It says | Meaning, and what to do |", "|---|---|"]
     for start in ACORN_FAILURES:
         found = [r for r in rows if r.startswith("| " + start)]
         if len(found) != 1:
-            raise wiring.WiringError(f"docs/verify.md, Common failures: {len(found)} rows start {start!r}, not one")
+            raise wiring.WiringError(
+                f"docs/verify/common-failures.md, Common failures: {len(found)} rows start {start!r}, not one"
+            )
         other = [key for key, marks in ONLY.items() if key != c.key and any(m in start for m in marks)]
         if not other:
-            out.append(site_links(found[0]))
+            out.append(site_links(found[0], "common-failures"))
     return "\n".join(out) + "\n"
 
 
-def site_links(text):
-    """verify.md's links, written from docs/, as they have to read from a page of the site."""
-    text = text.replace(
-        "[acorn-pcie-programming.md](hardware/acorn-pcie-programming.md)", f"[converting a card]({CONVERTING})"
-    )
-    text = text.replace("](hardware/acorn-pcie-programming.md)", f"]({CONVERTING})")
-    text = re.sub(r"\]\(#([a-z0-9-]+)\)", rf"]({SITE}/verify/fpgas-verify.html#\1)", text)
-    return text
+def site_links(text, page=None):
+    """Links written from docs/ (check/*.md) or from docs/verify/ (the reference's rows), as they have to read
+    from a page of the site.
+
+    A link to a heading of a page of the tool's reference goes to that heading on the site's copy of the page;
+    one written as `#heading` is to a heading of `page`, the page of docs/verify/ the text is from."""
+    for source in ("../hardware/acorn-pcie-programming.md", "hardware/acorn-pcie-programming.md"):
+        text = text.replace(f"[acorn-pcie-programming.md]({source})", f"[converting a card]({CONVERTING})")
+        text = text.replace(f"]({source})", f"]({CONVERTING})")
+    unplaced = re.search(r"\]\(#[^)]*\)", text)
+    if page is None and unplaced:
+        raise wiring.WiringError(f"a link to a heading of no page: {unplaced[0]}")
+    text = re.sub(r"\]\(#([a-z0-9-]+)\)", rf"]({page}.md#\1)", text)
+    return re.sub(r"\]\(([a-z0-9-]+)\.md#([a-z0-9-]+)\)", rf"]({SITE}/verify/\1.html#\2)", text)
 
 
 def wire_of(sig):

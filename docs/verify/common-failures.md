@@ -1,0 +1,47 @@
+# fpgas-verify: common failures
+
+You have a result that is not `pass` and want to know what its message means and what to do.
+Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
+
+## Common failures
+
+| It says | Meaning, and what to do |
+|---|---|
+| `missing`: `no <board> found: this host is set up for one…` | the board is not on USB/PCI (or JTAG). Check power and cables. A Fomu that has run a design needs a power cycle |
+| `missing`: `…; a Fomu EVT was found on this host by an earlier check and is not there now: …` | the Fomu may still be plugged in and working: the last check that found it loaded its test design, which has no USB, and a reboot does not bring it back. If it is plugged in, power-cycle the Pi (its power or its PoE port), not a reboot. The check cannot tell this from a Fomu that was unplugged |
+| `missing`: `none of the installed boards … was found` | nothing attached. Expected on a Pi with no FPGA, and still a fail |
+| `error`: `the board did not say which Tiny Tapeout board it is, so no test was run and nothing was loaded` | the demo board could not be asked: the rest of the reason says why (rpi-hwid not installed, its `main.py` changed, its SDK did not start, rpi-hwid could not read it). [Which Tiny Tapeout board it is](tt-fpga.md#which-tiny-tapeout-board-it-is) |
+| `fail`: `wiring not run: the Pmod wiring test is not yet part of the boot check, …` | a demo board with a Tiny Tapeout chip. Nothing is known to be wrong with it: the check cannot test its cabling to the Pi yet, and does not pass a board untested. Its `sdk` test and identity are in the report. [The `sdk` test](tt-fpga.md#the-sdk-test) |
+| `fail`: `sdk fail: a tt06 chip needs SDK 2.0.x on an RP2040, and the board runs SDK …` / `no SDK release is recorded as supporting …` | the Tiny Tapeout SDK on the demo board is not a release known to work with the chip it carries. The firmware is installed by whoever looks after the board; the check writes nothing to it. [The `sdk` test](tt-fpga.md#the-sdk-test) |
+| `fail`: `a Raspberry Pi RP2 is on USB but is not running the Tiny Tapeout firmware` | the demo board's microcontroller is in its USB boot loader: power-cycle the board; if it comes back the same, its firmware is gone |
+| `error`: `… is not installed` | a tool is missing: `mpremote` (bookworm: bookworm-backports), openocd, openFPGALoader |
+| `error`: `no FPGA board is configured` / `conflicting fpga-board settings` | install one board's package, or fix `/etc/fpgas-verify/*.ini` |
+| `fail`: `power-cycle fail: the FPGA has not restarted since an earlier boot's check` | the Acorn kept its configuration across the Pi's restart (not seen after a soft reboot on the one Pi 5 measured): power-cycle the Pi (PoE). [The power-cycle check](acorn-power-cycle.md#the-acorns-power-cycle-check-opt-in) |
+| `error`: `power-cycle-check is '…'; it is on or off` / `conflicting power-cycle-check settings` | fix `/etc/fpgas-verify/*.ini` |
+| `error`: `… does not match its manifest` / `manifest.json is missing` | `sudo apt install --reinstall fpgas-online-<board>-bitstreams` |
+| `fail`: `loading it failed (exit N)` | the programmer could not load the design: JTAG wiring, cable, or programmer support |
+| `fail`: `python3 did not finish within 300 s` | the design never printed what the test waits for: wrong UART, or the design does not run |
+| `fail`: `the test exited 1` | the test failed; its last lines are in the summary. `fpgas-<board>-debug test <test>` shows all of it |
+| `fail`: `N/24 pins match expected wiring` (TT FPGA) or `N/18` (Arty) | the Pmod HAT cabling differs from the board's expected map: the table above that line shows each wire, what was expected on it and what was heard. The line after it says how many of the cabling's signal wires the test covers: all 24 on a TT FPGA board; 18 of 24 on an Arty, whose design cannot test the six wires on the three Pi pins two Pmods share |
+| `fail`: `… is an XC7A100T, not the a7-35's XC7A35T …` / `P1 JTAG chain has … expected one …` | the JTAG IDCODE is not the variant's part: the wrong board, or the wrong `--variant` |
+| `fail`: `the JTAG chain has N devices (…), not one` | more than the board's FPGA answers on its JTAG chain (an Arty or a NeTV2): another device wired into it, or a fault on the cable |
+| `fail`: `unconverted: …` | an Acorn on SQRL's factory image (or the XDMA sample): convert it ([acorn-pcie-programming.md](../hardware/acorn-pcie-programming.md)) |
+| `fail`: `… is not a design we built` | a Xilinx PCIe design the Acorn check does not know; its flash is not read |
+| `fail`: `… has no test design for this board yet` | a Xilinx PCIe board that is not an Acorn (a PCIe Screamer, a PicoEVB) |
+| `fail`: `running the golden image` | the Acorn's operational slot did not boot; it fell back to golden |
+| `fail`: `link is x2, expected x1` | the Acorn's PCIe link is not the setup's (`expected.toml`) |
+| `fail`: `no device on the P1 JTAG chain` / `no UARTBone reply on /dev/ttyAMA0` | an Acorn's JTAG or P2 UART cable is off or miswired |
+| `fail`: `P1 JTAG could not be probed: GPIO14 (TMS) is held by 1f00030000.serial (uart0): the kernel does not hand out a pin that is held…` | an Acorn's JTAG pin is in use by another driver, so the scan was not tried. Seen on a Compute Blade with a CM5 (kernel 6.18): TMS and the serial port's TX are both GPIO14, and with the serial port on the kernel does not lend the pin. JTAG cannot be tested there while the serial port is on; booting with it off should free the pin, which is not yet confirmed on hardware ([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)) |
+| `fail`: `… gpiod_line_request_set_values_subset: Assertion 'request' failed` | openFPGALoader could not have one of the JTAG pins, because a driver holds it. Seen on a Compute Blade with a CM5 (kernel 6.18), where the serial port holds GPIO14, which is also JTAG TMS: the JTAG test cannot run there yet ([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)) |
+| `fail`: `openFPGALoader printed no raw IDCODE scan (needs --verbose-level 2 output)` | the tool's version, not the board: openFPGALoader exited 0 but printed no `- 0 -> 0x...` lines at `--verbose-level 2`, so it is older than v0.9.0. Its last lines are in the report's `output` |
+| `fail`: `… failed (exit N) before scanning the JTAG chain: …` | the scan tool exited with an error and printed no scan: the cable or gpiochip would not open, say. The reason ends with its last line of output; more is in the report's `output` |
+| `fail`: `… exited N reading the IDCODE` / `openFPGALoader --detect exited N …` | the IDCODE scan reported an error, even if it printed an IDCODE; its last lines are in the report's `output` |
+| `fail`: `device DNA over P1 JTAG reads 0x…: the DNA port is not being read` | the DNA read over JTAG is all zeros or all ones, which is no chip's DNA. The IDCODE read worked without TDI, so check the P1 TDI wire first; then run `openFPGALoader --read-dna` by hand |
+| `fail`: `device DNA over JTAG reads 0x…: the DNA port is not being read` | an Arty's or NeTV2's DNA read is all zeros or all ones. Its IDCODE scan works without TDI, so check TDI first (the NeTV2's GPIO27); then run `openFPGALoader --read-dna` by hand |
+| `fail`: `openFPGALoader --read-dna read no device DNA (exit N): …` | an Arty's or NeTV2's DNA read failed; the reason ends with its last line. An openFPGALoader older than 0.13.0 (Debian bookworm's) has no `--read-dna`: install fpgas.online's ([Installing](installing.md#installing)) |
+| `fail`: `device DNA over JTAG … is not the one over BAR0` | the P1 TDI wire does not carry, or the DNA readout is wrong. Only a good BAR0 DNA is compared: one of all zeros or all ones is pcie-bar0's own fault (`device DNA over BAR0 reads 0x0: the DNA port is not being read`) |
+| `fail`: `J5 -> GPIO3: the FPGA drove 0, the Pi read 1` (or the other way) | a P2 spare wire is cut or miswired |
+| `fail`: `K2 -> GPIO15: …` / `GPIO14 -> J2: …` | a P2 serial wire is cut or miswired |
+| `fail`: `DRAM write … MB/s, below the … MB/s expected` / `… words wrong in the … half` | the DRAM is slow or broken; `selftest.py` shows more |
+| `error`: `this host (…) is not an Acorn setup in wiring.toml` | an Acorn on a host neither setup has: add the host to `wiring.toml` if it is a real setup |
+| `changed` | the board or its flash differs from the recorded state. Meant it? `sudo fpgas-verify --update` |
