@@ -10,7 +10,8 @@ its camera until a visitor loads a design
 | Board | TT FPGA Demo Board (iCE40UP5K) |
 | Clock | the iCE40's own low-frequency oscillator (`SB_LFOSC`, 10 kHz nominal) |
 | Pins driven | `uo_out[7:0]` only: bits 0 to 6 are segments a to g, bit 7 is the dot |
-| Pins ignored | `clk`, `rst_n`, `ui_in`, `uio` (never driven, never read) |
+| Pins left undriven | `ui_in`, `uio`: never driven, never read, with the iCE40's pull-up off (and its input buffer), so the check can read the DIP switches on `ui_in` under this design (#166) |
+| Pins ignored | `clk`, `rst_n` |
 | Pattern | one segment runs round the outer ring (a to f), an eighth of a second a step; the middle segment changes at each lap; the dot is lit for the first half of each second |
 
 It needs nothing from the demo board's microcontroller once it is loaded: no clock, no reset, no input.

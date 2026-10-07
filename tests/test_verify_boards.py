@@ -70,6 +70,8 @@ class Runner:
                 f.write(self.flash)
         for needle, answer in self.answers:
             if needle in line:
+                if isinstance(answer, list):  # one answer for each call, in turn; the last for any after
+                    answer = answer.pop(0) if len(answer) > 1 else answer[0]
                 if isinstance(answer, Exception):
                     raise answer
                 return answer
@@ -540,9 +542,9 @@ def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_rea
     # the pin-ID scan loads its design itself and runs first; the bridge loads the UART design,
     # so the last design left on the board is one with a single TX pin, not one driving every Pmod line
     # first of all the board's own word is judged (sdk), which loads nothing
-    assert [t["test"] for t in report["tests"]] == ["sdk", "pin-id", "uart"]
+    assert [t["test"] for t in report["tests"]] == ["sdk", "dip-switches", "pin-id", "uart"]
     assert "bitstream" not in report["tests"][0] and "not_run" not in report
-    load, _display = [c for c in run.calls if "tt_fpga_program.py" in " ".join(c)]
+    _dip, load, _display = [c for c in run.calls if "tt_fpga_program.py" in " ".join(c)]
     assert load[3].endswith("pmod-pin-id-tt-fpga/tt_fpga_platform.bin") and load[4:] == ["--gpio-release"]
     bridged = [c for c in run.calls if "tt_test_wrapper.py" in " ".join(c)]
     assert [c[3].rsplit("/", 2)[-2] for c in bridged] == ["uart-test-tt-fpga"]
@@ -1209,7 +1211,8 @@ def test_single_tests_asked_of_a_chip_board_are_refused_and_nothing_is_loaded(tm
 def test_an_fpga_board_whose_sdk_test_fails_still_has_its_designs_loaded_and_tested(tmp_path, monkeypatch):
     _installed(monkeypatch)
     report = _check(TT, tmp_path, TT_FOUND, Runner([_rpi_hwid({**TT_BOARD, "sdk": "3.0.8"})]))
-    assert [(t["test"], t["result"]) for t in report["tests"]] == [("sdk", "fail"), ("pin-id", "pass"),
+    assert [(t["test"], t["result"]) for t in report["tests"]] == [("sdk", "fail"), ("dip-switches", "pass"),
+                                                                    ("pin-id", "pass"),
                                                                     ("uart", "pass")]  # fmt: skip
     assert report["result"] == "fail" and report["reason"].startswith("sdk fail: the FPGA breakout needs SDK 3.1.x")
 
@@ -1283,12 +1286,13 @@ def test_the_check_of_an_fpga_board_ends_by_leaving_the_display_design_running(t
     assert report["result"] == "pass" and "warnings" not in report
     assert report["left_running"] == {"design": "display", "bitstream": DISPLAY}
     # it is the last thing sent to the board: after every test, and nothing follows it but the bridge's start
-    assert _loads(run) == ["pmod-pin-id-tt-fpga", "uart-test-tt-fpga", "tt-display-tt-fpga"]
+    assert _loads(run) == ["tt-display-tt-fpga", "pmod-pin-id-tt-fpga", "uart-test-tt-fpga", "tt-display-tt-fpga"]
     last = run.calls[-2]
     assert last[1].endswith("tt_fpga_program.py") and last[2] == "/dev/ttyACM0" and last[3].endswith(DISPLAY)
     assert last[4:] == ["--gpio-release"] and _restarted_last(run)
     # it is no test: not in the tests, and nothing is run to read it
-    assert [t["test"] for t in report["tests"]] == ["sdk", "pin-id", "uart"] and "display" not in TT.tests
+    assert [t["test"] for t in report["tests"]] == ["sdk", "dip-switches", "pin-id", "uart"]
+    assert "display" not in TT.tests
     shown = runner.summary({"result": "pass", "mode": "tt", "boards": [report]})
     assert f"    left running: the display design ({DISPLAY})" in shown and "WARNING" not in shown
     sent = runner.details({"result": "pass", "mode": "tt", "boards": [report]})
@@ -1298,21 +1302,24 @@ def test_the_check_of_an_fpga_board_ends_by_leaving_the_display_design_running(t
 def test_a_display_design_that_cannot_be_loaded_is_a_warning_and_the_board_still_passes(tmp_path, monkeypatch):
     """The board was tested before it; the design is for the camera. But it is said, in the report and the event."""
     _installed(monkeypatch)
-    run = Runner([(DISPLAY, (1, "mpremote: no device found\nPROGRAM_FAILED")), _rpi_hwid(TT_BOARD)])
+    run = Runner([(DISPLAY, [(0, "ok"), (1, "mpremote: no device found\nPROGRAM_FAILED")]), _rpi_hwid(TT_BOARD)])
     report = _check(TT, tmp_path, TT_FOUND, run)
     assert report["result"] == "pass" and "reason" not in report and "left_running" not in report
     assert report["warnings"] == [
         "the display design, which the check leaves running, could not be loaded (loading it failed (exit 1): "
         "mpremote: no device found PROGRAM_FAILED): the board is left as its last test left it"]  # fmt: skip
-    assert [t["result"] for t in report["tests"]] == ["pass", "pass", "pass"] and _restarted_last(run)
+    assert [t["result"] for t in report["tests"]] == ["pass", "pass", "pass", "pass"] and _restarted_last(run)
     whole = {"result": "pass", "mode": "tt", "boards": [report]}
     assert "    WARNING: the display design, which the check leaves running, could not" in runner.summary(whole)
     assert runner.details(whole)["board0_warnings"] == report["warnings"][0]
-    # a damaged or absent file is the same warning, and nothing is sent to the board for it
+    # a damaged or absent file is the same warning, and nothing is sent to the board for it; the DIP switch read,
+    # which needs that design under it (#166), is an error then: the switches were not read
     images = _install(tmp_path / "damaged", TT, corrupt=DISPLAY)
     run = Runner([_rpi_hwid(TT_BOARD)])
     report = TT.check(_host(TT), TT_FOUND, {"images": images}, runner=run)
-    assert report["result"] == "pass" and "does not match its manifest" in report["warnings"][0]
+    assert report["result"] == "error" and "does not match its manifest" in report["warnings"][0]
+    dip = report["tests"][1]
+    assert dip["test"] == "dip-switches" and dip["result"] == "error" and "does not match its manifest" in dip["reason"]
     assert _loads(run) == ["pmod-pin-id-tt-fpga", "uart-test-tt-fpga"]
 
 
@@ -1330,7 +1337,8 @@ def test_the_display_design_is_left_after_single_tests_and_after_a_failed_test_t
 
 def test_a_load_that_times_out_is_a_warning_and_a_failing_boards_closing_lines_keep_it_apart(tmp_path, monkeypatch):
     _installed(monkeypatch)
-    run = Runner([(DISPLAY, core.Problem("error", "tt_fpga_program.py did not finish within 300 s")),
+    # the display design is loaded twice: for the DIP switch read first (it loads), and last (it times out)
+    run = Runner([(DISPLAY, [(0, "ok"), core.Problem("error", "tt_fpga_program.py did not finish within 300 s")]),
                   ("tt_test_wrapper.py", (1, "could not enter raw repl")), _rpi_hwid(TT_BOARD)])  # fmt: skip
     report = _check(TT, tmp_path, TT_FOUND, run)
     assert report["result"] == "fail" and "did not finish within 300 s" in report["warnings"][0]
@@ -1429,3 +1437,43 @@ def test_by_hand_the_debug_tool_does_not_guess_a_tt_boards_variant():
         debug._variant(TT, _host(TT), argparse.Namespace(variant=None))
     assert debug._variant(TT, _host(TT), argparse.Namespace(variant="tt-fpga")) == "tt-fpga"
     assert debug._variant(FOMU, _host(FOMU), argparse.Namespace(variant=None)) == "evt"
+
+
+# -- the DIP switches (#166) -----------------------------------------------------------------------------------
+
+
+def test_the_dip_switches_are_read_first_under_the_display_design_and_one_on_fails_the_board(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    said = "DIP_SWITCHES: switch 4 is on: set all DIP switches off"
+    run = Runner([("tt_dip_switches.py", (1, f"{said}\n")), _rpi_hwid(TT_BOARD)])
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    assert report["result"] == "fail"
+    dip = report["tests"][1]
+    assert dip == {**dip, "test": "dip-switches", "result": "fail", "bitstream": DISPLAY,
+                   "reason": "switch 4 is on: set all DIP switches off"}  # fmt: skip
+    # the display design went to the board with --gpio-release, then the read, on the board's port
+    load = next(c for c in run.calls if "tt_fpga_program.py" in " ".join(c))
+    read = next(c for c in run.calls if "tt_dip_switches.py" in " ".join(c))
+    assert load[3].endswith(DISPLAY) and load[4:] == ["--gpio-release"] and read[2:] == ["/dev/ttyACM0"]
+    assert (
+        run.calls.index(load)
+        < run.calls.index(read)
+        < run.calls.index(next(c for c in run.calls if "pmod-pin-id" in " ".join(c)))
+    )
+    # nothing is stopped for its port: the RP2350's USB serial has no login console
+    assert not any("serial-getty" in " ".join(c) for c in run.calls)
+    assert "dip-switches fail: switch 4 is on: set all DIP switches off" in runner.summary(
+        {"result": "fail", "mode": "tt", "boards": [report]}
+    )
+
+
+def test_dip_switches_that_could_not_be_read_are_an_error_with_the_scripts_reason(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    said = "DIP_SWITCHES: the DIP switches could not be read from the board (exit 1): no device"
+    run = Runner([("tt_dip_switches.py", (2, f"{said}\n")), _rpi_hwid(TT_BOARD)])
+    dip = _check(TT, tmp_path, TT_FOUND, run)["tests"][1]
+    assert (dip["result"], dip["reason"]) == ("error", said.removeprefix("DIP_SWITCHES: "))
+    # a script that dies without its last word is the plain fail it always was
+    run = Runner([("tt_dip_switches.py", (1, "Traceback (most recent call last):\n")), _rpi_hwid(TT_BOARD)])
+    dip = _check(TT, tmp_path / "again", TT_FOUND, run)["tests"][1]
+    assert (dip["result"], dip["reason"]) == ("fail", "the test exited 1")
