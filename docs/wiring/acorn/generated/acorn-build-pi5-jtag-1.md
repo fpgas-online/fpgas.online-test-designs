@@ -12,8 +12,10 @@ For this cable: one half of the Molex Pico-EZmate cable (a plug with six black w
 
 ![The cable, cut in the middle](acorn-cable-cut.png)
 
+**2.** Check that a half reaches, before any wire is cut back or crimped. Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. Lay one half from where the card's two sockets are, with the card in its slot, along the way each cable will run to its header on the Raspberry Pi 5 (40-pin header): its cut end must reach past that header's pins with at least 3 mm to spare. If it does not reach, stop: this guide uses each half at the length it has, and a longer cable is not written here. Tell whoever gave you this guide. **Not yet done by us on this hardware.**
 
-**2.** Find wire 1 of the P1 cable and flag the wires, before cutting any wire back.
+
+**3.** Find wire 1 of the P1 cable and flag the wires, before cutting any wire back.
 
 1. Press the plug of one half into socket P1 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost.
 2. Put a numbered tape flag on each of the 6 wires, 1 at the left to 6, about 25 mm back from the tip, clear of the end that will be cut and stripped later. Write P1 on the flag of wire 1 as well: off the card, the two halves look alike.
@@ -27,10 +29,10 @@ For this cable: one half of the Molex Pico-EZmate cable (a plug with six black w
 
 ![Checking which wire is wire 1 with a meter, the plug in socket P1](acorn-cable-p1-ground-check.png)
 
-**3.** Cut wire 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over the cut end. It goes in no cavity. Wire 6 is VCC, 3.3 V from the Acorn: it must never reach the host. Leave wires 1 to 5 at full length.
+**4.** Cut wire 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over the cut end. It goes in no cavity. Wire 6 is VCC, 3.3 V from the Acorn: it must never reach the host. Leave wires 1 to 5 at full length.
 
 ![The P1 cable: its wires prepared](acorn-cable-pi5-p1-prepare.png)
 
-**4.** Strip about 3 mm from wires 1 to 5. Crimp a Dupont terminal on each.
+**5.** Strip about 3 mm from wires 1 to 5. Crimp a Dupont terminal on each.
 
 ![Stripping and crimping](acorn-cable-crimp.png)
