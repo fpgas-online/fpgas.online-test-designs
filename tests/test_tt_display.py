@@ -57,8 +57,22 @@ def test_every_segment_is_used_and_the_display_never_stands_still():
 
 
 def test_the_design_takes_nothing_from_the_microcontroller_and_drives_only_uo_out():
-    """It is left running across resets of the RP2350, whose clock and reset lines then mean nothing."""
+    """It is left running across resets of the RP2350, whose clock and reset lines then mean nothing. ui_in and
+    uio are taken only to hold them as inputs without a pull-up (the next test)."""
     platform = tt_display.Platform(toolchain="icestorm")
     tt_display.Display(platform)
     taken = {resource[0] for resource, _signal in platform.constraint_manager.matched}
-    assert taken == {"uo_out"}
+    assert taken == {"uo_out", "ui_in", "uio"}
+
+
+def test_ui_in_and_uio_are_plain_inputs_with_the_pull_up_off():
+    """The check reads the DIP switches on ui_in under this design with a pull-down (#166): an iCE40 pin a
+    design does not use keeps its weak pull-up, so each of the 16 pins is an SB_IO input with PULLUP 0, and none
+    is driven. (In the bitstream: each pin's REN bit is set, read with icebox on a local build, 7 Oct 2026.)"""
+    platform = tt_display.Platform(toolchain="icestorm")
+    display = tt_display.Display(platform)
+    ios = [s for s in display.get_fragment().specials if getattr(s, "of", None) == "SB_IO"]
+    params = [{i.name: i.value for i in io.items if i.__class__.__name__ == "Parameter"} for io in ios]
+    assert len(ios) == 16
+    for p in params:
+        assert int(p["PIN_TYPE"].value) == 0b000001 and int(p["PULLUP"].value) == 0  # input, no output, no pull-up
