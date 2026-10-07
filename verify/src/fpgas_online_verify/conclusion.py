@@ -87,6 +87,10 @@ ADVICE = (
      "The reason names the ribbon (by the demo board's ui_in, uio or uo_out Pmod, and the HAT port it should "
      "go to: ui_in to JA, uio to JB, uo_out to JC) and its Pmod and HAT pins. Seat it, move it to its port, or "
      f"turn it the right way round, and run the check again: {DOCS}/tt-fpga.html#the-wiring-test"),
+    (r"the readings fit no single open wire",
+     "The wiring test's readings fit no single wrong wire or ribbon: two neighbouring wires of a ribbon are most "
+     "likely bridged. Look at the ribbon it names, around the HAT pins it saw joined; its READINGS: lines say what "
+     f"each signal reached. Then run the check again: {DOCS}/tt-fpga.html#the-wiring-test"),
     (r"is held high on the demo board",
      "One of the demo board's ui_in lines is held high: a DIP switch that is on ties its line to 3.3 V. Set all "
      f"the DIP switches off and run the check again: {DOCS}/tt-fpga.html#the-wiring-test"),

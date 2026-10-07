@@ -149,7 +149,15 @@ JA connector:
 
 A ribbon names up to two of its faults, and counts the rest (`; and 3 more`). When a ribbon is wholly elsewhere
 (another port, turned round, not plugged in) only that is said: the single-wire faults around it follow
-from it. What to do: seat the ribbon named, or move it to its port, and run the check again.
+from it. What to do: seat the ribbon named, move it to its port, or turn it the right way round (Pmod pin 1 to HAT
+pin 1); for a line held high, set all the DIP switches off. Then run the check again.
+
+When the readings fit no single fault (an open wire, two crossed wires, one ribbon elsewhere, one held bit), the
+test does not guess which wire is wrong. That is most often a short between two neighbouring wires of a ribbon.
+It names the ribbon to look at and the HAT pins it saw joined, and the `READINGS:` lines under it give what each
+signal reached and should have reached:
+
+* `wiring fail: the readings fit no single open wire, swapped or turned ribbon: a short between neighbouring wires is likely; look at the uio ribbon (to HAT JB) for bridged pins (HAT JA/JB pin 2 and HAT JB pin 7 read as one)`
 
 How it tests:
 
@@ -167,6 +175,14 @@ How it tests:
   `ui_in[1..3]` and `uio[1..3]` share them: while one of a pair is driven, the other is an input. Which port each
   ribbon is on is found by a second walk in which the Pi pulls each line up in turn and the RP2040 reads which of
   its pins follows, which the chip's copies do not enter.
+* Only the signal under test is driven; every other one is an input then (only `ui_in[0]` stays low, as the
+  factory test needs), so a short between two wires shows as one following the other, never as two of the
+  RP2040's pins driving against each other. The name round (pin-id) runs only when the walks found no short.
+* `uio[6:7]` are on HAT JB9/JB10, the Pi's GPIO3/2, which carry the Pi's fixed 1.8 kOhm I2C pull-ups: no probe can
+  see past those. They are driven only when the rest of the `uio` ribbon was found in place, the reverse walk
+  reached neither of them, and neither followed another `uio` bit's walk (a chip output on its line); and then
+  together, the two switched at the same instant (the RP2040's SIO registers), so the chip's copy of either can
+  only agree with them. They send no names.
 * Every set of readings must agree the first time: a line that changes while nothing is switching fails the
   test, named (a loose contact), with no retry.
 * On the Pi, for the test only: the serial getty is stopped and SysRq is off (the console's GPIO14/15 are HAT
@@ -184,7 +200,7 @@ How it tests:
   (`tt_sdk_start.py`), so the board is never left in the command server; the `FALLBACK:` line says so. The
   board's own `main.py` rewrites its `boot.log` when it starts: on the good path that happens once per boot
   check, at the identification start, and not again.
-* The test stops itself after 90 s (`--time-limit`) and puts everything back (up to 120 s, every step bounded, and 75 s more for the
+* The test stops itself after 90 s (`--time-limit`) and puts everything back (up to 130 s, every step bounded, and 75 s more for the
   fallback); the boot check's own limit, 300 s, which kills it, is beyond all of that. A passing run on the TT07
   board took 22.7 s (8 October 2026).
 * The chip's factory test is enabled with the SDK's `config.ini` turned off (`apply_configs`): applied, it would
@@ -204,7 +220,18 @@ is a `fail` when the readings were not steady (a loose contact?).
 
 The output's `MEM:` lines say how much of the RP2040's heap was free with the command server loaded, while each
 pin-id round sends, and after the test. `MEM:`, `PULLS:`, `RESTORE:` and `FALLBACK:` are said again just before
-the `WIRING:` line, where the boot report keeps them.
+the `WIRING:` line, where the boot report keeps them, and so are the `READINGS:` lines of a fail.
+
+**Not covered:**
+
+* A short among HAT JB9, JB10, JC9 and JC10 is not seen: it joins `uio[6]` or `uio[7]` to its own copy or the
+  other's, which agree with them, as they are driven together.
+* `MIN_HEAP_FREE` (60000 bytes) was measured on the TT07 board, SDK 2.0.4. A board on another shuttle may need
+  more: its shuttle file is bigger (TT06's is about twice TT07's), so its SDK leaves less heap. It then fails
+  loudly (`RP2040 heap too low`) until it has been measured.
+* A short between neighbouring wires is said as one, with where to look, not as which two wires.
+* "The board's files the same before and after" is every file but `/boot.log`, which the board's own `main.py`
+  rewrites at every start (the identification start).
 
 [PR #15](https://github.com/fpgas-online/fpgas.online-test-designs/pull/15)'s form of it ran on every Tiny Tapeout
 host at Welland on 4 September 2026. This form passed on the board with a TT07 chip at Welland on 8 October 2026

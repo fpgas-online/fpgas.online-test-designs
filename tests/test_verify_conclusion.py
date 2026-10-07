@@ -209,6 +209,7 @@ def test_every_advice_pattern_matches_a_reason_the_code_gives():
         "wiring fail: the ui_in ribbon (to HAT JA): ui_in[2] (Pmod pin 3) did not reach HAT JA/JB pin 3",
         "wiring fail: the ui_in and uio ribbons are on each other's HAT ports (JB and JA): swap them",
         "wiring fail: these ribbons are plugged in turned round and one position over (ui_in on HAT JC ...)",
+        "wiring fail: the readings fit no single open wire, swapped or turned ribbon: a short between neighbouring ...",
         "wiring fail: the ui_in ribbon (to HAT JA): ui_in[4] (Pmod pin 7) is held high on the demo board (a DIP ...",
         "wiring fail: the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) is held low on the demo board (some ...",
         "wiring fail: the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) is held against the pulls on the demo board",
