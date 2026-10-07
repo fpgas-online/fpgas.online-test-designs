@@ -24,7 +24,7 @@ Commands: `fpgas-verify` (what the boot unit runs), `fpgas-<board>-verify`, `fpg
 rpi-hwid is optional: `--label` runs its command if it is installed (`python3-rpi-hwid`, or the `labels`
 extra: `pip install 'fpgas-online-verify[labels]'`) and says how to install it if not. Inside `--label`,
 `FPGAS_VERIFY_IDENTITY` makes `--identify` print the outer run's document and every other mode refuse
-([docs/verify.md](../docs/verify.md#identity-and-labels)).
+([docs/verify.md](../docs/verify/identity-and-labels.md#identity-and-labels)).
 
 The guide is [docs/verify.md](../docs/verify.md); the design notes are in
 [docs/plans/2026-09-26-fpgas-online-verify-design.md](../docs/plans/2026-09-26-fpgas-online-verify-design.md).

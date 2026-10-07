@@ -8,7 +8,7 @@ See [acorn-pinmap.md](acorn-pinmap.md) for the full RPi GPIO pinmap.
 
 ## Installing the Acorn Packages
 
-Add the fpgas.online APT repository first ([verify.md: Installing](../verify.md#installing)), then on the Acorn's Pi 5 host:
+Add the fpgas.online APT repository first ([verify.md: Installing](../verify/installing.md#installing)), then on the Acorn's Pi 5 host:
 
 ```bash
 sudo apt install fpgas-online-acorn
@@ -24,7 +24,7 @@ sudo apt install fpgas-online-acorn
 The tools package depends on one exact bitstreams version. Which release that is comes from [`packaging/acorn-pcie/release.toml`](../../packaging/acorn-pcie/release.toml), and a new release reaches hosts only when a reviewed PR moves that pin. Every package is built, and its install rules are checked in clean Debian bookworm and trixie, by [`collect-bitstreams.yml`](../../.github/workflows/collect-bitstreams.yml).
 
 At boot the check finds the Acorn on PCI (Xilinx `10ee` or SQRL `1e24`), works out which setup the host is
-from its device-tree model, and runs these tests ([verify.md](../verify.md#what-each-boards-check-tests) has the
+from its device-tree model, and runs these tests ([verify.md](../verify/tests.md#what-each-boards-check-tests) has the
 details). It never writes the flash and never reconfigures the FPGA, and a fault in one test does not stop
 the others:
 
@@ -33,14 +33,14 @@ the others:
 | `pcie-link` | the link is 5.0 GT/s x1 ([`expected.toml`](../wiring/acorn/expected.toml)) |
 | `pcie-bar0` | over BAR0: the operational build of the installed release runs, the flash identifies itself, the device DNA reads, and the XADC temperature and voltages are in range |
 | `rp1-pio` | Pi 5 / CM5 only: `/dev/pio0` opens, for openfpgaloader-rp1pio; when it does not, the `rp1_fw` / `rp1_pio` modules and the kernel's reason are reported (`failed to contact RP1 firmware` on bootloader 2024/11/05) |
-| `jtag` | over P1: the whole IDCODE, decoded into `idcode_version`, `idcode_part_number`, `idcode_manufacturer_id`, `idcode_manufacturer` and `idcode_device`, must be the variant's part in any silicon version ([verify.md: the IDCODE](../verify.md#the-jtag-idcode)); and the device DNA, which must be BAR0's (this proves TDI) |
+| `jtag` | over P1: the whole IDCODE, decoded into `idcode_version`, `idcode_part_number`, `idcode_manufacturer_id`, `idcode_manufacturer` and `idcode_device`, must be the variant's part in any silicon version ([verify.md: the IDCODE](../verify/idcode-and-dna.md#the-jtag-idcode)); and the device DNA, which must be BAR0's (this proves TDI) |
 | `flash` | both 4 MiB slots hold the release's images |
 | `ddr` | the BIOS console read out, then the DRAM BIST over the whole DRAM, two passes: no errors, and write and read at least 1100 MB/s ([`expected.toml`](../wiring/acorn/expected.toml)); p48 measures 1327 / 1350 MB/s |
 | `p2-uart` | the UARTBone bridge on P2 at 1200 and 921600 baud: identifier, DNA and XADC, as over BAR0 |
 | `p2-serial` | both setups: J2 and K2 borrowed with `p2_serial` and tested both ways, the switch's own timeout, and the UARTBone answering again |
 | `scratch` | the `ctrl` scratch register written and read back over BAR0 and over P2 |
 | `p2-gpio` | Pi 5 setup only: J5 and H5 driven from the FPGA and read on GPIO3/GPIO4, then driven from the Pi and read on the FPGA |
-| `power-cycle` (opt-in: `power-cycle-check = on`, set on the fpgas.online fleet) | the FPGA restarted since the last check (it was configured, or its SoC reset), that is, it did not keep its state across the Pi's restart ([verify.md](../verify.md#the-acorns-power-cycle-check-opt-in)) |
+| `power-cycle` (opt-in: `power-cycle-check = on`, set on the fpgas.online fleet) | the FPGA restarted since the last check (it was configured, or its SoC reset), that is, it did not keep its state across the Pi's restart ([verify.md](../verify/acorn.md#the-acorns-power-cycle-check-opt-in)) |
 
 Where each setup's wires land on the host:
 
@@ -255,7 +255,7 @@ Flash a persistent bitstream using OpenOCD or openFPGALoader. The S25FL256S supp
 
 ### Via PCIe (LiteX)
 
-LiteX provides PCIe-based programming via `litepcie_util` when a LiteX bitstream with PCIe support is already loaded. Which Welland boards run the fpgas.online SoC is in the [current verify results](../verify.md#current-results) and [#53](https://github.com/fpgas-online/fpgas.online-test-designs/issues/53).
+LiteX provides PCIe-based programming via `litepcie_util` when a LiteX bitstream with PCIe support is already loaded. Which Welland boards run the fpgas.online SoC is in the [current verify results](../verify/current-results.md#current-results) and [#53](https://github.com/fpgas-online/fpgas.online-test-designs/issues/53).
 
 ## Self-test registers
 
@@ -347,7 +347,7 @@ index 2) under the [VLAN-per-port scheme](site-welland.md#network-topology):
 hostname `pi-sw2-p<port>`, IP `10.21.2.<port>`. Their MACs and revision codes
 are in [site-welland.md](site-welland.md#sqrl-acorn-cle-215).
 What each board runs and whether its JTAG and P2 links pass is in the
-[current verify results](../verify.md#current-results); moving them all to the
+[current verify results](../verify/current-results.md#current-results); moving them all to the
 pinned release is
 [#53](https://github.com/fpgas-online/fpgas.online-test-designs/issues/53).
 
