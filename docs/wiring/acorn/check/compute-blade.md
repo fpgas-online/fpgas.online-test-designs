@@ -2,7 +2,7 @@ What has been run on a Compute Blade, and what has not, as of 7 October 2026:
 
 | | State |
 |---|---|
-| Installing the packages and running the check (Raspberry Pi OS trixie, CM5) | run at ps1, by the page's own steps (pi16 and pi20 at ps1, 7 October 2026, 0.0.post1216): the failing run printed on the page "verifying 1" is pi16 at ps1's result. An install lasts until the blade's next boot |
+| Installing the packages and running the check (Raspberry Pi OS trixie, CM5) | run at ps1, by the page's own steps (pi16 and pi20 at ps1, 7 October 2026, 0.0.post1216): the failing run printed on the page "verifying 1" is the result from pi16 at ps1. An install lasts until the blade's next boot |
 | `pcie-link` | run at ps1: passes (5.0 GT/s, x1) |
 | `jtag` with the serial port on, kernel 6.18 | run at ps1: **cannot work**. TMS is GPIO14, which is also the serial port's TX; that kernel does not lend a pin a driver has, and the serial driver cannot be detached while the system runs. From 0.0.post1111 the test fails saying so, without running the tool ([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)). Seen on the two CM5 blades, where `gpioinfo` names the kernel as line 14's user; on the two CM4 blades `gpioinfo` names no user for line 14 although the pin is the serial port's TXD0 (7 October 2026): whether JTAG can have it there is **not yet run by us** |
 | `jtag` with the serial port off | **not yet run by us on this hardware** |
