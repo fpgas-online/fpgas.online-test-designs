@@ -45,11 +45,9 @@ The tools to build its two cables, once for any number of hosts:
 
 ![The cable, cut in the middle](acorn-cable-cut.png)
 
-**2.** Check that a half reaches, before any wire is cut back or crimped. Power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Lay one half from where the card's two sockets are, with the card in its slot, along the way each cable will run to its header on the Compute Blade (Extension Port and the UART): its cut end must reach past that header's pins with at least 3 mm to spare. If it does not reach, stop: this guide uses each half at the length it has, and a longer cable is not written here. Tell whoever gave you this guide. **Not yet done by us on this hardware.**
-
 #### The P1 cable (JTAG)
 
-**3.** Find wire 1 of the P1 cable and flag the wires, before cutting any wire back.
+**2.** Find wire 1 of the P1 cable and flag the wires, before cutting any wire back.
 
 1. Press the plug of one half into socket P1 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost.
 2. Put a numbered tape flag on each of the 6 wires, 1 at the left to 6, about 25 mm back from the tip, clear of the end that will be cut and stripped later. Write P1 on the flag of wire 1 as well: off the card, the two halves look alike.
@@ -63,21 +61,21 @@ The tools to build its two cables, once for any number of hosts:
 
 ![Checking which wire is wire 1 with a meter, the plug in socket P1](acorn-cable-p1-ground-check.png)
 
-**4.** Cut wire 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over the cut end. It goes in no cavity. Wire 6 is VCC, 3.3 V from the Acorn: it must never reach the host. Leave wires 1 to 5 at full length.
+**3.** Cut wire 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over the cut end. It goes in no cavity. Wire 6 is VCC, 3.3 V from the Acorn: it must never reach the host. Leave wires 1 to 5 at full length.
 
 ![The P1 cable: its wires prepared](acorn-cable-blade-p1-prepare.png)
 
-**5.** Strip about 3 mm from wires 1 to 5. Crimp a Dupont terminal on each.
+**4.** Strip about 3 mm from wires 1 to 5. Crimp a Dupont terminal on each.
 
 ![Stripping and crimping](acorn-cable-crimp.png)
 
-**6.** Hold the empty 2×5 housing with the wire openings facing you and its long side upright, as in the picture. Until it is marked, either way up is the same. Mark the top left corner with a paint pen or a dot of tape: that is the pin 1 corner. For each wire, read the number on its flag, find the same number in the picture, and push its terminal into that cavity, latch tab towards the window, until it clicks. Turned round, the housing puts 5 V on the TCK wire, which can destroy the host. Wire 6 goes in no cavity. Pull each wire gently: the terminal must stay in.
+**5.** Hold the empty 2×5 housing with the wire openings facing you and its long side upright, as in the picture. Until it is marked, either way up is the same. Mark the top left corner with a paint pen or a dot of tape: that is the pin 1 corner. For each wire, read the number on its flag, find the same number in the picture, and push its terminal into that cavity, latch tab towards the window, until it clicks. Turned round, the housing puts 5 V on the TCK wire, which can destroy the host. Wire 6 goes in no cavity. Pull each wire gently: the terminal must stay in.
 
 ![Which wire goes in which cavity, P1 cable](acorn-cable-blade-p1.png)
 
 ![Which way round a terminal goes in, and the pull test](acorn-cable-push.png)
 
-**7.** Check each wire with a meter on continuity. For each wire: one probe on its contact on the plug, the other on the terminal in the cavity the picture gives for that wire number, through the opening on the pin side of the housing: it must beep. Every other cavity must stay silent for that contact. The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.
+**6.** Check each wire with a meter on continuity. For each wire: one probe on its contact on the plug, the other on the terminal in the cavity the picture gives for that wire number, through the opening on the pin side of the housing: it must beep. Every other cavity must stay silent for that contact. The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.
 
 ![A meter between the plug and the housing](acorn-cable-check.png)
 
@@ -87,7 +85,7 @@ The P1 cavity picture again, to read each wire's cavity from:
 
 #### The P2 cable (I/O)
 
-**8.** Find wire 1 of the P2 cable and flag the wires, before cutting any wire back.
+**7.** Find wire 1 of the P2 cable and flag the wires, before cutting any wire back.
 
 1. Press the plug of the other half into socket P2 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost.
 2. Put a numbered tape flag on each of the 6 wires, 1 at the left to 6, about 25 mm back from the tip, clear of the end that will be cut and stripped later. Write P2 on the flag of wire 1 as well: off the card, the two halves look alike.
@@ -101,25 +99,25 @@ The P1 cavity picture again, to read each wire's cavity from:
 
 ![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check.png)
 
-**9.** Cut wires 4, 5 and 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over each cut end. They go in no cavity. Wire 6 is VCC, 3.3 V from the Acorn: it must never reach the host. Leave wires 1, 2 and 3 at full length.
+**8.** Cut wires 4, 5 and 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over each cut end. They go in no cavity. Wire 6 is VCC, 3.3 V from the Acorn: it must never reach the host. Leave wires 1, 2 and 3 at full length.
 
 ![The P2 cable: its wires prepared](acorn-cable-blade-p2-prepare.png)
 
-**10.** Cut wire 2 (J2) about 15 mm from its free end. Slide a piece of the 3 mm tube onto the wire, clear of the cut. Strip about 3 mm from each cut end. Trim the resistor's leads to about 5 mm each. Solder the 470 Ω resistor between the two cut ends. Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this. The resistor is there because J2 lands on GPIO14, which is also JTAG TMS: with 470 Ω in the wire, JTAG still gets through if the FPGA drives J2 (designed so, not yet measured).
+**9.** Cut wire 2 (J2) about 15 mm from its free end. Slide a piece of the 3 mm tube onto the wire, clear of the cut. Strip about 3 mm from each cut end. Trim the resistor's leads to about 5 mm each. Solder the 470 Ω resistor between the two cut ends. Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this. The resistor is there because J2 lands on GPIO14, which is also JTAG TMS: with 470 Ω in the wire, JTAG still gets through if the FPGA drives J2 (designed so, not yet measured).
 
 ![The resistor fitted into wire 2](acorn-cable-blade-p2-resistor.png)
 
-**11.** Strip about 3 mm from wires 1, 2 and 3. Crimp a Dupont terminal on each.
+**10.** Strip about 3 mm from wires 1, 2 and 3. Crimp a Dupont terminal on each.
 
 ![Stripping and crimping](acorn-cable-crimp.png)
 
-**12.** Hold the empty 1×4 housing with the wire openings facing you and its long side upright, as in the picture. Until it is marked, either way up is the same. Mark the top end with a paint pen or a dot of tape: that is the pin 1 corner. For each wire, read the number on its flag, find the same number in the picture, and push its terminal into that cavity, latch tab towards the window, until it clicks. Turned round, the housing puts 5 V on the K2 wire, which can destroy the host. Wires 4, 5 and 6 go in no cavity. Pull each wire gently: the terminal must stay in.
+**11.** Hold the empty 1×4 housing with the wire openings facing you and its long side upright, as in the picture. Until it is marked, either way up is the same. Mark the top end with a paint pen or a dot of tape: that is the pin 1 corner. For each wire, read the number on its flag, find the same number in the picture, and push its terminal into that cavity, latch tab towards the window, until it clicks. Turned round, the housing puts 5 V on the K2 wire, which can destroy the host. Wires 4, 5 and 6 go in no cavity. Pull each wire gently: the terminal must stay in.
 
 ![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2.png)
 
 ![Which way round a terminal goes in, and the pull test](acorn-cable-push.png)
 
-**13.** Check each wire with a meter on continuity. For each wire: one probe on its contact on the plug, the other on the terminal in the cavity the picture gives for that wire number, through the opening on the pin side of the housing: it must beep. Every other cavity must stay silent for that contact. **Wire 2 is the exception: it has the 470 Ω resistor in it. Leave wire 2 until last and read it in ohms, not by the buzzer.** A continuity buzzer usually sounds only below some tens of ohms, so through the resistor it will usually stay silent (we have not tried your meter). Set the meter to ohms, on auto-range or the 2 kΩ range, and touch the two probes together first: it must read close to 0. Then, between wire 2's contact on the plug and its terminal, it must read close to 470 Ω. Close to 0 there means the resistor is bridged or was left out. Over-range (OL, or a lone 1 at the left of the display) or a value far from 470 Ω means a bad joint or the wrong wire. Between wire 2's contact and every other cavity it must show over-range. The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.
+**12.** Check each wire with a meter on continuity. For each wire: one probe on its contact on the plug, the other on the terminal in the cavity the picture gives for that wire number, through the opening on the pin side of the housing: it must beep. Every other cavity must stay silent for that contact. **Wire 2 is the exception: it has the 470 Ω resistor in it. Leave wire 2 until last and read it in ohms, not by the buzzer.** A continuity buzzer usually sounds only below some tens of ohms, so through the resistor it will usually stay silent (we have not tried your meter). Set the meter to ohms, on auto-range or the 2 kΩ range, and touch the two probes together first: it must read close to 0. Then, between wire 2's contact on the plug and its terminal, it must read close to 470 Ω. Close to 0 there means the resistor is bridged or was left out. Over-range (OL, or a lone 1 at the left of the display) or a value far from 470 Ω means a bad joint or the wrong wire. Between wire 2's contact and every other cavity it must show over-range. The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.
 
 ![A meter between the plug and the housing](acorn-cable-check-blade-p2.png)
 
@@ -129,7 +127,7 @@ The P2 cavity picture again, to read each wire's cavity from:
 
 #### Fit the cables
 
-**14.** This is a bench check; the housings come off again before the cables are fitted. Fit the P1 housing on the Extension Port with its marked corner on the pin printed 1 beside the header, and the P2 housing on the UART with its marked corner on the pin printed 1 beside the header. The Acorn is not in its slot and the plugs are free. With the host unplugged from power, put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Compute Blade: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent.
+**13.** This is a bench check; the housings come off again before the cables are fitted. Fit the P1 housing on the Extension Port with its marked corner on the pin printed 1 beside the header, and the P2 housing on the UART with its marked corner on the pin printed 1 beside the header. The Acorn is not in its slot and the plugs are free. With the host unplugged from power, put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Compute Blade: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent.
 
 ![The bench check on a Compute Blade](acorn-cable-blade-shell-check.png)
 
@@ -141,7 +139,7 @@ The P2 cavity picture again, for where its housing sits and which corner is mark
 
 ![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2.png)
 
-**15.** Fit the cables, in this order. The sockets are on the underside of the card and may not be reachable once it is in the slot.
+**14.** Fit the cables, in this order. The sockets are on the underside of the card and may not be reachable once it is in the slot.
 
 1. Power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in.
 2. If the housings are on the headers (after the bench check), take them off.

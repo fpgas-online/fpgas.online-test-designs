@@ -380,13 +380,7 @@ def pages(c):
         "Find the failing line in the table, then the wire in the two cavity pictures under it: the number in a "
         "cavity is the number on the wire's flag.",
         "",
-        f"**Before you touch a cable: {c.power_off}** After moving a wire, boot and run the check again"
-        + (
-            " (on a blade at ps1 the install is gone after the boot: install again, as on verifying 1)"
-            if c.key == "blade"
-            else ""
-        )
-        + ". One "
+        f"**Before you touch a cable: {c.power_off}** After moving a wire, boot and run the check again. One "
         "test can be run on its own, `sudo fpgas-acorn-verify --test jtag` or `--test p2-serial`; it prints "
         "the usual summary, then the whole report as JSON.",
         "",
