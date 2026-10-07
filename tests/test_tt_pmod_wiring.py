@@ -398,8 +398,9 @@ class FakeHat:
         return self.model.pi_read_all()
 
 
-def run_simulated(model, argv=(), projects=("tt_um_factory_test",), sdk=True, firmware_cls=FakeFirmware,
-                  hat_cls=FakeHat, pin_id=False):
+def run_simulated(
+    model, argv=(), projects=("tt_um_factory_test",), sdk=True, firmware_cls=FakeFirmware, hat_cls=FakeHat, pin_id=False
+):
     """Run the full measurement against *model*; return (result, log_lines)."""
     a, b = socket.socketpair()
     firmware = firmware_cls(model, projects=projects, sdk=sdk)
@@ -488,8 +489,10 @@ def test_pin_id_labels_and_expectations():
     assert ttw.expected_labels("asic", True, {"ui_in[1]": "UI1"}) == {10: "UI1", 14: "UI1"}
     ok, rows = ttw.evaluate_pin_id({7: "IO0", 8: "IO0"}, {7: "IO0", 8: "IO0"})
     assert ok and {r["status"] for r in rows} == {"ok", "idle"}
-    by = {r["gpio"]: r["status"] for r in ttw.evaluate_pin_id(
-        {7: None, 8: "?IOx", 16: "UI0", 14: "IO0"}, {7: "IO0", 8: "IO0", 16: "IO0"})[1]}
+    by = {
+        r["gpio"]: r["status"]
+        for r in ttw.evaluate_pin_id({7: None, 8: "?IOx", 16: "UI0", 14: "IO0"}, {7: "IO0", 8: "IO0", 16: "IO0"})[1]
+    }
     assert by[7] == "open" and by[8] == "garbled" and by[16] == "wrong" and by[14] == "unexpected"
 
 
@@ -522,7 +525,7 @@ def test_classify(expected, observed, status):
 
 
 def test_evaluate_untested_required_row_fails():
-    expected = ttw.expected_map("fpga",False)
+    expected = ttw.expected_map("fpga", False)
     observed = {name: set(pins) for name, pins in expected.items() if name.startswith("ui_in")}
     ok, rows, _shorts = ttw.evaluate(observed, expected, set(observed), set(expected))
     assert not ok
@@ -532,12 +535,13 @@ def test_evaluate_untested_required_row_fails():
 
 
 def test_evaluate_cross_checks_override_ok():
-    expected = ttw.expected_map("fpga",True)
+    expected = ttw.expected_map("fpga", True)
     observed = {n: set(p) for n, p in expected.items()}
     direct = ttw.expected_direct("fpga")
     # Reverse walk says uio[0]'s own line is JA1, not JB1 -> ribbons swapped.
-    _ok, rows, _ = ttw.evaluate(observed, expected, set(observed), set(observed), direct=direct,
-                                reverse={"uio[0]": {8}})
+    _ok, rows, _ = ttw.evaluate(
+        observed, expected, set(observed), set(observed), direct=direct, reverse={"uio[0]": {8}}
+    )
     assert rows_by_name({"rows": rows})["uio[0]"]["status"] == "miswired"
     _ok, rows, _ = ttw.evaluate(observed, expected, set(observed), set(observed), follows={"ui_in[2]": ["ui_in[3]"]})
     assert rows_by_name({"rows": rows})["ui_in[2]"]["status"] == "short"

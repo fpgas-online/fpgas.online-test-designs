@@ -736,9 +736,7 @@ class WiringProbe:
 
     def signals(self, group, bits=None):
         return [
-            (signal_name(group, bit), gpio)
-            for bit, gpio in enumerate(self.table[group])
-            if bits is None or bit in bits
+            (signal_name(group, bit), gpio) for bit, gpio in enumerate(self.table[group]) if bits is None or bit in bits
         ]
 
     def gpio_of(self, name):
@@ -917,8 +915,9 @@ class WiringProbe:
         for name in sorted(attributed):
             self.log(f"  {name:<10} <- {describe_gpios(sorted(attributed[name]))}")
         if held:
-            self.log(f"  Pi lines not following the Pi's pull-down (driven or pulled up): "
-                     f"{describe_gpios(sorted(held))}")
+            self.log(
+                f"  Pi lines not following the Pi's pull-down (driven or pulled up): {describe_gpios(sorted(held))}"
+            )
         if held_low:
             self.log(f"  Pi lines not following the Pi's pull-up (driven low): {describe_gpios(held_low)}")
         return attributed, sorted(set(held) | set(held_low))
@@ -1137,8 +1136,9 @@ def classify(expected, observed):
     return "partial"
 
 
-def evaluate(observed, expected, tested, required, direct=None, reverse=None, follows=None,
-             drive_failures=None, latch=None):
+def evaluate(
+    observed, expected, tested, required, direct=None, reverse=None, follows=None, drive_failures=None, latch=None
+):
     """Build the per-signal verdict rows.
 
     *observed*: ``{signal: set}`` from the forward walk; *expected*:
@@ -1311,8 +1311,15 @@ class PiEnvironment:
                 # clear any stale one from an earlier aborted run first.
                 run_quiet(["systemctl", "stop", f"{self.RESTART_UNIT}.timer"])
                 armed = run_quiet(
-                    ["systemd-run", "--quiet", "--on-active=600", f"--unit={self.RESTART_UNIT}",
-                     "systemctl", "start", "fpgas-tt"]
+                    [
+                        "systemd-run",
+                        "--quiet",
+                        "--on-active=600",
+                        f"--unit={self.RESTART_UNIT}",
+                        "systemctl",
+                        "start",
+                        "fpgas-tt",
+                    ]
                 )
                 if armed.returncode != 0:
                     self.log(f"WARNING: could not arm the fpgas-tt restart timer: {armed.stderr.strip()}")
@@ -1572,9 +1579,15 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
         if unexpected:
             bad_follows[name] = unexpected
     all_ok, rows, shorts = evaluate(
-        judged, expected, tested, required,
-        direct=direct, reverse=reverse, follows=bad_follows,
-        drive_failures=probe.drive_failures, latch=latch,
+        judged,
+        expected,
+        tested,
+        required,
+        direct=direct,
+        reverse=reverse,
+        follows=bad_follows,
+        drive_failures=probe.drive_failures,
+        latch=latch,
     )
     if want_loopback and not asic_loopback and args.strict:
         all_ok = False
@@ -1612,9 +1625,11 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
 
 def report(result, discover, log=print):
     log("")
-    log(f"Cabling profile: {result['cabling']} "
+    log(
+        f"Cabling profile: {result['cabling']} "
         f"(ui_in <- HAT {CABLINGS[result['cabling']]['ui_in']}, uio <- {CABLINGS[result['cabling']]['uio']}, "
-        f"uo_out <- {CABLINGS[result['cabling']]['uo_out']})")
+        f"uo_out <- {CABLINGS[result['cabling']]['uo_out']})"
+    )
     log("")
     observed = {k: set(v) for k, v in result["observed"].items()}
     log(format_docs_table(observed, result["controller"], result["cabling"], result["asic_loopback"]))
@@ -1646,9 +1661,18 @@ def report(result, discover, log=print):
     log(f"\n{n_ok}/{n_tested} tested signals match; {n_req} required.")
     for round_name, data in result.get("pin_id", {}).items():
         bad = [r for r in data["rows"] if r["status"] not in ("ok", "idle")]
-        log(f"pin-id {round_name} round: {'ok' if data['ok'] else 'FAIL'}"
-            + (": " + ", ".join(f"GPIO{r['gpio']} {r['status']} (expected {r['expected']}, "
-                                f"got {pin_id_display(r['decoded'])})" for r in bad) if bad else ""))
+        log(
+            f"pin-id {round_name} round: {'ok' if data['ok'] else 'FAIL'}"
+            + (
+                ": "
+                + ", ".join(
+                    f"GPIO{r['gpio']} {r['status']} (expected {r['expected']}, got {pin_id_display(r['decoded'])})"
+                    for r in bad
+                )
+                if bad
+                else ""
+            )
+        )
     if not result["asic_loopback"]:
         log("uo_out was NOT tested (no ASIC loopback).")
 
@@ -1658,11 +1682,15 @@ def parse_args(argv=None):
     parser.add_argument("--port", default=None, help="serial port (default: /dev/ttboard, else /dev/ttyACM0)")
     parser.add_argument("--controller", choices=sorted(CONTROLLERS), default="rp2040")
     parser.add_argument(
-        "--cabling", choices=["auto", *sorted(CABLINGS)], default="auto",
+        "--cabling",
+        choices=["auto", *sorted(CABLINGS)],
+        default="auto",
         help="expected cabling profile, or auto to pick the best fit (default)",
     )
     parser.add_argument(
-        "--method", choices=["walk", "pin-id", "both"], default="both",
+        "--method",
+        choices=["walk", "pin-id", "both"],
+        default="both",
         help="walk: RP2 walks a 1; pin-id: RP2 transmits each signal's name at 1200 baud (default: both)",
     )
     parser.add_argument("--discover", action="store_true", help="print the measured map only, no verdict")
@@ -1673,7 +1701,10 @@ def parse_args(argv=None):
     )
     parser.add_argument("--no-sdk", dest="sdk", action="store_false", help="never import the ttboard SDK on the RP2")
     parser.add_argument(
-        "--fpga-reset", dest="fpga_reset", action="store_true", default=None,
+        "--fpga-reset",
+        dest="fpga_reset",
+        action="store_true",
+        default=None,
         help="hold the iCE40 of a TT FPGA board in reset during the test (default for --controller rp2350)",
     )
     parser.add_argument("--no-fpga-reset", dest="fpga_reset", action="store_false")
