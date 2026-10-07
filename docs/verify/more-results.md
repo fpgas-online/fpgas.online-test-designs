@@ -40,7 +40,7 @@ What to do:
   * To look at the acorn board yourself: sudo fpgas-acorn-debug --help (sudo
     apt install fpgas-online-acorn-debug)
   * What each message means:
-    https://docs.fpgas.online/en/latest/verify/fpgas-verify.html#common-failures
+    https://docs.fpgas.online/en/latest/verify/common-failures.html#common-failures
 The whole report, for a program to read (JSON): /run/fpgas-online/verify.json
 ******************************************************************************
 ```
@@ -74,7 +74,7 @@ What to do:
   * To look at the netv2 board yourself: sudo fpgas-netv2-debug --help (sudo
     apt install fpgas-online-netv2-debug)
   * What each message means:
-    https://docs.fpgas.online/en/latest/verify/fpgas-verify.html#common-failures
+    https://docs.fpgas.online/en/latest/verify/common-failures.html#common-failures
 The whole report, for a program to read (JSON): /run/fpgas-online/verify.json
 ******************************************************************************
 ```
@@ -96,7 +96,7 @@ What to do:
   * Check the board's power and cables. `sudo fpgas-arty-debug detect` looks
     for it again without running the tests.
   * What each message means:
-    https://docs.fpgas.online/en/latest/verify/fpgas-verify.html#common-failures
+    https://docs.fpgas.online/en/latest/verify/common-failures.html#common-failures
 The whole report, for a program to read (JSON): /run/fpgas-online/verify.json
 ******************************************************************************
 

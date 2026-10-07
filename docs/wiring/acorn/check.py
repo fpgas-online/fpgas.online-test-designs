@@ -33,7 +33,7 @@ RESULTS = VERIFY / "reading-the-result.md"  # the transcripts of real runs
 COMMON_FAILURES = VERIFY / "common-failures.md"  # the table of messages and what to do
 SITE = "https://docs.fpgas.online/en/latest"
 CONVERTING = f"{SITE}/boards/acorn/pcie-programming.html"
-FAILURES = f"{SITE}/verify/fpgas-verify.html#common-failures"
+FAILURES = f"{SITE}/verify/common-failures.html#common-failures"
 
 # Which test proves which wire. A ground wire is every test's return.
 USES = {
@@ -165,20 +165,24 @@ def failures(c):
             )
         other = [key for key, marks in ONLY.items() if key != c.key and any(m in start for m in marks)]
         if not other:
-            out.append(site_links(found[0]))
+            out.append(site_links(found[0], "common-failures"))
     return "\n".join(out) + "\n"
 
 
-def site_links(text):
+def site_links(text, page=None):
     """Links written from docs/ (check/*.md) or from docs/verify/ (the reference's rows), as they have to read
     from a page of the site.
 
-    A link to a heading of the tool's reference goes to that heading on the site's fpgas-verify page."""
-    for page in ("../hardware/acorn-pcie-programming.md", "hardware/acorn-pcie-programming.md"):
-        text = text.replace(f"[acorn-pcie-programming.md]({page})", f"[converting a card]({CONVERTING})")
-        text = text.replace(f"]({page})", f"]({CONVERTING})")
-    text = re.sub(r"\]\((?:[a-z0-9-]+\.md)?#([a-z0-9-]+)\)", rf"]({SITE}/verify/fpgas-verify.html#\1)", text)
-    return text
+    A link to a heading of a page of the tool's reference goes to that heading on the site's copy of the page;
+    one written as `#heading` is to a heading of `page`, the page of docs/verify/ the text is from."""
+    for source in ("../hardware/acorn-pcie-programming.md", "hardware/acorn-pcie-programming.md"):
+        text = text.replace(f"[acorn-pcie-programming.md]({source})", f"[converting a card]({CONVERTING})")
+        text = text.replace(f"]({source})", f"]({CONVERTING})")
+    unplaced = re.search(r"\]\(#[^)]*\)", text)
+    if page is None and unplaced:
+        raise wiring.WiringError(f"a link to a heading of no page: {unplaced[0]}")
+    text = re.sub(r"\]\(#([a-z0-9-]+)\)", rf"]({page}.md#\1)", text)
+    return re.sub(r"\]\(([a-z0-9-]+)\.md#([a-z0-9-]+)\)", rf"]({SITE}/verify/\1.html#\2)", text)
 
 
 def wire_of(sig):

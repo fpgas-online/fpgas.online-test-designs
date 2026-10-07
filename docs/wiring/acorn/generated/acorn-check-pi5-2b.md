@@ -2,7 +2,7 @@
 
 ## Every other message about an Acorn
 
-The check's own words, from the tool's list of [common failures](https://docs.fpgas.online/en/latest/verify/fpgas-verify.html#common-failures), which has the other boards' too. A wire of the cables is behind the `jtag` and `p2-…` lines only; for those, the page "verifying 2" goes from the line to the wire.
+The check's own words, from the tool's list of [common failures](https://docs.fpgas.online/en/latest/verify/common-failures.html#common-failures), which has the other boards' too. A wire of the cables is behind the `jtag` and `p2-…` lines only; for those, the page "verifying 2" goes from the line to the wire.
 
 | It says | Meaning, and what to do |
 |---|---|
@@ -18,7 +18,7 @@ The check's own words, from the tool's list of [common failures](https://docs.fp
 | `fail`: `J5 -> GPIO3: the FPGA drove 0, the Pi read 1` (or the other way) | a P2 spare wire is cut or miswired |
 | `fail`: `K2 -> GPIO15: …` / `GPIO14 -> J2: …` | a P2 serial wire is cut or miswired |
 | `fail`: `DRAM write … MB/s, below the … MB/s expected` / `… words wrong in the … half` | the DRAM is slow or broken; `selftest.py` shows more |
-| `fail`: `power-cycle fail: the FPGA has not restarted since an earlier boot's check` | the Acorn kept its configuration across the Pi's restart (not seen after a soft reboot on the one Pi 5 measured): power-cycle the Pi (PoE). [The power-cycle check](https://docs.fpgas.online/en/latest/verify/fpgas-verify.html#the-acorns-power-cycle-check-opt-in) |
+| `fail`: `power-cycle fail: the FPGA has not restarted since an earlier boot's check` | the Acorn kept its configuration across the Pi's restart (not seen after a soft reboot on the one Pi 5 measured): power-cycle the Pi (PoE). [The power-cycle check](https://docs.fpgas.online/en/latest/verify/acorn.html#the-acorns-power-cycle-check-opt-in) |
 | `error`: `this host (…) is not an Acorn setup in wiring.toml` | an Acorn on a host neither setup has: add the host to `wiring.toml` if it is a real setup |
 | `error`: `… does not match its manifest` / `manifest.json is missing` | `sudo apt install --reinstall fpgas-online-<board>-bitstreams` |
 | `changed` | the board or its flash differs from the recorded state. Meant it? `sudo fpgas-verify --update` |

@@ -53,7 +53,7 @@ def test_the_unconverted_compute_blade_ends_with_what_failed_what_was_not_run_an
     assert "It has to be converted" in todo and conclusion.ACORN_PROGRAMMING in todo
     assert "the serial port holds GPIO14" in todo and f"{conclusion.ISSUES}/127" in todo
     assert "sudo fpgas-acorn-debug --help" in todo and "fpgas-online-acorn-debug" in todo
-    assert f"{conclusion.DOCS}#common-failures" in todo
+    assert f"{conclusion.DOCS}/common-failures.html#common-failures" in todo
     # the verdict and where the report is are the last things on the terminal
     assert lines[-2:] == [f"The whole report, for a program to read (JSON): {KEPT_IN}", "*" * 78]
 

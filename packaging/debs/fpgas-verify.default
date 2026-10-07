@@ -7,4 +7,4 @@
 #FPGAS_VERIFY_ARGS="--no-probe"
 #
 # Which board the host has, and the other settings, are not here: they are in /etc/fpgas-verify/*.ini
-# (https://docs.fpgas.online/en/latest/verify/fpgas-verify.html#running-it).
+# (https://docs.fpgas.online/en/latest/verify/running.html#running-it).
