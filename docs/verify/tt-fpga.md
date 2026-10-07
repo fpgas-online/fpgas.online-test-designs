@@ -180,7 +180,8 @@ How it tests:
   RP2040's pins driving against each other. The name round (pin-id) runs only when the walks found no short.
 * `uio[6:7]` are on HAT JB9/JB10, the Pi's GPIO3/2, which carry the Pi's fixed 1.8 kOhm I2C pull-ups: no probe can
   see past those. They are driven only when the rest of the `uio` ribbon was found in place, the reverse walk
-  reached neither of them, and neither followed another `uio` bit's walk (a chip output on its line); and then
+  reached neither of them, the pull probe found them held high (by the Pi's pull-ups, not a short to ground), and
+  neither followed another `uio` bit's walk (a chip output on its line); and then
   together, the two switched at the same instant (the RP2040's SIO registers), so the chip's copy of either can
   only agree with them. They send no names.
 * Every set of readings must agree the first time: a line that changes while nothing is switching fails the
@@ -224,8 +225,9 @@ the `WIRING:` line, where the boot report keeps them, and so are the `READINGS:`
 
 **Not covered:**
 
-* A short among HAT JB9, JB10, JC9 and JC10 is not seen: it joins `uio[6]` or `uio[7]` to its own copy or the
-  other's, which agree with them, as they are driven together.
+* Four shorts are not seen: JB9 with JB10, JC9 with JC10, JB9 with JC10 and JB10 with JC9. Each joins `uio[6]` and
+  `uio[7]`, or their copies, which agree with each other, as the two are driven together. (JB9 with JC9 and JB10
+  with JC10 are seen: the line is then held low, not by the Pi's pull-up.)
 * `MIN_HEAP_FREE` (60000 bytes) was measured on the TT07 board, SDK 2.0.4. A board on another shuttle may need
   more: its shuttle file is bigger (TT06's is about twice TT07's), so its SDK leaves less heap. It then fails
   loudly (`RP2040 heap too low`) until it has been measured.

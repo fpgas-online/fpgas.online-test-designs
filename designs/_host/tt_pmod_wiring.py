@@ -978,6 +978,8 @@ class WiringProbe:
         """Drive *names* high and low together (twice; both passes must agree) and return the Pi GPIOs that
         followed them, as one set. For uio[6:7]: driven in phase, the chip's copy of either (uo_out[6:7]) agrees
         with whatever a short joins it to among them, so no two drivers ever disagree on a net."""
+        if self.controller != "rp2040":  # group/ungroup write the RP2040's SIO registers: other chips' differ
+            raise ProtocolError(f"driving {', '.join(names)} together is written for the RP2040 only")
         gpios = " ".join(str(self.gpio_of(n)) for n in names)
 
         def group(value):
@@ -1727,7 +1729,9 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
             notes.append(f"factory test not confirmed: {reason}; uo_out loopback disabled")
             log(f"WARNING: {notes[-1]}")
             if required:  # the chip's uio_oe is then not known: walking ui_in[0] could make it drive uio
-                raise Unclear(reason)
+                if "not uo_out = uio_in" in reason:  # a bridge between uio or uo_out wires reads like this too
+                    raise Unclear(reason)
+                raise ProtocolError(f"the chip's {args.asic_project} could not be confirmed: {reason}")
 
     log("\n== ui_in: RP2 drives, Pi reads ==")
     if asic_loopback or 0 not in ui_bits:
@@ -1791,6 +1795,15 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
                 deferred.discard(k)
                 drivable.discard(k)
                 notes.append(f"uio[{k}] is not driven: the reverse walk reached it through something (a short?)")
+            elif probe.held_level.get(signal_name("uio", k)) != "high":
+                # The Pi's pull-ups hold these lines high; held otherwise, something else (a short to ground, a
+                # driven line) holds them, and driving them would meet it.
+                deferred.discard(k)
+                drivable.discard(k)
+                notes.append(
+                    f"uio[{k}] is not driven: its line is held "
+                    f"{probe.held_level.get(signal_name('uio', k), 'by something')}, not by the Pi's pull-up"
+                )
         for k in sorted(set(range(8)) - drivable):
             notes.append(f"uio[{k}] is not driven: its line may be driven by something else (a wrong ribbon?)")
         strength = 3
@@ -1948,6 +1961,7 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
         "cabling": cabling,
         "cabling_found": found if score >= 8 else None,
         "held_inputs": held_ui,
+        "held_levels": dict(probe.held_level),
         "asic_loopback": asic_loopback,
         "observed": {k: sorted(v) for k, v in observed.items()},
         "reverse": {k: sorted(v) for k, v in reverse.items()},
@@ -2135,7 +2149,7 @@ def ribbon_findings(result):
     return found, place
 
 
-def row_faults(row, cabling, held):
+def row_faults(row, cabling, held, levels=None):
     """The faults of a required row that is not ok, each on the ribbon it is on: [{"group", "signal", "own",
     "via", "text"}]. own: the signal's own HAT line was not reached; via: for a uo_out line the chip drives from
     this row's signal, that signal."""
@@ -2143,6 +2157,7 @@ def row_faults(row, cabling, held):
     group = name.split("[")[0]
     own = lines[name]
     where = f"{name} (Pmod pin {pmod_pin(name)})"
+    levels = levels or {}
 
     def fault(text, g=group, s=name, own_missing=False, via=None):
         return {"group": g, "signal": s, "own": own_missing, "via": via, "text": text}
@@ -2153,6 +2168,8 @@ def row_faults(row, cabling, held):
         if name in held:
             return [fault(f"{where} is held {held[name]} on the demo board ({HELD_WHY[held[name]]})",
                           own_missing=True)]  # fmt: skip
+        if levels.get(name) in ("high", "low"):
+            return [fault(f"{where} could not be tested: something holds its line {levels[name]}", own_missing=True)]
         return [fault(f"{where} could not be tested", own_missing=True)]
     expected, observed = set(row["expected"]), set(row["observed"])
     missing, extra = expected - observed, observed - expected
@@ -2248,7 +2265,16 @@ def no_single_fault(result, bad, held, faults):
         f"should reach {hat_pins(r['expected'])}" + (f"; held {held[r['signal']]}" if r["signal"] in held else "")
         for r in bad
     ][:8]  # fmt: skip
-    joined = "; ".join(f"{hat_pin(a)} and {hat_pin(b)} read as one" for a, b in pairs[:NAMED_PER_RIBBON])
+    together = any("were walked together" in n for n in result.get("notes", ()))
+    pair_lines = {profile_lines(cabling)[signal_name("uio", k)] for k in (6, 7)}
+
+    def named(gpio):  # uio[6:7] are walked as one, so which of their two lines it was is not known
+        if together and gpio in pair_lines:
+            return " or ".join(hat_pin(g) for g in sorted(pair_lines, reverse=True)).replace(" or HAT JB pin", " or")
+        return hat_pin(gpio)
+
+    shown = list(dict.fromkeys(f"{named(a)} and {named(b)} read as one" for a, b in pairs))
+    joined = "; ".join(shown[:NAMED_PER_RIBBON])
     return UNCLEAR.format(ribbons=ribbons_at(ports, cabling)) + (f" ({joined})" if joined else "")
 
 
@@ -2273,7 +2299,7 @@ def verdict(result, strict=True):
         # leaves uio untested: all of that follows from ui_in[0], which alone is said. Held low it explains nothing.
         bad = [r for r in bad if not (r["signal"] in {"ui_in[1]", "ui_in[2]", "ui_in[3]"} and r["signal"] in held)
                and not (r["signal"].startswith("uio[") and r["status"] == "untested")]  # fmt: skip
-    walk = [f for r in bad for f in row_faults(r, cabling, held)]
+    walk = [f for r in bad for f in row_faults(r, cabling, held, result.get("held_levels"))]
     whole, _place = ribbon_findings(result)
     # A signal whose own wire is at fault explains what the chip copies from it, and what pin-id heard of it.
     at_fault = {f["signal"] for f in walk if f["own"]}

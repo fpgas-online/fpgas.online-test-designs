@@ -44,7 +44,9 @@ class BoardModel:
 
     UI, UIO, UO = RP2040["ui_in"], RP2040["uio"], RP2040["uo_out"]
 
-    def __init__(self, wires, project="factory", extra_shorts=(), held_ui_in=(), hard_ui_in=(), dip_level=0):
+    def __init__(
+        self, wires, project="factory", extra_shorts=(), held_ui_in=(), hard_ui_in=(), dip_level=0, grounded=()
+    ):
         self.wires = wires
         self.project = project  # what the chip is running right now
         self.rp2 = {g: ("in", None) for g in self.UI + self.UIO + self.UO}
@@ -52,6 +54,7 @@ class BoardModel:
         self.pi_pull_up = set()
         self.held_ui_in = set(held_ui_in)  # ui_in bits a DIP switch pulls to dip_level through a resistor
         self.dip_level = dip_level  # 1: a switch that is on ties its line to 3.3 V (the demo board's own)
+        self.grounded = set(grounded)  # Pi GPIOs whose HAT line is shorted to ground
         self.hard_ui_in = set(hard_ui_in)  # ui_in bits shorted to a rail (low)
         self.levels = {}
         self.contentions = []
@@ -131,6 +134,8 @@ class BoardModel:
             net = self.net(node)
             kind, gpio = node.split(":")
             gpio = int(gpio)
+            if kind == "pi" and gpio in self.grounded:
+                strong.setdefault(net, []).insert(0, ("rail", gpio, 0))  # ground always wins
             if kind == "rp2":
                 mode, val = self.rp2[gpio]
                 if gpio in self.UI and self.UI.index(gpio) in self.held_ui_in:
@@ -994,9 +999,12 @@ def test_a_factory_test_that_does_not_confirm_stops_the_test():
                 return ["TTW OK enabled=tt_um_factory_test"]
             return super().handle(line)
 
-    for firmware, why in ((StubbornFirmware, "uio bits float"), (QuietFirmware, "not uo_out = uio_in")):
+    # a uo_out that does not follow uio is a reading a bridge also gives (exit 1, the unclear line); a factory
+    # test that could not even be tried is the chip's or the SDK's (exit 2)
+    for firmware, raised, why in ((StubbornFirmware, ttw.ProtocolError, "could not be confirmed: only 0 uio bits"),
+                                  (QuietFirmware, ttw.Unclear, "not uo_out = uio_in")):  # fmt: skip
         model = BoardModel(asic_wires(), project="drives_uio")
-        with pytest.raises(ttw.Unclear, match=why):  # said as readings that fit no single fault (exit 1)
+        with pytest.raises(raised, match=why):
             run_simulated(model, argv=ASIC, firmware_cls=firmware)
         assert model.contentions == []
         # by hand, --no-strict, it goes on without the loopback, never driving ui_in[0] against the chip
@@ -1498,7 +1506,7 @@ def test_the_command_server_does_not_use_an_sdk_still_logging_to_its_boot_log():
 
 # Shorts among HAT JB9, JB10, JC9 and JC10 join uio[6:7] to their own copies or each other's: uio[6:7] are walked
 # together, in phase, so those are not seen (said in the PR and the docs), and nothing fights.
-UNSEEN = {(3, 5), (2, 6), (3, 6), (2, 5)}
+UNSEEN = {(3, 6), (2, 5)}  # JB9-JC10, JB10-JC9 (and JB9-JB10, JC9-JC10, not lines to JC here)
 SHORTS_TO_UO_OUT = [(fixed, jc) for fixed in (3, 2) for jc in ttw.PMOD_HAT_PORTS["JC"]]
 
 
@@ -1543,3 +1551,21 @@ def test_an_sdk_never_used_leaves_released_pins_so_the_board_gets_the_fallback(m
                                                               "changed"], fallbacks=fallbacks)  # fmt: skip
     assert code == 2 and fallbacks == ["/dev/ttyACM0"]
     assert "; and the board's SDK was not used, so its pins were left released; its SDK was started again" in line
+
+
+@pytest.mark.parametrize("gpio", [3, 2])
+def test_hat_jb9_or_jb10_shorted_to_ground_is_never_driven_against(gpio):
+    """Review 5: Pmod pin 10 lies next to pin 5, ground. A JB9/JB10 line held low is not the Pi's pull-up holding it
+    high, so uio[6:7] are not driven into it, and the board fails, saying what holds the line."""
+    model = BoardModel(asic_wires(), project="drives_uio", grounded={gpio})
+    result, _log = run_simulated(model, argv=ASIC, pin_id=True)
+    ours = [c for c in model.contentions if any(d[0] == "rp2" for d in c)]
+    assert ours == []
+    code, line = ttw.verdict(result)
+    assert code == 1 and "could not be tested: something holds its line low" in line, line
+
+
+def test_the_group_drive_is_refused_on_anything_but_an_rp2040():
+    probe = ttw.WiringProbe(rp2=None, hat=None, controller="rp2350", log=lambda *_: None)
+    with pytest.raises(ttw.ProtocolError, match="written for the RP2040 only"):
+        probe.walk_together(["uio[6]", "uio[7]"])
