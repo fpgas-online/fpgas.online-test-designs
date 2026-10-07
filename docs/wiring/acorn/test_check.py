@@ -70,9 +70,10 @@ def test_a_crossed_pair_is_told_by_the_wire_numbers_of_the_cable(key):
 
 def test_the_transcripts_and_failure_rows_come_from_the_tool_reference():
     verify = check.VERIFY.read_text()
-    for marker in (check.PASS, check.BLADE_FAIL):
+    command = {check.PASS: "fpgas-verify", check.BLADE_FAIL: "fpgas-acorn-verify"}  # as each was run
+    for marker, tool in command.items():
         block = check.transcript(marker)
-        assert block in verify and block.startswith("```text\n$ sudo fpgas-verify --no-publish")
+        assert block in verify and block.startswith(f"```text\n$ sudo {tool} --no-publish\n")
     for c in wiring.CARRIERS.values():
         rows = check.failures(c).splitlines()[2:]
         assert len(rows) >= 14 and all(r.startswith("| `") for r in rows)
