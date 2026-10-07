@@ -449,8 +449,9 @@ def pages(c):
         "",
         f"**Before you touch a cable: {c.power_off}** **After moving a wire, the cable goes through the same checks "
         "as a new one before any boot:** take the card out and pull both plugs from its sockets, check that "
-        'cable\'s plug contacts against its housing with the meter as step 2 of "JTAG connector 2" or "UART '
-        'connector 2" does, run "the bench check" with the card out, and fit the cables as "Fitting" does. Then '
+        "cable's plug contacts against its housing with the meter as step "
+        f'{steps.meter_check_step(c)} of "JTAG connector 2" or "UART connector 2" does, run "the bench check" with '
+        'the card out, and fit the cables as "Fitting" does. Then '
         "boot and run the check again"
         + (
             " (on a blade at ps1 the install is gone after the boot: install again, as on verifying 1; and "

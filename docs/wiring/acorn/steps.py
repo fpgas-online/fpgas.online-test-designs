@@ -73,7 +73,7 @@ ASSUMPTIONS = [
 ]
 ASSUMED = (
     "Not yet checked against a cable in the hand:",
-    "Check wire 1 with a meter before cutting any wire back: the flag step shows how.",
+    "Check wire 1 with a meter before cutting any wire back: the wire 1 check shows how.",
 )
 BOX_LINE = 20  # from line to line in the box of assumptions
 ACORN_PAD = (188, 0, 308, 80)  # the plated half-round mounting pad at the end of the card, in acorn-cw.jpg
@@ -743,7 +743,7 @@ def prepare(c, connector):
     tx = px + pw + 20
     ty = para(sh, tx, 98, f"The plug is drawn under socket {connector} to show which wire is which.", W - 10 - tx)
     ty = para(sh, tx, ty + 2, "Card underside up, M.2 edge to your left: wire 1 is the leftmost.", W - 10 - tx, "bold")
-    ty = para(sh, tx, ty + 2, "Each wire keeps the flag you gave it in the step before.", W - 10 - tx)
+    ty = para(sh, tx, ty + 2, "Each wire keeps the flag you gave it before the wire 1 check.", W - 10 - tx)
     x1 = 164
     out, body = plug(sh, x1, max(py + ph + 30, ty - LINE + 14), pins)
     half = (sockets[connector][2] - sockets[connector][0]) / 2
@@ -1359,6 +1359,8 @@ def procedure_parts(c, restart=False):
             f"Put a numbered tape flag on each of the {len(pins)} wires, 1 at the left to {len(pins)}, about "
             f"{lengths['flag_back']} mm back from the tip, clear of the end that will be cut and stripped later. "
             f"Write {connector} on the flag of wire 1 as well: off the card, the two halves look alike.",
+        ]
+        check = [
             "With the plug still in the socket (the Acorn out of any slot, unpowered), set the meter to continuity. "
             "Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not "
             "stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: "
@@ -1373,6 +1375,10 @@ def procedure_parts(c, restart=False):
             f"Find wire 1 of the {connector} cable and flag the wires, before cutting any wire back.\n\n"
             + "\n".join(f"{i}. {line}" for i, line in enumerate(flag, 1)),
             flags,
+        )
+        step(
+            f"Check which wire of the {connector} cable is wire 1, with a meter, before cutting any wire back.\n\n"
+            + "\n".join(f"{i}. {line}" for i, line in enumerate(check, 1)),
             (
                 f"Checking which wire is wire 1 with a meter, the plug in socket {connector}",
                 png(ground_check_name(connector)),
@@ -1411,15 +1417,18 @@ def procedure_parts(c, restart=False):
             "the picture. Until it is marked, either way up is the same. "
             f"Mark {'the top left corner' if data.columns > 1 else 'the top end'} with a paint pen or a dot of tape: "
             f"that is the pin {plan.first} corner. "
-            "For each wire, read the number on its flag, find the same number in the picture, and push its terminal "
-            f"into that cavity, latch tab towards the window, until it clicks. {warning} "
-            f"{cut_who[0].upper()}{cut_who[1:]} {'goes' if one else 'go'} in no cavity. "
-            "Pull each wire gently: the terminal must stay in.",
+            "For each wire, read the number on its flag and find the same number in the picture: that is the "
+            f"cavity its terminal goes in. {warning} "
+            f"{cut_who[0].upper()}{cut_who[1:]} {'goes' if one else 'go'} in no cavity.",
             cavity[connector],
+        )
+        step(
+            "Push each terminal into its cavity, latch tab towards the window, until it clicks. "
+            "Pull each wire gently: the terminal must stay in.",
             ("Which way round a terminal goes in, and the pull test", "acorn-cable-push.png"),
         )
         step(
-            "Check each wire with a meter on continuity. For each wire: one probe on its contact on the plug, the "
+            f"{CHECK_EACH} For each wire: one probe on its contact on the plug, the "
             "other on the terminal in the cavity the picture gives for that wire number, through the opening on the "
             "pin side of the housing: it must beep. Every other cavity must stay silent for that contact. "
             + through_resistor(c, connector)
@@ -1628,6 +1637,27 @@ def guide(c):
         ),
     )
     return out
+
+
+def step_number(c, part, start):
+    """The number of the step on the guide page `part` of carrier `c` whose words start `start`."""
+    body = guide(c)[guide_name(c, part)]
+    found = re.findall(r"^\*\*(\d+)\.\*\* " + re.escape(start), body, re.M)
+    if len(found) != 1:
+        raise wiring.WiringError(f"{guide_name(c, part)}: {len(found)} steps start {start!r}, not one")
+    return int(found[0])
+
+
+# The words the meter check of a finished cable starts with, on each connector's second page.
+CHECK_EACH = "Check each wire with a meter on continuity."
+
+
+def meter_check_step(c):
+    """The number of the meter check on the second page of every connector: one number, as other pages quote it."""
+    numbers = {step_number(c, f"{part}-2", CHECK_EACH) for part, _ in GUIDE.values()}
+    if len(numbers) != 1:
+        raise wiring.WiringError(f"{c.key}: the meter check is step {sorted(numbers)} of the connector 2 pages")
+    return numbers.pop()
 
 
 # Where the M.2 slot is in blade.jpg, in photo pixels. A HAT's is in wiring.toml.

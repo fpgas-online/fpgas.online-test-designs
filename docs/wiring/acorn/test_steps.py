@@ -343,8 +343,11 @@ def test_the_flag_step_shows_whole_wires_and_the_cut_picture_comes_only_after_th
     text = steps.procedure(c)
     for connector in wiring.CONNECTORS:
         flag_step = text.split(f"Find wire 1 of the {connector} cable")[1].split("\n**")[0]
-        images = light_images(flag_step)
-        assert images == [steps.png(steps.flag_name(connector)), steps.png(steps.ground_check_name(connector))]
+        assert light_images(flag_step) == [steps.png(steps.flag_name(connector))]
+        check_step = text.split(f"Check which wire of the {connector} cable is wire 1")[1].split("\n**")[0]
+        assert light_images(check_step) == [steps.png(steps.ground_check_name(connector))]
+        assert text.index(flag_step) < text.index(check_step)  # flagged first, then checked
+        assert "Take the plug out again." in check_step and "Put a numbered tape flag" in flag_step
         prepared = steps.png(steps.prepare_name(c, connector))
         assert text.count(prepared) == 1
         assert text.index(prepared) > text.index(steps.png(steps.ground_check_name(connector)))
@@ -468,3 +471,55 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
         assert "Hold the empty" in pages[steps.guide_name(c, part)]
     assert "Fit the cables, in this order" in pages[steps.guide_name(c, "fit")]
     assert "This is a bench check" in pages[steps.guide_name(c, "bench")]
+
+
+def step_blocks(body):
+    """[(the step's number, its text and pictures)] of a page, up to the next step or heading."""
+    at = [m.start() for m in re.finditer(r"^\*\*\d+\.\*\* ", body, re.M)]
+    blocks = []
+    for i, start in enumerate(at):
+        end = at[i + 1] if i + 1 < len(at) else len(body)
+        heading = re.search(r"^## ", body[start:end], re.M)
+        block = body[start : start + heading.start()] if heading else body[start:end]
+        blocks.append((int(re.match(r"\*\*(\d+)", block).group(1)), block))
+    return blocks
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_every_step_of_the_building_pages_has_one_picture_of_its_own(key):
+    """A printed step keeps its words and its picture on one sheet, so a step has one new picture.
+
+    The one exception: a cavity picture shown again, with its own line saying why (the meter check and the bench
+    check, to read each wire's cavity from). The fitting step's two halves are its own numbered lists, each with
+    its half of the picture."""
+    c = wiring.CARRIERS[key]
+    for name, body in steps.guide(c).items():
+        for n, block in step_blocks(body):
+            lines = block.splitlines()
+            fresh = [
+                image
+                for i, line in enumerate(lines)
+                for image in light_images(line)
+                if not (i >= 2 and lines[i - 2].startswith("The ") and " cavity picture again" in lines[i - 2])
+            ]
+            if name == steps.guide_name(c, "fit"):
+                assert fresh == [steps.png(f) for f in steps.fit_names(c)], (name, n)
+            else:
+                assert len(fresh) <= 1, (name, n, fresh)
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_a_quoted_step_number_is_the_step_it_means(key):
+    """Pages that send the reader back to the meter check of connector 2 quote its number: it is that step."""
+    c = wiring.CARRIERS[key]
+    n = steps.meter_check_step(c)
+    pages = steps.guide(c)
+    for part, _ in steps.GUIDE.values():
+        assert steps.step_number(c, f"{part}-2", steps.CHECK_EACH) == n
+        assert f"**{n}.** {steps.CHECK_EACH}" in pages[steps.guide_name(c, f"{part}-2")]
+    docs = wiring.HERE.parent.parent
+    texts = [*sorted((docs / "verify").glob("*.md")), *sorted((wiring.HERE / "check").glob("*.md"))]
+    texts += sorted((wiring.HERE / "generated").glob("acorn-check-*.md"))
+    quote = r'step (\d+) of "(?:JTAG|UART) connector 2"'
+    quoted = [(f.name, m) for f in texts for m in re.findall(quote, f.read_text())]
+    assert quoted and all(int(m) == n for _, m in quoted), quoted
