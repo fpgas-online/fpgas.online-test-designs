@@ -65,11 +65,13 @@ One page for each task, in this order:
 
 <a id="acorn"></a>
 
+* [What an Acorn check tests](verify/acorn.md#acorn): for you if you have an Acorn and want to know what its check does.
+
 <a id="the-acorn-s-power-cycle-check-opt-in"></a>
 
 <a id="the-acorns-power-cycle-check-opt-in"></a>
 
-* [What an Acorn check tests](verify/acorn.md#acorn): for you if you have an Acorn and want to know what its check does, and its power-cycle check.
+* [The Acorn's power-cycle check](verify/acorn-power-cycle.md#the-acorns-power-cycle-check-opt-in): for you if you have an Acorn and want to know how its opt-in power-cycle check works, and the details of its `ddr` test.
 
 <a id="the-jtag-idcode"></a>
 

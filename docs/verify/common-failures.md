@@ -16,7 +16,7 @@ Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
 | `fail`: `a Raspberry Pi RP2 is on USB but is not running the Tiny Tapeout firmware` | the demo board's microcontroller is in its USB boot loader: power-cycle the board; if it comes back the same, its firmware is gone |
 | `error`: `… is not installed` | a tool is missing: `mpremote` (bookworm: bookworm-backports), openocd, openFPGALoader |
 | `error`: `no FPGA board is configured` / `conflicting fpga-board settings` | install one board's package, or fix `/etc/fpgas-verify/*.ini` |
-| `fail`: `power-cycle fail: the FPGA has not restarted since an earlier boot's check` | the Acorn kept its configuration across the Pi's restart (not seen after a soft reboot on the one Pi 5 measured): power-cycle the Pi (PoE). [The power-cycle check](acorn.md#the-acorns-power-cycle-check-opt-in) |
+| `fail`: `power-cycle fail: the FPGA has not restarted since an earlier boot's check` | the Acorn kept its configuration across the Pi's restart (not seen after a soft reboot on the one Pi 5 measured): power-cycle the Pi (PoE). [The power-cycle check](acorn-power-cycle.md#the-acorns-power-cycle-check-opt-in) |
 | `error`: `power-cycle-check is '…'; it is on or off` / `conflicting power-cycle-check settings` | fix `/etc/fpgas-verify/*.ini` |
 | `error`: `… does not match its manifest` / `manifest.json is missing` | `sudo apt install --reinstall fpgas-online-<board>-bitstreams` |
 | `fail`: `loading it failed (exit N)` | the programmer could not load the design: JTAG wiring, cable, or programmer support |
