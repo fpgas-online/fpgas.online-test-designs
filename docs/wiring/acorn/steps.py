@@ -1692,53 +1692,80 @@ def fit_actions(c):
     ]
 
 
-def fit_name(c):
-    return f"acorn-cable-{c.key}-fit.svg"
+# The fitting picture is drawn in two halves, at the seam after action 3: the plugs into the card's sockets (actions
+# 1 to 3), then the card into its slot and the housings onto their headers (actions 4 to 6). Each half is printed
+# with its own three actions, so that a half and its words fit on one printed sheet.
+FIT_HALVES = ((1, 2, 3), (4, 5, 6))
+FIT_SECOND = "Then the card and the housings:"
+
+
+def fit_name(c, half):
+    return f"acorn-cable-{c.key}-fit-{half}.svg"
+
+
+def fit_names(c):
+    return [fit_name(c, half) for half in (1, 2)]
 
 
 def fit_block(c):
-    """The fitting actions as a numbered list, and their picture: Markdown."""
-    items = "\n".join(f"{i}. {action}" for i, action in enumerate(fit_actions(c), 1))
-    return f"{items}\n\n{markdown_image(f'Fitting the cables on a {c.name}, in order', png(fit_name(c)))}\n"
+    """The fitting actions as two numbered lists, each followed by its half of the picture: Markdown."""
+    actions = fit_actions(c)
+    out = []
+    for half, numbers in enumerate(FIT_HALVES, 1):
+        if half == 2:
+            out.append(FIT_SECOND)
+        out.append("\n".join(f"{n}. {actions[n - 1]}" for n in numbers))
+        alt = f"Fitting the cables on a {c.name}, actions {numbers[0]} to {numbers[-1]}"
+        out.append(markdown_image(alt, png(fit_name(c, half))))
+    return "\n\n".join(out) + "\n"
 
 
-def fit(c):
-    """Fitting both cables: plugs into the card, the card into its slot, the housings onto their headers."""
+def fit(c, half):
+    """One half of fitting both cables: (1) the plugs into the card's sockets; (2) the card into its slot and the
+    housings onto their headers."""
     actions = fit_actions(c)
     if len(actions) != 6:
         raise wiring.WiringError(f"fit {c.key}: the picture draws six actions, the list has {len(actions)}")
-    pins = wiring.CONNECTORS["P1"]["pins"]
     sh = Sheet(W, 100)
-    title(sh, f"Fit the cables on a {c.name}", "in this order: the sockets may not be reachable once the card is in")
-    y = 98
-    for n in (1, 2, 3):
-        order(sh, 44, y - 6, n)
-        y = para(sh, 68, y, actions[n - 1], W - 78, "bold") + 6
-    sockets, (px, py, pw, ph) = acorn_photo_down(sh, 30, y + 54, 470, T, crop=(0, 60, 160, 590))
-    plug_y = py + ph + 26
-    for connector, rect in sockets.items():
-        centre = (rect[0] + rect[2]) / 2
-        out, body = plug(sh, centre - 2.5 * 28, plug_y, pins, pitch=28, size=25)
-        wedge(sh, rect, (rect[0], body[1], rect[2], body[3]), down=True)
-        for x, y0 in out.values():
-            sh.add(f'<line x1="{x}" y1="{y0}" x2="{x}" y2="{y0 + 18}" stroke="{BLACK_WIRE}" stroke-width="4"/>')
-        sh.text(centre, body[3] + 40, f"{connector} plug", T, "bold", INK, "middle")
-    tx = px + pw + 16
-    same = "Wire 1 at the pin 1 end of each socket: the same way round as when you put the flags on."
-    ty = para(sh, tx, py + 20, same, W - 10 - tx)
-    para(sh, tx, ty + 4, "The plugs are sketched.", W - 10 - tx, fill=MUTED)
-    y = plug_y + 58 + 74
-    order(sh, 44, y - 6, 4)
-    y = para(sh, 68, y, actions[3], W - 78, "bold")
-    sh.add(f'<path d="M44,{y - 8} v22" stroke="{INK}" stroke-width="2.5"/>')
-    sh.add(f'<path d="M38,{y + 10} l6,10 l6,-10 z" fill="{INK}"/>')
-    y = FIT_HOSTS[c.key](sh, c, y + 44)
-    order(sh, 44, y + 16, 5)
-    y = para(sh, 68, y + 22, actions[4], W - 78, "bold")
-    order(sh, 44, y + 10, 6)
-    y = para(sh, 68, y + 16, actions[5], W - 78, "bold")
+    if half == 1:
+        pins = wiring.CONNECTORS["P1"]["pins"]
+        title(
+            sh,
+            f"{c.name}: the plugs into the card",
+            "first: the sockets may not be reachable once the card is in",
+        )
+        y = 98
+        for n in FIT_HALVES[0]:
+            order(sh, 44, y - 6, n)
+            y = para(sh, 68, y, actions[n - 1], W - 78, "bold") + 6
+        sockets, (px, py, pw, ph) = acorn_photo_down(sh, 30, y + 54, 470, T, crop=(0, 60, 160, 590))
+        plug_y = py + ph + 26
+        for connector, rect in sockets.items():
+            centre = (rect[0] + rect[2]) / 2
+            out, body = plug(sh, centre - 2.5 * 28, plug_y, pins, pitch=28, size=25)
+            wedge(sh, rect, (rect[0], body[1], rect[2], body[3]), down=True)
+            for x, y0 in out.values():
+                sh.add(f'<line x1="{x}" y1="{y0}" x2="{x}" y2="{y0 + 18}" stroke="{BLACK_WIRE}" stroke-width="4"/>')
+            sh.text(centre, body[3] + 40, f"{connector} plug", T, "bold", INK, "middle")
+        tx = px + pw + 16
+        same = "Wire 1 at the pin 1 end of each socket: the same way round as when you put the flags on."
+        ty = para(sh, tx, py + 20, same, W - 10 - tx)
+        para(sh, tx, ty + 4, "The plugs are sketched.", W - 10 - tx, fill=MUTED)
+        y = plug_y + 58 + 74
+    else:
+        title(sh, f"{c.name}: the card, then the housings", "after the plugs are in their sockets")
+        y = 98
+        order(sh, 44, y - 6, 4)
+        y = para(sh, 68, y, actions[3], W - 78, "bold")
+        sh.add(f'<path d="M44,{y - 8} v22" stroke="{INK}" stroke-width="2.5"/>')
+        sh.add(f'<path d="M38,{y + 10} l6,10 l6,-10 z" fill="{INK}"/>')
+        y = FIT_HOSTS[c.key](sh, c, y + 44)
+        order(sh, 44, y + 16, 5)
+        y = para(sh, 68, y + 22, actions[4], W - 78, "bold")
+        order(sh, 44, y + 10, 6)
+        y = para(sh, 68, y + 16, actions[5], W - 78, "bold")
     sh.h = math.ceil(y - LINE + 14)
-    sh.check(f"fit {c.key}")
+    sh.check(f"fit {c.key} {half}")
     return sh.svg()
 
 
@@ -1892,7 +1919,7 @@ def build_names():
         if has_resistor(c, connector):
             names += [resistor_name(c, connector), check_name(c, connector)]
     names += [f(connector) for connector in wiring.CONNECTORS for f in (flag_name, ground_check_name)]
-    return [*names, *SHARED, *(f(c) for c in wiring.CARRIERS.values() for f in (fit_name, shell_check_name))]
+    return [*names, *SHARED, *(n for c in wiring.CARRIERS.values() for n in (*fit_names(c), shell_check_name(c)))]
 
 
 def build():
@@ -1913,7 +1940,8 @@ def build():
     for name, draw in SHARED.items():
         out[name] = draw()
     for key, c in wiring.CARRIERS.items():
-        out[fit_name(c)] = fit(c)
+        for half in (1, 2):
+            out[fit_name(c, half)] = fit(c, half)
         out[shell_check_name(c)] = shell_check(c)
         out[f"acorn-fit-{key}.md"] = tables.BANNER + fit_block(c)
         out[f"acorn-cables-{key}.md"] = procedure(c)

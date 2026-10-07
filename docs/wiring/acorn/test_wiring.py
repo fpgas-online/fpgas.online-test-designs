@@ -156,7 +156,12 @@ def test_every_pi5_page_and_picture_names_the_hat_and_none_names_another():
     pi5 = {n: t for n, t in gen.build().items() if "pi5" in n}
     for name in ("acorn-pi5-bom.md", "acorn-build-pi5-overview.md", "acorn-cables-pi5.md"):
         assert HAT_NAME in pi5[name], name
-    for name in ("acorn-wiring-pi5.svg", "acorn-cable-pi5-p1.svg", "acorn-cable-pi5-p2.svg", "acorn-cable-pi5-fit.svg"):
+    for name in (
+        "acorn-wiring-pi5.svg",
+        "acorn-cable-pi5-p1.svg",
+        "acorn-cable-pi5-p2.svg",
+        "acorn-cable-pi5-fit-2.svg",
+    ):
         said = re.findall(r'aria-label="([^"]*)"', pi5[name])  # the words drawn, each line of text once
         assert any("HAT+ (B)" in line for line in said), name
     # "HAT+" alone is the other HAT, named only to say it is not this guide's
