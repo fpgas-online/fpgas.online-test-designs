@@ -406,6 +406,7 @@ def test_the_guard_covers_every_tiny_tapeout_host_script():
         "tt_sdk_start.py",
         "tt_main_py.py",
         "tt_dip_switches.py",
+        "tt_pmod_wiring.py",
         "tt_fpga.py",
     } <= {p.name for p in GUARDED}
 

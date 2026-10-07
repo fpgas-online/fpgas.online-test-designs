@@ -1103,64 +1103,135 @@ def test_a_board_that_says_it_is_an_fpga_board_is_a_tt_fpga_and_only_then_is_a_d
     assert loads and min(loads) > asked  # the board is asked first
 
 
-def test_a_healthy_board_with_a_tiny_tapeout_chip_fails_until_its_wiring_is_tested_and_nothing_is_loaded(
-    tmp_path, monkeypatch
-):
-    """#132, and Tim on 2026-10-05: "Fail until wiring is tested". The `sdk` test runs and passes, the report
-    shows a healthy board, and the result is `fail` because its cabling to the Pi was not tested."""
+WIRING = "tt_pmod_wiring.py"
+WRONG_RIBBON = "the ui_in ribbon (HAT JA): ui_in[2] (pin 3) did not reach JA3: it reached JA4/JB4"
+
+
+def _wiring_said(rc, line):
+    """tt_pmod_wiring.py's answer: its report, its WIRING: line, then RESULT."""
+    return WIRING, (rc, f"== Wiring check: asic cabling ==\nWIRING: {line}\nRESULT: {'PASS' if rc == 0 else 'FAIL'}\n")
+
+
+def _index(run, needle):
+    return next(i for i, c in enumerate(run.calls) if needle in " ".join(c))
+
+
+def _sdk_starts(run):
+    return [i for i, c in enumerate(run.calls) if SDK_START in " ".join(c)]
+
+
+def test_a_board_with_a_tiny_tapeout_chip_has_its_wiring_tested_and_passes_with_nothing_loaded(tmp_path, monkeypatch):
+    """#132, and Tim on 2026-10-05: "Fail until wiring is tested". The `sdk` test, then the `wiring` test
+    (tt_pmod_wiring.py, no bitstream) while the bridge is stopped; then the board's SDK is started again."""
     _installed(monkeypatch)
     events = []
-    run = Runner([_rpi_hwid(TT_CHIP_BOARD)])
+    run = Runner([_rpi_hwid(TT_CHIP_BOARD), _wiring_said(0, "all 24 Pmod signals reached the Pi where they should")])
     report = _check(TT, tmp_path, TT_FOUND, run, event=lambda stage, d: events.append((stage, d)))
     assert report["variant"] == "tt-asic" and report["identity"]["variant"] == "tt-asic"
     assert report["identity"]["chip"] == "asic" and report["identity"]["shuttle"] == "tt06"
-    why = tt_fpga.PENDING["tt-asic"]["wiring"]
-    assert report["result"] == "fail" and report["reason"] == f"wiring not run: {why}"
-    assert why.startswith("the Pmod wiring test is not yet part of the boot check")
-    (sdk,) = report["tests"]
+    assert report["result"] == "pass" and "reason" not in report and "not_run" not in report
+    sdk, wiring = report["tests"]
     assert (sdk["test"], sdk["result"]) == ("sdk", "pass") and "reason" not in sdk
     assert sdk["output"][-1] == "SDK 2.0.x on an RP2040 supports a tt06 chip"
-    assert report["not_run"] == tt_fpga.PENDING["tt-asic"] and set(report["not_run"]) == {"wiring"}
+    assert (wiring["test"], wiring["result"]) == ("wiring", "pass") and "bitstream" not in wiring
+    assert wiring["output"][-2] == "WIRING: all 24 Pmod signals reached the Pi where they should"
     assert _nothing_loaded(report, run) and "bitstreams" not in report and _restarted_last(run)
-    assert [stage for stage, _ in events] == ["fpga-board-identified", "fpga-test-started", "fpga-test-finished"]
-    assert events[0][1]["variant"] == "tt-asic" and events[2][1] == {"test": "sdk", "result": "pass", "reason": ""}
-    assert report["state"] == {"variant": "tt-asic", "serial": "E661"}
+    # the wiring test runs on the board's port, against the cabling the boards have, after the board was asked
+    argv = run.calls[_index(run, WIRING)]
+    assert argv[0] == sys.executable and argv[1].endswith(WIRING)
+    assert argv[2:] == ["--port", "/dev/ttyACM0", "--controller", "rp2040", "--cabling", "asic", "--no-daemon"]
+    stop = run.calls.index(["systemctl", "stop", "fpgas-tt.service"])
+    assert stop < run.calls.index(RPI_HWID_TT) < _index(run, WIRING)
+    # and the SDK is started again after it: once before rpi-hwid asks the board, once after the wiring test
+    first, again = _sdk_starts(run)
+    assert first < run.calls.index(RPI_HWID_TT) and _index(run, WIRING) < again < len(run.calls) - 1
+    assert run.calls[again][2:] == ["/dev/ttyACM0"]
+    assert [stage for stage, _ in events] == ["fpga-board-identified", *["fpga-test-started", "fpga-test-finished"] * 2]
+    assert events[4][1] == {"test": "wiring", "result": "pass", "reason": ""}
+    assert report["state"] == {"variant": "tt-asic", "serial": "E661"} and "warnings" not in report
     # no bitstreams need be installed for it: the package's designs are the FPGA board's
     bare = TT.check(_host(TT), TT_FOUND, {"images": tmp_path / "none"}, runner=Runner([_rpi_hwid(TT_CHIP_BOARD)]))
-    assert bare["result"] == "fail" and bare["reason"] == report["reason"]
+    assert bare["result"] == "pass" and [t["test"] for t in bare["tests"]] == ["sdk", "wiring"]
 
 
-def test_a_chip_board_with_another_fault_says_both_and_an_fpga_board_is_not_held_to_the_wiring_test(
+def test_a_ribbon_that_is_not_where_it_should_be_fails_the_board_and_is_named(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    run = Runner([_rpi_hwid(TT_CHIP_BOARD), _wiring_said(1, WRONG_RIBBON)])
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    assert report["result"] == "fail" and report["reason"] == f"wiring fail: {WRONG_RIBBON}"
+    assert report["tests"][-1]["reason"] == WRONG_RIBBON
+    assert len(_sdk_starts(run)) == 2 and _restarted_last(run)  # the SDK is started again whatever it found
+
+
+@pytest.mark.parametrize("answer, result, reason", [
+    # exit 2: it could not make its reading at all
+    (_wiring_said(2, "the wiring could not be tested: no raw REPL banner"), "error",
+     "the wiring could not be tested: no raw REPL banner"),
+    # a script that printed no WIRING: line
+    ((WIRING, (1, "Traceback (most recent call last):\nKeyError: 'x'\n")), "fail", "the test exited 1"),
+    # killed at its limit
+    ((WIRING, core.Problem("fail", "tt_pmod_wiring.py did not finish within 240 s: ")), "fail",
+     "tt_pmod_wiring.py did not finish within 240 s: "),
+])  # fmt: skip
+def test_a_wiring_test_that_could_not_finish_is_said_as_that_and_the_sdk_is_still_started(
+    tmp_path, monkeypatch, answer, result, reason
+):
+    _installed(monkeypatch)
+    run = Runner([_rpi_hwid(TT_CHIP_BOARD), answer])
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    assert report["result"] == result and report["tests"][-1] == {**report["tests"][-1], "result": result}
+    assert report["tests"][-1]["reason"] == reason and report["reason"] == f"wiring {result}: {reason}"
+    assert len(_sdk_starts(run)) == 2 and _restarted_last(run)
+
+
+def test_a_wiring_test_runs_with_the_check_s_time_limit_for_it():
+    assert tt_fpga.WIRING_TIMEOUT < testbench.PROGRAM_TIMEOUT + testbench.TEST_TIMEOUT
+    run = Runner([_wiring_said(0, "ok")])
+    seen = []
+    TT.run_script_test("wiring", _host(TT), lambda argv, timeout: seen.append(timeout) or run(argv, timeout))
+    assert seen == [tt_fpga.WIRING_TIMEOUT, tt_fpga.SDK_START_TIMEOUT]
+
+
+def test_an_sdk_that_does_not_start_again_after_the_wiring_test_is_a_warning_not_the_result(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    starts = [(0, "tt.sdk_version=2.0.4\n"), (1, "SDK_START: the board's main.py raised: OSError\n")]
+    run = Runner([_rpi_hwid(TT_CHIP_BOARD), _wiring_said(0, "all 24"), (SDK_START, starts)])
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    assert report["result"] == "pass" and [t["result"] for t in report["tests"]] == ["pass", "pass"]
+    (warning,) = report["warnings"]
+    assert warning.startswith("tt_sdk_start.py, which the check runs after the wiring test, did not succeed (it "
+                              "exited 1: SDK_START: the board's main.py raised: OSError")  # fmt: skip
+
+
+def test_a_chip_board_with_another_fault_says_both_and_an_fpga_board_has_no_wiring_test_of_this_kind(
     tmp_path, monkeypatch
 ):
     _installed(monkeypatch)
-    report = _check(TT, tmp_path, TT_FOUND, Runner([_rpi_hwid({**TT_CHIP_BOARD, "sdk": "1.2.2"})]))
+    run = Runner([_rpi_hwid({**TT_CHIP_BOARD, "sdk": "1.2.2"}), _wiring_said(1, WRONG_RIBBON)])
+    report = _check(TT, tmp_path, TT_FOUND, run)
     assert report["result"] == "fail"
-    assert (
-        report["reason"].startswith("sdk fail: a tt06 chip needs SDK 2.0.x")
-        and "; wiring not run: " in report["reason"]
-    )
-    # the FPGA board's wiring test is pin-id, which it has: nothing is pending for it
-    fpga = _check(TT, tmp_path / "fpga", TT_FOUND, Runner([_rpi_hwid(TT_BOARD)]))
-    assert fpga["result"] == "pass" and "not_run" not in fpga and "tt-fpga" not in TT.pending
+    assert report["reason"] == f"sdk fail: a tt06 chip needs SDK 2.0.x on an RP2040, and the board runs SDK 1.2.2 " \
+                               f"on an RP2040; wiring fail: {WRONG_RIBBON}"  # fmt: skip
+    # the FPGA board's wiring test is pin-id, which loads its design: the chip board's script is not run there
+    fpga_run = Runner([_rpi_hwid(TT_BOARD)])
+    fpga = _check(TT, tmp_path / "fpga", TT_FOUND, fpga_run)
+    assert fpga["result"] == "pass" and "not_run" not in fpga and not any(WIRING in " ".join(c) for c in fpga_run.calls)
+    assert [t["test"] for t in fpga["tests"]] == ["sdk", "dip-switches", "pin-id", "uart"]
 
 
-def test_the_report_of_a_chip_board_reads_plainly_and_its_event_says_what_was_not_run(tmp_path, monkeypatch):
+def test_the_report_of_a_chip_board_whose_ribbon_is_wrong_reads_plainly(tmp_path, monkeypatch):
     _installed(monkeypatch)
-    board = _check(TT, tmp_path, TT_FOUND, Runner([_rpi_hwid(TT_CHIP_BOARD)]))
+    board = _check(TT, tmp_path, TT_FOUND, Runner([_rpi_hwid(TT_CHIP_BOARD), _wiring_said(1, WRONG_RIBBON)]))
     report = {"result": "fail", "mode": "tt", "boards": [board]}
     shown = runner.summary(report)
     assert "  tt tt-asic: fail" in shown and "    sdk        pass" in shown
-    assert "    wiring     not run: the Pmod wiring test is not yet part of the boot check" in shown
-    # the closing lines say it once, as what was not run, and what it means
+    assert f"    wiring     fail: {WRONG_RIBBON}" in shown
     closing = conclusion.lines(report)
-    assert "  tt tt-asic: fail (1 test passed, 0 failed, 1 not run)" in closing
-    assert sum("Pmod wiring test is not yet part of the boot check" in line for line in closing) == 1
-    assert not any(line.startswith("    fault:") for line in closing)
-    assert any("Nothing is known to be" in line for line in closing)
+    assert "  tt tt-asic: fail (1 test passed, 1 failed)" in closing
+    assert "is not where it should be" in " ".join(closing) and "#the-wiring-test" in " ".join(closing)
     sent = runner.details(report)
-    assert sent["board0"] == "tt tt-asic fail" and sent["board0_tests"] == "sdk=pass"
-    assert sent["board0_not_run"] == "wiring" and sent["board0_reason"].startswith("wiring not run: ")
+    assert sent["board0"] == "tt tt-asic fail" and sent["board0_tests"] == "sdk=pass wiring=fail"
+    assert "board0_not_run" not in sent and sent["board0_reason"] == f"wiring fail: {WRONG_RIBBON}"
 
 
 @pytest.mark.parametrize("said, variant, why", [
@@ -1207,10 +1278,9 @@ def test_single_tests_asked_of_a_chip_board_are_refused_and_nothing_is_loaded(tm
     assert report["result"] == "error" and report["variant"] == "tt-asic" and _nothing_loaded(report, run)
     assert report["reason"] == "the board is a tt-asic: uart is for a tt-fpga, so nothing was loaded"
     assert report["tests"] == [] and "not_run" not in report
-    # an empty list names no test: nothing is refused, and the board is not passed unchecked
+    # an empty list names no test: nothing is refused, and the whole check runs, its wiring test too
     none = _check(TT, tmp_path / "none", TT_FOUND, Runner([_rpi_hwid(TT_CHIP_BOARD)]), tests=[])
-    assert [t["test"] for t in none["tests"]] == ["sdk"] and none["result"] == "fail"
-    assert none["reason"].startswith("wiring not run: ")
+    assert [t["test"] for t in none["tests"]] == ["sdk", "wiring"] and none["result"] == "pass"
 
 
 def test_an_fpga_board_whose_sdk_test_fails_still_has_its_designs_loaded_and_tested(tmp_path, monkeypatch):
@@ -1396,10 +1466,11 @@ def test_two_demo_boards_on_one_pi_are_both_an_error_and_neither_is_touched(tmp_
 def test_no_other_board_settles_its_variant_late():
     """The hook is the Tiny Tapeout board's alone: every other board's check runs as it did."""
     assert TT.variant_from_board and not any(b.variant_from_board for b in (ARTY, NETV2, FOMU))
-    assert not any(b.fact_tests or b.pending for b in (ARTY, NETV2, FOMU))
-    # a variant no bitstream is for is checked by fact tests alone, and every pending test is such a variant's
+    assert not any(b.fact_tests or b.pending or b.script_tests for b in (ARTY, NETV2, FOMU))
+    # a variant no bitstream is for is checked by its fact and script tests, which load nothing; none is pending
     assert TT.fact_tests_for("tt-asic") == ["sdk"] and "tt-asic" not in TT.variants
-    assert set(TT.pending) == {"tt-asic"} and "wiring" not in TT.tests
+    assert TT.script_tests_for("tt-asic") == ["wiring"] and TT.script_tests_for("tt-fpga") == []
+    assert TT.pending == {} and "wiring" not in TT.tests
 
 
 def test_a_chip_board_whose_demo_board_was_not_detected_is_still_a_tt_asic(tmp_path, monkeypatch):
