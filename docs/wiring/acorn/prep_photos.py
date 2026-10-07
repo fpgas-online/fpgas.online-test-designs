@@ -1,18 +1,21 @@
 """Cut the reference photos down to the board pictures the sheets embed.
 
+Run from this directory, with the vendors' originals in ref/ (they are not in this repository; each is
+named below with where it comes from):  uv run prep_photos.py [acorn] [hat] [blade]  (none named: all).
+
 Backgrounds are removed by connectivity, not by painting boxes: everything that is not part of the
 largest non-white object (the board) becomes paper. That removes dimension lines and captions from the
 vendor drawings without touching a single board pixel.
 """
 
 import pathlib
+import sys
 from collections import deque
 
 from PIL import Image, ImageFilter
 
 REF = pathlib.Path("ref")
 OUT = pathlib.Path("photos")
-OUT.mkdir(exist_ok=True)
 PAPER = (251, 250, 247)
 
 
@@ -72,33 +75,51 @@ def flatten(path):
     return Image.alpha_composite(Image.new("RGBA", im.size, "white"), im).convert("RGB")
 
 
-# Acorn / LiteFury underside (RHS Research "contents" photo): fan end left, M.2 edge right,
-# connectors on the bottom edge.
-acorn = keep_largest_object(flatten(REF / "rhs-contents.PNG").crop((200, 740, 1990, 1262)))
-acorn.save(OUT / "acorn-flat.jpg", quality=90)
-end = acorn.crop((0, 0, 1100, 522))  # only the connector end: the connectors are a few mm long and need the pixels
-end.rotate(-90, expand=True).save(
-    OUT / "acorn-cw.jpg", quality=90
-)  # connectors on the LEFT edge, P2 on top, pin 1 at the bottom
-end.rotate(90, expand=True).save(
-    OUT / "acorn-ccw.jpg", quality=90
-)  # connectors on the RIGHT edge, P1 on top, pin 1 at the top
+def acorn():
+    """Acorn / LiteFury underside (RHS Research "contents" photo): fan end left, M.2 edge right, connectors on the
+    bottom edge."""
+    acorn = keep_largest_object(flatten(REF / "rhs-contents.PNG").crop((200, 740, 1990, 1262)))
+    acorn.save(OUT / "acorn-flat.jpg", quality=90)
+    end = acorn.crop((0, 0, 1100, 522))  # only the connector end: the connectors are a few mm long and need the pixels
+    end.rotate(-90, expand=True).save(
+        OUT / "acorn-cw.jpg", quality=90
+    )  # connectors on the LEFT edge, P2 on top, pin 1 at the bottom
+    end.rotate(90, expand=True).save(
+        OUT / "acorn-ccw.jpg", quality=90
+    )  # connectors on the RIGHT edge, P1 on top, pin 1 at the top
 
-# Waveshare PoE M.2 HAT+ top view (their dimension drawing): header on the bottom edge, pin 1 at the right.
-hat = keep_largest_object(flatten(REF / "ws-PoE-M.2-HAT-plus-details-size.jpg").crop((170, 70, 795, 580)))
-hat.rotate(90, expand=True).save(
-    OUT / "hat-ccw.jpg", quality=92
-)  # header on the RIGHT edge, pin 1 on top (pinout-chart order)
-hat.rotate(-90, expand=True).save(OUT / "hat-cw.jpg", quality=92)  # header on the LEFT edge, pin 1 at the bottom
 
-# Compute Blade top view and the close-up of its Expansion Port (vendor docs).
-blade = keep_largest_object(flatten(REF / "blade-mk4-k-dev.webp").resize((3120, 521)))
-blade.save(OUT / "blade.jpg", quality=86)
-full = flatten(REF / "blade-mk4-k-dev.webp")
-W, H = full.size
-full.crop((int(W * 0.59) + 80, int(H * 0.55) + 10, int(W * 0.59) + 1720, int(H * 0.55) + 520)).save(
-    OUT / "blade-port.jpg", quality=90
-)
+def hat():
+    """Waveshare PoE M.2 HAT+ (B) top view: their dimension drawing (wiring.toml [carriers.pi5.hat] `drawing`), the
+    Pi turned half a turn, header on the bottom edge, pin 1 at the right. The crop keeps the whole board and the
+    2280 standoff that overhangs its left end; the dimension lines and figures round it go to paper. line_px=1: the
+    black between the top right mounting hole's white ring and the board's edge is thinner than the default
+    erosion, which painted that ring and hole over as paper."""
+    hat = keep_largest_object(flatten(REF / "PoE-M.2-HAT-Plus-B-details-size.jpg").crop((95, 118, 845, 598)), line_px=1)
+    hat.rotate(90, expand=True).save(
+        OUT / "hat-plus-b-ccw.jpg", quality=92
+    )  # header on the RIGHT edge, pin 1 on top (pinout-chart order)
 
-for p in sorted(OUT.glob("*.jpg")):
-    print(p, Image.open(p).size, p.stat().st_size)
+
+def blade():
+    """Compute Blade top view and the close-up of its Expansion Port (vendor docs)."""
+    blade = keep_largest_object(flatten(REF / "blade-mk4-k-dev.webp").resize((3120, 521)))
+    blade.save(OUT / "blade.jpg", quality=86)
+    full = flatten(REF / "blade-mk4-k-dev.webp")
+    W, H = full.size
+    full.crop((int(W * 0.59) + 80, int(H * 0.55) + 10, int(W * 0.59) + 1720, int(H * 0.55) + 520)).save(
+        OUT / "blade-port.jpg", quality=90
+    )
+
+
+PHOTOS = {"acorn": acorn, "hat": hat, "blade": blade}
+
+if __name__ == "__main__":
+    names = sys.argv[1:] or list(PHOTOS)
+    if set(names) - set(PHOTOS):
+        raise SystemExit(f"prep_photos.py: the photos are {', '.join(PHOTOS)}, not {names}")
+    OUT.mkdir(exist_ok=True)
+    for name in names:
+        PHOTOS[name]()
+    for p in sorted(OUT.glob("*.jpg")):
+        print(p, Image.open(p).size, p.stat().st_size)
