@@ -4,11 +4,11 @@ Not yet run by us on this hardware: written from the design. Photos: Uptime Lab 
 
 ## What you need
 
-Both finished cables, the Compute Blade unplugged from power, and a multimeter with a continuity buzzer. The Acorn stays out of its slot.
+Both finished cables, the Compute Blade, and a multimeter with a continuity buzzer. The Acorn stays out of its slot. If the Compute Blade is on, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in.
 
 ## Steps
 
-**1.** This is a bench check; the housings come off again before the cables are fitted. Fit the P1 housing on the Extension Port with its marked corner on the pin printed 1 beside the header, and the P2 housing on the UART with its marked corner on the pin printed 1 beside the header. The Acorn is not in its slot and the plugs are free. With the host unplugged from power, put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Compute Blade: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent. That the shell is the host's ground is not measured by us; contact 1's beep is what shows it. The beep also shows that the P1 housing is the right way round: turned round, its GND wire would sit on IO3, not a ground pin (that it would then stay silent is not tried by us). The beep also shows that the P2 housing is the right way round: turned round, its GND wire would sit on TX, not a ground pin (that it would then stay silent is not tried by us).
+**1.** This is a bench check; the housings come off again before the cables are fitted. If the Compute Blade is on, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Then fit the P1 housing on the Extension Port with its marked corner on the pin printed 1 beside the header, and the P2 housing on the UART with its marked corner on the pin printed 1 beside the header. The Acorn is not in its slot and the plugs are free. Put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Compute Blade: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent. That the shell is the host's ground is not measured by us; contact 1's beep is what shows it. The beep is also meant to show that the P1 housing is the right way round: turned round, its GND wire would sit on IO3, not a ground pin; that a turned housing would then stay silent is not tried by us. The beep is also meant to show that the P2 housing is the right way round: turned round, its GND wire would sit on TX, not a ground pin; that a turned housing would then stay silent is not tried by us.
 
 ![The bench check on a Compute Blade](acorn-cable-blade-shell-check.png){.only-light}
 ![The bench check on a Compute Blade](acorn-cable-blade-shell-check-dark.png){.only-dark}
@@ -25,4 +25,4 @@ The P2 cavity picture again, for where its housing sits and which corner is mark
 
 ## If it fails
 
-Do not fit the cables. A contact 1 that does not beep means that cable's ground wire is open or in the wrong cavity; a contact 6 that beeps anywhere means the 3.3 V wire was not the one cut back. Go back to that cable's page "fill and check the housing" and check every wire again.
+Do not fit the cables. A contact 1 that does not beep means that cable's ground wire is open or in the wrong cavity; a contact 6 that beeps anywhere means the 3.3 V wire was not the one cut back. Go back to that cable's second page, "JTAG connector 2" or "UART connector 2" (fill and check the housing), and check every wire again.
