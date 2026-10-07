@@ -213,6 +213,9 @@ def test_every_advice_pattern_matches_a_reason_the_code_gives():
         "wiring fail: the ui_in ribbon (to HAT JA): ui_in[4] (Pmod pin 7) is held high on the demo board (a DIP ...",
         "wiring fail: the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) is held low on the demo board (some ...",
         "wiring fail: the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) is held against the pulls on the demo board",
+        "wiring fail: the uo_out ribbon (to HAT JC): uo_out[6] … (that line is held low: a short to ground?)",
+        "wiring fail: the uio ribbon (to HAT JB): uio[6] … could not be tested: something holds its line low",
+        "wiring error: … only 1 uio bit floats, so the loopback cannot be confirmed (the others' lines are held: …)",
         "openocd is not installed",
         "x does not match its manifest",
         "manifest.json is missing",
@@ -312,3 +315,10 @@ def test_a_held_line_gets_the_advice_for_it_and_not_the_ribbon_s():
     wrong_says = [text for pattern, text in advice.items() if conclusion.re.search(pattern, wrong)]
     assert len(held_says) == 1 and "DIP switches off" in held_says[0]
     assert len(wrong_says) == 1 and "not where it should be" in wrong_says[0]
+
+
+def test_a_held_line_is_not_told_to_reseat_a_ribbon():
+    held_low = ("wiring fail: the uo_out ribbon (to HAT JC): uo_out[6] (Pmod pin 9) did not reach HAT JC pin 9 (that "
+                "line is held low: a short to ground?)")  # fmt: skip
+    says = [text for pattern, text in conclusion.ADVICE if conclusion.re.search(pattern, held_low)]
+    assert len(says) == 1 and "for a short" in says[0]

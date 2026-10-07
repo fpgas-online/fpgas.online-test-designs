@@ -1083,7 +1083,8 @@ class WiringProbe:
         bits = [int(n[:-1].split("[")[1]) for n in uio_floating]
         if len(bits) < 2:
             return (
-                f"only {len(bits)} uio bits float, so the loopback cannot be confirmed (the others' lines are "
+                f"only {len(bits)} uio bit{'' if len(bits) == 1 else 's'} float{'s' if len(bits) == 1 else ''}, "
+                "so the loopback cannot be confirmed (the others' lines are "
                 "held: by a ribbon on another port or turned round, or by the chip)"
             )
         self.set_inputs("uio")
@@ -1109,7 +1110,8 @@ class WiringProbe:
             return f"{'; '.join(wrong)}: not uo_out = uio_in"
         if len(followed) < 2:
             return (
-                f"only {len(followed)} uo_out bits followed their uio bit, so the loopback cannot be confirmed (a "
+                f"only {len(followed)} uo_out bit{'' if len(followed) == 1 else 's'} followed its uio bit, so "
+                "the loopback cannot be confirmed (a "
                 "ribbon on another port or turned round, or the chip)"
             )
         # Counter check: ui_in[0]=1 puts cnt on uo_out and uio. The chip then drives uio, so every other ui_in bit
@@ -1746,6 +1748,10 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
         candidates = [n for n, ok in uio_floating.items() if ok]
         log("\n== confirming tt_um_factory_test on-board (uo_out = uio_in, counter = 0) ==")
         reason = probe.confirm_factory_test(candidates)
+        for name, level in sorted(probe.uo_held.items()):
+            notes.append(f"{name} reads {level} whatever its uio bit is set to: its line is held (a ribbon turned "
+                         "round, or a short?)")  # fmt: skip
+            log(f"  {notes[-1]}")
         if reason is None:
             asic_loopback = True
             log("  confirmed")
@@ -2323,6 +2329,8 @@ def verdict(result, strict=True):
         return 0, f"the signals tested reached the Pi where they should ({where}); uo_out was not tested"
     held = result.get("held_inputs", {})
     bad = [r for r in result["rows"] if r["required"] and r["status"] != "ok"]
+    untested_groups = [g for g in GROUPS if any(r["signal"].startswith(g + "[") and r["status"] == "untested"
+                                                for r in bad)]  # fmt: skip
     if held.get("ui_in[0]") == "high":
         # With ui_in[0] high the factory test drives uio (its counter), which holds ui_in[1:3] through the HAT: that
         # follows from ui_in[0], which alone is said. Held low it explains no other held bit.
@@ -2388,8 +2396,7 @@ def verdict(result, strict=True):
             more = f"; and {len(texts) - NAMED_PER_RIBBON} more" if len(texts) > NAMED_PER_RIBBON else ""
             parts.append(f"{ribbon(group, port)}: {'; '.join(texts[:NAMED_PER_RIBBON])}{more}")
     if whole:  # ribbons a misplaced one leaves untestable (not driven: a chip output may be on their lines)
-        untested = [g for g in GROUPS if g not in whole and any(
-            r["signal"].startswith(g + "[") and r["status"] == "untested" for r in bad)]  # fmt: skip
+        untested = [g for g in untested_groups if g not in whole]
         if strict and not result["asic_loopback"] and "uo_out" not in whole and "uo_out" not in untested:
             untested.append("uo_out")  # no loopback (ui_in[0] on the misplaced ribbon's ground, say): untested
         if untested:
@@ -2399,10 +2406,11 @@ def verdict(result, strict=True):
         parts.append("; ".join(stray[:NAMED_PER_RIBBON]) + (f"; and {len(stray) - NAMED_PER_RIBBON} more"
                                                              if len(stray) > NAMED_PER_RIBBON else ""))  # fmt: skip
     if strict and not result["asic_loopback"] and not whole:  # a ribbon wholly elsewhere explains it
+        which = "uio and uo_out were" if "uio" in untested_groups else "uo_out was"
         parts.append(
-            "uo_out was not tested: the chip's factory test could not be used (ui_in[0] is held)"
+            f"{which} not tested: the chip's factory test could not be used (ui_in[0] is held)"
             if "ui_in[0]" in held
-            else "uo_out was not tested: the chip's factory test was not confirmed"
+            else f"{which} not tested: the chip's factory test was not confirmed"
         )
     return 1, "; ".join(parts) or "the wiring did not pass (see the table above)"
 

@@ -81,7 +81,7 @@ ADVICE = (
      "loaded into it. The reason above says what stopped the read; if rpi-hwid is not installed, install it "
      f"(sudo apt install python3-rpi-hwid, from https://github.com/mithro/rpi-hwid): {DOCS}"
      "/tt-fpga.html#which-tiny-tapeout-board-it-is"),
-    (r"the u\w+ ribbon \(to HAT J[ABC]\): (?!\S+ \(Pmod pin \d+\) is held)|ribbons are on each other's HAT ports"
+    (r"the u\w+ ribbon \(to HAT J[ABC]\): (?![^;]*held)|ribbons are on each other's HAT ports"
      r"|turned round and one position over",
      "A ribbon cable between the demo board's Pmod connectors and the Pi's Pmod HAT is not where it should be. "
      "The reason names the ribbon (by the demo board's ui_in, uio or uo_out Pmod, and the HAT port it should "
@@ -94,10 +94,15 @@ ADVICE = (
     (r"is held high on the demo board",
      "One of the demo board's ui_in lines is held high: a DIP switch that is on ties its line to 3.3 V. Set all "
      f"the DIP switches off and run the check again: {DOCS}/tt-fpga.html#the-wiring-test"),
-    (r"is held low on the demo board|is held against the pulls on the demo board",
-     "One of the demo board's ui_in lines is held by something other than the check: a short, or a chip output "
-     "that a wrong ribbon joins to it. The check does not drive such a line. Look at the ribbon and the pins "
-     f"named: {DOCS}/tt-fpga.html#the-wiring-test"),
+    (r"is held low on the demo board|is held against the pulls on the demo board|that line is held low"
+     r"|holds its line",
+     "A line of the demo board's Pmods is held by something other than the check: a short (to ground, or to "
+     "another wire), or a chip output that a wrong ribbon joins to it. The check does not drive such a line. Look "
+     f"at the ribbon and the pins named for a short: {DOCS}/tt-fpga.html#the-wiring-test"),
+    (r"the loopback cannot be confirmed",
+     "The wiring test could not use the chip's factory test, because too few of its lines behaved: most often "
+     "two ribbons are on each other's HAT ports, or one is turned round. Check that ui_in goes to HAT JA, uio to "
+     f"JB and uo_out to JC, each the right way round; if they are, the chip: {DOCS}/tt-fpga.html#the-wiring-test"),
     (r"and the board runs SDK|no SDK release is recorded as supporting",
      "The Tiny Tapeout SDK on the demo board is not a release known to work with the chip it carries, so the "
      "board could not select a project on that chip. The board's firmware is installed by whoever looks after "

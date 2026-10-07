@@ -12,6 +12,7 @@ the tests also prove the sequence never causes contention — with or without
 the ASIC loopback, and on the shorted bits.
 """
 
+import contextlib
 import importlib.util
 import itertools
 import pathlib
@@ -963,7 +964,7 @@ def wiring_line(wires, pin_id=True):
     (placed({"ui_in": "JC", "uio": "JB", "uo_out": "JA"}, offset=("ui_in", "uio", "uo_out")),
      "the ui_in ribbon is plugged in turned round and one position over (ui_in on HAT JC (it goes on JA)): Pmod "
      "pin n arrives on HAT pin 12-n, and Pmod pins 1 and 7 are on the HAT's ground; plug it in the right way "
-     "round, Pmod pin 1 to HAT pin 1; and some uo_out signals could not be tested until then"),
+     "round, Pmod pin 1 to HAT pin 1; and some uio and uo_out signals could not be tested until then"),
     # review 2: uo_out alone, and with ui_in, turned round (its lines are what uio reaches through the chip)
     (placed({"ui_in": "JA", "uio": "JB", "uo_out": "JC"}, offset=("uo_out",)),
      "the uo_out ribbon is plugged in turned round and one position over (uo_out on HAT JC): Pmod pin n arrives on "
@@ -973,11 +974,11 @@ def wiring_line(wires, pin_id=True):
     (placed({"ui_in": "JA", "uio": "JB", "uo_out": "JC"}, offset=("ui_in", "uo_out")),
      "the ui_in ribbon is plugged in turned round and one position over (ui_in on HAT JA): Pmod pin n arrives on "
      "HAT pin 12-n, and Pmod pins 1 and 7 are on the HAT's ground; plug it in the right way round, Pmod pin 1 to "
-     "HAT pin 1; and some uo_out signals could not be tested until then"),
+     "HAT pin 1; and some uio and uo_out signals could not be tested until then"),
     (placed({"ui_in": "JA", "uio": "JB", "uo_out": "JC"}, offset=("ui_in",)),
      "the ui_in ribbon is plugged in turned round and one position over (ui_in on HAT JA): Pmod pin n arrives on "
      "HAT pin 12-n, and Pmod pins 1 and 7 are on the HAT's ground; plug it in the right way round, Pmod pin 1 to "
-     "HAT pin 1; and some uo_out signals could not be tested until then"),
+     "HAT pin 1; and some uio and uo_out signals could not be tested until then"),
 ])  # fmt: skip
 def test_each_wrong_wiring_has_its_own_line_and_no_two_parties_ever_drive_one_net(wires, line):
     assert wiring_line(wires) == (1, line, [])
@@ -1428,7 +1429,7 @@ def test_a_bit_held_high_suggests_a_dip_switch_and_ui_in0_held_is_said_once():
     code, line = ttw.verdict(result)
     assert code == 1 and line.startswith("the ui_in ribbon (to HAT JA): ui_in[0] (Pmod pin 1) is held low on the ")
     assert "ui_in[1]" not in line and "ui_in[2]" not in line and "ui_in[3]" not in line
-    assert line.endswith("uo_out was not tested: the chip's factory test could not be used (ui_in[0] is held)")
+    assert line.endswith("uio and uo_out were not tested: the chip's factory test could not be used (ui_in[0] is held)")
 
 
 def test_replies_cut_short_by_a_stop_are_brought_back_in_step():
@@ -1607,3 +1608,28 @@ def test_a_uo_out_line_shorted_to_ground_is_said_as_held_low_not_as_an_open_wire
     assert ours(model.contentions) == []
     code, line = ttw.verdict(result)
     assert code == 1 and f"did not reach HAT JC pin {pin} (that line is held low: a short to ground?)" in line, line
+
+
+def test_the_chip_s_uio_never_fights_a_rail_in_any_placement():
+    """Review 7, finding 5: the tests leave out fights of the chip's outputs against a wire's fault, as the fault's
+    own; that holds only for uo_out (always driven). The chip's uio, which the test controls through ui_in[0], must
+    never meet ground or a rail, in any of the 48 placements."""
+    uio_nodes = set(RP2040["uio"])
+    for ports, turned in PLACEMENTS:
+        model = BoardModel(placed(ports, offset=turned), project="drives_uio")
+        with contextlib.suppress(ttw.ProtocolError):
+            run_simulated(model, argv=ASIC, pin_id=True)
+        bad = [
+            c
+            for c in model.contentions
+            if any(d[0] == "asic" and d[1] in uio_nodes for d in c) and any(d[0] == "rail" for d in c)
+        ]
+        assert bad == [], (ports, turned, bad[:2])
+
+
+def test_the_tt04_placement_says_uio_and_uo_out_could_not_be_tested():
+    """Review 7, finding 1: the fleet's one miswiring (4 Sep, TT04): all three ribbons turned round, ui_in on JC,
+    uio on JB, uo_out on JA. ui_in[0] lands on the HAT's ground, so uio and uo_out are both untested."""
+    code, line, fights = wiring_line(placed({"ui_in": "JC", "uio": "JB", "uo_out": "JA"}, offset=ttw.GROUPS))
+    assert fights == [] and code == 1, line
+    assert "some uio and uo_out signals could not be tested" in line or "uio and uo_out were not tested" in line, line
