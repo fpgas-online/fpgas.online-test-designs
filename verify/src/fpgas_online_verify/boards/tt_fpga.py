@@ -250,7 +250,7 @@ class TTFPGA(TestBoard):
     flash_note = ("none: nothing on the demo board is read back; the FPGA breakout has no SPI flash, and its "
                   "RP2350 loads each bitstream from the Pi")  # fmt: skip
     # Run in this order: the DIP switches first (#166), read under the display design, which drives only uo_out
-    # and holds ui_in and uio as inputs without the iCE40's pull-up (tt_dip_switches.py says why); then the
+    # and leaves ui_in and uio undriven without the iCE40's pull-up (tt_dip_switches.py says why); then the
     # pin-ID scan, so the UART-bridge design (one TX pin) is the last test design, not one driving every Pmod
     # line. What the board is left running is `left_running`, below.
     tests: ClassVar[dict] = {

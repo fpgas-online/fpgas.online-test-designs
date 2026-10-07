@@ -54,12 +54,19 @@ The `dip-switches` test checks it, before any other test loads a design
   the board. For each line it drives the pin low for a moment, then reads it as an input with its pull-down,
   so a switch that is on reads high and one that is off reads low.
 * Nothing else may hold the lines while they are read. So the check first streams
-  [`tt-display`](../../designs/tt-display/README.md) with `--gpio-release`: it drives only `uo_out`, and holds
-  `ui_in` and `uio` as inputs with the FPGA's pull-up off. The Pi's eight GPIOs on HAT JA are made inputs with
+  [`tt-display`](../../designs/tt-display/README.md) with `--gpio-release`: it drives only `uo_out`, and leaves
+  `ui_in` and `uio` undriven with the FPGA's pull-up off. The Pi's eight GPIOs on HAT JA are made inputs with
   their pull-down for the read, and are then put back as they were (with `pinctrl`). JA pins 2 to 4 are also
-  JB's, `uio[1]` to `uio[3]`.
-* The test is an `error`, not a `fail`, when it could not make the read: the board did not answer
-  (`the DIP switches could not be read from the board …`), or `pinctrl` could not set the Pi's GPIOs.
+  JB's, `uio[1]` to `uio[3]`: for switches 2 to 4 the board's microcontroller sets its `uio[1]` to `uio[3]`
+  pins the same way as the `ui_in` pin it reads.
+* The test is an `error`, not a `fail`, when it could not make the read:
+  * the board did not answer (`the DIP switches could not be read from the board …`);
+  * `pinctrl` could not set the Pi's GPIOs, or cannot read their pull (a Pi 3 and older), so they could not
+    be put back;
+  * the Pi's GPIOs could not be put back afterwards (the reason says so, after the switches' result).
+* A load of `tt-display` that fails is a `fail` of this test (`loading it failed (exit N)`), as for any test.
+  A `tt-display` file that is damaged or missing in the bitstreams package makes the test an `error`: the
+  switches cannot be read without it.
 
 ## What the TT FPGA is left running
 

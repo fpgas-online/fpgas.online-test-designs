@@ -8,7 +8,7 @@ It needs nothing from the demo board's microcontroller once it is loaded: its cl
 low-frequency oscillator (SB_LFOSC, 10 kHz), and it does not look at `clk`, `rst_n` or `ui_in`, whose
 levels after the microcontroller is reset are not known. It drives `uo_out` only (the display: bits 0 to 6
 are segments a to g, bit 7 is the dot); every other pin stays an input, so it never drives against the
-microcontroller. `ui_in` and `uio` are held as inputs with the iCE40's pull-up off: the boot check reads the
+microcontroller. `ui_in` and `uio` are left undriven with the iCE40's pull-up off: the boot check reads the
 demo board's DIP switches on `ui_in` under this design, with a pull-down (#166).
 
 The pattern, in steps of an eighth of a second: one segment runs round the outer ring (a, b, c, d, e, f);
@@ -69,9 +69,10 @@ class Display(Module):
         self.clock_domains.cd_sys = ClockDomain("sys", reset_less=True)
         self.comb += self.cd_sys.clk.eq(clk)
         self.submodules.pattern = Pattern(platform.request("uo_out"), LFOSC_HZ // STEP_HZ)
-        # ui_in and uio: plain inputs with the iCE40's pull-up off (#166). A pin a design does not use keeps the
+        # ui_in and uio: undriven, with the iCE40's pull-up off (#166). A pin a design does not use keeps the
         # iCE40's weak pull-up (the bitstream leaves its REN bit clear), and on these lines that pull-up would
-        # stand against the pull-down the check's DIP switch read relies on (dip_switches.py). Nothing reads them.
+        # stand against the pull-down the check's DIP switch read relies on (tt_dip_switches.py). Nothing reads
+        # them, so nextpnr turns their input buffers off too.
         for name in ("ui_in", "uio"):
             pads = platform.request(name)
             for i in range(len(pads)):
