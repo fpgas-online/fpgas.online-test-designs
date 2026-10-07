@@ -63,3 +63,4 @@ packages = ["src/fpgas_online_verify"]
 "../designs/_host/tt_sdk_start.py" = "fpgas_online_verify/scripts/tt_sdk_start.py"
 "../designs/_host/tt_main_py.py" = "fpgas_online_verify/scripts/tt_main_py.py"
 "../designs/_host/tt_dip_switches.py" = "fpgas_online_verify/scripts/tt_dip_switches.py"
+"../designs/_host/tt_pmod_wiring.py" = "fpgas_online_verify/scripts/tt_pmod_wiring.py"
