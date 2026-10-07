@@ -30,6 +30,8 @@ flash:
 | `10ee:7021`, subsystem `10ee:0007`, class `070001`, with a BAR2 | a stock Xilinx XDMA design (most likely a PicoEVB) | `fail`: fpgas.online has no test design for this board yet |
 | any other Xilinx or SQRL ID | not a design we built | `fail` |
 
+The two boards that are not Acorns are reported as `xilinx-pcie`, followed by what their IDs say (for example `xilinx-pcie PCIe Screamer (PCILeech image): fail`), not as `acorn`, and the `fpga-verified` fleet event's `board0` says `xilinx-pcie - fail`. The report keeps `"board": "acorn"`, the check that found them, and so do the progress events (`fpga-board-found`, `fpga-board-identified`).
+
 **Which setup the host is.** The Acorn has two setups, each wired its own way:
 
 | Host (`/proc/device-tree/model`) | Setup | JTAG `--pins` (TDI:TDO:TCK:TMS) | GPIO chip | J5 / H5 |
