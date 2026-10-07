@@ -299,9 +299,11 @@ TODAY = {
         "port holds GPIO14, which is also the JTAG TMS wire, so `jtag` fails there whatever the wiring. With "
         'the port off at boot (a change to the gateway\'s boot files, on the page "verifying 3"), `jtag` '
         "passes (it reads the IDCODE and device DNA): run on pi20 at ps1 on 7 October 2026. On a Compute "
-        "Module 4 it has not been run by us. Every other test but `rp1-pio` is `not run` until the card "
-        "is converted to the fpgas.online design, and converting a card on a blade has not been "
-        "done by us. So the result today is `fail` even with perfect cables: it shows that the card is seated "
+        "Module 4 it has not been run by us under this kernel (on pi14 at ps1 on 20 September 2026, under "
+        "kernel 6.12, JTAG got no response, TCK floating). Every other test but `rp1-pio` is `not run` until the card "
+        "is converted to the fpgas.online design, and converting a card on a blade is not in this guide yet: "
+        'do not load a design into the card or convert it (the page "verifying 3" says why). So the result '
+        "today is `fail` even with perfect cables: it shows that the card is seated "
         "and its PCIe link is up, and it cannot yet show that the two cables are right. The bench check with a "
         "meter, before fitting, is what the cables rest on until then.",
         "",
@@ -328,8 +330,8 @@ def pages(c):
         "`fpgas-verify` is the program that checks an FPGA board from the machine it is attached to. For an Acorn "
         "its check doubles as a wiring test: each of its tests uses a known set of wires between the card and the "
         f"{c.host}, so which tests pass, and what a failing one says, point at the wire. An Acorn is sold as a "
-        "CLE-215+ and as a CLE-101; the check covers both, and its summary names the one it found (`acorn "
-        "cle-101`).",
+        "CLE-215+, a CLE-215 or a CLE-101, and the check's summary names the variant it found (`acorn cle-101`, "
+        "for example); a CLE-215 has not been checked by us.",
         "",
         "The check never writes the card's flash and never loads a design into the FPGA. It drives the P1 and "
         "P2 wires, which is how it tests them, and puts the host's pins back as it found them.",
@@ -369,21 +371,28 @@ def pages(c):
             "7 October 2026, installed by the steps above). Two things are wrong and neither is the wiring or the "
             "installation: the card has "
             "not been converted to the fpgas.online design, and in this boot the JTAG test cannot have its TMS "
-            "pin, which the header's serial port holds.",
+            "pin, which the header's serial port holds. **Do not follow its first `What to do:` line on a "
+            "Compute Blade:** it says to convert the card, and converting or loading a card on a blade is not in this "
+            'guide yet (the page "verifying 3" says why). That line is as version 0.0.post1216 printed it; later '
+            "versions say not to on a Compute Blade.",
             "",
-            transcript(BLADE_FAIL, "pi16", "2026-10-07", "CLE-101").strip(),
+            transcript(BLADE_FAIL, "pi16", "2026-10-07", "CLE-101", "0.0.post1216").strip(),
             "",
             "On the blades at ps1 every `sudo` first prints `sudo: unable to resolve host pi16: Name or service "
             "not known` (with the blade's own name). It did no harm on the blades it was seen on (7 October 2026), "
-            "and is left out above.",
+            'and is left out above. The advice above to "change one blade\'s own copy" of the boot files is as '
+            'version 0.0.post1216 printed it; later versions say what the page "verifying 3" says: changing the '
+            "shared files or giving one blade its own copy is the gateway owner's choice.",
             "",
             "**A card still on the vendor's XDMA sample image** (pi20 at ps1, 7 October 2026, version "
             "0.0.post1220) gets the same tests as one on SQRL's image: `pcie-link` and `rp1-pio` pass, `jtag` "
             "fails on GPIO14 as above, the rest are `not run`. Its summary line reads `acorn -: fail` (no variant "
-            "is named), and the first `What to do:` line says the board runs Xilinx's XDMA sample design and is to "
-            "be converted. That was on pi20 at ps1, installed by the steps above; with an earlier version the check "
-            "printed `acorn: fail (no test ran)` "
-            "([#155](https://github.com/fpgas-online/fpgas.online-test-designs/issues/155)).",
+            "is named), and the first `What to do:` line says the board runs Xilinx's XDMA sample design (on a "
+            "Compute Blade, in versions after the one used there, not to convert it). That was on pi20 at ps1, "
+            "installed by the steps above as version 0.0.post1216 and updated "
+            "to 0.0.post1220 the same day; version 0.0.post1216 printed `acorn: fail (no test ran)` there "
+            "([fpgas.online-test-designs issue 155, a card on the vendor XDMA sample image got no test at "
+            "all](https://github.com/fpgas-online/fpgas.online-test-designs/issues/155)).",
             "",
             "A pass will list every test with `pass` and end there, with no `RESULT:` part; on a Compute Blade "
             "`p2-gpio` stays `not run`, because J5 and H5 are not wired.",

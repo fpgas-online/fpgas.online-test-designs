@@ -16,6 +16,8 @@ DOCS = "https://docs.fpgas.online/en/latest/verify"  # the pages of docs/verify/
 REPO_DOCS = "https://github.com/fpgas-online/fpgas.online-test-designs/blob/main/docs"
 ACORN_PROGRAMMING = f"{REPO_DOCS}/hardware/acorn-pcie-programming.md"
 ISSUES = "https://github.com/fpgas-online/fpgas.online-test-designs/issues"
+# An issue the advice points at is named with what it is about, not by its number alone.
+ISSUE_127 = "on a Compute Blade the JTAG test cannot have GPIO14 while the serial port holds it"
 
 VERDICT = {
     "changed": "the board, or what is in its flash, is not what was recorded last time",
@@ -53,9 +55,11 @@ ADVICE = (
      "The serial port has a pin JTAG needs, so the JTAG test could not run. On a Compute Blade the JTAG TMS "
      "wire and the serial port's TX are the same pin (GPIO14): while the serial port is on, JTAG cannot be "
      "tested there. Boot with the header's serial port off: in config.txt enable_uart=0 and no "
-     "uart_2ndstage=1, in cmdline.txt no console=serial0 (on a netbooted blade these files are on the gateway: "
-     "change one blade's own copy, as several hosts may share them). With all three, on one Compute Blade with "
-     f"a CM5, the pin was free and the JTAG test passed: {ISSUES}/127"),
+     "uart_2ndstage=1, in cmdline.txt no console=serial0. On a netbooted blade these files are on the gateway "
+     "and may be shared by several hosts: changing the shared files changes every host that boots from them, "
+     "giving the one blade its own copy changes only that blade; which to do is the gateway owner's choice. "
+     "With all three changes, on one Compute Blade with a CM5, the pin was free and the JTAG test passed "
+     f"(fpgas.online-test-designs issue 127, {ISSUE_127}): {ISSUES}/127"),
     # any other holder: not the serial port's own case above, which has its own words
     (r"^(?!.*GPIO14 \(TMS\) is held by [0-9a-f]+\.serial \().*is held by .*the JTAG chain cannot be scanned",
      "A JTAG pin is in use by a driver or by another program (the reason above names it), so the JTAG test "
@@ -64,7 +68,7 @@ ADVICE = (
     (r"gpiod_line_request",
      "openFPGALoader could not have one of the JTAG pins, because a driver holds it (on a Compute Blade the "
      "serial port holds GPIO14, which is also the JTAG TMS wire). The check cannot test JTAG on such a host "
-     f"yet: {ISSUES}/127"),
+     f"yet (fpgas.online-test-designs issue 127, {ISSUE_127}): {ISSUES}/127"),
     (r"no device on the (P1 )?JTAG chain|no UARTBone reply",
      "Nothing answered on a cable between the Pi and the board: check that the JTAG and UART cables are seated "
      "and wired as the board's page shows."),
@@ -76,7 +80,8 @@ ADVICE = (
     (r"Pmod wiring test is not yet part of the boot check",
      "This demo board carries a Tiny Tapeout chip. It was identified and its other tests are above, but the "
      "check cannot yet test its cabling to the Pi, and a board is not passed untested. Nothing is known to be "
-     f"wrong with the board: {ISSUES}/132"),
+     "wrong with the board (fpgas.online-test-designs issue 132, a healthy demo board with a Tiny Tapeout chip "
+     f"cannot pass the boot check): {ISSUES}/132"),
     (r"and the board runs SDK|no SDK release is recorded as supporting",
      "The Tiny Tapeout SDK on the demo board is not a release known to work with the chip it carries, so the "
      "board could not select a project on that chip. The board's firmware is installed by whoever looks after "
@@ -100,6 +105,38 @@ ADVICE = (
      "Check the board's power and cables. `sudo fpgas-<board>-debug detect` looks for it again without "
      "running the tests."),
 )  # fmt: skip
+
+# An Acorn on a Compute Blade (the report's `setup`, wiring.toml's carrier name) is not to be converted yet: the only
+# load into a card on a blade lost its PCIe endpoint. Where the report names that setup, the conversion advice above
+# is replaced; where it names no setup, the warning is added to it, as the host may be a blade.
+BLADE = "Compute Blade"
+VERIFYING_3 = "https://docs.fpgas.online/en/latest/boards/acorn/building/compute-blade/verifying-3.html"
+NOT_ON_A_BLADE = (
+    "On a Compute Blade, do not load a design into the card or convert it: that is not in the guide yet. The "
+    "only attempt (pi20 at ps1, 7 October 2026) lost the card's PCIe endpoint (a bus rescan did not bring it "
+    "back, and a root-complex re-probe failed), and the reboot after it was followed by about two hours of "
+    f"restarts, cause not known: {VERIFYING_3}"
+)
+ON_A_BLADE = {
+    r"unconverted: runs SQRL's factory image": "The Acorn still runs the image it was sold with, not the "
+    "fpgas.online one, so only its PCIe link and its JTAG could be tested. " + NOT_ON_A_BLADE,
+    r"unconverted: runs the vendor XDMA sample": "The board runs Xilinx's XDMA sample design, not the fpgas.online "
+    "one. " + NOT_ON_A_BLADE,
+    r"running the golden image": "The Acorn fell back to its golden image: the operational image in its flash did "
+    "not start. " + NOT_ON_A_BLADE,
+}
+
+
+def _for_setup(pattern, text, setup):
+    """An entry's advice for the board's setup: the blade's own where the report says it is a blade, both where it
+    names no setup, and the entry's as it is on any other setup."""
+    if pattern not in ON_A_BLADE:
+        return text
+    if setup == BLADE:
+        return ON_A_BLADE[pattern]
+    if setup is None:
+        return f"{text} {NOT_ON_A_BLADE}"
+    return text
 
 
 def slug(board):
@@ -159,6 +196,8 @@ def advice(report):
         if not about:
             continue
         board = about[0] or (mode if mode and mode != "auto" else None)
+        setup = next((b.get("setup") for b in report["boards"] if b["board"] == board), None)
+        text = _for_setup(pattern, text, setup)
         if "<board>" in text:
             text = text.replace("<board>", slug(board)) if board else f"{text} (<board> is {BOARDS})"
         out.append(text)

@@ -159,11 +159,11 @@ def bom(c):
     tools = [
         (TICK, t["tool"], t.get("note", "—") + (t.get("note_resistor", "") if c.resistors else ""))
         for t in wiring.TOOLS
-        if "when" not in t or c.resistors
+        if ("when" not in t or c.resistors) and t.get("carrier", c.key) == c.key
     ]
     return (
         f"The parts for **one** {c.name} host; for several hosts, that many of each.\n\n{parts}\n"
-        "The tools to build its two cables, once for any number of hosts:\n\n"
+        "The tools to build, fit and check its two cables, once for any number of hosts:\n\n"
         + table(["Have it", "Tool", "What it is for"], tools)
     )
 

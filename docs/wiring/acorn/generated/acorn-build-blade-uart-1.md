@@ -4,7 +4,7 @@ Not yet run by us on this hardware: written from the design. Photos: Uptime Lab 
 
 ## What you need
 
-For this cable: the other half of the Molex Pico-EZmate cable, which was cut in half on the page "JTAG connector 1" (if it is still whole: cut it in the middle with side cutters; each half is one cable); the 1×4 Dupont housing; 3 Dupont crimp terminals, and a few spare; 2 mm heat-shrink tube; the 470 Ω resistor; 3 mm heat-shrink tube. Tools: a multimeter with a continuity buzzer, side cutters, wire strippers, the crimping tool, a hot-air tool, a soldering iron, masking tape and a fine pen. The Acorn itself, out of any slot, is needed for the first steps: if it is fitted, power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Then take the card out.
+For this cable: the other half of the Molex Pico-EZmate cable, which was cut in half on the page "JTAG connector 1" (if it is still whole: cut it in the middle with side cutters; each half is one cable); the 1×4 Dupont housing; 3 Dupont crimp terminals, and a few spare; 2 mm heat-shrink tube; the 470 Ω resistor; 3 mm heat-shrink tube. Tools: a multimeter with a continuity buzzer, a fine probe tip for it or a sewing pin to hold against a probe, a ruler marked in millimetres, side cutters, wire strippers, the crimping tool, a hot-air tool, a soldering iron, masking tape and a fine pen. The Acorn itself, out of any slot, is needed for the first steps: if it is fitted, power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Then take the card out.
 
 ## Steps
 
@@ -15,7 +15,7 @@ For this cable: the other half of the Molex Pico-EZmate cable, which was cut in 
 3. With the plug still in the socket (the Acorn out of any slot, unpowered), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: it must beep.
 4. Do the same with the wire flagged 6: it must stay silent.
 5. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again; if still neither beeps, stop: the ground point is not confirmed.
-6. If both wires beep, first see that the two probes do not touch each other and that the cut faces of wires 1 and 6 do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires apart. Leave the flags on and take the plug out. Wire 6 is the card's 3.3 V; that it stays silent to ground on a card with no power is expected and has not been measured by us. Set the meter to ohms, write down what each of the two wires reads to the pad, and send both readings to whoever gave you this guide.
+6. If both wires beep, first see that the two probes do not touch each other and that the cut faces of wires 1 and 6 do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires apart. Leave the flags on and take the plug out. Wire 6 is the card's 3.3 V by the LiteX wiki's legend; that it stays silent to ground on a card with no power is expected and has not been measured by us. Set the meter to ohms, write down what each of the two wires reads to the pad, and send both readings to whoever gave you this guide.
 7. Take the plug out again.
 
 ![The P2 cable's plug in socket P2, all 6 wires whole, a flag on each](acorn-cable-p2-flag.png){.only-light}
@@ -24,7 +24,7 @@ For this cable: the other half of the Molex Pico-EZmate cable, which was cut in 
 ![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check.png){.only-light}
 ![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check-dark.png){.only-dark}
 
-**2.** Cut wires 4, 5 and 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over each cut end. They go in no cavity. Wire 6 is VCC, 3.3 V from the Acorn: it must never reach the host. Leave wires 1, 2 and 3 at full length.
+**2.** Cut wires 4, 5 and 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over each cut end. They go in no cavity. Wire 6 is VCC, 3.3 V from the Acorn (the LiteX wiki's legend names it so; not measured by us): it must never reach the host. Leave wires 1, 2 and 3 at full length.
 
 ![The P2 cable: its wires prepared](acorn-cable-blade-p2-prepare.png){.only-light}
 ![The P2 cable: its wires prepared](acorn-cable-blade-p2-prepare-dark.png){.only-dark}

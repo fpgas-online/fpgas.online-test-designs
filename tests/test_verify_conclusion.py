@@ -50,8 +50,11 @@ def test_the_unconverted_compute_blade_ends_with_what_failed_what_was_not_run_an
         "    not run: p2-gpio: J5 and H5 are not wired on the Compute Blade setup",
     ]
     assert lines[start + 7] == "What to do:"
-    todo = "\n".join(lines[start + 8 :])
-    assert "It has to be converted" in todo and conclusion.ACORN_PROGRAMMING in todo
+    todo = " ".join(line.strip() for line in lines[start + 8 :])
+    # on a Compute Blade the card is not to be converted: the only load on a blade lost its PCIe endpoint
+    assert "It has to be converted" not in todo and conclusion.ACORN_PROGRAMMING not in todo
+    assert "On a Compute Blade, do not load a design into the card or convert it" in todo
+    assert conclusion.VERIFYING_3 in todo
     assert "the serial port holds GPIO14" in todo and f"{conclusion.ISSUES}/127" in todo
     assert "sudo fpgas-acorn-debug --help" in todo and "fpgas-online-acorn-debug" in todo
     assert f"{conclusion.DOCS}/common-failures.html#common-failures" in todo
@@ -171,7 +174,7 @@ def test_a_reason_is_one_line_and_the_advice_is_wrapped_without_breaking_a_url()
     start = lines.index("What to do:")
     advice = lines[start + 1 : -1]
     assert all(len(line) <= conclusion.WIDTH or "https://" in line for line in advice)
-    assert f"    {conclusion.ACORN_PROGRAMMING}" in advice  # whole, on a line of its own
+    assert f"    {conclusion.VERIFYING_3}" in advice  # whole, on a line of its own
     assert f"    failed: jtag: {GPIOD}" in lines  # not wrapped: a reason can be searched for as it is
 
 
@@ -236,6 +239,9 @@ def test_a_jtag_pin_the_serial_port_has_gets_the_blades_advice_and_any_other_hol
 
     uart = todo({14: "1f00030000.serial (uart0)"})
     assert "while the serial port is on, JTAG cannot be tested there" in uart and f"{conclusion.ISSUES}/127" in uart
+    assert (
+        "the gateway owner's choice" in uart and "change one blade's own copy" not in uart
+    )  # both ways, as verifying 3
     assert "Stop what has the pin" not in uart  # one line of advice for it, not two that disagree
     for holders in ({2: '"spi0 CS0"'}, {14: '"serial-test"'}):  # a program that asked for the line, whatever its name
         other = todo(holders)
@@ -267,3 +273,26 @@ def test_every_docs_link_the_tool_prints_names_a_page_of_docs_verify_and_a_headi
         source = repo / "docs" / "verify" / page.replace(".html", ".md")
         assert source.is_file(), f"{conclusion.DOCS}/{page}: no {source}"
         assert anchor in _headings(source), f"{conclusion.DOCS}/{page}#{anchor}: no such heading in {source}"
+
+
+def test_the_conversion_advice_follows_the_setup_the_report_names():
+    """A Pi 5 is told to convert the card; a Compute Blade is told not to, and why; a report that names no setup
+    gets both, as its host may be a blade."""
+    assert conclusion.BLADE == setup.detect("Raspberry Pi Compute Module 4 Rev 1.1").name == BLADE.name
+
+    def todo(board_setup, reason):
+        board = _acorn("fail", [("pcie-link", "pass", "")], reason=reason)
+        if board_setup:
+            board["setup"] = board_setup
+        return " ".join(line.strip() for line in conclusion.lines(_report("fail", [board])))
+
+    pi5 = setup.detect("Raspberry Pi 5 Model B Rev 1.0").name
+    for reason in (
+        UNCONVERTED,
+        "unconverted: runs the vendor XDMA sample image, not the fpgas.online design",
+        "pcie-bar0 fail: running the golden image: the operational slot did not boot",
+    ):
+        on_pi5, on_blade, unknown = todo(pi5, reason), todo(conclusion.BLADE, reason), todo(None, reason)
+        assert conclusion.ACORN_PROGRAMMING in on_pi5 and "On a Compute Blade" not in on_pi5
+        assert conclusion.ACORN_PROGRAMMING not in on_blade and "On a Compute Blade, do not load" in on_blade
+        assert conclusion.ACORN_PROGRAMMING in unknown and "On a Compute Blade, do not load" in unknown

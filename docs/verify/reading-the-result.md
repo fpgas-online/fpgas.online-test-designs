@@ -55,9 +55,9 @@ fpgas-verify: pass (mode auto, auto: USB/PCI IDs)
 ```
 
 **fail, a first install on someone's own hardware**: a Compute Blade with a CM5 and an Acorn CLE-101 still on
-SQRL's factory image (ps1's `pi16`, 2026-10-05; the summary its boot report gives). Two things are wrong, and
+SQRL's factory image (pi16 at ps1, 2026-10-05; the summary its boot report gives). Two things are wrong, and
 neither is the installation: the card has not been converted, and on this setup the JTAG test cannot have its
-TMS pin ([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)).
+TMS pin ([fpgas.online-test-designs issue 127: on a Compute Blade the JTAG test cannot have GPIO14 while the serial port holds it](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)).
 
 ```text
 $ sudo fpgas-verify --no-publish
@@ -90,13 +90,18 @@ RESULT: FAIL: a board did not pass.
     not run: p2-gpio: J5 and H5 are not wired on the Compute Blade setup
 What to do:
   * The Acorn still runs the image it was sold with, not the fpgas.online one,
-    so only its PCIe link and its JTAG could be tested. It has to be converted
-    once (the fpgas.online image loaded over JTAG, then written to its flash
-    with fpgas-acorn-flash):
-    https://github.com/fpgas-online/fpgas.online-test-designs/blob/main/docs/hardware/acorn-pcie-programming.md
+    so only its PCIe link and its JTAG could be tested. On a Compute Blade, do
+    not load a design into the card or convert it: that is not in the guide
+    yet. The only attempt (pi20 at ps1, 7 October 2026) lost the card's PCIe
+    endpoint (a bus rescan did not bring it back, and a root-complex re-probe
+    failed), and the reboot after it was followed by about two hours of
+    restarts, cause not known:
+    https://docs.fpgas.online/en/latest/boards/acorn/building/compute-blade/verifying-3.html
   * openFPGALoader could not have one of the JTAG pins, because a driver holds
     it (on a Compute Blade the serial port holds GPIO14, which is also the
-    JTAG TMS wire). The check cannot test JTAG on such a host yet:
+    JTAG TMS wire). The check cannot test JTAG on such a host yet
+    (fpgas.online-test-designs issue 127, on a Compute Blade the JTAG test
+    cannot have GPIO14 while the serial port holds it):
     https://github.com/fpgas-online/fpgas.online-test-designs/issues/127
   * To look at the acorn board yourself: sudo fpgas-acorn-debug --help (sudo
     apt install fpgas-online-acorn-debug)
@@ -109,7 +114,10 @@ The whole report, for a program to read (JSON): /run/fpgas-online/verify.json
 **fail, the docs' install steps run on a Compute Blade**: the same blade (pi16 at ps1, a CM5 and an Acorn
 CLE-101 on SQRL's factory image) on 2026-10-07, version 0.0.post1216, installed by the steps of the docs'
 "verifying 1" page as printed. The lines `sudo: unable to resolve host pi16: Name or service not known`, which
-sudo printed first, are left out. From 0.0.post1111 the `jtag` line names what holds the pin.
+sudo printed first, are left out. From 0.0.post1111 the `jtag` line names what holds the pin. Its advice to
+"change one blade's own copy" of the gateway's boot files is that version's; later versions say that changing the
+shared files or giving one blade its own copy is the gateway owner's choice. So is its advice to convert the card:
+later versions say not to load or convert a card on a Compute Blade, as the first transcript above shows.
 
 ```text
 $ sudo fpgas-acorn-verify --no-publish

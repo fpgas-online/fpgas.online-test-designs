@@ -128,10 +128,11 @@ def test_what_to_expect_on_a_blade_is_said_on_the_first_verifying_page_only():
 
 def test_the_cm4_blades_are_said_to_have_had_reads_and_a_pull_test_put_back():
     text = check.pages(wiring.CARRIERS["blade"])[3]
-    assert "On the two Compute Module 4 blades (pi14 and pi18 at ps1, 7 October 2026) only reads and a pin pull" in (
-        " ".join(text.split())
-    )
-    assert "put each back as it was" in " ".join(text.split()) and "**no check and no JTAG**" in " ".join(text.split())
+    flat = " ".join(text.split())
+    # one account of the CM4 blades everywhere: the JTAG attempt of 20 September, the reads and pull test of 7 October
+    assert "on 20 September 2026 a JTAG attempt on pi14 at ps1 got no response (TCK floating)" in flat
+    assert "On 7 October 2026 pi14 and pi18 at ps1 had logins, pin reads" in flat
+    assert "put each back as it was" in flat and "**no check, and no JTAG since 20 September**" in flat
 
 
 def test_a_fragment_with_marks_that_do_not_pair_or_are_not_understood_stops_the_run(tmp_path, monkeypatch):
