@@ -221,7 +221,7 @@ def choose_cabling(observed_ui_in, reverse):
 # pull=None so the intent (no pull, whatever the SDK had set) is visible.
 # "out" reads the pin back so the Pi can see a lost fight immediately.
 FIRMWARE = r"""
-import sys, time
+import gc, sys, time
 from machine import Pin
 DATA = __DATA__
 _pins = {}
@@ -256,18 +256,25 @@ def _clock_stop(t):
         _emit('WARN clock_project_stop: %r' % e)
 
 def _find_tt():
+    # The SDK's own `tt`, which its main.py builds when the board starts. It is never imported or built here:
+    # that needs more heap than the RP2040 has beside this server (MemoryError, 8 Oct 2026), and would be a
+    # second board object on the same pins.
     global _tt
     if _tt is None:
         t = globals().get('tt')
         if t is None:
-            from ttboard.demoboard import DemoBoard
-            t = DemoBoard.get() if hasattr(DemoBoard, 'get') else DemoBoard()
+            raise RuntimeError('the SDK is not running on the board (no tt object): start it first')
         _tt = t
     return _tt
 
 def _sdk(args):
     global _saved_mode
     op = args[0]
+    if op == 'restore':
+        _release_all()
+        if _tt is None or _saved_mode is None:
+            _emit('OK pins released; the SDK mode was not changed')
+            return
     t = _find_tt()
     if op == 'init':
         _saved_mode = t.mode
@@ -296,7 +303,6 @@ def _sdk(args):
         t.reset_project(False)
         _emit('OK')
     elif op == 'restore':
-        _release_all()
         if _saved_mode is not None:
             # Go through SAFE first in case the mode setter is a no-op for
             # an unchanged value; the SDK must re-own its pins.
@@ -334,7 +340,7 @@ def _txid(args):
     slots = [[(pins[i], frames[i][s]) for i in range(len(pins))] for s in range(n)]
     poll = select.poll()
     poll.register(sys.stdin, select.POLLIN)
-    _emit('OK started')
+    _emit('OK started mem_free=%d' % gc.mem_free())
     t = time.ticks_us()
     while True:
         for slot in slots:
@@ -351,7 +357,8 @@ def _txid(args):
         p.value(1)
     _emit('OK stopped')
 
-_emit('READY')
+gc.collect()
+_emit('READY mem_free=%d' % gc.mem_free())
 try:
     while True:
         line = sys.stdin.readline()
@@ -397,6 +404,9 @@ try:
                 _emit('OK')
             elif cmd == 'sdk':
                 _sdk(args)
+            elif cmd == 'mem':
+                gc.collect()
+                _emit('VAL mem %d' % gc.mem_free())
             elif cmd == 'ping':
                 _emit('PONG')
             elif cmd == 'quit':
@@ -415,6 +425,22 @@ def build_firmware(controller):
     table = CONTROLLERS[controller]
     data = table["ui_in"] + table["uio"] + table["uo_out"]
     return FIRMWARE.replace("__DATA__", repr(data))
+
+
+# The least free heap the RP2's command server must find once it is loaded, beside the SDK's own objects. The
+# largest thing it builds is txid's table for one pin-id round (8 pins; a frame of 50 bits each): see the MEM:
+# lines a run prints, and the pull request that set this figure.
+MIN_HEAP_FREE = 20000
+
+
+def mem_free(fields):
+    """The figure in a reply's ``mem_free=N`` (READY, txid's OK) or ``VAL mem N`` (mem); None if there is none."""
+    for i, f in enumerate(fields or ()):
+        if f.startswith("mem_free="):
+            return int(f.split("=", 1)[1])
+        if f == "mem" and i + 1 < len(fields):
+            return int(fields[i + 1])
+    return None
 
 
 class ProtocolError(Exception):
@@ -573,6 +599,7 @@ def start_firmware(link, firmware):
     fields = link.expect(timeout=10.0)
     if fields[:1] != ["READY"]:
         raise ProtocolError(f"unexpected first reply from the RP2: {fields}")
+    return fields
 
 
 def stop_firmware(link):
@@ -1064,7 +1091,8 @@ def run_pin_id_round(rp2, probe, scanner, transmitting, partners, log):
                 released.append(p)
     # "txid" answers OK once it is transmitting; any later line stops it and
     # is answered with a second OK.
-    rp2.cmd("txid " + " ".join(f"{probe.gpio_of(n)}={label}" for n, label in transmitting.items()))
+    started = rp2.cmd("txid " + " ".join(f"{probe.gpio_of(n)}={label}" for n, label in transmitting.items()))
+    log(f"MEM: {mem_free(started)} bytes of the RP2's heap free while it sends {len(transmitting)} names")
     try:
         decoded = scanner()
     finally:
@@ -1471,11 +1499,16 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
         notes.append("iCE40 held in reset for the test (CRESET_B low); it reloads from flash afterwards")
         log("FPGA held in reset (CRESET_B low)")
 
+    # Strict (the boot check): the chip's loopback is required, so an SDK that cannot select it stops the test
+    # here, before any pin is driven, rather than going on with a test that cannot pass.
+    required = want_loopback and args.strict
     if args.sdk:
         try:
             fields = rp2.cmd("sdk init", timeout=15)
             log(f"SDK: {' '.join(fields[1:])}")
         except ProtocolError as e:
+            if required:
+                raise ProtocolError(f"the board's SDK could not be used: {e}") from None
             notes.append(f"SDK init failed: {e}")
             log(f"WARNING: {notes[-1]}")
     project_selected = False
@@ -1486,6 +1519,8 @@ def run_wiring_test(rp2, hat, args, log=print, pin_scanner=None):
             rp2.cmd("sdk reset", timeout=10)
             project_selected = True
         except ProtocolError as e:
+            if required:
+                raise ProtocolError(f"the chip's {args.asic_project} could not be selected: {e}") from None
             notes.append(f"could not select {args.asic_project}: {e}")
             log(f"WARNING: {notes[-1]}")
     elif want_loopback:
@@ -1986,15 +2021,24 @@ def main(argv=None):
         fd = open_raw_serial(args.port)
         link = Rp2Link(fd, log=print)
         try:
-            start_firmware(link, build_firmware(args.controller))
+            ready = start_firmware(link, build_firmware(args.controller))
         except ProtocolError:
             # Do not leave the board in the raw REPL for the daemon to find.
             link.write(b"\r\x03\x02")
             raise
         print("RP2 command server running")
         try:
+            free = mem_free(ready)
+            print(f"MEM: {free} bytes of the RP2's heap free with the command server loaded")
+            if free is None or free < MIN_HEAP_FREE:
+                raise RuntimeError(f"RP2040 heap too low: {free} bytes free with the command server loaded (the "
+                                   f"test needs {MIN_HEAP_FREE})")  # fmt: skip
             result = run_wiring_test(link, hat, args, pin_scanner=pin_scanner)
         finally:
+            try:
+                print(f"MEM: {mem_free(link.cmd('mem', timeout=5))} bytes of the RP2's heap free after the test")
+            except ProtocolError as e:
+                print(f"MEM: not read after the test: {e}")
             if args.fpga_reset:
                 try:
                     link.cmd("creset 1", timeout=5)

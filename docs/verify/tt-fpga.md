@@ -171,12 +171,17 @@ How it tests:
 * A DIP switch that is on does not change the result: the RP2040 drives `ui_in` as the SDK does, stronger than
   a switch's 1 kΩ, and the test's output notes the line.
 
-The test is an `error`, not a `fail`, when it could not make its reading: the board did not answer its raw REPL,
-gpiod or `pinctrl` is missing or could not read the HAT GPIOs, the test was stopped (the Pi is put back first),
-or what it changed on the Pi was not put back (the reason says what). It is a `fail` when the readings were not
-steady (a loose contact?), and when the chip's factory test could not be confirmed, since `uo_out` is then not
-tested: a board on SDK 1.x (a TT03p5 board) cannot select it this way, so it fails there until the test learns
-that SDK's interface.
+The test is an `error`, not a `fail`, when it could not make its reading, and then it drives no pin at all: the
+board did not answer its raw REPL; the board's SDK is not running (no `tt` object: the command server never
+imports or builds the SDK itself) or could not select `tt_um_factory_test` (a board on SDK 1.x, a TT03p5 board,
+cannot be asked this way, so it is an `error` until the test learns that SDK); the RP2040 has too little heap
+free with the command server loaded (`RP2040 heap too low: N bytes free …`); gpiod or `pinctrl` is missing or
+could not read the HAT GPIOs; the test was stopped (the Pi is put back first); or what it changed on the Pi was
+not put back (the reason says what). It is a `fail` when the readings were not steady (a loose contact?), and
+when the chip's factory test was selected but does not behave as one, since `uo_out` is then not tested.
+
+The output's `MEM:` lines say how much of the RP2040's heap was free with the command server loaded, while each
+pin-id round sends, and after the test.
 
 It has run in this form on one board with a TT07 chip (see the pull request that brought it into the check);
 [PR #15](https://github.com/fpgas-online/fpgas.online-test-designs/pull/15)'s form of it ran on every Tiny

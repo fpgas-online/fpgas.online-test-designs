@@ -320,7 +320,7 @@ class FakeFirmware:
                     g, label = a.split("=")
                     m.rp2[int(g)] = ("tx", label)
                 m.resolve()  # a fight would be recorded here
-                return ["TTW OK started"]
+                return ["TTW OK started mem_free=51000"]
             if cmd == "stop":
                 for g, (mode, _val) in list(m.rp2.items()):
                     if mode == "tx":
@@ -332,6 +332,8 @@ class FakeFirmware:
             if cmd == "creset":
                 self.creset = int(args[0])
                 return ["TTW OK"]
+            if cmd == "mem":
+                return ["TTW VAL mem 60000"]
             if cmd == "ping":
                 return ["TTW PONG"]
             if cmd == "quit":
@@ -364,7 +366,7 @@ def serve(sock, firmware):
     """Run *firmware* on *sock* until quit or EOF (thread target)."""
     buf = b""
     try:
-        sock.sendall(b"TTW READY\n")
+        sock.sendall(b"TTW READY mem_free=60000\n")
         while True:
             data = sock.recv(4096)
             if not data:
@@ -656,11 +658,17 @@ def test_unknown_project_reacting_to_ui_in_is_not_a_short():
     assert result["pass"] is True
 
 
-def test_factory_project_unavailable_is_strict_failure():
+def test_factory_project_unavailable_stops_a_strict_test():
     model = BoardModel(standard_wires(), project="drives_uio")
-    result, _log = run_simulated(model, projects=())
+    with pytest.raises(ttw.ProtocolError, match="the chip's tt_um_factory_test could not be selected"):
+        run_simulated(model, projects=())
+    assert model.contentions == []
+
+
+def test_factory_project_unavailable_without_strict_is_noted():
+    model = BoardModel(standard_wires(), project="drives_uio")
+    result, _log = run_simulated(model, argv=["--no-strict"], projects=())
     assert result["asic_loopback"] is False
-    assert result["pass"] is False
     assert any("could not select tt_um_factory_test" in n for n in result["notes"])
     assert model.contentions == []
 
@@ -799,12 +807,19 @@ def test_hard_held_ui_in0_disables_loopback():
     assert result["pass"] is False
 
 
-def test_sdk_missing_is_reported_and_ui_in_still_tested():
+def test_no_sdk_stops_a_strict_test_before_any_pin_is_driven():
+    """The boot check needs the chip's loopback: an SDK it cannot use stops the test (exit 2), not a half test."""
     model = BoardModel(standard_wires(), project="quiet")
-    result, _log = run_simulated(model, sdk=False)
+    with pytest.raises(ttw.ProtocolError, match="the board's SDK could not be used: 'sdk init' -> sdk: ImportError"):
+        run_simulated(model, sdk=False)
+    assert all(mode == "in" for mode, _ in model.rp2.values())  # nothing was driven
+
+
+def test_sdk_missing_without_strict_is_reported_and_ui_in_still_tested():
+    model = BoardModel(standard_wires(), project="quiet")
+    result, _log = run_simulated(model, argv=["--no-strict"], sdk=False)
     assert set(statuses(result, "ui_in").values()) == {"ok"}
     assert result["asic_loopback"] is False
-    assert result["pass"] is False  # loopback was requested and is unavailable
     assert any("SDK init failed" in n for n in result["notes"])
 
 
@@ -963,8 +978,15 @@ def test_more_than_four_faults_on_a_ribbon_are_counted():
     assert line.endswith("; and 1 more") and line.count("did not reach") == 4
 
 
-def test_no_factory_test_means_uo_out_is_not_tested_and_the_board_does_not_pass():
-    result, _log = run_simulated(BoardModel(asic_wires(), project="drives_uio"), argv=ASIC, projects=())
+def test_a_factory_test_that_does_not_confirm_means_uo_out_is_not_tested_and_the_board_does_not_pass():
+    class StubbornFirmware(FakeFirmware):  # says it selected the project; the chip keeps driving uio
+        def handle(self, line):
+            if line.startswith("sdk project"):
+                return ["TTW OK enabled=tt_um_factory_test"]
+            return super().handle(line)
+
+    model = BoardModel(asic_wires(), project="drives_uio")
+    result, _log = run_simulated(model, argv=ASIC, firmware_cls=StubbornFirmware)
     code, line = ttw.verdict(result)
     assert code == 1 and "uo_out was not tested: the chip's factory test project was not confirmed" in line
 
@@ -1167,7 +1189,7 @@ class _Hat:
         pass
 
 
-def _main(monkeypatch, capsys, measure, faults=()):
+def _main(monkeypatch, capsys, measure, faults=(), heap=60000, mem=None):
     """main() with the Pi and the board replaced: `measure` stands in for run_wiring_test."""
     _Env.faults = list(faults)
     envs = []
@@ -1177,9 +1199,11 @@ def _main(monkeypatch, capsys, measure, faults=()):
     monkeypatch.setattr(ttw, "make_pin_id_scanner", lambda pinid: None)
     monkeypatch.setattr(ttw, "open_raw_serial", lambda port: 99)
     monkeypatch.setattr(ttw.os, "close", lambda fd: None)
-    monkeypatch.setattr(ttw, "start_firmware", lambda link, fw: None)
+    monkeypatch.setattr(ttw, "start_firmware", lambda link, fw: ["READY", f"mem_free={heap}"])
     monkeypatch.setattr(ttw, "stop_firmware", lambda link: None)
-    monkeypatch.setattr(ttw.Rp2Link, "cmd", lambda self, text, timeout=None: ["OK"])
+    monkeypatch.setattr(
+        ttw.Rp2Link, "cmd", lambda self, text, timeout=None: ["VAL", "mem", "41000"] if text == "mem" else ["OK"]
+    )
     monkeypatch.setattr(ttw, "run_wiring_test", lambda *a, **k: measure())
     monkeypatch.setattr(ttw, "report", lambda result, discover: None)
     before = {sig: ttw.signal.getsignal(sig) for sig in ttw.STOPS}
@@ -1188,6 +1212,8 @@ def _main(monkeypatch, capsys, measure, faults=()):
     out = capsys.readouterr().out.splitlines()
     assert envs[0].left == [True]  # the Pi is put back whatever happened
     said = [line for line in out if line.startswith("WIRING: ")]
+    if mem is not None:
+        mem.extend(line for line in out if line.startswith("MEM: "))
     assert said and out[-1] == f"RESULT: {'PASS' if code == 0 else 'FAIL'}"
     return code, said[-1][len("WIRING: ") :]
 
@@ -1229,3 +1255,30 @@ def test_a_pi_not_put_back_is_exit_2_after_the_verdict(monkeypatch, capsys):
     code, line = _main(monkeypatch, capsys, _passed, faults=["GPIO8 could not be set to ip pu: x"])
     assert code == 2 and line.endswith("; and the Pi was not put back as it was (GPIO8 could not be set to ip pu: x)")
     assert line.startswith("all 24 Pmod signals reached the Pi where they should")
+
+
+def test_the_rp2_heap_is_said_and_a_heap_too_low_stops_the_test_before_it_starts(monkeypatch, capsys):
+    mem = []
+    assert _main(monkeypatch, capsys, _passed, mem=mem)[0] == 0
+    assert mem == ["MEM: 60000 bytes of the RP2's heap free with the command server loaded",
+                   "MEM: 41000 bytes of the RP2's heap free after the test"]  # fmt: skip
+    measured = []
+    low = ttw.MIN_HEAP_FREE - 1
+    code, line = _main(monkeypatch, capsys, lambda: measured.append(1) or _passed(), heap=low)
+    assert code == 2 and measured == []  # not started
+    assert line == (f"the wiring could not be tested: RP2040 heap too low: {low} bytes free with the command "
+                    f"server loaded (the test needs {ttw.MIN_HEAP_FREE})")  # fmt: skip
+
+
+def test_each_pin_id_round_says_the_heap_free_while_it_sends():
+    _result, log = run_simulated(BoardModel(asic_wires(), project="drives_uio"), argv=ASIC, pin_id=True)
+    rounds = [line for line in log if line.startswith("MEM: ")]
+    assert rounds and all(line.startswith("MEM: 51000 bytes of the RP2's heap free while it sends ") for line in rounds)
+
+
+def test_the_command_server_never_imports_the_sdk_and_reports_its_heap():
+    fw = ttw.build_firmware("rp2040")
+    assert "import ttboard" not in fw and "from ttboard.demoboard" not in fw and "DemoBoard(" not in fw
+    assert "the SDK is not running on the board (no tt object)" in fw
+    assert "READY mem_free=" in fw and "VAL mem " in fw and "OK started mem_free=" in fw
+    compile(fw, "firmware", "exec")  # it is valid Python, as MicroPython will parse it
