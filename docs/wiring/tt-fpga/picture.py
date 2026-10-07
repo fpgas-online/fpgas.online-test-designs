@@ -99,6 +99,14 @@ def turned_round(w):
     return sorted(13 - pin for pin in w.pmod["ground_pins"])
 
 
+def carried_columns(w):
+    """The columns (0 at the left, as drawn) of the pins a cable carries: all but the power pins, one block."""
+    cols = sorted({5 - (pin - 1) % 6 for pin in range(1, 13) if pin not in w.pmod["power_pins"]})
+    if cols != list(range(cols[0], cols[-1] + 1)) or any(5 - (p - 1) % 6 in cols for p in w.pmod["power_pins"]):
+        raise SystemExit("picture.py: the pins a cable carries are no longer one block of columns")
+    return cols
+
+
 def pin_1_warning(w):
     """PIN_1 as the three sentences to print, or SystemExit if the wiring no longer makes the last one true."""
     if not set(turned_round(w)) <= set(w.pmod["signal_pins"]):
@@ -147,7 +155,7 @@ def draw(w, name):
         raise SystemExit("picture.py is laid out for three headers and three ports")
 
     sh.text(left, 40, f"Tiny Tapeout FPGA demo board to Pmod HAT: {title_end}", 22, "bold")
-    cables = "Three 10-pin ribbon cables (no 3.3 V wire), each pin 1 to pin 1, and one USB-C cable. Not to scale."
+    cables = "Three 10-pin ribbon cables, 3.3 V pins 6 and 12 left free (as we read Tim's answer); one USB-C cable."
     sh.text(left, 66, cables, SMALLEST, fill=MUTED)
 
     sh.rect(left, board_top, right - left, board_bottom - board_top, fill=BOARD_FILL, stroke=INK, sw=2, rx=10)
@@ -181,8 +189,11 @@ def draw(w, name):
         x0, port_top, x1, port_end = connector(sh, w, cx, hat_top + 16, lit, ringed)
         sh.text(cx, port_end + 30, port, 22, "bold", ink, "middle")
 
-        # the cable: a band from the header to the port, and a gold line from pin 1 to pin 1
-        sh.rect(x0, top_end, x1 - x0, port_top - top_end, fill=colour, stroke=colour, sw=2, opacity=BAND)
+        # the cable: a band over the columns it carries, from the header to the port, and a gold line from pin 1
+        # to pin 1. Our cables leave the 3.3 V pins free (wiring.toml, fact cable-fitted), so the band does too.
+        cols = carried_columns(w)
+        bx0, bx1 = x0 + cols[0] * CELL, x0 + (cols[-1] + 1) * CELL
+        sh.rect(bx0, top_end, bx1 - bx0, port_top - top_end, fill=colour, stroke=colour, sw=2, opacity=BAND)
         pin1 = x0 + 5 * CELL + CELL / 2  # pin 1 is the right-hand cell of the upper row
         sh.add(f'<line x1="{pin1}" y1="{top_end}" x2="{pin1}" y2="{port_top}" stroke="{GOLD if lit else FAINT}" '
                'stroke-width="6"/>')  # fmt: skip

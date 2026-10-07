@@ -95,6 +95,14 @@ def test_every_picture_says_in_words_that_the_gold_square_is_a_number_not_a_plac
             assert line.format(power="3.3 V") in words, (name, line)
 
 
+def test_a_cable_band_covers_the_columns_it_carries_and_leaves_the_3v3_column_free():
+    assert picture.carried_columns(W) == [1, 2, 3, 4, 5]  # pins 6 and 12 are column 0, as drawn
+    d = copy.deepcopy(wiring.DATA)
+    d["pmod"].update(signal_pins=[1, 2, 4, 5, 7, 8, 10, 11], ground_pins=[6, 12], power_pins=[3, 9])
+    with pytest.raises(SystemExit, match="one block of columns"):
+        picture.carried_columns(wiring.build(d))
+
+
 def test_the_warning_about_a_cable_turned_round_is_worked_out_from_the_numbering():
     assert picture.turned_round(W) == [2, 8]  # where pins 11 and 5, the ground pins, land
     d = copy.deepcopy(wiring.DATA)
