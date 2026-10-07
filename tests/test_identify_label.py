@@ -1105,3 +1105,18 @@ def test_no_module_imports_rpi_hwid():
             assert not any(n.split(".")[0] == "rpi_hwid" for n in names), path
             if isinstance(node, ast.Call) and getattr(node.func, "attr", "") == "import_module":
                 assert "rpi_hwid" not in ast.unparse(node), path
+
+
+def test_identify_tells_each_board_whether_the_host_is_set_up_for_it(tmp_path, locks):
+    """#155: as runner.verify does, so --identify reads a card the Acorn cannot name by its IDs (the vendor XDMA
+    sample) only on a host set up for an Acorn, and the label matches what the check read."""
+    seen = []
+
+    class Told(Identified):
+        def identify(self, host, found, options):
+            seen.append(options["configured"])
+            return super().identify(host, found, options)
+
+    _read({"acorn": Told("acorn", seen=[{"kind": "vendor-xdma", "bdf": "0000:01:00.0"}])}, tmp_path)
+    _read_auto({"acorn": Told("acorn", seen=[{"kind": "fpgas-online", "bdf": "0000:01:00.0"}])}, tmp_path)
+    assert seen == [True, False]

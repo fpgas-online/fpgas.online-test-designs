@@ -185,6 +185,73 @@ def test_a_board_on_sqrl_factory_image_still_has_its_link_and_jtag_checked(tmp_p
     assert "unconverted" in report["not_run"]["flash"]
 
 
+CLE101_IDCODE = 0x03631093  # XC7A100T, silicon version 0
+
+
+def test_an_acorn_host_checks_the_link_and_jtag_of_a_card_on_the_vendor_xdma_sample(tmp_path, images):
+    """#155: on a host set up for an Acorn, a card on the vendor XDMA sample (10ee:7011) is taken to be an
+    unconverted Acorn, as a factory-image card is: its link and its P1 JTAG are tested, nothing on BAR0. The
+    variant is not in its PCI IDs, so the jtag test takes either Acorn FPGA and names the variant it found."""
+    rig = Rig(tmp_path, images, ids=fk.VENDOR_XDMA)
+    rig.pi.idcode = CLE101_IDCODE
+    report = suite.check_board(rig.found(), rig.options(open_bar=fk.refuse, configured=True))
+    assert _results(report) == {"pcie-link": "pass", "rp1-pio": "pass", "jtag": "pass"}
+    assert set(report["not_run"]) == {"pcie-bar0", "flash", "ddr", "p2-uart", "p2-serial", "scratch", "p2-gpio"}
+    assert report["result"] == "fail"
+    assert report["reason"].startswith("unconverted: runs the vendor XDMA sample image, not the fpgas.online design")
+    (jtag,) = [t for t in report["tests"] if t["test"] == "jtag"]
+    assert jtag["variant"] == "cle-101"
+    assert report["identity"]["variant"] == "cle-101"
+    assert not rig.uart.opened_at
+
+
+def test_a_card_on_the_vendor_xdma_sample_is_not_tested_when_the_host_is_not_set_up_for_an_acorn(tmp_path, images):
+    """With fpga-board = auto, 10ee:7011 may be a NeTV2 (the Xilinx sample runs on one too): its pins are not the
+    Acorn's to drive, so nothing is tested, as before #155."""
+    rig = Rig(tmp_path, images, ids=fk.VENDOR_XDMA)
+    report = suite.check_board(rig.found(), rig.options(open_bar=fk.refuse))
+    assert report["tests"] == [] and report["result"] == "fail"
+    assert rig.pi.calls == []  # no pin read or driven, no openFPGALoader
+
+
+def test_jtag_with_no_known_variant_names_none_for_an_xc7a200t(tmp_path, images):
+    """The XC7A200T is in the CLE-215 and the CLE-215+: it passes as an Acorn's FPGA, and no variant is named."""
+    rig = Rig(tmp_path, images, ids=fk.VENDOR_XDMA)  # the fake's IDCODE is an XC7A200T
+    report = suite.check_board(rig.found(), rig.options(open_bar=fk.refuse, configured=True))
+    (jtag,) = [t for t in report["tests"] if t["test"] == "jtag"]
+    assert jtag["result"] == "pass" and "variant" not in jtag
+    assert report["variant"] is None and "variant" not in report["identity"]
+
+
+@pytest.mark.parametrize(
+    ("kind", "configured", "acorn"),
+    [("fpgas-online", False, True), ("sqrl-factory", False, True), ("vendor-xdma", False, False),
+     ("vendor-xdma", True, True), ("litex-other", True, False), ("xilinx-xdma", True, False),
+     ("pcileech", True, False), ("unknown", True, False)],
+)  # fmt: skip
+def test_which_cards_are_taken_to_be_acorns(kind, configured, acorn):
+    assert av.is_acorn({"kind": kind}, configured) is acorn
+
+
+def test_identify_on_an_acorn_host_reads_the_jtag_of_a_card_on_the_vendor_xdma_sample(tmp_path, images):
+    """--identify (and so the label) reads what the check reads: the IDCODE, and the variant it names."""
+    from fpgas_online_verify.boards.acorn import BOARD
+
+    rig = Rig(tmp_path, images, ids=fk.VENDOR_XDMA)
+    rig.pi.idcode = CLE101_IDCODE
+    ident = BOARD.identify({}, rig.found(), rig.options(open_bar=fk.refuse, configured=True))
+    assert ident["variant"] == "cle-101" and ident["idcode_device"] == "XC7A100T"
+
+
+def test_jtag_with_no_known_variant_fails_on_an_fpga_that_is_no_acorns(tmp_path, images):
+    rig = Rig(tmp_path, images, ids=fk.VENDOR_XDMA)
+    rig.pi.idcode = 0x0362D093  # XC7A35T: no Acorn has one
+    report = suite.check_board(rig.found(), rig.options(open_bar=fk.refuse, configured=True))
+    (jtag,) = [t for t in report["tests"] if t["test"] == "jtag"]
+    assert jtag["result"] == "fail" and "variant" not in jtag
+    assert "expected one XC7A100T (cle-101) or XC7A200T (cle-215/cle-215+)" in jtag["reason"]
+
+
 @pytest.mark.parametrize(
     ("ids", "cls", "bars", "title"),
     [

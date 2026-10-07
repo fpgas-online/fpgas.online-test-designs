@@ -352,6 +352,16 @@ def test_configured_for_one_board_the_check_sees_every_test_asked_for(opts):
     assert arty.options["tests"] == ["uart", "nope"]  # TestBoard.check makes "nope" an error
 
 
+def test_a_check_is_told_whether_the_host_is_set_up_for_its_board(opts):
+    """#155: the Acorn tests a card it cannot name (the vendor XDMA sample) only on a host set up for an Acorn."""
+    acorn = WithTests("acorn", ["jtag"], seen=[{"kind": "vendor-xdma"}])
+    runner.verify({**opts, "board": "acorn"}, _boards(acorn), usb=[], pci=[])
+    assert acorn.options["configured"] is True
+    acorn = WithTests("acorn", ["jtag"], seen=[{"kind": "fpgas-online"}])
+    runner.verify(opts, _boards(acorn), usb=[], pci=[], mode=("auto", "test"))
+    assert acorn.options["configured"] is False
+
+
 def test_the_same_board_and_flash_again_passes(opts):
     arty = Fake("arty", seen=[{"variant": "a7-35", "serial": "A"}])
     runner.verify({**opts, "board": "arty"}, _boards(arty), usb=[], pci=[])

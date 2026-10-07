@@ -234,7 +234,10 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
                 # still found, so still identified (once), from what finding it showed
                 board_event("fpga-board-identified", identity.details(identity.base(key, board.name, found)))
                 continue
-            board_options = {**board_options, "event": board_event, "board_key": key, identity.KEEP: kept.append}
+            # configured: the host is set up for this board (or its own command was run), not found by `auto`;
+            # the Acorn tests a card it cannot name by its IDs only then (#155)
+            board_options = {**board_options, "event": board_event, "board_key": key, identity.KEEP: kept.append,
+                             "configured": report["mode"] != config.AUTO}  # fmt: skip
             with hold_lock(board.lock, board.title):
                 reports.append(board.check(host, found, board_options))
         except Problem as p:
