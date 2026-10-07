@@ -21,7 +21,7 @@ def labels(svg):
 
 
 def test_there_is_a_picture_for_the_whole_wiring_and_one_for_each_page_that_picks_headers_out():
-    assert set(SVGS) == {f"{name}.svg" for name in picture.PICTURES}
+    assert set(SVGS) == {f"{name}.svg" for name in (*picture.PICTURES, picture.DISPLAY)}
     assert "tt-fpga-pmod-cables.svg" in SVGS
 
 
@@ -50,7 +50,8 @@ def test_the_shared_gpios_are_said_on_the_picture_from_the_hat_table():
 
 def test_it_brings_its_own_background_so_it_reads_on_a_light_and_a_dark_page():
     for name, svg in SVGS.items():
-        assert f'<rect width="{picture.W}" height="{picture.H}" fill="#fbfaf7"/>' in svg, name
+        root = re.match(r'<svg[^>]*width="(\d+)" height="(\d+)"', svg)
+        assert f'<rect width="{root[1]}" height="{root[2]}" fill="#fbfaf7"/>' in svg, name
 
 
 def test_it_loads_nothing_so_it_renders_from_its_raw_url():
@@ -77,6 +78,8 @@ def test_a_picture_that_picks_headers_out_still_names_every_cable():
 def test_every_picture_says_in_words_that_the_gold_square_is_a_number_not_a_place():
     """Where pin 1 is on a board has not been read off one, so the square must not be taken for a place."""
     for name, svg in SVGS.items():
+        if name == "tt-fpga-display.svg":  # not a picture of cables: no pin 1 on it
+            continue
         words = labels(svg)
         assert "The gold square is pin NUMBER 1 of the Pmod numbering. It is not a place on the board." in words, name
         assert (
@@ -91,3 +94,11 @@ def test_the_warning_about_a_cable_turned_round_is_worked_out_from_the_numbering
     d["pmod"].update(signal_pins=[2, 3, 4, 5, 8, 9, 10, 11], ground_pins=[6, 12], power_pins=[1, 7])
     with pytest.raises(SystemExit, match="it no longer does"):
         picture.pin_1_warning(wiring.build(d))
+
+
+def test_the_display_picture_letters_each_segment_with_the_bit_that_lights_it_and_does_not_place_a():
+    words = labels(SVGS["tt-fpga-display.svg"])
+    for seg, wire in zip(W.display["segments"], W.of_group(W.display["group"]), strict=True):
+        assert seg in words or (seg == "dot" and "decimal point" in words and "dot" in words)
+        assert wire.signal in words
+    assert "Where a is, and which way round the ring runs, is not recorded." in words

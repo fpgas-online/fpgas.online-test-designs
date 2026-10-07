@@ -8,7 +8,7 @@ For the person at the bench with a Tiny Tapeout demo board that has the FPGA bre
 
 **Finding the headers.** The demo board's three Pmod connectors are printed INPUT (`ui_in`), BIDIR (`uio`) and OUTPUT (`uo_out`). They are on the bottom edge, in that order from left to right, with the board held so that its "Tiny Tapeout Demoboard" text reads upright. A 12-pin Pmod cable joins each header to its port on the Digilent Pmod HAT, pin 1 to pin 1: INPUT to JA and OUTPUT to JC. A USB-C cable joins the demo board to a USB port of the Raspberry Pi.
 
-How the sockets and cables are made, and what is not yet known about the cables: see the cables page (`tt-fpga-cables.md`).
+How the sockets and cables are made, and what is not yet known about the cables: see [the cables page](tt-fpga-cables.md).
 
 **Reading the table.** *iCE40 pin* is the pin number of the FPGA itself (a Lattice iCE40UP5K in its 48-pin SG48 package). *Signal* is the Tiny Tapeout name a design uses. *Demo board* and *Pmod HAT* give the connector and its pin; a cable joins pins of the same number. *Pi GPIO* is the Raspberry Pi's GPIO number (the BCM number), not a position on its 40-pin header.
 
@@ -27,7 +27,7 @@ The Raspberry Pi drives these; the FPGA reads them. They are on the demo board's
 | 26 | `ui_in[6]` | INPUT pin 9 | JA pin 9 | GPIO20 | measured |
 | 27 | `ui_in[7]` | INPUT pin 10 | JA pin 10 | GPIO18 | measured |
 
-**Checked.** *measured*: read on boards on 29 September 2026 and 4 October 2026; for where and how, see Sources (`tt-fpga-sources.md`). *from the design*: not read on a board; it follows the pattern of the measured wires (bit n of a group on the pin of that place in its header and port); not measured by us.
+**Checked.** *measured*: read on boards on 29 September 2026 and 4 October 2026; for where and how, see [Sources](tt-fpga-sources.md). *from the design*: not read on a board; it follows the pattern of the measured wires (bit n of a group on the pin of that place in its header and port); not measured by us.
 
 **Shared GPIOs.** The Digilent Pmod HAT joins some pins of two ports to one Raspberry Pi GPIO, so the two signals on them are one wire at the Raspberry Pi: GPIO10 is JA pin 2 and JB pin 2 (`ui_in[1]` and `uio[1]`); GPIO9 is JA pin 3 and JB pin 3 (`ui_in[2]` and `uio[2]`); GPIO11 is JA pin 4 and JB pin 4 (`ui_in[3]` and `uio[3]`). Whatever the Raspberry Pi puts on such a GPIO reaches both signals. A design that drives one of these `uio` signals drives the signal it shares with too, and the Raspberry Pi must then leave that GPIO as an input.
 
@@ -46,4 +46,4 @@ The FPGA drives these; the Raspberry Pi reads them. The same eight signals light
 | 47 | `uo_out[6]` | OUTPUT pin 9 | JC pin 9 | GPIO5 | measured |
 | 48 | `uo_out[7]` | OUTPUT pin 10 | JC pin 10 | GPIO6 | measured |
 
-**Checked.** *measured*: read on boards on 29 September 2026 and 4 October 2026; for where and how, see Sources (`tt-fpga-sources.md`).
+**Checked.** *measured*: read on boards on 29 September 2026 and 4 October 2026; for where and how, see [Sources](tt-fpga-sources.md).

@@ -200,5 +200,62 @@ def draw(w, name):
     return sh.svg()
 
 
+DISPLAY = "tt-fpga-display"
+DISPLAY_W, DISPLAY_H = 760, 520
+# Where each segment is drawn: (x, y, w, h) of its bar, for the six of the ring in the order wiring.toml
+# lists them. Only so that the letters have somewhere to go: where a really is is not recorded.
+BAR, LONG = 26, 100
+DISPLAY_NOTE = "a is drawn at the top and the ring runs clockwise only to give the letters a place."
+
+
+def segment_boxes(x, y):
+    """{segment: (x, y, w, h)} for a seven-segment digit whose top left is (x, y), a at the top, running clockwise."""
+    near, far = x, x + LONG + BAR
+    return {
+        "a": (x + BAR, y, LONG, BAR),
+        "b": (far, y + BAR, BAR, LONG),
+        "c": (far, y + 2 * BAR + LONG, BAR, LONG),
+        "d": (x + BAR, y + 2 * LONG + 2 * BAR, LONG, BAR),
+        "e": (near, y + 2 * BAR + LONG, BAR, LONG),
+        "f": (near, y + BAR, BAR, LONG),
+        "g": (x + BAR, y + BAR + LONG, LONG, BAR),
+    }
+
+
+def draw_display(w):
+    """The seven-segment display: each segment lettered, and which uo_out bit lights it, from wiring.toml."""
+    group = w.display["group"]
+    segments = w.display["segments"]
+    wires = w.of_group(group)
+    if len(segments) != len(wires) or segments[:7] != list("abcdefg") or segments[7:] != ["dot"]:
+        raise SystemExit("picture.py draws the display as segments a to g and a dot, in that order")
+    sh = Sheet(DISPLAY_W, DISPLAY_H)
+    colour = w.groups[group]["colour"]
+    sh.text(30, 40, f"The seven-segment display: which {group} bit lights which segment", 20, "bold")
+    sh.text(30, 66, "A diagram. The signals are the ones on the demo board's OUTPUT header.", SMALLEST, fill=MUTED)
+    x0, y0 = 50, 100
+    for seg, (x, y, bw, bh) in segment_boxes(x0, y0).items():
+        sh.rect(x + 2, y + 2, bw - 4, bh - 4, fill=colour, stroke=INK, sw=1.5, rx=6, extra='fill-opacity="0.35"')
+        sh.text(x + bw / 2, y + bh / 2 + 5, seg, SMALLEST, "bold", INK, "middle", box=(x, y, x + bw, y + bh))
+    dx, dy = x0 + 2 * LONG + 2 * BAR + 24, y0 + 2 * LONG + 3 * BAR - 12
+    sh.add(
+        f'<circle cx="{dx}" cy="{dy}" r="13" fill="{colour}" fill-opacity="0.35" stroke="{INK}" stroke-width="1.5"/>'
+    )
+    sh.text(dx, dy + 40, "dot", SMALLEST, "bold", INK, "middle")
+    x = 400
+    sh.text(x, 130, "Segment", SMALLEST, "bold", MUTED)
+    sh.text(x + 120, 130, "Lit by", SMALLEST, "bold", MUTED)
+    for i, (seg, wire) in enumerate(zip(segments, wires, strict=True)):
+        y = 164 + 30 * i
+        sh.text(x, y, "decimal point" if seg == "dot" else seg, SMALLEST, "bold")
+        sh.text(x + 120, y, wire.signal, SMALLEST, "mono")
+    box = (30, DISPLAY_H - 100, DISPLAY_W - 30, DISPLAY_H - 30)
+    sh.rect(box[0], box[1], box[2] - box[0], box[3] - box[1], fill="#fff4d6", stroke=GOLD, sw=2, rx=8)
+    sh.text(46, DISPLAY_H - 72, DISPLAY_NOTE, 16, "bold", box=box)
+    sh.text(46, DISPLAY_H - 48, "Where a is, and which way round the ring runs, is not recorded.", 16, box=box)
+    sh.check(DISPLAY)
+    return sh.svg()
+
+
 def build(w=wiring.WIRING):
-    return {f"{name}.svg": draw(w, name) for name in PICTURES}
+    return {**{f"{name}.svg": draw(w, name) for name in PICTURES}, f"{DISPLAY}.svg": draw_display(w)}

@@ -93,28 +93,33 @@ def test_the_rows_the_hand_written_page_had_are_still_what_the_tables_say():
 def test_a_page_with_a_wire_table_repeats_the_picture_and_how_to_find_the_header_in_place():
     for name in WIRE_PAGES:
         text = FILES[name]
-        shown = re.findall(r"\[!\[[^\]]+\]\((tt-fpga-pmod-cables[a-z-]*)\.png\)\]\(\1\.svg\)", text)
-        assert shown and set(shown) <= set(picture.PICTURES), name
+        shown = re.findall(r"\[!\[[^\]]+\]\((tt-fpga-[a-z-]*)\.png\)\]\(\1\.svg\)", text)
+        if name == "tt-fpga-pins-other.md":  # its picture is the display's, in its own section
+            assert shown == [picture.DISPLAY], name
+        else:
+            assert shown and set(shown) <= set(picture.PICTURES), name
         assert "**Finding the headers.**" in text, name
         assert "pin 1 to pin 1" in text, name
     # the picture of each page picks out the headers that page is about
     assert "tt-fpga-pmod-cables-ui-uo.png" in FILES["tt-fpga-pins-ui-uo.md"]
-    assert "tt-fpga-pmod-cables-uo.png" in FILES["tt-fpga-pins-other.md"]
     assert "(tt-fpga-pmod-cables.png)" in FILES["tt-fpga-pins-uio-uart.md"]
 
 
 def test_a_measured_wire_has_its_dates_under_its_table_and_its_place_once_on_the_sources_page():
     (m,) = W.measurements
-    line = "*measured*: read on boards on 29 September 2026 and 4 October 2026; for where and how, see Sources"
+    line = (
+        "*measured*: read on boards on 29 September 2026 and 4 October 2026; "
+        "for where and how, see [Sources](tt-fpga-sources.md)"
+    )
     for name in ("tt-fpga-cables.md", "tt-fpga-pins-ui-uo.md", "tt-fpga-pins-uio-uart.md", "tt-fpga-pins-other.md"):
         text = FILES[name]
-        assert line in text and "(`tt-fpga-sources.md`)" in text, name
+        assert line in text, name
         assert m.where not in text and "sw2" not in text, name
     for name in ("tt-fpga-cables.md", "tt-fpga-pins-ui-uo.md", "tt-fpga-pins-uio-uart.md"):
         text = FILES[name]
         assert "*from the design*: not read on a board;" in text and "not measured by us" in text, name
     sources = FILES["tt-fpga-sources.md"]
-    assert sources.count(m.where) == 1 and m.when in sources and m.record in sources
+    assert sources.count(m.where) == 1 and m.when in sources and tables.linked_paths(m.record) in sources
     assert "the host at sw2 p34 was not powered either time" in sources
     assert "test_identify_pmod_pins.py" in m.record and "`8987ede`" in m.record and "`ef38e22`" in m.record
 
@@ -130,10 +135,14 @@ def test_the_pin_1_warning_is_under_every_picture():
         "the board. Find pin 1 on each connector by its marking before plugging a cable in. A 2x6 cable turned "
         "round puts 3.3 V on signal pins."
     )
-    for name in WIRE_PAGES:
+    for name in WIRE_PAGES:  # the display's picture is no picture of cables, so has no pin 1 to warn about
         text = FILES[name]
-        assert text.count(warning) == text.count(".png)](") >= 1, name
-        for shown in re.finditer(r"\.svg\)\n\n", text):
+        pictures = text.count("(tt-fpga-pmod-cables")
+        if name == "tt-fpga-pins-other.md":
+            assert pictures == 0 and warning not in text, name
+            continue
+        assert text.count(warning) == pictures // 2 >= 1, name  # each picture names its PNG and its SVG
+        for shown in re.finditer(r"tt-fpga-pmod-cables[a-z-]*\.svg\)\n\n", text):
             assert text[shown.end() :].startswith(warning), name
 
 
@@ -161,7 +170,7 @@ def test_a_pin_table_page_points_at_the_cables_page_instead_of_repeating_the_mak
     for name in ("tt-fpga-pins-ui-uo.md", "tt-fpga-pins-uio-uart.md", "tt-fpga-pins-other.md"):
         text = FILES[name]
         assert tables.SEE_CABLES.strip() in text, name
-        assert "see the cables page (`tt-fpga-cables.md`)" in text, name
+        assert "see [the cables page](tt-fpga-cables.md)" in text, name
         assert not [line for line in text.splitlines() if line.startswith("- ")], name
         assert "From the makers' documents" not in text and "rainbow" not in text, name
         assert "are printed INPUT (`ui_in`), BIDIR (`uio`) and OUTPUT (`uo_out`)." in text, name
@@ -169,14 +178,15 @@ def test_a_pin_table_page_points_at_the_cables_page_instead_of_repeating_the_mak
 
 def test_the_serial_ports_test_has_its_date_on_the_page_and_its_place_on_the_sources_page():
     text = FILES["tt-fpga-pins-uio-uart.md"]
-    assert "That test passed on 2 October 2026; for where, see Sources (`tt-fpga-sources.md`)." in text
-    assert f"It passed on 2 October 2026 on {W.uart['checked']['where']}." in FILES["tt-fpga-sources.md"]
+    assert "That test passed on 2 October 2026; for where, see [Sources](tt-fpga-sources.md)." in text
+    where = tables.linked_paths(W.uart["checked"]["where"])
+    assert f"It passed on 2 October 2026 on {where}." in FILES["tt-fpga-sources.md"]
 
 
 def test_every_makers_fact_has_its_source_on_the_sources_page_and_none_is_called_verified():
     text = FILES["tt-fpga-sources.md"]
     for fact in W.facts.values():
-        assert f"- {fact['says']}: {fact['source']}." in text, fact["key"]
+        assert f"- {fact['says']}: {tables.linked_paths(fact['source'])}." in text, fact["key"]
     assert "mirrored between the host connector and the peripheral board connector" in text
     assert "github.com/TinyTapeout/tt-demo-pcb" in text and text.count("read from a copy on 6 October 2026") >= 3
     assert "verified by us on" not in text.replace("not verified by us on", "")
@@ -226,7 +236,7 @@ def test_the_page_of_other_pins_says_there_is_no_flash_and_that_no_cable_carries
 def test_the_sources_page_prints_every_source_and_says_what_nobody_checked():
     text = FILES["tt-fpga-sources.md"]
     for claim, source in tables.sources().items():
-        assert f"- {claim}: {source}." in text
+        assert f"- {claim}: {tables.linked_paths(source)}." in text
     assert set(W.sources) < set(tables.sources())  # the measurements add their own entries
     assert "{" not in text  # no placeholder left unfilled
     assert text.count("not verified by us") >= 5 and "not measured by us" in text
@@ -244,3 +254,28 @@ def test_the_words_follow_the_writing_rules():
         for seen in re.findall(r"[^.;]*sw2 p\d+[^.;]*", text):
             assert "seen at welland's sw2" in text, name
             assert "that day" in seen or "those days" in seen or "either time" in seen, (name, seen)
+
+
+def test_every_other_page_is_a_markdown_link_to_its_sibling_fragment_not_a_file_name_in_backticks():
+    """The docs site includes each fragment with :relative-docs: tt-fpga-, which rewrites a link to a sibling."""
+    for name, text in FILES.items():
+        assert not re.search(r"`tt-fpga-[a-z-]+\.md`", text), name
+        for target in re.findall(r"\]\((tt-fpga-[a-z-]+\.md)\)", text):
+            assert target in FILES and target != name, (name, target)
+    assert "[Sources](tt-fpga-sources.md)" in FILES["tt-fpga-cables.md"]
+    assert "[the cables page](tt-fpga-cables.md)" in FILES["tt-fpga-pins-other.md"]
+
+
+def test_the_files_of_this_repository_named_on_the_sources_page_are_links_to_them_on_github():
+    text = FILES["tt-fpga-sources.md"]
+    assert not re.search(r"(?<!\[)`(?:docs|designs)/[^`\s]+`(?!\]\()", text)
+    base = "https://github.com/fpgas-online/fpgas.online-test-designs/blob/main/"
+    assert f"[`docs/hardware/pmod-tt.md`]({base}docs/hardware/pmod-tt.md)" in text
+    assert f"[`designs/_host/tt_fpga_program.py`]({base}designs/_host/tt_fpga_program.py)" in text
+
+
+def test_the_display_section_shows_the_display_not_the_cable_diagram():
+    text = FILES["tt-fpga-pins-other.md"]
+    section = text.split("### The seven-segment display")[1].split("### The clock")[0]
+    assert f"({picture.DISPLAY}.png)]({picture.DISPLAY}.svg)" in section
+    assert "tt-fpga-pmod-cables" not in section

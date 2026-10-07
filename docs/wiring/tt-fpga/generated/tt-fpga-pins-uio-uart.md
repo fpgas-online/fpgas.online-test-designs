@@ -8,7 +8,7 @@ For the person at the bench with a Tiny Tapeout demo board that has the FPGA bre
 
 **Finding the headers.** The demo board's three Pmod connectors are printed INPUT (`ui_in`), BIDIR (`uio`) and OUTPUT (`uo_out`). They are on the bottom edge, in that order from left to right, with the board held so that its "Tiny Tapeout Demoboard" text reads upright. A 12-pin Pmod cable joins each header to its port on the Digilent Pmod HAT, pin 1 to pin 1: INPUT to JA, BIDIR to JB and OUTPUT to JC. A USB-C cable joins the demo board to a USB port of the Raspberry Pi.
 
-How the sockets and cables are made, and what is not yet known about the cables: see the cables page (`tt-fpga-cables.md`).
+How the sockets and cables are made, and what is not yet known about the cables: see [the cables page](tt-fpga-cables.md).
 
 **Reading the table.** *iCE40 pin* is the pin number of the FPGA itself (a Lattice iCE40UP5K in its 48-pin SG48 package). *Signal* is the Tiny Tapeout name a design uses. *Demo board* and *Pmod HAT* give the connector and its pin; a cable joins pins of the same number. *Pi GPIO* is the Raspberry Pi's GPIO number (the BCM number), not a position on its 40-pin header.
 
@@ -27,7 +27,7 @@ Either end may drive each of these: the design decides, signal by signal. They a
 | 11 | `uio[6]` | BIDIR pin 9 | JB pin 9 | GPIO3 | measured |
 | 12 | `uio[7]` | BIDIR pin 10 | JB pin 10 | GPIO2 | measured |
 
-**Checked.** *measured*: read on boards on 29 September 2026 and 4 October 2026; for where and how, see Sources (`tt-fpga-sources.md`). *from the design*: not read on a board; it follows the pattern of the measured wires (bit n of a group on the pin of that place in its header and port); not measured by us.
+**Checked.** *measured*: read on boards on 29 September 2026 and 4 October 2026; for where and how, see [Sources](tt-fpga-sources.md). *from the design*: not read on a board; it follows the pattern of the measured wires (bit n of a group on the pin of that place in its header and port); not measured by us.
 
 **Shared GPIOs.** The Digilent Pmod HAT joins some pins of two ports to one Raspberry Pi GPIO, so the two signals on them are one wire at the Raspberry Pi: GPIO10 is JA pin 2 and JB pin 2 (`ui_in[1]` and `uio[1]`); GPIO9 is JA pin 3 and JB pin 3 (`ui_in[2]` and `uio[2]`); GPIO11 is JA pin 4 and JB pin 4 (`ui_in[3]` and `uio[3]`). Whatever the Raspberry Pi puts on such a GPIO reaches both signals. A design that drives one of these `uio` signals drives the signal it shares with too, and the Raspberry Pi must then leave that GPIO as an input.
 
@@ -42,8 +42,8 @@ A design's serial port uses two of the signals of the other two headers, by Tiny
 
 On its way to the Raspberry Pi's GPIO, `ui_in[3]` is from the design and `uo_out[4]` is measured.
 
-**Checked.** *measured*: read on boards on 29 September 2026 and 4 October 2026; for where and how, see Sources (`tt-fpga-sources.md`). *from the design*: not read on a board; it follows the pattern of the measured wires (bit n of a group on the pin of that place in its header and port); not measured by us.
+**Checked.** *measured*: read on boards on 29 September 2026 and 4 October 2026; for where and how, see [Sources](tt-fpga-sources.md). *from the design*: not read on a board; it follows the pattern of the measured wires (bit n of a group on the pin of that place in its header and port); not measured by us.
 
-The demo board's microcontroller (an RP2350 on a version 3 demo board) is on the same two signals: its GPIO20 sends to `ui_in[3]` and its GPIO37 receives from `uo_out[4]`. Our `uart` test talks to the design through the microcontroller and the USB-C cable, not through the Pmod HAT. That test passed on 2 October 2026; for where, see Sources (`tt-fpga-sources.md`). Nobody has used these two signals as a serial port from the Raspberry Pi's own GPIOs, which would mean sending on GPIO11 and receiving on GPIO4.
+The demo board's microcontroller (an RP2350 on a version 3 demo board) is on the same two signals: its GPIO20 sends to `ui_in[3]` and its GPIO37 receives from `uo_out[4]`. Our `uart` test talks to the design through the microcontroller and the USB-C cable, not through the Pmod HAT. That test passed on 2 October 2026; for where, see [Sources](tt-fpga-sources.md). Nobody has used these two signals as a serial port from the Raspberry Pi's own GPIOs, which would mean sending on GPIO11 and receiving on GPIO4.
 
 **Shared GPIOs.** The Digilent Pmod HAT joins some pins of two ports to one Raspberry Pi GPIO, so the two signals on them are one wire at the Raspberry Pi: GPIO11 is JA pin 4 and JB pin 4 (`ui_in[3]` and `uio[3]`). Whatever the Raspberry Pi puts on such a GPIO reaches both signals. A design that drives one of these `uio` signals drives the signal it shares with too, and the Raspberry Pi must then leave that GPIO as an input.

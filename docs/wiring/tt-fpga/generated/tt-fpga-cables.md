@@ -30,7 +30,7 @@ For the person at the bench with a Tiny Tapeout demo board that has the FPGA bre
 - What cable is fitted on our boards, and whether its pins 6 and 12 are connected, is not recorded; asked on 6 October 2026.
 - Seen on the cameras of the boards shown as fpga-1 and fpga-3 on tinytapeout.fpgas.online on 6 October 2026: a black two-row housing is plugged on each of the demo board's three connectors, and a rainbow ribbon runs from them on fpga-1. Neither the wires nor any pin 1 mark can be made out.
 
-On a Pmod connector pins 1 to 6 are one row and pins 7 to 12 the other; pins 5 and 11 are ground and pins 6 and 12 are 3.3 V. Where each of these statements comes from: Sources (`tt-fpga-sources.md`).
+On a Pmod connector pins 1 to 6 are one row and pins 7 to 12 the other; pins 5 and 11 are ground and pins 6 and 12 are 3.3 V. Where each of these statements comes from: [Sources](tt-fpga-sources.md).
 
 | Demo board header | Signals | Pmod HAT port | Driven by | Checked |
 |---|---|---|---|---|
@@ -38,7 +38,7 @@ On a Pmod connector pins 1 to 6 are one row and pins 7 to 12 the other; pins 5 a
 | BIDIR | `uio[0]` to `uio[7]` | JB | either end | measured, except the wires on shared GPIOs |
 | OUTPUT | `uo_out[0]` to `uo_out[7]` | JC | the FPGA | measured |
 
-**Checked.** *measured*: read on boards on 29 September 2026 and 4 October 2026; for where and how, see Sources (`tt-fpga-sources.md`). *from the design*: not read on a board; it follows the pattern of the measured wires (bit n of a group on the pin of that place in its header and port); not measured by us.
+**Checked.** *measured*: read on boards on 29 September 2026 and 4 October 2026; for where and how, see [Sources](tt-fpga-sources.md). *from the design*: not read on a board; it follows the pattern of the measured wires (bit n of a group on the pin of that place in its header and port); not measured by us.
 
 **Shared GPIOs.** The Digilent Pmod HAT joins some pins of two ports to one Raspberry Pi GPIO, so the two signals on them are one wire at the Raspberry Pi: GPIO10 is JA pin 2 and JB pin 2 (`ui_in[1]` and `uio[1]`); GPIO9 is JA pin 3 and JB pin 3 (`ui_in[2]` and `uio[2]`); GPIO11 is JA pin 4 and JB pin 4 (`ui_in[3]` and `uio[3]`). Whatever the Raspberry Pi puts on such a GPIO reaches both signals. A design that drives one of these `uio` signals drives the signal it shares with too, and the Raspberry Pi must then leave that GPIO as an input.
 

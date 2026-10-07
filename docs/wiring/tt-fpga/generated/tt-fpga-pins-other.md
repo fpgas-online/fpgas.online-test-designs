@@ -30,13 +30,11 @@ Which microcontroller pin is wired to which of the four iCE40 pins is not record
 
 The display is on the eight `uo_out` signals, the same ones that go to the OUTPUT header: whatever a design puts on `uo_out` shows on the display and reaches the Raspberry Pi too. Segments a to f are the six bars of the outer ring, in the order `designs/tt-display` runs round it; where a is, and which way round the ring that order goes, is not recorded and not verified by us. g is the middle bar and the dot is the decimal point.
 
-[![The OUTPUT header goes to port JC](tt-fpga-pmod-cables-uo.png)](tt-fpga-pmod-cables-uo.svg)
-
-**Pin 1 on the picture.** The gold square is pin NUMBER 1 of the Pmod numbering. It is not a place on the board. Find pin 1 on each connector by its marking before plugging a cable in. A 2x6 cable turned round puts 3.3 V on signal pins.
+[![The seven-segment display: each segment lettered, with the uo_out bit that lights it](tt-fpga-display.png)](tt-fpga-display.svg)
 
 **Finding the headers.** The demo board's three Pmod connectors are printed INPUT (`ui_in`), BIDIR (`uio`) and OUTPUT (`uo_out`). They are on the bottom edge, in that order from left to right, with the board held so that its "Tiny Tapeout Demoboard" text reads upright. A 12-pin Pmod cable joins the header to its port on the Digilent Pmod HAT, pin 1 to pin 1: OUTPUT to JC. A USB-C cable joins the demo board to a USB port of the Raspberry Pi.
 
-How the sockets and cables are made, and what is not yet known about the cables: see the cables page (`tt-fpga-cables.md`).
+How the sockets and cables are made, and what is not yet known about the cables: see [the cables page](tt-fpga-cables.md).
 
 | Segment | Signal | iCE40 pin | Demo board | Pmod HAT | Pi GPIO |
 |---|---|---|---|---|---|
@@ -49,7 +47,7 @@ How the sockets and cables are made, and what is not yet known about the cables:
 | g | `uo_out[6]` | 47 | OUTPUT pin 9 | JC pin 9 | GPIO5 |
 | dot | `uo_out[7]` | 48 | OUTPUT pin 10 | JC pin 10 | GPIO6 |
 
-**Checked.** *measured*: read on boards on 29 September 2026 and 4 October 2026; for where and how, see Sources (`tt-fpga-sources.md`). Which segment each signal lights is from Tiny Tapeout's board specification; not verified by us segment by segment.
+**Checked.** *measured*: read on boards on 29 September 2026 and 4 October 2026; for where and how, see [Sources](tt-fpga-sources.md). Which segment each signal lights is from Tiny Tapeout's board specification; not verified by us segment by segment.
 
 ### The clock, the reset and the LED
 

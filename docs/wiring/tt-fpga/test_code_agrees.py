@@ -166,3 +166,20 @@ def test_the_serial_bridge_is_on_the_two_microcontroller_pins_of_the_wirings_ser
     # the microcontroller sends on the design's RX and receives on the design's TX
     expected = f"uart = UART({u['mcu_uart']}, {u['baud']}, tx=Pin({rx.mcu_gpio}), rx=Pin({tx.mcu_gpio}))"
     assert expected in BRIDGE.read_text()
+
+
+def test_the_loader_starts_the_clock_and_frees_the_gpios_only_with_gpio_release_and_the_bridge_starts_its_own():
+    """The sources page says so in those words: the flag's name, what it does, and that the bridge needs no flag."""
+    text = LOADER.read_text()
+    assert 'add_argument(\n        "--gpio-release",' in text
+    snippet = literal(LOADER, "GPIO_RELEASE_SNIPPET")
+    assert "PWM(Pin(16))" in snippet and "Pin(g, Pin.IN)" in snippet
+    # the clock is started nowhere else in the loader, and the snippet is added only when the flag is given
+    assert text.count("PWM(Pin(") == snippet.count("PWM(Pin(")
+    assert "    if gpio_release:\n        script += GPIO_RELEASE_SNIPPET\n" in text
+    # the bridge loads without the flag, so it has to start the clock itself (test above)
+    assert re.findall(r"tt_fpga_program\.program\(([^)]*)\)", BRIDGE.read_text()) == ["port, local_path"] * 2
+    said = next(v for k, v in W.sources.items() if k.startswith("The other RP2350 GPIO numbers"))
+    assert "run with `--gpio-release`, starts the clock and then sets the GPIOs of the 24 signals to inputs" in said
+    assert "without that flag it starts no clock and leaves GPIO17 to GPIO40 as they were" in said
+    assert "Our serial bridge starts the clock itself" in said

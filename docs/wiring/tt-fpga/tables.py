@@ -17,6 +17,7 @@ Every wire's row comes from wiring.WIRING, so no number is written twice.
 """
 
 import pathlib
+import re
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))  # docs/wiring, for wiringlib
@@ -49,6 +50,16 @@ CABLES_PAGE = "tt-fpga-cables.md"
 
 def code(s):
     return f"`{s}`"
+
+
+GITHUB = "https://github.com/fpgas-online/fpgas.online-test-designs/blob/main/"
+REPO_PATH = re.compile(r"`((?:docs|designs)/[^`\s]+)`")
+
+
+def linked_paths(text):
+    """`docs/...` and `designs/...` paths in backticks, as links to the file on GitHub: the docs site cannot
+    reach this repository's files any other way."""
+    return REPO_PATH.sub(lambda m: f"[`{m.group(1)}`]({GITHUB}{m.group(1)})", text)
 
 
 def spoken(items):
@@ -92,8 +103,8 @@ def finding(keys=None):
 
 # On a pin table's page, in place of the makers' list: its reader is looking up a GPIO, not plugging a cable.
 SEE_CABLES = (
-    "How the sockets and cables are made, and what is not yet known about the cables: see the cables page "
-    f"({code(CABLES_PAGE)}).\n"
+    "How the sockets and cables are made, and what is not yet known about the cables: see "
+    f"[the cables page]({CABLES_PAGE}).\n"
 )
 MAKERS_LISTS = {"demo": "The demo board's sockets", "hat": "The Pmod HAT's ports", "cables": "The cables"}
 
@@ -107,7 +118,7 @@ def makers():
     out.append(
         f"On a Pmod connector pins 1 to 6 are one row and pins 7 to 12 the other; pins "
         f"{spoken(W.pmod['ground_pins'])} are ground and pins {spoken(W.pmod['power_pins'])} are "
-        f"{W.pmod['power']}. Where each of these statements comes from: Sources ({code(SOURCES_PAGE)})."
+        f"{W.pmod['power']}. Where each of these statements comes from: [Sources]({SOURCES_PAGE})."
     )
     return "\n\n".join(out) + "\n"
 
@@ -149,8 +160,7 @@ def checked(wires):
     for m in dict.fromkeys(W.measured(w) for w in wires):
         if m is not None:
             out.append(
-                f"*measured*: read on boards on {spoken(m.dates)}; for where and how, see Sources "
-                f"({code(SOURCES_PAGE)})."
+                f"*measured*: read on boards on {spoken(m.dates)}; for where and how, see [Sources]({SOURCES_PAGE})."
             )
     if any(W.measured(w) is None for w in wires):
         out.append(f"*from the design*: not read on a board; {W.unmeasured['why']}.")
@@ -264,7 +274,7 @@ def uart_section():
         f"GPIO{rx.mcu_gpio} sends to {code(rx.signal)} and its GPIO{tx.mcu_gpio} receives from "
         f"{code(tx.signal)}. Our {code('uart')} test talks to the design through the microcontroller and the "
         f"USB-C cable, not through the Pmod HAT. That test passed on {u['checked']['date']}; for where, see "
-        f"Sources ({code(SOURCES_PAGE)}). Nobody has used these two signals as a serial "
+        f"[Sources]({SOURCES_PAGE}). Nobody has used these two signals as a serial "
         f"port from the Raspberry Pi's own GPIOs, which would mean sending on GPIO{rx.gpio} and receiving on "
         f"GPIO{tx.gpio}.",
     ]
@@ -322,7 +332,8 @@ def display_section():
             "reaches the Raspberry Pi too. Segments a to f are the six bars of the outer ring, in the order "
             "`designs/tt-display` runs round it; where a is, and which way round the ring that order goes, is "
             "not recorded and not verified by us. g is the middle bar and the dot is the decimal point.",
-            image("tt-fpga-pmod-cables-uo", f"The {header_name(key)} header goes to port {W.cables[key]}").strip(),
+            f"[![The seven-segment display: each segment lettered, with the {group} bit that lights it]"
+            f"({picture.DISPLAY}.png)]({picture.DISPLAY}.svg)",
             finding([key]).strip(),
             SEE_CABLES.strip(),
             table(["Segment", "Signal", "iCE40 pin", *CHAIN[2:]], rows).strip(),
@@ -411,7 +422,7 @@ def sources_page():
         "checked says so. A board is named by where it was seen on the day of the measurement, because that is "
         "all the record gives.",
         "",
-        *(f"- {claim}: {source}." for claim, source in sources().items()),
+        *(f"- {claim}: {linked_paths(source)}." for claim, source in sources().items()),
     ]
     return "\n".join(lines) + "\n"
 
