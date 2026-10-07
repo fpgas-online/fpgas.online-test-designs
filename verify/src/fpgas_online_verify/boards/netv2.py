@@ -57,8 +57,12 @@ class NeTV2(TestBoard):
     tests: ClassVar[dict] = {
         "uart": {"artifact": "uart-test-netv2-{v}/kosagi_netv2.bit", "script": "test_uart.py",
                  "args": ["--port", "{port}", "--board", "netv2", "--skip-banner"], "verify": True},
+        # The BIOS prints its SDRAM calibration once, at start, before the memtest, and test_ddr.py needs both:
+        # opened after the load, the Pi's own UART has already dropped the calibration (every Welland NeTV2,
+        # 2026-10-06). So it listens from before the load, and its timeout covers the load, as spiflash's does.
         "ddr": {"artifact": "ddr-test-netv2-{v}/kosagi_netv2.bit", "script": "test_ddr.py",
-                "args": ["--port", "{port}", "--board", "netv2"], "verify": True},
+                "args": ["--port", "{port}", "--board", "netv2", "--timeout", "180"], "verify": True,
+                "listen": True},
         # It prints its JEDEC ID once, at start, onto the Pi's own UART, so it listens from before the load
         # (listen.py), and its timeout covers the load too (openocd on a Pi 3 takes a minute or more).
         "spiflash": {"artifact": "spiflash-test-netv2-{v}/kosagi_netv2.bit", "script": "test_spiflash.py",
