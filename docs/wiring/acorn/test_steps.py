@@ -200,7 +200,8 @@ def test_the_procedure_is_complete_in_itself(key):
     assert text.rstrip().endswith(gen_credits(key) + ".")
     assert ("Solder the 470 Ω resistor between the two cut ends." in text) == bool(RAW[key].get("resistors"))
     assert ("heat-shrink tube, about 3 mm" in text) == bool(RAW[key].get("resistors"))
-    assert text.count("which can destroy the host") == sum(
+    building = text.replace(steps.fit_block(c).rstrip(), "")  # the fitting step says it again, for both
+    assert building.count(f", {steps.HARM}.") == sum(
         "puts 5 V on" in steps.turned_warning(c, steps.housing(c, conn)) for conn in wiring.CONNECTORS
     )
     assert f"about {CUT} mm from the plug" in text and "buy a few more than this, as spares" in text
@@ -261,6 +262,50 @@ def test_the_last_step_fits_plugs_then_card_then_both_housings_on_their_headers(
         fit = f"the {connector} housing on the {c.headers[plan.header].name}"
         assert last.index(fit) > order[-1]
         assert f"marked corner on pin {plan.first}" in last
+
+
+def test_the_look_before_power_names_each_marked_pin_and_says_what_a_turned_housing_does():
+    """The last fitting action, per carrier, from the wiring: a Pi 5 housing has no 5 V to turn onto."""
+    assert steps.HARM == "which can destroy the FPGA pin on the Acorn that wire reaches"
+    for c in wiring.CARRIERS.values():
+        last = steps.fit_actions(c)[-1]
+        assert last.startswith("Before powering on, look at both housings again")
+        for connector in wiring.CONNECTORS:
+            plan = steps.housing(c, connector)
+            assert f"pin {plan.first} of the {c.headers[plan.header].name}" in last
+    pi5 = steps.fit_actions(wiring.CARRIERS["pi5"])[-1]
+    assert "5 V" not in pi5 and steps.HARM not in pi5
+    assert "marked corner is on pin 19 of the 40-pin header" in pi5 and "P2 housing's on pin 5 of the" in pi5
+    assert "Turned round, either housing puts its wires on the wrong pins." in pi5
+    blade = steps.fit_actions(wiring.CARRIERS["blade"])[-1]
+    assert "P1 housing's marked corner is on pin 1 of the Extension Port" in blade
+    assert "P2 housing's on pin 1 of the UART" in blade
+    assert (
+        "Turned round, the P1 housing puts 5 V on the TCK wire and the P2 housing puts 5 V on the K2 wire, "
+        f"{steps.HARM}." in blade
+    )
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_the_fitting_picture_draws_every_action_of_the_list_beside_it_with_its_number(key):
+    c = wiring.CARRIERS[key]
+    actions = steps.fit_actions(c)
+    svg = steps.fit(c)
+    assert re.findall(r'<circle id="action-(\d+)"', svg) == [str(n) for n in range(1, len(actions) + 1)]
+    drawn = " ".join(words(svg))
+    for action in actions:
+        assert action in drawn, action
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_the_finished_wiring_sheet_is_on_the_overview_not_on_the_fitting_page(key):
+    c = wiring.CARRIERS[key]
+    pages = steps.guide(c)
+    sheet = f"{steps.SHEETS[key]}.png"
+    assert sheet in pages[steps.guide_name(c, "overview")]
+    fit = pages[steps.guide_name(c, "fit")]
+    assert sheet not in fit and "finished wiring" not in fit.lower()
+    assert steps.procedure(c).count(f"({sheet})") == 1
 
 
 def test_the_ground_check_is_in_each_flag_step_and_on_the_box():

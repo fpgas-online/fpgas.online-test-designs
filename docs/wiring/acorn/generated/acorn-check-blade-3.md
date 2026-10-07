@@ -2,8 +2,6 @@
 
 ## What has been run on a Compute Blade
 
-**What to expect on a Compute Blade today.** `pcie-link` passes when the card is seated, on SQRL's factory image or on the vendor's XDMA sample image (version 0.0.post1220 or newer). On a Compute Module 5 `jtag` cannot run in a boot that has the header's serial port on (kernel 6.18): the serial port holds GPIO14, which is also the JTAG TMS wire, so `jtag` fails there whatever the wiring. With the port off at boot (a change to the gateway's boot files, on the page "verifying 3"), `jtag` passes (it reads the IDCODE and device DNA): run on pi20 at ps1 on 7 October 2026. On a Compute Module 4 it has not been run by us. Every other test but `rp1-pio` is `not run` until the card is converted to the fpgas.online design, and converting a card on a blade has not been done by us. So the result today is `fail` even with perfect cables: it shows that the card is seated and its PCIe link is up, and it cannot yet show that the two cables are right. The bench check with a meter, before fitting, is what the cables rest on until then.
-
 What has been run on a Compute Blade, and what has not, as of 7 October 2026:
 
 | | State |
@@ -24,7 +22,11 @@ kernel keeps GPIO14 for it. **With the header's serial port off at boot, JTAG re
 device DNA**: run on a Compute Module 5 blade, pi20 at ps1, on 7 October 2026. The same day, in that boot, a
 load of our SoC into the FPGA's SRAM over JTAG worked there, but the card's PCIe endpoint did not come back on a
 bus rescan and the run stopped before any flash write. A flash write over JTAG has **not yet been run** that
-way, and **nothing has been run on a Compute Module 4 blade**.
+way. On the two Compute Module 4 blades (pi14 and pi18 at ps1, 7 October 2026) only reads and a pin pull test
+have been run: the login, `pinctrl get`, `gpioinfo`, and `vcgencmd`, which hung there; the pull test set the
+Pi's pull-down and then its pull-up on GPIO2, GPIO3 and GPIO4 (TDI, TDO, TCK) with `pinctrl`, read each pin, and
+put each back as it was (`pinctrl get` read the same before and after, on both blades): **no check and no
+JTAG**.
 
 The two changes, as run:
 

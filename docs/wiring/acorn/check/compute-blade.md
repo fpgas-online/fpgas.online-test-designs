@@ -18,7 +18,11 @@ kernel keeps GPIO14 for it. **With the header's serial port off at boot, JTAG re
 device DNA**: run on a Compute Module 5 blade, pi20 at ps1, on 7 October 2026. The same day, in that boot, a
 load of our SoC into the FPGA's SRAM over JTAG worked there, but the card's PCIe endpoint did not come back on a
 bus rescan and the run stopped before any flash write. A flash write over JTAG has **not yet been run** that
-way, and **nothing has been run on a Compute Module 4 blade**.
+way. On the two Compute Module 4 blades (pi14 and pi18 at ps1, 7 October 2026) only reads and a pin pull test
+have been run: the login, `pinctrl get`, `gpioinfo`, and `vcgencmd`, which hung there; the pull test set the
+Pi's pull-down and then its pull-up on GPIO2, GPIO3 and GPIO4 (TDI, TDO, TCK) with `pinctrl`, read each pin, and
+put each back as it was (`pinctrl get` read the same before and after, on both blades): **no check and no
+JTAG**.
 
 The two changes, as run:
 

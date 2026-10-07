@@ -113,8 +113,25 @@ def test_the_picture_names_every_wire_of_both_cables_with_where_it_lands(key):
 def test_a_fragment_keeps_only_its_carriers_lines():
     blade, pi5 = (check.fragment("to-the-wire.md", wiring.CARRIERS[k]) for k in ("blade", "pi5"))
     assert "One open wire" in pi5 and "One open wire" not in blade
-    assert "A crossed pair" in blade and "A crossed pair" in pi5
+    # the crossed pair was read on a Pi 5: the blade's page keeps the table and how to read the eight lines
+    assert "A crossed pair" in pi5 and "A crossed pair" not in blade and "acorn-olive" not in blade
+    assert "A correctly wired pair reads back what was driven" in blade
     assert "<!--" not in blade + pi5
+
+
+def test_what_to_expect_on_a_blade_is_said_on_the_first_verifying_page_only():
+    pages = check.pages(wiring.CARRIERS["blade"])
+    assert pages[1].count("What to expect on a Compute Blade today") == 1
+    assert all("What to expect on a Compute Blade today" not in pages[part] for part in (2, "2b", 3))
+    assert "What has been run on a Compute Blade, and what has not" in pages[3]
+
+
+def test_the_cm4_blades_are_said_to_have_had_reads_and_a_pull_test_put_back():
+    text = check.pages(wiring.CARRIERS["blade"])[3]
+    assert "On the two Compute Module 4 blades (pi14 and pi18 at ps1, 7 October 2026) only reads and a pin pull" in (
+        " ".join(text.split())
+    )
+    assert "put each back as it was" in " ".join(text.split()) and "**no check and no JTAG**" in " ".join(text.split())
 
 
 def test_a_fragment_with_marks_that_do_not_pair_or_are_not_understood_stops_the_run(tmp_path, monkeypatch):

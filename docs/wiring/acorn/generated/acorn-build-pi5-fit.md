@@ -15,12 +15,10 @@ Both cables, checked on the bench (the page before this one), the Acorn and the 
 3. Press the P1 plug into socket P1 and the P2 plug into socket P2 on the underside of the Acorn, each the way round it was when you put the flags on, until fully seated.
 4. Put the Acorn in the M.2 slot and fit its screw.
 5. Fit the P1 housing on the 40-pin header pins 19 to 26, marked corner on pin 19, and the P2 housing on the 40-pin header pins 5 to 10, marked corner on pin 5.
+6. Before powering on, look at both housings again, as on the bench check: the P1 housing's marked corner is on pin 19 of the 40-pin header, and the P2 housing's on pin 5 of the 40-pin header. Turned round, either housing puts its wires on the wrong pins.
 
 ![Fitting the cables on a Raspberry Pi 5, in order](acorn-cable-pi5-fit.png){.only-light}
 ![Fitting the cables on a Raspberry Pi 5, in order](acorn-cable-pi5-fit-dark.png){.only-dark}
-
-![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5.png){.only-light}
-![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5-dark.png){.only-dark}
 
 ## Next
 

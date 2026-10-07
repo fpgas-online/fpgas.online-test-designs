@@ -289,7 +289,7 @@ INSTALL = {
         "file system is in memory (`overlayroot=tmpfs`), what you install is gone at the next boot:"
     ),
 }
-# What a blade owner can expect, said once and shown on the first and the last verifying page.
+# What a blade owner can expect, said once, on the first verifying page (the third does not repeat it).
 TODAY = {
     "blade": [
         "",
@@ -453,7 +453,6 @@ def pages(c):
             "",
             "## What has been run on a Compute Blade",
             "",
-            *TODAY["blade"][1:],
             site_links(fragment("compute-blade.md", c)).strip(),
             "",
         ]
