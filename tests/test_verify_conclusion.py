@@ -220,9 +220,9 @@ def test_every_advice_pattern_matches_a_reason_the_code_gives():
 
 
 def test_the_docs_show_what_the_code_prints_for_the_real_report():
-    """docs/verify.md's first failing example is this report's summary, line for line, as a run with --no-publish
-    gives it (the report is from before fpgas-verify said whether it published)."""
-    docs = (pathlib.Path(__file__).parents[1] / "docs" / "verify.md").read_text()
+    """docs/verify/reading-the-result.md's first failing example is this report's summary, line for line, as a
+    run with --no-publish gives it (the report is from before fpgas-verify said whether it published)."""
+    docs = (pathlib.Path(__file__).parents[1] / "docs" / "verify" / "reading-the-result.md").read_text()
     report = {**_blade(), "publish": {"on": False, "why": "--no-publish"}}
     assert runner.summary(report, KEPT_IN).strip("\n") in docs
 

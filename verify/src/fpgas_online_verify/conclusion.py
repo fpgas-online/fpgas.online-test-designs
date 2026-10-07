@@ -5,7 +5,8 @@ output. These lines say it again plainly, and last, so they are what is left on 
 words; each board with its faults and its failed tests, one line of reason each; what was not run and why;
 and what to do next, chosen from the faults found (ADVICE). The JSON report is for machines and is unchanged.
 
-ADVICE follows docs/verify.md's "Common failures": a line there that names something to do has its entry here.
+ADVICE follows docs/verify/common-failures.md's "Common failures": a line there that names something to do has
+its entry here.
 """
 
 import re
