@@ -14,15 +14,17 @@ What has been run on a Compute Blade, and what has not, as of 7 October 2026:
 | `jtag` with the serial port off | run at ps1 on a CM5 (pi20 at ps1, 7 October 2026, with the two changes below): **passes**: the test reads the IDCODE, `0x13631093` (XC7A100T), and the device DNA, `0x0028e5c45e304854` (the same as read from this card on 20 September 2026); no bitstream was loaded and the flash was not written. **Not yet run on a CM4 blade** |
 | `jtag` under kernel 6.12, serial port on | recorded as working on one ps1 blade (`--pins 2:3:4:14`), before these packages existed; not run with them |
 | The `p2-uart` and `p2-serial` tests | **not yet run by us on this hardware**: they need a converted card |
-| Converting a card on a Compute Blade | **not yet run by us on this hardware**; the [written steps](https://docs.fpgas.online/en/latest/boards/acorn/pcie-programming.html) are for the Pi 5 setup |
+| Converting a card on a Compute Blade | **not yet run by us on this hardware** to its end: begun on pi20 at ps1 on 7 October 2026 and stopped after the load into SRAM, before the flash write (the paragraph below the table); the [written steps](https://docs.fpgas.online/en/latest/boards/acorn/pcie-programming.html) are for the Pi 5 setup |
 | A Compute Blade that passes the whole check | **not yet seen**. With the serial port off, pi20 at ps1 (7 October 2026) passed `pcie-link`, `rp1-pio` and `jtag`; the other seven were not run, and the check failed only on `unconverted: runs the vendor XDMA sample image` |
 | The `p2-serial` test on a blade whose J2 wire has no 470 Ω resistor (pi20 at ps1 as wired on 5 October 2026: the pair on Extension Port pins 9 and 10) | **not yet run by us on this hardware**. From the code: while it runs to its end or raises an error, the test never has both ends of a wire driving at once (the Pi's pins are made inputs before the FPGA drives, and the FPGA's outputs are switched off before the Pi drives), so it does not rely on the resistor. What the resistor guards against is a design that drives J2 while JTAG or the serial port drives GPIO14; the fpgas.online design leaves J2 an input except while the host has switched J2/K2 to GPIO mode and enabled J2's output, which is what this test does, with the Pi's GPIO14 an input at that moment |
 
 JTAG and the serial pair share GPIO14 on a Compute Blade (J2 reaches it through 470 Ω, so JTAG wins
 electrically). Under kernel 6.18 they cannot both be had from one boot: with the header's serial port on, the
 kernel keeps GPIO14 for it. **With the header's serial port off at boot, JTAG reads the FPGA's IDCODE and
-device DNA**: run on a Compute Module 5 blade, pi20 at ps1, on 7 October 2026. A bitstream load and a flash
-write over JTAG have **not yet been run** that way, and **nothing has been run on a Compute Module 4 blade**.
+device DNA**: run on a Compute Module 5 blade, pi20 at ps1, on 7 October 2026. The same day, in that boot, a
+load of our SoC into the FPGA's SRAM over JTAG worked there, but the card's PCIe endpoint did not come back on a
+bus rescan and the run stopped before any flash write. A flash write over JTAG has **not yet been run** that
+way, and **nothing has been run on a Compute Module 4 blade**.
 
 The two changes, as run:
 
