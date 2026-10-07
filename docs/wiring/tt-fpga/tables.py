@@ -38,7 +38,7 @@ LEAD = (
 # the fact this repository can stand behind (tests/test_tt_host_scripts.py holds what its scripts send).
 STREAMING = (
     "**The rule here: an FPGA on a demo board is loaded by streaming only**, and no code of ours may write, "
-    "replace or delete a file on a demo board. The loader and the tests in this repository do not: the demo "
+    "replace or delete a file on a demo board. The loader and the tests in fpgas.online-test-designs do not: the demo "
     "board's microcontroller reads the bitstream from the Raspberry Pi over the USB-C cable and passes it "
     "straight to the FPGA."
 )
@@ -259,7 +259,7 @@ def ui_uo():
     return "\n\n".join(p.strip("\n") for p in parts) + "\n"
 
 
-def uart_section():
+def uart_section(shared_said=False):
     u = W.uart
     rx, tx = (W.wire(u[end]["group"], u[end]["bit"]) for end in ("rx", "tx"))
     rows = [[*chain(rx)[:2], u["rx"]["what"], *chain(rx)[2:]], [*chain(tx)[:2], u["tx"]["what"], *chain(tx)[2:]]]
@@ -281,7 +281,7 @@ def uart_section():
         f"port from the Raspberry Pi's own GPIOs, which would mean sending on GPIO{rx.gpio} and receiving on "
         f"GPIO{tx.gpio}.",
     ]
-    if shared([rx, tx]):
+    if shared([rx, tx]) and not shared_said:  # the page may have said it already, above
         parts.append(shared([rx, tx]))
     return "\n\n".join(p.strip("\n") for p in parts) + "\n"
 
@@ -294,7 +294,7 @@ def uio_uart():
         SEE_CABLES,
         READING,
         group_section("uio"),
-        uart_section(),
+        uart_section(shared_said=True),
     ]
     return "\n\n".join(p.strip("\n") for p in parts) + "\n"
 

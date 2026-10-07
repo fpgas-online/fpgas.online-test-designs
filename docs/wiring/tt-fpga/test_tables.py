@@ -166,7 +166,7 @@ def test_the_cables_page_lists_what_the_makers_say_one_fact_to_a_bullet_under_th
     listed = sorted((f for f in W.facts.values() if f["group"] in order), key=lambda f: order.index(f["group"]))
     assert bullets == [f"- {f['says']}." for f in listed]
     assert all(bullet.count(". ") <= 1 for bullet in bullets)  # one or two sentences each
-    assert "- A twelve-wire straight cable joins the two boards' 3.3 V supplies." in bullets
+    assert "- If a straight twelve-wire cable is used, it joins the two boards' 3.3 V supplies." in bullets
     assert (
         "- What cable is fitted on our boards, and whether its pins 6 and 12 are connected, is not recorded; "
         "asked on 6 October 2026."
@@ -224,7 +224,7 @@ def test_the_streaming_rule_is_on_every_page_that_mentions_loading():
     assert tables.STREAMING in FILES["tt-fpga-pins-other.md"] and tables.STREAMING in FILES["tt-fpga-cables.md"]
     assert tables.STREAMING.startswith("**The rule here: an FPGA on a demo board is loaded by streaming only**")
     assert "no code of ours may write, replace or delete a file on a demo board" in tables.STREAMING
-    assert "The loader and the tests in this repository do not" in tables.STREAMING
+    assert "The loader and the tests in fpgas.online-test-designs do not" in tables.STREAMING
     assert "No code of ours writes" not in "".join(FILES.values())
 
 

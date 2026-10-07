@@ -277,7 +277,7 @@ source = "it follows from the two makers' statements that the sockets are female
 [[facts]]
 key = "cable-3v3"
 group = "cables"
-says = "A twelve-wire straight cable joins the two boards' 3.3 V supplies"
+says = "If a straight twelve-wire cable is used, it joins the two boards' 3.3 V supplies"
 source = "it follows from the two makers' statements that pins 6 and 12 are each board's 3.3 V supply. That the cables are straight through is from `docs/hardware/rpi-hat-pmod.md`, and the measured wires are where a straight-through cable puts them"
 
 [[facts]]

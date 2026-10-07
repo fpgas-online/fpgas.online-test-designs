@@ -4,7 +4,7 @@ For the person at the bench with a Tiny Tapeout demo board that has the FPGA bre
 
 ### Loading the FPGA: its configuration pins
 
-**The rule here: an FPGA on a demo board is loaded by streaming only**, and no code of ours may write, replace or delete a file on a demo board. The loader and the tests in this repository do not: the demo board's microcontroller reads the bitstream from the Raspberry Pi over the USB-C cable and passes it straight to the FPGA.
+**The rule here: an FPGA on a demo board is loaded by streaming only**, and no code of ours may write, replace or delete a file on a demo board. The loader and the tests in fpgas.online-test-designs do not: the demo board's microcontroller reads the bitstream from the Raspberry Pi over the USB-C cable and passes it straight to the FPGA.
 
 The FPGA breakout has no SPI flash (no memory chip that keeps a design), so the FPGA is loaded again after every power-up. Its four configuration pins go only to the demo board's microcontroller. None is on a Pmod header: no cable carries them, and the Raspberry Pi cannot reach them.
 

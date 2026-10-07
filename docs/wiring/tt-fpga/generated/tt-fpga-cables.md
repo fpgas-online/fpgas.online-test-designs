@@ -27,7 +27,7 @@ For the person at the bench with a Tiny Tapeout demo board that has the FPGA bre
 **The cables**
 
 - Both ends are female sockets, so each cable needs a male end at each board.
-- A twelve-wire straight cable joins the two boards' 3.3 V supplies.
+- If a straight twelve-wire cable is used, it joins the two boards' 3.3 V supplies.
 - What cable is fitted on our boards, and whether its pins 6 and 12 are connected, is not recorded; asked on 6 October 2026.
 - Seen on the cameras of the boards shown as fpga-1 and fpga-3 on tinytapeout.fpgas.online on 6 October 2026: a black two-row housing is plugged on each of the demo board's three connectors, and a rainbow ribbon runs from them on fpga-1. Neither the wires nor any pin 1 mark can be made out.
 
@@ -43,4 +43,4 @@ On a Pmod connector pins 1 to 6 are one row and pins 7 to 12 the other; pins 5 a
 
 **Shared GPIOs.** The Digilent Pmod HAT joins some pins of two ports to one Raspberry Pi GPIO, so the two signals on them are one wire at the Raspberry Pi: GPIO10 is JA pin 2 and JB pin 2 (`ui_in[1]` and `uio[1]`); GPIO9 is JA pin 3 and JB pin 3 (`ui_in[2]` and `uio[2]`); GPIO11 is JA pin 4 and JB pin 4 (`ui_in[3]` and `uio[3]`). Whatever the Raspberry Pi puts on such a GPIO reaches both signals. A design that drives one of these `uio` signals drives the signal it shares with too, and the Raspberry Pi must then leave that GPIO as an input.
 
-The USB-C cable carries the demo board's serial link to the Raspberry Pi: it is how the FPGA is loaded and how a design's serial port is reached. **The rule here: an FPGA on a demo board is loaded by streaming only**, and no code of ours may write, replace or delete a file on a demo board. The loader and the tests in this repository do not: the demo board's microcontroller reads the bitstream from the Raspberry Pi over the USB-C cable and passes it straight to the FPGA.
+The USB-C cable carries the demo board's serial link to the Raspberry Pi: it is how the FPGA is loaded and how a design's serial port is reached. **The rule here: an FPGA on a demo board is loaded by streaming only**, and no code of ours may write, replace or delete a file on a demo board. The loader and the tests in fpgas.online-test-designs do not: the demo board's microcontroller reads the bitstream from the Raspberry Pi over the USB-C cable and passes it straight to the FPGA.
