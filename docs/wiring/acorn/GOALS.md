@@ -1,6 +1,6 @@
 # What the Acorn wiring sheets are for
 
-Reader: someone at a bench with a host (Pi 5 + Waveshare PoE M.2 HAT+, or a Compute Blade),
+Reader: someone at a bench with a host (Pi 5 + Waveshare PoE M.2 HAT+ (B), or a Compute Blade),
 an Acorn, two Molex Pico-EZmate cables whose six wires are ALL BLACK, Dupont housings and a crimper.
 
 ## Must be answerable from the picture alone, in under a minute

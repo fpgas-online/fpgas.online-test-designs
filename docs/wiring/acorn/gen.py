@@ -644,7 +644,7 @@ def blade_photos(sh, x, y, w, inset, only=None, title=12.5, beside=False):
 
 # The photo credits of each carrier's pictures: the sheets' footers and the step pictures.
 CREDITS = {
-    "pi5": "Photos: Waveshare (PoE M.2 HAT+), RHS Research (LiteFury underside; the Acorn is the same PCB)",
+    "pi5": f"Photos: {wiring.CARRIERS['pi5'].hat.credit}, RHS Research (LiteFury underside; the Acorn is the same PCB)",
     "blade": "Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn is the same PCB)",
 }
 
@@ -706,21 +706,24 @@ def housing_note(carrier, connector):
 # ----------------------------------------------------------------------------------------------
 def pi5(nudge=0):
     c = wiring.CARRIERS["pi5"]
+    hat = c.hat
     sh = Sheet()
     title_block(
         sh,
         "ACORN WIRING  ·  RASPBERRY PI 5",
         "SQRL Acorn to Raspberry Pi 5",
-        "Waveshare PoE M.2 HAT+ on a Pi 5. An Acorn needs PCIe, which a Pi 4 or older does not have.",
+        f"{hat.name} on a Pi 5. An Acorn needs PCIe, which a Pi 4 or older does not have.",
         f"--pins {c.jtag_pins}",
         "These are GPIO numbers, not header pin numbers",
     )
 
-    (px, py, _pw, ph), k = sh.photo("hat-ccw.jpg", 30, 150, 380)
-    sh.text(30, 138, "Pi 5 with the PoE M.2 HAT+, from above", 12.5, "bold")
+    # As wide as fits 380 px, and no taller than 470: the legend is below it.
+    im_w, im_h = Image.open(HERE / "photos" / hat.photo).size
+    (px, py, _pw, ph), k = sh.photo(hat.photo, 30, 150, min(380, 470 * im_w / im_h))
+    sh.text(30, 138, f"Pi 5 with the {hat.name}, from above", 12.5, "bold")
     sh.text(30, py + ph + 18, "The header pins come up through the HAT along this edge", 11.5, "regular", MUTED)
     sh.text(30, py + ph + 33, "(shown here without the stacking header fitted).", 11.5, "regular", MUTED)
-    hl = (px + 436 * k, py + 64 * k, px + 487 * k, py + 355 * k)
+    hl = tuple(v * k + (px, py)[i % 2] for i, v in enumerate(hat.pin1_box))
     highlight(sh, hl)
     sh.tag(hl[0] - 5, hl[1] + 10, "pin 1", BOX, size=10, h=15, anchor="end", fg=INK, stroke=INK, pad=4)
 
