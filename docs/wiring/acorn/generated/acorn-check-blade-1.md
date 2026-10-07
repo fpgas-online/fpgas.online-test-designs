@@ -6,7 +6,7 @@
 
 The check never writes the card's flash and never loads a design into the FPGA. It drives the P1 and P2 wires, which is how it tests them, and puts the host's pins back as it found them.
 
-**What to expect on a Compute Blade today.** `pcie-link` passes when the card is seated. `jtag` cannot run in a boot that has the header's serial port on (kernel 6.18): the serial port holds GPIO14, which is also the JTAG TMS wire, so `jtag` fails there whatever the wiring. Every other test is `not run` until the card is converted to the fpgas.online design, and converting a card on a blade has not been done by us. So the result today is `fail` even with perfect cables: it shows that the card is seated and its PCIe link is up, and it cannot yet show that the two cables are right. The bench check with a meter, before fitting, is what the cables rest on until then.
+**What to expect on a Compute Blade today.** `pcie-link` passes when the card is seated and on SQRL's factory image (a card on the vendor's XDMA sample image gets no test at all: below). On a Compute Module 5 `jtag` cannot run in a boot that has the header's serial port on (kernel 6.18): the serial port holds GPIO14, which is also the JTAG TMS wire, so `jtag` fails there whatever the wiring; on a Compute Module 4 it has not been run by us. Every other test is `not run` until the card is converted to the fpgas.online design, and converting a card on a blade has not been done by us. So the result today is `fail` even with perfect cables: it shows that the card is seated and its PCIe link is up, and it cannot yet show that the two cables are right. The bench check with a meter, before fitting, is what the cables rest on until then.
 
 
 ## Install it and run it
@@ -41,10 +41,10 @@ sudo fpgas-acorn-verify --no-publish
 
 There is one result, **pass** or **fail**, and only a pass exits 0. The summary on the terminal lists every test in the order it ran with its result; for a check that did not pass it ends with `RESULT:`, a `failed:` line for each failed test, a `not run:` line for the tests that did not run and why, and `What to do:`.
 
-**No Compute Blade has passed the whole check yet.** This is what one prints today: a Compute Blade with a Compute Module 5 and an Acorn CLE-101 still on the image it was sold with (pi16 at ps1, 5 October 2026). Two things are wrong and neither is the wiring or the installation: the card has not been converted to the fpgas.online design, and in this boot the JTAG test cannot have its TMS pin, which the header's serial port holds.
+**No Compute Blade has passed the whole check yet.** This is what one prints today: a Compute Blade with a Compute Module 5 and an Acorn CLE-101 still on the image it was sold with (pi16 at ps1, 7 October 2026, installed by the steps above). Two things are wrong and neither is the wiring or the installation: the card has not been converted to the fpgas.online design, and in this boot the JTAG test cannot have its TMS pin, which the header's serial port holds.
 
 ```text
-$ sudo fpgas-verify --no-publish
+$ sudo fpgas-acorn-verify --no-publish
 
 ******************************************************************************
 *** FPGA VERIFY: FAIL ******************************************************
@@ -54,8 +54,7 @@ fpgas-verify: fail (mode acorn, configured: acorn)
     unconverted: runs SQRL's factory image, not the fpgas.online design
     pcie-link  pass
     rp1-pio    pass
-    jtag       fail: P1 JTAG: openFPGALoader --detect failed (exit -6) before scanning the JTAG chain: openFPGALoader: line-request.c:199: gpiod_line_request_set_values_subset: Assertion `request' failed.
-        openFPGALoader: line-request.c:199: gpiod_line_request_set_values_subset: Assertion `request' failed.
+    jtag       fail: P1 JTAG could not be probed: GPIO14 (TMS) is held by 1f00030000.serial (uart0): the kernel does not hand out a pin that is held, so the JTAG chain cannot be scanned
     pcie-bar0  not run: unconverted: runs SQRL's factory image, not the fpgas.online design
     flash      not run: unconverted: runs SQRL's factory image, not the fpgas.online design
     ddr        not run: unconverted: runs SQRL's factory image, not the fpgas.online design
@@ -68,7 +67,7 @@ fpgas-verify: fail (mode acorn, configured: acorn)
 RESULT: FAIL: a board did not pass.
   acorn cle-101: fail (2 tests passed, 1 failed, 7 not run)
     fault: unconverted: runs SQRL's factory image, not the fpgas.online design
-    failed: jtag: P1 JTAG: openFPGALoader --detect failed (exit -6) before scanning the JTAG chain: openFPGALoader: line-request.c:199: gpiod_line_request_set_values_subset: Assertion `request' failed.
+    failed: jtag: P1 JTAG could not be probed: GPIO14 (TMS) is held by 1f00030000.serial (uart0): the kernel does not hand out a pin that is held, so the JTAG chain cannot be scanned
     not run: pcie-bar0, flash, ddr, p2-serial, scratch: unconverted: runs SQRL's factory image, not the fpgas.online design
     not run: p2-uart: the board does not run a known build
     not run: p2-gpio: J5 and H5 are not wired on the Compute Blade setup
@@ -78,9 +77,11 @@ What to do:
     once (the fpgas.online image loaded over JTAG, then written to its flash
     with fpgas-acorn-flash):
     https://github.com/fpgas-online/fpgas.online-test-designs/blob/main/docs/hardware/acorn-pcie-programming.md
-  * openFPGALoader could not have one of the JTAG pins, because a driver holds
-    it (on a Compute Blade the serial port holds GPIO14, which is also the
-    JTAG TMS wire). The check cannot test JTAG on such a host yet:
+  * The serial port has a pin JTAG needs, so the JTAG test could not run. On a
+    Compute Blade the JTAG TMS wire and the serial port's TX are the same pin
+    (GPIO14): while the serial port is on, JTAG cannot be tested there.
+    Booting with it off (enable_uart in config.txt) should free the pin; that
+    is not yet confirmed on hardware:
     https://github.com/fpgas-online/fpgas.online-test-designs/issues/127
   * To look at the acorn board yourself: sudo fpgas-acorn-debug --help (sudo
     apt install fpgas-online-acorn-debug)
@@ -90,7 +91,9 @@ The whole report, for a program to read (JSON): /run/fpgas-online/verify.json
 ******************************************************************************
 ```
 
-That run was made with version 0.0.post1100 of the check. From 0.0.post1111 the `jtag` line says what holds the pin instead: `P1 JTAG could not be probed: GPIO14 (TMS) is held by … (uart0)`.
+On the blades at ps1 every `sudo` first prints `sudo: unable to resolve host pi16: Name or service not known` (with the blade's own name). It did no harm on the blades it was seen on (7 October 2026), and is left out above.
+
+**A card still on the vendor's XDMA sample image gets no test at all** (pi20 at ps1, 7 October 2026): the check prints `unconverted: runs the vendor XDMA sample image, not the fpgas.online design` and `acorn: fail (no test ran)`. That says nothing about the cables: it is a known gap in the check ([#155](https://github.com/fpgas-online/fpgas.online-test-designs/issues/155)); the bench check with a meter is what such a card's cables rest on until it is converted.
 
 A pass will list every test with `pass` and end there, with no `RESULT:` part; on a Compute Blade `p2-gpio` stays `not run`, because J5 and H5 are not wired.
 
