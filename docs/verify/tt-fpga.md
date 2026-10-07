@@ -228,7 +228,8 @@ the `WIRING:` line, where the boot report keeps them, and so are the `READINGS:`
 * Four shorts are not seen: JB9 with JB10, JC9 with JC10, JB9 with JC10 and JB10 with JC9. Each joins `uio[6]` and
   `uio[7]`, or their copies, which agree with each other, as the two are driven together. (JB9 with JC9 and JB10
   with JC10 are seen: the line is then held low, not by the Pi's pull-up.)
-* `MIN_HEAP_FREE` (60000 bytes) was measured on the TT07 board, SDK 2.0.4. A board on another shuttle may need
+* `MIN_HEAP_FREE` (27000 bytes) was measured on the TT07 board, SDK 2.0.4 (the largest drop, 17424 bytes, plus
+  headroom). A board on another shuttle may need
   more: its shuttle file is bigger (TT06's is about twice TT07's), so its SDK leaves less heap. It then fails
   loudly (`RP2040 heap too low`) until it has been measured.
 * A short between neighbouring wires is said as one, with where to look, not as which two wires.
@@ -237,8 +238,9 @@ the `WIRING:` line, where the boot report keeps them, and so are the `READINGS:`
 
 [PR #15](https://github.com/fpgas-online/fpgas.online-test-designs/pull/15)'s form of it ran on every Tiny Tapeout
 host at Welland on 4 September 2026. This form passed on the board with a TT07 chip at Welland on 8 October 2026
-(RP2040, SDK 2.0.4, on a Pi 3B+): 22.7 s, the RP2040's heap 71568 bytes free at the start and 20752 at the lowest,
-the board's files the same before and after; the record is in
+(RP2040, SDK 2.0.4, on a Pi 3B+), four times on its way in (the last at 06:08): about 22.5 s, the RP2040's heap
+69472 bytes free at the start and 52048 at the lowest after a collection, the board's files the same before and
+after (all but `/boot.log`); the record is in
 [PR #179](https://github.com/fpgas-online/fpgas.online-test-designs/pull/179).
 
 

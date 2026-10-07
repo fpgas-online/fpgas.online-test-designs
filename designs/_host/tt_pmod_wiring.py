@@ -489,11 +489,12 @@ def build_firmware(controller):
 
 
 # The least free heap the RP2's command server must find once it is loaded, beside the SDK's own objects. Measured
-# on the TT07 board (RP2040, SDK 2.0.4) on 8 Oct 2026: 71568 bytes free at load, 20752 at the lowest (sending the 8
-# uio names, the largest pin-id round), so the test used at most 50816 bytes, garbage the collector had not yet taken
-# back included. The floor is that drop plus about 9 kB of headroom, so a board at the floor still has some left at
-# the lowest point; a later measurement on another board or SDK release moves it.
-MIN_HEAP_FREE = 60000
+# in PR #179's live run 4 (8 Oct 2026, 06:08) on the TT07 board de641070db746f27 (RP2040, SDK 2.0.4), each figure
+# after a collection: 69472 bytes free at load, 68832 before the walks, 52048 at the lowest (sending the 7 ui_in
+# names), 68704 after. The largest drop from load is 17424 bytes; the floor is that plus about 9 kB of headroom.
+# (Run 3's 8736 was taken with no collection, so it counted the walks' garbage.) A later measurement on another
+# board, shuttle or SDK release moves it.
+MIN_HEAP_FREE = 27000
 
 
 def mem_free(fields):
