@@ -57,7 +57,8 @@ netbooted hosts fetch them from the gateway: its TFTP root (`/srv/tftp/`) has on
 symbolic link named by the last eight characters of the host's serial number (on the host:
 `tr -d '\0' < /proc/device-tree/serial-number`), and those links point at one directory,
 `/srv/nfs/rpi/trixie/boot/`. On 7 October 2026 twelve hosts at ps1 were pointed at it, not only the four
-blades: among them pi21 at ps1, which carries a Tiny Tapeout board, and seven hosts we cannot name. So there
+blades: among them pi21 at ps1, a Tiny Tapeout host by fpgas.online-infra's inventory (not seen by us),
+and seven hosts we cannot name. So there
 are two ways, and the choice belongs to whoever runs the gateway (at ps1: Carl):
 
 1. **Change the one shared directory.** Every host that boots from it, all twelve, loses its console and
@@ -68,8 +69,8 @@ are two ways, and the choice belongs to whoever runs the gateway (at ps1: Carl):
    that blade's link in `/srv/tftp/` at the copy. Only that blade is changed, from its next boot. To undo it,
    point the link back at `/srv/nfs/rpi/trixie/boot` and boot the blade again. This is how pi20 at ps1 was
    tested on 7 October 2026: its link, `/srv/tftp/de59093d`, was pointed at a copy for the test, and the shared
-   directory was not touched. The link was put back at 17:19:48 and the copy was removed then; nothing of the
-   test remains on the gateway, and the shared `config.txt` and `cmdline.txt` read the same as before it.
+   directory was not touched. The link was put back at 17:19:48 and the copy was removed then, and the shared
+   `config.txt` and `cmdline.txt` read the same as before it.
    Every boot of pi20 at ps1 since 17:20 has come from the shared directory; at 18:10 its header's serial port
    was on (`serial0` was `ttyAMA0`).
 
