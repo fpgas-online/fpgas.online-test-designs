@@ -1,0 +1,45 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["fonttools==4.65.0"]
+# ///
+# SPDX-License-Identifier: Apache-2.0
+"""The Tiny Tapeout FPGA demo board's cable picture and pin tables, all from wiring.toml.
+
+Run:  uv run gen.py           (writes generated/; --check compares instead, for CI)
+      uv run render.py        (the PNGs of the pictures; needs google-chrome-stable or chromium)
+
+The pictures are generated/tt-fpga-pmod-cables*.svg (picture.py), each with its dark twin <name>-dark.svg,
+the tables generated/*.md (tables.py).
+fontTools is pinned and the fonts are in ../wiringlib/fonts/, so the output is the same on every machine.
+"""
+
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))  # docs/wiring, for wiringlib
+
+import picture
+import tables
+import wiring
+from wiringlib import canvas, output, palette
+
+OUT = wiring.HERE / "generated"
+
+
+def build():
+    """{file name: contents} for everything in generated/ except the PNGs (render.py makes those): every picture
+    as <name>.svg and <name>-dark.svg."""
+    return palette.themed({**picture.build(), **tables.build()})
+
+
+def main(argv):
+    files = build()
+    canvas.light_report()
+    if "--check" in argv:
+        output.check(files, OUT)
+        return
+    output.write(files, OUT)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

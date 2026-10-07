@@ -1,0 +1,316 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# How a Tiny Tapeout demo board carrying the FPGA breakout is wired to its host, a Raspberry Pi with a
+# Digilent Pmod HAT: which FPGA pin is which Tiny Tapeout signal, which demo board header and pin that
+# signal is on, which Pmod HAT port and pin the cable takes it to, and which Raspberry Pi GPIO that is.
+#
+# This file is the one copy for the documentation. gen.py draws the cable picture and writes the Markdown
+# tables from it. The test code keeps its own copies of the same numbers, because its scripts are
+# installed on the Pi one file at a time; test_code_agrees.py fails when any of them differs from this
+# file, entry by entry. Change the wiring here and in the code together, run gen.py and render.py, and
+# commit the regenerated files with it.
+
+[board]
+name = "Tiny Tapeout demo board with the FPGA breakout"
+fpga = "Lattice iCE40UP5K in its 48-pin SG48 package"
+fpga_device = "ice40-up5k-sg48"  # the same, as designs/_shared/tt_fpga_platform.py names it to the toolchain
+mcu = "RP2350"  # the demo board's microcontroller on a version 3 demo board; version 2 has an RP2040
+hat = "Digilent Pmod HAT"
+host = "Raspberry Pi carrying a Digilent Pmod HAT"
+
+# ---------------------------------------------------------------------------------------------------
+# A 12-pin Pmod connector, the same on the demo board's headers and on the HAT's ports.
+#   signal_pins: the pin that carries bit 0, bit 1, ... bit 7 of a signal group, in that order.
+# ---------------------------------------------------------------------------------------------------
+[pmod]
+signal_pins = [1, 2, 3, 4, 7, 8, 9, 10]
+ground_pins = [5, 11]
+power_pins = [6, 12]
+power = "3.3 V"
+
+# ---------------------------------------------------------------------------------------------------
+# The three groups of Tiny Tapeout signals.
+#   fpga_pins: the iCE40 package pin of bit 0 .. bit 7 (designs/_shared/tt_fpga_platform.py).
+#   connector: that group's name in the platform's connector table.
+#   header: the demo board header that carries it.  drive: which end drives it (pi, fpga, both).
+#   mcu_first_gpio: the RP2350 GPIO on bit 0; bit n is on that plus n (demo board version 3).
+#   note: a sentence printed with the group's table; what it states has its entry in [sources].
+# ---------------------------------------------------------------------------------------------------
+[groups.ui_in]
+what = "the design's eight inputs"
+drive = "pi"
+fpga_pins = [13, 19, 18, 21, 23, 25, 26, 27]
+connector = "tt_input"
+note = "The demo board's DIP switches are on these signals too: each switch, when on, pulls its `ui_in` line up to 3.3 V through 1 kΩ; when off it leaves the line alone. So set every switch off while the Raspberry Pi drives these signals (from Tiny Tapeout's KiCad files for the board, SW1 and R3 to R10; not verified by us on a board)."
+header = "input"
+mcu_first_gpio = 17
+colour = "#b4491f"
+
+[groups.uio]
+what = "eight signals that the design can use as inputs or as outputs, each on its own"
+drive = "both"
+fpga_pins = [2, 4, 3, 6, 9, 10, 11, 12]
+connector = "tt_bidir"
+header = "bidir"
+mcu_first_gpio = 25
+colour = "#6b4aa0"
+
+[groups.uo_out]
+what = "the design's eight outputs"
+drive = "fpga"
+fpga_pins = [38, 42, 43, 44, 45, 46, 47, 48]
+connector = "tt_output"
+header = "output"
+mcu_first_gpio = 33
+colour = "#0f766e"
+
+# The demo board's three Pmod headers, in the order they sit along the board's bottom edge, left to right.
+# name: what is printed beside the header on the board, according to the maker's drawings ([[facts]], "printed").
+[headers.input]
+name = "INPUT"
+
+[headers.bidir]
+name = "BIDIR"
+
+[headers.output]
+name = "OUTPUT"
+
+# The Pmod HAT's three ports. gpios: the Raspberry Pi GPIO (BCM number) on port pins 1, 2, 3, 4, 7, 8, 9, 10.
+[hat.JA]
+gpios = [8, 10, 9, 11, 19, 21, 20, 18]
+
+[hat.JB]
+gpios = [7, 10, 9, 11, 26, 13, 3, 2]
+
+[hat.JC]
+gpios = [16, 14, 15, 17, 4, 12, 5, 6]
+
+# Which demo board header is cabled to which HAT port. Every cable is straight through: pin n to pin n.
+[cables]
+input = "JA"
+bidir = "JB"
+output = "JC"
+
+# ---------------------------------------------------------------------------------------------------
+# The serial port of a design, on two of the signals above (Tiny Tapeout's first UART convention).
+#   mcu_uart: the RP2350 UART that our bridge puts on the same two signals.
+#   checked: what has been run on it, carried from the record it names. The date is printed under the
+#   serial port's table; where it was run is printed once, in the sources list.
+[uart]
+baud = 115200
+mcu_uart = 1
+checked = { date = "2 October 2026", where = "the three Tiny Tapeout FPGA boards seen at welland's sw2 p33, p35 and p36 that day (the results in `docs/verify.md`)" }
+rx = { group = "ui_in", bit = 3, what = "serial data into the design (its RX)" }
+tx = { group = "uo_out", bit = 4, what = "serial data out of the design (its TX)" }
+
+# The seven-segment display: the segment that bit 0 .. bit 7 of uo_out lights.
+[display]
+group = "uo_out"
+segments = ["a", "b", "c", "d", "e", "f", "g", "dot"]
+
+# ---------------------------------------------------------------------------------------------------
+# Loading the FPGA. The breakout has no SPI flash: the microcontroller loads the FPGA over these pins.
+#   config.fpga: the iCE40's configuration pins, by the iCE40's own names (docs/hardware/tt-fpga.md).
+#   config.mcu: the RP2350 GPIOs our loader drives (designs/_host/tt_fpga_program.py).
+# Which RP2350 GPIO is wired to which of the four iCE40 pins is not recorded in this repository.
+# ---------------------------------------------------------------------------------------------------
+[[config.fpga]]
+name = "SPI_SO"
+pin = 14
+
+[[config.fpga]]
+name = "SPI_SCK"
+pin = 15
+
+[[config.fpga]]
+name = "SPI_SS"
+pin = 16
+
+[[config.fpga]]
+name = "SPI_SI"
+pin = 17
+
+[[config.mcu]]
+name = "reset"
+gpio = 1
+what = "the FPGA's configuration reset (CRESET_B): pulled low, then released, before a load"
+
+[[config.mcu]]
+name = "mosi"
+gpio = 3
+what = "data out of the microcontroller: the bitstream"
+
+[[config.mcu]]
+name = "ss"
+gpio = 5
+what = "select"
+
+[[config.mcu]]
+name = "sck"
+gpio = 6
+what = "clock"
+
+# ---------------------------------------------------------------------------------------------------
+# The FPGA pins that are not Tiny Tapeout inputs or outputs. None is on a Pmod header.
+#   signal: the name in designs/_shared/tt_fpga_platform.py.  mcu_gpio: the RP2350 GPIO at the other end.
+#   hz: the clock's frequency, as the loader and the serial bridge set it and the platform file expects it.
+#   mcu_source: "code" when our own code drives that GPIO, "tt" when the number is only from Tiny Tapeout's
+#   documents (docs/hardware/pmod-tt.md).
+# ---------------------------------------------------------------------------------------------------
+[[other]]
+signal = "clk_rp2040"
+pin = 20
+what = "the clock into the design, made by the microcontroller"
+hz = 50_000_000
+mcu_gpio = 16
+mcu_source = "code"
+
+[[other]]
+signal = "rst_n"
+pin = 37
+what = "the design's reset: low resets it"
+mcu_gpio = 14
+mcu_source = "tt"
+
+[[other]]
+signal = "rgb_led.r"
+pin = 39
+what = "red of the three-colour LED: low lights it"
+
+[[other]]
+signal = "rgb_led.g"
+pin = 40
+what = "green of the three-colour LED: low lights it"
+
+[[other]]
+signal = "rgb_led.b"
+pin = 41
+what = "blue of the three-colour LED: low lights it"
+
+# ---------------------------------------------------------------------------------------------------
+# What has been measured, and where. Nothing here is invented: each entry is carried from a record in
+# this repository, named in `record`. A wire that no entry covers is printed as "from the design".
+#   wires = "own": the wires whose Raspberry Pi GPIO no other wire ends on.
+#   dates: the days it was made; printed under every table that has a measured wire, with a pointer to the
+#   sources list.
+#   how, when, where, also, record: printed once, in the sources list. `when` says who or what measured on
+#   each of `dates`, in their order ({0}, {1}).
+# ---------------------------------------------------------------------------------------------------
+[[measurements]]
+wires = "own"
+how = "read with the pin identification design (each FPGA pin sends its own pin number, and the Raspberry Pi reads which number arrives on which GPIO)"
+dates = ["29 September 2026", "4 October 2026"]
+when = "on {0}, and again by the boot check (`fpgas-verify`) on {1}"
+where = "on the three Tiny Tapeout FPGA boards seen at welland's sw2 p33, p35 and p36 on those days; the host at sw2 p34 was not powered either time"
+also = "On 3 September 2026 those three ports had the demo boards whose microcontrollers have the USB serial numbers `4df39a7a6856f86f`, `8c46329b33590ecb` and `a2961e5cac65b25f` (`docs/hardware/site-welland.md`); whether the same boards were there on the days of the measurement is not recorded"
+record = "the hand-written `docs/hardware/tt-fpga-pin-mapping.md` that this generator replaced, as it stood at commit `ef38e22`; and, wire by wire, the scan decoded on those boards, kept as the expected values of `test_a_tt_cabled_as_the_fleet_passes_and_ja_jc_swapped_fails` in `designs/pmod-pin-id/host/test_identify_pmod_pins.py` (as commit `8987ede` left it), whose comment gives the same ports and days"
+
+# What is printed for a wire that no measurement covers.
+[unmeasured]
+why = "it follows the pattern of the measured wires (bit n of a group on the pin of that place in its header and port); not measured by us"
+also = "Since issue 142 of fpgas.online-test-designs (two wires that end on one Raspberry Pi GPIO could not be told apart) the pin identification design sends on such wires in turns so that each can be read, but no result of that is recorded in this repository"
+
+# ---------------------------------------------------------------------------------------------------
+# facts: what the two makers' own documents, and two camera stills, say about the connectors and the cables.
+#   says: one fact, in one or two sentences.  source: where it is from, printed with it in the sources list.
+#   group: where it is printed. "demo", "hat" and "cables" are the three short lists on the cables page (the
+#   demo board's sockets, the Pmod HAT's ports, the cables); "finding" only in "Finding the headers", which
+#   every page has, with the fact `printed`; "sources" only in the sources list.
+# None of these is verified by us on a board, and the pages say so.
+# Where pin 1 is comes from a drawing and a photograph. Until a board has been looked at, the picture draws
+# pin 1 where Tiny Tapeout's drawing puts it, with the words in picture.PIN_1 saying it is not checked.
+# ---------------------------------------------------------------------------------------------------
+[[facts]]
+key = "printed"
+group = "demo"
+says = "The demo board's three Pmod connectors are printed INPUT (`ui_in`), BIDIR (`uio`) and OUTPUT (`uo_out`)"
+source = "Tiny Tapeout's published demo board design (github.com/TinyTapeout/tt-demo-pcb: README, doc/img/pmods-io.png, doc/img/tt-etr-dbv3p2-pinout.png, doc/img/tt-etr-dbv3-board.jpg), read 6 October 2026; not verified by us on a board"
+
+[[facts]]
+key = "edge"
+group = "finding"
+says = "They are on the bottom edge, in that order from left to right, with the board held so that its \"Tiny Tapeout Demoboard\" text reads upright"
+source = "Tiny Tapeout's published demo board design (github.com/TinyTapeout/tt-demo-pcb: README, doc/img/pmods-io.png, doc/img/tt-etr-dbv3p2-pinout.png, doc/img/tt-etr-dbv3-board.jpg), read 6 October 2026; not verified by us on a board"
+
+[[facts]]
+key = "sockets"
+group = "demo"
+says = "Each is a female right-angle 2x6 socket, numbered as Digilent numbers a host port"
+source = "Tiny Tapeout's published demo board design (github.com/TinyTapeout/tt-demo-pcb: README, doc/img/pmods-io.png, doc/img/tt-etr-dbv3p2-pinout.png, doc/img/tt-etr-dbv3-board.jpg), read 6 October 2026: the schematic says \"PMOD host (female) headers, using digilent's numbering\", and the pinout poster says \"the connectors on this board are female and designed to operate as the host\"; not verified by us on a board"
+
+[[facts]]
+key = "demo-3v3"
+group = "demo"
+says = "The board's own 3.3 V supply is on pins 6 and 12 of each"
+source = "Tiny Tapeout's published demo board design (github.com/TinyTapeout/tt-demo-pcb: README, doc/img/pmods-io.png, doc/img/tt-etr-dbv3p2-pinout.png, doc/img/tt-etr-dbv3-board.jpg), read 6 October 2026 (the schematic puts +3V3 on pins 6 and 12); not verified by us on a board"
+
+[[facts]]
+key = "pin-1-demo-board"
+group = "demo"
+says = "Pin 1 is the square pad under the label i0, b0 or o0, at the right-hand end of the row farther from the board edge, seen from above with the Pmod edge toward you; no \"1\" is printed. The small L-shaped corner mark on the socket's outline is beside pin 6 (3.3 V), not pin 1"
+source = "Tiny Tapeout's KiCad files for the demo board v3.2 (github.com/TinyTapeout/tt-demo-pcb at commit 0277545, tinytapeout-demo.kicad_pcb and .kicad_sch), read 7 October 2026: footprint PinSocket_2x06_P2.54mm_PMODHost1A, whose pad 1 is its only rectangular pad and whose outline's corner mark sits beside pad 6 (KiCad's stock socket mirrored to Digilent's numbering); not yet looked at on our boards"
+
+[[facts]]
+key = "hat-ports"
+group = "hat"
+says = "JA, JB and JC are 2x6 Pmod host ports (female sockets)"
+source = "Digilent's Pmod HAT Adapter Reference Manual, read from a copy on 6 October 2026: \"2x6 Pmod host ports\"; not verified by us on a board"
+
+[[facts]]
+key = "hat-3v3"
+group = "hat"
+says = "Pins 6 and 12 of each port are tied to the HAT's 3.3 V supply, and pins 5 and 11 are ground"
+source = "Digilent's Pmod HAT Adapter Reference Manual, read from a copy on 6 October 2026: \"Pins #6 and #12 of each Pmod port are tied to the HAT Adapter's 3V3 rail\"; not verified by us on a board"
+
+[[facts]]
+key = "pin-1-hat"
+group = "hat"
+says = "On each of JA, JB and JC, pin 1 is a square pad with a printed \"1\" beside it, at one end of the row nearer the middle of the HAT; \"3V3\" and \"GND\" are printed at the other end of that row"
+source = "Digilent's Pmod HAT Adapter Reference Manual, Rev. B (page 4), and its 1000 px top photograph (pmod-hat-adapter-top-1000.png on Digilent's reference site, as archived on 27 January 2025), read 7 October 2026, JC's \"1\" included; not yet looked at on our boards"
+
+[[facts]]
+key = "cable-fitted"
+group = "cables"
+says = "On our boards the 3.3 V pins (6 and 12) are expected not to be connected, so the two boards' 3.3 V supplies are not joined; each cable is a female-to-female ribbon cable joined to the socket at each end through a strip of pin header, and whether it has 10 or 12 wires is not known. A 10-wire cable on pins 1 to 5 and 7 to 11 would carry both grounds (pins 5 and 11) and leave only the 3.3 V pins free"
+source = "Tim Ansell, 7 October 2026, answering our question of 6 October; he believes the ribbon cables are whiteeeen 10-pin flat ribbon cables, 0.1 inch pitch, female to female sockets, about 7.87 inch (200 mm), IDC connectors (Amazon product B094RGMBS9). Asked again on 7 October 2026 (question docs-2), he answered: \"The expectation is that the 3v3 pin is not connected. I'm unsure if we are using 10-pin or 12-pin cables?\" Not checked by us on a board. That a 10-wire cable on pins 1 to 5 and 7 to 11 carries both grounds follows from the Pmod numbering"
+
+[[facts]]
+key = "cable-ends"
+group = "cables"
+says = "Both ends are female sockets, so each cable needs a male end at each board"
+source = "it follows from the two makers' statements that the sockets are female; not checked by us on a board"
+
+[[facts]]
+key = "cable-3v3"
+group = "cables"
+says = "If a straight twelve-wire cable is used instead, it joins the two boards' 3.3 V supplies"
+source = "it follows from the two makers' statements that pins 6 and 12 are each board's 3.3 V supply. That the cables are straight through is from `docs/hardware/rpi-hat-pmod.md`, and the measured wires are where a straight-through cable puts them"
+
+[[facts]]
+key = "cameras"
+group = "cables"
+says = "Seen on the cameras of the boards shown as fpga-1 and fpga-3 on tinytapeout.fpgas.online on 6 October 2026: a black two-row housing is plugged on each of the demo board's three connectors, and a rainbow ribbon runs from them on fpga-1. Neither the wires nor any pin 1 mark can be made out"
+source = "two camera stills taken on 6 October 2026; nobody has looked at the boards themselves for this"
+
+[[facts]]
+key = "mirrored"
+group = "sources"
+says = "Digilent's specification says: \"the pin numbering conventions for the 2x6 connectors are non-standard and are mirrored between the host connector and the peripheral board connector\""
+source = "Digilent's Pmod Interface Specification, revised 28 October 2020, read from a copy on 6 October 2026"
+
+# ---------------------------------------------------------------------------------------------------
+# sources: where a statement of fact on the generated pages comes from, said once here and printed as
+#   generated/tt-fpga-sources.md, after the entries the generator writes itself from [[measurements]],
+#   [unmeasured] and [[facts]]. A statement nobody has checked says so.
+# ---------------------------------------------------------------------------------------------------
+[sources]
+"Which iCE40 pin is which Tiny Tapeout signal (`ui_in`, `uo_out`, `uio`, the clock, the reset, the LED)" = "`designs/_shared/tt_fpga_platform.py`, which follows the `fabricfoxv2` pin file of Tiny Tapeout's tt-support-tools. From the design; a test keeps these tables equal to that file. Measured by us only as far as the entries above say"
+"That bit 0 to bit 7 of a group are on pins 1, 2, 3, 4, 7, 8, 9, 10 of its demo board header, that pins 1 to 6 are one row and pins 7 to 12 the other, and that pins 5 and 11 are ground and pins 6 and 12 are 3.3 V" = "Tiny Tapeout's pinout documents and Digilent's Pmod specification, as `docs/hardware/pmod-tt.md` and `docs/hardware/pmod.md` summarise them; not verified by us against a board"
+"Which Raspberry Pi GPIO each Pmod HAT pin is, and that some pins of two ports are the same GPIO" = "the DesignSpark Pmod HAT driver and Digilent's schematic of the HAT, as `docs/hardware/rpi-hat-pmod.md` cites them; a test keeps these tables equal to the list in `designs/pmod-pin-id/host/identify_pmod_pins.py`. Not verified by us with a meter; the measured wires agree with it"
+"The serial port (which two signals, which two RP2350 GPIOs, the speed)" = "`designs/_shared/tt_fpga_platform.py` and `designs/_host/tt_test_wrapper.py`; a test keeps these tables equal to both. The `uart` test goes through the microcontroller and not through the Pmod HAT. It passed on {uart.date} on {uart.where}. Nobody has used these two signals as a serial port from the Raspberry Pi's GPIO"
+"The iCE40's configuration pins, and that the breakout has no SPI flash" = "`docs/hardware/tt-fpga.md`, from the breakout's published design (TinyTapeout/breakout-pcb), checked there on 4 October 2026; not measured by us"
+"The RP2350 GPIOs that load the FPGA and make its clock" = "`designs/_host/tt_fpga_program.py`, the loader, and `designs/_host/tt_test_wrapper.py`, the serial bridge, which starts the clock again. A test holds the four loading pins (in both of the loader's ways of sending), the clock pin and the clock's frequency to those two files, and the frequency to the platform file"
+"The other RP2350 GPIO numbers (those on the 24 signals, and the one on the reset)" = "Tiny Tapeout's pinout documents for the version 3 demo board, as `docs/hardware/pmod-tt.md` summarises them. Our loader, run with `--gpio-release`, starts the clock and then sets the GPIOs of the 24 signals to inputs; without that flag it starts no clock and leaves GPIO17 to GPIO40 as they were. Our serial bridge starts the clock itself and uses two of the signals; the rest, and the reset's, are not verified by us"
+"Which segment of the display each bit of `uo_out` lights, and that a to f are the outer ring in that order" = "Tiny Tapeout's board specification, as `docs/hardware/tt-fpga.md` gives it, and `designs/tt-display`, which is written to it and describes its pattern as one segment running round the outer ring, a to f (a test holds the place of g and of the dot to that design). Where a is, and which way round the ring runs, is not recorded; none of it is verified by us segment by segment"
+"That the three-colour LED lights when its pin is low" = "a comment in `designs/_shared/tt_fpga_platform.py`; not verified by us"
+"That the demo board's DIP switches are on the `ui_in` signals, each pulling its line up to 3.3 V through 1 kΩ when on" = "Tiny Tapeout's KiCad files for the demo board v3.2 (github.com/TinyTapeout/tt-demo-pcb at commit 0277545, tinytapeout-demo.kicad_pcb and .kicad_sch), read 7 October 2026: SW1 (8-way DIP) with R3 to R10 (1 kΩ to +3V3), switch 1 to ui_in0 through switch 8 to ui_in7; the ui_in nets have no other pull on the demo board; not verified by us on a board"

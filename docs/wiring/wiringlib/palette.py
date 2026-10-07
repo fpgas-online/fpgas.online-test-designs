@@ -4,7 +4,12 @@
 A drawing is made once, its colours written as tokens (`@@ink@@`, `@@wire-0f766e@@`), and resolve() turns it
 into the light SVG and the dark SVG, which differ only in their colours (and in words drawn inside
 Sheet.dark_only()). The dark one is for the dark theme of docs.fpgas.online: its paper is the theme's own
-background, its ink light.
+background, its ink light. themed() makes both for every drawing a generator writes.
+
+One palette for every generator under docs/wiring/: their pictures sit on the pages of one site, so the
+paper, the ink and the warnings must be the same colours on all of them, and a wire colour that two boards
+both use (the teal, the rust, the purple) must turn into the same dark colour on both. A role that only one
+board's drawings use says so in its description.
 
 A colour is named by what it is and what it stands on, not by its value, because one value can mean two
 things: "#fff" is the fill of a label box (dark on the dark sheet) and the text on a coloured tag (dark there
@@ -62,22 +67,29 @@ ROLES = {
     "meter-display": ("#dfe8d8", "#dfe8d8", "the meter's display"),
     "on-meter": ("#15181d", "#15181d", "the word on the meter's display"),
     "knob": ("#1d1f23", "#1d1f23", "the meter's black knob"),
+    # the Tiny Tapeout FPGA pictures (tt-fpga/picture.py)
+    "board": ("#eef0f3", "#1b1d21", "a board drawn as a diagram: the demo board, the Pmod HAT"),
+    "pad-ground": ("#aab1ba", "#3b4048", "a ground pin of a Pmod connector, and its key"),
+    "pad-power": ("#f6c9c9", "#4a1f1f", "a power pin of a Pmod connector, and its key, edged red"),
+    "shared-ring": ("#1d6fb8", "#6fb3f2", "the ring round a pin whose GPIO another port shares"),
+    "cable-off": ("#8a929c", "#8a929c", "a cable the picture is not about, and its tag"),
+    "caution-fill": ("#fff4d6", "#2e2914", "the gold-edged box of what has not been checked on a board"),
 }
 
-# The wire colours of wiring.toml (light, as written there) and each one's dark counterpart: the same named
+# The wire colours of every wiring.toml (light, as written there) and each one's dark counterpart: the same named
 # colour, lighter, so that it shows on the dark sheet and dark words read on a tag of it. A colour that is
 # drawn as ink on the light sheet (ground) is drawn as the dark sheet's ink.
 WIRES = {
-    "#0f766e": "#4fd1c5",  # K2, teal
-    "#b4491f": "#ff9466",  # J2, rust
-    "#6b4aa0": "#c3a6f2",  # J5, purple
+    "#0f766e": "#4fd1c5",  # teal: the Acorn's K2; the Tiny Tapeout board's uo_out
+    "#b4491f": "#ff9466",  # rust: the Acorn's J2; the Tiny Tapeout board's ui_in
+    "#6b4aa0": "#c3a6f2",  # purple: the Acorn's J5; the Tiny Tapeout board's uio
     "#1d6fb8": "#6fb3f2",  # H5, blue
     "#d97706": "#ffb547",  # TDI, amber
     "#2e7d32": "#74c776",  # TDO, green
     "#546e7a": "#a3b8c2",  # TCK, blue grey
     "#d81b60": "#ff79a8",  # TMS, pink
     "#15181d": "#e3e6ea",  # GND, ink
-    "#9aa0a8": "#a0a6ae",  # a wire that is cut back and is not VCC, grey (sheetlib.GREY)
+    "#9aa0a8": "#a0a6ae",  # a wire that is cut back and is not VCC, grey (acorn/sheetlib.GREY)
 }
 THEMES = ("light", "dark")
 PHOTO_START, PHOTO_END = "<!--photo-->", "<!--/photo-->"
@@ -110,12 +122,29 @@ def wire(colour):
     return f"@@wire-{colour.lower()[1:]}@@"
 
 
+WASH = re.compile(r"wash(\d{1,3})-([a-z0-9-]+)")
+
+
+def wash(token, percent):
+    """The token for what `token` drawn at `percent` % opacity over the paper looks like: what text drawn on such a
+    translucent fill stands on, for the contrast check (Sheet.rect(opacity=...) records it)."""
+    m = TOKEN.fullmatch(token)
+    if m is None or not 0 < percent <= 100 or percent != int(percent):
+        raise ValueError(f"no wash of {token!r} at {percent} %")
+    return f"@@wash{int(percent)}-{m.group(1)}@@"
+
+
 def value(token, theme):
     """The colour a token stands for on a sheet of `theme`."""
     m = TOKEN.fullmatch(token)
     if m is None:
         raise ValueError(f"{token!r} is not a colour token")
     name = m.group(1)
+    washed = WASH.fullmatch(name)
+    if washed:
+        a = int(washed.group(1)) / 100
+        top, paper = rgb(value(f"@@{washed.group(2)}@@", theme)), rgb(value("@@paper@@", theme))
+        return "#" + "".join(f"{round(a * t + (1 - a) * p):02x}" for t, p in zip(top, paper, strict=True))
     if name.startswith("wire-"):
         light = "#" + name[5:]
         if light not in WIRES:
@@ -184,3 +213,18 @@ def dark_name(name):
     """acorn-x.svg -> acorn-x-dark.svg, acorn-x.png -> acorn-x-dark.png."""
     stem, _, ext = name.rpartition(".")
     return f"{stem}-dark.{ext}"
+
+
+def themed(files):
+    """Every drawing twice: its light SVG under its own name, its dark SVG beside it as <name>-dark.svg.
+
+    `files` is a generator's {file name: text}, the drawings with their colours as tokens; the two SVGs of each
+    differ only in the colours and in the words for the dark sheet only. Any other file is passed through."""
+    out = {}
+    for name, text in files.items():
+        if name.endswith(".svg"):
+            out[name] = resolve(text, "light")
+            out[dark_name(name)] = resolve(text, "dark")
+        else:
+            out[name] = text
+    return out

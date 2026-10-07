@@ -16,7 +16,6 @@ import math
 import re
 from dataclasses import dataclass
 
-import palette
 import tables
 import wiring
 from gen import (
@@ -29,8 +28,9 @@ from gen import (
     pin_label,
     wedge,
 )
-from palette import role
 from sheetlib import BODY, BOX, GOLD, GREY, INK, MUTED, PAPER, RED, SIGNALS, Sheet, label_of
+from wiringlib import fragments
+from wiringlib.palette import role
 
 W = 780  # canvas width; the height follows from what the cable needs
 T = 17  # body text: 15 px where the picture is shown 700 px wide
@@ -1797,11 +1797,8 @@ def png(name):
 
 
 def markdown_image(alt, name):
-    """A picture on a page: its light PNG in the light theme and its dark PNG in the dark one.
-
-    only-light and only-dark are the docs theme's (Furo's) classes for that, set with MyST's inline attributes;
-    printing keeps the light one only. The two are one paragraph, so the picture stays one block either way."""
-    return f"![{alt}]({name}){{.only-light}}\n![{alt}]({palette.dark_name(name)}){{.only-dark}}"
+    """A picture on a page: its light PNG in the light theme and its dark PNG in the dark one (fragments.picture)."""
+    return fragments.picture(alt, name)
 
 
 def build_names():

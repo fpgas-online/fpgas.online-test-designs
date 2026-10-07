@@ -8,11 +8,11 @@ import functools
 import re
 
 import gen
-import palette
 import pytest
 import sheetlib
 import steps
 import wiring
+from wiringlib import palette
 
 OUT = wiring.HERE / "generated"
 FURO_DARK_BACKGROUND = "#131416"  # furo.css, body[data-theme=dark] --color-background-primary

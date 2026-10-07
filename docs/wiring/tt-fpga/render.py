@@ -6,8 +6,7 @@
 """Render generated/*.svg to PNG with headless Chrome, at 2x, for pages and PDFs that cannot use the SVG.
 
 Run:  uv run render.py
-Each SVG is rendered at its own size, read from its root element. Google Chrome is used where it is
-installed, Chromium otherwise. The work is docs/wiring/wiringlib/chrome.py, shared with the other generators.
+The work is docs/wiring/wiringlib/chrome.py, shared with the Acorn generator.
 """
 
 import pathlib

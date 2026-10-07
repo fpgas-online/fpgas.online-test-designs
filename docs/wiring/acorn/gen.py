@@ -8,23 +8,22 @@
 Run:  uv run gen.py           (writes generated/; --check compares instead, for CI)
 The sheets are generated/acorn-wiring-*.svg, the tables generated/*.md (tables.py). See GOALS.md for
 what the sheets have to show, and sheetlib.py for the layout checks that fail the build. Pillow and
-fontTools are pinned, and the fonts are in fonts/, so the output is the same on every machine.
+fontTools are pinned, and the fonts are in ../wiringlib/fonts/, so the output is the same on every machine.
 
 Wires whose pad is in the header column AWAY from the plugs reach it through the gap between two
 rows of pins, the way a trace escapes a connector. That keeps every wire to two bends outside the
 header and removes the long loops around it.
 """
 
-import hashlib
 import itertools
+import pathlib
 import random
 import sys
 
-import palette
-import sheetlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))  # docs/wiring, for wiringlib
+
 import tables
 import wiring
-from palette import role
 from PIL import Image
 from sheetlib import (
     BODY,
@@ -46,6 +45,8 @@ from sheetlib import (
     W,
     label_of,
 )
+from wiringlib import canvas, output, palette
+from wiringlib.palette import role
 
 # The header placement each sheet was laid out with: the one with the fewest crossings, found by
 # `gen.py --search`, which tries every nudge again (a few minutes).
@@ -864,62 +865,16 @@ def build(search=False):
     import check  # the same: it shows steps' cavity pictures again and draws with their pieces
 
     out.update(check.build())
-    return themed(out)
-
-
-def themed(files):
-    """Every drawing twice: its light SVG under its own name, its dark SVG beside it as <name>-dark.svg.
-
-    The drawings come with their colours as palette.py's tokens; the two differ only in the colours and in
-    the words for the dark sheet only."""
-    out = {}
-    for name, text in files.items():
-        if name.endswith(".svg"):
-            out[name] = palette.resolve(text, "light")
-            out[palette.dark_name(name)] = palette.resolve(text, "dark")
-        else:
-            out[name] = text
-    return out
-
-
-def light_report():
-    """The text of the LIGHT sheets short of 4.5:1, one line per colour pair: reported, not a failure.
-
-    The dark sheets are held to their contrast by Sheet.check(); the light ones keep the colours they were drawn
-    with before there was a dark sheet, and changing those is a change of its own."""
-    pairs = {}
-    for name, s, _size, fill, bg, ratio, _need in sheetlib.LIGHT_SHORT:
-        pair = pairs.setdefault((round(ratio, 2), fill, bg), [0, set(), s])
-        pair[0] += 1
-        pair[1].add(name)
-    if not pairs:
-        return
-    print(f"light sheets: text under {sheetlib.TEXT_SMALL}:1 (reported, not a failure):")
-    for (ratio, fill, bg), (count, names, example) in sorted(pairs.items()):
-        print(f"  {ratio:5.2f}  {fill} on {bg}: {count} texts in {len(names)} drawings, e.g. {example!r}")
+    return palette.themed(out)
 
 
 def main(argv):
     files = build(search="--search" in argv)
-    light_report()
+    canvas.light_report()
     if "--check" in argv:
-        stale = [f for f, text in files.items() if not (OUT / f).exists() or (OUT / f).read_text() != text]
-        stale += [p.name for p in OUT.glob("*") if p.suffix in (".svg", ".md") and p.name not in files]
-        rendered = (OUT / "png-sources.sha256").read_text() if (OUT / "png-sources.sha256").exists() else ""
-        for f, text in files.items():
-            if f.endswith(".svg") and f"{hashlib.sha256(text.encode()).hexdigest()}  {f}" not in rendered.splitlines():
-                stale.append(f"{f[:-4]}.png (rendered from an older {f}; run render.py)")
-        if stale:
-            raise SystemExit(
-                "generated/ is out of date with wiring.toml or the generator; run `uv run gen.py` and commit:\n  "
-                + "\n  ".join(sorted(stale))
-            )
-        print("generated/ is up to date")
+        output.check(files, OUT)
         return
-    OUT.mkdir(exist_ok=True)
-    for f, text in files.items():
-        (OUT / f).write_text(text)
-    print(f"wrote {len(files)} files to {OUT.relative_to(HERE)}/; run render.py for the PNGs")
+    output.write(files, OUT)
 
 
 if __name__ == "__main__":

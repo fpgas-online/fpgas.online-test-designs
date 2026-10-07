@@ -2,11 +2,11 @@
 
 # TinyTapeout FPGA Demo Board
 
-The TinyTapeout (TT) FPGA Demo Board is a development platform that combines an FPGA breakout board (Lattice iCE40UP5K) with the TinyTapeout demo PCB (RP2040-based). It allows testing TinyTapeout designs on real FPGA hardware before silicon fabrication.
+The TinyTapeout (TT) FPGA Demo Board is a development platform that combines an FPGA breakout board (Lattice iCE40UP5K) with the TinyTapeout demo PCB (its microcontroller is an RP2350 on a version 3 demo board, the one our tooling is written for; a version 2 demo board has an RP2040). It allows testing TinyTapeout designs on real FPGA hardware before silicon fabrication.
 
 ## Installing the TT FPGA Packages
 
-Add the fpgas.online APT repository first ([verify.md: Installing](../verify.md#installing)), then on the demo board's Pi:
+Add the fpgas.online APT repository first (the steps under [Installing](../verify.md#installing) in the boot check's documentation), then on the demo board's Pi:
 
 ```bash
 sudo apt install fpgas-online-tt-fpga
@@ -21,9 +21,25 @@ sudo apt install fpgas-online-tt-fpga
 
 `fpgas-online-tt` is a different package: the TT site's own.
 
-The check finds the board by its Raspberry Pi microcontroller on USB (`2e8a:0005` or `2e8a:000f`, MicroPython's serial port). That does not say whether the demo board carries the FPGA breakout or a Tiny Tapeout chip, so the check asks the board itself (below) and loads a design only into a board that said it is an FPGA board ([Which Tiny Tapeout board it is](../verify.md#which-tiny-tapeout-board-it-is)). Every board first has what it said judged by [the `sdk` test](../verify.md#the-sdk-test), which loads nothing; for a board with a Tiny Tapeout chip that is the only test so far, and such a board fails until its Pmod cabling can be tested (the report says so). On an FPGA board it then loads the PMOD pin identification design and checks the PMOD HAT cabling against the expected map (ui_in on HAT JA, uio on JB, uo_out on JC, [tt-fpga-pin-mapping.md](tt-fpga-pin-mapping.md)); a miswired HAT fails the board. It then loads the UART test design through that microcontroller (`tt_fpga_program.py`, over `mpremote`), and runs its host test through the UART bridge on `/dev/ttyACM0`. There is no SPI flash test: the breakout has no flash (see [Programming](#programming)). Nothing is written to the demo board: for every load the microcontroller reads the bitstream from the Pi over the serial link (see [Programming](#programming)). The board has no flash to compare, so what `changed` compares is its USB serial number. `mpremote` is `micropython-mpremote` in trixie, but only in bookworm-backports for bookworm: without it the check reports an `error`. Only the PMOD loopback test is left to `fpgas-tt-fpga-debug`. When the tests are done the check streams one more design, which moves the seven-segment display and is left running ([what the TT FPGA is left running](../verify.md#what-the-tt-fpga-is-left-running)); if that load fails the board still passes, with a warning in the report.
+The check, at each boot:
 
-Before the first test, while it holds `/dev/ttyACM0`, the check reads whether the board's `main.py` is still the SDK's own (`tt_main_py.py`, with or without rpi-hwid; a changed one is an `error`). It then starts the board's SDK (`tt_sdk_start.py`, see [The SDK's main.py](#the-sdks-mainpy)) and then runs `rpi-hwid tinytapeout --json --no-stop-service`, both only when [rpi-hwid](https://github.com/mithro/rpi-hwid) is installed (`python3-rpi-hwid`, which `fpgas-online-verify` suggests, from rpi-hwid's own apt repository). rpi-hwid asks the Tiny Tapeout SDK on the RP2350 which microcontroller, chip, demo board and SDK release this is. The answer goes into the board's identity, for rpi-hwid's Tiny Tapeout label ([TT FPGA identity](../verify.md#tt-fpga-identity), [Tiny Tapeout fields](../identity.md#tiny-tapeout-fields)). Without rpi-hwid the board cannot be asked which Tiny Tapeout board it is: the check is an `error` and nothing is loaded.
+1. It finds the board by its Raspberry Pi microcontroller on USB (`2e8a:0005` or `2e8a:000f`, MicroPython's serial port).
+2. That does not say whether the demo board carries the FPGA breakout or a Tiny Tapeout chip, so the check asks the board itself (below) and loads a design only into a board that said it is an FPGA board ([Which Tiny Tapeout board it is](../verify.md#which-tiny-tapeout-board-it-is)).
+3. Every board first has what it said judged by [the `sdk` test](../verify.md#the-sdk-test), which loads nothing; for a board with a Tiny Tapeout chip that is the only test so far, and such a board fails until its Pmod cabling can be tested (the report says so).
+4. On an FPGA board it then loads the PMOD pin identification design and checks the PMOD HAT cabling against the expected map (ui_in on HAT JA, uio on JB, uo_out on JC, the [pin mapping](tt-fpga-pin-mapping.md)); a miswired HAT fails the board.
+5. It then loads the UART test design through that microcontroller (`tt_fpga_program.py`, over `mpremote`), and runs its host test through the UART bridge on the board's serial port (`/dev/ttboard`, or its `/dev/serial/by-id/` name).
+6. There is no SPI flash test: the breakout has no flash. Nothing is written to the demo board: for every load the microcontroller reads the bitstream from the Pi over the serial link (see [Programming](#programming)). The board has no flash to compare, so what `changed` compares is its USB serial number.
+7. `mpremote` is `micropython-mpremote` in trixie, but only in bookworm-backports for bookworm: without it the check reports an `error`.
+8. Only the PMOD loopback test is left to `fpgas-tt-fpga-debug` (`sudo fpgas-tt-fpga-debug --variant tt-fpga test pmod`).
+9. When the tests are done the check streams one more design, which moves the seven-segment display and is left running ([what the TT FPGA is left running](../verify.md#what-the-tt-fpga-is-left-running)); if that load fails the board still passes, with a warning in the report.
+
+Before the first test, while it holds `/dev/ttyACM0`, the check:
+
+1. Reads whether the board's `main.py` is still the SDK's own (`tt_main_py.py`, with or without rpi-hwid; a changed one is an `error`).
+2. Starts the board's SDK (`tt_sdk_start.py`, see [The SDK's main.py](#the-sdks-mainpy)).
+3. Runs `rpi-hwid tinytapeout --json --no-stop-service`, both only when [rpi-hwid](https://github.com/mithro/rpi-hwid) is installed (`python3-rpi-hwid`, which `fpgas-online-verify` suggests, from rpi-hwid's own apt repository). rpi-hwid asks the Tiny Tapeout SDK on the RP2350 which microcontroller, chip, demo board and SDK release this is. The answer goes into the board's identity, for rpi-hwid's Tiny Tapeout label ([TT FPGA identity](../verify.md#tt-fpga-identity), [Tiny Tapeout fields](../identity.md#tiny-tapeout-fields)).
+
+Without rpi-hwid the board cannot be asked which Tiny Tapeout board it is: the check is an `error` and nothing is loaded.
 
 It runs at every boot of the Welland TT FPGA boards: [current results](../verify.md#current-results).
 
@@ -31,7 +47,7 @@ It runs at every boot of the Welland TT FPGA boards: [current results](../verify
 
 ```bash
 sudo fpgas-tt-fpga-verify --no-publish --report -  # this board only, the JSON report on stdout
-sudo fpgas-tt-fpga-debug test uart                 # load one test's design and run its test
+sudo fpgas-tt-fpga-debug --variant tt-fpga test uart  # load one test's design and run its test
 ```
 
 What the results mean, the report, `changed` and `--update`, the debug tool and common failures: [verify.md](../verify.md#reading-the-result).
@@ -44,11 +60,11 @@ What the results mean, the report, `changed` and `--update`, the debug tool and 
 | Logic cells | 5,280 LUT4s |
 | SPRAM | 128 KB (4 x 32 KB blocks) |
 | DPRAM (EBR) | 120 Kbit (15 x 8 Kbit blocks) |
-| Controller | RP2040 (dual-core Arm Cortex-M0+, on demo PCB) |
-| USB | USB-C (via RP2040) |
+| Controller | RP2350 (on the version 3 demo PCB; RP2040 on version 2) |
+| USB | USB-C (via RP2350) |
 | Display | 7-segment LED display |
 | DIP switches | Configuration switches |
-| PMOD headers | 2x standard PMOD (following Digilent spec) |
+| PMOD headers | 3x standard PMOD (following Digilent spec): input, bidirectional, output ([pmod-tt.md](pmod-tt.md#demo-board-pmod-connectors)) |
 | Max clock | ~66 MHz |
 | I/O voltage | 3.3V |
 
@@ -58,7 +74,7 @@ Source: [TinyTapeout PCB Specs](https://tinytapeout.com/specs/pcb/), [TinyTapeou
 
 The TT FPGA Demo Board consists of two PCBs:
 
-1. **TinyTapeout Demo PCB** (bottom): Contains the RP2040 microcontroller, USB-C connector, 7-segment display, DIP switches, and PMOD headers. This PCB is designed to interface with TinyTapeout ASICs but also accepts the FPGA breakout board.
+1. **TinyTapeout Demo PCB** (bottom): Contains the RP2350 microcontroller, USB-C connector, 7-segment display, DIP switches, and PMOD headers. This PCB is designed to interface with TinyTapeout ASICs but also accepts the FPGA breakout board.
 
 2. **FPGA Breakout Board** (top): Contains the iCE40UP5K FPGA; it has no SPI flash. It plugs into the demo PCB's chip socket, presenting the same interface as a TinyTapeout ASIC.
 
@@ -75,8 +91,8 @@ The TT FPGA Demo Board consists of two PCBs:
 ┌──────────────┴───────────────┐
 │    TinyTapeout Demo PCB      │
 │                              │
-│  [USB-C] [RP2040] [7-seg]   │
-│  [DIP SW] [PMOD A] [PMOD B] │
+│  [USB-C] [RP2350] [7-seg]   │
+│  [DIP SW] [3 x PMOD header] │
 └──────────────────────────────┘
 ```
 
@@ -86,8 +102,8 @@ The FPGA implements a TinyTapeout-compatible interface with the following signal
 
 | Signal Group | Width | Direction | Description |
 |-------------|-------|-----------|-------------|
-| `ui_in[7:0]` | 8 bits | Input | User inputs (directly from DIP switches or RP2040) |
-| `uo_out[7:0]` | 8 bits | Output | User outputs (directly to 7-segment display or RP2040) |
+| `ui_in[7:0]` | 8 bits | Input | User inputs (directly from DIP switches or RP2350) |
+| `uo_out[7:0]` | 8 bits | Output | User outputs (directly to 7-segment display or RP2350) |
 | `uio[7:0]` | 8 bits | Bidirectional | User bidirectional I/O |
 | `ena` | 1 bit | Input | Enable signal |
 | `clk` | 1 bit | Input | Clock (up to ~66 MHz) |
@@ -113,17 +129,16 @@ The TT FPGA board supports UART communication through the TinyTapeout I/O pins. 
 | RX | ui_in[7] | Input |
 | TX | uo_out[0] | Output |
 
-The RP2040 on the demo PCB can act as a USB-to-UART bridge, forwarding serial data between the USB-C port and the FPGA's UART pins.
+The RP2350 on the demo PCB can act as a USB-to-UART bridge, forwarding serial data between the USB-C port and the FPGA's UART pins.
 
 Source: [TinyTapeout PCB Specs](https://tinytapeout.com/specs/pcb/)
 
 ## PMOD Headers
 
-The demo PCB has 2 standard PMOD headers following the Digilent specification:
+The demo PCB has 3 standard PMOD headers following the Digilent specification, one for each signal group (`ui_in`, `uio`, `uo_out`); which one is cabled to which Pmod HAT port is in [tt-fpga-cables.md](../wiring/tt-fpga/generated/tt-fpga-cables.md):
 
 - Each header is a 12-pin connector (8 signal + 2 GND + 2 VCC)
 - Signal voltage: 3.3V
-- The PMOD signals are routed through the TinyTapeout bidirectional I/O (`uio`) or directly to the FPGA breakout board
 
 These PMOD headers can be used for loopback testing in the fpgas.online infrastructure.
 
@@ -131,7 +146,7 @@ Source: [TinyTapeout PCB Specs](https://tinytapeout.com/specs/pcb/)
 
 ## Clock
 
-The RP2040 generates a 50 MHz clock via PWM on GPIO16 (`RP_PROJCLK`). The
+The RP2350 generates a 50 MHz clock via PWM on GPIO16 (`RP_PROJCLK`). The
 iCE40UP5K's internal PLL divides this down to a 12 MHz system clock for
 LiteX SoC designs (see `designs/_shared/tt_fpga_crg.py`).
 
@@ -158,7 +173,7 @@ The demo PCB has DIP switches connected to the `ui_in` pins, allowing manual inp
 
 ## Programming
 
-The RP2040 programs the iCE40UP5K over SPI using the `fabricfox` MicroPython
+The RP2350 programs the iCE40UP5K over SPI using the `fabricfox` MicroPython
 module (PIO-accelerated or bitbang fallback).
 
 ```bash
@@ -252,8 +267,8 @@ to bring up the PS1 boards.
 
 ## Test Infrastructure
 
-The RP2040 provides bitstream loading, clock generation, and USB-to-UART
-bridging. Three host-side wrapper scripts handle the RP2040 interaction:
+The RP2350 provides bitstream loading, clock generation, and USB-to-UART
+bridging. Three host-side wrapper scripts handle the RP2350 interaction:
 
 | Script                                                              | Purpose                                          |
 |---------------------------------------------------------------------|--------------------------------------------------|
@@ -265,7 +280,7 @@ bridging. Three host-side wrapper scripts handle the RP2040 interaction:
 
 | Test           | Bitstream                                                                            | Wrapper                                                            | What it verifies                     |
 |----------------|--------------------------------------------------------------------------------------|--------------------------------------------------------------------|--------------------------------------|
-| UART echo      | [`uart/.../tt_fpga_platform.bin`](../../designs/uart/build/tt-fpga-yosys-nextpnr/gateware/)              | [`tt_test_wrapper.py`](../../designs/_host/tt_test_wrapper.py)     | Serial TX/RX via RP2040 bridge       |
+| UART echo      | [`uart/.../tt_fpga_platform.bin`](../../designs/uart/build/tt-fpga-yosys-nextpnr/gateware/)              | [`tt_test_wrapper.py`](../../designs/_host/tt_test_wrapper.py)     | Serial TX/RX via RP2350 bridge       |
 | PMOD loopback  | [`pmod-loopback/.../tt_fpga_platform.bin`](../../designs/pmod-loopback/build/tt-fpga-yosys-nextpnr/gateware/) | [`tt_pmod_wrapper.py`](../../designs/_host/tt_pmod_wrapper.py)     | GPIO inversion across wired pin pairs |
 | PMOD pin ID    | [`pmod-pin-id/.../tt_fpga_platform.bin`](../../designs/pmod-pin-id/build/tt-fpga-yosys-nextpnr/gateware/) | [`tt_pmod_wrapper.py`](../../designs/_host/tt_pmod_wrapper.py)     | UART TX on each GPIO pin             |
 
@@ -342,7 +357,7 @@ If a board does hang in `DemoBoard()` (the stock `ttdbv3` build does), a power c
 RP2's mass-storage bootloader path stalls on Pi 3B+ hosts, so reflashing from a Pi 3B+ needs the PICOBOOT path
 rather than MSC.
 
-### RP2040 PWM first-call bug
+### RP2350 PWM first-call bug
 
 The first `PWM()` call on GPIO16 produces a stuck-HIGH output instead of
 oscillation. **Workaround:** deinit and recreate the PWM object:
