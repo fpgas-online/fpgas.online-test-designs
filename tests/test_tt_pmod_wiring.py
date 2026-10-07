@@ -232,7 +232,7 @@ def swapped_ja_jb_wires():
 
 
 def asic_wires():
-    """The ASIC hosts' cabling as measured on pi-sw2-p6: JA -> ui_in, JB -> uio, JC -> uo_out."""
+    """The ASIC hosts' cabling as measured on 4 Sep 2026: JA -> ui_in, JB -> uio, JC -> uo_out."""
     return standard_wires(cabling="asic")
 
 
@@ -464,7 +464,7 @@ def test_expected_map_matches_documented_cabling():
     assert with_asic["uio[1]"] == {10}  # JB2 and JA2 are the same Pi line
     assert with_asic["uio[7]"] == {2, 18}
     assert ttw.expected_direct("fpga")["uio[0]"] == 7
-    # asic cabling as measured on pi-sw2-p6: ui_in[1] drives the shared line
+    # asic cabling as measured on 4 Sep 2026: ui_in[1] drives the shared line
     # with uio[1], so the chip echoes it onto uo_out[1] = JC2 too.
     asic = ttw.expected_map("asic", asic_loopback=True)
     assert asic["ui_in[0]"] == {8}
@@ -924,12 +924,22 @@ def wiring_line(wires, pin_id=True):
      "the ui_in and uo_out ribbons are on each other's HAT ports (JC and JA): swap them"),
     # the TT04 board of 4 Sep: all three one position off, and ui_in and uo_out on each other's ports
     (placed({"ui_in": "JC", "uio": "JB", "uo_out": "JA"}, offset=("ui_in", "uio", "uo_out")),
-     "these ribbons are seated one position off (ui_in on HAT JC (it goes on JA), uio on HAT JB, uo_out on HAT "
-     "JA (it goes on JC)): Pmod pin n arrives on HAT pin 12-n, and Pmod pins 1 and 7 are on the HAT's ground; "
-     "reseat"),
+     "these ribbons are plugged in turned round and one position over (ui_in on HAT JC (it goes on JA), uio on "
+     "HAT JB, uo_out on HAT JA (it goes on JC)): Pmod pin n arrives on HAT pin 12-n, and Pmod pins 1 and 7 are on "
+     "the HAT's ground; plug each in the right way round, Pmod pin 1 to HAT pin 1"),
+    # review 2: uo_out alone, and with ui_in, turned round (its lines are what uio reaches through the chip)
+    (placed({"ui_in": "JA", "uio": "JB", "uo_out": "JC"}, offset=("uo_out",)),
+     "the uo_out ribbon is plugged in turned round and one position over (uo_out on HAT JC): Pmod pin n arrives on "
+     "HAT pin 12-n, and Pmod pins 1 and 7 are on the HAT's ground; plug it in the right way round, Pmod pin 1 to "
+     "HAT pin 1"),
+    (placed({"ui_in": "JA", "uio": "JB", "uo_out": "JC"}, offset=("ui_in", "uo_out")),
+     "these ribbons are plugged in turned round and one position over (ui_in on HAT JA, uo_out on HAT JC): Pmod "
+     "pin n arrives on HAT pin 12-n, and Pmod pins 1 and 7 are on the HAT's ground; plug each in the right way "
+     "round, Pmod pin 1 to HAT pin 1"),
     (placed({"ui_in": "JA", "uio": "JB", "uo_out": "JC"}, offset=("ui_in",)),
-     "the ui_in ribbon is seated one position off (ui_in on HAT JA): Pmod pin n arrives on HAT pin 12-n, and "
-     "Pmod pins 1 and 7 are on the HAT's ground; reseat"),
+     "the ui_in ribbon is plugged in turned round and one position over (ui_in on HAT JA): Pmod pin n arrives on "
+     "HAT pin 12-n, and Pmod pins 1 and 7 are on the HAT's ground; plug it in the right way round, Pmod pin 1 to "
+     "HAT pin 1"),
 ])  # fmt: skip
 def test_each_wrong_wiring_has_its_own_line_and_no_two_parties_ever_drive_one_net(wires, line):
     assert wiring_line(wires) == (1, line, [])
@@ -950,8 +960,8 @@ def test_a_bit_something_holds_is_never_driven_and_fails_the_board_named():
         assert all(rows_by_name(result)[f"ui_in[{k}]"]["status"] == "ok" for k in range(8) if k != 5)
         code, line = ttw.verdict(result)
         assert code == 1 and line == (
-            "the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) is held low on the demo board (a DIP switch that is "
-            "on, or a wrong ribbon joining it to a chip output: set all DIP switches off)")  # fmt: skip
+            "the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) is held low on the demo board (something drives it "
+            "low: a short to ground, or a chip output a wrong ribbon joins to it)")  # fmt: skip
 
 
 def test_a_factory_test_that_does_not_confirm_stops_the_test():
@@ -1206,6 +1216,7 @@ def _main(monkeypatch, capsys, measure, faults=(), heap=60000, mem=None, restore
     monkeypatch.setattr(ttw, "start_firmware", start or (lambda link, fw: ["READY", f"mem_free={heap}"]))
     monkeypatch.setattr(ttw, "stop_firmware", lambda link: None)
     monkeypatch.setattr(ttw.Rp2Link, "cmd", cmd)
+    monkeypatch.setattr(ttw.Rp2Link, "resync", lambda self, timeout=5.0: None)
     monkeypatch.setattr(ttw.Rp2Link, "write", lambda self, data: None)
     monkeypatch.setattr(ttw, "run_wiring_test", lambda *a, **k: measure())
     monkeypatch.setattr(ttw, "report", lambda result, discover, log=print: None)
@@ -1360,3 +1371,57 @@ def test_the_spi_modules_are_loaded_again_and_the_restore_is_read_back(monkeypat
     pinctrl.state[8] = ("op", "pu", "hi")
     env.saved_pins = dict(env.saved_pins)
     assert env.check_pins() == ["GPIO8 reads back op pu hi, not ip pu"]
+
+
+def test_a_bit_held_high_suggests_a_dip_switch_and_ui_in0_held_is_said_once():
+    row = {"signal": "ui_in[4]", "status": "untested", "expected": [19], "observed": [], "detail": ""}
+    (f,) = ttw.row_faults(row, "asic", {"ui_in[4]": "high"})
+    assert f["text"] == "ui_in[4] (Pmod pin 7) is held high on the demo board (a DIP switch that is on? set all DIP " \
+                        "switches off)"  # fmt: skip
+    # ui_in[0] held: the factory test then drives uio, which holds ui_in[1:3] too; only ui_in[0] is named
+    model = BoardModel(asic_wires(), project="drives_uio", hard_ui_in={0})
+    result, _log = run_simulated(model, argv=ASIC)
+    assert model.contentions == []
+    code, line = ttw.verdict(result)
+    assert code == 1 and line.startswith("the ui_in ribbon (to HAT JA): ui_in[0] (Pmod pin 1) is held low on the ")
+    assert "ui_in[1]" not in line and "ui_in[2]" not in line and "ui_in[3]" not in line
+    assert line.endswith("uo_out was not tested: the chip's factory test could not be used (ui_in[0] is held)")
+
+
+def test_replies_cut_short_by_a_stop_are_brought_back_in_step():
+    """The reply of a command a stop cut short arrives after the resync's ping: it is read past, up to the PONG,
+    and the next command reads its own reply."""
+    a, b = socket.socketpair()
+
+    def board():
+        buf = b""
+        while b"ping\n" not in buf:
+            buf += b.recv(64)
+        b.sendall(b"TTW OK 1\nTTW PONG\n")  # the late reply, then the ping's
+        while b"mem\n" not in buf:
+            buf += b.recv(64)
+        b.sendall(b"TTW VAL mem 41000\n")
+
+    thread = threading.Thread(target=board, daemon=True)
+    thread.start()
+    link = ttw.Rp2Link(a.fileno(), timeout=2.0)
+    link.resync(timeout=2)
+    assert link.cmd("mem") == ["VAL", "mem", "41000"]
+    thread.join(timeout=2)
+    a.close()
+    b.close()
+    silent, other = socket.socketpair()
+    with pytest.raises(ttw.ProtocolError):
+        ttw.Rp2Link(silent.fileno(), timeout=0.5).resync(timeout=0.5)
+    silent.close()
+    other.close()
+
+
+def test_the_sdk_s_config_is_off_for_our_project_enable_and_on_again_for_the_restore():
+    """SDK 2.0.4's enable() applies config.ini (the factory test's: ui_in = 1, a 10 Hz clock) unless apply_configs
+    is off (demoboard.py line 477): the chip would then drive uio[1:3] against ui_in[1:3] through the HAT."""
+    fw = ttw.build_firmware("rp2040")
+    project = fw[fw.index("elif op == 'project':") : fw.index("elif op == 'reset':")]
+    assert project.index("t.apply_configs = False") < project.index("p.enable()")
+    restore = fw[fw.index("project, freq, was = _saved") :]
+    assert restore.index("t.apply_configs = _saved_apply") < restore.index("project.enable()")
