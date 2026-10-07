@@ -36,7 +36,7 @@ class Arty(TestBoard):
                  "args": ["--board", "arty"], "pre": PMOD_PRE},
         # The Pmod HAT cabling, against identify_pmod_pins.BOARDS["arty"] (HAT JA/JB/JC -> Arty JA/JB/JC).
         "pin-id": {"artifact": "pmod-pin-id-arty-{v}/digilent_arty.bit", "script": "identify_pmod_pins.py",
-                   "args": ["--board", "arty"], "pre": PMOD_PRE, "verify": True},
+                   "args": ["--board", "arty"], "pre": PMOD_PRE, "verify": True, "says": "PIN-ID:"},
     }  # fmt: skip
 
     def idcode_argv(self, host):

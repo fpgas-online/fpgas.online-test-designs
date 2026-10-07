@@ -163,6 +163,55 @@ BOARDS = {
 }
 
 
+# Every FPGA ball on the Arty's four Pmods, by connector (docs/hardware/arty-a7.md, "PMOD FPGA Pin Assignments"),
+# so that a wire from a connector the map does not expect (JD, or JC on HAT JA) is named in the routing line.
+ARTY_PMODS = {
+    "Arty JA": ("G13", "B11", "A11", "D12", "D13", "B18", "A18", "K16"),
+    "Arty JB": ("E15", "E16", "D15", "C15", "J17", "J18", "K15", "J15"),
+    "Arty JC": ("U12", "V12", "V10", "V11", "U14", "V14", "T13", "U13"),
+    "Arty JD": ("D4", "D3", "F4", "F3", "E2", "D2", "H2", "G2"),
+}
+BOARDS["arty"]["sources"] = {ball: conn for conn, balls in ARTY_PMODS.items() for ball in balls}
+
+
+def sources(board_name):
+    """FPGA ball -> the board connector (or TT bus) it is on: from the map's own labels ("HAT JA.1 <- Arty JA.1"
+    is on "Arty JA", "HAT JC.1 <- uo_out[0]" on "uo_out"), and the board's `sources` for balls the map leaves out."""
+    spec = BOARDS[board_name]
+    out = {}
+    for _gpio, ball, label in spec["pins"]:
+        if " <- " in label:
+            out[ball] = re.split(r"[.\[]", label.split(" <- ", 1)[1], maxsplit=1)[0]
+    out.update(spec.get("sources", {}))
+    return out
+
+
+def routing(board_name, rows):
+    """One line saying where each HAT connector's wires come from, as read: "HAT JA reads Arty JC, HAT JB reads
+    Arty JD, HAT JC reads Arty JB; no signal on HAT JA.10". None for a map that is not of HAT connectors (the
+    Acorn's P2 header). A connector whose wires come from more than one place names each, most wires first; a
+    ball no connector has is named as itself, and a garbled decode as "garbled"."""
+    known = sources(board_name)
+    heard, silent = {}, []
+    for r in rows:
+        if not r["label"].startswith("HAT ") or " <- " not in r["label"]:
+            return None
+        pin = r["label"].split(" <- ", 1)[0]  # "HAT JA.10"
+        from_ = heard.setdefault(pin.split(".", 1)[0], {})
+        # A wire that matched counts as its own label: on a GPIO two wires share, both wires' labels are heard.
+        got = [r["expected"]] if r["ok"] else r["got"].split("+") if r["got"] else []
+        if not got:
+            silent.append(pin)
+        for label in got:
+            where = "garbled" if label.startswith("?") else known.get(label, label)
+            from_[where] = from_.get(where, 0) + 1
+    said = []
+    for hat, from_ in heard.items():
+        ranked = sorted(from_, key=lambda where: -from_[where])  # stable: first heard first among equals
+        said.append(f"{hat} reads {' and '.join(ranked) if ranked else 'nothing'}")
+    return ", ".join(said) + (f"; no signal on {', '.join(silent)}" if silent else "")
+
+
 def evaluate_board(board_name, results):
     """Validate decoded pin labels against a board's expected wiring.
 
@@ -680,6 +729,9 @@ def main():
         n_ok = sum(1 for r in rows if r["ok"])
         print(f"\n{n_ok}/{len(rows)} pins match expected wiring.")
         print(coverage(args.board))
+        read = routing(args.board, rows)
+        if read:  # the boot check's reason when the test fails (the test's `says`), so the routing is kept
+            print(f"PIN-ID: {n_ok}/{len(rows)} pins match: {read}")
         print(f"RESULT: {'PASS' if all_ok else 'FAIL'}")
         sys.exit(0 if all_ok else 1)
 
