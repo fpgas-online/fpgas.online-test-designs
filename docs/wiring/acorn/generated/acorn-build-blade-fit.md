@@ -4,7 +4,7 @@ Not yet run by us on this hardware: written from the design. Photos: Uptime Lab 
 
 ## What you need
 
-Both cables, checked on the bench (the page before this one), the Acorn and the Compute Blade. As before: touch bare metal of the unplugged host before you pick up the card, and hold it by its edges.
+Both cables, checked on the bench (the page before this one), the Acorn and the Compute Blade. As before: after action 1 of the list below, touch bare metal of the host before you pick up the card, and hold it by its edges.
 
 ## Steps
 

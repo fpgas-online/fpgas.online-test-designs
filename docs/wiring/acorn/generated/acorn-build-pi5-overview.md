@@ -20,7 +20,7 @@ Nothing in this guide cuts a wire to length. The bought cable is cut in half, on
 3. JTAG connector 2: the P1 cable's housing filled and checked.
 4. UART connector 1: the P2 cable's wires flagged, checked with a meter, cut back and crimped.
 5. UART connector 2: the P2 cable's housing filled and checked.
-6. Bench check: both cables checked on the host with the power off.
+6. Bench check: both cables checked on the host before power, the card out of its slot.
 7. Fitting: the plugs, the card and the housings go in.
 8. Verifying: the check run on the host, and what a failing line means.
 
