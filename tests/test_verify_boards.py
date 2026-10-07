@@ -1558,3 +1558,16 @@ def test_dip_switches_that_could_not_be_read_are_an_error_with_the_scripts_reaso
     run = Runner([("tt_dip_switches.py", (1, "Traceback (most recent call last):\n")), _rpi_hwid(TT_BOARD)])
     dip = _check(TT, tmp_path / "again", TT_FOUND, run)["tests"][1]
     assert (dip["result"], dip["reason"]) == ("fail", "the test exited 1")
+
+
+def test_a_pin_id_failure_keeps_the_routing_it_read_as_its_reason(tmp_path):
+    """The registry and the board page keep only the reason: "the test exited 1" lost which connector each HAT
+    connector reads (every Welland Arty, 2026-10-04; test-designs issue #58)."""
+    said = "PIN-ID: 0/18 pins match: HAT JA reads Arty JC, HAT JB reads Arty JD, HAT JC reads Arty JB"
+    run = Runner([("identify_pmod_pins.py", (1, f"| GPIO8 | ... |\n{said}\nRESULT: FAIL\n"))],
+                 flash=b"\x5a" * ARTY.flash_region["a7-35"])  # fmt: skip
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    pin_id = next(t for t in report["tests"] if t["test"] == "pin-id")
+    assert (pin_id["result"], pin_id["reason"]) == ("fail", said.removeprefix("PIN-ID: "))
+    assert report["reason"] == f"pin-id fail: {said.removeprefix('PIN-ID: ')}"
+    assert TT.tests["pin-id"]["says"] == ARTY.tests["pin-id"]["says"] == "PIN-ID:"

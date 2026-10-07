@@ -357,3 +357,65 @@ def test_a_tt_cabled_as_the_fleet_passes_and_ja_jc_swapped_fails():
     all_ok, rows = ident.evaluate_board("tt", swapped)
     assert not all_ok
     assert [r["label"].split(" <- ")[1] for r in rows if r["ok"]] == [f"uio[{i}]" for i in (0, 4, 5, 6, 7)]
+
+
+# -- the routing line (the boot check's reason when pin-id fails) ----------------------------------------------
+
+# The Welland Artys as the boot check read them on 2026-10-04 (data of fpgas.online-test-designs issue #58).
+WELLAND_P12 = {8: "V12", 19: "U14", 21: "V14", 20: "T13", 18: "U13", 7: "D4", 26: "E2", 13: "D2", 3: "H2", 2: "G2",
+               16: "E15", 14: "E16", 15: "D15", 17: "C15", 4: "J17", 12: "J18", 5: "K15", 6: "J15"}  # fmt: skip
+WELLAND_8415 = {8: "V12", 19: "U14", 21: "V14", 20: "T13", 18: None, 7: "E15", 26: "J17", 13: "J18", 3: "K15",
+                2: "J15", 16: "D4", 14: "D3", 15: "F4", 17: "F3", 4: "E2", 12: "D2", 5: "H2", 6: "G2"}  # fmt: skip
+
+
+def test_the_routing_line_names_the_arty_connector_each_hat_connector_reads():
+    _ok, rows = ident.evaluate_board("arty", _decoded("arty"))
+    assert ident.routing("arty", rows) == "HAT JA reads Arty JA, HAT JB reads Arty JB, HAT JC reads Arty JC"
+    _ok, rows = ident.evaluate_board("arty", WELLAND_P12)
+    assert ident.routing("arty", rows) == "HAT JA reads Arty JC, HAT JB reads Arty JD, HAT JC reads Arty JB"
+    _ok, rows = ident.evaluate_board("arty", WELLAND_8415)
+    assert ident.routing("arty", rows) == (
+        "HAT JA reads Arty JC, HAT JB reads Arty JB, HAT JC reads Arty JD (no signal on HAT JA.10)")
+
+
+def test_the_routing_line_names_mixed_unknown_garbled_and_silent_wires():
+    mixed = {**_decoded("arty"), 8: "E15", 19: "W12", 21: "?\x93", 20: None, 18: None}
+    _ok, rows = ident.evaluate_board("arty", mixed)
+    assert ident.routing("arty", rows) == (
+        "HAT JA reads Arty JB and W12 and garbled, HAT JB reads Arty JB, HAT JC reads Arty JC "
+        "(no signal on HAT JA.9, HAT JA.10)")
+    _ok, rows = ident.evaluate_board("arty", {})
+    nothing = "HAT JA reads nothing, HAT JB reads nothing, HAT JC reads nothing (no signal on"
+    assert ident.routing("arty", rows).startswith(nothing)
+
+
+def test_the_routing_line_for_the_tt_counts_a_shared_gpio_as_each_wire_heard_alone():
+    _ok, rows = ident.evaluate_board("tt", _tt_good())
+    assert ident.routing("tt", rows) == "HAT JA reads ui_in, HAT JB reads uio, HAT JC reads uo_out"
+    # the JA and JC ribbons swapped, as the Welland TTs were before 2026-10-04
+    swapped = {8: "38", 19: "45", 21: "46", 20: "47", 18: "48", 7: "2", 26: "9", 13: "10", 3: "11", 2: "12",
+               16: "13", 14: "19", 15: "18", 17: "21", 4: "23", 12: "25", 5: "26", 6: "27",
+               10: ("42",), 9: ("43",), 11: ("44",)}  # fmt: skip
+    _ok, rows = ident.evaluate_board("tt", swapped)
+    assert ident.routing("tt", rows) == "HAT JA reads uo_out, HAT JB reads uio and uo_out, HAT JC reads ui_in"
+
+
+def test_the_acorn_map_has_no_routing_line():
+    _ok, rows = ident.evaluate_board("acorn", CANONICAL)
+    assert ident.routing("acorn", rows) is None
+
+
+def test_board_mode_prints_the_routing_line_for_the_boot_check(monkeypatch, capsys):
+    monkeypatch.setattr(ident.sys, "argv", ["identify_pmod_pins.py", "--board", "arty"])
+    monkeypatch.setattr(ident, "release_kernel_gpio_drivers", lambda: None)
+    monkeypatch.setattr(ident, "detect_gpio_chip", lambda: "/dev/gpiochip0")
+    monkeypatch.setattr(ident, "alt_functions", lambda gpios: {})
+    monkeypatch.setattr(ident, "scan_gpios", lambda gpios, chip, shared=(): dict(WELLAND_P12))
+    try:
+        ident.main()
+        code = 0
+    except SystemExit as e:
+        code = e.code
+    lines = capsys.readouterr().out.splitlines()
+    assert code == 1 and lines[-1] == "RESULT: FAIL"
+    assert lines[-2] == ("PIN-ID: 0/18 pins match: HAT JA reads Arty JC, HAT JB reads Arty JD, HAT JC reads Arty JB")

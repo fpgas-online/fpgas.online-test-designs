@@ -279,7 +279,7 @@ class TTFPGA(TestBoard):
         # The Pmod HAT cabling, against identify_pmod_pins.BOARDS["tt"] (ui_in on HAT JA, uio JB, uo_out JC).
         "pin-id": {"artifact": "pmod-pin-id-{v}/tt_fpga_platform.bin", "script": "identify_pmod_pins.py",
                    "args": ["--board", "tt"], "pre": PMOD_PRE, "program_args": ["--gpio-release"],
-                   "verify": True},
+                   "verify": True, "says": "PIN-ID:"},
         "uart": {"artifact": "uart-test-tt-fpga/tt_fpga_platform.bin", "script": "test_uart.py",
                  "args": ["--port", "{port}", "--board", "tt", "--skip-banner"], "verify": True,
                  "runner": "tt-bridge"},
