@@ -1110,7 +1110,8 @@ class WiringProbe:
             return f"{'; '.join(wrong)}: not uo_out = uio_in"
         if len(followed) < 2:
             return (
-                f"only {len(followed)} uo_out bit{'' if len(followed) == 1 else 's'} followed its uio bit, so "
+                f"only {len(followed)} uo_out {'bit' if len(followed) == 1 else 'bits'} followed "
+                f"{'its' if len(followed) == 1 else 'their'} uio bit, so "
                 "the loopback cannot be confirmed (a "
                 "ribbon on another port or turned round, or the chip)"
             )
@@ -2201,6 +2202,11 @@ def row_faults(row, cabling, held, levels=None, held_low_lines=()):
         if name in held:
             return [fault(f"{where} is held {held[name]} on the demo board ({HELD_WHY[held[name]]})",
                           own_missing=True)]  # fmt: skip
+        sharer = [u for u in held if u.startswith("ui_in[") and name in
+                  (signal_name("uio", j) for j in connected_uio(cabling, u))]  # fmt: skip
+        if group == "uio" and sharer:
+            return [fault(f"{where} could not be tested: it shares its HAT line with {sharer[0]}, which is held "
+                          f"{held[sharer[0]]}", own_missing=True)]  # fmt: skip
         if levels.get(name) == "low" or (levels.get(name) == "high" and own not in PI_FIXED_PULLUP_GPIOS):
             return [fault(f"{where} could not be tested: something holds its line {levels[name]}", own_missing=True)]
         return [fault(f"{where} could not be tested", own_missing=True)]
@@ -2331,6 +2337,7 @@ def verdict(result, strict=True):
     bad = [r for r in result["rows"] if r["required"] and r["status"] != "ok"]
     untested_groups = [g for g in GROUPS if any(r["signal"].startswith(g + "[") and r["status"] == "untested"
                                                 for r in bad)]  # fmt: skip
+    untested_uio = [r["signal"] for r in bad if r["signal"].startswith("uio[") and r["status"] == "untested"]
     if held.get("ui_in[0]") == "high":
         # With ui_in[0] high the factory test drives uio (its counter), which holds ui_in[1:3] through the HAT: that
         # follows from ui_in[0], which alone is said. Held low it explains no other held bit.
@@ -2406,7 +2413,12 @@ def verdict(result, strict=True):
         parts.append("; ".join(stray[:NAMED_PER_RIBBON]) + (f"; and {len(stray) - NAMED_PER_RIBBON} more"
                                                              if len(stray) > NAMED_PER_RIBBON else ""))  # fmt: skip
     if strict and not result["asic_loopback"] and not whole:  # a ribbon wholly elsewhere explains it
-        which = "uio and uo_out were" if "uio" in untested_groups else "uo_out was"
+        if len(untested_uio) == 8:
+            which = "uio and uo_out were"
+        elif untested_uio:
+            which = ", ".join(f"{n} (Pmod pin {pmod_pin(n)})" for n in untested_uio) + " and uo_out were"
+        else:
+            which = "uo_out was"
         parts.append(
             f"{which} not tested: the chip's factory test could not be used (ui_in[0] is held)"
             if "ui_in[0]" in held

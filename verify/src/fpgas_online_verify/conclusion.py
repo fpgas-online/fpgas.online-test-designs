@@ -81,7 +81,12 @@ ADVICE = (
      "loaded into it. The reason above says what stopped the read; if rpi-hwid is not installed, install it "
      f"(sudo apt install python3-rpi-hwid, from https://github.com/mithro/rpi-hwid): {DOCS}"
      "/tt-fpga.html#which-tiny-tapeout-board-it-is"),
-    (r"the u\w+ ribbon \(to HAT J[ABC]\): (?![^;]*held)|ribbons are on each other's HAT ports"
+    # A ribbon with a fault that is not a held line ("held", "holds its line"), anywhere among its named faults;
+    # the faults of one ribbon are joined by "; ", and the lookaheads stop at the next part of the line.
+    (r"the u\w+ ribbon \(to HAT J[ABC]\): (?:[^;]*\bh[eo]lds?\b[^;]*; (?!the )(?!and )(?!these )(?!uio and )"
+     r"(?!uo_out was)(?!uio\[\d\] \(Pmod pin \d+\),)(?!uio\[\d\] \(Pmod pin \d+\) and uo_out))*"
+     r"(?![^;]*\bh[eo]lds?\b)(?!and \d+ more)"
+     r"|ribbons are on each other's HAT ports"
      r"|turned round and one position over",
      "A ribbon cable between the demo board's Pmod connectors and the Pi's Pmod HAT is not where it should be. "
      "The reason names the ribbon (by the demo board's ui_in, uio or uo_out Pmod, and the HAT port it should "

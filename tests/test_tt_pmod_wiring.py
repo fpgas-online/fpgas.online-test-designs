@@ -1429,7 +1429,10 @@ def test_a_bit_held_high_suggests_a_dip_switch_and_ui_in0_held_is_said_once():
     code, line = ttw.verdict(result)
     assert code == 1 and line.startswith("the ui_in ribbon (to HAT JA): ui_in[0] (Pmod pin 1) is held low on the ")
     assert "ui_in[1]" not in line and "ui_in[2]" not in line and "ui_in[3]" not in line
-    assert line.endswith("uio and uo_out were not tested: the chip's factory test could not be used (ui_in[0] is held)")
+    assert line.endswith(
+        "; uio[6] (Pmod pin 9), uio[7] (Pmod pin 10) and uo_out were not tested: the chip's factory test could not "
+        "be used (ui_in[0] is held)"
+    )  # review 8, finding 2: held low, ui_in[0] leaves uio[0:5] tested
 
 
 def test_replies_cut_short_by_a_stop_are_brought_back_in_step():
@@ -1592,12 +1595,14 @@ def test_the_group_drive_is_refused_on_anything_but_an_rp2040():
 
 
 def test_ui_in0_held_low_says_nothing_of_uio_and_not_that_the_pi_s_pull_ups_hold_uio6_7():
-    """Review 6, finding 2: with ui_in[0] held at either level the loopback cannot be used, so uio is untested and
-    not named; and the Pi's own pull-ups on uio[6:7] are never given as "something holds its line"."""
+    """Review 6, finding 2: with ui_in[0] held at either level the loopback cannot be used, so uio is not blamed
+    on its ribbon; and the Pi's own pull-ups on uio[6:7] are never given as "something holds its line". Review 8,
+    finding 2: the uio bits not tested are named as that."""
     model = BoardModel(asic_wires(), project="drives_uio", hard_ui_in={0})
     result, _log = run_simulated(model, argv=ASIC)
     code, line = ttw.verdict(result)
-    assert code == 1 and "uio[" not in line and "holds its line high" not in line, line
+    assert code == 1 and "uio ribbon" not in line and "holds its line" not in line, line
+    assert "; uio[6] (Pmod pin 9), uio[7] (Pmod pin 10) and uo_out were not tested" in line, line
 
 
 @pytest.mark.parametrize("gpio, pin", [(5, 9), (6, 10)])
@@ -1633,3 +1638,24 @@ def test_the_tt04_placement_says_uio_and_uo_out_could_not_be_tested():
     code, line, fights = wiring_line(placed({"ui_in": "JC", "uio": "JB", "uo_out": "JA"}, offset=ttw.GROUPS))
     assert fights == [] and code == 1, line
     assert "some uio and uo_out signals could not be tested" in line or "uio and uo_out were not tested" in line, line
+
+
+@pytest.mark.parametrize("model", [dict(hard_ui_in={0}), dict(held_ui_in={0}, dip_level=0)])
+def test_ui_in0_held_low_names_the_uio_bits_not_tested_not_all_of_uio(model):
+    """Review 8, finding 2: held low, ui_in[0] leaves uio[0:5] tested; only uio[6:7] (driven only through the chip's
+    factory test) and uo_out are not."""
+    code, line = asic_verdict(asic_wires(), project="drives_uio", pin_id=True, **model)
+    assert code == 1 and line.endswith(
+        "; uio[6] (Pmod pin 9), uio[7] (Pmod pin 10) and uo_out were not tested: the chip's factory test could not "
+        "be used (ui_in[0] is held)"
+    ), line
+
+
+@pytest.mark.parametrize("bit", [1, 2, 3])
+def test_a_dip_switch_on_ui_in1_to_3_says_why_its_uio_bit_is_untested(bit):
+    """Review 8, finding 3: uio[k] is on ui_in[k]'s HAT line (JA2-4 and JB2-4 are the same Pi GPIOs)."""
+    code, line = asic_verdict(asic_wires(), project="drives_uio", pin_id=True, held_ui_in={bit}, dip_level=1)
+    assert code == 1 and line.endswith(
+        f"the uio ribbon (to HAT JB): uio[{bit}] (Pmod pin {bit + 1}) could not be tested: it shares its HAT line "
+        f"with ui_in[{bit}], which is held high"
+    ), line

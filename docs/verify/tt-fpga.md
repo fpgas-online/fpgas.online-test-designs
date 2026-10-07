@@ -215,7 +215,7 @@ How it tests:
 The test is an `error`, not a `fail`, when it could not make its reading, and stops there: the
 board did not answer its raw REPL; the board's SDK is not running (no `tt` object) or could not select
 `tt_um_factory_test`, or fewer than two `uio` bits float or fewer than two `uo_out` bits followed their `uio` bit,
-so the loopback could not be confirmed (a ribbon on another port or turned round, or the chip); the RP2040 has too little heap free with the command
+so `the loopback cannot be confirmed` (a ribbon on another port or turned round, or the chip); the RP2040 has too little heap free with the command
 server loaded (`RP2040 heap too low: N bytes free …`); gpiod or `pinctrl` is missing or could not read the HAT
 GPIOs; the test was stopped or reached its own time limit (the Pi is put back first); the test failed in a way it
 does not know (the exception is named); or what it changed on the Pi or the board was not put back (the reason

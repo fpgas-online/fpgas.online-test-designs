@@ -322,3 +322,38 @@ def test_a_held_line_is_not_told_to_reseat_a_ribbon():
                 "line is held low: a short to ground?)")  # fmt: skip
     says = [text for pattern, text in conclusion.ADVICE if conclusion.re.search(pattern, held_low)]
     assert len(says) == 1 and "for a short" in says[0]
+
+
+def advice_for(reason):
+    return [text for pattern, text in conclusion.ADVICE if conclusion.re.search(pattern, reason)]
+
+
+def test_a_line_something_holds_is_not_told_to_reseat_a_ribbon():
+    """Review 8, finding 1: "holds its line" is a held line too."""
+    says = advice_for("wiring fail: the uio ribbon (to HAT JB): uio[0] (Pmod pin 1) could not be tested: something "
+                      "holds its line low")  # fmt: skip
+    assert len(says) == 1 and "for a short" in says[0]
+
+
+def test_a_ribbon_gets_the_ribbon_advice_for_any_fault_that_is_not_a_held_line():
+    """Review 8, finding 4: a held line named first does not hide an open wire after it on the same ribbon."""
+    says = advice_for("wiring fail: the uio ribbon (to HAT JB): uio[0] (Pmod pin 1) could not be tested: something "
+                      "holds its line low; uio[4] (Pmod pin 7) did not reach HAT JB pin 7")  # fmt: skip
+    assert any("Seat it" in s for s in says) and any("for a short" in s for s in says)
+    held_then_untested_list = (
+        "wiring fail: the ui_in ribbon (to HAT JA): ui_in[0] (Pmod pin 1) is held low on the demo board (something "
+        "drives it low: a short to ground, or a chip output a wrong ribbon joins to it); uio[6] (Pmod pin 9), "
+        "uio[7] (Pmod pin 10) and uo_out were not tested: the chip's factory test could not be used (ui_in[0] is held)"
+    )
+    assert not any("Seat it" in s for s in advice_for(held_then_untested_list))
+
+
+def test_a_uio_bit_sharing_a_held_ui_in_line_gets_only_the_dip_switch_advice():
+    """Review 8, finding 3."""
+    reason = (
+        "wiring fail: the ui_in ribbon (to HAT JA): ui_in[1] (Pmod pin 2) is held high on the demo board (a DIP "
+        "switch that is on? set all DIP switches off); the uio ribbon (to HAT JB): uio[1] (Pmod pin 2) could not be "
+        "tested: it shares its HAT line with ui_in[1], which is held high"
+    )
+    says = advice_for(reason)
+    assert len(says) == 1 and "DIP switches off" in says[0]
