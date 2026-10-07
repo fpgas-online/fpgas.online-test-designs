@@ -5,7 +5,7 @@ The parts for **one** Compute Blade host; for several hosts, that many of each.
 | Have it | Qty | Part | Part number | What it is for |
 |---|---|---|---|---|
 | ☐ | 1 | Compute Blade (Uptime Lab) | — | its M.2 slot takes the card |
-| ☐ | 1 | Raspberry Pi Compute Module 4 or 5 | — | the host: it sits on the Compute Blade |
+| ☐ | 1 | Raspberry Pi Compute Module 4 or 5 | — | the host: it sits on the Compute Blade. JTAG on this wiring's pins has been run by us on a CM5 only, not yet on a CM4 |
 | ☐ | 1 | SQRL Acorn CLE-215+, CLE-215 or CLE-101 (the same card is sold as LiteFury and NiteFury) | — | M.2 M-key, 2280 |
 | ☐ | 1 | Molex Pico-EZmate cable assembly, 6 circuits, a plug at each end | Molex 0369200601 | cut in half: one half is the P1 cable, the other the P2 cable. All six wires are black |
 | ☐ | 1 | heat-shrink tube, about 2 mm, a few centimetres | — | over each cut-back wire end |
@@ -15,7 +15,7 @@ The parts for **one** Compute Blade host; for several hosts, that many of each.
 | ☐ | 1 | resistor, 470 Ω, 1/8 W axial | — | in series with J2 |
 | ☐ | 1 | heat-shrink tube, about 3 mm, a few centimetres | — | over the resistor and both joints |
 
-The tools to build its two cables, once for any number of hosts:
+The tools to build, fit and check its two cables, once for any number of hosts:
 
 | Have it | Tool | What it is for |
 |---|---|---|
@@ -26,3 +26,6 @@ The tools to build its two cables, once for any number of hosts:
 | ☐ | hot-air tool for the heat-shrink tube | to shrink the tube over each cut-back end (VCC always), and over the series resistor |
 | ☐ | a fine probe tip for the multimeter, or a sewing pin to hold against a probe | the plug's contacts are 1.2 mm apart, and a terminal is reached through a small opening |
 | ☐ | masking tape and a fine marker pen, or a paint pen | to flag the six wires with their numbers, and to mark the pin 1 corner of each housing |
+| ☐ | a ruler marked in millimetres | the steps give lengths in millimetres: where a flag goes, how much of a wire is left, cut back or stripped |
+| ☐ | a PH1 (Phillips size 1) screwdriver | for the M2x2.5 screw that holds the card in the M.2 slot. Uptime Lab's assembly guide for the Compute Blade names a PH1 driver for that screw (and a 5 mm hex driver for its standoff, if that is not fitted yet); not verified by us on the blades |
+| ☐ | a computer with ssh, on a network that reaches the blade | to log in to the blade and run the check (the page "verifying 1") |

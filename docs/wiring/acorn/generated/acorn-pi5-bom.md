@@ -13,7 +13,7 @@ The parts for **one** Raspberry Pi 5 host; for several hosts, that many of each.
 | ☐ | 1 | Dupont housing, 2×4, 2.54 mm pitch | — | over 40-pin header pins 19 to 26; 3 of its 8 cavities stay empty |
 | ☐ | 10 | Dupont female crimp terminal, 2.54 mm | — | one for each connected wire: GND, TCK, TDO, TMS, TDI, GND, J2, K2, J5, H5; buy a few more than this, as spares |
 
-The tools to build its two cables, once for any number of hosts:
+The tools to build, fit and check its two cables, once for any number of hosts:
 
 | Have it | Tool | What it is for |
 |---|---|---|
@@ -23,3 +23,4 @@ The tools to build its two cables, once for any number of hosts:
 | ☐ | hot-air tool for the heat-shrink tube | to shrink the tube over each cut-back end (VCC always) |
 | ☐ | a fine probe tip for the multimeter, or a sewing pin to hold against a probe | the plug's contacts are 1.2 mm apart, and a terminal is reached through a small opening |
 | ☐ | masking tape and a fine marker pen, or a paint pen | to flag the six wires with their numbers, and to mark the pin 1 corner of each housing |
+| ☐ | a ruler marked in millimetres | the steps give lengths in millimetres: where a flag goes, how much of a wire is left, cut back or stripped |
