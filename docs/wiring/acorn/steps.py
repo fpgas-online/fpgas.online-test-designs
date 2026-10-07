@@ -162,8 +162,9 @@ def ground_shows_way_round(c):
             )
         else:
             out.append(
-                f"The beep also shows that the {connector} housing is the right way round: turned round, its GND "
-                f"wire would sit on {on}, not a ground pin (that it would then stay silent is not tried by us)."
+                f"The beep is also meant to show that the {connector} housing is the right way round: turned round, "
+                f"its GND wire would sit on {on}, not a ground pin; that a turned housing would then stay silent is "
+                "not tried by us."
             )
     return " ".join(out)
 
@@ -1201,6 +1202,12 @@ def has_resistor(c, connector):
 SHEETS = {"pi5": "acorn-wiring-pi5", "blade": "acorn-wiring-computeblade"}
 
 
+def power_off_if_on(c):
+    """The carrier's own power-off sentence, for a step that needs the host off: every page that powers a host
+    off, or presumes it off, says it in these words (on a blade, Tim is asked first)."""
+    return f"If the {c.name} is on, {c.power_off[0].lower()}{c.power_off[1:]}"
+
+
 def header_words(name):
     """A header's name as words in a sentence: \"UART\" becomes \"UART header\"."""
     return name if any(w in name.lower() for w in ("header", "port")) else f"{name} header"
@@ -1325,8 +1332,9 @@ def procedure_parts(c, restart=False):
         for k in wiring.CONNECTORS
     ]
     step(
-        "Check that each half reaches, before any wire is cut back or crimped. With the host powered off and "
-        "the card out of its slot, hold the card over the slot where it will sit, and lay "
+        "Check that each half reaches, before any wire is cut back or crimped. "
+        + power_off_if_on(c)
+        + " With the card out of its slot, hold the card over the slot where it will sit, and lay "
         + " and ".join(pairs)
         + ", along the way each cable will run. Its cut end must reach the header with some slack left to "
         "bend into the housing; how much is needed has not been measured by us. If a half does not reach, "
@@ -1359,7 +1367,7 @@ def procedure_parts(c, restart=False):
             f"Put a numbered tape flag on each of the {len(pins)} wires, 1 at the left to {len(pins)}, about "
             f"{lengths['flag_back']} mm back from the tip, clear of the end that will be cut and stripped later. "
             f"Write {connector} on the flag of wire 1 as well: off the card, the two halves look alike.",
-            "With the plug still in the socket (the Acorn out of any slot, unpowered), set the meter to continuity. "
+            "With the plug still in the socket (the Acorn out of any slot), set the meter to continuity. "
             "Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not "
             "stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: "
             "it must beep.",
@@ -1446,9 +1454,9 @@ def procedure_parts(c, restart=False):
     first = next(iter(wiring.CONNECTORS.values()))["pins"][0]
     step(
         "This is a bench check; the housings come off again before the cables are fitted. "
-        f"Fit {fits[0]}, and {fits[1]}. The Acorn is not in its slot and the plugs are free. With the host unplugged "
-        "from power, "
-        "put one meter probe "
+        + power_off_if_on(c)
+        + f" Then fit {fits[0]}, and {fits[1]}. The Acorn is not in its slot and the plugs are free. "
+        "Put one meter probe "
         f"on contact 1 ({label_of(first)}) of a plug and the other on {c.shell}: it must "
         f"beep. Do the same for the other plug. Then contact {len(pins)} of each plug ({label_of(pins[-1])}, the wire "
         "you cut back): against the shell and against every other contact it must be silent. That the shell is the "
@@ -1485,7 +1493,7 @@ def guide_name(c, part):
 
 # Where the reader first picks up the card (each cable's first page): the one full note on static.
 STATIC = (
-    "The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the unplugged host, or wear an "
+    "The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an "
     "anti-static wrist strap; hold the card by its edges."
 )
 
@@ -1561,7 +1569,7 @@ def guide(c):
             f"{title} 2: the {connector} cable's housing filled and checked.",
         ]
     order += [
-        "Bench check: both cables checked on the host with the power off.",
+        "Bench check: both cables checked on the host before power, the card out of its slot.",
         "Fitting: the plugs, the card and the housings go in.",
         "Verifying: the check run on the host, and what a failing line means.",
     ]
@@ -1607,17 +1615,19 @@ def guide(c):
         )
     bench, fit_ = cut_at(parts["fit"], "Fit the cables, in this order")
     out[guide_name(c, "bench")] = body(
-        f"Both finished cables, the {c.name} unplugged from power, and a multimeter with a continuity buzzer. The "
-        "Acorn stays out of its slot.",
+        f"Both finished cables, the {c.name}, and a multimeter with a continuity buzzer. The Acorn stays out of "
+        f"its slot. {power_off_if_on(c)}",
         bench,
         "## If it fails",
         "Do not fit the cables. A contact 1 that does not beep means that cable's ground wire is open or in the wrong "
         "cavity; a contact 6 that beeps anywhere means the 3.3 V wire was not the one cut back. Go back to that "
-        'cable\'s page "fill and check the housing" and check every wire again.',
+        'cable\'s second page, "JTAG connector 2" or "UART connector 2" (fill and check the housing), and check every '
+        "wire again.",
     )
     out[guide_name(c, "fit")] = body(
         f"Both cables, checked on the bench (the page before this one), the Acorn and the {c.name}. As before: "
-        "touch bare metal of the unplugged host before you pick up the card, and hold it by its edges.",
+        "after action 1 of the list below, touch bare metal of the host before you pick up the card, and hold it by "
+        "its edges.",
         fit_,
         "## Next",
         'Power the host on and run the check: the page "verifying 1".'
@@ -1842,8 +1852,8 @@ def shell_check(c):
     """The bench check: contact 1 of a plug to the host's metal, with the housings on their headers."""
     pins = wiring.CONNECTORS["P1"]["pins"]
     sh = Sheet(W, 100)
-    title(sh, f"Bench check on a {c.name}, before power", "housings on their headers, plugs free, host unplugged")
-    y = 96
+    title(sh, f"Bench check on a {c.name}, before power", "housings on their headers, plugs free, card out of its slot")
+    y = para(sh, 30, 98, power_off_if_on(c), W - 40, "bold") + 2
     if c.key in USB_SHELL:
         (px, py, _pw, ph), k = sh.photo("blade.jpg", 30, y + 34, W - 40)
         x0, y0, x1, y1 = USB_SHELL[c.key]
