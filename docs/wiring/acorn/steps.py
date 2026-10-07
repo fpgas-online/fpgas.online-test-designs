@@ -1247,6 +1247,16 @@ def procedure_parts(c, restart=False):
         "Cut the Molex cable in half with side cutters. Each half is one cable.",
         ("The cable, cut in the middle", "acorn-cable-cut.png"),
     )
+    headers = " and the ".join(dict.fromkeys(c.headers[housing(c, k).header].name for k in wiring.CONNECTORS))
+    step(
+        f"Check that a half reaches, before any wire is cut back or crimped. {c.power_off} Lay one half from "
+        f"where the card's two sockets are, with the card in its slot, along the way each cable will run to "
+        f"its header on the {c.name} ({headers}): its cut end must reach past that header's pins with at "
+        f"least {lengths['strip']} mm to spare. If it does not reach, stop: this guide uses each half at the "
+        "length it has, and a "
+        "longer cable is not written here. Tell whoever gave you this guide. **Not yet done by us on this "
+        "hardware.**"
+    )
     cavity = {}
     for connector, conn in wiring.CONNECTORS.items():
         plan = housing(c, connector)

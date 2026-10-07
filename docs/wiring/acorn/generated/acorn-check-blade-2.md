@@ -4,7 +4,7 @@
 
 Find the failing line in the table, then the wire in the two cavity pictures under it: the number in a cavity is the number on the wire's flag.
 
-**Before you touch a cable: Power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in.** After moving a wire, boot and run the check again. One test can be run on its own, `sudo fpgas-acorn-verify --test jtag` or `--test p2-serial`; it prints the usual summary, then the whole report as JSON.
+**Before you touch a cable: Power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in.** After moving a wire, boot and run the check again (on a blade at ps1 the install is gone after the boot: install again, as on verifying 1). One test can be run on its own, `sudo fpgas-acorn-verify --test jtag` or `--test p2-serial`; it prints the usual summary, then the whole report as JSON.
 
 | The failing line | Look at |
 |---|---|
