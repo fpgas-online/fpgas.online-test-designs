@@ -175,8 +175,30 @@ def failures(c):
             )
         other = [key for key, marks in ONLY.items() if key != c.key and any(m in start for m in marks)]
         if not other:
-            out.append(site_links(found[0], "common-failures"))
+            out.append(site_links(for_carrier(found[0], c), "common-failures"))
     return "\n".join(out) + "\n"
+
+
+def for_carrier(row, c):
+    """A row whose advice differs by host, written as "On a <host>: … On a <other host>: …", keeps only the clause
+    for carrier `c`: a reader of one carrier's page is not told what to do on the other."""
+    names = [k.name for k in wiring.CARRIERS.values()]
+    clause = re.compile(
+        r" On a ("
+        + "|".join(map(re.escape, names))
+        + r"): (.*?)(?= On a (?:"
+        + "|".join(map(re.escape, names))
+        + r"):| \|$)"
+    )
+    found = clause.findall(row)
+    if not found:
+        return row
+    if c.name not in [name for name, _ in found]:
+        raise wiring.WiringError(f"docs/verify/common-failures.md: a row splits by host but has no clause for {c.name}")
+    return clause.sub(
+        lambda m: " " + re.sub(r"[a-z]", lambda ch: ch[0].upper(), m.group(2), count=1) if m.group(1) == c.name else "",
+        row,
+    )
 
 
 def site_links(text, page=None):
@@ -425,7 +447,11 @@ def pages(c):
         "Find the failing line in the table, then the wire in the two cavity pictures under it: the number in a "
         "cavity is the number on the wire's flag.",
         "",
-        f"**Before you touch a cable: {c.power_off}** After moving a wire, boot and run the check again"
+        f"**Before you touch a cable: {c.power_off}** **After moving a wire, the cable goes through the same checks "
+        "as a new one before any boot:** take the card out, check that cable's plug contacts against its housing "
+        "with the meter as step 2 of its second connector page does (JTAG connector 2 or UART connector 2), run the "
+        "bench check with the card out, and fit the cables as the Fitting page does. Then boot and run the check "
+        "again"
         + (
             " (on a blade at ps1 the install is gone after the boot: install again, as on verifying 1; and "
             "not on pi14 or pi18 at ps1 yet, as verifying 1 says)"

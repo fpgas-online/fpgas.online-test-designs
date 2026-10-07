@@ -164,9 +164,11 @@ def test_a_caption_cannot_outlive_its_transcript_and_a_swap_stays_on_one_cable()
     assert "power-cycle fail" not in check.failures(blade) and "power-cycle fail" in check.failures(
         wiring.CARRIERS["pi5"]
     )
-    assert "[converting a card](https://" in check.failures(
-        blade
-    ) and "acorn-pcie-programming.md]" not in check.failures(blade)
+    pi5 = wiring.CARRIERS["pi5"]  # the link to converting is the Pi 5's only: a blade is told not to convert
+    assert "[converting a card](https://" in check.failures(pi5) and "acorn-pcie-programming.md]" not in check.failures(
+        pi5
+    )
+    assert "[converting a card]" not in check.failures(blade)
 
 
 def test_a_blade_page_prints_no_older_advice_and_no_convert_in_its_transcripts():
@@ -182,3 +184,22 @@ def test_a_blade_page_prints_no_older_advice_and_no_convert_in_its_transcripts()
     assert fenced  # the blade pages do print transcripts: the check below is not empty
     for block in fenced:
         assert "convert" not in block.replace("unconverted", "")
+
+
+def test_a_row_split_by_host_keeps_only_this_carriers_clause():
+    row = "| `x` | a card. On a Raspberry Pi 5: convert it. On a Compute Blade: **do not**; not yet |"
+    blade, pi5 = wiring.CARRIERS["blade"], wiring.CARRIERS["pi5"]
+    assert check.for_carrier(row, blade) == "| `x` | a card. **Do not**; not yet |"
+    assert check.for_carrier(row, pi5) == "| `x` | a card. Convert it. |"
+    assert check.for_carrier("| `y` | the same on every host |", blade) == "| `y` | the same on every host |"
+    with pytest.raises(wiring.WiringError):
+        check.for_carrier("| `z` | a card. On a Raspberry Pi 5: convert it. |", blade)
+    # and the blade's printed rows never tell its reader to convert a card
+    assert "convert it" not in check.failures(blade).replace("or convert it", "")
+
+
+def test_moving_a_wire_sends_the_cable_through_the_new_cables_checks_before_a_boot():
+    for c in wiring.CARRIERS.values():
+        body = "\n".join(check.pages(c).values())
+        rework = body[body.index("After moving a wire") :][:600]
+        assert "take the card out" in rework and "bench check" in rework and "Then boot" in rework
