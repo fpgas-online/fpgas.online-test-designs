@@ -6,7 +6,7 @@ The Fomu is a tiny FPGA board that fits inside a USB port, designed by Sean Cros
 
 ## Installing the Fomu Packages
 
-Add the fpgas.online APT repository first ([verify.md: Installing](../verify/installing.md#installing)), then on the Fomu's Pi:
+Add the fpgas.online APT repository first ([fpgas-verify: installing it](../verify/installing.md#installing)), then on the Fomu's Pi:
 
 ```bash
 sudo apt install fpgas-online-fomu
@@ -30,7 +30,7 @@ sudo fpgas-fomu-verify --no-publish --report -  # this board only, the JSON repo
 sudo fpgas-fomu-debug test spiflash             # load one test's design and run its test
 ```
 
-What the results mean, the report, `changed` and `--update`, the debug tool and common failures: [verify.md](../verify/reading-the-result.md#reading-the-result).
+What the results mean, the report, `changed` and `--update`, the debug tool and common failures: [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result).
 
 ## Key Specifications
 

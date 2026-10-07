@@ -6,7 +6,7 @@ The TinyTapeout (TT) FPGA Demo Board is a development platform that combines an 
 
 ## Installing the TT FPGA Packages
 
-Add the fpgas.online APT repository first ([verify.md: Installing](../verify/installing.md#installing)), then on the demo board's Pi:
+Add the fpgas.online APT repository first ([fpgas-verify: installing it](../verify/installing.md#installing)), then on the demo board's Pi:
 
 ```bash
 sudo apt install fpgas-online-tt-fpga
@@ -34,7 +34,7 @@ sudo fpgas-tt-fpga-verify --no-publish --report -  # this board only, the JSON r
 sudo fpgas-tt-fpga-debug test uart                 # load one test's design and run its test
 ```
 
-What the results mean, the report, `changed` and `--update`, the debug tool and common failures: [verify.md](../verify/reading-the-result.md#reading-the-result).
+What the results mean, the report, `changed` and `--update`, the debug tool and common failures: [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result).
 
 ## Key Specifications
 
