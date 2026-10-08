@@ -24,13 +24,15 @@ The order is what keeps both sides safe:
     written either.
  4. Every SPI line goes back to an input BEFORE CRESET is let go, so the iCE40 masters its flash alone when it
     boots. CRESET then goes back to an input too, and the board's pull-up takes it high. If an SPI line will
-    not go back to an input (or the release is interrupted), CRESET is not let go: the lines are given back
-    to the kernel, CRESET last. The bcm2835/bcm2711 pin controller (Pi 3 and 4) makes a freed line an input;
-    the board module checks with pinctrl afterwards that every line is one, on any Pi.
+    not go back to an input, CRESET is not let go: the lines are given back to the kernel, CRESET last. If the
+    script is interrupted (Ctrl-C) or killed, CRESET is not let go by it either, and the kernel frees every
+    line when the process exits, in an order the script does not control. The bcm2835/bcm2711 pin controller
+    (Pi 3 and 4) makes a freed line an input; the board module checks with pinctrl afterwards that every line
+    is one, on any Pi.
  5. CDONE must rise again within BOOT_WAIT: the iCE40 has booted from its flash, as at power-up.
 
-Nothing is written to the flash, and every line is given back to the kernel whatever went wrong. A run stops whatever
-design the iCE40 was running (the reset), so only the boot check runs it.
+Nothing is written to the flash, and every line is given back to the kernel, at the latest when the process
+exits. A run stops whatever design the iCE40 was running (the reset), so only the boot check runs it.
 
 It prints one line, `fomu-header: {json}`, with what it read, and exits 0. It exits 2, with `fomu-header-error:
 <why>`, when the GPIO lines could not be used. The board module (fpgas_online_verify.boards.fomu) judges the
@@ -133,8 +135,8 @@ class Lines:
         """Every line an input again, CRESET last, and the lines given back to the kernel, CRESET last. When a
         line will not go back to an input, CRESET is not let go while the Pi holds the lines: giving them back
         then leaves it to the kernel, CRESET after the others (on a Pi 3/4 the pin controller makes each freed
-        line an input). If this raises before giving them back, the process's exit frees them in the same
-        order. The script cannot hold CRESET low past its own exit."""
+        line an input). If this raises before giving them back, the kernel frees them when the process exits, in
+        an order the script does not control. The script cannot hold CRESET low past its own exit."""
         stuck = release(self, [g for g in self.outputs if g != CRESET])
         if CRESET in self.outputs and not stuck:
             self.input(CRESET)
