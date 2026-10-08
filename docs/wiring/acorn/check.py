@@ -388,9 +388,10 @@ def pages(c):
         "",
         INSTALL[c.key],
         "",
+        # before the commands: the last of them runs `jtag`, which must not run until verifying 3's checks pass
+        *([JTAG_FIRST["blade"], ""] if c.key == "blade" else []),
         install.strip(),
         "",
-        *([JTAG_FIRST["blade"], ""] if c.key == "blade" else []),
         "`fpgas-verify` checks whichever board this host is set up for, as the check at boot does; "
         "`fpgas-acorn-verify` checks the Acorn whatever the host is set up for. On a host set up for an Acorn "
         "the two print the same.",
