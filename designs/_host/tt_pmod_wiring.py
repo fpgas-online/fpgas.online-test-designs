@@ -234,6 +234,7 @@ _saved_mode = None
 _saved = None
 _saved_apply = None
 _drive_warned = False
+_restored = False  # the SDK put its pins back (sdk restore): the way out must not release them again
 _PULLS = {'none': None, 'up': Pin.PULL_UP, 'down': Pin.PULL_DOWN}
 
 def _emit(s):
@@ -279,7 +280,7 @@ def _find_tt():
     return _tt
 
 def _sdk(args):
-    global _saved_mode, _saved, _saved_apply
+    global _saved_mode, _saved, _saved_apply, _restored
     op = args[0]
     if op == 'restore':
         _release_all()
@@ -345,6 +346,7 @@ def _sdk(args):
         if now != was:
             _emit('ERR restore: the board was %s and is now %s' % (was, now))
         else:
+            _restored = True
             _emit('OK restored: %s' % now)
     else:
         _emit('ERR sdk: unknown op %s' % op)
@@ -403,6 +405,8 @@ try:
         if not parts:
             continue
         cmd, args = parts[0], parts[1:]
+        if cmd not in ('quit', 'ping', 'mem'):  # anything else may touch a pin: the SDK's pins are ours again
+            _restored = False
         try:
             if cmd == 'out':
                 g = int(args[0])
@@ -478,7 +482,10 @@ try:
         except Exception as e:
             _emit('ERR %s: %r' % (cmd, e))
 finally:
-    _release_all()
+    # Released on every way out but one: after the SDK's restore its pins are the SDK's (issue #196: releasing
+    # them here left ui_in undriven, the RP2040's output enable off on all eight).
+    if not _restored:
+        _release_all()
 """
 
 
