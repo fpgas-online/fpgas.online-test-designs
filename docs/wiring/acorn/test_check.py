@@ -205,3 +205,10 @@ def test_moving_a_wire_sends_the_cable_through_the_new_cables_checks_before_a_bo
         order = ["take the card out and pull both plugs", "with the meter", "the bench check", "Fitting", "Then boot"]
         at = [rework.index(words) for words in order]  # each named, in this order
         assert at == sorted(at)
+
+
+def test_a_blade_page_says_when_jtag_may_run_before_the_command_that_runs_it():
+    """verifying 1's install block ends in the whole check, which runs `jtag`: verifying 3's conditions come first."""
+    page = check.pages(wiring.CARRIERS["blade"])[1]
+    run = page.index("sudo fpgas-acorn-verify --no-publish")
+    assert page.index(check.JTAG_FIRST["blade"]) < page.index("```bash") < run
