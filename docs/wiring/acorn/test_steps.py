@@ -337,7 +337,7 @@ def test_the_ground_check_is_in_each_flag_step_and_on_the_box():
         assert "This is a bench check; the housings come off again before the cables are fitted." in text
         assert ("Trim the resistor's leads to about" in text) == bool(c.resistors)
         assert text.index("If wire 6 beeps instead") < text.index("Cut wire")
-    assert any("mounting pad is ground" in item and "not measured" in item for item in steps.ASSUMPTIONS)
+    assert any("mounting pad is taken to be ground" in item and "not measured" in item for item in steps.ASSUMPTIONS)
     assert wiring.LENGTHS["flag_back"] > wiring.LENGTHS["resistor"]
 
 
@@ -598,3 +598,73 @@ def test_a_quoted_step_number_is_the_step_it_means(key):
     assert {page for _, page, _ in quoted} >= {"JTAG connector 1", "UART connector 1", "JTAG connector 2"}
     for name, page, numbers in quoted:
         assert numbers in meant[page], (name, page, numbers)
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_the_reach_step_has_its_own_picture(key):
+    c = wiring.CARRIERS[key]
+    body = steps.guide(c)[steps.guide_name(c, "jtag-1")]
+    blocks = dict(step_blocks(body))
+    (block,) = (b for b in blocks.values() if b.startswith(f"**{list(blocks)[1]}.** Check that each half reaches"))
+    assert light_images(block) == [steps.png(steps.reach_name(c))]
+    assert steps.reach_name(c) in steps.build_names() and steps.reach_name(c) in steps.build()
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_no_page_has_a_beep_show_that_ground_is_ground(key):
+    """Wire 1's beep to the pad (and contact 1's to the shell) only shows they are joined: ground is taken as given."""
+    c = wiring.CARRIERS[key]
+    texts = [*steps.guide(c).values(), steps.procedure(c), *steps.ASSUMPTIONS]
+    texts += [(wiring.HERE / "building-leads.md").read_text()]
+    for text in texts:
+        flat = " ".join(text.split())
+        assert "beep shows it" not in flat and "beep is what shows it" not in flat and "is what shows it" not in flat
+        assert "reaches nothing" not in flat
+    bench = " ".join(steps.guide(c)[steps.guide_name(c, "bench")].split())
+    assert "shows only that contact 1 and the shell are joined" in bench
+    assert "taken as given, not measured by us" in bench
+    leads = " ".join((wiring.HERE / "building-leads.md").read_text().split())
+    assert "It does not show whether any wire reaches the right header pin" in leads
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_the_bench_steps_words_say_what_their_picture_shows(key):
+    c = wiring.CARRIERS[key]
+    bench = steps.guide(c)[steps.guide_name(c, "bench")]
+    assert "where its housing sits" not in bench
+    for k in wiring.CONNECTORS:
+        assert (
+            f"The {k} cavity picture is shown again below, for which wire goes in which cavity, and which corner"
+            in bench
+        )
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_taking_the_card_out_says_only_what_the_repo_records(key):
+    c = wiring.CARRIERS[key]
+    for part in ("jtag-1", "uart-1", "bench"):
+        page = steps.guide(c)[steps.guide_name(c, part)]
+        assert steps.card_out(c) in page, part
+    out = steps.card_out(c)
+    assert "not recorded by us" in out
+    if key == "blade":  # the PH1 screwdriver is in the parts list, "not verified by us on the blades"
+        assert "PH1" in out and "Uptime Lab's assembly guide, not measured by us" in out
+    else:  # no screw size or driver for the Pi 5's HAT is recorded: needs a fact
+        assert "PH1" not in out and "M2" not in out and "SSD mounting screw" in out
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_putting_the_card_back_is_from_the_makers_pages_and_the_bench_intro_orders_screw_then_card(key):
+    c = wiring.CARRIERS[key]
+    action = steps.fit_actions(c)[3]
+    if key == "blade":
+        for words in ("standoff", "5 mm hex driver", "nylon washer", "30° angle", "press down", "PH1 driver"):
+            assert words in action
+        assert any("assembly.mdx" in s["source"] for s in wiring.SOURCES if s.get("carrier") == "blade")
+    else:
+        assert "SSD mounting screw" in action and "not recorded by us" in action
+        assert any("SSD mounting screw x1" in s["source"] for s in wiring.SOURCES if s.get("carrier") == "pi5")
+    assert "not measured by us" in action or key == "pi5"
+    intro = steps.guide(c)[steps.guide_name(c, "bench")]
+    assert "take it out first" not in intro and "if it is fitted, take it out. Take " in intro
+    assert steps.REACH_NOTE.count("not drawn") == 1
