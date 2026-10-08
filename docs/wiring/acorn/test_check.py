@@ -202,9 +202,11 @@ def test_moving_a_wire_sends_the_cable_through_the_new_cables_checks_before_a_bo
     for c in wiring.CARRIERS.values():
         body = "\n".join(check.pages(c).values())
         rework = body[body.index("After moving a wire") :].split("\n", 1)[0]
-        order = ["take the card out and pull both plugs", "with the meter", "the bench check", "Fitting", "Then boot"]
+        order = ["take the card out and pull both plugs", "with the meter", "the bench check", "Fitting", "Then "]
         at = [rework.index(words) for words in order]  # each named, in this order
         assert at == sorted(at)
+        assert re.search(r"Then (ask Tim and )?boot", rework)
+        assert ("Then ask Tim and boot" in rework) == (c.key == "blade")  # a blade's reboot is asked for
 
 
 def test_a_blade_page_says_when_jtag_may_run_before_the_command_that_runs_it():
@@ -212,3 +214,53 @@ def test_a_blade_page_says_when_jtag_may_run_before_the_command_that_runs_it():
     page = check.pages(wiring.CARRIERS["blade"])[1]
     run = page.index("sudo fpgas-acorn-verify --no-publish")
     assert page.index(check.JTAG_FIRST["blade"]) < page.index("```bash") < run
+
+
+def blade_texts():
+    """Every blade page of the check as generated, and the fragment of the blade's compute-blade.md."""
+    blade = wiring.CARRIERS["blade"]
+    return [*check.pages(blade).values(), check.fragment("compute-blade.md", blade)]
+
+
+def test_every_reboot_a_blade_page_asks_for_is_preceded_by_ask_tim():
+    """A reboot ends a visitor's session on a blade, the same harm as a power-off: "ask Tim" comes first."""
+    reboot = re.compile(r"\b(?:re)?boot the blade\b|\bthen boot\b|\bboot, and run\b|\band boot\b", re.I)
+    seen = 0
+    for text in blade_texts():
+        for m in reboot.finditer(text):
+            before = text[max(0, m.start() - 60) : m.start()].lower()
+            if "we reboot" in before or "was reboot" in before:  # the record of what was done, not an instruction
+                continue
+            seen += 1
+            assert re.search(r"ask(?:ing)? tim", before + m.group(0).lower()), text[m.start() - 80 : m.end() + 20]
+    assert seen >= 4  # verifying 3 (twice), the rework line, and the install block's reboot
+    assert "ask tim before you reboot a blade" in blade_texts()[0].lower()  # verifying 1, where the installs are
+    assert "a reboot ends a visitor's session" in blade_texts()[-1]  # verifying 3 says why, once
+    assert blade_texts()[-1].count("Ask Tim, then boot the blade again") == 1
+
+
+def test_the_jtag_list_has_no_exception_to_its_steps_2_and_3():
+    page = check.pages(wiring.CARRIERS["blade"])[3]
+    at = page.index(f"### {check.JTAG_LIST}")
+    block = page[at : page.index("With the serial port off, `/dev/ttyAMA0`")]
+    flat = " ".join(block.split())
+    assert [int(n) for n in re.findall(r"^\d+(?=\. )", block, re.M)] == [1, 2, 3, 4]
+    assert "unless" not in flat and "if you know" not in flat.lower()
+    assert "Always run this step" in flat and "not yet measured by us" in flat
+
+
+def test_the_list_steps_2_and_3_are_quoted_by_is_found_by_its_heading():
+    """ "The last list on the page" gives a printed sheet no way to be found: the pages quote the list's heading."""
+    blade = wiring.CARRIERS["blade"]
+    heading = f"### {check.JTAG_LIST}"
+    assert check.pages(blade)[3].count(heading) == 1
+    texts = [*blade_texts(), check.COMMON_FAILURES.read_text()]
+    texts += [p.read_text() for p in sorted((wiring.HERE / "generated").glob("acorn-check-blade-*.md"))]
+    for text in texts:
+        assert "last list" not in text
+        flat = " ".join(text.split())
+        said = flat.count("steps 2 and 3 of the list")
+        assert said == flat.count(
+            f'steps 2 and 3 of the list "{check.JTAG_LIST}" on the page "verifying 3"'
+        ) + flat.count(f'steps 2 and 3 of the list "{check.JTAG_LIST}" on that page')
+    assert sum(" ".join(t.split()).count("steps 2 and 3 of the list") for t in texts) >= 4

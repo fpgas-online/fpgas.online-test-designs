@@ -67,7 +67,7 @@ are two ways, and the choice belongs to whoever runs the gateway (at ps1: Carl):
    next boot.
 2. **Give one blade its own copy.** Copy the directory (any name), make the two changes in the copy, and point
    that blade's link in `/srv/tftp/` at the copy. Only that blade is changed, from its next boot. To undo it,
-   point the link back at `/srv/nfs/rpi/trixie/boot` and boot the blade again. This is how pi20 at ps1 was
+   point the link back at `/srv/nfs/rpi/trixie/boot` and, after asking Tim, boot the blade again. This is how pi20 at ps1 was
    tested on 7 October 2026: its link, `/srv/tftp/de59093d`, was pointed at a copy for the test, and the changes were
    made in the copy only. The link was put back at 17:19:48 and the copy was removed then, and the shared
    `config.txt` and `cmdline.txt` read the same as before it.
@@ -77,12 +77,16 @@ are two ways, and the choice belongs to whoever runs the gateway (at ps1: Carl):
 Which of the two to take is the gateway owner's choice, not this page's: the first changes every host that
 boots from the shared directory, the second only the one blade.
 
-Then boot the blade again, and in that boot (the one with the serial port off):
+### Before JTAG runs on a blade
+
+Ask Tim, then boot the blade again (a reboot ends a visitor's session on it, the same harm as a power-off), and in that boot (the one with the serial port off):
 
 1. Install the packages again, as on the page "verifying 1": the install is gone after the boot.
 2. Check that GPIO14 is free, with the commands at the end of this page: it must show no consumer.
 3. Check that nothing on the card drives GPIO14. Do this on each blade you run JTAG on (at ps1: pi16 and pi20
-   only, as the page "verifying 1" says), unless you know its J2 wire has its 470 Ω resistor (pi20 at ps1's present serial pair, read on 31 August 2026, has none). Note what `pinctrl get 14` prints,
+   only, as the page "verifying 1" says). Always run this step: the 470 Ω resistor in J2's wire is designed
+   to protect against a card that drives GPIO14, not yet measured by us (pi20 at ps1's present serial pair,
+   read on 31 August 2026, has none). Note what `pinctrl get 14` prints,
    then:
 
    ```bash

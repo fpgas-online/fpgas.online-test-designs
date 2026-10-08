@@ -101,6 +101,16 @@ claim = "The HAT in the pictures, the Waveshare PoE M.2 HAT+ (B), and where its 
 source = "Waveshare's dimension drawing of the HAT (https://www.waveshare.com/img/devkit/accBoard/PoE-M.2-HAT-Plus-B/PoE-M.2-HAT-Plus-B-details-size.jpg), measured by a script against the 58.00 × 49.00 mm of its mounting holes. That the welland Acorns' Raspberry Pi 5s carry this HAT: every one whose HAT EEPROM has been read by us gives the product \"Waveshare PoE M.2 HAT+ (B)\" (read on 6 and 7 October 2026)"
 
 [[sources]]
+carrier = "blade"
+claim = "How a card is put into the Compute Blade's M.2 slot (standoff, washer, 30 degree angle, press down, PH1 driver)"
+source = "Uptime Lab's assembly guide (https://raw.githubusercontent.com/uptime-lab/compute-blade/main/docs/docs/blade/getting-started/assembly.mdx) and its image page (docs.computeblade.com): not measured by us. How a card comes out is not given there, and is not recorded by us"
+
+[[sources]]
+carrier = "pi5"
+claim = "That the HAT ships one SSD mounting screw"
+source = "the package list of Waveshare's product page (https://www.waveshare.com/poe-m.2-hat-plus-b.htm): \"SSD mounting screw x1\"; the page's text gives no size, no driver and no steps to put a card in or take it out, and none is recorded by us"
+
+[[sources]]
 carrier = "pi5"
 claim = "That the HAT takes an M.2 2280 card, held by a screw at its far end"
 source = "Waveshare's product page (https://www.waveshare.com/poe-m.2-hat-plus-b.htm): \"Compatible With 2230 / 2242 / 2260 / 2280 Size M.2 Solid State Drive\", and its drawing, which shows a standoff for each of the four lengths. The other Waveshare PoE M.2 HAT+, without the (B), is listed for 2230 and 2242 cards only, and is not in this guide"
