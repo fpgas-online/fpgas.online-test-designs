@@ -688,7 +688,9 @@ def stop_firmware(link):
     """Leave the command loop and return the board to the friendly REPL.
 
     The firmware releases every pin on its way out (``finally``), also when
-    it is interrupted with Ctrl-C because the protocol got stuck.
+    it is interrupted with Ctrl-C because the protocol got stuck, unless the
+    SDK's restore came back the same and no pin was touched since: the pins
+    are then the SDK's (issue #196).
     """
     try:
         link.cmd("quit", timeout=3.0)

@@ -1764,9 +1764,16 @@ def test_after_the_sdks_restore_the_way_out_leaves_its_pins_alone(monkeypatch):
     assert released_after(log, "OK restored") == []
 
 
+def test_a_ping_or_heap_read_after_the_restore_keeps_the_sdks_pins(monkeypatch):
+    """Review 1 of #198: the host asks `ping` and `mem` after the restore; they touch no pin."""
+    log = run_command_server(monkeypatch, ["sdk init", "sdk restore", "ping", "mem", "quit"])
+    assert released_after(log, "OK restored") == []
+
+
 @pytest.mark.parametrize(
     "commands",
     [
+        ["sdk restore", "quit"],  # a restore with nothing saved: the SDK not changed, its pins released
         ["quit"],  # the SDK never used
         ["sdk init", "quit"],  # stopped before the restore
         ["sdk init", "sdk restore", f"out {RP2040['ui_in'][3]} 1", "quit"],  # a pin driven after the restore
