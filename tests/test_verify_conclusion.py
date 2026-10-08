@@ -11,7 +11,7 @@ import pathlib
 import re
 
 from fpgas_online_verify import conclusion, runner
-from fpgas_online_verify.boards import fomu, tt_fpga
+from fpgas_online_verify.boards import tt_fpga
 from fpgas_online_verify.boards.acorn import check, links, setup, suite
 
 DATA = pathlib.Path(__file__).parent / "data"
@@ -224,7 +224,6 @@ def test_every_advice_pattern_matches_a_reason_the_code_gives():
         "conflicting fpga-board settings: a and b",
         "none of the installed boards (arty, tt) was found (auto: USB/PCI IDs)",
         "no Sqrl Acorn found: this host is set up for one, and nothing else is looked for",
-        fomu.BOARD.gone_after_check,
     ]
     for pattern, _ in conclusion.ADVICE:
         assert any(conclusion.re.search(pattern, r) for r in reasons), pattern

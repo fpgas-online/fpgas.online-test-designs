@@ -143,12 +143,15 @@ console on `ttyAMA10` and leaves `serial-getty@ttyAMA0` inactive.
 Pi 5 draws ~0.4 W on PoE instead of ~8 W and needs a PoE cycle (> 90 s to
 return).
 
-### Fomu EVT (on an RPi 3B+ host, sw1 p17)
+### Fomu EVT (on the RPi 3B+ 00000000cc479fd1, seen on sw1 p17 on 8 Oct 2026)
 
-A Fomu EVT in its bootloader appears as "Generic Fomu EVT running DFU
-Bootloader v2.0.4" (`1209:5bf0`). No serial devices — the Fomu uses native USB
-(ValentyUSB) for communication. The host also has an OpenVizsla USB analyzer
-(`1d50:607c`) for the Fomu's USB traffic.
+The Fomu EVT sits on the Pi's GPIO header, which reaches its iCE40's reset,
+CDONE, SPI flash and UART ([pin mapping](fomu-pin-mapping.md#the-pis-header)):
+the check finds and identifies it there. In its bootloader it also appears on
+USB as "Generic Fomu EVT running DFU Bootloader v2.0.4" (`1209:5bf0`). An
+OpenVizsla OV3 USB analyser (`1d50:607c`, serial OV100662) sits inline on the
+Fomu's USB to debug its USB stack: a debug tool, not a board. On 9 Oct 2026 at
+09:00 ACDT, with only the OV3 on USB, the header's CDONE read high.
 
 ### Tiny Tapeout ASIC Boards (×6, on S3300 ports 3–8, RPi 4 / 3B+ hosts with PMOD HATs)
 

@@ -39,7 +39,8 @@ Install **one** of these. They conflict, so a host is never set up for two board
 * `fpgas-online-<board>-debug` adds `fpgas-<board>-debug` and the tools for the tests the boot check skips.
 * Installing does not run the check. It runs at the next boot, or when you run it.
 * The packages are `Architecture: all`: they install on Raspberry Pi OS and on an x86 machine alike. The NeTV2
-  and the Acorn need a Pi's GPIO header; the Arty, Fomu and TT FPGA board need only USB.
+  and the Acorn need a Pi's GPIO header, and so does the Fomu EVT, which sits on it; the Arty and TT FPGA board
+  need only USB.
 * Versions are `0.0.postN` from `git describe` (for example `0.0.post771`). Each package depends on the others'
   exact version, so `sudo apt upgrade` moves them together.
 * Each board's page lists what its packages pull in: [acorn](../hardware/acorn.md#installing-the-acorn-packages),

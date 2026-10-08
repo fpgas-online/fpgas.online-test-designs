@@ -24,7 +24,8 @@ the check, publishes anything or records any state.
   | Acorn | the running build, device DNA and flash identity over BAR0 (the check's `pcie-bar0`), and the IDCODE and DNA over P1 JTAG (`jtag`) |
   | Arty | the JTAG IDCODE and the device DNA ([the device DNA](idcode-and-dna.md#the-device-dna)) |
   | NeTV2 | the JTAG IDCODE, from the scan that finds it, and the device DNA |
-  | Fomu, TT FPGA | how the board was found (its USB serial) |
+  | Fomu | how the board was found: CDONE on its header, or foboot on USB. Its flash IDs (its label, `flash_uid`) come from the boot report: reading them resets the FPGA |
+  | TT FPGA | how the board was found (its USB serial) |
 
   A TT board's [Tiny Tapeout fields](../identity.md#tiny-tapeout-fields) are not read live: they come from the
   boot report (see below).
@@ -56,6 +57,11 @@ the check, publishes anything or records any state.
   listed in the board's `from_report`. An IDCODE names a part, not a board, so a board known only by its
   IDCODE (a NeTV2 whose DNA could not be read) gets nothing from the report: the fields stay missing, for
   the reason
+  `no board-unique match in the boot report`.
+* The Fomu EVT has no such key: foboot has no USB serial, and reading its flash resets it. It sits on the Pi's
+  own header, so there is at most one per host, and changing it means powering the Pi off, which runs the boot
+  check again. So its flash fields, and its label `flash_uid`, come from the one Fomu in the boot report. With
+  none there the reason is `this board is not in the boot report`, and with two (which no Pi has),
   `no board-unique match in the boot report`.
 * The exit status is 0 when every board's identity is whole (no field missing, no `<field>_error`), 1
   otherwise. Each missing field is printed on stderr with why. The document is printed either way; readers

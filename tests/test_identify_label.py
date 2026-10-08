@@ -563,6 +563,32 @@ def _read_tt(tmp_path, usb=TT_USB):
     return identify.read({"board": "tt", "boot_report": tmp_path / "verify.json"}, {"tt": TT}, usb=usb, pci=[])
 
 
+def test_a_fomu_on_the_header_takes_its_flash_ids_from_the_boot_report_of_the_one_fomu_there(tmp_path, locks):
+    """#200: a Fomu has no USB serial, DNA or PCI slot, and reading its flash resets it, so --identify takes its
+    label (flash_uid) from the boot report: one per host, since it sits on the Pi's header."""
+    from fpgas_online_verify.boards.fomu import BOARD as FOMU
+
+    fomu_boot = {"board": "fomu", "kind": "fomu", "variant": "evt", "flash_jedec": "0xef7018",
+                 "flash_uid": "e467286593241321", "flash_source": "header"}  # fmt: skip
+    _boot_report(tmp_path, ARTY_BOOT, fomu_boot)
+    fomu = Identified("fomu", seen=[{"variant": "evt", "cdone": "hi"}], label_fields=FOMU.label_fields,
+                      report_fields=FOMU.report_fields)  # fmt: skip
+    fomu.one_per_host = FOMU.one_per_host
+    doc, gaps = _read({"fomu": fomu}, tmp_path)
+    (board,) = doc["boards"]
+    assert board["flash_uid"] == "e467286593241321" and gaps == []
+    assert board["from_report"] == ["flash_jedec", "flash_source", "flash_uid"]
+    # no Fomu in the report, or two (which no Pi has): nothing is taken
+    _boot_report(tmp_path, ARTY_BOOT)
+    assert _read({"fomu": fomu}, tmp_path)[1] == ["fomu: flash_uid: this board is not in the boot report"]
+    _boot_report(tmp_path, fomu_boot, {**fomu_boot, "flash_uid": "00"})
+    assert _read({"fomu": fomu}, tmp_path)[1] == ["fomu: flash_uid: no board-unique match in the boot report"]
+    # a board that is not one per host still needs a board-unique key
+    fomu.one_per_host = False
+    _boot_report(tmp_path, fomu_boot)
+    assert _read({"fomu": fomu}, tmp_path)[1] == ["fomu: flash_uid: no board-unique match in the boot report"]
+
+
 def test_the_tt_boards_rpi_hwid_fields_come_from_the_boot_report_by_its_usb_serial(tmp_path, locks):
     _boot_report(tmp_path, {**TT_BOOT, "usb_serial": "OTHER", "serial": "OTHER", "mcu": "RP2040"}, TT_BOOT)
     doc, gaps = _read_tt(tmp_path)

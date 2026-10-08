@@ -118,9 +118,15 @@ def from_report(board, live, previous):
     if not board.report_fields:
         return live, None
     key = next((k for k in MATCH_KEYS if live.get(k)), None)
-    if key is None:
+    if key is not None:
+        match = next((p for p in previous if p.get("kind") == live.get("kind") and p.get(key) == live[key]), None)
+    elif board.one_per_host:  # the one of its kind on this Pi's header (Board.one_per_host)
+        same = [p for p in previous if p.get("kind") == live.get("kind")]
+        if len(same) > 1:
+            return live, NO_MATCH
+        match = same[0] if same else None
+    else:
         return live, NO_MATCH
-    match = next((p for p in previous if p.get("kind") == live.get("kind") and p.get(key) == live[key]), None)
     if not match:
         return live, NOT_IN_REPORT
     taken = {k: v for k, v in match.items() if k not in live and k.startswith(board.report_fields)}
