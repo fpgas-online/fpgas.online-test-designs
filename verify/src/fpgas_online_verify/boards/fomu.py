@@ -85,10 +85,13 @@ def header_check(variant, facts, found):
     if reading is None:
         return "error", found.get("header_error", "the header was not read"), []
     flash = reading.get("flash")
-    lines = [f"CDONE before {reading['cdone_before']}, in reset {reading['cdone_in_reset']}, "
-             f"after {reading['cdone_after']} (rose in {reading.get('boot_seconds')} s)"]  # fmt: skip
+    lines = [f"CDONE before {reading['cdone_before']}, in reset {reading.get('cdone_in_reset', '-')}, "
+             f"after {reading.get('cdone_after', '-')} (rose in {reading.get('boot_seconds')} s)"]  # fmt: skip
     if flash:
         lines.append(f"flash JEDEC ID {flash['jedec']}, unique ID {flash['uid']}, status {' '.join(flash['status'])}")
+    if reading["cdone_before"] != 1:
+        return "fail", ("CDONE was low before the reset: no iCE40 on the header has loaded a design, so the header "
+                        "was not driven and the flash not read"), lines  # fmt: skip
     if reading["cdone_in_reset"] != 0:
         return "fail", ("CDONE stayed high with CRESET held low: no iCE40 is on the header's reset (GPIO27), so "
                         "the flash was not read"), lines  # fmt: skip

@@ -43,7 +43,7 @@ Each test checks its bitstream's sha256 against the `-bitstreams` package's mani
   reset (CRESET, GPIO27), reads its flash's JEDEC ID and unique ID over the shared SPI pins with read commands
   only, sets every line back to an input, and lets the iCE40 boot from its flash, into foboot, as at power-up.
   That stops whatever design was running, so only the check does it, never `--identify`. `header` judges the
-  reading: CDONE must fall in reset and rise after it, and the flash must be the EVT's W25Q128JV (`ef7018`)
+  reading: CDONE must be high before the reset (or nothing is driven), fall in reset and rise after it, and the flash must be the EVT's W25Q128JV (`ef7018`)
   with a unique ID that is not all `00` or all `ff`. `foboot` passes when foboot is on USB within 10 s of the
   reset: the DFU loads need it.
 * The Fomu runs only `uart` at boot: a DFU load replaces the bootloader until the next reset.

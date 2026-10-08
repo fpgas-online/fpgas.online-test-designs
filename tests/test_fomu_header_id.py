@@ -35,12 +35,12 @@ class Clock:
 class Evt:
     """The Pi's side of the header lines (fhi.Lines' interface) and the board behind them."""
 
-    def __init__(self, clock, ice40=True, busy_reads=0, boots=True, fail_at=None, fail_input=()):
+    def __init__(self, clock, ice40=True, busy_reads=0, boots=True, fail_at=None, fail_input=(), configured=True):
         self.clock = clock
         self.ice40 = ice40  # False: nothing on CRESET/CDONE (a header with no Fomu, CDONE held high by something)
         self.boots = boots
         self.driven = {}  # gpio -> level the Pi drives
-        self.cdone = 1
+        self.cdone = 1 if configured else 0
         self.events = []  # what happened, in order
         self.contention = []
         self.opcodes = []
@@ -234,7 +234,7 @@ def test_an_spi_line_that_will_not_go_back_to_an_input_keeps_creset_low(stuck):
     """Every other line is still let go, but the iCE40 is not let out of reset onto a bus the Pi still drives."""
     clock = Clock()
     evt = Evt(clock, fail_input={stuck})
-    with pytest.raises(OSError, match=rf"GPIO{stuck} could not be set back to an input.*CRESET is left low"):
+    with pytest.raises(OSError, match=rf"GPIO{stuck} could not be set back to an input.*CRESET is still held low"):
         run(evt, clock)
     assert evt.driven == {fhi.CRESET: 0, stuck: evt.driven[stuck]}
     assert evt.contention == []
@@ -283,7 +283,8 @@ class FakeGpiodV1:
                     return 0 if test.direction.get(fhi.CRESET) == "out" else 1
                 return 0
 
-            def release(self):
+            def release(self):  # the bcm2835 pin controller makes a freed line an input
+                test.direction[self.g] = "in"
                 test.log.append(("release", self.g))
 
         class Chip:
@@ -316,19 +317,22 @@ def test_lines_close_lets_creset_go_last(monkeypatch):
     assert set(fake.direction.values()) == {"in"} and fake.log[-1] == ("close",)
 
 
-def test_lines_close_keeps_creset_low_when_a_line_is_stuck_and_says_so(monkeypatch):
+def test_lines_close_does_not_let_creset_go_while_a_line_is_stuck_and_says_so(monkeypatch):
     fake = FakeGpiodV1(stuck={fhi.MOSI})
     pins = _lines(monkeypatch, fake)
     pins.output(fhi.CRESET, 0)
     pins.output(fhi.MOSI, 0)
     pins.output(fhi.CS, 1)
-    with pytest.raises(OSError, match=r"GPIO10 could not be set back to an input.*CRESET is left low"):
+    with pytest.raises(OSError, match=r"GPIO10 could not be set back to an input.*CRESET was not let go"):
         pins.close()
-    assert fake.direction[fhi.CRESET] == "out" and fake.direction[fhi.CS] == "in"
-    assert ("close",) in fake.log  # the lines are still given back to the kernel
+    assert ("in", fhi.CRESET) not in fake.log and ("in", fhi.CS) in fake.log
+    released = [e[1] for e in fake.log if e[0] == "release"]
+    assert released[-1] == fhi.CRESET and ("close",) in fake.log  # given back to the kernel, CRESET last
 
 
-def test_main_says_why_and_exits_2_when_a_line_will_not_be_given_back(monkeypatch, capsys):
+def test_main_with_a_stuck_line_never_lets_creset_go_before_the_lines_are_given_back(monkeypatch, capsys):
+    """The second review of #201: identify() kept CRESET low, but close() then let it go while CLK was still
+    driven. Now only giving the lines back (CRESET last) lets it go."""
     fake = FakeGpiodV1(stuck={fhi.CLK})
     monkeypatch.setattr(fhi, "gpiod", fake)
     monkeypatch.setattr(fhi, "header_chip", lambda: "/dev/gpiochip0")
@@ -337,3 +341,115 @@ def test_main_says_why_and_exits_2_when_a_line_will_not_be_given_back(monkeypatc
     assert fhi.main() == 2
     said = capsys.readouterr().out
     assert said.startswith("fomu-header-error: ") and "GPIO11 could not be set back to an input" in said
+    assert ("in", fhi.CRESET) not in fake.log, "CRESET was let go while CLK was still driven"
+    released = [e[1] for e in fake.log if e[0] == "release"]
+    assert released[-1] == fhi.CRESET and set(released) == set(fhi.LINES)
+    assert set(fake.direction.values()) == {"in"}
+
+
+def test_main_gives_the_lines_back_whatever_the_reading_raised(monkeypatch, capsys):
+    fake = FakeGpiodV1()
+    monkeypatch.setattr(fhi, "gpiod", fake)
+    monkeypatch.setattr(fhi, "header_chip", lambda: "/dev/gpiochip0")
+
+    def broken(pins):
+        pins.output(fhi.CRESET, 0)
+        raise KeyError("boom")
+
+    monkeypatch.setattr(fhi, "identify", broken)
+    assert fhi.main() == 2
+    assert "the reading failed: KeyError: 'boom'" in capsys.readouterr().out
+    assert ("in", fhi.CRESET) in fake.log and ("close",) in fake.log
+
+
+def test_nothing_is_driven_when_cdone_is_low_before_the_reset():
+    """No design loaded, or no board (a floating GPIO17): CDONE falling would not prove an iCE40 is on the reset."""
+    clock = Clock()
+    evt = Evt(clock, configured=False)
+    out = run(evt, clock)
+    assert out == {"cdone_before": 0, "creset_before": 1, "flash": None}
+    assert evt.events == [] and evt.opcodes == []
+
+
+# -- Lines, on a stand-in for libgpiod 2.x ---------------------------------------------------------------------
+
+
+class FakeGpiodV2:
+    """request_lines, LineSettings and reconfigure_lines, as python3-libgpiod 2.x has them. A reconfigure that
+    would make a `stuck` line an input fails as a whole; release() makes every line an input (bcm2835)."""
+
+    def __init__(self, stuck=()):
+        test = self
+        self.stuck, self.direction, self.log, self.reconfigured = set(stuck), {}, [], []
+
+        class Direction:
+            INPUT, OUTPUT = "in", "out"
+
+        class Value:
+            ACTIVE, INACTIVE = 1, 0
+
+        class Line:
+            pass
+
+        Line.Direction, Line.Value = Direction, Value
+        self.line = Line
+
+        class LineSettings:
+            def __init__(self, direction, output_value=None):
+                self.direction = direction
+
+        self.LineSettings = LineSettings
+
+        class Request:
+            def apply(self, config):
+                new = {g: s.direction for g, s in config.items()}
+                if any(new.get(g) == "in" and test.direction.get(g) == "out" for g in test.stuck):
+                    raise OSError("EBUSY")
+                test.direction.update(new)
+
+            def reconfigure_lines(self, config):
+                test.reconfigured.append(dict(config))
+                self.apply(config)
+
+            def set_value(self, g, v):
+                pass
+
+            def get_value(self, g):
+                low = g == fhi.CDONE and test.direction.get(fhi.CRESET) == "out"
+                return Value.INACTIVE if low else Value.ACTIVE
+
+            def release(self):
+                test.log.append(("release",))
+                test.direction = dict.fromkeys(test.direction, "in")
+
+        def request_lines(path, consumer, config):
+            request = Request()
+            request.apply(config)
+            return request
+
+        self.request_lines = request_lines
+
+
+def test_v2_a_line_that_will_not_go_back_to_an_input_stays_counted_as_driven(monkeypatch):
+    fake = FakeGpiodV2(stuck={fhi.MOSI})
+    pins = _lines(monkeypatch, fake)
+    pins.output(fhi.CRESET, 0)
+    pins.output(fhi.MOSI, 0)
+    with pytest.raises(OSError):
+        pins.input(fhi.MOSI)
+    assert fhi.MOSI in pins.outputs and fake.direction[fhi.MOSI] == "out"
+    with pytest.raises(OSError, match=r"GPIO10 could not be set back to an input.*CRESET was not let go"):
+        pins.close()
+    assert all(c[fhi.CRESET].direction == "out" for c in fake.reconfigured), "CRESET was let go"
+    assert fake.log == [("release",)] and set(fake.direction.values()) == {"in"}
+
+
+def test_v2_close_lets_creset_go_after_the_others(monkeypatch):
+    fake = FakeGpiodV2()
+    pins = _lines(monkeypatch, fake)
+    pins.output(fhi.CRESET, 0)
+    pins.output(fhi.CS, 1)
+    fake.reconfigured.clear()
+    pins.close()
+    assert [(c[fhi.CS].direction, c[fhi.CRESET].direction) for c in fake.reconfigured] == [("in", "out"), ("in", "in")]
+    assert fake.log == [("release",)]

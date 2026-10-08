@@ -10,6 +10,7 @@ Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
 | `missing`: `no <board> found: this host is set up for one…` | the board is not on USB/PCI (or JTAG, or the Fomu's header). Check power and cables. A Fomu is found by its CDONE (GPIO17) reading high: low means it is off the header, or its iCE40 loaded no design from its flash |
 | `…; OpenVizsla OV3 OV100662 on USB (1d50:607c at …), a debug tool, not a board` | an analyser on a Fomu's USB, there to debug its USB stack: named so it is not read as the board, and never checked. It says nothing about whether the Fomu is there |
 | `header fail: CDONE stayed high with CRESET held low: …` | the Fomu's header does not reach an iCE40's reset: it is not seated on the header, or this is not a Fomu EVT. The flash was not read |
+| `header fail: CDONE was low before the reset: …` | the Fomu's iCE40 runs no design (its flash's boot image did not load), or the board was found on USB but is not on the header. Nothing on the header was driven |
 | `header fail: the flash's JEDEC ID is …, not the EVT's W25Q128JV (ef7018)` | something answered on the header's SPI pins, but not the EVT's flash |
 | `foboot fail: foboot (1209:5bf0) did not appear on USB within 10 s of the reset…` | the iCE40 booted (the `header` test says so) but foboot did not enumerate: look at the Fomu's USB path, and at the OpenVizsla when one is inline. The DFU loads (`uart`) fail with it |
 | `missing`: `none of the installed boards … was found` | nothing attached. Expected on a Pi with no FPGA, and still a fail |

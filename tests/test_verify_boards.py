@@ -879,6 +879,8 @@ def test_finding_a_fomu_reads_cdone_and_drives_nothing():
 
 @pytest.mark.parametrize("change, reason", [
     ({"cdone_in_reset": 1, "flash": None}, "CDONE stayed high with CRESET held low"),
+    ({"cdone_before": 0, "cdone_in_reset": None, "cdone_after": None, "boot_seconds": None, "flash": None},
+     "CDONE was low before the reset"),
     ({"flash": {**FOMU_READING["flash"], "jedec": "ffffff"}}, "the flash did not answer over the header"),
     ({"flash": {**FOMU_READING["flash"], "jedec": "c22018"}}, "the flash's JEDEC ID is c22018, not the EVT's"),
     ({"flash": {**FOMU_READING["flash"], "uid": "ff" * 8}}, "which is no ID"),

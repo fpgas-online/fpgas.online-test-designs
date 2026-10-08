@@ -62,6 +62,7 @@ What passes and what fails:
 
 | Outcome | Result |
 |---|---|
+| CDONE is low before the reset (no design loaded, or nothing there) | the check fails; nothing on the header is driven (from the second review) |
 | CDONE does not fall while CRESET is held | the check fails: "no iCE40 on the header's CRESET/CDONE" |
 | A JEDEC ID of all 0x00 or all 0xff | the check fails: no flash answering |
 | A unique ID of all 0x00 or all 0xff | the check fails |

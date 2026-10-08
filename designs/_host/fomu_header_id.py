@@ -15,17 +15,20 @@ The EVT's header (im-tomu/fomu-hardware, branch evt, hardware/pcb/tomu-fpga.sch;
 
 The order is what keeps both sides safe:
 
- 1. Every line is taken as an input, and CDONE is read.
+ 1. Every line is taken as an input, and CDONE is read. It must be high (an iCE40 has loaded a design), or
+    nothing is driven at all: CDONE falling in step 2 would prove nothing.
  2. CRESET is driven low, and CDONE must fall. If it does not, no iCE40 is held on that reset and its flash
     bus may be in use, so the bus is never driven: CRESET is let go and the script says so.
  3. With the iCE40 in reset the Pi is the only master on the flash's bus. It sends read commands only: the
     opcodes in READ_ONLY, and nothing else can be sent. /WP is held low, so no status register can be
     written either.
  4. Every SPI line goes back to an input BEFORE CRESET is let go, so the iCE40 masters its flash alone when it
-    boots. CRESET then goes back to an input too, and the board's pull-up takes it high.
+    boots. CRESET then goes back to an input too, and the board's pull-up takes it high. If an SPI line will
+    not go back to an input, CRESET is not let go: the lines are given back to the kernel, CRESET last, and
+    the Pi's pin controller makes each freed line an input.
  5. CDONE must rise again within BOOT_WAIT: the iCE40 has booted from its flash, as at power-up.
 
-Nothing is written to the flash, and every line is left an input whatever went wrong. A run stops whatever
+Nothing is written to the flash, and every line is given back an input whatever went wrong. A run stops whatever
 design the iCE40 was running (the reset), so only the boot check runs it.
 
 It prints one line, `fomu-header: {json}`, with what it read, and exits 0. It exits 2, with `fomu-header-error:
@@ -45,7 +48,7 @@ except ImportError:  # only on a Raspberry Pi
 
 CRESET, CDONE = 27, 17
 CS, MOSI, MISO, CLK, WP, HOLD = 8, 10, 9, 11, 24, 25
-LINES = (CRESET, CDONE, CS, MOSI, MISO, CLK, WP, HOLD)
+LINES = (CDONE, CS, MOSI, MISO, CLK, WP, HOLD, CRESET)  # CRESET last: lines are given back in this order
 SPI_OUTPUTS = (CS, MOSI, CLK, WP, HOLD)
 
 RELEASE_POWER_DOWN, READ_STATUS_1, READ_STATUS_2, READ_STATUS_3 = 0xAB, 0x05, 0x35, 0x15
@@ -100,11 +103,18 @@ class Lines:
             self.lines[gpio].set_direction_output(level)
 
     def input(self, gpio):
-        self.outputs.pop(gpio, None)
+        """`gpio` an input; it stays in `outputs`, as driven, unless that worked."""
         if self.v2:
-            self.request.reconfigure_lines(self._config())
+            level = self.outputs.pop(gpio, None)
+            try:
+                self.request.reconfigure_lines(self._config())
+            except OSError:
+                if level is not None:
+                    self.outputs[gpio] = level
+                raise
         else:
             self.lines[gpio].set_direction_input()
+            self.outputs.pop(gpio, None)
 
     def set(self, gpio, level):
         self.outputs[gpio] = level
@@ -119,9 +129,10 @@ class Lines:
         return int(self.lines[gpio].get_value())
 
     def close(self):
-        """Every line an input again, CRESET last, and the lines released. A line that will not go back to an input
-        keeps CRESET low: an iCE40 held in reset is a board that is down, which the check says; one let out of reset
-        onto a bus the Pi still drives is a fight on its flash's lines."""
+        """Every line an input again, CRESET last, and the lines given back to the kernel, CRESET last. When a
+        line will not go back to an input, CRESET is not let go while the Pi holds the lines: giving them back
+        then leaves it to the kernel, whose Raspberry Pi pin controller makes each freed line an input, CRESET
+        after the others. The script cannot hold CRESET low past its own exit."""
         stuck = release(self, [g for g in self.outputs if g != CRESET])
         if CRESET in self.outputs and not stuck:
             self.input(CRESET)
@@ -132,7 +143,7 @@ class Lines:
                 line.release()
             self.chip.close()
         if stuck:
-            raise OSError(f"{'; '.join(stuck)}: CRESET is left low, so the iCE40 stays in reset")
+            raise OSError(f"{'; '.join(stuck)}: CRESET was not let go before the lines were given back (CRESET last)")
 
 
 class Spi:
@@ -206,8 +217,11 @@ def wait_for(pins, gpio, level, limit, sleep=time.sleep, clock=time.monotonic):
 
 def identify(pins, sleep=time.sleep, clock=time.monotonic):
     """The reading. `pins` has all LINES as inputs; every line is an input again when this returns or raises,
-    except CRESET when an SPI line could not be set back to an input (see Lines.close)."""
+    except CRESET when an SPI line could not be set back to an input: it stays low (see Lines.close)."""
     out = {"cdone_before": pins.get(CDONE), "creset_before": pins.get(CRESET)}
+    if out["cdone_before"] != 1:  # no design loaded, or nothing there: CDONE falling would prove nothing
+        out["flash"] = None
+        return out
     stuck = []
     try:
         pins.output(CRESET, 0)
@@ -229,7 +243,7 @@ def identify(pins, sleep=time.sleep, clock=time.monotonic):
         if not stuck:
             pins.input(CRESET)
     if stuck:
-        raise OSError(f"{'; '.join(stuck)}: CRESET is left low, so the iCE40 stays in reset")
+        raise OSError(f"{'; '.join(stuck)}: CRESET is still held low")
     out["boot_seconds"] = wait_for(pins, CDONE, 1, BOOT_WAIT, sleep, clock)
     out["cdone_after"] = pins.get(CDONE)
     return out
@@ -261,8 +275,8 @@ def main():
     faults, reading = [], None
     try:
         reading = identify(pins)
-    except OSError as e:
-        faults.append(f"a GPIO line failed during the reading: {e}")
+    except Exception as e:  # whatever it was, the lines are still given back below, and it is said
+        faults.append(f"the reading failed: {type(e).__name__}: {e}")
     try:
         pins.close()
     except OSError as e:
