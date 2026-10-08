@@ -26,6 +26,10 @@ class Board:
     # check holds), which --identify takes from the boot report instead.
     label_fields = ()
     report_fields = ()
+    # True for a board that sits on the Pi's own header (the Fomu EVT): there is at most one per host, and changing
+    # it means powering the Pi off, which runs the boot check again. So --identify takes the boot report's fields
+    # from the one board of its kind there, when the live read has no board-unique key to match on.
+    one_per_host = False
     # USB devices that sit beside this board as debug tools, never boards: {(vendor, product): name} (the Fomu's
     # OpenVizsla, inline on its USB). The report names each one seen, and a board not found is not blamed on it.
     debug_usb: ClassVar[dict] = {}

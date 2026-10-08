@@ -35,7 +35,7 @@ class Clock:
 class Evt:
     """The Pi's side of the header lines (fhi.Lines' interface) and the board behind them."""
 
-    def __init__(self, clock, ice40=True, busy_reads=0, boots=True, fail_at=None):
+    def __init__(self, clock, ice40=True, busy_reads=0, boots=True, fail_at=None, fail_input=()):
         self.clock = clock
         self.ice40 = ice40  # False: nothing on CRESET/CDONE (a header with no Fomu, CDONE held high by something)
         self.boots = boots
@@ -46,6 +46,7 @@ class Evt:
         self.opcodes = []
         self.busy_reads = busy_reads
         self.fail_at = fail_at  # raise OSError on this set() call number
+        self.fail_input = set(fail_input)  # lines whose input() raises OSError, every time
         self.sets = 0
         self.closed = False
         self._bits, self._out, self._edges = [], [], 0
@@ -67,6 +68,8 @@ class Evt:
         self._check_bus()
 
     def input(self, gpio):
+        if gpio in self.fail_input and gpio in self.driven:
+            raise OSError(f"GPIO{gpio} is stuck")
         was_reset = self.in_reset()
         self.driven.pop(gpio, None)
         self.events.append(("input", gpio))
@@ -187,8 +190,8 @@ def test_wp_is_low_while_the_pi_has_the_bus():
     clock = Clock()
     evt = Evt(clock)
     run(evt, clock)
-    first_cs = next(i for i, e in enumerate(evt.events) if e == ("output", fhi.CS, 1))
-    assert ("output", fhi.WP, 0) in evt.events[:first_cs]
+    first_command = evt.events.index(("cs-high",))  # the end of the first command
+    assert ("output", fhi.WP, 0) in evt.events[:first_command]
 
 
 def test_no_ice40_on_the_reset_means_the_bus_is_never_driven():
@@ -224,3 +227,113 @@ def test_a_line_that_fails_mid_read_leaves_every_line_an_input(fail_at):
         run(evt, clock)
     assert evt.driven == {}
     assert evt.contention == []
+
+
+@pytest.mark.parametrize("stuck", [fhi.MOSI, fhi.CS, fhi.WP])
+def test_an_spi_line_that_will_not_go_back_to_an_input_keeps_creset_low(stuck):
+    """Every other line is still let go, but the iCE40 is not let out of reset onto a bus the Pi still drives."""
+    clock = Clock()
+    evt = Evt(clock, fail_input={stuck})
+    with pytest.raises(OSError, match=rf"GPIO{stuck} could not be set back to an input.*CRESET is left low"):
+        run(evt, clock)
+    assert evt.driven == {fhi.CRESET: 0, stuck: evt.driven[stuck]}
+    assert evt.contention == []
+
+
+def test_the_flash_is_deselected_before_any_other_line_is_driven():
+    clock = Clock()
+    evt = Evt(clock)
+    run(evt, clock)
+    driven = [e[1] for e in evt.events if e[0] == "output" and e[1] != fhi.CRESET]
+    assert driven[0] == fhi.CS and evt.events[evt.events.index(("output", fhi.CS, 1)) - 1] == ("output", fhi.CRESET, 0)
+
+
+# -- Lines, on a stand-in for libgpiod 1.6 (python3-libgpiod 1.6.3 on the Fomu host, 9 Oct 2026) ----------------
+
+
+class FakeGpiodV1:
+    LINE_REQ_DIR_IN = "in"
+
+    def __init__(self, stuck=()):
+        self.stuck, self.log, self.direction = set(stuck), [], {}
+        test = self
+
+        class Line:
+            def __init__(self, g):
+                self.g = g
+
+            def request(self, consumer, type):
+                test.direction[self.g] = "in"
+
+            def set_direction_output(self, level):
+                test.direction[self.g] = "out"
+                test.log.append(("out", self.g, level))
+
+            def set_direction_input(self):
+                if self.g in test.stuck:
+                    raise OSError("EBUSY")
+                test.direction[self.g] = "in"
+                test.log.append(("in", self.g))
+
+            def set_value(self, level):
+                test.log.append(("set", self.g, level))
+
+            def get_value(self):  # CDONE falls while CRESET is driven (low); the flash's MISO reads 0
+                if self.g == fhi.CDONE:
+                    return 0 if test.direction.get(fhi.CRESET) == "out" else 1
+                return 0
+
+            def release(self):
+                test.log.append(("release", self.g))
+
+        class Chip:
+            def __init__(self, path):
+                pass
+
+            def get_line(self, g):
+                return Line(g)
+
+            def close(self):
+                test.log.append(("close",))
+
+        self.Chip = Chip
+
+
+def _lines(monkeypatch, fake):
+    monkeypatch.setattr(fhi, "gpiod", fake)
+    return fhi.Lines(fhi.LINES, "/dev/gpiochip0")
+
+
+def test_lines_close_lets_creset_go_last(monkeypatch):
+    fake = FakeGpiodV1()
+    pins = _lines(monkeypatch, fake)
+    pins.output(fhi.CRESET, 0)
+    pins.output(fhi.CS, 1)
+    pins.output(fhi.MOSI, 0)
+    pins.close()
+    inputs = [e[1] for e in fake.log if e[0] == "in"]
+    assert inputs[-1] == fhi.CRESET and set(inputs) == {fhi.CRESET, fhi.CS, fhi.MOSI}
+    assert set(fake.direction.values()) == {"in"} and fake.log[-1] == ("close",)
+
+
+def test_lines_close_keeps_creset_low_when_a_line_is_stuck_and_says_so(monkeypatch):
+    fake = FakeGpiodV1(stuck={fhi.MOSI})
+    pins = _lines(monkeypatch, fake)
+    pins.output(fhi.CRESET, 0)
+    pins.output(fhi.MOSI, 0)
+    pins.output(fhi.CS, 1)
+    with pytest.raises(OSError, match=r"GPIO10 could not be set back to an input.*CRESET is left low"):
+        pins.close()
+    assert fake.direction[fhi.CRESET] == "out" and fake.direction[fhi.CS] == "in"
+    assert ("close",) in fake.log  # the lines are still given back to the kernel
+
+
+def test_main_says_why_and_exits_2_when_a_line_will_not_be_given_back(monkeypatch, capsys):
+    fake = FakeGpiodV1(stuck={fhi.CLK})
+    monkeypatch.setattr(fhi, "gpiod", fake)
+    monkeypatch.setattr(fhi, "header_chip", lambda: "/dev/gpiochip0")
+    clock = Clock()
+    monkeypatch.setattr(fhi.time, "sleep", clock.sleep)
+    assert fhi.main() == 2
+    said = capsys.readouterr().out
+    assert said.startswith("fomu-header-error: ") and "GPIO11 could not be set back to an input" in said

@@ -119,14 +119,20 @@ class Lines:
         return int(self.lines[gpio].get_value())
 
     def close(self):
-        for gpio in list(self.outputs):
-            self.input(gpio)
+        """Every line an input again, CRESET last, and the lines released. A line that will not go back to an input
+        keeps CRESET low: an iCE40 held in reset is a board that is down, which the check says; one let out of reset
+        onto a bus the Pi still drives is a fight on its flash's lines."""
+        stuck = release(self, [g for g in self.outputs if g != CRESET])
+        if CRESET in self.outputs and not stuck:
+            self.input(CRESET)
         if self.v2:
             self.request.release()
         else:
             for line in self.lines.values():
                 line.release()
             self.chip.close()
+        if stuck:
+            raise OSError(f"{'; '.join(stuck)}: CRESET is left low, so the iCE40 stays in reset")
 
 
 class Spi:
@@ -159,6 +165,17 @@ class Spi:
             self.pins.set(CS, 1)
 
 
+def release(pins, gpios):
+    """Each of `gpios` an input again, every one tried whatever the others do: what failed, in words."""
+    stuck = []
+    for gpio in gpios:
+        try:
+            pins.input(gpio)
+        except OSError as e:
+            stuck.append(f"GPIO{gpio} could not be set back to an input ({e})")
+    return stuck
+
+
 def read_flash(spi, sleep=time.sleep, clock=time.monotonic):
     """{"jedec", "uid", "status"} read from the flash, the iCE40 in reset."""
     spi.command(RELEASE_POWER_DOWN)
@@ -188,8 +205,10 @@ def wait_for(pins, gpio, level, limit, sleep=time.sleep, clock=time.monotonic):
 
 
 def identify(pins, sleep=time.sleep, clock=time.monotonic):
-    """The reading. `pins` has all LINES as inputs; every line is an input again when this returns or raises."""
+    """The reading. `pins` has all LINES as inputs; every line is an input again when this returns or raises,
+    except CRESET when an SPI line could not be set back to an input (see Lines.close)."""
     out = {"cdone_before": pins.get(CDONE), "creset_before": pins.get(CRESET)}
+    stuck = []
     try:
         pins.output(CRESET, 0)
         sleep(RESET_HOLD)
@@ -198,17 +217,19 @@ def identify(pins, sleep=time.sleep, clock=time.monotonic):
             out["flash"] = None  # no iCE40 held on that reset: its bus may be in use, so it is not driven
             return out
         try:
+            pins.output(CS, 1)  # the flash deselected before any other line moves
             pins.output(WP, 0)  # status registers protected while the Pi has the bus
             pins.output(HOLD, 1)
             pins.output(CLK, 0)
             pins.output(MOSI, 0)
-            pins.output(CS, 1)
             out["flash"] = read_flash(Spi(pins), sleep, clock)
         finally:
-            for gpio in SPI_OUTPUTS:  # the bus is the iCE40's again before it leaves reset
-                pins.input(gpio)
+            stuck = release(pins, SPI_OUTPUTS)  # the bus is the iCE40's again before it leaves reset
     finally:
-        pins.input(CRESET)
+        if not stuck:
+            pins.input(CRESET)
+    if stuck:
+        raise OSError(f"{'; '.join(stuck)}: CRESET is left low, so the iCE40 stays in reset")
     out["boot_seconds"] = wait_for(pins, CDONE, 1, BOOT_WAIT, sleep, clock)
     out["cdone_after"] = pins.get(CDONE)
     return out
@@ -237,13 +258,18 @@ def main():
     except OSError as e:
         print(f"fomu-header-error: the header's GPIO lines could not be taken: {e}")
         return 2
+    faults, reading = [], None
     try:
         reading = identify(pins)
     except OSError as e:
-        print(f"fomu-header-error: a GPIO line failed during the reading: {e}")
-        return 2
-    finally:
+        faults.append(f"a GPIO line failed during the reading: {e}")
+    try:
         pins.close()
+    except OSError as e:
+        faults.append(f"the lines could not all be given back: {e}")
+    if faults:
+        print("fomu-header-error: " + "; ".join(faults))
+        return 2
     print("fomu-header: " + json.dumps(reading, sort_keys=True))
     return 0
 

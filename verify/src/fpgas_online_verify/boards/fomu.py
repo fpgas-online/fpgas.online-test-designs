@@ -126,7 +126,8 @@ class Fomu(TestBoard):
     probes = True  # reads CDONE on the header: nothing is driven
     debug_usb: ClassVar[dict] = {("1d50", "607c"): "OpenVizsla OV3"}
     variants: ClassVar[dict] = {"evt": "evt"}
-    label_fields = ("flash_uid",)
+    label_fields = ("flash_uid",)  # --identify takes it from the boot report: reading it resets the FPGA
+    one_per_host = True  # on the Pi's header
     port = "/dev/serial0"
     flash_note = "not read back: every verify rewrites the user image by DFU; its IDs are read over the header"
     fact_tests: ClassVar[dict] = {
@@ -145,7 +146,9 @@ class Fomu(TestBoard):
     }  # fmt: skip
 
     def probe(self, host, runner=run):
-        """A Fomu on the header: CDONE (GPIO17) high, read with pinctrl, which drives nothing."""
+        """A Fomu on the header: CDONE (GPIO17) high, read with pinctrl, which drives nothing. GPIO17 is also the
+        NeTV2's TMS (and GPIO27 its TDI): on a host with both boards' packages, a NeTV2 whose TMS reads high would
+        be taken for a Fomu too, and fail its `header` test (CDONE does not fall, so its bus is never driven)."""
         if not is_pi(host["model"]):
             return []
         cdone = pin_states(runner, (CDONE,))[CDONE]

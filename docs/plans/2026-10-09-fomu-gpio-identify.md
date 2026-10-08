@@ -80,7 +80,7 @@ Holding CRESET low stops whatever design a visitor loaded. So the reset runs onl
   - the module, with a line left driven.
 - The reset also brings foboot back for the DFU load. A Fomu that an earlier check left running its test design (#135) is now found by its CDONE and checked without a power cycle. `gone_after_check` and its advice are removed, since the Fomu was their only user. The runner tests for them are replaced by tests that name the OV3.
 
-**`--identify`** must not disturb the board (`Board.identify`: "nothing reconfigured"). The reset reconfigures the FPGA, so `--identify` reads only CDONE and USB, and takes `flash_jedec` and `flash_uid` from the boot report (`report_fields`), as the Arty and NeTV2 already do for the flash.
+**`--identify`** must not disturb the board (`Board.identify`: "nothing reconfigured"). The reset reconfigures the FPGA, so `--identify` reads only CDONE and USB, and takes `flash_jedec` and `flash_uid` from the boot report (`report_fields`), as the Arty and NeTV2 already do for the flash. The Fomu has no board-unique key to match the report by: no USB serial, DNA or PCI slot. So a new `Board.one_per_host`, true for the Fomu, lets `--identify` take the one Fomu in the report. It sits on the Pi's own header, and changing it means powering the Pi off, which runs the boot check again. This came from the review.
 
 **Label.** The `label_fields` change from `serial` to `flash_uid`. foboot has no USB serial number at all: `sw/src/usb-desc.c` gives `iSerialNumber` 0, and its README's log shows `SerialNumber=0`. So the Fomu's label had no value, and the flash's 64-bit unique ID is the board's own identifier.
 
@@ -127,6 +127,21 @@ A board module can name USB debug tools: `Board.debug_usb = {(vendor, product): 
 ### Not in this PR
 
 The iCE40 can be loaded over the same header in SPI-slave mode: CRESET is pulled with SS held low, as `fomu-flash -f` does. That loads into SRAM only, never writes the flash and needs no USB. It would end the DFU load's rewrite of the user image at every verify. It needs bit-banged SPI with MOSI/MISO swapped.
+
+### Run on the real Fomu host (9 Oct 2026, 09:18 ACDT, the coordinator's grant)
+
+`fomu_header_id.py` from head f756e96 (sha256 `1b471e90…ae664`) ran once as pi, without sudo, on the Pi 3B+ 00000000cc479fd1 (python3-libgpiod 1.6.3, the v1 path). The script was copied to the Pi's home and removed after. It printed:
+
+```
+fomu-header: {"boot_seconds": 0.071, "cdone_after": 1, "cdone_before": 1, "cdone_in_reset": 0, "creset_before": 1, "flash": {"busy_after_wait": false, "busy_at_reset": false, "jedec": "ef7018", "status": ["00", "02", "60"], "uid": "e467286593241321"}}
+```
+
+- Before the run: all eight lines were inputs, CDONE was high, and only the OV3 was on USB.
+- During the run: CDONE fell in reset; the flash is the EVT's W25Q128JV, unique ID `e467286593241321`; the iCE40 booted from its flash again in 71 ms.
+- After the run: all eight lines were inputs.
+- 10 s later, foboot (`1209:5bf0`, "Generic Fomu EVT running DFU Bootloader v2.0.4") was back on USB beside the OV3.
+
+Records: `scratch/data/welland/fomu-200/02-*`.
 
 ### Running on the real Fomu host
 

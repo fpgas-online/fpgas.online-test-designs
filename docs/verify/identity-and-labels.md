@@ -58,6 +58,11 @@ the check, publishes anything or records any state.
   IDCODE (a NeTV2 whose DNA could not be read) gets nothing from the report: the fields stay missing, for
   the reason
   `no board-unique match in the boot report`.
+* The Fomu EVT has no such key: foboot has no USB serial, and reading its flash resets it. It sits on the Pi's
+  own header, so there is at most one per host, and changing it means powering the Pi off, which runs the boot
+  check again. So its flash fields, and its label `flash_uid`, come from the one Fomu in the boot report. With
+  none there the reason is `this board is not in the boot report`, and with two (which no Pi has),
+  `no board-unique match in the boot report`.
 * The exit status is 0 when every board's identity is whole (no field missing, no `<field>_error`), 1
   otherwise. Each missing field is printed on stderr with why. The document is printed either way; readers
   use it and ignore the exit status.
