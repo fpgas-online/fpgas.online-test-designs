@@ -15,7 +15,7 @@ import stat
 import subprocess
 
 import pytest
-from fpgas_online_verify import conclusion, config, core, identity, runner, state
+from fpgas_online_verify import config, core, identity, runner, state
 from fpgas_online_verify.board import Board, installed
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
 from fpgas_online_verify.boards.acorn import suite as acorn_suite
@@ -408,49 +408,41 @@ def test_a_failed_test_is_not_a_state_change(opts):
     assert report["result"] == "fail" and "changes" not in report["state"]
 
 
-def test_a_fomu_that_an_earlier_check_took_off_usb_is_missing_with_that_said(opts):
-    """#135: the Fomu's test design has no USB, so after a reboot (not a power cycle) the board is there and
-    unseen. Still "missing": it was not checked. But the reason says what happened and what brings it back."""
+OV3 = {"vendor": "1d50", "product": "607c", "serial": "OV100662", "path": "1-1.3"}
+OV3_SAID = "OpenVizsla OV3 OV100662 on USB (1d50:607c at 1-1.3), a debug tool, not a board"
+
+
+def test_an_openvizsla_on_the_fomus_usb_is_named_as_a_debug_tool_not_no_board(opts):
+    """#200: on 8 Oct the Fomu host's USB had an OpenVizsla OV3 and no foboot, and the check said only that no
+    board was found. The OV3 is named, in the report and in the reason, and is never taken for a board."""
     from fpgas_online_verify.boards.fomu import BOARD as FOMU
 
-    state.save({"fomu": {"variant": "evt"}}, "then", opts["state"])
     events = []
     report = runner.verify({**opts, "event": lambda stage, d: events.append((stage, d))}, _boards(FOMU, Fake("arty")),
-                           usb=[], pci=[], mode=("auto", "test"))  # fmt: skip
-    assert report["result"] == "missing"
-    assert report["reason"].startswith("none of the installed boards (fomu, arty) was found (auto: USB/PCI IDs")
-    said = ("; a Fomu EVT was found on this host by an earlier check and is not there now: the check's own test "
-            "design has no USB, so a Fomu that has been checked is off USB until it is power-cycled: power-cycle "
-            "the Pi (a reboot is not enough)")  # fmt: skip
-    assert report["reason"].endswith(said)
+                           usb=[OV3], pci=[], mode=("auto", "test"))  # fmt: skip
+    assert report["result"] == "missing" and report["boards"] == []
+    assert report["usb_debug_tools"] == [OV3_SAID]
+    assert report["reason"].startswith("none of the installed boards (fomu, arty) was found")
+    assert report["reason"].endswith("; " + OV3_SAID)
     assert events == [("fpga-no-board", {"reason": report["reason"]})]
-    assert report["state"]["changes"] == ["fomu: recorded, not found now"]
     # configured for the Fomu alone, the same
-    alone = runner.verify({**opts, "board": "fomu"}, _boards(FOMU), usb=[], pci=[])
-    assert alone["result"] == "missing" and alone["reason"].endswith(said)
-    todo = " ".join(line.strip() for line in conclusion.lines(alone))
-    assert "The Fomu may still be plugged in and working" in todo and "power-cycle the Pi" in todo
+    alone = runner.verify({**opts, "board": "fomu"}, _boards(FOMU), usb=[OV3], pci=[])
+    assert alone["result"] == "missing" and alone["reason"].endswith("; " + OV3_SAID)
 
 
-def test_a_missing_board_is_not_explained_by_a_fomu_that_was_never_here_or_is_not_looked_for(opts):
+def test_a_debug_tool_is_named_beside_the_boards_found_and_only_for_an_installed_board(opts):
     from fpgas_online_verify.boards.fomu import BOARD as FOMU
 
-    # no record at all, a record without a Fomu, a record that cannot be read: nothing is added
-    assert "earlier check" not in runner.verify({**opts, "board": "fomu"}, _boards(FOMU), usb=[], pci=[])["reason"]
-    state.save({"arty": {"variant": "a7-35", "serial": "A"}}, "then", opts["state"])
-    assert "earlier check" not in runner.verify({**opts, "board": "fomu"}, _boards(FOMU), usb=[], pci=[])["reason"]
-    opts["state"].write_text("{broken")
-    assert "earlier check" not in runner.verify({**opts, "board": "fomu"}, _boards(FOMU), usb=[], pci=[])["reason"]
-    # a Fomu is recorded, but this host is set up for an Arty: the Fomu is not looked for, so nothing is said of it
-    state.save({"fomu": {"variant": "evt"}, "arty": {"variant": "a7-35"}}, "then", opts["state"])
-    report = runner.verify({**opts, "board": "arty"}, _boards(FOMU, Fake("arty")), usb=[], pci=[])
-    assert report["result"] == "missing" and "Fomu" not in report["reason"]
-    # a board whose check leaves it on its bus says nothing either
-    report = runner.verify(opts, _boards(Fake("arty")), usb=[], pci=[], mode=("auto", "test"))
-    assert report["reason"].count(";") == 0
-    # one of two Fomus on a host (keys fomu@<where>) is a Fomu recorded
-    state.save({"fomu@1-1.3": {"variant": "evt"}, "fomu@1-1.4": {"variant": "evt"}}, "then", opts["state"])
-    assert "earlier check" in runner.verify({**opts, "board": "fomu"}, _boards(FOMU), usb=[], pci=[])["reason"]
+    arty = Fake("arty", seen=[{"variant": "a7-35", "serial": "A"}])
+    report = runner.verify(opts, _boards(FOMU, arty), usb=[OV3], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and report["usb_debug_tools"] == [OV3_SAID]
+    # no board module that names it is installed: it is any USB device, and not mentioned
+    report = runner.verify(opts, _boards(arty), usb=[OV3], pci=[], mode=("auto", "test"))
+    assert "usb_debug_tools" not in report
+    # one without a serial number
+    bare = {**OV3, "serial": None}
+    said = runner.debug_tools(_boards(FOMU), [bare])
+    assert said == ["OpenVizsla OV3 on USB (1d50:607c at 1-1.3), a debug tool, not a board"]
 
 
 def test_a_missing_board_on_the_first_run_records_nothing(opts):

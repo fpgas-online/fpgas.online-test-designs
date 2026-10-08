@@ -109,18 +109,15 @@ def find(boards, mode, options, usb, pci):
     raise Problem("missing", f"none of the installed boards ({', '.join(boards)}) was found ({how})")
 
 
-def recorded_and_gone(boards, mode, path):
-    """For each board looked for whose own check takes it off its bus (Board.gone_after_check) and that the
-    recorded state has: a sentence saying so. Nothing was found, so such a board may be there and unseen."""
-    recorded = state.load(path)
-    if not isinstance(recorded, dict) or "unreadable" in recorded:
-        return []
-    looked_for = boards.values() if mode == config.AUTO else [b for b in boards.values() if mode in (b.name, b.slug)]
+def debug_tools(boards, usb):
+    """A sentence for each USB debug tool (Board.debug_usb) of an installed board that is on USB now."""
+    names = {ids: name for b in boards.values() for ids, name in b.debug_usb.items()}
     out = []
-    for b in looked_for:
-        if b.gone_after_check and any(key == b.name or key.startswith(f"{b.name}@") for key in recorded):
-            out.append(f"a {b.title} was found on this host by an earlier check and is not there now: "
-                       f"{b.gone_after_check}")  # fmt: skip
+    for d in usb:
+        name = names.get((d["vendor"], d["product"]))
+        if name:
+            out.append(f"{name}{' ' + d['serial'] if d.get('serial') else ''} on USB ({d['vendor']}:{d['product']} "
+                       f"at {d['path']}), a debug tool, not a board")  # fmt: skip
     return out
 
 
@@ -206,12 +203,14 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
                 report["power_cycle_check"] = {"on": True, "configured_by": str(path)}
         usb = usb_devices() if usb is None else usb
         pci = pci_devices() if pci is None else pci
+        tools = debug_tools(boards, usb)
+        if tools:
+            report["usb_debug_tools"] = tools
         targets, report["chosen_by"] = find(boards, report["mode"], options, usb, pci)
     except Problem as p:
         report.update(result=p.result, reason=p.reason)
-        if p.result == "missing":  # say what was recorded, if anything: nothing is recorded now
-            gone = recorded_and_gone(boards, report.get("mode"), options.get("state", state.STATE))
-            report["reason"] = "; ".join([p.reason, *gone])
+        if p.result == "missing":  # a debug tool on USB is named, so it is not read as the board; nothing is recorded
+            report["reason"] = "; ".join([p.reason, *report.get("usb_debug_tools", [])])
             event("fpga-no-board", {"reason": report["reason"]})
             report["state"] = compare_state(report, [], [], False, options.get("state", state.STATE))
         return report

@@ -7,6 +7,7 @@ modules that are installed. A board module is the only place that knows its boar
 
 import importlib
 import pkgutil
+from typing import ClassVar
 
 from . import identity
 from .core import host_facts
@@ -25,10 +26,9 @@ class Board:
     # check holds), which --identify takes from the boot report instead.
     label_fields = ()
     report_fields = ()
-    # Why this board can be off its bus now with nothing wrong, when the last check that found it left it so
-    # (the Fomu: its test design has no USB). Said when it is not found and the recorded state has it: the
-    # result stays "missing", since it was not checked, and the reason says what brings it back.
-    gone_after_check = ""
+    # USB devices that sit beside this board as debug tools, never boards: {(vendor, product): name} (the Fomu's
+    # OpenVizsla, inline on its USB). The report names each one seen, and a board not found is not blamed on it.
+    debug_usb: ClassVar[dict] = {}
 
     def facts(self, port=None):
         """What the check needs to know about this host."""
