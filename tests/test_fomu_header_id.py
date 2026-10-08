@@ -354,7 +354,7 @@ def test_lines_close_does_not_let_creset_go_while_a_line_is_stuck_and_says_so(mo
 
 def test_main_with_a_stuck_line_never_lets_creset_go_before_the_lines_are_given_back(monkeypatch, capsys):
     """The second review of #201: identify() kept CRESET low, but close() then let it go while CLK was still
-    driven. Now only giving the lines back (CRESET last) lets it go."""
+    driven. Now only giving the lines back (on libgpiod v1, CRESET last) lets it go."""
     fake = FakeGpiodV1(stuck={fhi.CLK})
     monkeypatch.setattr(fhi, "gpiod", fake)
     monkeypatch.setattr(fhi, "header_chip", lambda: "/dev/gpiochip0")

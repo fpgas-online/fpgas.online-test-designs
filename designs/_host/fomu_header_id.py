@@ -23,12 +23,11 @@ The order is what keeps both sides safe:
     opcodes in READ_ONLY, and nothing else can be sent. /WP is held low, so no status register can be
     written either.
  4. Every SPI line goes back to an input BEFORE CRESET is let go, so the iCE40 masters its flash alone when it
-    boots. CRESET then goes back to an input too, and the board's pull-up takes it high. If an SPI line will
-    not go back to an input, CRESET is not let go: the lines are given back to the kernel, CRESET last. If the
-    script is interrupted (Ctrl-C) or killed, CRESET is not let go by it either, and the kernel frees every
-    line when the process exits, in an order the script does not control. The bcm2835/bcm2711 pin controller
-    (Pi 3 and 4) makes a freed line an input; the board module checks with pinctrl afterwards that every line
-    is one, on any Pi.
+    boots. The script lets CRESET go only once every SPI line is known to be an input; the board's pull-up
+    then takes it high. Whatever the script could not put back (a stuck line, a Ctrl-C during that release, a
+    kill) is left to the kernel, which frees the lines when they are given back or the process exits. The
+    bcm2835/bcm2711 pin controller (Pi 3 and 4) makes a freed line an input; the board module checks with
+    pinctrl afterwards that every line is one, on any Pi.
  5. CDONE must rise again within BOOT_WAIT: the iCE40 has booted from its flash, as at power-up.
 
 Nothing is written to the flash, and every line is given back to the kernel, at the latest when the process
@@ -51,7 +50,7 @@ except ImportError:  # only on a Raspberry Pi
 
 CRESET, CDONE = 27, 17
 CS, MOSI, MISO, CLK, WP, HOLD = 8, 10, 9, 11, 24, 25
-LINES = (CDONE, CS, MOSI, MISO, CLK, WP, HOLD, CRESET)  # CRESET last: lines are given back in this order
+LINES = (CDONE, CS, MOSI, MISO, CLK, WP, HOLD, CRESET)  # CRESET last: libgpiod v1 gives them back in this order
 SPI_OUTPUTS = (CS, MOSI, CLK, WP, HOLD)
 
 RELEASE_POWER_DOWN, READ_STATUS_1, READ_STATUS_2, READ_STATUS_3 = 0xAB, 0x05, 0x35, 0x15
@@ -132,11 +131,10 @@ class Lines:
         return int(self.lines[gpio].get_value())
 
     def close(self):
-        """Every line an input again, CRESET last, and the lines given back to the kernel, CRESET last. When a
-        line will not go back to an input, CRESET is not let go while the Pi holds the lines: giving them back
-        then leaves it to the kernel, CRESET after the others (on a Pi 3/4 the pin controller makes each freed
-        line an input). If this raises before giving them back, the kernel frees them when the process exits, in
-        an order the script does not control. The script cannot hold CRESET low past its own exit."""
+        """Every other line an input again, then CRESET, but CRESET only if none of the others is stuck; then the
+        lines are given back to the kernel (in one release on libgpiod v2; line by line in LINES order on v1). If
+        this raises before that, the kernel frees them when the process exits. The script cannot hold CRESET low
+        past its own exit."""
         stuck = release(self, [g for g in self.outputs if g != CRESET])
         if CRESET in self.outputs and not stuck:
             self.input(CRESET)
@@ -147,7 +145,7 @@ class Lines:
                 line.release()
             self.chip.close()
         if stuck:
-            raise OSError(f"{'; '.join(stuck)}: CRESET was not let go before the lines were given back (CRESET last)")
+            raise OSError(f"{'; '.join(stuck)}: CRESET was not let go before the lines were given back")
 
 
 class Spi:
