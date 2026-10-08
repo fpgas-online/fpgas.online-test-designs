@@ -17,7 +17,9 @@ import importlib.util
 import itertools
 import pathlib
 import socket
+import sys
 import threading
+import types
 
 import pytest
 
@@ -1659,3 +1661,130 @@ def test_a_dip_switch_on_ui_in1_to_3_says_why_its_uio_bit_is_untested(bit):
         f"the uio ribbon (to HAT JB): uio[{bit}] (Pmod pin {bit + 1}) could not be tested: it shares its HAT line "
         f"with ui_in[{bit}], which is held high"
     ), line
+
+
+class _FirmwareTT:
+    """As much of the SDK's DemoBoard as the command server's `sdk` commands use."""
+
+    def __init__(self, log):
+        self._log = log
+        self.mode = 2  # ASIC_RP_CONTROL
+        self.shuttle = types.SimpleNamespace(enabled=types.SimpleNamespace(name="tt_um_factory_test", enable=self._on))
+        self.apply_configs = True
+        self.clock = 10
+        self.drift = False  # a restore that does not come back the same
+
+    def _on(self):
+        self._log.append(("sdk", "enable"))
+
+    @property
+    def is_auto_clocking(self):
+        return bool(self.clock)
+
+    @property
+    def auto_clocking_freq(self):
+        return self.clock
+
+    def clock_project_stop(self):
+        self.clock = 0
+
+    def clock_project_PWM(self, hz):
+        self.clock = hz
+
+    def reset_project(self, putInReset):
+        pass
+
+    def clock_project_once(self):
+        pass
+
+    def __repr__(self):
+        clocking = f", auto-clocking @ {self.clock}" if self.clock else ""
+        return f"<DemoBoard mode {self.mode}{clocking}{' drifted' if self.drift else ''}>"
+
+
+def run_command_server(monkeypatch, commands, drift_after_init=False):
+    """Run the RP2040 command server itself (FIRMWARE), under CPython, with a fake `machine`, `gc`, `time` and SDK.
+    Returns the log: ("pin", gpio, mode, pull) for every Pin made, ("out", line) for every line it says."""
+    log = []
+
+    class Pin:
+        IN, OUT, PULL_UP, PULL_DOWN = 0, 1, 1, 2
+
+        def __init__(self, g, mode=0, pull=None, value=None, drive=None):
+            log.append(("pin", g, mode, pull))
+
+        def value(self, v=None):
+            return 0
+
+    machine = types.ModuleType("machine")
+    machine.Pin, machine.mem32 = Pin, {}
+    fake_gc = types.ModuleType("gc")
+    fake_gc.collect, fake_gc.mem_free = lambda: None, lambda: 100000
+    fake_time = types.ModuleType("time")
+    fake_time.sleep_ms = fake_time.sleep_us = lambda n: None
+    for name, mod in (("machine", machine), ("gc", fake_gc), ("time", fake_time)):
+        monkeypatch.setitem(sys.modules, name, mod)
+    tt = _FirmwareTT(log)
+    script = list(commands)
+
+    class Stdin:
+        def readline(self):
+            line = script.pop(0) + "\n"
+            if line.startswith("sdk restore") and drift_after_init:
+                tt.drift = True
+            return line
+
+    class Stdout:
+        def write(self, s):
+            log.extend(("out", x) for x in s.splitlines() if x)
+
+    monkeypatch.setattr(sys, "stdin", Stdin())
+    monkeypatch.setattr(sys, "stdout", Stdout())
+    try:
+        exec(ttw.build_firmware("rp2040"), {"tt": tt, "__name__": "__main__"})  # the server itself
+    finally:
+        monkeypatch.undo()
+    return log
+
+
+DATA_PINS = RP2040["ui_in"] + RP2040["uio"] + RP2040["uo_out"]  # what the server releases
+
+
+def released_after(log, text):
+    """Pins made plain inputs with no pull after the server said a line starting with `text`."""
+    at = next(i for i, e in enumerate(log) if e[0] == "out" and e[1].startswith("TTW " + text))
+    return [e[1] for e in log[at:] if e[0] == "pin" and e[2:] == (0, None)]
+
+
+def test_after_the_sdks_restore_the_way_out_leaves_its_pins_alone(monkeypatch):
+    """Issue #196: the server's `finally` released every data pin after `sdk restore`, so the SDK's own ui_in drive
+    was undone (on board de641070db746f27, 8 Oct 2026: the RP2040's output enable off on all eight ui_in GPIOs)."""
+    log = run_command_server(monkeypatch, ["sdk init", "sdk restore", "quit"])
+    assert ("out", "TTW OK restored: <DemoBoard mode 2, auto-clocking @ 10>") in log
+    assert released_after(log, "OK restored") == []
+
+
+def test_a_ping_or_heap_read_after_the_restore_keeps_the_sdks_pins(monkeypatch):
+    """Review 1 of #198: the host asks `ping` and `mem` after the restore; they touch no pin."""
+    log = run_command_server(monkeypatch, ["sdk init", "sdk restore", "ping", "mem", "quit"])
+    assert released_after(log, "OK restored") == []
+
+
+@pytest.mark.parametrize(
+    "commands",
+    [
+        ["sdk restore", "quit"],  # a restore with nothing saved: the SDK not changed, its pins released
+        ["quit"],  # the SDK never used
+        ["sdk init", "quit"],  # stopped before the restore
+        ["sdk init", "sdk restore", f"out {RP2040['ui_in'][3]} 1", "quit"],  # a pin driven after the restore
+    ],
+)
+def test_on_every_other_way_out_the_pins_are_released(monkeypatch, commands):
+    log = run_command_server(monkeypatch, commands)
+    assert sorted(released_after(log, "BYE")) == sorted(DATA_PINS)
+
+
+def test_a_restore_that_did_not_come_back_the_same_releases_the_pins(monkeypatch):
+    log = run_command_server(monkeypatch, ["sdk init", "sdk restore", "quit"], drift_after_init=True)
+    assert any(e[0] == "out" and e[1].startswith("TTW ERR restore:") for e in log)
+    assert sorted(released_after(log, "BYE")) == sorted(DATA_PINS)
