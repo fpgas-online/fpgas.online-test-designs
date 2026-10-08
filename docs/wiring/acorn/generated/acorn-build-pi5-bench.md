@@ -4,21 +4,21 @@ Not yet run by us on this hardware: written from the design. Photos: Waveshare (
 
 ## What you need
 
-Both finished cables, the Raspberry Pi 5, and a multimeter with a continuity buzzer. The Acorn stays out of its slot. If the Raspberry Pi 5 is on, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE.
+Both finished cables, the Raspberry Pi 5, and a multimeter with a continuity buzzer. If the Raspberry Pi 5 is on, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. The Acorn stays out of its slot; if it is fitted, take it out first. The screw at its far end comes out first (its size and the screwdriver are not recorded by us). How the card then comes out of the slot is not recorded by us.
 
 ## Steps
 
-**1.** This is a bench check; the housings come off again before the cables are fitted. If the Raspberry Pi 5 is on, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. Then fit the P1 housing on the 40-pin header pins 19 to 26 with its marked corner on pin 19, counted as in the picture. The P1 cavity picture is shown again below, for where its housing sits and which corner is marked.
+**1.** This is a bench check; the housings come off again before the cables are fitted. If the Raspberry Pi 5 is on, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. Then fit the P1 housing on the 40-pin header pins 19 to 26 with its marked corner on pin 19, counted as in the picture. The P1 cavity picture is shown again below, for which wire goes in which cavity, and which corner is marked.
 
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png){.only-light}
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1-dark.png){.only-dark}
 
-**2.** Fit the P2 housing on the 40-pin header pins 5 to 10 with its marked corner on pin 5, counted as in the picture. The P2 cavity picture is shown again below, for where its housing sits and which corner is marked.
+**2.** Fit the P2 housing on the 40-pin header pins 5 to 10 with its marked corner on pin 5, counted as in the picture. The P2 cavity picture is shown again below, for which wire goes in which cavity, and which corner is marked.
 
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png){.only-light}
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2-dark.png){.only-dark}
 
-**3.** The Acorn is not in its slot and the plugs are free. Put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Raspberry Pi 5: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent. That the shell is the host's ground is not measured by us; contact 1's beep is what shows it. The beep does not show which way round the P1 housing is: turned round, its GND wire still sits on a ground pin, so look at its marked corner. The beep does not show which way round the P2 housing is: turned round, its GND wire still sits on a ground pin, so look at its marked corner.
+**3.** The Acorn is not in its slot and the plugs are free. Put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Raspberry Pi 5: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent. That the shell is the host's ground is taken as given, not measured by us: contact 1's beep shows only that contact 1 and the shell are joined. The beep does not show which way round the P1 housing is: turned round, its GND wire still sits on a ground pin, so look at its marked corner. The beep does not show which way round the P2 housing is: turned round, its GND wire still sits on a ground pin, so look at its marked corner.
 
 ![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check.png){.only-light}
 ![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check-dark.png){.only-dark}

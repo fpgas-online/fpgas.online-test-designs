@@ -11,11 +11,11 @@ The check never writes the card's flash and never loads a design into the FPGA. 
 
 ## Install it and run it
 
-The Compute Blades at ps1 boot from the network with their root file system in memory (`overlayroot=tmpfs`): what you install is gone at the next boot, and so is the check that would run at boot. So after each boot, install and run by hand.
+The Compute Blades at ps1 boot from the network with their root file system in memory (`overlayroot=tmpfs`): what you install is gone at the next boot, and so is the check that would run at boot. So after each boot, install and run by hand. **Ask Tim before you reboot a blade:** a reboot ends a visitor's session on it, the same harm as a power-off.
 
 **Not on pi14 at ps1 or pi18 at ps1 yet.** Those two carry a Compute Module 4; the check has been run as written only on the two Compute Module 5 blades (pi16 and pi20 at ps1, 7 October 2026), and `vcgencmd` hung for good on both CM4 blades that day. Until the check has been tried on a CM4 blade, run it on pi16 at ps1 and pi20 at ps1 only.
 
-**The check runs `jtag` too, whose TMS wire is GPIO14.** In a boot with the header's serial port on, `jtag` fails without running the JTAG tool (the result printed below). In a boot with the header's serial port off (the page "verifying 3"), run the check only after steps 2 and 3 of the last list on that page pass (check that GPIO14 is free; check that nothing on the card drives GPIO14). If either fails, do not run the check in that boot: something holds or drives the TMS wire.
+**The check runs `jtag` too, whose TMS wire is GPIO14.** In a boot with the header's serial port on, `jtag` fails without running the JTAG tool (the result printed below). In a boot with the header's serial port off (the page "verifying 3"), run the check only after steps 2 and 3 of the list "Before JTAG runs on a blade" on that page pass (check that GPIO14 is free; check that nothing on the card drives GPIO14). If either fails, do not run the check in that boot: something holds or drives the TMS wire.
 
 ```bash
 # 1. The two apt repositories the packages come from.

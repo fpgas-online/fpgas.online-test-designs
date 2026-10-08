@@ -303,7 +303,8 @@ INSTALL = {
     "blade": (
         "The Compute Blades at ps1 boot from the network with their root file system in memory "
         "(`overlayroot=tmpfs`): what you install is gone at the next boot, and so is the check that would run at "
-        "boot. So after each boot, install and run by hand.\n\n"
+        "boot. So after each boot, install and run by hand. **Ask Tim before you reboot a blade:** a reboot "
+        "ends a visitor's session on it, the same harm as a power-off.\n\n"
         "**Not on pi14 at ps1 or pi18 at ps1 yet.** Those two carry a Compute Module 4; the check has been "
         "run as written only on the two Compute Module 5 blades (pi16 and pi20 at ps1, 7 October 2026), and "
         "`vcgencmd` hung for good on both CM4 blades that day. Until the check has been tried on a CM4 blade, "
@@ -343,16 +344,19 @@ TODAY = {
 }
 # When JTAG may be run on a blade, in the words of the page "verifying 3" (check/compute-blade.md): its last list's
 # steps 2 and 3. Said wherever a blade page gives a command that runs the `jtag` test.
+JTAG_LIST = "Before JTAG runs on a blade"  # the heading of that list on the page "verifying 3"
 JTAG_CONDITIONS = (
-    "in a boot with the header's serial port off, and only after steps 2 and 3 of the last list on the page "
-    '"verifying 3" pass (check that GPIO14 is free; check that nothing on the card drives GPIO14)'
+    "in a boot with the header's serial port off, and only after steps 2 and 3 of the list "
+    f'"{JTAG_LIST}" on the page "verifying 3" pass (check that GPIO14 is free; check that nothing on the card '
+    "drives GPIO14)"
 )
 JTAG_FIRST = {
     "blade": (
         "**The check runs `jtag` too, whose TMS wire is GPIO14.** In a boot with the header's serial port on, "
         "`jtag` fails without running the JTAG tool (the result printed below). In a boot with the header's "
-        'serial port off (the page "verifying 3"), run the check only after steps 2 and 3 of the last list on '
-        "that page pass (check that GPIO14 is free; check that nothing on the card drives GPIO14). If either "
+        'serial port off (the page "verifying 3"), run the check only after steps 2 and 3 of the list '
+        f'"{JTAG_LIST}" on that page pass (check that GPIO14 is free; check that nothing on the card drives '
+        "GPIO14). If either "
         "fails, do not run the check in that boot: something holds or drives the TMS wire."
     )
 }
@@ -469,7 +473,8 @@ def pages(c):
         "cable's plug contacts against its housing with the meter as "
         f'{steps.meter_check_steps(c)} of "JTAG connector 2" or "UART connector 2" do, run "the bench check" with '
         'the card out, and fit the cables as "Fitting" does. Then '
-        "boot and run the check again"
+        + ("ask Tim and boot, and run" if c.key == "blade" else "boot and run")
+        + " the check again"
         + (
             " (on a blade at ps1 the install is gone after the boot: install again, as on verifying 1; and "
             "not on pi14 or pi18 at ps1 yet, as verifying 1 says)"
@@ -521,7 +526,7 @@ def pages(c):
             "",
             "## What has been run on a Compute Blade",
             "",
-            site_links(fragment("compute-blade.md", c)).strip(),
+            site_links(fragment("compute-blade.md", c).replace("{jtag_list}", JTAG_LIST)).strip(),
             "",
         ]
     done = {}

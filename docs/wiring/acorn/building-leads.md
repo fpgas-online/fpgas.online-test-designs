@@ -8,7 +8,7 @@ published address, which the sync turns into a link inside the site.
 
 ## boards/acorn/building/compute-blade/bench-check.md
 
-**You have built both cables for an Acorn on a Compute Blade. Before anything is powered, a check on the host with a meter that ground reaches the plugs and that the 3.3 V wire reaches nothing.**
+**You have built both cables for an Acorn on a Compute Blade. Before anything is powered, a check on the host with a meter that contact 1 of each plug beeps to the host's metal, and that contact 6 (the 3.3 V wire, cut back) is silent against that metal and the plug's other contacts. It does not show whether any wire reaches the right header pin.**
 
 ## boards/acorn/building/compute-blade/bom.md
 
@@ -58,7 +58,7 @@ Log in to the blade first. At ps1:
 
 ## boards/acorn/building/rpi-5/bench-check.md
 
-**You have built both cables for an Acorn on a Raspberry Pi 5. Before anything is powered, a check on the host with a meter that ground reaches the plugs and that the 3.3 V wire reaches nothing.**
+**You have built both cables for an Acorn on a Raspberry Pi 5. Before anything is powered, a check on the host with a meter that contact 1 of each plug beeps to the host's metal, and that contact 6 (the 3.3 V wire, cut back) is silent against that metal and the plug's other contacts. It does not show whether any wire reaches the right header pin.**
 
 ## boards/acorn/building/rpi-5/bom.md
 

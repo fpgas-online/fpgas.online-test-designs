@@ -4,21 +4,21 @@ Not yet run by us on this hardware: written from the design. Photos: Uptime Lab 
 
 ## What you need
 
-Both finished cables, the Compute Blade, and a multimeter with a continuity buzzer. The Acorn stays out of its slot. If the Compute Blade is on, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in.
+Both finished cables, the Compute Blade, and a multimeter with a continuity buzzer. If the Compute Blade is on, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. The Acorn stays out of its slot; if it is fitted, take it out first. Its screw comes out first (an M2x2.5 screw: Uptime Lab's assembly guide names a PH1 screwdriver for it, not verified by us on the blades). How the card then comes out of the slot is not recorded by us.
 
 ## Steps
 
-**1.** This is a bench check; the housings come off again before the cables are fitted. If the Compute Blade is on, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Then fit the P1 housing on the Extension Port with its marked corner on the pin printed 1 beside the header. The P1 cavity picture is shown again below, for where its housing sits and which corner is marked.
+**1.** This is a bench check; the housings come off again before the cables are fitted. If the Compute Blade is on, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Then fit the P1 housing on the Extension Port with its marked corner on the pin printed 1 beside the header. The P1 cavity picture is shown again below, for which wire goes in which cavity, and which corner is marked.
 
 ![Which wire goes in which cavity, P1 cable](acorn-cable-blade-p1.png){.only-light}
 ![Which wire goes in which cavity, P1 cable](acorn-cable-blade-p1-dark.png){.only-dark}
 
-**2.** Fit the P2 housing on the UART with its marked corner on the pin printed 1 beside the header. The P2 cavity picture is shown again below, for where its housing sits and which corner is marked.
+**2.** Fit the P2 housing on the UART with its marked corner on the pin printed 1 beside the header. The P2 cavity picture is shown again below, for which wire goes in which cavity, and which corner is marked.
 
 ![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2.png){.only-light}
 ![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2-dark.png){.only-dark}
 
-**3.** The Acorn is not in its slot and the plugs are free. Put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Compute Blade: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent. That the shell is the host's ground is not measured by us; contact 1's beep is what shows it. The beep is also meant to show that the P1 housing is the right way round: turned round, its GND wire would sit on IO3, not a ground pin; that a turned housing would then stay silent is not tried by us. The beep is also meant to show that the P2 housing is the right way round: turned round, its GND wire would sit on TX, not a ground pin; that a turned housing would then stay silent is not tried by us.
+**3.** The Acorn is not in its slot and the plugs are free. Put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Compute Blade: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent. That the shell is the host's ground is taken as given, not measured by us: contact 1's beep shows only that contact 1 and the shell are joined. The beep is also meant to show that the P1 housing is the right way round: turned round, its GND wire would sit on IO3, not a ground pin; that a turned housing would then stay silent is not tried by us. The beep is also meant to show that the P2 housing is the right way round: turned round, its GND wire would sit on TX, not a ground pin; that a turned housing would then stay silent is not tried by us.
 
 ![The bench check on a Compute Blade](acorn-cable-blade-shell-check.png){.only-light}
 ![The bench check on a Compute Blade](acorn-cable-blade-shell-check-dark.png){.only-dark}

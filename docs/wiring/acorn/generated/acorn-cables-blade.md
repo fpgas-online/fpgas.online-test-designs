@@ -52,6 +52,9 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 
 **2.** Check that each half reaches, before any wire is cut back or crimped. If the Compute Blade is on, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. With the card out of its slot, hold the card over the slot where it will sit, and lay the half for P1 from socket P1 to the Extension Port and the half for P2 from socket P2 to the UART header, along the way each cable will run. Its cut end must reach the header with some slack left to bend into the housing; how much is needed has not been measured by us. If a half does not reach, stop: this guide uses each half at the length it has, and a longer cable is not written here. Tell Tim. **Not yet done by us on this hardware.**
 
+![Where each half must reach on a Compute Blade: from the M.2 slot, where the card will sit, to its header](acorn-cable-blade-reach.png){.only-light}
+![Where each half must reach on a Compute Blade: from the M.2 slot, where the card will sit, to its header](acorn-cable-blade-reach-dark.png){.only-dark}
+
 #### The P1 cable (JTAG)
 
 **3.** Find wire 1 of the P1 cable and flag the wires, before cutting any wire back.
@@ -167,17 +170,17 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 
 #### Fit the cables
 
-**20.** This is a bench check; the housings come off again before the cables are fitted. If the Compute Blade is on, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Then fit the P1 housing on the Extension Port with its marked corner on the pin printed 1 beside the header. The P1 cavity picture is shown again below, for where its housing sits and which corner is marked.
+**20.** This is a bench check; the housings come off again before the cables are fitted. If the Compute Blade is on, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Then fit the P1 housing on the Extension Port with its marked corner on the pin printed 1 beside the header. The P1 cavity picture is shown again below, for which wire goes in which cavity, and which corner is marked.
 
 ![Which wire goes in which cavity, P1 cable](acorn-cable-blade-p1.png){.only-light}
 ![Which wire goes in which cavity, P1 cable](acorn-cable-blade-p1-dark.png){.only-dark}
 
-**21.** Fit the P2 housing on the UART with its marked corner on the pin printed 1 beside the header. The P2 cavity picture is shown again below, for where its housing sits and which corner is marked.
+**21.** Fit the P2 housing on the UART with its marked corner on the pin printed 1 beside the header. The P2 cavity picture is shown again below, for which wire goes in which cavity, and which corner is marked.
 
 ![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2.png){.only-light}
 ![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2-dark.png){.only-dark}
 
-**22.** The Acorn is not in its slot and the plugs are free. Put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Compute Blade: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent. That the shell is the host's ground is not measured by us; contact 1's beep is what shows it. The beep is also meant to show that the P1 housing is the right way round: turned round, its GND wire would sit on IO3, not a ground pin; that a turned housing would then stay silent is not tried by us. The beep is also meant to show that the P2 housing is the right way round: turned round, its GND wire would sit on TX, not a ground pin; that a turned housing would then stay silent is not tried by us.
+**22.** The Acorn is not in its slot and the plugs are free. Put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Compute Blade: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent. That the shell is the host's ground is taken as given, not measured by us: contact 1's beep shows only that contact 1 and the shell are joined. The beep is also meant to show that the P1 housing is the right way round: turned round, its GND wire would sit on IO3, not a ground pin; that a turned housing would then stay silent is not tried by us. The beep is also meant to show that the P2 housing is the right way round: turned round, its GND wire would sit on TX, not a ground pin; that a turned housing would then stay silent is not tried by us.
 
 ![The bench check on a Compute Blade](acorn-cable-blade-shell-check.png){.only-light}
 ![The bench check on a Compute Blade](acorn-cable-blade-shell-check-dark.png){.only-dark}
@@ -193,7 +196,7 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 
 **24.** Fit the card, then the housings, in this order.
 
-4. Put the Acorn in the M.2 slot and fit its screw.
+4. Put the Acorn in the M.2 slot and fit its screw (an M2x2.5 screw, a PH1 screwdriver: Uptime Lab's assembly guide names it, not verified by us on the blades).
 5. Fit the P1 housing on the Extension Port, marked corner on pin 1, and the P2 housing on the UART, marked corner on pin 1.
 6. Before powering on, look at both housings again, as on the bench check: the P1 housing's marked corner is on pin 1 of the Extension Port, and the P2 housing's on pin 1 of the UART. Turned round, the P1 housing puts 5 V on the TCK wire and the P2 housing puts 5 V on the K2 wire, above the most AMD's Artix 7 data sheet allows on an FPGA pin (DS181, Table 1: VCCO + 0.55 V, with VCCO at most 3.6 V), which can destroy the FPGA pin on the Acorn that wire reaches. Fitted, the housings get only this look; the meter check was the bench check's.
 

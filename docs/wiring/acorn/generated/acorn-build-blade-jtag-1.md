@@ -4,7 +4,7 @@ Not yet run by us on this hardware: written from the design. Photos: Uptime Lab 
 
 ## What you need
 
-For this cable: one half of the Molex Pico-EZmate cable (a plug with six black wires); the 2×5 Dupont housing; 5 Dupont crimp terminals, and a few spare; 2 mm heat-shrink tube. Tools: a multimeter with a continuity buzzer, a fine probe tip for it or a sewing pin to hold against a probe, a ruler marked in millimetres, side cutters, wire strippers, the crimping tool, a hot-air tool, masking tape and a fine pen. The Acorn itself, out of any slot, is needed for the first steps: if it is fitted, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Then take the card out. The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges.
+For this cable: one half of the Molex Pico-EZmate cable (a plug with six black wires); the 2×5 Dupont housing; 5 Dupont crimp terminals, and a few spare; 2 mm heat-shrink tube. Tools: a multimeter with a continuity buzzer, a fine probe tip for it or a sewing pin to hold against a probe, a ruler marked in millimetres, side cutters, wire strippers, the crimping tool, a hot-air tool, masking tape and a fine pen. The Acorn itself, out of any slot, is needed for the first steps: if it is fitted, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Then take the card out. Its screw comes out first (an M2x2.5 screw: Uptime Lab's assembly guide names a PH1 screwdriver for it, not verified by us on the blades). How the card then comes out of the slot is not recorded by us. The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges.
 
 ## Steps
 
@@ -14,6 +14,9 @@ For this cable: one half of the Molex Pico-EZmate cable (a plug with six black w
 ![The cable, cut in the middle](acorn-cable-cut-dark.png){.only-dark}
 
 **2.** Check that each half reaches, before any wire is cut back or crimped. If the Compute Blade is on, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. With the card out of its slot, hold the card over the slot where it will sit, and lay the half for P1 from socket P1 to the Extension Port and the half for P2 from socket P2 to the UART header, along the way each cable will run. Its cut end must reach the header with some slack left to bend into the housing; how much is needed has not been measured by us. If a half does not reach, stop: this guide uses each half at the length it has, and a longer cable is not written here. Tell Tim. **Not yet done by us on this hardware.**
+
+![Where each half must reach on a Compute Blade: from the M.2 slot, where the card will sit, to its header](acorn-cable-blade-reach.png){.only-light}
+![Where each half must reach on a Compute Blade: from the M.2 slot, where the card will sit, to its header](acorn-cable-blade-reach-dark.png){.only-dark}
 
 
 **3.** Find wire 1 of the P1 cable and flag the wires, before cutting any wire back.

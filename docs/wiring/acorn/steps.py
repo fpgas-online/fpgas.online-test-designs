@@ -72,7 +72,7 @@ ASSUMPTIONS = [
     "the plug's shape, drawn from a photo",
     "where the housing's windows are",
     "which face of the plug shows its contacts",
-    "the card's mounting pad is ground (not measured by us: wire 1's beep shows it)",
+    "the card's mounting pad is taken to be ground (not measured by us)",
 ]
 ASSUMED = (
     "Not yet checked against a cable in the hand:",
@@ -1044,8 +1044,8 @@ def ground_check(connector):
         sh,
         30,
         y + 4,
-        "The pad is taken to be ground, not measured by us: wire 1's beep is what shows it. The plug, the flags and "
-        "the meter are sketched.",
+        "The pad is taken to be ground, not measured by us: wire 1's beep shows only that wire 1 and the pad are "
+        "joined. The plug, the flags and the meter are sketched.",
         W - 40,
         fill=MUTED,
     )
@@ -1074,7 +1074,8 @@ def card():
         (
             "The half-round plated pad",
             "at the end of the card (boxed, right): the card's mounting pad, taken to be "
-            "ground; not measured by us: the beep of wire 1 in the meter check is what shows it.",
+            "ground; not measured by us (the beep of wire 1 in the meter check shows only that wire 1 and the pad "
+            "are joined).",
         ),
         ("The M.2 edge connector", "is off the picture to the left: this is the end of the card away from it."),
         (
@@ -1199,6 +1200,22 @@ def power_off_if_on(c):
     """The carrier's own power-off sentence, for a step that needs the host off: every page that powers a host
     off, or presumes it off, says it in these words (on a blade, Tim is asked first)."""
     return f"If the {c.name} is on, {c.power_off[0].lower()}{c.power_off[1:]}"
+
+
+# Taking the card out of its slot: only what the repo records. The blade's screw and driver are in the parts
+# list (wiring.toml, the PH1 screwdriver); the Pi 5's HAT is recorded as holding the card by a screw at its far end,
+# and no size or driver for it. How the card then leaves the slot is recorded for neither.
+CARD_OUT = {
+    "blade": "Its screw comes out first (an M2x2.5 screw: Uptime Lab's assembly guide names a PH1 screwdriver for "
+    "it, not verified by us on the blades).",
+    "pi5": "The screw at its far end comes out first (its size and the screwdriver are not recorded by us).",
+}
+CARD_OUT_REST = " How the card then comes out of the slot is not recorded by us."
+
+
+def card_out(c):
+    """The sentence that says how a card is taken out of its slot, for a step that needs it out."""
+    return CARD_OUT[c.key] + CARD_OUT_REST
 
 
 def header_words(name):
@@ -1332,7 +1349,11 @@ def procedure_parts(c, restart=False):
         + ", along the way each cable will run. Its cut end must reach the header with some slack left to "
         "bend into the housing; how much is needed has not been measured by us. If a half does not reach, "
         "stop: this guide uses each half at the length it has, and a longer cable is not written here. Tell "
-        f"{c.contact}. **Not yet done by us on this hardware.**"
+        f"{c.contact}. **Not yet done by us on this hardware.**",
+        (
+            f"Where each half must reach on a {c.name}: from the M.2 slot, where the card will sit, to its header",
+            png(reach_name(c)),
+        ),
     )
     cavity = {}
     for connector, conn in wiring.CONNECTORS.items():
@@ -1355,8 +1376,8 @@ def procedure_parts(c, restart=False):
         target.extend([f"#### The {connector} cable ({conn['what']})", ""])
         half = "one" if connector == next(iter(wiring.CONNECTORS)) else "the other"
         flag = [
-            f"Press the plug of {half} half into socket {connector} on the underside of the Acorn. Hold the card "
-            "underside up with the M.2 edge to your left: wire 1 is the leftmost.",
+            f"Press the plug of {half} half into socket {connector} on the underside of the Acorn. "
+            "Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost.",
             f"Put a numbered tape flag on each of the {len(pins)} wires, 1 at the left to {len(pins)}, about "
             f"{lengths['flag_back']} mm back from the tip, clear of the end that will be cut and stripped later. "
             f"Write {connector} on the flag of wire 1 as well: off the card, the two halves look alike.",
@@ -1464,7 +1485,7 @@ def procedure_parts(c, restart=False):
         fits.append(f"the {connector} housing on the {on} with its marked corner on {pin}")
     first = next(iter(wiring.CONNECTORS.values()))["pins"][0]
     # The bench check, one picture to a step: each housing fitted with its cavity picture again, then the beeps.
-    why = "for where its housing sits and which corner is marked"
+    why = "for which wire goes in which cavity, and which corner is marked"
     for i, (connector, picture) in enumerate(cavity.items()):
         step(
             (f"{BENCH_START} {power_off_if_on(c)} Then fit {fits[i]}." if i == 0 else f"Fit {fits[i]}.")
@@ -1477,7 +1498,8 @@ def procedure_parts(c, restart=False):
         f"on contact 1 ({label_of(first)}) of a plug and the other on {c.shell}: it must "
         f"beep. Do the same for the other plug. Then contact {len(pins)} of each plug ({label_of(pins[-1])}, the wire "
         "you cut back): against the shell and against every other contact it must be silent. That the shell is the "
-        "host's ground is not measured by us; contact 1's beep is what shows it. " + ground_shows_way_round(c),
+        "host's ground is taken as given, not measured by us: contact 1's beep shows only that contact 1 and the "
+        "shell are joined. " + ground_shows_way_round(c),
         (f"The bench check on a {c.name}", png(shell_check_name(c))),
     )
     actions = fit_actions(c)
@@ -1540,7 +1562,7 @@ def needs(c, connector):
     return (
         f"For this cable: {'; '.join(items)}. Tools: {tools}, masking tape and a fine pen. The Acorn itself, out of "
         f"any slot, is needed for the first steps: if it is fitted, {c.power_off[0].lower()}{c.power_off[1:]} Then "
-        f"take the card out. {STATIC}"
+        f"take the card out. {card_out(c)} {STATIC}"
     )
 
 
@@ -1630,8 +1652,8 @@ def guide(c):
         )
     bench, fit_ = cut_at(parts["fit"], FIT_STEPS[0])
     out[guide_name(c, "bench")] = body(
-        f"Both finished cables, the {c.name}, and a multimeter with a continuity buzzer. The Acorn stays out of "
-        f"its slot. {power_off_if_on(c)}",
+        f"Both finished cables, the {c.name}, and a multimeter with a continuity buzzer. {power_off_if_on(c)} "
+        f"The Acorn stays out of its slot; if it is fitted, take it out first. {card_out(c)}",
         bench,
         "## If it fails",
         "Do not fit the cables. A contact 1 that does not beep means that cable's ground wire is open or in the wrong "
@@ -1775,7 +1797,12 @@ def fit_actions(c):
         "Press the P1 plug into socket P1 and the P2 plug into socket P2 on the underside of the Acorn, each the way "
         "round it was when you put the flags on, until fully seated.",
         "Put the Acorn in the M.2 slot and fit its screw"
-        + (f", in the standoff marked {c.hat.largest_card} at the far end of the {c.hat.name}." if c.hat else "."),
+        + (
+            f", in the standoff marked {c.hat.largest_card} at the far end of the {c.hat.name}."
+            if c.hat
+            else " (an M2x2.5 screw, a PH1 screwdriver: Uptime Lab's assembly guide names it, not verified by us on "
+            "the blades)."
+        ),
         f"Fit {on[0]}, and {on[1]}.",
         f"Before powering on, look at both housings again, as on the bench check: the {c1} housing's marked corner "
         f"is on {at1}, and the {c2} housing's on {at2}. Turned round, {turned}"
@@ -1871,8 +1898,9 @@ def fit(c, half):
     return sh.svg()
 
 
-def fit_host_blade(sh, c, y):
-    """The blade with its M.2 slot boxed, and the close-up with both headers boxed and each marked corner."""
+def fit_host_blade(sh, c, y, reach=False):
+    """The blade with its M.2 slot boxed, and the close-up with both headers boxed and each marked corner (for the
+    reach check: each box is where a half ends, with no corner)."""
     w = 430
     hl, (ix, iy, iw, ih) = blade_photos(sh, 30, y + 26, w, (520, y, 240), title=0, beside=True)
     k = w / 3120
@@ -1883,13 +1911,14 @@ def fit_host_blade(sh, c, y):
     for connector in wiring.CONNECTORS:
         plan = housing(c, connector)
         rect = hl[plan.header]
-        corner(sh, rect)
+        if not reach:
+            corner(sh, rect)
         centre = min(max((rect[0] + rect[2]) / 2, ix + 20), ix + iw - 20)
         # The bare name is the Acorn's socket; the box on the host is where that cable's housing goes.
         sh.tag(
             centre,
             iy + ih + 16,
-            f"{connector} housing",
+            f"{connector} end" if reach else f"{connector} housing",
             BOX,
             size=T,
             h=24,
@@ -1899,12 +1928,13 @@ def fit_host_blade(sh, c, y):
             pad=3,  # the two headers are close together: a wider label would touch its neighbour
         )
     ty = para(sh, 30, y + 26 + w * 521 / 3120 + 34, f"{c.name}, from above.", 330, "bold")
-    ty = para(sh, 30, ty, "The red corner of each box is the housing's marked corner, on the pin printed 1.", 330)
+    ty = para(sh, 30, ty, REACH_NOTE if reach else MARKED_NOTE, 330)
     return max(ty - LINE, iy + ih + 30)
 
 
-def fit_host_pi5(sh, c, y):
-    """The HAT with its M.2 slot boxed and the rows of both housings boxed, each with its marked corner."""
+def fit_host_pi5(sh, c, y, reach=False):
+    """The HAT with its M.2 slot boxed and the rows of both housings boxed, each with its marked corner (for the
+    reach check: where a half ends, with no corner)."""
     w, hat = 250, c.hat
     (px, py, _pw, ph), k = sh.photo(hat.photo, 30, y, w)
     x0, y0, x1, y1 = hat.m2_slot
@@ -1922,15 +1952,37 @@ def fit_host_pi5(sh, c, y):
         top, bottom = (py + (hat.row + hat.pitch * r) * k for r in (r0, r1))
         frame = (px + left * k - half, top - half, px + right * k + half, bottom + half)
         highlight(sh, frame)
-        corner(sh, frame)
+        if not reach:
+            corner(sh, frame)
         sh.tag(frame[2] + 8, (frame[1] + frame[3]) / 2, connector, BOX, size=T, h=22, fg=INK, stroke=INK, pad=5)
-        sh.text(tx, (frame[1] + frame[3]) / 2 + 6, f"{connector} housing: pins {plan.first} to {plan.last}", T)
-    ty = para(sh, tx, py + ph - 70, "The red corner of each box is the housing's marked corner.", W - 10 - tx)
-    para(sh, tx, ty + 2, "The photo shows the HAT without its stacking header.", W - 10 - tx, fill=MUTED)
-    return py + ph + 8
+        what = "half ends" if reach else "housing"
+        sh.text(tx, (frame[1] + frame[3]) / 2 + 6, f"{connector} {what}: pins {plan.first} to {plan.last}", T)
+    note = REACH_NOTE if reach else "The red corner of each box is the housing's marked corner."
+    ty = para(sh, tx, py + ph - 70, note, W - 10 - tx)
+    ty = para(sh, tx, ty + 2, "The photo shows the HAT without its stacking header.", W - 10 - tx, fill=MUTED)
+    return max(py + ph + 8, ty)
 
 
 FIT_HOSTS = {"blade": fit_host_blade, "pi5": fit_host_pi5}
+MARKED_NOTE = "The red corner of each box is the housing's marked corner, on the pin printed 1."
+REACH_NOTE = (
+    "Each half runs from its socket on the card, with the card in the M.2 slot, to its box. How far that is has not "
+    "been measured by us."
+)
+
+
+def reach_name(c):
+    return f"acorn-cable-{c.key}-reach.svg"
+
+
+def reach(c):
+    """The reach check: the host from above, the M.2 slot where the card sits, and where each half has to end."""
+    sh = Sheet(W, 100)
+    title(sh, f"{c.name}: where each half must reach", "from where the card will sit to the header")
+    y = FIT_HOSTS[c.key](sh, c, 98, reach=True)
+    sh.h = math.ceil(y + 14)
+    sh.check(f"reach {c.key}")
+    return sh.svg()
 
 
 # A USB socket's metal shell in each host's photo, in photo pixels, where the photo shows one: blade.jpg.
@@ -2021,7 +2073,11 @@ def build_names():
         if has_resistor(c, connector):
             names += [resistor_name(c, connector), check_name(c, connector)]
     names += [f(connector) for connector in wiring.CONNECTORS for f in (flag_name, ground_check_name)]
-    return [*names, *SHARED, *(n for c in wiring.CARRIERS.values() for n in (*fit_names(c), shell_check_name(c)))]
+    return [
+        *names,
+        *SHARED,
+        *(n for c in wiring.CARRIERS.values() for n in (*fit_names(c), shell_check_name(c), reach_name(c))),
+    ]
 
 
 def build():
@@ -2045,6 +2101,7 @@ def build():
         for half in (1, 2):
             out[fit_name(c, half)] = fit(c, half)
         out[shell_check_name(c)] = shell_check(c)
+        out[reach_name(c)] = reach(c)
         out[f"acorn-fit-{key}.md"] = tables.BANNER + fit_block(c)
         out[f"acorn-cables-{key}.md"] = procedure(c)
         out.update(guide(c))
