@@ -235,7 +235,8 @@ def test_every_reboot_a_blade_page_asks_for_is_preceded_by_ask_tim():
             assert re.search(r"ask(?:ing)? tim", before + m.group(0).lower()), text[m.start() - 80 : m.end() + 20]
     assert seen >= 4  # verifying 3 (twice), the rework line, and the install block's reboot
     assert "ask tim before you reboot a blade" in blade_texts()[0].lower()  # verifying 1, where the installs are
-    assert "ask tim before you reboot a blade" in blade_texts()[-1].lower()  # verifying 3
+    assert "a reboot ends a visitor's session" in blade_texts()[-1]  # verifying 3 says why, once
+    assert blade_texts()[-1].count("Ask Tim, then boot the blade again") == 1
 
 
 def test_the_jtag_list_has_no_exception_to_its_steps_2_and_3():

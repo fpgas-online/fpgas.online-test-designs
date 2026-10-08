@@ -4,7 +4,7 @@ Not yet run by us on this hardware: written from the design. Photos: Waveshare (
 
 ## What you need
 
-Both finished cables, the Raspberry Pi 5, and a multimeter with a continuity buzzer. If the Raspberry Pi 5 is on, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. The Acorn stays out of its slot; if it is fitted, take it out first. The screw at its far end comes out first (its size and the screwdriver are not recorded by us). How the card then comes out of the slot is not recorded by us.
+Both finished cables, the Raspberry Pi 5, and a multimeter with a continuity buzzer. If the Raspberry Pi 5 is on, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. The Acorn stays out of its slot; if it is fitted, take it out. Take the screw at its far end out first (the HAT ships one SSD mounting screw: from Waveshare's page, not measured by us; its size and the driver are not recorded by us). How the card then comes out of the slot is not recorded by us.
 
 ## Steps
 

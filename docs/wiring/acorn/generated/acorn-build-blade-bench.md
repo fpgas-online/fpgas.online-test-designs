@@ -4,7 +4,7 @@ Not yet run by us on this hardware: written from the design. Photos: Uptime Lab 
 
 ## What you need
 
-Both finished cables, the Compute Blade, and a multimeter with a continuity buzzer. If the Compute Blade is on, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. The Acorn stays out of its slot; if it is fitted, take it out first. Its screw comes out first (an M2x2.5 screw: Uptime Lab's assembly guide names a PH1 screwdriver for it, not verified by us on the blades). How the card then comes out of the slot is not recorded by us.
+Both finished cables, the Compute Blade, and a multimeter with a continuity buzzer. If the Compute Blade is on, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. The Acorn stays out of its slot; if it is fitted, take it out. Take its screw out first (an M2x2.5 screw with an M2 nylon washer, put in with a PH1 driver: from Uptime Lab's assembly guide, not measured by us). How the card then comes out of the slot is not recorded by us.
 
 ## Steps
 

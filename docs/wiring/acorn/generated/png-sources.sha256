@@ -1,7 +1,7 @@
 75bb088d8f010e39146f73666b9c417e854a0282a11d6848f8992bd07c2e7b50  acorn-cable-blade-fit-1-dark.svg
 f586748f939abb4339a075e9ccfbbf7283bab4bdcc88d1e645951adea384365e  acorn-cable-blade-fit-1.svg
-9710be52fc9643e0d270879bd7f553299713b8cce32617fbac4ee8609cb60aec  acorn-cable-blade-fit-2-dark.svg
-e19682687b6a0247c2415c52d145c763028696690ad8acc809e5b499f7f0c203  acorn-cable-blade-fit-2.svg
+2b62501232a6acdde811d3a0eee1936bc4620af9b7d238a6deb9eb14f2aa9a4f  acorn-cable-blade-fit-2-dark.svg
+a4bdeafc179f0c524b320d4cb9372a6e0a86c7e1a4f5b9e2fdcb0794a0746d57  acorn-cable-blade-fit-2.svg
 46469651a48b7d78a4ad5fb35685dcd8cf4d86fc2881fdc4815a0f63b0a0e295  acorn-cable-blade-p1-dark.svg
 a09e9f97258c2f5271297851ce7de0a52b2f48b0bf278765307bbbc86a6a5a9b  acorn-cable-blade-p1-prepare-dark.svg
 13b16614029b01540f3d0fc4d7091c86d30c2c859a8de735c0bb1ed4f5004e5d  acorn-cable-blade-p1-prepare.svg
@@ -12,8 +12,8 @@ e1bc4d0c0da8d3c6015424c923818814b5a42d149427f6b9dbd8ee2df3b24da2  acorn-cable-bl
 7250c74d401a3aa542372400d167632f9f194ee7289f85b99cfd353a31f85e4b  acorn-cable-blade-p2-resistor-dark.svg
 3c9f1fd637bab7545ccb1b4e6c9cb832dbbd45cfbba2573b1da8ec26e2b70c5d  acorn-cable-blade-p2-resistor.svg
 f61bb0908d97fb29f093a684274907e6273a8ee64806f3ea39c8a8fa4c1e090d  acorn-cable-blade-p2.svg
-1e899f0e7d28a448f64e3de02b4f148c08b193bcf0e6952afc760fe8924c0e62  acorn-cable-blade-reach-dark.svg
-8cbfce5e4b325368c6aaae0ba81a9320d016d64c309671bc539dcb37eff62eb9  acorn-cable-blade-reach.svg
+52d3dfb0a6c680f78bca2adc2922e31e1ac2b94c2b09e12db33c598161522895  acorn-cable-blade-reach-dark.svg
+8ee83bb0b766d86f66007e69d1600d5b6baa875d2bbe5dfdc547179c09bd9111  acorn-cable-blade-reach.svg
 a5ed324377655c0a843bf18f7d57740e4cacbe4bd670129a063ed75c7c8f2a63  acorn-cable-blade-shell-check-dark.svg
 1d91fe9f9e05933896b8fc56a7ccaf41a61dac21cb0f6fba066db5245e3ab9db  acorn-cable-blade-shell-check.svg
 dbd6a7dfe293cbe54813d5d7b074907b17d7a54cee2e65f5cde0374262b033e9  acorn-cable-check-blade-p2-dark.svg
@@ -34,8 +34,8 @@ fe5a0351ec509bf54474e4fc717686ba0c77cc4a866163bc444c9f5422642aa7  acorn-cable-p1
 d3067a462ef3ab8bc8e076370ae5467fb00771dd00599f5f3a06196bb9fd0876  acorn-cable-p2-ground-check.svg
 dc0e23a3213d1072cd7c373480972514e049b7b9757e619543a2a72d7fffe6ab  acorn-cable-pi5-fit-1-dark.svg
 e90058143ed3b941a2a7b270480baa71448624020a210def47ff1e34efacbbbc  acorn-cable-pi5-fit-1.svg
-d79e9cdde58a67537f942771551ef73bca6f98c23ed6221663b7d5bca126f84c  acorn-cable-pi5-fit-2-dark.svg
-1cfa9749c6a07bccc0441be3ad3370aa3c848ea18e57d82ebdea5cfae3f18c59  acorn-cable-pi5-fit-2.svg
+6f6cda53ba8d9e9556972e3c1044fd74c9cb05195ef27a13bbedaa3e967f0f1e  acorn-cable-pi5-fit-2-dark.svg
+dfda4fc27a5cd7f0aaf93d2a3e29124da07772a6144227d010271a85652401ef  acorn-cable-pi5-fit-2.svg
 12ccccf4d7ee062ff896f7024e04c50f1577ee2c453b5630e022d1f95716665c  acorn-cable-pi5-p1-dark.svg
 be2b000c1b7e710a89c97d36eba7d3bccc49eff590c18a1d431728761792afed  acorn-cable-pi5-p1-prepare-dark.svg
 f43557d8278d4b28c74a7abb2195cbebe3837ed1da347f0c8fe4fa44d42217df  acorn-cable-pi5-p1-prepare.svg
@@ -44,8 +44,8 @@ f54164ffc608501b65daed690441445de0fc932cadd9e423b995ca531e45ed6e  acorn-cable-pi
 67bc3f80462dd733ec40d76b7f301ab99478802e1bd6638852eeba0eef9a23a6  acorn-cable-pi5-p2-prepare-dark.svg
 c61ea08ffb217d07f7599788d6274bb12f4bce74ccfad76cd388ef98026ead00  acorn-cable-pi5-p2-prepare.svg
 c6c23096be96a8c649c1f2b732690d936abb9520da3a8c14c59389aef68cad25  acorn-cable-pi5-p2.svg
-7e4ab27af13953bb9c2519fda99a6ca28f95b838d8b2ae607adec9e56b3c0d86  acorn-cable-pi5-reach-dark.svg
-2244a9fd66be09d1b010beb8dc36b29cb416ac0616123c143dd3f843af2736ef  acorn-cable-pi5-reach.svg
+1b38e66308dd6f07772a2b371dccd37e1dbcf0ce26c862c5902f574649354c6c  acorn-cable-pi5-reach-dark.svg
+0a36191cc36813fd1af3c3f5f1b37718444dda67974890f3e307d3fff107d052  acorn-cable-pi5-reach.svg
 1335419a273c72f61cdf7b78006271b14dc328b7a935c32e023189f0cfafdc85  acorn-cable-pi5-shell-check-dark.svg
 fe2e38ba1198fd44c90a94984fb56e0d03057a4e4807289292f1db47c3d85d8d  acorn-cable-pi5-shell-check.svg
 b32e16399bc82924f1b52afbbf7b43e9b68148770628e1e3d4fb717d13eea7dd  acorn-cable-push-dark.svg

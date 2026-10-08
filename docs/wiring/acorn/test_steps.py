@@ -648,6 +648,23 @@ def test_taking_the_card_out_says_only_what_the_repo_records(key):
     out = steps.card_out(c)
     assert "not recorded by us" in out
     if key == "blade":  # the PH1 screwdriver is in the parts list, "not verified by us on the blades"
-        assert "PH1" in out and "not verified by us on the blades" in out
+        assert "PH1" in out and "Uptime Lab's assembly guide, not measured by us" in out
     else:  # no screw size or driver for the Pi 5's HAT is recorded: needs a fact
-        assert "PH1" not in out and "M2" not in out
+        assert "PH1" not in out and "M2" not in out and "SSD mounting screw" in out
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_putting_the_card_back_is_from_the_makers_pages_and_the_bench_intro_orders_screw_then_card(key):
+    c = wiring.CARRIERS[key]
+    action = steps.fit_actions(c)[3]
+    if key == "blade":
+        for words in ("standoff", "5 mm hex driver", "nylon washer", "30° angle", "press down", "PH1 driver"):
+            assert words in action
+        assert any("assembly.mdx" in s["source"] for s in wiring.SOURCES if s.get("carrier") == "blade")
+    else:
+        assert "SSD mounting screw" in action and "not recorded by us" in action
+        assert any("SSD mounting screw x1" in s["source"] for s in wiring.SOURCES if s.get("carrier") == "pi5")
+    assert "not measured by us" in action or key == "pi5"
+    intro = steps.guide(c)[steps.guide_name(c, "bench")]
+    assert "take it out first" not in intro and "if it is fitted, take it out. Take " in intro
+    assert steps.REACH_NOTE.count("not drawn") == 1

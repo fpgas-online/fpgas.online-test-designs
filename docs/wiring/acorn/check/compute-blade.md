@@ -73,12 +73,9 @@ are two ways, and the choice belongs to whoever runs the gateway (at ps1: Carl):
 Which of the two to take is the gateway owner's choice, not this page's: the first changes every host that
 boots from the shared directory, the second only the one blade.
 
-**Ask Tim before you reboot a blade:** a reboot ends a visitor's session on it, the same harm as a
-power-off.
-
 ### {jtag_list}
 
-Ask Tim, then boot the blade again, and in that boot (the one with the serial port off):
+Ask Tim, then boot the blade again (a reboot ends a visitor's session on it, the same harm as a power-off), and in that boot (the one with the serial port off):
 
 1. Install the packages again, as on the page "verifying 1": the install is gone after the boot.
 2. Check that GPIO14 is free, with the commands at the end of this page: it must show no consumer.

@@ -9,7 +9,7 @@
 
 Then the card and the housings:
 
-4. Put the Acorn in the M.2 slot and fit its screw (an M2x2.5 screw, a PH1 screwdriver: Uptime Lab's assembly guide names it, not verified by us on the blades).
+4. Put the Acorn in the M.2 slot and fit its screw: the M2x2.5 standoff goes in the threaded insert for the card's size, with a 5 mm hex driver; put the M2 nylon washer on the M2x2.5 screw, insert the card at a 30° angle and press down, then secure the screw to the standoff with a PH1 driver (from Uptime Lab's assembly guide, not measured by us).
 5. Fit the P1 housing on the Extension Port, marked corner on pin 1, and the P2 housing on the UART, marked corner on pin 1.
 6. Before powering on, look at both housings again, as on the bench check: the P1 housing's marked corner is on pin 1 of the Extension Port, and the P2 housing's on pin 1 of the UART. Turned round, the P1 housing puts 5 V on the TCK wire and the P2 housing puts 5 V on the K2 wire, above the most AMD's Artix 7 data sheet allows on an FPGA pin (DS181, Table 1: VCCO + 0.55 V, with VCCO at most 3.6 V), which can destroy the FPGA pin on the Acorn that wire reaches. Fitted, the housings get only this look; the meter check was the bench check's.
 

@@ -1206,9 +1206,10 @@ def power_off_if_on(c):
 # list (wiring.toml, the PH1 screwdriver); the Pi 5's HAT is recorded as holding the card by a screw at its far end,
 # and no size or driver for it. How the card then leaves the slot is recorded for neither.
 CARD_OUT = {
-    "blade": "Its screw comes out first (an M2x2.5 screw: Uptime Lab's assembly guide names a PH1 screwdriver for "
-    "it, not verified by us on the blades).",
-    "pi5": "The screw at its far end comes out first (its size and the screwdriver are not recorded by us).",
+    "blade": "Take its screw out first (an M2x2.5 screw with an M2 nylon washer, put in with a PH1 driver: from "
+    "Uptime Lab's assembly guide, not measured by us).",
+    "pi5": "Take the screw at its far end out first (the HAT ships one SSD mounting screw: from Waveshare's "
+    "page, not measured by us; its size and the driver are not recorded by us).",
 }
 CARD_OUT_REST = " How the card then comes out of the slot is not recorded by us."
 
@@ -1653,7 +1654,7 @@ def guide(c):
     bench, fit_ = cut_at(parts["fit"], FIT_STEPS[0])
     out[guide_name(c, "bench")] = body(
         f"Both finished cables, the {c.name}, and a multimeter with a continuity buzzer. {power_off_if_on(c)} "
-        f"The Acorn stays out of its slot; if it is fitted, take it out first. {card_out(c)}",
+        f"The Acorn stays out of its slot; if it is fitted, take it out. {card_out(c)}",
         bench,
         "## If it fails",
         "Do not fit the cables. A contact 1 that does not beep means that cable's ground wire is open or in the wrong "
@@ -1798,10 +1799,14 @@ def fit_actions(c):
         "round it was when you put the flags on, until fully seated.",
         "Put the Acorn in the M.2 slot and fit its screw"
         + (
-            f", in the standoff marked {c.hat.largest_card} at the far end of the {c.hat.name}."
+            f", in the standoff marked {c.hat.largest_card} at the far end of the {c.hat.name}. The HAT ships one "
+            "SSD mounting screw (from Waveshare's page, not measured by us); its size, the driver and how the "
+            "card goes in are not recorded by us."
             if c.hat
-            else " (an M2x2.5 screw, a PH1 screwdriver: Uptime Lab's assembly guide names it, not verified by us on "
-            "the blades)."
+            else ": the M2x2.5 standoff goes in the threaded insert for the card's size, with a 5 mm hex driver; "
+            "put the M2 nylon washer on the M2x2.5 screw, insert the card at a 30° angle and press down, then "
+            "secure the screw to the standoff with a PH1 driver (from Uptime Lab's assembly guide, not measured "
+            "by us)."
         ),
         f"Fit {on[0]}, and {on[1]}.",
         f"Before powering on, look at both housings again, as on the bench check: the {c1} housing's marked corner "
@@ -1966,8 +1971,8 @@ def fit_host_pi5(sh, c, y, reach=False):
 FIT_HOSTS = {"blade": fit_host_blade, "pi5": fit_host_pi5}
 MARKED_NOTE = "The red corner of each box is the housing's marked corner, on the pin printed 1."
 REACH_NOTE = (
-    "Each half runs from its socket on the card, with the card in the M.2 slot, to its box. How far that is has not "
-    "been measured by us."
+    "Each half must reach from the card, once it sits in the M.2 slot, to its box. The card and its sockets are "
+    "not drawn here, and how far that is has not been measured by us."
 )
 
 
