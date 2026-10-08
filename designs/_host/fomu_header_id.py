@@ -24,11 +24,12 @@ The order is what keeps both sides safe:
     written either.
  4. Every SPI line goes back to an input BEFORE CRESET is let go, so the iCE40 masters its flash alone when it
     boots. CRESET then goes back to an input too, and the board's pull-up takes it high. If an SPI line will
-    not go back to an input, CRESET is not let go: the lines are given back to the kernel, CRESET last, and
-    the Pi's pin controller makes each freed line an input.
+    not go back to an input (or the release is interrupted), CRESET is not let go: the lines are given back
+    to the kernel, CRESET last. The bcm2835/bcm2711 pin controller (Pi 3 and 4) makes a freed line an input;
+    the board module checks with pinctrl afterwards that every line is one, on any Pi.
  5. CDONE must rise again within BOOT_WAIT: the iCE40 has booted from its flash, as at power-up.
 
-Nothing is written to the flash, and every line is given back an input whatever went wrong. A run stops whatever
+Nothing is written to the flash, and every line is given back to the kernel whatever went wrong. A run stops whatever
 design the iCE40 was running (the reset), so only the boot check runs it.
 
 It prints one line, `fomu-header: {json}`, with what it read, and exits 0. It exits 2, with `fomu-header-error:
@@ -131,8 +132,9 @@ class Lines:
     def close(self):
         """Every line an input again, CRESET last, and the lines given back to the kernel, CRESET last. When a
         line will not go back to an input, CRESET is not let go while the Pi holds the lines: giving them back
-        then leaves it to the kernel, whose Raspberry Pi pin controller makes each freed line an input, CRESET
-        after the others. The script cannot hold CRESET low past its own exit."""
+        then leaves it to the kernel, CRESET after the others (on a Pi 3/4 the pin controller makes each freed
+        line an input). If this raises before giving them back, the process's exit frees them in the same
+        order. The script cannot hold CRESET low past its own exit."""
         stuck = release(self, [g for g in self.outputs if g != CRESET])
         if CRESET in self.outputs and not stuck:
             self.input(CRESET)
@@ -216,21 +218,22 @@ def wait_for(pins, gpio, level, limit, sleep=time.sleep, clock=time.monotonic):
 
 
 def identify(pins, sleep=time.sleep, clock=time.monotonic):
-    """The reading. `pins` has all LINES as inputs; every line is an input again when this returns or raises,
-    except CRESET when an SPI line could not be set back to an input: it stays low (see Lines.close)."""
+    """The reading. `pins` has all LINES as inputs; every line is an input again when this returns. When it
+    raises, CRESET is let go only if no SPI line is still driven; Lines.close deals with what is left."""
     out = {"cdone_before": pins.get(CDONE), "creset_before": pins.get(CRESET)}
     if out["cdone_before"] != 1:  # no design loaded, or nothing there: CDONE falling would prove nothing
         out["flash"] = None
         return out
-    stuck = []
+    stuck = None  # the SPI lines not set back to inputs; None while that is not known (nothing driven yet: [])
     try:
         pins.output(CRESET, 0)
         sleep(RESET_HOLD)
         out["cdone_in_reset"] = pins.get(CDONE)
         if out["cdone_in_reset"] != 0:
+            stuck = []
             out["flash"] = None  # no iCE40 held on that reset: its bus may be in use, so it is not driven
             return out
-        try:
+        try:  # from here an SPI line may be driven
             pins.output(CS, 1)  # the flash deselected before any other line moves
             pins.output(WP, 0)  # status registers protected while the Pi has the bus
             pins.output(HOLD, 1)
@@ -240,7 +243,7 @@ def identify(pins, sleep=time.sleep, clock=time.monotonic):
         finally:
             stuck = release(pins, SPI_OUTPUTS)  # the bus is the iCE40's again before it leaves reset
     finally:
-        if not stuck:
+        if stuck == []:  # known: no SPI line is driven (an interrupted release leaves it None)
             pins.input(CRESET)
     if stuck:
         raise OSError(f"{'; '.join(stuck)}: CRESET is still held low")

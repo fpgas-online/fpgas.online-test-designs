@@ -35,7 +35,17 @@ class Clock:
 class Evt:
     """The Pi's side of the header lines (fhi.Lines' interface) and the board behind them."""
 
-    def __init__(self, clock, ice40=True, busy_reads=0, boots=True, fail_at=None, fail_input=(), configured=True):
+    def __init__(
+        self,
+        clock,
+        ice40=True,
+        busy_reads=0,
+        boots=True,
+        fail_at=None,
+        fail_input=(),
+        configured=True,
+        input_raises=OSError,
+    ):
         self.clock = clock
         self.ice40 = ice40  # False: nothing on CRESET/CDONE (a header with no Fomu, CDONE held high by something)
         self.boots = boots
@@ -46,7 +56,8 @@ class Evt:
         self.opcodes = []
         self.busy_reads = busy_reads
         self.fail_at = fail_at  # raise OSError on this set() call number
-        self.fail_input = set(fail_input)  # lines whose input() raises OSError, every time
+        self.fail_input = set(fail_input)  # lines whose input() raises `input_raises`, every time
+        self.input_raises = input_raises
         self.sets = 0
         self.closed = False
         self._bits, self._out, self._edges = [], [], 0
@@ -69,7 +80,7 @@ class Evt:
 
     def input(self, gpio):
         if gpio in self.fail_input and gpio in self.driven:
-            raise OSError(f"GPIO{gpio} is stuck")
+            raise self.input_raises(f"GPIO{gpio} is stuck")
         was_reset = self.in_reset()
         self.driven.pop(gpio, None)
         self.events.append(("input", gpio))
@@ -237,6 +248,17 @@ def test_an_spi_line_that_will_not_go_back_to_an_input_keeps_creset_low(stuck):
     with pytest.raises(OSError, match=rf"GPIO{stuck} could not be set back to an input.*CRESET is still held low"):
         run(evt, clock)
     assert evt.driven == {fhi.CRESET: 0, stuck: evt.driven[stuck]}
+    assert evt.contention == []
+
+
+def test_an_interrupted_release_does_not_let_creset_go():
+    """The third review of #201: a Ctrl-C (or any non-OSError) while the SPI lines are being set back to inputs
+    must not let the iCE40 out of reset with a line still driven."""
+    clock = Clock()
+    evt = Evt(clock, fail_input={fhi.CLK}, input_raises=KeyboardInterrupt)
+    with pytest.raises(KeyboardInterrupt):
+        run(evt, clock)
+    assert evt.driven.get(fhi.CRESET) == 0 and fhi.CLK in evt.driven
     assert evt.contention == []
 
 
