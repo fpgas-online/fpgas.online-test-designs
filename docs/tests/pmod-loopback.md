@@ -152,7 +152,7 @@ by the current cable setup.
 | pmoda_n | 28, 27, 26, 23 | Input (RPi drives) |
 | pmodb_n | 48, 47, 46, 45 | Output (RPi reads) |
 
-On the Fomu EVT, which sits on the Pi's header, these tests cannot pass as they are: their designs use `pmoda_n` and `pmodb_n` (iCE40 pins 23, 26-28 and 45-48), which reach no header pin, and their Pi side is the PMOD HAT's. The iCE40 user pins that reach the Pi are the six `dbg` pins (GPIO 2, 3, 4, 18, 22, 7), the UART (GPIO 14, 15), and the SPI pins it shares with its flash (GPIO 8-11, 24, 25) ([the EVT's header](../hardware/fomu-pin-mapping.md#the-pis-header); [#202](https://github.com/fpgas-online/fpgas.online-test-designs/issues/202)).
+On the Fomu EVT, which sits on the Pi's header, these tests cannot pass as they are: their designs use `pmoda_n` and `pmodb_n` (iCE40 pins 23, 26-28 and 45-48), which reach no header pin, and their Pi side is the PMOD HAT's. The iCE40 user pins that reach the Pi are the six `dbg` pins (GPIO 2, 3, 4, 18, 22, 7), the UART (GPIO 14, 15), and the SPI pins it shares with its flash (GPIO 8-11, 24, 25; usable only once the iCE40 has loaded a design, and not while the Pi reads the flash) ([the EVT's header](../hardware/fomu-pin-mapping.md#the-pis-header); [#202](https://github.com/fpgas-online/fpgas.online-test-designs/issues/202)).
 
 ### Standard PMOD Pinout (12-pin)
 

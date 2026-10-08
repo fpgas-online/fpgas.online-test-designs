@@ -159,7 +159,7 @@ An earlier version of this page listed "drive GPIO27, read GPIO9" as a confirmed
 - GPIO27 is the iCE40's CRESET, a dedicated reset input.
 - GPIO9 is the flash's MISO.
 
-No net joins the two ([the Pi's header](#the-pis-header)). The `pmod` and `pin-id` tests assume the PMOD HAT's wiring, which an EVT on the header does not have. On this board the Pi lines an iCE40 design can drive are the six `dbg` pins (GPIO 2, 3, 4, 18, 22, 7), the UART (GPIO 14, 15), and the SPI pins it shares with its flash (GPIO 8-11, 24, 25). The follow-up is in
+No net joins the two ([the Pi's header](#the-pis-header)). The `pmod` and `pin-id` tests assume the PMOD HAT's wiring, which an EVT on the header does not have. On this board the Pi lines an iCE40 design can drive are the six `dbg` pins (GPIO 2, 3, 4, 18, 22, 7), the UART (GPIO 14, 15), and the SPI pins it shares with its flash (GPIO 8-11, 24, 25; only once it has loaded a design, and never while the Pi reads the flash with the iCE40 held in reset). The follow-up is in
 [#202](https://github.com/fpgas-online/fpgas.online-test-designs/issues/202).
 
 ## SPI Flash
