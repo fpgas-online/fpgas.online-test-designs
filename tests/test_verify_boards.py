@@ -814,19 +814,123 @@ def test_only_an_acorn_claim_on_a_design_it_cannot_name_is_weak():
     assert not ACORN.weak({"kind": "fpgas-online"}) and not ACORN.weak({"kind": "sqrl-factory"})
 
 
-def test_the_fomu_state_is_its_serial_only(tmp_path):
-    report = _check(FOMU, tmp_path, {"variant": "evt", "usb": "1-3", "serial": "fomu-7"}, Runner())
-    assert report["result"] == "pass" and report["state"] == {"variant": "evt", "serial": "fomu-7"}
+# -- the Fomu EVT, through the Pi's header (#200) ---------------------------------------------------------------
+
+FOMU_UID = "e4613c4813475c2a"
+FOMU_READING = {"cdone_before": 1, "creset_before": 1, "cdone_in_reset": 0, "cdone_after": 1, "boot_seconds": 0.2,
+                "flash": {"jedec": "ef7018", "uid": FOMU_UID, "status": ["00", "02", "00"], "busy_at_reset": False,
+                          "busy_after_wait": False}}  # fmt: skip
+FOBOOT_USB = {"vendor": "1209", "product": "5bf0", "serial": None, "path": "1-1.2"}
 
 
-def test_a_test_board_says_when_each_test_starts_and_how_it_ended(tmp_path):
+def _says(reading):
+    """What fomu_header_id.py prints for `reading`."""
+    return 0, "fomu-header: " + json.dumps(reading) + "\n"
+
+
+@pytest.fixture
+def fomu_usb(monkeypatch):
+    """The Fomu module's view of USB: a list the test fills (foboot appears on it), and a clock the waits move."""
+    usb, now = [], [0.0]
+    monkeypatch.setattr(fomu, "usb_devices", lambda: list(usb))
+    monkeypatch.setattr(fomu, "_clock", lambda: now[0])
+    monkeypatch.setattr(fomu, "_sleep", lambda s: now.__setitem__(0, now[0] + s))
+    return usb
+
+
+def test_a_fomu_is_identified_by_its_flash_over_the_header_and_foboot_is_waited_for(tmp_path, fomu_usb):
+    fomu_usb.append(FOBOOT_USB)
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING))])
+    report = _check(FOMU, tmp_path, {"variant": "evt", "cdone": "hi"}, run)
+    assert report["result"] == "pass", report
+    assert [t["test"] for t in report["tests"]] == ["header", "foboot", "uart"]
+    assert report["identity"] == {
+        "board": "fomu", "kind": "fomu", "variant": "evt", "usb": "1-1.2", "flash": "W25Q128JV",
+        "flash_jedec": "0xef7018", "flash_size_bytes": 16777216, "flash_status": "0x00", "flash_uid": FOMU_UID,
+        "flash_uid_bits": 64, "flash_uid_state": "read", "flash_uid_opcode": "0x4b", "flash_source": "header",
+    }  # fmt: skip
+    assert report["state"] == {"variant": "evt", "flash_jedec": "0xef7018", "flash_uid": FOMU_UID}
+    assert report["found"]["header"] == FOMU_READING and report["found"]["foboot_seconds"] == 0.0
+    # the header is read before anything is loaded, and its lines are then checked to be inputs
+    header = next(i for i, c in enumerate(run.calls) if c[-1].endswith("fomu_header_id.py"))
+    assert run.calls[header + 1] == ["pinctrl", "get", "8,9,10,11,17,24,25,27"]
+    load = next(i for i, c in enumerate(run.calls) if c[0] == "openFPGALoader")
+    assert header < load
+
+
+def test_the_fomu_label_is_its_flash_unique_id_which_only_the_boot_check_reads():
+    assert FOMU.label_fields == ("flash_uid",) and "flash" in FOMU.report_fields
+    # --identify does not reset it: identify() reads nothing over the header
+    run = Runner()
+    FOMU.identify(_host(FOMU), {"variant": "evt", "cdone": "hi"}, {}, runner=run)
+    assert run.calls == []
+
+
+def test_finding_a_fomu_reads_cdone_and_drives_nothing():
+    run = Runner([("pinctrl get 17", (0, "17: ip    -- | hi // GPIO17 = input\n"))])
+    assert FOMU.probe(_host(FOMU), runner=run) == [{"variant": "evt", "cdone": "hi"}]
+    assert run.calls == [["pinctrl", "get", "17"]]
+    low = Runner([("pinctrl get 17", (0, "17: ip    -- | lo // GPIO17 = input\n"))])
+    assert FOMU.probe(_host(FOMU), runner=low) == []
+    driven = Runner([("pinctrl get 17", (0, "17: op    -- | hi // GPIO17 = output\n"))])
+    assert FOMU.probe(_host(FOMU), runner=driven) == []
+    assert FOMU.probe(_host(FOMU, model="Generic x86"), runner=Runner()) == []
+
+
+@pytest.mark.parametrize("change, reason", [
+    ({"cdone_in_reset": 1, "flash": None}, "CDONE stayed high with CRESET held low"),
+    ({"flash": {**FOMU_READING["flash"], "jedec": "ffffff"}}, "the flash did not answer over the header"),
+    ({"flash": {**FOMU_READING["flash"], "jedec": "c22018"}}, "the flash's JEDEC ID is c22018, not the EVT's"),
+    ({"flash": {**FOMU_READING["flash"], "uid": "ff" * 8}}, "which is no ID"),
+    ({"flash": {**FOMU_READING["flash"], "busy_after_wait": True}}, "still busy"),
+    ({"boot_seconds": None, "cdone_after": 0}, "did not load a design from its flash after the reset"),
+])  # fmt: skip
+def test_a_header_reading_that_is_not_an_evt_fails_the_header_test(tmp_path, fomu_usb, change, reason):
+    fomu_usb.append(FOBOOT_USB)
+    run = Runner([("fomu_header_id.py", _says({**FOMU_READING, **change}))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run)
+    header = report["tests"][0]
+    assert header["test"] == "header" and header["result"] == "fail" and reason in header["reason"], header
+    assert report["result"] == "fail"
+
+
+def test_foboot_not_coming_back_after_the_reset_fails_foboot_not_the_identity(tmp_path, fomu_usb):
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("openFPGALoader", (1, "no device found"))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run)
+    results = {t["test"]: t for t in report["tests"]}
+    assert results["header"]["result"] == "pass" and report["identity"]["flash_uid"] == FOMU_UID
+    assert results["foboot"]["result"] == "fail" and "did not appear on USB within 10 s" in results["foboot"]["reason"]
+    assert results["uart"]["result"] == "fail"
+    assert "usb" not in report["identity"]
+
+
+@pytest.mark.parametrize("answer, said", [
+    ((2, "fomu-header-error: python3-libgpiod (the gpiod module) is not installed\n"), "python3-libgpiod"),
+    ((1, "Traceback ...\nKeyError: 9\n"), "fomu_header_id.py exited 1: Traceback ... KeyError: 9"),
+    ((0, "nothing it should say\n"), "fomu_header_id.py exited 0"),
+])  # fmt: skip
+def test_a_header_that_could_not_be_read_is_an_error(tmp_path, fomu_usb, answer, said):
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, Runner([("fomu_header_id.py", answer)]))
+    assert report["result"] == "error"
+    assert said in report["identity"]["flash_error"] and report["tests"][0]["result"] == "error"
+
+
+def test_a_header_line_left_driven_is_an_error(tmp_path, fomu_usb):
+    pins = "".join(f"{g}: {'op' if g == 27 else 'ip'}    -- | lo // GPIO{g}\n" for g in (8, 9, 10, 11, 17, 24, 25, 27))
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("pinctrl get 8,9", (0, pins))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run)
+    assert report["result"] == "error" and "GPIO27 was left op, not an input" in report["identity"]["flash_error"]
+
+
+def test_a_test_board_says_when_each_test_starts_and_how_it_ended(tmp_path, fomu_usb):
+    fomu_usb.append(FOBOOT_USB)
     events = []
-    _check(FOMU, tmp_path, {"variant": "evt", "usb": "1-3", "serial": "fomu-7"}, Runner(),
+    _check(FOMU, tmp_path, {"variant": "evt"}, Runner([("fomu_header_id.py", _says(FOMU_READING))]),
            event=lambda stage, d: events.append((stage, d)))  # fmt: skip
-    assert events == [("fpga-board-identified", {"board": "fomu", "kind": "fomu", "variant": "evt", "serial": "fomu-7",
-                                                 "usb": "1-3", "schema": "fpga-identity/1"}),
-                      ("fpga-test-started", {"test": "uart"}),
-                      ("fpga-test-finished", {"test": "uart", "result": "pass", "reason": ""})]  # fmt: skip
+    assert events[0][0] == "fpga-board-identified" and events[0][1]["flash_uid"] == FOMU_UID
+    assert events[1:] == [(stage, {"test": test, **extra}) for test in ("header", "foboot", "uart")
+                          for stage, extra in (("fpga-test-started", {}),
+                                               ("fpga-test-finished", {"result": "pass", "reason": ""}))]  # fmt: skip
 
 
 def test_an_arty_says_who_it_is_before_its_tests_with_its_whole_idcode(tmp_path):
@@ -1471,7 +1575,8 @@ def test_two_demo_boards_on_one_pi_are_both_an_error_and_neither_is_touched(tmp_
 def test_no_other_board_settles_its_variant_late():
     """The hook is the Tiny Tapeout board's alone: every other board's check runs as it did."""
     assert TT.variant_from_board and not any(b.variant_from_board for b in (ARTY, NETV2, FOMU))
-    assert not any(b.fact_tests or b.pending or b.script_tests for b in (ARTY, NETV2, FOMU))
+    assert not any(b.fact_tests or b.pending or b.script_tests for b in (ARTY, NETV2))
+    assert FOMU.fact_tests_for("evt") == ["header", "foboot"] and not (FOMU.pending or FOMU.script_tests)
     # a variant no bitstream is for is checked by its fact and script tests, which load nothing; none is pending
     assert TT.fact_tests_for("tt-asic") == ["sdk"] and "tt-asic" not in TT.variants
     assert TT.script_tests_for("tt-asic") == ["wiring"] and TT.script_tests_for("tt-fpga") == []

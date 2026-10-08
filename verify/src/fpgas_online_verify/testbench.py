@@ -353,7 +353,9 @@ class TestBoard(Board):
     # them.
     variant_from_board = False
     # Tests judged from what the board itself said (port_facts), which load nothing: test -> {"variants": the
-    # variants it is for, "check": f(variant, facts) giving (result, the reason or None, lines for the report)}.
+    # variants it is for, "check": f(variant, facts, found) giving (result, the reason or None, lines for the
+    # report)}. `found` is how the board was found, with what port_facts left in it (the Fomu's header reading,
+    # which is not an identity field).
     # They run first, in the whole boot check only (not when single tests were asked for), and are the whole
     # check of a variant that no bitstream here is for (a demo board with a Tiny Tapeout chip).
     fact_tests: ClassVar[dict] = {}
@@ -405,8 +407,8 @@ class TestBoard(Board):
     def fact_tests_for(self, variant):
         return [name for name, t in self.fact_tests.items() if variant in t["variants"]]
 
-    def run_fact_test(self, test, variant, facts):
-        result, reason, output = self.fact_tests[test]["check"](variant, facts)
+    def run_fact_test(self, test, variant, facts, found=None):
+        result, reason, output = self.fact_tests[test]["check"](variant, facts, found or {})
         return {"test": test, "result": result, **({"reason": reason} if reason else {}), "output": list(output)}
 
     def identified(self, report, found, options, facts=None):
@@ -482,7 +484,7 @@ class TestBoard(Board):
             # No test named (None, or an empty list, which names none): the board's own word is judged.
             for test in self.fact_tests_for(variant) if not options.get("tests") and not refused else ():
                 event("fpga-test-started", {"test": test})
-                report["tests"].append(self.run_fact_test(test, variant, facts))
+                report["tests"].append(self.run_fact_test(test, variant, facts, found))
                 done = report["tests"][-1]
                 event("fpga-test-finished", {"test": test, "result": done["result"], "reason": done.get("reason", "")})
             not_run = dict(self.pending.get(variant, {})) if not refused else {}

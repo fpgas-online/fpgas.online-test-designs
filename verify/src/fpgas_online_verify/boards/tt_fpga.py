@@ -198,7 +198,7 @@ def sdk_line(release):
     return ".".join(parts[:2]) if len(parts) >= 3 and all(p.isdigit() for p in parts[:2]) else None
 
 
-def sdk_check(variant, facts):
+def sdk_check(variant, facts, found=None):
     """The `sdk` test: (result, reason, lines). Passes when the board's chip, shuttle, microcontroller and SDK
     release are a row of SDK_SUPPORTED. Reads nothing: `facts` is what the board said (port_facts)."""
     chip, shuttle, mcu, sdk = (facts.get(k) for k in ("chip", "shuttle", "mcu", "sdk"))
