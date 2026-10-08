@@ -55,12 +55,14 @@ For tests that do not use UART as the primary interface (e.g., PCIe enumeration)
 
 | Test | Arty A7 | NeTV2 | Fomu EVT | TT FPGA | Acorn / LiteFury |
 |------|---------|-------|----------|---------|------------------|
-| [PMOD Loopback](pmod-loopback.md) | Yes | Yes | Yes | Yes | Yes |
+| [PMOD Loopback](pmod-loopback.md) | Yes | Yes | No¹ | Yes | Yes |
 | [UART](uart.md) | Yes | Yes | Yes | Yes | Yes |
 | [Ethernet](ethernet.md) | Yes | Yes | — | — | — |
 | [PCIe Enumeration](pcie-enumeration.md) | — | Yes | — | — | Yes |
 | [DDR Memory](ddr-memory.md) | Yes | Yes | — | — | Yes |
 | [SPI Flash ID](spi-flash-id.md) | Yes | Yes | Yes | — | Yes |
+
+¹ A design is built, but the Fomu EVT's PMOD pins reach no pin of the Pi's header it sits on ([#202](https://github.com/fpgas-online/fpgas.online-test-designs/issues/202)).
 
 Source: [Project README Test Matrix](../../README.md#test-matrix)
 
@@ -68,7 +70,7 @@ Source: [Project README Test Matrix](../../README.md#test-matrix)
 
 ### PMOD Loopback
 
-Verifies PMOD/GPIO pin connectivity between the RPi and the FPGA board using pure combinational gateware (`output = ~input`). The RPi drives known bit patterns on one set of GPIO pins and reads the inverted result on another set. No UART, no CPU, no firmware needed. Supports Arty A7 (8-bit), NeTV2 (1-bit), Fomu EVT (4-bit), TT FPGA (8-bit), and Acorn (1-bit serial loopback).
+Verifies PMOD/GPIO pin connectivity between the RPi and the FPGA board using pure combinational gateware (`output = ~input`). The RPi drives known bit patterns on one set of GPIO pins and reads the inverted result on another set. No UART, no CPU, no firmware needed. Supports Arty A7 (8-bit), NeTV2 (1-bit), TT FPGA (8-bit), and Acorn (1-bit serial loopback). A Fomu EVT (4-bit) design is built, but its pins reach no pin of the Pi's header ([#202](https://github.com/fpgas-online/fpgas.online-test-designs/issues/202)).
 
 See: [pmod-loopback.md](pmod-loopback.md)
 

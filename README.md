@@ -70,13 +70,15 @@ and the current results on the Welland Pis.
 
 | Test | Arty A7 | NeTV2 | Fomu EVT | TT FPGA | Acorn / LiteFury | ULX3S | ButterStick |
 |------|---------|-------|----------|---------|------------------|-------|-------------|
-| [GPIO Loopback](docs/tests/pmod-loopback.md) | Yes | Yes | Yes | Yes | Yes | — | — |
-| [PMOD Pin ID](docs/tests/pmod-loopback.md) | Yes | Yes | Yes | Yes | Yes | — | — |
+| [GPIO Loopback](docs/tests/pmod-loopback.md) | Yes | Yes | No¹ | Yes | Yes | — | — |
+| [PMOD Pin ID](docs/tests/pmod-loopback.md) | Yes | Yes | No¹ | Yes | Yes | — | — |
 | [UART](docs/tests/uart.md) | Yes | Yes | Yes | Yes | Yes | — | — |
 | [Ethernet](docs/tests/ethernet.md) | Yes | Yes | — | — | — | — | — |
 | [PCIe Enumeration](docs/tests/pcie-enumeration.md) | — | Yes | — | — | Yes | — | — |
 | [DDR Memory](docs/tests/ddr-memory.md) | Yes | Yes | — | — | Yes | — | — |
 | [SPI Flash ID](docs/tests/spi-flash-id.md) | Yes | Yes | Yes | — | Yes | — | — |
+
+¹ A design is built, but the Fomu EVT's PMOD pins reach no pin of the Pi's header it sits on, so the test cannot pass there ([#202](https://github.com/fpgas-online/fpgas.online-test-designs/issues/202)).
 
 See [docs/tests/](docs/tests/) for detailed test specifications.
 
