@@ -15,6 +15,8 @@ with a logic analyser or UART adapter.
 | `gateware/pmod_pin_id_acorn.py` | SQRL Acorn | XC7A200T |
 | `gateware/pmod_pin_id_netv2.py` | Kosagi NeTV2 | XC7A35T |
 
+The Fomu EVT's design drives its PMOD pins, which reach no pin of the Pi's header the EVT sits on, so it cannot identify anything there ([#202](https://github.com/fpgas-online/fpgas.online-test-designs/issues/202)).
+
 ## Building
 
 ```sh
