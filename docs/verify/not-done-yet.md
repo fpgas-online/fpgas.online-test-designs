@@ -21,7 +21,7 @@ What [verify-goals.md](../verify-goals.md) asks for that the check does not do y
 * The Arty's and NeTV2's flash is fingerprinted (a sha256 of its boot image region) and compared only with the
   last run's, not checked against a golden full test design.
 * Only the Acorn's flash can be written with its golden images (`fpgas-acorn-flash write`).
-* The Arty's and NeTV2's flash IDs are not read, nor the flash IDs of the TT and Fomu; their
+* The Arty's and NeTV2's flash IDs are not read, nor the TT's (the Fomu's are, over its header); their
   [identity](../identity.md) has only what finding the board, its IDCODE and its device DNA give, and on the
   TT FPGA what rpi-hwid reads.
 * Nothing is compared with the site's records.

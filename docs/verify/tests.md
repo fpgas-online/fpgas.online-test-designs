@@ -25,7 +25,7 @@ Each test checks its bitstream's sha256 against the `-bitstreams` package's mani
 |---|---|---|---|---|---|---|
 | Arty A7 | USB `0403:6010` | `openFPGALoader -b arty` | `/dev/ttyUSB1` | `uart`, `ddr`, `spiflash`, `ethernet`, `pin-id` | `pmod` | FTDI serial, IDCODE, device DNA, flash JEDEC ID, sha256 of the flash's first 2.1 MiB |
 | NeTV2 | JTAG IDCODE over GPIO 4/17/27/22 | openocd (Pi 3/4), openFPGALoader `rp1pio` (Pi 5) | `/dev/ttyAMA0` | `uart`, `ddr`, `spiflash` | `ethernet`, `pmod`, `pin-id` | IDCODE, device DNA, flash JEDEC ID, sha256 of the flash's boot image |
-| Fomu EVT | USB `1209:5bf0` (DFU bootloader) | openFPGALoader over DFU | `/dev/serial0` | `uart` | `spiflash`, `pmod`, `pin-id` | USB serial |
+| Fomu EVT | CDONE high on the Pi's header (GPIO17), or USB `1209:5bf0` (foboot) | openFPGALoader over DFU | `/dev/serial0` | `header`, `foboot` (both load nothing), `uart` | `spiflash`, `pmod`, `pin-id` | the flash's JEDEC ID and unique ID, read over the header |
 | TT FPGA | USB `2e8a:0005`, `2e8a:000f` (and `2e8a:0003`, the RP2's boot loader, which fails) | `tt_fpga_program.py` over `mpremote` | `/dev/ttyACM0` | `sdk` (loads nothing), `pin-id`, `uart`; a board with a Tiny Tapeout chip: `sdk` only, and it fails until its wiring test exists | `pmod` | USB serial |
 
 * The Arty and NeTV2 are left running openFPGALoader's SPI-over-JTAG bridge (used to read the flash back), the
@@ -36,13 +36,17 @@ Each test checks its bitstream's sha256 against the `-bitstreams` package's mani
   ([the JTAG IDCODE](idcode-and-dna.md#the-jtag-idcode)): a part that is not the variant's fails the board. Then their device
   DNA is read over the same JTAG ([the device DNA](idcode-and-dna.md#the-device-dna)): one that cannot be read, or is all zeros
   or all ones, fails the board.
-* The Fomu runs only `uart` at boot: a DFU load replaces the bootloader until the next power cycle.
-* That test design has no USB, so a Fomu that has been checked is off USB until it is power-cycled, and the
-  check of the next boot does not find it if that boot was a reboot (seen on a Pi 3B+ on 5 October 2026: the
-  Fomu left USB 36 seconds into the boot, and the reboot after it reported `missing`). The result is still
-  `missing`, since the board was not checked; when the recorded state has a Fomu, the reason says so: `a Fomu
-  EVT was found on this host by an earlier check and is not there now: the check's own test design has no
-  USB, …`. Power-cycle the Pi. ([#135](https://github.com/fpgas-online/fpgas.online-test-designs/issues/135))
+* The Fomu EVT sits on the Pi's header ([how it is wired](../hardware/fomu-pin-mapping.md#the-pis-header)). Finding it
+  reads its CDONE (GPIO17) and drives nothing: high means its iCE40 runs a design, whatever is on its USB. The
+  check then identifies it before any test
+  ([#200](https://github.com/fpgas-online/fpgas.online-test-designs/issues/200)): `fomu_header_id.py` holds the iCE40 in
+  reset (CRESET, GPIO27), reads its flash's JEDEC ID and unique ID over the shared SPI pins with read commands
+  only, sets every line back to an input, and lets the iCE40 boot from its flash, into foboot, as at power-up.
+  That stops whatever design was running, so only the check does it, never `--identify`. `header` judges the
+  reading: CDONE must fall in reset and rise after it, and the flash must be the EVT's W25Q128JV (`ef7018`)
+  with a unique ID that is not all `00` or all `ff`. `foboot` passes when foboot is on USB within 10 s of the
+  reset: the DFU loads need it.
+* The Fomu runs only `uart` at boot: a DFU load replaces the bootloader until the next reset.
 * The TT FPGA's `fpgas-tt.service` is stopped for the tests and started again once the report is written, so
   it never starts against the report of the run before. If it cannot be started again the result is `error`
   and the report says so, in `services_failed` at the top of the report: the board's own entry keeps the

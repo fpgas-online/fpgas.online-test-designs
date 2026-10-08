@@ -19,9 +19,15 @@ sudo apt install fpgas-online-fomu
 | `fpgas-online-fomu-bitstreams` | the test bitstreams built by the same commit's CI, in `/usr/share/fpgas-online/fomu/bitstreams/` |
 | `fpgas-online-verify` | `fpgas-verify`, the unit, and the host test scripts |
 
-The check finds the Fomu by its foboot DFU bootloader on USB (`1209:5bf0`), which is there from power-up until a design is loaded. It loads the UART test design with openFPGALoader over DFU and runs its host test on `/dev/serial0`. That is the only test at boot: a DFU load replaces the bootloader until the next power cycle, and it writes the design into the flash's user image. So the Fomu's flash is not part of what `changed` compares; its USB serial number is. `fpgas-fomu-debug` runs the SPI flash, PMOD loopback and pin identification tests, one per power cycle.
+The EVT sits on the Pi's GPIO header ([how it is wired](fomu-pin-mapping.md#the-pis-header)).
 
-Welland's Fomu (pi-sw1-p17) does not enumerate, so that Pi reports `missing` ([current results](../verify/current-results.md#current-results)).
+How the check works with it:
+- **Finding it.** The check reads the iCE40's CDONE (GPIO17), which drives nothing: high means the board is there and running a design. foboot's DFU bootloader on USB (`1209:5bf0`) finds it too, but is not needed. A Fomu whose USB is being analysed, or that runs a design with no USB, is still found.
+- **Identifying it**, before any test. The check holds the iCE40 in reset and reads the flash's JEDEC ID and 64-bit unique ID over the header with read commands only. It then sets every line back to an input and lets the iCE40 boot from its flash, into foboot, as at power-up. That stops whatever design was running, so only the check does it. The `header` test judges the reading.
+- **The board's label** is the flash's unique ID (`flash_uid`): foboot has no USB serial number.
+- **The `foboot` test** passes when foboot appears on USB within 10 s of the reset.
+- **The UART test.** The check loads the UART test design with openFPGALoader over DFU and runs its host test on `/dev/serial0`. That is the only test that loads a design at boot. A DFU load replaces the bootloader until the next reset, and it writes the design into the flash's user image. So the flash's contents are not part of what `changed` compares; its IDs are.
+- `fpgas-fomu-debug` runs the SPI flash, PMOD loopback and pin identification tests, one per power cycle. The PMOD tests assume a PMOD HAT ([not a loopback on the EVT](fomu-pin-mapping.md#not-a-loopback-on-the-evt)).
 
 **Check the board now**, or run one test with its output live (`fpgas-fomu-debug` is in `fpgas-online-fomu-debug`):
 
@@ -209,11 +215,11 @@ iceprog design.bin
 Source: [Fomu Workshop](https://workshop.fomu.im)
 
 ## Test Infrastructure Hosts
-Welland's Fomu EVT is on pi-sw1-p17, an RPi 3B+, with an
-[OpenVizsla](https://github.com/openvizsla/ov_ftdi) USB protocol analyzer
-(`1d50:607c`) inline to capture the Fomu's USB traffic (DFU programming,
-CDC-ACM serial, custom USB protocols) without changing the FPGA design or host
-software. Its state is in the [current verify results](../verify/current-results.md#current-results).
+Welland's Fomu EVT sits on the GPIO header of the RPi 3B+ 00000000cc479fd1 (seen on switch 1 port 17 on 8 Oct
+2026). An [OpenVizsla](https://github.com/openvizsla/ov_ftdi) OV3 USB protocol analyser (`1d50:607c`, serial
+OV100662) sits inline on the Fomu's USB, to debug the Fomu's USB stack (DFU programming, CDC-ACM serial, custom
+USB protocols) without changing the FPGA design or host software. The check names it as a debug tool, not a
+board. Its state is in the [current verify results](../verify/current-results.md#current-results).
 
 ## LiteX Integration
 

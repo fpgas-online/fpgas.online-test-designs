@@ -29,7 +29,7 @@ rpi-hwid's `FpgaBoard` fields:
 | Field | Type | Value | Missing when |
 |---|---|---|---|
 | `kind` | string | `acorn`, `arty`, `netv2`, `tt`, `fomu`, `pcileech`, or `unknown-fpga` for a PCIe FPGA design that is not known | never |
-| `serial` | string | the USB serial number (Arty: its FT2232H; TT: its RP2350; Fomu: its bootloader) | the board is not found on USB |
+| `serial` | string | the USB serial number (Arty: its FT2232H; TT: its RP2350) | the board is not found on USB, or has no USB serial (the Fomu: foboot has none) |
 | `dna` | string | the Xilinx device DNA, 16 hex digits: `0x0054b48664b04854` | not read: the board has no DNA (TT, Fomu). The Acorn reads it over BAR0, or over JTAG when BAR0 cannot be used; the Arty and NeTV2 over JTAG (`openFPGALoader --read-dna`). When the JTAG read fails or is not run (the chain did not show the one FPGA expected, or the scan that showed it exited non-zero), `dna_error` says why the DNA itself was not read. A DNA of all zeros or all ones means the DNA port is not being read, so it is no DNA: on the Acorn the other path's is used if it is good, and otherwise `dna_error` says so |
 | `idcode` | string | the whole 32-bit JTAG IDCODE, 8 hex digits: `0x13636093` | the board has no JTAG link to the Pi (TT, Fomu), or the JTAG test was not run. The NeTV2 is found by scanning its JTAG chain, so it has the IDCODE that scan read even when its JTAG test is not run |
 | `flash` | string | the flash part: `S25FL256S`, `S25FS256S`, told apart by RDID byte 6 (the family ID); the family's name, `S25Fx256S`, when byte 6 is not known | the flash was not read, or its part is not known |
@@ -40,7 +40,7 @@ rpi-hwid's `FpgaBoard` fields:
 | `flash_uid_bits` | number | the unique ID's length in bits: `128` | as `flash_uid` |
 | `flash_uid_state` | string | `read`, or `blank` when every byte is `00` or `ff` | as `flash_uid` |
 | `flash_error` | string | why the flash could not be read | the flash was read, or reading it was not tried |
-| `flash_source` | string | how the flash was read: `pcie` through the Acorn's own SoC | the flash was not read |
+| `flash_source` | string | how the flash was read: `pcie` through the Acorn's own SoC; `header` over the Pi's header with the FPGA held in reset (the Fomu) | the flash was not read |
 | `soc_model` | string | the card the Acorn's SoC says it was built for, from the variant its identifier string names: `cle-215+`, `cle-101` (as rpi-hwid reads it) | not an Acorn running our SoC (SQRL's factory image, a design we do not know), BAR0 could not be read, or the identifier names no variant |
 
 fpgas-verify's own fields:
@@ -117,7 +117,7 @@ still stand.
 | Arty | `board`, `kind`, `variant`, `serial`, `usb`, `dna`, the IDCODE fields |
 | NeTV2 | `board`, `kind`, `variant`, `dna`, the IDCODE fields |
 | TT | `board`, `kind`, `variant`, `serial`, `usb`, and the Tiny Tapeout fields (or `tinytapeout_note`, or `tinytapeout_error`) |
-| Fomu | `board`, `kind`, `variant`, `serial`, `usb` |
+| Fomu | `board`, `kind`, `variant`, `usb` (when foboot came back after the reset), and the flash fields read over the header: `flash`, `flash_jedec`, `flash_size_bytes`, `flash_status`, `flash_uid`, `flash_uid_bits`, `flash_uid_state`, `flash_uid_opcode`, `flash_source` (or `flash_error`) |
 
 ## The event
 

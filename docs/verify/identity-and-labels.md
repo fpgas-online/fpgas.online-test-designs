@@ -24,7 +24,8 @@ the check, publishes anything or records any state.
   | Acorn | the running build, device DNA and flash identity over BAR0 (the check's `pcie-bar0`), and the IDCODE and DNA over P1 JTAG (`jtag`) |
   | Arty | the JTAG IDCODE and the device DNA ([the device DNA](idcode-and-dna.md#the-device-dna)) |
   | NeTV2 | the JTAG IDCODE, from the scan that finds it, and the device DNA |
-  | Fomu, TT FPGA | how the board was found (its USB serial) |
+  | Fomu | how the board was found: CDONE on its header, or foboot on USB. Its flash IDs (its label, `flash_uid`) come from the boot report: reading them resets the FPGA |
+  | TT FPGA | how the board was found (its USB serial) |
 
   A TT board's [Tiny Tapeout fields](../identity.md#tiny-tapeout-fields) are not read live: they come from the
   boot report (see below).

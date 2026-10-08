@@ -39,9 +39,9 @@ A side finding: the "confirmed loopback pair GPIO27 → GPIO9" in `docs/hardware
 
 ### 1. Identification over GPIO (the gate)
 
-There's a new `fomu_gpio` module in the Fomu's board package. It reads the Fomu through the header, in this order, under the board's lock:
+The host script `designs/_host/fomu_header_id.py` reads the Fomu through the header, in this order, under the board's lock:
 
-1. Save the state of GPIO 8-11, 17, 24, 25 and 27 (`core.pin_states`).
+1. Take GPIO 8-11, 17, 24, 25 and 27 as inputs.
 2. Read CDONE (GPIO17): this is the passive sighting.
 3. Drive CRESET (GPIO27) low, then read CDONE again. It must now be low; that proves an iCE40's reset is wired to GPIO27.
 4. With the FPGA in reset, the Pi is the only master on the flash's SPI bus. It sends these commands, all reads or volatile:
@@ -70,10 +70,15 @@ What passes and what fails:
 | foboot absent on USB after the reset | **not** a fail of identification: it is said in the report ("foboot did not appear on USB after the reset"). The uart test that needs DFU fails with that reason. |
 
 **Where it runs.**
-- `Fomu.probes = True`. `probe(host)` is the GPIO identification, so a Fomu with no foboot on USB is found. This covers the 8 Oct case: OV3 analysing, or a user design running.
-- `spot()` keeps the USB sighting. It drives nothing, and `auto` uses it first.
-- In `check()`, the GPIO identification runs every time as `port_facts`, before the uart test. So the Fomu's identity always comes from its own flash, never from USB alone. A Fomu found on USB whose header does not answer fails.
-- The reset is also what brings foboot back for the DFU load. A Fomu that an earlier check left running its test design (#135) no longer needs a power cycle to be found and checked. `gone_after_check` is then no longer needed, and is removed with its runner test rewritten.
+Holding CRESET low stops whatever design a visitor loaded. So the reset runs only in the check: the boot check, at boot, before the board is offered, or an admin's `fpgas-fomu-verify`, which loads designs anyway. Finding the board never resets it, and neither does `--identify`.
+
+- `Fomu.probes = True`, and `probe(host)` only reads CDONE (GPIO17) with `pinctrl get`, driving nothing. High means an iCE40 on the header has loaded a design, so a Fomu with no foboot on USB is found. That covers the 8 Oct case: an OV3 analysing, or a user design running.
+- `spot()` keeps the USB sighting of foboot. It drives nothing either, and `auto` uses it first.
+- In `check()`, the GPIO identification runs every time as `port_facts`, before any test. So the Fomu's identity always comes from its own flash, never from USB alone. A Fomu found on USB whose header does not answer fails the `header` test.
+- **The safe state afterwards.** Every line the script took (GPIO 8-11, 17, 24, 25, 27) is an input again before it exits, whatever went wrong, as the TT board's safe state does. The SPI lines are inputs before CRESET is let go, and CRESET becomes an input that the board's pull-up takes high. The board module then reads those lines with `pinctrl get`: one that is not an input makes the check an error. Tests cover each part:
+  - the script against a model of the EVT: the order, an exception mid-read, no ice40 on the reset, and no line driven while the iCE40 owns the bus;
+  - the module, with a line left driven.
+- The reset also brings foboot back for the DFU load. A Fomu that an earlier check left running its test design (#135) is now found by its CDONE and checked without a power cycle. `gone_after_check` and its advice are removed, since the Fomu was their only user. The runner tests for them are replaced by tests that name the OV3.
 
 **`--identify`** must not disturb the board (`Board.identify`: "nothing reconfigured"). The reset reconfigures the FPGA, so `--identify` reads only CDONE and USB, and takes `flash_jedec` and `flash_uid` from the boot report (`report_fields`), as the Arty and NeTV2 already do for the flash.
 
@@ -85,7 +90,7 @@ What passes and what fails:
 - sets every line it drove back to an input **before** CRESET is let go, so the iCE40 masters its flash alone when it boots;
 - prints one JSON line.
 
-The board module runs it as the other host scripts are run. Around it, the board module saves and puts back the pins with `pinctrl` (`core.pin_states` and `restore_pins`), as the NeTV2's JTAG pins are. WP is held low while the Pi has the bus (status-register writes blocked), and HOLD high.
+The board module runs it as the other host scripts are run, then checks with `pinctrl get` that every line it took is an input. WP is held low while the Pi has the bus (status-register writes blocked), and HOLD high.
 
 ### 2. The OpenVizsla OV3 as a debug tool
 
@@ -102,7 +107,7 @@ A board module can name USB debug tools: `Board.debug_usb = {(vendor, product): 
 
 ### Tests (CI, no hardware)
 
-`tests/test_fomu_gpio.py` will use a fake pinctrl and a fake SPI that model the EVT: CRESET pulls CDONE low, and the flash answers 9F and 4B. It covers:
+`tests/test_fomu_header_id.py` uses a model of the EVT: CRESET pulls CDONE low, and the flash answers 9F and 4B. It covers:
 - the order: pins saved, then reset, then reads, then the SPI pins put back before CRESET is released;
 - the opcode allow-list, so no write opcode can be sent;
 - each fail row of the table above;
@@ -115,7 +120,11 @@ A board module can name USB debug tools: `Board.debug_usb = {(vendor, product): 
 
 `tests/test_verify_boards.py` will cover the Fomu's `label_fields` and `report_fields`.
 
-### Not in this PR (a follow-up issue)
+### Follow-up
+
+[#202](https://github.com/fpgas-online/fpgas.online-test-designs/issues/202) covers the docs' "GPIO27 → GPIO9 loopback" (CRESET → flash MISO on the EVT) and the Fomu `pmod`/`pin-id` tests, which assume a PMOD HAT. This PR corrects the docs only.
+
+### Not in this PR
 
 The iCE40 can be loaded over the same header in SPI-slave mode: CRESET is pulled with SS held low, as `fomu-flash -f` does. That loads into SRAM only, never writes the flash and needs no USB. It would end the DFU load's rewrite of the user image at every verify. It needs bit-banged SPI with MOSI/MISO swapped.
 
