@@ -4,6 +4,55 @@ You have a Tiny Tapeout demo board and want to know how the check tells which bo
 running, what its `sdk` and `wiring` tests judge, and how its identity is read.
 Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
 
+## The TT FPGA check at boot
+
+The check finds the board by its Raspberry Pi microcontroller on USB (`2e8a:0005` or `2e8a:000f`, MicroPython's
+serial port). That does not say whether the demo board carries the FPGA breakout or a Tiny Tapeout chip. So the
+check asks the board itself, and loads a design only into a board that said it is an FPGA board
+([Which Tiny Tapeout board it is](#which-tiny-tapeout-board-it-is)).
+
+Before the first test, while it holds `/dev/ttyACM0`:
+
+1. The check reads whether the board's `main.py` is still the SDK's own (`tt_main_py.py`, with or without
+   rpi-hwid). A changed one is an `error`.
+2. It starts the board's SDK (`tt_sdk_start.py`:
+   [The SDK's main.py](../hardware/tt-fpga.md#the-sdks-mainpy)).
+3. It runs `rpi-hwid tinytapeout --json --no-stop-service`. rpi-hwid asks the Tiny Tapeout SDK on the RP2350
+   which microcontroller, chip, demo board and SDK release this is. The answer goes into the board's identity,
+   for rpi-hwid's Tiny Tapeout label ([TT FPGA identity](#tt-fpga-identity),
+   [Tiny Tapeout fields](../identity.md#tiny-tapeout-fields)).
+
+Steps 2 and 3 run only when [rpi-hwid](https://github.com/mithro/rpi-hwid) is installed (`python3-rpi-hwid`,
+which `fpgas-online-verify` suggests, from rpi-hwid's own apt repository). Without rpi-hwid the board cannot be
+asked which Tiny Tapeout board it is: the check is an `error` and nothing is loaded.
+
+Then the tests of an FPGA board, in this order:
+
+1. [The `sdk` test](#the-sdk-test) judges what the board said, on every board. It loads nothing.
+2. [The `dip-switches` test](#the-dip-switches): a switch that is on fails the board.
+3. The `pin-id` test: the check loads the PMOD pin identification design and checks the PMOD HAT cabling against
+   the expected map (ui_in on HAT JA, uio on JB, uo_out on JC:
+   [tt-fpga-pin-mapping.md](../hardware/tt-fpga-pin-mapping.md)). A miswired HAT fails the board.
+4. The `uart` test: the check loads the UART test design through the microcontroller (`tt_fpga_program.py`, over
+   `mpremote`), and runs its host test through the UART bridge on `/dev/ttyACM0`.
+5. When the tests are done it streams one more design, which moves the seven-segment display and is left running
+   ([what the TT FPGA is left running](#what-the-tt-fpga-is-left-running)). If that load fails the board still
+   passes, with a warning in the report.
+
+Steps 2 to 5 are for an FPGA board. A board with a Tiny Tapeout chip runs `sdk` and then
+[the wiring test](#the-wiring-test) of its three Pmod ribbons. Nothing is loaded into it.
+
+What the check does not do, and why:
+
+- Nothing is written to the demo board. For every load the microcontroller reads the bitstream from the Pi over
+  the serial link ([Programming](../hardware/tt-fpga.md#programming)).
+- There is no SPI flash test: the breakout has no flash. So what `changed` compares is the board's USB serial
+  number.
+- Only the PMOD loopback test is left to `fpgas-tt-fpga-debug`.
+
+`mpremote` is `micropython-mpremote` in trixie, but only in bookworm-backports for bookworm. Without it the check
+reports an `error`.
+
 ## Which Tiny Tapeout board it is
 
 The same demo board carries an FPGA breakout or a Tiny Tapeout chip, and its microcontroller looks the same on

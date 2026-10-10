@@ -6,33 +6,45 @@ The Digilent Arty A7 is a Xilinx Artix-7 development board used in the fpgas.onl
 
 ## Installing the Arty Packages
 
-Add the fpgas.online APT repository first ([fpgas-verify: installing it](../verify/installing.md#installing)), then on the Arty's Pi:
+### What you need
+
+- a Raspberry Pi with the Arty on one of its USB ports
+- the fpgas.online apt repository added on the Pi ([fpgas-verify: installing it](../verify/installing.md#installing))
+- on bookworm: the fpgas.online-fpga-tools apt repository added too (the same page). Debian bookworm's openFPGALoader is too old for the check
+
+### Steps
+
+**1.** Install the Arty's packages. This also turns the check at boot on (`fpgas-verify.service`).
 
 ```bash
 sudo apt install fpgas-online-arty
 ```
 
-| Package | Installs |
-|---------|----------|
-| `fpgas-online-arty` | installs everything below to check an Arty, and turns the boot check (`fpgas-verify.service`) on for it |
-| `fpgas-online-arty-tools` | the Arty's module of `fpgas_online_verify`, and `fpgas-arty-verify`; with `python3-serial`, openFPGALoader, `python3-libgpiod` (the PMOD HAT scan) and `iproute2`/`ping`/`arping` (the Ethernet test, which runs as root), and recommending `raspi-utils-core` (`pinctrl`, which puts back the Pi's SPI/UART/I2C pin functions after the scan; Raspberry Pi OS only) |
-| `fpgas-online-arty-bitstreams` | the Arty A7-35T test bitstreams built by the same commit's CI, in `/usr/share/fpgas-online/arty/bitstreams/` |
-| `fpgas-online-verify` | `fpgas-verify`, the unit, and the host test scripts |
-
-At boot the check finds the Arty by its FT2232H on USB (`0403:6010`). It reads the FPGA's whole JTAG IDCODE over that FT2232H, which must be an XC7A35T in any silicon version; the report's `jtag` has it decoded (`idcode_version`, `idcode_device` and the others, [fpgas-verify: the JTAG IDCODE](../verify/idcode-and-dna.md#the-jtag-idcode)), then its device DNA with `openFPGALoader -b arty --read-dna` over the same FT2232H, which loads nothing; a DNA that cannot be read, or is all zeros or all ones, fails the board ([fpgas-verify: the device DNA](../verify/idcode-and-dna.md#the-device-dna)). It then loads the UART, DDR, SPI flash, Ethernet and PMOD pin identification test designs into SRAM with openFPGALoader, one at a time, and runs each one's host test. The Ethernet test pings the design through the Pi's USB Ethernet adapter cabled to the Arty's RJ45; it never touches an interface the Pi uses itself. The pin identification scan checks the PMOD HAT cabling against the expected map (HAT JA/JB/JC → Arty JA/JB/JC, [PMOD Cable Routing](arty-a7-pin-mapping.md#pmod-cable-routing-hat--arty)). A failure in either fails the board, like any other test. Last, it reads back the flash's boot image region (the first 2.1 MiB) through openFPGALoader's SPI-over-JTAG bridge. The FTDI serial number, the IDCODE, the device DNA, the flash's JEDEC ID and that region's sha256 are what `changed` compares. The Arty is left running the SPI-over-JTAG bridge, and comes back to its flash image at the next power cycle. Only the PMOD loopback test is left to `fpgas-arty-debug`.
-
-For the fpgas.online openFPGALoader build, add the [fpgas.online-fpga-tools repository](https://github.com/fpgas-online/fpgas.online-fpga-tools#debian-packages-bookworm-trixie-sid-arm64-armhf) **before** installing; otherwise apt installs Debian's `openfpgaloader`. That works for the Arty from 0.13.0 on (trixie's), because the check reads the device DNA with `--read-dna`. Bookworm's (0.10.0) is too old, so on bookworm `fpgas-online-arty` installs only with the repository added.
-
-It runs at every boot of the Welland Arties: [current results](../verify/current-results.md#current-results).
-
-**Check the board now**, or run one test with its output live (`fpgas-arty-debug` is in `fpgas-online-arty-debug`):
+**2.** Check the board now. Nothing is sent to the site: `--no-publish` makes sure.
 
 ```bash
-sudo fpgas-arty-verify --no-publish --report -  # this board only, the JSON report on stdout
-sudo fpgas-arty-debug test ddr                  # load one test's design and run its test
+sudo fpgas-arty-verify --no-publish
 ```
 
-What the results mean, the report, `changed` and `--update`, the debug tool and common failures: [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result).
+### Check
+
+The first line of the output starts with `fpgas-verify: pass`. The board's line under it ends in `pass`, and so does the line of each test.
+
+### If it fails
+
+- The first line names the result, and the output ends with `RESULT:` and `What to do:`. [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result) says what each result means.
+- [fpgas-verify: common failures](../verify/common-failures.md#common-failures) lists the messages and what to do about each.
+- To run one test with its output live, install `fpgas-online-arty-debug` and run it:
+
+```bash
+sudo fpgas-arty-debug test ddr
+```
+
+### Next
+
+- [The Arty check at boot](../verify/tests.md#the-arty-check-at-boot): what the check does, test by test.
+- [Arty packages](../verify/installing.md#arty-packages): what each package installs.
+- [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result): the report, `changed` and `--update`.
 
 ## Key Specifications
 
