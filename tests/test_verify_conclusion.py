@@ -54,7 +54,7 @@ def test_the_unconverted_compute_blade_ends_with_what_failed_what_was_not_run_an
     # on a Compute Blade the card is not to be converted: the only load on a blade lost its PCIe endpoint
     assert "It has to be converted" not in todo and conclusion.ACORN_PROGRAMMING not in todo
     assert "On a Compute Blade, do not load a design into the card or convert it" in todo
-    assert conclusion.VERIFYING_3 in todo
+    assert conclusion.BLADE_JTAG_PAGE in todo
     assert "the serial port holds GPIO14" in todo and f"{conclusion.ISSUES}/127" in todo
     assert "sudo fpgas-acorn-debug --help" in todo and "fpgas-online-acorn-debug" in todo
     assert f"{conclusion.DOCS}/common-failures.html#common-failures" in todo
@@ -174,7 +174,7 @@ def test_a_reason_is_one_line_and_the_advice_is_wrapped_without_breaking_a_url()
     start = lines.index("What to do:")
     advice = lines[start + 1 : -1]
     assert all(len(line) <= conclusion.WIDTH or "https://" in line for line in advice)
-    assert f"    {conclusion.VERIFYING_3}" in advice  # whole, on a line of its own
+    assert f"    {conclusion.BLADE_JTAG_PAGE}" in advice  # whole, on a line of its own
     assert f"    failed: jtag: {GPIOD}" in lines  # not wrapped: a reason can be searched for as it is
 
 
@@ -356,3 +356,20 @@ def test_a_uio_bit_sharing_a_held_ui_in_line_gets_only_the_dip_switch_advice():
     )
     says = advice_for(reason)
     assert len(says) == 1 and "DIP switches off" in says[0]
+
+
+def test_the_blade_advice_links_the_page_about_jtag_on_a_blade_at_its_published_address():
+    """docs.fpgas.online moved the Acorn pages and keeps no redirect: the address the tool prints is the page's."""
+    page = "https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html"
+    assert page == conclusion.BLADE_JTAG_PAGE and conclusion.NOT_ON_A_BLADE.endswith(page)
+
+
+def test_no_address_of_a_moved_acorn_docs_page_is_left_in_the_tool_or_the_pages():
+    """The Acorn pages that were under boards/acorn/building/ and boards/acorn/wiring/rpi-5-host are now under
+    setup/, checks/ and troubleshooting/, with no redirect: an old address anywhere here is a dead link."""
+    root = pathlib.Path(__file__).resolve().parents[1]
+    files = [*(root / "verify" / "src").rglob("*.py"), *(root / "docs").rglob("*.md")]
+    files = [f for f in files if "plans" not in f.parts]
+    assert len(files) > 100
+    old = re.compile(r"boards/acorn/(?:building/|wiring/rpi-5-host)")
+    assert [(str(f.relative_to(root)), m.group(0)) for f in files for m in old.finditer(f.read_text())] == []

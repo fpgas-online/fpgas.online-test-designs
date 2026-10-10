@@ -90,10 +90,7 @@ def test_the_transcripts_and_failure_rows_come_from_the_tool_reference():
         check.transcript("**no such transcript**")
     # the tool's own reference still points at both pages, and keeps the anchor its summary prints
     wiring_page = (check.VERIFY / "acorn-wiring.md").read_text()
-    assert (
-        "boards/acorn/building/compute-blade/verifying-1.html" in wiring_page
-        and "boards/acorn/building/rpi-5/verifying-1.html" in wiring_page
-    )
+    assert "boards/acorn/checks/compute-blade.html" in wiring_page and "boards/acorn/checks/rpi-5.html" in wiring_page
     assert "\n## Common failures\n" in check.COMMON_FAILURES.read_text()
     assert not any("# On a Compute Blade" in page.read_text() for page in check.VERIFY.glob("*.md"))
 
