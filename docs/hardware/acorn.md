@@ -73,7 +73,7 @@ also be a NeTV2 on PCIe, which that tool does not apply to). Its PCIe link, the 
 still tested: on a card on the XDMA sample only when the host is set up for an Acorn, and then `jtag` names the
 variant from the FPGA's IDCODE, which the sample's PCI IDs do not say. A PCIe Screamer (PCILeech, `10ee:0666`) or a stock
 Xilinx XDMA design (most likely a PicoEVB: `10ee:7021` with the Xilinx default subsystem, told apart
-from an old fpgas.online build by its XDMA class code and BAR2) is named, and fails: fpgas.online has no test design for it yet. Any
+from an old fpgas.online build by its XDMA class code and BAR2) is named, and fails: the check has no test design for it ([issue 238](https://github.com/fpgas-online/fpgas.online-test-designs/issues/238)). Any
 other PCIe FPGA whose design the check does not recognise is `fail` too. A Pi with no Acorn is `missing`:
 fatal, since the host was set up for one.
 

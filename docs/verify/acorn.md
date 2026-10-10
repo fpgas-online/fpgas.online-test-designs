@@ -26,8 +26,8 @@ flash:
 | `10ee:7021`, subsystem `1e24:021f` (CLE-215+) or `1e24:0101` (CLE-101) | the fpgas.online Acorn SoC | tested |
 | `1e24:021f` or `1e24:0101` as vendor:device | an Acorn on SQRL's factory image | `fail`, `unconverted: …`; only `pcie-link`, `rp1-pio` and `jtag` run |
 | `10ee:7011` | the vendor XDMA sample (an Acorn or a NeTV2) | `fail`, `unconverted: …`; on a host set up for an Acorn (`fpga-board = acorn`, or `fpgas-acorn-verify`) `pcie-link`, `rp1-pio` and `jtag` run, and `jtag` takes either Acorn FPGA and names the variant from its IDCODE where only one variant has that part (an XC7A100T is a `cle-101`); with `auto` nothing runs, since it may be a NeTV2 |
-| `10ee:0666` | a PCIe Screamer running PCILeech | `fail`: fpgas.online has no test design for this board yet |
-| `10ee:7021`, subsystem `10ee:0007`, class `070001`, with a BAR2 | a stock Xilinx XDMA design (most likely a PicoEVB) | `fail`: fpgas.online has no test design for this board yet |
+| `10ee:0666` | a PCIe Screamer running PCILeech | `fail`: no test design for this board (fpgas.online-test-designs issue 238) |
+| `10ee:7021`, subsystem `10ee:0007`, class `070001`, with a BAR2 | a stock Xilinx XDMA design (most likely a PicoEVB) | `fail`: no test design for this board (fpgas.online-test-designs issue 238) |
 | any other Xilinx or SQRL ID | not a design we built | `fail` |
 
 The two boards that are not Acorns are reported as `xilinx-pcie`, followed by what their IDs say (for example `xilinx-pcie PCIe Screamer (PCILeech image): fail`), not as `acorn`, and the `fpga-verified` fleet event's `board0` says `xilinx-pcie - fail`. The report keeps `"board": "acorn"`, the check that found them, and so do the progress events (`fpga-board-found`, `fpga-board-identified`).
