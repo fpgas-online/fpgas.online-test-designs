@@ -19,6 +19,7 @@ on the right edge, pin 1 at the top. Everything wiring.toml says about where thi
   the header the cable pictures show) and `m2_slot`.
 
 Run: uv run docs/wiring/acorn/measure_hat.py           prints the values, as wiring.toml has them
+     uv run docs/wiring/acorn/measure_hat.py --mm      prints the figures geometry.toml has, in millimetres
      uv run docs/wiring/acorn/measure_hat.py --check   fails unless wiring.toml has exactly these
 test_wiring.py runs the check too.
 """
@@ -161,6 +162,13 @@ def measure(path):
     if abs((bottom - top) / scale - BOARD_LONG) > 1:
         raise SystemExit(f"{path}: the board is {(bottom - top) / scale:.2f} mm long, not {BOARD_LONG}")
     right = next(x for x in range(w - 1, -1, -1) if lum[round(row0) * w + x] < 200)
+    # The left edge the same way, from x = 0; the median over the header's 20 rows, so that one row crossing a
+    # silkscreen mark or a notch cannot move it.
+    lefts = sorted(next(x for x in range(w) if lum[round(row0 + i * pitch) * w + x] < 200) for i in range(ROWS))
+    left = lefts[ROWS // 2 - 1 : ROWS // 2 + 1]
+    left = sum(left) / 2
+    if lefts[-1] - lefts[0] > 2:
+        raise SystemExit(f"{path}: the board's left edge is not straight along the header's rows: {lefts}")
     if not right - columns[1] < right - columns[0]:
         raise SystemExit(f"{path}: the odd column (pin 1's) is not the inner one")
 
@@ -196,6 +204,26 @@ def measure(path):
         ],
         "m2_slot": [socket[0], socket[1], socket[2] + 1, socket[3] + 1],
         "socket_mm": (round(long_mm, 2), round((socket[3] - socket[1]) / scale, 2)),
+        "board_px": (left, top, right, bottom),
+    }
+
+
+def measure_mm(path):
+    """The HAT in millimetres, origin at the top left corner of the board in the photo: what geometry.toml holds."""
+    m = measure(path)
+    s = m["scale_px_per_mm"]
+    left, top, right, bottom = m["board_px"]
+
+    def mm(px, origin):
+        return round((px - origin) / s, 2)
+
+    x0, y0, x1, y1 = m["m2_slot"]
+    return {
+        "size": [mm(right, left), mm(bottom, top)],
+        "px_per_mm": s,
+        "origin": [left, top],
+        "pin1": [mm(m["columns"][0], left), mm(m["row"], top)],
+        "m2_slot": [mm(x0, left), mm(y0, top), mm(x1, left), mm(y1, top)],
     }
 
 
@@ -204,6 +232,10 @@ STORED = ("columns", "row", "pitch", "pin1_box", "crop", "m2_slot")
 
 def main(argv):
     hat = tomllib.loads((HERE / "wiring.toml").read_text())["carriers"]["pi5"]["hat"]
+    if "--mm" in argv:
+        for k, v in measure_mm(HERE / "photos" / hat["photo"]).items():
+            print(f"{k} = {v}")
+        return
     got = measure(HERE / "photos" / hat["photo"])
     for k, v in got.items():
         print(f"{k} = {list(v) if isinstance(v, tuple) else v}")

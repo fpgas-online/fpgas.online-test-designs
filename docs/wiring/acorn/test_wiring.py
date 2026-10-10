@@ -191,3 +191,16 @@ def test_where_things_are_in_the_hat_photo_is_what_measure_hat_measures():
     hat = wiring.DATA["carriers"]["pi5"]["hat"]
     got = measure_hat.measure(wiring.HERE / "photos" / hat["photo"])
     assert {k: hat[k] for k in measure_hat.STORED} == {k: got[k] for k in measure_hat.STORED}
+
+
+def test_the_hat_in_geometry_toml_is_what_measure_hat_measures():
+    import measure_hat
+    import tomllib
+
+    hat = tomllib.loads((wiring.HERE / "geometry.toml").read_text())["things"]["hat"]
+    photo = wiring.DATA["carriers"]["pi5"]["hat"]["photo"]
+    got = measure_hat.measure_mm(wiring.HERE / "photos" / photo)
+    assert hat["size"] == got["size"]
+    assert hat["photos"]["top"]["px_per_mm"] == got["px_per_mm"] and hat["photos"]["top"]["origin"] == got["origin"]
+    assert hat["headers"]["header"]["pin1"] == got["pin1"]
+    assert hat["items"]["m2-slot"]["box"] == got["m2_slot"]

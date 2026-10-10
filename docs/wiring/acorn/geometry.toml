@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+# Where the parts of each thing are, in millimetres. Every table names its source; the figures marked
+# "measured" are the ones `uv run docs/wiring/acorn/measure_hat.py --mm` prints, and test_wiring.py checks them.
+
+[things.hat]
+name = "Waveshare PoE M.2 HAT+ (B)"
+size = [55.77, 84.87]
+source = "the maker's dimension drawing (wiring.toml [carriers.pi5.hat] drawing): 85.00 mm long, mounting holes 58.00 x 49.00 mm, 3.50 mm from the pin 1 end; measured in the photo by measure_hat.py (the board's outline there)"
+
+[things.hat.photos.top]
+file = "hat-plus-b-ccw.jpg"
+px_per_mm = 8.177
+origin = [10.0, 15]
+
+[things.hat.headers.header]
+face = "top"
+label = ""
+columns = 2
+rows = 20
+numbering = "across"
+pitch = 2.54
+pin1 = [51.02, 8.21]
+source = "Raspberry Pi 40-pin header, 2.54 mm; position measured in the photo by measure_hat.py"
+
+[things.hat.items.m2-slot]
+kind = "slot"
+face = "top"
+box = [6.85, 0.86, 29.23, 10.03]
+source = "measured in the photo by measure_hat.py (the grey socket moulding)"
