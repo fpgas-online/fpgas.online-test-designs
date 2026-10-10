@@ -24,7 +24,7 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png){.only-light}
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2-dark.png){.only-dark}
 
-**3.** The Acorn is not in its slot and the plugs are free. Put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Raspberry Pi 5: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent. Contact 1's beep shows only that contact 1 and the shell are joined. The beep does not show which way round the P1 housing is: turned round, its GND wire still sits on a ground pin, so look at its marked corner. The beep does not show which way round the P2 housing is: turned round, its GND wire still sits on a ground pin, so look at its marked corner.
+**3.** The Acorn is not in its slot and the plugs are free. Put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Raspberry Pi 5: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent. Contact 1's beep shows only that contact 1 and the shell are joined. The beep does not show which way round either housing is: turned round, its GND wire still sits on a ground pin, so look at each marked corner.
 
 ![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check.png){.only-light}
 ![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check-dark.png){.only-dark}

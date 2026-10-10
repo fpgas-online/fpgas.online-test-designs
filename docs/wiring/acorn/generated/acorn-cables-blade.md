@@ -113,7 +113,7 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 
 #### The P2 cable (I/O)
 
-**12.** Have the Acorn out of its slot. If it is fitted, ask the site operator, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Then take the card out. Take its screw out first: an M2x2.5 screw with an M2 nylon washer, which takes a PH1 driver ([the Compute Blade's assembly guide](https://github.com/uptime-lab/compute-blade/blob/main/docs/docs/blade/getting-started/assembly.mdx)). The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges.
+**12.** Have the Acorn out of its slot. If it is fitted, ask the site operator, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Then take the card out. Take its screw out first: an M2x2.5 screw with an M2 nylon washer, which takes a PH1 driver ([the Compute Blade's assembly guide](https://github.com/uptime-lab/compute-blade/blob/main/docs/docs/blade/getting-started/assembly.mdx)). The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges. If the Molex cable is still whole, cut it in the middle with side cutters: each half is one cable.
 
 **13.** Find wire 1 of the P2 cable and flag the wires, before cutting any wire back.
 
@@ -139,7 +139,7 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 ![The P2 cable: its wires prepared](acorn-cable-blade-p2-prepare.png){.only-light}
 ![The P2 cable: its wires prepared](acorn-cable-blade-p2-prepare-dark.png){.only-dark}
 
-**16.** Cut wire 2 (J2) about 15 mm from its free end. Slide a piece of the 3 mm tube onto the wire, clear of the cut. Strip about 3 mm from each cut end. Trim the resistor's leads to about 5 mm each. Solder the 470 Ω resistor between the two cut ends. Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this. The resistor is there because J2 lands on GPIO14, which is also JTAG TMS: the 470 Ω in the wire is there to let JTAG through if the FPGA drives J2.
+**16.** Cut wire 2 (J2) about 15 mm from its free end. Slide a piece of the 3 mm tube onto the wire, clear of the cut. Strip about 3 mm from each cut end. Trim the resistor's leads to about 5 mm each. Solder the 470 Ω resistor between the two cut ends. Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this. The resistor is there because J2 lands on GPIO14, which is also JTAG TMS: the 470 Ω in the wire is meant to let JTAG through if the FPGA drives J2.
 
 ![The resistor fitted into wire 2](acorn-cable-blade-p2-resistor.png){.only-light}
 ![The resistor fitted into wire 2](acorn-cable-blade-p2-resistor-dark.png){.only-dark}
@@ -184,7 +184,7 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 ![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2.png){.only-light}
 ![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2-dark.png){.only-dark}
 
-**24.** The Acorn is not in its slot and the plugs are free. Put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Compute Blade: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent. Contact 1's beep shows only that contact 1 and the shell are joined. Turned round, the P1 housing's GND wire would sit on IO3, not a ground pin. Do not rely on the beep for which way round it is: look at its marked corner. Turned round, the P2 housing's GND wire would sit on TX, not a ground pin. Do not rely on the beep for which way round it is: look at its marked corner.
+**24.** The Acorn is not in its slot and the plugs are free. Put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Compute Blade: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent. Contact 1's beep shows only that contact 1 and the shell are joined. Turned round, the P1 housing's GND wire would sit on IO3 and the P2 housing's GND wire would sit on TX, not a ground pin. Do not rely on the beep for which way round a housing is: look at each marked corner.
 
 ![The bench check on a Compute Blade](acorn-cable-blade-shell-check.png){.only-light}
 ![The bench check on a Compute Blade](acorn-cable-blade-shell-check-dark.png){.only-dark}
@@ -198,7 +198,7 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 ![Fitting the cables on a Compute Blade, actions 1 to 3](acorn-cable-blade-fit-1.png){.only-light}
 ![Fitting the cables on a Compute Blade, actions 1 to 3](acorn-cable-blade-fit-1-dark.png){.only-dark}
 
-**26.** Fit the card, then the housings, in this order.
+**26.** Fit the card, then the housings, in this order. How the card goes in (action 4) is from [the Compute Blade's assembly guide](https://github.com/uptime-lab/compute-blade/blob/main/docs/docs/blade/getting-started/assembly.mdx).
 
 4. Put the Acorn in the M.2 slot and fit its screw: the M2x2.5 standoff goes in the threaded insert for the card's size, with a 5 mm hex driver; put the M2 nylon washer on the M2x2.5 screw, insert the card at a 30° angle and press down, then secure the screw to the standoff with a PH1 driver.
 5. Fit the P1 housing on the Extension Port, marked corner on pin 1, and the P2 housing on the UART, marked corner on pin 1.

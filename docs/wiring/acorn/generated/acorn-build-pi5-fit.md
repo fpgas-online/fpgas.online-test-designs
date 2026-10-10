@@ -23,7 +23,7 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 ![Fitting the cables on a Raspberry Pi 5, actions 1 to 3](acorn-cable-pi5-fit-1.png){.only-light}
 ![Fitting the cables on a Raspberry Pi 5, actions 1 to 3](acorn-cable-pi5-fit-1-dark.png){.only-dark}
 
-**2.** Fit the card, then the housings, in this order.
+**2.** Fit the card, then the housings, in this order. The screw of action 4 is the one [Waveshare's page for the HAT](https://www.waveshare.com/poe-m.2-hat-plus-b.htm) lists.
 
 4. Put the Acorn in the M.2 slot and fit its screw, in the standoff marked 2280 at the far end of the Waveshare PoE M.2 HAT+ (B): the SSD mounting screw the HAT ships with.
 5. Fit the P1 housing on the 40-pin header pins 19 to 26, marked corner on pin 19, and the P2 housing on the 40-pin header pins 5 to 10, marked corner on pin 5.

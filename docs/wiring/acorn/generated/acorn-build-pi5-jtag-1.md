@@ -13,6 +13,7 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 - 5 Dupont crimp terminals, and a few spare
 - 2 mm heat-shrink tube
 - the Acorn
+- the Raspberry Pi 5 with the Waveshare PoE M.2 HAT+ (B)
 
 **Tools**
 

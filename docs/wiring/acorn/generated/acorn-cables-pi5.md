@@ -108,7 +108,7 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 
 #### The P2 cable (I/O)
 
-**12.** Have the Acorn out of its slot. If it is fitted, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. Then take the card out. Take the screw at its far end out first: the SSD mounting screw the HAT ships with ([Waveshare's page for the HAT](https://www.waveshare.com/poe-m.2-hat-plus-b.htm)). The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges.
+**12.** Have the Acorn out of its slot. If it is fitted, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. Then take the card out. Take the screw at its far end out first: the SSD mounting screw the HAT ships with ([Waveshare's page for the HAT](https://www.waveshare.com/poe-m.2-hat-plus-b.htm)). The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges. If the Molex cable is still whole, cut it in the middle with side cutters: each half is one cable.
 
 **13.** Find wire 1 of the P2 cable and flag the wires, before cutting any wire back.
 
@@ -174,7 +174,7 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png){.only-light}
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2-dark.png){.only-dark}
 
-**23.** The Acorn is not in its slot and the plugs are free. Put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Raspberry Pi 5: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent. Contact 1's beep shows only that contact 1 and the shell are joined. The beep does not show which way round the P1 housing is: turned round, its GND wire still sits on a ground pin, so look at its marked corner. The beep does not show which way round the P2 housing is: turned round, its GND wire still sits on a ground pin, so look at its marked corner.
+**23.** The Acorn is not in its slot and the plugs are free. Put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Raspberry Pi 5: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent. Contact 1's beep shows only that contact 1 and the shell are joined. The beep does not show which way round either housing is: turned round, its GND wire still sits on a ground pin, so look at each marked corner.
 
 ![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check.png){.only-light}
 ![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check-dark.png){.only-dark}
@@ -188,7 +188,7 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 ![Fitting the cables on a Raspberry Pi 5, actions 1 to 3](acorn-cable-pi5-fit-1.png){.only-light}
 ![Fitting the cables on a Raspberry Pi 5, actions 1 to 3](acorn-cable-pi5-fit-1-dark.png){.only-dark}
 
-**25.** Fit the card, then the housings, in this order.
+**25.** Fit the card, then the housings, in this order. The screw of action 4 is the one [Waveshare's page for the HAT](https://www.waveshare.com/poe-m.2-hat-plus-b.htm) lists.
 
 4. Put the Acorn in the M.2 slot and fit its screw, in the standoff marked 2280 at the far end of the Waveshare PoE M.2 HAT+ (B): the SSD mounting screw the HAT ships with.
 5. Fit the P1 housing on the 40-pin header pins 19 to 26, marked corner on pin 19, and the P2 housing on the 40-pin header pins 5 to 10, marked corner on pin 5.

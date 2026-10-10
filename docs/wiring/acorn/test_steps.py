@@ -479,7 +479,7 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
     assert ("the one wire that is cut to take the resistor" in overview) == bool(c.resistors)
     if c.resistors:
         said = (
-            f"lands on GPIO14, which is also JTAG TMS: the {c.resistor_value} in the wire is there to let JTAG through"
+            f"lands on GPIO14, which is also JTAG TMS: the {c.resistor_value} in the wire is meant to let JTAG through"
         )
         assert said in steps.procedure(c)
     # the meter check of wire 1 is on the page that cuts wires, before the cut
@@ -499,9 +499,12 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
     for connector in wiring.CONNECTORS:
         assert (
             f"The beep does not show which way round the {connector} housing is" in bench
-            or f"Turned round, the {connector} housing's GND wire would sit on" in bench
+            or "The beep does not show which way round either housing is" in bench
+            or f"the {connector} housing's GND wire would sit on" in bench
         )
-    assert bench.count("look at its marked corner") == len(wiring.CONNECTORS)
+    assert "marked corner" in steps.ground_shows_way_round(c)
+    said = steps.ground_shows_way_round(c)  # one sentence where both housings behave alike, not the same one twice
+    assert len(set(re.split(r"(?<=\.) ", re.sub(r"\bP[12]\b", "P", said)))) == len(re.split(r"(?<=\.) ", said))
 
 
 def step_blocks(body):
@@ -735,6 +738,29 @@ def test_what_you_need_is_lists_of_parts_and_tools_and_nothing_to_do(key):
                 current.append(line)
         assert all(2 <= len(items) <= 7 for items in lists), (part, [len(items) for items in lists])
         said = " ".join(lines).lower()
-        for doing in ("power off", "unplug", "take the card out", "take it out", "touch bare metal", "ask "):
+        doing_words = ("power off", "unplug", "take the card out", "take it out", "touch bare metal", "ask ")
+        doing_words += ("cut it", "if it is", "side cutters;")
+        for doing in doing_words:
             assert doing not in said, (part, doing)
+        # everything its steps use is listed: the first cable's page lays each half from the card to the host
+        if part == "jtag-1":
+            assert f"- the {c.name}" + (f" with the {c.hat.name}" if c.hat else "") in need
         assert not any(line.rstrip().endswith(".") for line in lines), part  # items, not sentences
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_how_the_card_goes_in_and_comes_out_each_links_the_maker_s_page(key):
+    """Taking the card out (a step's words) and putting it in (the fitting action, which is also drawn in a
+    picture and so cannot link) each carry one link to the maker's own page: the action's is in its step's words."""
+    c = wiring.CARRIERS[key]
+    text, address = steps.MAKER[key]
+    link = f"[{text}]({address})"
+    assert steps.card_out(c).count(link) == 1
+    fit = steps.guide(c)[steps.guide_name(c, "fit")]
+    second = dict(step_blocks(fit))[steps.fit_step(c, 2)]
+    lead = second.split("\n", 1)[0]
+    assert lead.startswith(f"**{steps.fit_step(c, 2)}.** {steps.FIT_STEPS[1]}") and lead.count(link) == 1
+    assert "](" not in steps.fit_actions(c)[3]  # the action itself, as the picture draws it, has no link
+    # a cable's second-cable page says what to do with a cable that is still whole, as a step, not as a part
+    uart = dict(step_blocks(steps.guide(c)[steps.guide_name(c, "uart-1")]))[1]
+    assert "If the Molex cable is still whole, cut it in the middle with side cutters" in uart

@@ -8,7 +8,7 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 
 **Parts**
 
-- the other half of the Molex Pico-EZmate cable, which was cut in half in [How to prepare the JTAG cable's wires (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/jtag-wires.html) (if it is still whole: cut it in the middle with side cutters; each half is one cable)
+- the other half of the Molex Pico-EZmate cable, which was cut in half in [How to prepare the JTAG cable's wires (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/jtag-wires.html)
 - the 2×3 Dupont housing
 - 5 Dupont crimp terminals, and a few spare
 - 2 mm heat-shrink tube
@@ -25,7 +25,7 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 
 ## Steps
 
-**1.** Have the Acorn out of its slot. If it is fitted, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. Then take the card out. Take the screw at its far end out first: the SSD mounting screw the HAT ships with ([Waveshare's page for the HAT](https://www.waveshare.com/poe-m.2-hat-plus-b.htm)). The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges.
+**1.** Have the Acorn out of its slot. If it is fitted, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. Then take the card out. Take the screw at its far end out first: the SSD mounting screw the HAT ships with ([Waveshare's page for the HAT](https://www.waveshare.com/poe-m.2-hat-plus-b.htm)). The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges. If the Molex cable is still whole, cut it in the middle with side cutters: each half is one cable.
 
 **2.** Find wire 1 of the P2 cable and flag the wires, before cutting any wire back.
 

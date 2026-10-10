@@ -13,6 +13,7 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 - 5 Dupont crimp terminals, and a few spare
 - 2 mm heat-shrink tube
 - the Acorn
+- the Compute Blade
 
 **Tools**
 

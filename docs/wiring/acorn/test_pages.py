@@ -174,7 +174,11 @@ UNPROVEN = re.compile(
     r"|\bis not written here\b|\bSources:"
 )
 # A person named in what ships: a role is named instead ("the site operator").
-PERSON = re.compile(r"\bTim\b")
+PERSON = re.compile(r"\b(?:Tim|Carl)\b")
+# A record of where and when something was done: a host of a site, a site, a date. The fact stays; the record is
+# the review's, or the bench-run issue's.
+MONTHS = "January|February|March|April|May|June|July|August|September|October|November|December"
+RECORD = re.compile(rf"\bpi\d{{2}}\b|\bps1\b|\bwelland\b|\b\d{{1,2}} (?:{MONTHS}) 20\d\d\b|\b20\d\d-\d\d-\d\d\b")
 
 
 def _build_texts(key):
@@ -200,6 +204,7 @@ def test_a_building_page_or_its_picture_says_nothing_unproven_and_names_no_perso
             for m in UNPROVEN.finditer(_words(f))]  # fmt: skip
     assert left == []
     assert [(f.name, m.group(0)) for f in files for m in PERSON.finditer(_words(f))] == []
+    assert [(f.name, m.group(0)) for f in files for m in RECORD.finditer(_words(f))] == []
 
 
 @pytest.mark.parametrize(
@@ -222,3 +227,13 @@ def test_the_unproven_pattern_finds_the_sentences_the_pages_had(words):
 )  # fmt: skip
 def test_the_unproven_pattern_leaves_plain_instructions_alone(words):
     assert not UNPROVEN.search(words)
+
+
+@pytest.mark.parametrize("words", ["on pi20 at ps1", "at welland", "read on 7 October 2026", "2026-10-07", "ask Carl"])
+def test_the_record_and_person_patterns_find_hosts_sites_dates_and_names(words):
+    assert RECORD.search(words) or PERSON.search(words)
+
+
+@pytest.mark.parametrize("words", ["a Raspberry Pi 5", "pins 19 to 26", "the P1 cable", "GPIO14", "2 mm heat-shrink"])
+def test_the_record_pattern_leaves_the_hardware_s_names_alone(words):
+    assert not RECORD.search(words) and not PERSON.search(words)

@@ -145,20 +145,24 @@ def turned_harms(c, plan):
 def ground_shows_way_round(c):
     """What the bench check's ground beep says about which way round each housing is, from the wiring: it shows it
     where the housing turned round puts its GND wire on a pin that is not ground."""
-    out = []
-    for connector, conn in wiring.CONNECTORS.items():
-        plan = housing(c, connector)
-        on = turned(c, plan)[conn["pins"][0]]
-        if on == "GND":
-            out.append(
-                f"The beep does not show which way round the {connector} housing is: turned round, its GND wire "
-                "still sits on a ground pin, so look at its marked corner."
-            )
-        else:
-            out.append(
-                f"Turned round, the {connector} housing's GND wire would sit on {on}, not a ground pin. Do not rely "
-                "on the beep for which way round it is: look at its marked corner."
-            )
+    lands = {k: turned(c, housing(c, k))[conn["pins"][0]] for k, conn in wiring.CONNECTORS.items()}
+    if set(lands.values()) == {"GND"}:
+        return (
+            "The beep does not show which way round either housing is: turned round, its GND wire still sits on a "
+            "ground pin, so look at each marked corner."
+        )
+    out = [
+        f"The beep does not show which way round the {connector} housing is: turned round, its GND wire still sits "
+        "on a ground pin, so look at its marked corner."
+        for connector, on in lands.items()
+        if on == "GND"
+    ]
+    off = [f"the {connector} housing's GND wire would sit on {on}" for connector, on in lands.items() if on != "GND"]
+    if off:  # said once, however many housings it is true of
+        out.append(
+            f"Turned round, {' and '.join(off)}, not a ground pin. Do not rely on the beep for which way round a "
+            f"housing is: look at {'its' if len(off) == 1 else 'each'} marked corner."
+        )
     return " ".join(out)
 
 
@@ -1174,19 +1178,40 @@ def power_off_if_on(c):
 # Taking the card out of its slot: only what the repo records. The blade's screw and driver are in the parts
 # list (wiring.toml, the PH1 screwdriver); the Pi 5's HAT is recorded as holding the card by a screw at its far end,
 # and no size or driver for it. How the card then leaves the slot is recorded for neither.
+# The maker's own page for how a card is held in each carrier's slot: (the link's words, its address). What the
+# pages say of the screw and of putting the card in is from there, and links it once where it is said.
+MAKER = {
+    "blade": (
+        "the Compute Blade's assembly guide",
+        "https://github.com/uptime-lab/compute-blade/blob/main/docs/docs/blade/getting-started/assembly.mdx",
+    ),
+    "pi5": ("Waveshare's page for the HAT", "https://www.waveshare.com/poe-m.2-hat-plus-b.htm"),
+}
+
+
+def maker_link(c):
+    text, address = MAKER[c.key]
+    return f"[{text}]({address})"
+
+
 CARD_OUT = {
-    "blade": "Take its screw out first: an M2x2.5 screw with an M2 nylon washer, which takes a PH1 driver "
-    "([the Compute Blade's assembly guide](https://github.com/uptime-lab/compute-blade/blob/main/docs/docs/blade/getting-started/assembly.mdx)).",
-    "pi5": "Take the screw at its far end out first: the SSD mounting screw the HAT ships with "
-    "([Waveshare's page for the HAT](https://www.waveshare.com/poe-m.2-hat-plus-b.htm)).",
+    "blade": "Take its screw out first: an M2x2.5 screw with an M2 nylon washer, which takes a PH1 driver ({maker}).",
+    "pi5": "Take the screw at its far end out first: the SSD mounting screw the HAT ships with ({maker}).",
+}
+# Said with the second fitting step, on the page: its action 4 is drawn in the fitting picture, which cannot link.
+CARD_IN = {
+    "blade": "How the card goes in (action 4) is from {maker}.",
+    "pi5": "The screw of action 4 is the one {maker} lists.",
 }
 
 
 def card_out(c):
     """The sentence that says how a card is taken out of its slot, for a step that needs it out."""
-    return CARD_OUT[c.key]
+    return CARD_OUT[c.key].format(maker=maker_link(c))
 
 
+# Said with the first step of a later cable's page, for a reader who starts there.
+STILL_WHOLE = "If the Molex cable is still whole, cut it in the middle with side cutters: each half is one cable."
 # The words the first cable's two steps before any flag start with, as the overview quotes them by number.
 CUT_HALF = "Cut the Molex cable in half"
 REACH = "Check that each half reaches"
@@ -1257,7 +1282,7 @@ def resistor_reason(c, sig):
         raise wiring.WiringError(f"{c.key}: {sig} has a series resistor and shares its pin with no JTAG wire: say why")
     return (
         f"The resistor is there because {label_of(sig)} lands on {gpio}, which is also JTAG {shared[0]}: the "
-        f"{c.resistor_value} in the wire is there to let JTAG through if the FPGA drives {label_of(sig)}."
+        f"{c.resistor_value} in the wire is meant to let JTAG through if the FPGA drives {label_of(sig)}."
     )
 
 
@@ -1359,7 +1384,7 @@ def procedure_parts(c, restart=False):
             n = 0
         target.extend([f"#### The {connector} cable ({conn['what']})", ""])
         if connector != next(iter(wiring.CONNECTORS)):  # the first cable's part has it as its first step, above
-            step(card_out_step(c))
+            step(f"{card_out_step(c)} {STILL_WHOLE}")
         half = "one" if connector == next(iter(wiring.CONNECTORS)) else "the other"
         flag = [
             f"Press the plug of {half} half into socket {connector} on the underside of the Acorn. "
@@ -1496,7 +1521,7 @@ def procedure_parts(c, restart=False):
     for half, (words, numbers) in enumerate(zip(FIT_STEPS, FIT_HALVES), 1):
         step(
             words
-            + (f" {FIT_STATIC}" if half == 1 else "")
+            + (f" {FIT_STATIC}" if half == 1 else f" {CARD_IN[c.key].format(maker=maker_link(c))}")
             + "\n\n"
             + "\n".join(f"{n}. {actions[n - 1]}" for n in numbers),  # a list from 4 starts at 4
             (fit_alt(c, numbers), png(fit_name(c, half))),
@@ -1563,8 +1588,7 @@ def needs(c, connector):
         "one half of the Molex Pico-EZmate cable (a plug with six black wires)"
         if connector == next(iter(wiring.CONNECTORS))
         else "the other half of the Molex Pico-EZmate cable, which was cut in half in "
-        f"{pages.link(c.key, next(iter(GUIDE.values()))[0] + '-1')} "
-        "(if it is still whole: cut it in the middle with side cutters; each half is one cable)",
+        f"{pages.link(c.key, next(iter(GUIDE.values()))[0] + '-1')}",
         f"the {shape} Dupont housing",
         f"{len(wired)} Dupont crimp terminals, and a few spare",
         f"{wiring.LENGTHS['tube']} mm heat-shrink tube",
@@ -1572,6 +1596,8 @@ def needs(c, connector):
     if has_resistor(c, connector):
         parts += [f"the {c.resistor_value} resistor", f"{wiring.LENGTHS['resistor_tube']} mm heat-shrink tube"]
     parts += ["the Acorn"]
+    if connector == next(iter(wiring.CONNECTORS)):
+        parts += [f"the {c.name}" + (f" with the {c.hat.name}" if c.hat else "")]
     tools = [
         "a multimeter with a continuity buzzer, and a fine probe tip for it or a sewing pin to hold against a probe",
         "a ruler marked in millimetres",

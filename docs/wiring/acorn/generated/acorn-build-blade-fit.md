@@ -23,7 +23,7 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 ![Fitting the cables on a Compute Blade, actions 1 to 3](acorn-cable-blade-fit-1.png){.only-light}
 ![Fitting the cables on a Compute Blade, actions 1 to 3](acorn-cable-blade-fit-1-dark.png){.only-dark}
 
-**2.** Fit the card, then the housings, in this order.
+**2.** Fit the card, then the housings, in this order. How the card goes in (action 4) is from [the Compute Blade's assembly guide](https://github.com/uptime-lab/compute-blade/blob/main/docs/docs/blade/getting-started/assembly.mdx).
 
 4. Put the Acorn in the M.2 slot and fit its screw: the M2x2.5 standoff goes in the threaded insert for the card's size, with a 5 mm hex driver; put the M2 nylon washer on the M2x2.5 screw, insert the card at a 30° angle and press down, then secure the screw to the standoff with a PH1 driver.
 5. Fit the P1 housing on the Extension Port, marked corner on pin 1, and the P2 housing on the UART, marked corner on pin 1.

@@ -8,7 +8,7 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 
 **Parts**
 
-- the other half of the Molex Pico-EZmate cable, which was cut in half in [How to prepare the JTAG cable's wires (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/jtag-wires.html) (if it is still whole: cut it in the middle with side cutters; each half is one cable)
+- the other half of the Molex Pico-EZmate cable, which was cut in half in [How to prepare the JTAG cable's wires (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/jtag-wires.html)
 - the 1×4 Dupont housing
 - 3 Dupont crimp terminals, and a few spare
 - 2 mm heat-shrink tube
@@ -28,7 +28,7 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 
 ## Steps
 
-**1.** Have the Acorn out of its slot. If it is fitted, ask the site operator, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Then take the card out. Take its screw out first: an M2x2.5 screw with an M2 nylon washer, which takes a PH1 driver ([the Compute Blade's assembly guide](https://github.com/uptime-lab/compute-blade/blob/main/docs/docs/blade/getting-started/assembly.mdx)). The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges.
+**1.** Have the Acorn out of its slot. If it is fitted, ask the site operator, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Then take the card out. Take its screw out first: an M2x2.5 screw with an M2 nylon washer, which takes a PH1 driver ([the Compute Blade's assembly guide](https://github.com/uptime-lab/compute-blade/blob/main/docs/docs/blade/getting-started/assembly.mdx)). The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges. If the Molex cable is still whole, cut it in the middle with side cutters: each half is one cable.
 
 **2.** Find wire 1 of the P2 cable and flag the wires, before cutting any wire back.
 
@@ -54,7 +54,7 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 ![The P2 cable: its wires prepared](acorn-cable-blade-p2-prepare.png){.only-light}
 ![The P2 cable: its wires prepared](acorn-cable-blade-p2-prepare-dark.png){.only-dark}
 
-**5.** Cut wire 2 (J2) about 15 mm from its free end. Slide a piece of the 3 mm tube onto the wire, clear of the cut. Strip about 3 mm from each cut end. Trim the resistor's leads to about 5 mm each. Solder the 470 Ω resistor between the two cut ends. Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this. The resistor is there because J2 lands on GPIO14, which is also JTAG TMS: the 470 Ω in the wire is there to let JTAG through if the FPGA drives J2.
+**5.** Cut wire 2 (J2) about 15 mm from its free end. Slide a piece of the 3 mm tube onto the wire, clear of the cut. Strip about 3 mm from each cut end. Trim the resistor's leads to about 5 mm each. Solder the 470 Ω resistor between the two cut ends. Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this. The resistor is there because J2 lands on GPIO14, which is also JTAG TMS: the 470 Ω in the wire is meant to let JTAG through if the FPGA drives J2.
 
 ![The resistor fitted into wire 2](acorn-cable-blade-p2-resistor.png){.only-light}
 ![The resistor fitted into wire 2](acorn-cable-blade-p2-resistor-dark.png){.only-dark}
