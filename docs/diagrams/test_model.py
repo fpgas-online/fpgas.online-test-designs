@@ -28,14 +28,22 @@ source = "a drawing"
 """
 
 
-def test_the_committed_geometry_loads_and_has_the_hat_header():
+def centre(box):
+    return ((box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2)
+
+
+def test_the_hat_header_is_where_geometry_toml_says_pin_by_pin():
+    raw = tomllib.loads(GEOMETRY.read_text())["things"]["hat"]["headers"]["header"]
+    (x, y), pitch = raw["pin1"], raw["pitch"]
     scene = model.load(GEOMETRY)
-    pin1, pin2, pin40 = (scene.item(f"hat.header.pin.{n}") for n in (1, 2, 40))
-    assert scene.item("hat.header").pin1 == pytest.approx(
-        ((pin1.box.x0 + pin1.box.x1) / 2, (pin1.box.y0 + pin1.box.y1) / 2)
-    )
-    assert pin2.box.x0 - pin1.box.x0 == pytest.approx(2.54)  # across: 2 is beside 1
-    assert pin40.box.y0 - pin2.box.y0 == pytest.approx(19 * 2.54)  # 20 rows down
+    assert scene.item("hat.header").pin1 == (x, y)
+    assert centre(scene.item("hat.header.pin.1").box) == pytest.approx((x, y))
+    assert centre(scene.item("hat.header.pin.2").box) == pytest.approx((x + pitch, y))  # across: 2 is beside 1
+    assert centre(scene.item("hat.header.pin.3").box) == pytest.approx((x, y + pitch))
+    assert centre(scene.item("hat.header.pin.40").box) == pytest.approx((x + pitch, y + 19 * pitch))  # 20 rows down
+    body = scene.item("hat.header").box
+    assert (body.x0, body.y0) == pytest.approx((x - pitch / 2, y - pitch / 2))
+    assert (body.x1, body.y1) == pytest.approx((x + 1.5 * pitch, y + 19.5 * pitch))
 
 
 def test_a_pin_range_selects_those_pins():
@@ -133,3 +141,11 @@ def test_a_pins_box_is_as_wide_as_the_header_says():
     for n in (1, 2, 40):
         box = scene.item(f"hat.header.pin.{n}").box
         assert (box.x1 - box.x0, box.y1 - box.y0) == pytest.approx((pin, pin))
+
+
+def test_a_header_numbered_down_runs_down_each_column_in_turn(tmp_path):
+    scene = model.load(write(tmp_path, THING + HEADER))  # 3 columns x 4 rows, 2.0 mm apart, pin 1 at (2.0, 3.0)
+    want = {1: (2.0, 3.0), 2: (2.0, 5.0), 4: (2.0, 9.0), 5: (4.0, 3.0), 8: (4.0, 9.0), 9: (6.0, 3.0), 12: (6.0, 9.0)}
+    for n, at in want.items():
+        assert centre(scene.item(f"b.h.pin.{n}").box) == pytest.approx(at)
+    assert len(scene.select("b.h.pins.1-12")) == 12
