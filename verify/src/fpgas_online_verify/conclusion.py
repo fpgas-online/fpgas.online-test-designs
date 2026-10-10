@@ -18,6 +18,7 @@ ACORN_PROGRAMMING = f"{REPO_DOCS}/hardware/acorn-pcie-programming.md"
 ISSUES = "https://github.com/fpgas-online/fpgas.online-test-designs/issues"
 # An issue the advice points at is named with what it is about, not by its number alone.
 ISSUE_127 = "on a Compute Blade the JTAG test cannot have GPIO14 while the serial port holds it"
+ISSUE_241 = "the record of what has been run on an Acorn on a Compute Blade"
 
 VERDICT = {
     "changed": "the board, or what is in its flash, is not what was recorded last time",
@@ -72,7 +73,7 @@ ADVICE = (
     (r"gpiod_line_request",
      "openFPGALoader could not have one of the JTAG pins, because a driver holds it (on a Compute Blade the "
      "serial port holds GPIO14, which is also the JTAG TMS wire). The check cannot test JTAG on such a host "
-     f"yet (fpgas.online-test-designs issue 127, {ISSUE_127}): {ISSUES}/127"),
+     f"while that driver holds the pin (fpgas.online-test-designs issue 127, {ISSUE_127}): {ISSUES}/127"),
     (r"no device on the (P1 )?JTAG chain|no UARTBone reply",
      "Nothing answered on a cable between the Pi and the board: check that the JTAG and UART cables are seated "
      "and wired as the board's page shows."),
@@ -128,17 +129,18 @@ ADVICE = (
      "running the tests."),
 )  # fmt: skip
 
-# An Acorn on a Compute Blade (the report's `setup`, wiring.toml's carrier name) is not to be converted yet: the only
-# load into a card on a blade lost its PCIe endpoint. Where the report names that setup, the conversion advice above
-# is replaced; where it names no setup, the warning is added to it, as the host may be a blade.
+# An Acorn on a Compute Blade (the report's `setup`, wiring.toml's carrier name) is not to be converted: a design
+# loaded into a card on a blade took its PCIe endpoint away. Where the report names that setup, the conversion advice
+# above is replaced; where it names no setup, the warning is added to it, as the host may be a blade. Which host and
+# which day is the record's (issue 241), not the tool's words.
 BLADE = "Compute Blade"
 # The docs page about JTAG on a Compute Blade, at its published address (docs.fpgas.online keeps no redirect).
 BLADE_JTAG_PAGE = "https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html"
 NOT_ON_A_BLADE = (
-    "On a Compute Blade, do not load a design into the card or convert it: that is not in the guide yet. The "
-    "only attempt (pi20 at ps1, 7 October 2026) lost the card's PCIe endpoint (a bus rescan did not bring it "
-    "back, and a root-complex re-probe failed), and the reboot after it was followed by about two hours of "
-    f"restarts, cause not known: {BLADE_JTAG_PAGE}"
+    "On a Compute Blade, do not load a design into the card or convert it. A design loaded into a card on a "
+    "blade took the card's PCIe endpoint away, and neither a bus rescan nor a root-complex re-probe brought it "
+    f"back (fpgas.online-test-designs issue 241, {ISSUE_241}: {ISSUES}/241). To test JTAG on a blade: "
+    f"{BLADE_JTAG_PAGE}"
 )
 ON_A_BLADE = {
     r"unconverted: runs SQRL's factory image": "The Acorn still runs the image it was sold with, not the "

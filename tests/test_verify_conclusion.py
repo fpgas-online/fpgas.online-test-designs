@@ -368,6 +368,22 @@ def test_the_blade_advice_links_the_page_about_jtag_on_a_blade_at_its_published_
     assert page == conclusion.BLADE_JTAG_PAGE and conclusion.NOT_ON_A_BLADE.endswith(page)
 
 
+def test_no_advice_the_tool_prints_holds_a_record_of_a_run_or_a_promise():
+    """Which host, at which site, on which day, is the record's (an issue the advice names), not the tool's words;
+    and the tool does not say what is not done yet."""
+    texts = [text for _, text in conclusion.ADVICE] + [conclusion.NOT_ON_A_BLADE, *conclusion.ON_A_BLADE.values()]
+    record = re.compile(r"\bpi\d\d\b|\bps1\b|\bwelland\b|\b20\d\d\b|\b(?:the )?only attempt\b|\byet\b|not in the guide")
+    for text in texts:
+        assert not record.search(text), record.search(text)[0]
+    blade = conclusion.NOT_ON_A_BLADE
+    assert blade.startswith("On a Compute Blade, do not load a design into the card or convert it. ")
+    # the reason stays, and the record it rests on is named by what it is and linked
+    assert "took the card's PCIe endpoint away" in blade
+    assert f"(fpgas.online-test-designs issue 241, {conclusion.ISSUE_241}: {conclusion.ISSUES}/241)" in blade
+    for found in ("pi20 at ps1", "7 October 2026", "welland", "not in the guide yet", "no JTAG there yet"):
+        assert record.search(found), found  # the pattern finds what it is for
+
+
 def test_no_address_of_a_moved_acorn_docs_page_is_left_in_the_tool_or_the_pages():
     """The Acorn pages that were under boards/acorn/building/ and boards/acorn/wiring/rpi-5-host are now under
     setup/, checks/ and troubleshooting/, with no redirect: an old address anywhere here is a dead link."""
