@@ -21,6 +21,7 @@ on the right edge, pin 1 at the top. Everything wiring.toml says about where thi
 Run: uv run docs/wiring/acorn/measure_hat.py           prints the values, as wiring.toml has them
      uv run docs/wiring/acorn/measure_hat.py --mm      prints the figures geometry.toml has, in millimetres
      uv run docs/wiring/acorn/measure_hat.py --check   fails unless wiring.toml has exactly these
+     (--mm and --check together: the millimetres are printed, then wiring.toml is checked)
 test_wiring.py runs the check too.
 """
 
@@ -149,18 +150,22 @@ def measure(path):
         raise SystemExit(f"{path}: the header is not centred between the mounting holes: a row is missed at an end")
 
     # Which way up: pin 1's end has its holes 3.50 mm in from the board's end, the other end 23.50 mm.
+    # Distances are between boundaries of pixels, not between pixels. An edge of the board is the boundary where
+    # it starts or stops: the first dark pixel's own coordinate at the left and top, the last dark pixel's plus one
+    # at the right and bottom (so a board dark from pixel 15 to pixel 709 is 695 px long, not 694). A centre found
+    # as a pixel's coordinate (a hole's, a pad's) is in the middle of that pixel: its coordinate plus a half.
     def board_end(x, rows):
         return next(y for y in rows if lum[y * w + round(x)] < 200)
 
     top = board_end(columns[0], range(h))
     bottom = board_end(columns[0], range(h - 1, -1, -1))
-    ends = ((top_holes - top) / scale, (bottom - bottom_holes) / scale)
+    ends = ((top_holes + 0.5 - top) / scale, (bottom + 1 - (bottom_holes + 0.5)) / scale)
     if abs(ends[0] - HOLE_EDGE) > 1 or abs(ends[1] - (BOARD_LONG - HOLE_EDGE - HOLE_PITCH_LONG)) > 1:
         raise SystemExit(
             f"{path}: the holes are {ends[0]:.2f} and {ends[1]:.2f} mm from the board's ends: upside down?"
         )
-    if abs((bottom - top) / scale - BOARD_LONG) > 1:
-        raise SystemExit(f"{path}: the board is {(bottom - top) / scale:.2f} mm long, not {BOARD_LONG}")
+    if abs((bottom + 1 - top) / scale - BOARD_LONG) > 1:
+        raise SystemExit(f"{path}: the board is {(bottom + 1 - top) / scale:.2f} mm long, not {BOARD_LONG}")
     right = next(x for x in range(w - 1, -1, -1) if lum[round(row0) * w + x] < 200)
     # The left edge the same way, from x = 0; the median over the header's 20 rows, so that one row crossing a
     # silkscreen mark or a notch cannot move it.
@@ -187,7 +192,7 @@ def measure(path):
     return {
         "scale_px_per_mm": round(scale, 3),
         "holes_from_ends_mm": tuple(round(e, 2) for e in ends),
-        "board_mm": round((bottom - top) / scale, 2),
+        "board_mm": round((bottom + 1 - top) / round(scale, 3), 2),
         "pads_found": [n for _a, _b, n in fits],
         "pad_fit_worst_px": round(worst, 2),
         "columns": [round(x, 1) for x in columns],
@@ -204,12 +209,16 @@ def measure(path):
         ],
         "m2_slot": [socket[0], socket[1], socket[2] + 1, socket[3] + 1],
         "socket_mm": (round(long_mm, 2), round((socket[3] - socket[1]) / scale, 2)),
-        "board_px": (left, top, right, bottom),
+        "board_px": (left, top, right, bottom),  # the first and the last dark pixel each way
     }
 
 
 def measure_mm(path):
-    """The HAT in millimetres, origin at the top left corner of the board in the photo: what geometry.toml holds."""
+    """The HAT in millimetres, origin at the top left corner of the board in the photo: what geometry.toml holds.
+
+    Every figure is a distance between pixel boundaries (see `measure`): the board runs from its first dark pixel
+    to one past its last; `m2_slot` already ends one past the socket's last pixel; the centre of pin 1 is the
+    middle of the pixel `columns` and `row` name."""
     m = measure(path)
     s = m["scale_px_per_mm"]
     left, top, right, bottom = m["board_px"]
@@ -219,10 +228,10 @@ def measure_mm(path):
 
     x0, y0, x1, y1 = m["m2_slot"]
     return {
-        "size": [mm(right, left), mm(bottom, top)],
+        "size": [mm(right + 1, left), mm(bottom + 1, top)],
         "px_per_mm": s,
         "origin": [left, top],
-        "pin1": [mm(m["columns"][0], left), mm(m["row"], top)],
+        "pin1": [mm(m["columns"][0] + 0.5, left), mm(m["row"] + 0.5, top)],
         "m2_slot": [mm(x0, left), mm(y0, top), mm(x1, left), mm(y1, top)],
     }
 
@@ -232,12 +241,9 @@ STORED = ("columns", "row", "pitch", "pin1_box", "crop", "m2_slot")
 
 def main(argv):
     hat = tomllib.loads((HERE / "wiring.toml").read_text())["carriers"]["pi5"]["hat"]
-    if "--mm" in argv:
-        for k, v in measure_mm(HERE / "photos" / hat["photo"]).items():
-            print(f"{k} = {v}")
-        return
     got = measure(HERE / "photos" / hat["photo"])
-    for k, v in got.items():
+    shown = measure_mm(HERE / "photos" / hat["photo"]) if "--mm" in argv else got
+    for k, v in shown.items():
         print(f"{k} = {list(v) if isinstance(v, tuple) else v}")
     if "--check" in argv:
         wrong = [f"{k}: wiring.toml {hat[k]}, measured {got[k]}" for k in STORED if hat[k] != got[k]]

@@ -204,3 +204,20 @@ def test_the_hat_in_geometry_toml_is_what_measure_hat_measures():
     assert hat["photos"]["top"]["px_per_mm"] == got["px_per_mm"] and hat["photos"]["top"]["origin"] == got["origin"]
     assert hat["headers"]["header"]["pin1"] == got["pin1"]
     assert hat["items"]["m2-slot"]["box"] == got["m2_slot"]
+
+
+def test_the_hat_measures_as_long_as_its_drawing_says():
+    import measure_hat
+
+    photo = wiring.DATA["carriers"]["pi5"]["hat"]["photo"]
+    length = measure_hat.measure_mm(wiring.HERE / "photos" / photo)["size"][1]
+    assert abs(length - measure_hat.BOARD_LONG) < 0.1
+    assert measure_hat.measure(wiring.HERE / "photos" / photo)["board_mm"] == length
+
+
+def test_measure_hat_prints_the_millimetres_and_checks_when_asked_for_both(capsys):
+    import measure_hat
+
+    measure_hat.main(["--mm", "--check"])
+    out = capsys.readouterr().out
+    assert "size = " in out and "wiring.toml matches the photo" in out

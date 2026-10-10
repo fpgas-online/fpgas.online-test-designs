@@ -4,8 +4,8 @@
 
 [things.hat]
 name = "Waveshare PoE M.2 HAT+ (B)"
-size = [55.77, 84.87]
-source = "the maker's dimension drawing (wiring.toml [carriers.pi5.hat] drawing): 85.00 mm long, mounting holes 58.00 x 49.00 mm, 3.50 mm from the pin 1 end; measured in the photo by measure_hat.py (the board's outline there)"
+size = [55.89, 84.99]
+source = "the maker's dimension drawing (wiring.toml [carriers.pi5.hat] drawing): 85.00 mm long, mounting holes 58.00 x 49.00 mm, 3.50 mm from the pin 1 end; measured in the photo by measure_hat.py (the board's outline there, from the first dark pixel to one past the last)"
 
 [things.hat.photos.top]
 file = "hat-plus-b-ccw.jpg"
@@ -19,7 +19,7 @@ columns = 2
 rows = 20
 numbering = "across"
 pitch = 2.54
-pin1 = [51.02, 8.21]
+pin1 = [51.08, 8.27]
 source = "Raspberry Pi 40-pin header, 2.54 mm; position measured in the photo by measure_hat.py"
 
 [things.hat.items.m2-slot]
