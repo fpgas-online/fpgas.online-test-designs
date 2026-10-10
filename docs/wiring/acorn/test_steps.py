@@ -403,7 +403,9 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
         numbered = re.findall(r"^\*\*(\d+)\.\*\* (.*)$", body, re.M)
         assert [int(n) for n, _ in numbered] == list(range(1, len(numbered) + 1)), name  # from 1, no gap
         paged += [words for _, words in numbered]
-        assert body.startswith(tables.BANNER.strip()) and "Not yet run by us on this hardware" in body
+        # the one line that warns the reader, naming the issue of the bench run; nothing else about what is unproven
+        assert body.startswith(tables.BANNER.strip()) and body.count(steps.bench_run(c)) == 1
+        assert "Not yet run by us" not in body and "written from the design" not in body
         assert not re.search(r"^#{1,1} |^#### ", body, re.M), name  # headings from level 2; no cable heading left over
         for image in light_images(body):
             assert "/" not in image, image
@@ -414,8 +416,9 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
     overview = pages[steps.guide_name(c, "overview")]
     mine = [s for s in wiring.SOURCES if s.get("carrier", key) == key]
     others = [s for s in wiring.SOURCES if s.get("carrier", key) != key]
-    assert mine and all(f"- {s['claim']}: " in overview for s in mine) and "has not been measured by us" in overview
-    assert others and not any(s["claim"] in overview for s in others)  # nothing about the other carrier
+    # the claims and their sources are the review's record (wiring.toml), not a section of the page
+    assert mine and others and "Where the facts come from" not in overview and "Sources" not in overview
+    assert not any(f"- {s['claim']}: " in overview for s in wiring.SOURCES)
     assert all(s.get("carrier") in (None, *wiring.CARRIERS) for s in wiring.SOURCES)
     for part in ("jtag-1", "uart-1", "bench", "fit"):  # the photo credit is not left to be the last line of a page
         assert pages[steps.guide_name(c, part)].count("Photos: ") == 1
@@ -678,3 +681,21 @@ def test_putting_the_card_back_is_from_the_makers_pages_and_the_bench_intro_orde
     intro = steps.guide(c)[steps.guide_name(c, "bench")]
     assert "take it out first" not in intro and "if it is fitted, take it out. Take " in intro
     assert steps.REACH_NOTE.count("not drawn") == 1
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_the_bench_run_line_names_the_carrier_s_issue(key):
+    """During the docs rework a build page warns once, at its top, that nobody has followed it on the hardware,
+    and names the issue of the bench run that will confirm or remove it."""
+    c = wiring.CARRIERS[key]
+    issue = steps.BENCH_RUN[key]
+    assert steps.bench_run(c) == (
+        f"This procedure is waiting for its bench run: [issue #{issue}]"
+        f"(https://github.com/fpgas-online/fpgas.online-test-designs/issues/{issue})."
+    )
+    assert len(set(steps.BENCH_RUN.values())) == len(wiring.CARRIERS) == len(steps.BENCH_RUN)
+    whole = steps.procedure(c)
+    assert whole.count(steps.bench_run(c)) == 1 and "Not yet run by us on this hardware" not in whole
+    for body in steps.guide(c).values():
+        lines = body.splitlines()
+        assert lines[2] == steps.bench_run(c) and lines[3] == ""  # under the banner, a paragraph of its own

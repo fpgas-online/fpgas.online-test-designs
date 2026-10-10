@@ -1305,12 +1305,13 @@ def procedure_parts(c, restart=False):
     out = [
         tables.BANNER.strip(),
         "",
-        "Not yet run by us on this hardware: written from the design.",
+        bench_run(c),
         "",
         "### What you will have",
         "",
-        f"Two short cables from the Acorn's two connectors to the {c.name}: the P1 cable carries JTAG, the P2 "
-        f"cable carries the serial port{spare}.",
+        f"Two short cables from the Acorn's two connectors to the {c.name}"
+        + (f" with the {c.hat.name}" if c.hat else "")
+        + f": the P1 cable carries JTAG, the P2 cable carries the serial port{spare}.",
         "",
         f"{listed(labels)} are the names on the pictures for each wire; {listed(balls)} are the FPGA's pin names.",
         "",
@@ -1523,6 +1524,18 @@ def procedure(c):
 # ----------------------------------------------------------------------------------------------
 # The building guide as pages: an overview, then one page for each connector's cable, then the fitting
 # ----------------------------------------------------------------------------------------------
+# The issue of each carrier's bench run: nobody has followed the building pages on the hardware. While the docs are
+# reworked, every building page says so once, at its top, by naming this issue; the run then confirms the page or
+# removes it. What a page cannot say for sure is an item of that issue, not a sentence of the page.
+BENCH_RUN = {"pi5": 218, "blade": 219}
+ISSUES = "https://github.com/fpgas-online/fpgas.online-test-designs/issues/"
+
+
+def bench_run(c):
+    """The line at the top of a building page of carrier `c`: it waits for its bench run, and which issue that is."""
+    return f"This procedure is waiting for its bench run: [issue #{BENCH_RUN[c.key]}]({ISSUES}{BENCH_RUN[c.key]})."
+
+
 # connector -> (file name part, the cable's name). Part `<part>-1` prepares that cable's wires and `<part>-2` fills
 # its housing: the keys of those pages in pages.PAGES. The parts list is tables.bom(), a page of its own.
 GUIDE = {"P1": ("jtag", "JTAG"), "P2": ("uart", "UART")}
@@ -1601,7 +1614,7 @@ def guide(c):
     parts = procedure_parts(c, restart=True)
     head = parts["head"]
     will_have = head[head.index("### What you will have") + 2 : head.index("### Parts and tools")]
-    not_run = "Not yet run by us on this hardware: written from the design."
+    not_run = bench_run(c)
     order = [f"{pages.link(c.key, 'parts')}: the list to tick off before starting."]
     for connector, (part, _) in GUIDE.items():
         order += [
@@ -1622,7 +1635,7 @@ def guide(c):
         lines = [line for line in lines if not line.startswith("#### ")]
         while lines and not lines[0]:
             lines.pop(0)
-        head = [tables.BANNER.strip(), "", f"{not_run} {parts['tail'][0]}", "", "## What you need", "", need, ""]
+        head = [tables.BANNER.strip(), "", not_run, "", parts["tail"][0], "", "## What you need", "", need, ""]
         return "\n".join([*head, "## Steps", "", *lines, *(line for extra in after for line in (extra, ""))])
 
     out = {
@@ -1635,8 +1648,6 @@ def guide(c):
             + f". Whether a half reaches from the card to the {c.name}'s headers has not been measured by us: "
             "the guide checks it as its second step, before any wire is cut back or crimped.", "",
             "## The order of work", "", *(f"{i}. {line}" for i, line in enumerate(order, 1)), "",
-            "## Where the facts come from", "",
-            *(f"- {s['claim']}: {s['source']}." for s in wiring.SOURCES if s.get("carrier", c.key) == c.key), "",
             *parts["tail"],
         ]),
     }  # fmt: skip
