@@ -10,16 +10,24 @@ from the M.2 edge, underside up, that end at the top, the two sockets on the lef
 things are in it is typed in; it is measured here:
 
 * the six contacts of each socket: small warm (gold) marks in the left quarter of the photo, in two runs of
-  six down the photo. The upper run is P2 and the lower P1 (the card's own silkscreen, and prep_photos.py);
-* the card's two long edges, on every row below the sockets where both are in the photo: the board is dark and
-  the background paper. A straight line is fitted to each, because the card does not sit quite square in the
-  photo. Their distance is the card's 22.00 mm width (wiring.toml [[sources]], "The card's form"): the scale;
-* the check on that scale: the contacts of a Molex Pico-EZmate socket are 1.20 mm apart, so each run's fitted
-  pitch must be 1.20 mm within 5 % at the edges' scale, or the script stops;
+  six down the photo. Which run is which socket is ASSUMED from position, not read: the socket nearer the M.2
+  edge (the lower run) is P1, as the vendor's photo and the wiki's legend have it; the card's silkscreen prints
+  P1 and P2 beside them, which this script does not read. Exactly two runs, one above the other, are required;
+* the scale across the photo (x): the card's two long edges, on every row below the sockets where both are in
+  the photo (the board is dark, the background paper). A straight line is fitted to each, because the card does
+  not sit quite square. Their distance is the card's 22.00 mm width (wiring.toml [[sources]], "The card's form");
+* the scale down the photo (y): the contacts of a Molex Pico-EZmate socket are 1.20 mm apart, so the mean of
+  the two runs' fitted pitches is 1.20 mm. The photo is not taken square-on, and the two scales differ;
+* two checks that stop the script: the two sockets' pitches agree within 2 %, and the two scales within 5 %
+  (a photo more oblique than that is refused);
 * each socket's box: the white outline the silkscreen draws round it, found outward from its contacts;
 * the half-round plated pad at the card's end: the gold area that touches that end;
 * pin 1 of each socket: the contact nearest the M.2 edge (wiring.toml's first [[sources]] line), which is off
   the bottom of this photo, so the contact with the largest y.
+
+Distances are between boundaries of pixels (as in measure_hat.py): an edge or a box starts at its first pixel's
+coordinate and ends at its last pixel's plus one; a contact's centre is the middle of its pixel, its coordinate
+plus a half. The millimetres are rounded to 0.1: a half-size copy of the photo moves a figure by 0.4 mm.
 
 Run: uv run docs/wiring/acorn/measure_card.py           prints the pixel values, then the millimetre ones
      uv run docs/wiring/acorn/measure_card.py --check   fails unless geometry.toml has exactly these
@@ -40,6 +48,7 @@ PHOTO = "acorn-cw.jpg"
 CARD_WIDTH = 22.00  # mm: M.2 2280 (wiring.toml [[sources]], "The card's form")
 CONTACT_PITCH = 1.20  # mm: Molex Pico-EZmate
 CONTACTS = 6
+PITCHES_AGREE, SCALES_AGREE = 0.02, 0.05  # the two sockets' pitches; the scales across and down the photo
 PAPER = 200  # the background is brighter than this (prep_photos.PAPER is about 250) and the card's edge darker
 ROWS_NEEDED, EDGE_AGREES = 20, 2.0  # an edge: at least this many rows, each within this many px of its line
 SILK = 80  # the silkscreen's white is brighter than this in every channel; the board and the mouldings darker
@@ -123,6 +132,12 @@ def measure(path):
         if worst > 0.15 * b:
             raise SystemExit(f"{path}: a socket's contacts are not evenly spaced: {run}")
     pitch_px = sum(b for _a, b, _r in fits) / 2
+    if abs(fits[0][1] - fits[1][1]) / pitch_px > PITCHES_AGREE:
+        raise SystemExit(
+            f"{path}: the contacts' pitch is {fits[0][1]:.2f} px in P2 and {fits[1][1]:.2f} px in P1: more than "
+            f"{PITCHES_AGREE:.0%} apart, so they do not give one scale down the photo"
+        )
+    scale_y = pitch_px / CONTACT_PITCH
 
     # The long edges, on the rows below both sockets where neither the board nor anything dark on it runs off the
     # photo's side.
@@ -145,13 +160,12 @@ def measure(path):
     scale = width_px / CARD_WIDTH
     width_at = [ra + rb * y - (la + lb * y) + 1 for y in (lefts[0][0], lefts[-1][0])]
 
-    pitches = [b / scale for _a, b, _r in fits]
-    if any(abs(p - CONTACT_PITCH) / CONTACT_PITCH > 0.05 for p in pitches):
+    if not 1 - SCALES_AGREE <= scale_y / scale <= 1 / (1 - SCALES_AGREE):
         raise SystemExit(
-            f"{path}: the contacts are {pitches[0]:.3f} mm (P2) and {pitches[1]:.3f} mm (P1) apart at the "
-            f"{scale:.3f} px/mm the card's width gives, not {CONTACT_PITCH} within 5 %: the photo is not square-on "
-            f"or the edges were misread (edges x = {la:.2f} + {lb:.5f}·y and {ra:.2f} + {rb:.5f}·y, {width_px:.2f} px "
-            f"apart; contacts {runs}; the contacts alone give {pitch_px / CONTACT_PITCH:.3f} px/mm)"
+            f"{path}: the card's width gives {scale:.3f} px/mm across the photo and the contacts' pitch "
+            f"{scale_y:.3f} px/mm along it: more than {SCALES_AGREE:.0%} apart, so the photo is too oblique or an "
+            f"edge was misread (edges x = {la:.2f} + {lb:.5f}·y and {ra:.2f} + {rb:.5f}·y, {width_px:.2f} px apart; "
+            f"pitches {fits[0][1]:.2f} px in P2 and {fits[1][1]:.2f} px in P1)"
         )
 
     def left_at(y):
@@ -178,8 +192,8 @@ def measure(path):
         if None in along:
             raise SystemExit(f"{path}: {name}'s silkscreen outline was not found beyond its end contacts")
         sockets[name] = (cols[0], along[0][0], cols[1], along[1][1] + 1)
-        x_mean = sum(x for x, _y in run) / CONTACTS
-        contacts[name] = [(round(x_mean, 1), round(a + b * i, 1)) for i in range(CONTACTS)]
+        # Each contact's own x; its y on the run's fitted line (the contacts are evenly spaced).
+        contacts[name] = [(round(x, 1), round(a + b * i, 1)) for i, (x, _y) in enumerate(run)]
     if not sockets["P2"][3] <= sockets["P1"][1]:
         raise SystemExit(f"{path}: the sockets' outlines overlap: {sockets}")
 
@@ -191,7 +205,7 @@ def measure(path):
         raise SystemExit(f"{path}: the card's far end is not in the photo (first row of card: {top})")
 
     # The half-round pad: the gold that reaches the card's far end.
-    plated = [b for b in blobs([gold(p) for p in rgb], w, h, 400) if b[1] - top <= scale]
+    plated = [b for b in blobs([gold(p) for p in rgb], w, h, 400) if b[1] - top <= scale_y]
     if len(plated) != 1:
         raise SystemExit(f"{path}: {len(plated)} plated pads at the card's end, not one: {plated}")
     pad = (plated[0][0], plated[0][1], plated[0][2] + 1, plated[0][3] + 1)
@@ -202,7 +216,8 @@ def measure(path):
     # Where the left edge is beside the sockets: the card leans, and the sockets are what the edge is wanted for.
     beside = (sockets["P2"][1] + sockets["P1"][3]) / 2
     return {
-        "scale_px_per_mm": round(scale, 3),
+        "scale_px_per_mm": [round(scale, 3), round(scale_y, 3)],  # across the photo (x), down it (y)
+        "scale_ratio_y_to_x": round(scale_y / scale, 3),
         "edges": {
             "rows": [lefts[0][0], lefts[-1][0]],
             "rows_with_both_edges": len(lefts),
@@ -214,9 +229,7 @@ def measure(path):
             "lean_degrees": round(math.degrees(math.atan(lean)), 2),
         },
         "contact_pitch_px": {"P2": round(fits[0][1], 2), "P1": round(fits[1][1], 2)},
-        "contact_pitch_mm": {"P2": round(pitches[0], 3), "P1": round(pitches[1], 3)},
         "contact_fit_worst_px": round(max(r for _a, _b, r in fits), 2),
-        "scale_from_contacts_px_per_mm": round(pitch_px / CONTACT_PITCH, 3),
         "contacts": contacts,
         "sockets": sockets,
         "pad": pad,
@@ -229,33 +242,35 @@ def measure(path):
 def measure_mm(path):
     """The card in millimetres, in its own frame: its top face from above, origin at the far-end corner, y toward
     the M.2 edge. The photo shows the bottom face, so x is mirrored across the card's width. What geometry.toml
-    holds; `origin` is the photo pixel of the card's corner at the photo's top left, the point (22.00, 0)."""
+    holds; `origin` is the photo pixel of the card's corner at the photo's top left, the point (22.0, 0).
+
+    x is measured at the scale the card's width gives and y at the scale the contacts' pitch gives; rounded to
+    0.1 mm, and `length_shown` rounded down, so that it never claims more of the card than the photo holds."""
     m = measure(path)
-    s, left, top = m["scale_px_per_mm"], m["left"], m["top"]
+    (sx, sy), left, top = m["scale_px_per_mm"], m["left"], m["top"]
 
     def x_mm(px):
-        return round(CARD_WIDTH - (px - left) / s, 2)
+        return round(CARD_WIDTH - (px - left) / sx, 1)
 
     def y_mm(px):
-        return round((px - top) / s, 2)
+        return round((px - top) / sy, 1)
 
     def box(b):
         return [x_mm(b[2]), y_mm(b[1]), x_mm(b[0]), y_mm(b[3])]
 
     def pin1(name):
-        x, y = m["contacts"][name][-1]  # the contact nearest the M.2 edge
-        return [x_mm(x), y_mm(y)]
+        x, y = m["contacts"][name][-1]  # the contact nearest the M.2 edge; its centre is the middle of its pixel
+        return [x_mm(x + 0.5), y_mm(y + 0.5)]
 
     return {
-        "px_per_mm": s,
+        "px_per_mm": [sx, sy],
         "origin": [left, top],
-        "length_shown": y_mm(m["height"]),
+        "length_shown": math.floor((m["height"] - top) / sy * 10) / 10,
         "p1": box(m["sockets"]["P1"]),
         "p2": box(m["sockets"]["P2"]),
         "p1_pin1": pin1("P1"),
         "p2_pin1": pin1("P2"),
         "pad": box(m["pad"]),
-        "contact_pitch_mm": {"P1": m["contact_pitch_mm"]["P1"], "P2": m["contact_pitch_mm"]["P2"]},
     }
 
 

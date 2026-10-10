@@ -201,6 +201,10 @@ def test_the_hat_in_geometry_toml_is_what_measure_hat_measures():
     photo = wiring.DATA["carriers"]["pi5"]["hat"]["photo"]
     got = measure_hat.measure_mm(wiring.HERE / "photos" / photo)
     assert hat["size"] == got["size"]
+    assert (
+        len(got["px_per_mm"]) == 2
+        and got["px_per_mm"] == measure_hat.measure(wiring.HERE / "photos" / photo)["scale_px_per_mm"]
+    )
     assert hat["photos"]["top"]["px_per_mm"] == got["px_per_mm"] and hat["photos"]["top"]["origin"] == got["origin"]
     assert hat["headers"]["header"]["pin1"] == got["pin1"]
     assert hat["items"]["m2-slot"]["box"] == got["m2_slot"]

@@ -165,6 +165,16 @@ def load(geometry_path):
                 raise DiagramError(
                     f"geometry: {key}: photo {face!r} needs file, px_per_mm and origin, on top or bottom"
                 )
+            scale = photo["px_per_mm"]
+            if not (
+                isinstance(scale, list)
+                and len(scale) == 2
+                and all(isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 for v in scale)
+            ):
+                raise DiagramError(
+                    f"geometry: {key}: photo {face!r}: px_per_mm {scale!r} is not two positive numbers, "
+                    "the scale across the photo and the scale down it"
+                )
             if "shown" in photo:
                 _shown(key, size, face, photo["shown"], items)
         things[key] = Thing(key, raw["name"], size, items, raw.get("photos", {}))

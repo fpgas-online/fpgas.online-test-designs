@@ -73,7 +73,7 @@ def test_box_arithmetic():
     assert a.area() == 16 and a.contains(model.Box(1, 1, 3, 3)) and not a.contains(b)
 
 
-PHOTO = '[things.b.photos.bottom]\nfile = "b.jpg"\npx_per_mm = 10.0\norigin = [0, 0]\nshown = [0, 12.5]\n'
+PHOTO = '[things.b.photos.bottom]\nfile = "b.jpg"\npx_per_mm = [10.0, 9.5]\norigin = [0, 0]\nshown = [0, 12.5]\n'
 ITEM = '[things.b.items.x]\nkind = "pad"\nface = "{face}"\nbox = [1, {y0}, 3, {y1}]\nsource = "s"\n'
 
 
@@ -100,3 +100,9 @@ def test_a_shown_range_that_is_not_part_of_the_thing_is_refused(tmp_path):
 def test_a_photo_table_with_an_unknown_key_is_refused(tmp_path):
     with pytest.raises(DiagramError, match="needs file, px_per_mm and origin"):
         model.load(write(tmp_path, THING + PHOTO + "turn = 90\n"))
+
+
+@pytest.mark.parametrize("bad", ["10.0", "[10.0]", "[10.0, 0]", "[10.0, -9.5]", '[10.0, "9.5"]', "[1, 2, 3]"])
+def test_a_photos_scale_is_two_positive_numbers_across_and_down(tmp_path, bad):
+    with pytest.raises(DiagramError, match=r"b: photo 'bottom': px_per_mm"):
+        model.load(write(tmp_path, THING + PHOTO.replace("[10.0, 9.5]", bad)))

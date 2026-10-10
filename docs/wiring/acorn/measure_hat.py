@@ -8,7 +8,9 @@
 The photo is Waveshare's dimension drawing of the PoE M.2 HAT+ (B), cut and turned by prep_photos.py: header
 on the right edge, pin 1 at the top. Everything wiring.toml says about where things are in it comes from here:
 
-* the scale, from the four HAT mounting holes, whose 58.00 × 49.00 mm pitch the drawing prints;
+* the scale, from the four HAT mounting holes, whose 58.00 × 49.00 mm pitch the drawing prints: one down the
+  photo from the 58.00 mm and one across it from the 49.00 mm, refused if they are more than 1 % apart. The pixel
+  values are worked out with the one down the photo; the millimetres use each along its own axis;
 * which way up it is, proved and not assumed: the holes are 3.50 mm in from one end of the 85.00 mm board and
   23.50 mm in from the other (the drawing's figures), and pin 1 is at the 3.50 mm end (Raspberry Pi's header);
 * the header: every pad of its 2 × 20 pins found in the photo, and the two column centres, the first row's
@@ -101,9 +103,10 @@ def measure(path):
     (lt, lb), (rt, rb) = sorted(holes[:2], key=lambda p: p[1]), sorted(holes[2:], key=lambda p: p[1])
     long_px = ((lb[1] - lt[1]) + (rb[1] - rt[1])) / 2  # down the photo: the 58.00 mm pitch
     short_px = ((rt[0] - lt[0]) + (rb[0] - lb[0])) / 2  # across it: the 49.00 mm pitch
-    scale = long_px / HOLE_PITCH_LONG
-    if abs(short_px / HOLE_PITCH_SHORT - scale) / scale > 0.01:
-        raise SystemExit(f"{path}: the holes give {scale:.3f} px/mm down and {short_px / HOLE_PITCH_SHORT:.3f} across")
+    scale = long_px / HOLE_PITCH_LONG  # down the photo (y); what every pixel value below is worked out with
+    scale_x = short_px / HOLE_PITCH_SHORT  # across it (x)
+    if abs(scale_x - scale) / scale > 0.01:
+        raise SystemExit(f"{path}: the holes give {scale:.3f} px/mm down and {scale_x:.3f} across")
     top_holes, bottom_holes = (lt[1] + rt[1]) / 2, (lb[1] + rb[1]) / 2
 
     # The header: pads brighter than the board, in the strip between the right-hand holes' column and the edge.
@@ -183,14 +186,14 @@ def measure(path):
     y1 = round(top_holes + 8 * scale)
     grey = [x0 <= x < x1 and y < y1 and 66 < lum[y * w + x] < 200 for y in range(h) for x in range(w)]
     socket = max(blobs(grey, w, h, 500), key=lambda b: b[4])
-    long_mm = (socket[2] - socket[0]) / scale
+    long_mm = (socket[2] + 1 - socket[0]) / scale_x
     if not 18 <= long_mm <= 26:
         raise SystemExit(f"{path}: the M.2 socket found is {long_mm:.1f} mm long, not about 22")
 
     half = pitch / 2
     last26 = row0 + 12 * pitch  # the row of pins 25 and 26
     return {
-        "scale_px_per_mm": round(scale, 3),
+        "scale_px_per_mm": [round(scale_x, 3), round(scale, 3)],  # across the photo (x), down it (y)
         "holes_from_ends_mm": tuple(round(e, 2) for e in ends),
         "board_mm": round((bottom + 1 - top) / round(scale, 3), 2),
         "pads_found": [n for _a, _b, n in fits],
@@ -208,7 +211,7 @@ def measure(path):
             min(h, round(row0 + (ROWS - 1) * pitch + 2.8 * scale)),
         ],
         "m2_slot": [socket[0], socket[1], socket[2] + 1, socket[3] + 1],
-        "socket_mm": (round(long_mm, 2), round((socket[3] - socket[1]) / scale, 2)),
+        "socket_mm": (round(long_mm, 2), round((socket[3] + 1 - socket[1]) / scale, 2)),
         "board_px": (left, top, right, bottom),  # the first and the last dark pixel each way
     }
 
@@ -220,19 +223,22 @@ def measure_mm(path):
     to one past its last; `m2_slot` already ends one past the socket's last pixel; the centre of pin 1 is the
     middle of the pixel `columns` and `row` name."""
     m = measure(path)
-    s = m["scale_px_per_mm"]
+    sx, sy = m["scale_px_per_mm"]  # x at the scale the holes' 49.00 mm gives, y at the one their 58.00 mm gives
     left, top, right, bottom = m["board_px"]
 
-    def mm(px, origin):
-        return round((px - origin) / s, 2)
+    def x(px):
+        return round((px - left) / sx, 2)
+
+    def y(px):
+        return round((px - top) / sy, 2)
 
     x0, y0, x1, y1 = m["m2_slot"]
     return {
-        "size": [mm(right + 1, left), mm(bottom + 1, top)],
-        "px_per_mm": s,
+        "size": [x(right + 1), y(bottom + 1)],
+        "px_per_mm": [sx, sy],
         "origin": [left, top],
-        "pin1": [mm(m["columns"][0] + 0.5, left), mm(m["row"] + 0.5, top)],
-        "m2_slot": [mm(x0, left), mm(y0, top), mm(x1, left), mm(y1, top)],
+        "pin1": [x(m["columns"][0] + 0.5), y(m["row"] + 0.5)],
+        "m2_slot": [x(x0), y(y0), x(x1), y(y1)],
     }
 
 
