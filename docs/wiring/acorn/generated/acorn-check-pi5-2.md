@@ -27,7 +27,7 @@ The two cavity pictures are the ones the cables were built from, shown again to 
 
 `p2-serial` and `p2-gpio` print what was driven and what was read, eight lines for two wires. The two digits are the two signals: the right-hand digit is J2 (or J5), the left-hand one K2 (or H5).
 
-**A crossed pair**: read on acorn-olive at Welland (an Acorn on a Raspberry Pi 5), 4 October 2026, whose P2 pairs were both crossed. The `p2-serial` test
+**A crossed pair.** The `p2-serial` test
 drives each wire as a plain pin, first from the FPGA and then from the host. `FPGA drives 01` raises J2, which
 should arrive on GPIO14; it arrives on GPIO15:
 
@@ -43,7 +43,7 @@ should arrive on GPIO14; it arrives on GPIO15:
         Pi drives 11: FPGA reads 11
 ```
 
-**One open wire**: read on acorn-sycamore at Welland the same day, whose J5 wire did not reach GPIO3. GPIO3
+**One open wire**, a J5 wire that does not reach GPIO3. GPIO3
 reads 1 whatever the FPGA drives (the Pi's own pull-up on GPIO3 wins over the test's pull-down; on GPIO4 an
 open wire would read the opposite of what was driven), and on this card the FPGA read J5 as 1 whatever the Pi
 drove; H5 and GPIO4 follow each other:

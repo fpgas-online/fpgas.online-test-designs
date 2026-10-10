@@ -26,17 +26,15 @@ def test_the_page_is_for_one_carrier_only(key):
         # nothing about the two spare wires, which a blade's cable does not carry
         assert (
             "J5 -> GPIO3" not in text
-            and "acorn-sycamore" not in text
+            and "One open wire" not in text
             and "{" not in re.sub(r"\{\.only-(light|dark)\}", "", text).split("```")[0]
         )
         assert "p2-gpio` | none: J5 and H5 are not wired on a Compute Blade" in text
-        assert (
-            "What has been run on a Compute Blade" in text and "No Compute Blade has passed the whole check yet" in text
-        )
+        assert "## What has been run on a Compute Blade" not in text  # the dated record is issue 241, not a page
     else:
-        assert "What has been run on a Compute Blade" not in text and "GPIO14 (TMS) is held by" not in text
-        assert "acorn-sycamore" in text and "J5 and H5 are **crossed**: wires 4 and 5 of the P2 cable" in text
-        assert "there is nothing to install" in text
+        assert "Compute Blade" not in text and "GPIO14 (TMS) is held by" not in text
+        assert "One open wire" in text and "J5 and H5 are **crossed**: wires 4 and 5 of the P2 cable" in text
+        assert "A Raspberry Pi 5 that boots the fleet's root has them" in text
 
 
 @pytest.mark.parametrize("key", CARRIERS)
@@ -69,12 +67,36 @@ def test_a_crossed_pair_is_told_by_the_wire_numbers_of_the_cable(key):
     assert (f"The {c.resistor_value} resistor stays in wire {a} (J2)" in words) == ("J2" in c.resistors)
 
 
-def test_the_blade_pages_stop_the_check_on_the_cm4_blades_where_it_is_typed_and_run_again():
-    pages = check.pages(wiring.CARRIERS["blade"])
-    assert "Not on pi14 at ps1 or pi18 at ps1 yet." in pages[1]
-    assert "not on pi14 or pi18 at ps1 yet" in pages[2]
-    for text in check.pages(wiring.CARRIERS["pi5"]).values():
-        assert "pi14" not in text
+def test_the_blade_pages_are_for_a_compute_module_5_and_hold_no_record_of_a_run():
+    """The pages say which hardware they cover in "What you need"; where and when something was run, on which host
+    and by whom, is the record's (issue 241), outside what the tool itself printed."""
+    blade, pi5 = wiring.CARRIERS["blade"], wiring.CARRIERS["pi5"]
+    for part in (1, 3):
+        assert "- a Compute Blade with a Compute Module 5, the Acorn and both cables fitted" in check.pages(blade)[part]
+    texts = [*check.pages(blade).values(), *check.pages(pi5).values(), check.about()]
+    for text in texts:
+        prose = re.sub(r"```.*?```", "", text, flags=re.S)  # a transcript is what the tool printed, host and all
+        for record in (
+            r"\bpi\d\d\b",
+            r"\bps1\b",
+            r"\bwelland\b",
+            r"\b20\d\d\b",
+            r"\bTim\b",
+            r"\bCarl\b",
+            r"(?<![\w/-])acorn-[a-z]+\b(?!\.)",
+        ):
+            assert not re.search(record, prose.replace("acorn-check", "").replace("acorn-cable", "")), record
+        for unproven in (
+            "not yet",
+            "by us",
+            "not measured",
+            "not recorded",
+            "not settled",
+            "not in this guide",
+            "today",
+            "our test",
+        ):
+            assert unproven not in prose, unproven
 
 
 def test_the_transcripts_and_failure_rows_come_from_the_tool_reference():
@@ -104,8 +126,9 @@ def test_the_picture_names_every_wire_of_both_cables_with_where_it_lands(key):
     assert set(check.USES) == {s for conn in wiring.CONNECTORS.values() for s in conn["pins"]} - {"GND1", "GND2", "VCC"}
     svg = check.picture(c)
     assert svg.startswith("<svg") and check.picture_name(c) in check.build()
-    assert list(check.pages(c)) == ([1, 2, "2b", 3] if key == "blade" else [1, 2, "2b"])
+    assert list(check.pages(c)) == ([1, "tests", 2, "2b", 3] if key == "blade" else [1, "tests", 2, "2b"])
     assert all(check.name(c, part) in check.build() for part in check.pages(c))
+    assert check.ABOUT_NAME in check.build() and check.build()[check.ABOUT_NAME] == check.about()
 
 
 def test_a_fragment_keeps_only_its_carriers_lines():
@@ -117,20 +140,54 @@ def test_a_fragment_keeps_only_its_carriers_lines():
     assert "<!--" not in blade + pi5
 
 
-def test_what_to_expect_on_a_blade_is_said_on_the_first_verifying_page_only():
-    pages = check.pages(wiring.CARRIERS["blade"])
-    assert pages[1].count("What to expect on a Compute Blade today") == 1
-    assert all("What to expect on a Compute Blade today" not in pages[part] for part in (2, "2b", 3))
-    assert "What has been run on a Compute Blade, and what has not" in pages[3]
+HOW_TO = ["## What you need", "## Steps", "## Check", "## If it fails", "## Next"]
 
 
-def test_the_cm4_blades_are_said_to_have_had_reads_and_a_pull_test_put_back():
-    text = check.pages(wiring.CARRIERS["blade"])[3]
-    flat = " ".join(text.split())
-    # one account of the CM4 blades everywhere: the JTAG attempt of 20 September, the reads and pull test of 7 October
-    assert "on 20 September 2026 a JTAG attempt on pi14 at ps1 got no response (TCK floating)" in flat
-    assert "On 7 October 2026 pi14 and pi18 at ps1 had logins, pin reads" in flat
-    assert "put each back as it was" in flat and "**no check, and no JTAG since 20 September**" in flat
+def headings(text):
+    """The headings of a page, outside its code blocks (a shell comment is no heading)."""
+    return re.findall(r"^#+ .*$", re.sub(r"```.*?```", "", text, flags=re.S), re.M)
+
+
+@pytest.mark.parametrize("key", CARRIERS)
+def test_each_check_page_is_one_type_of_page(key):
+    """The split by type (#207): the how-to pages have a how-to's five headings and no others; what the check is,
+    is the explanation; which test uses which wire is the reference."""
+    c = wiring.CARRIERS[key]
+    pages = check.pages(c)
+    assert headings(pages[1]) == HOW_TO
+    assert headings(pages["tests"]) == ["## Which test uses which wire"]  # the heading the docs pages link
+    assert "## What the check is" not in pages[1] and "## Which test uses which wire" not in pages[1]
+    steps_of = lambda page: [int(n) for n in re.findall(r"^\*\*(\d+)\.\*\* ", page, re.M)]  # noqa: E731
+    assert steps_of(pages[1]) == list(range(1, len(steps_of(pages[1])) + 1)) and len(steps_of(pages[1])) >= 2
+    need = pages[1][pages[1].index("## What you need") : pages[1].index("## Steps")].splitlines()[1:]
+    assert all(line.startswith("- ") for line in need if line) and 2 <= len([line for line in need if line]) <= 7
+    next_links = pages[1][pages[1].index("## Next") :].count("](https://")
+    assert 2 <= next_links <= 5
+    if key == "blade":
+        assert headings(pages[3]) == HOW_TO
+        assert steps_of(pages[3]) == list(range(1, 10))
+
+
+def test_what_the_check_is_is_one_explanation_for_both_carriers():
+    about = check.about()
+    assert about.count("<!--") == 1 and not re.search(r"^\*\*\d+\.\*\* ", about, re.M)  # no numbered step
+    assert len(headings(about)) <= 7 and "## On a Compute Blade" in headings(about)
+    for key in CARRIERS:
+        assert docs_pages.link(key, "check-tests") in about
+        assert check.ABOUT in check.pages(wiring.CARRIERS[key])[1]
+    blade_part = about[about.index("## On a Compute Blade") :]
+    assert "Do not load a design into a card on a Compute Blade, and do not convert it." in blade_part
+    assert check.BLADE_RECORD in blade_part and check.BLADE_JTAG in blade_part
+    assert "the check's result on a Compute Blade is `fail`" in blade_part
+    # before that section the blade is named once only: in the title of its page of tests and wires
+    assert about[: about.index("## On a Compute Blade")].count("Compute Blade") == 1
+
+
+def test_the_record_of_what_was_run_on_a_blade_is_an_issue_not_a_page():
+    assert check.BLADE_RECORD == "https://github.com/fpgas-online/fpgas.online-test-designs/issues/241"
+    for text in blade_texts():
+        assert "What has been run on a Compute Blade" not in text and "Test 6" not in text and "our test" not in text
+        assert "been tried" not in text  # no link promises a record the linked page no longer holds
 
 
 def test_a_fragment_with_marks_that_do_not_pair_or_are_not_understood_stops_the_run(tmp_path, monkeypatch):
@@ -210,10 +267,13 @@ def test_moving_a_wire_sends_the_cable_through_the_new_cables_checks_before_a_bo
 
 
 def test_a_blade_page_says_when_jtag_may_run_before_the_command_that_runs_it():
-    """verifying 1's install block ends in the whole check, which runs `jtag`: verifying 3's conditions come first."""
+    """The how-to's last step runs the whole check, which runs `jtag`: the step before it sends the reader to the
+    two checks of GPIO14, by their numbers on the page about JTAG."""
     page = check.pages(wiring.CARRIERS["blade"])[1]
-    run = page.index("sudo fpgas-acorn-verify --no-publish")
-    assert page.index(check.JTAG_FIRST["blade"]) < page.index("```bash") < run
+    free, driven = check.jtag_steps()
+    asked = f"steps {free} and {driven} of {check.BLADE_JTAG} (check that GPIO14 is free"
+    assert page.index(asked) < page.index("```bash\nsudo fpgas-acorn-verify --no-publish")
+    assert "If either fails, do not run the check in that boot" in page
 
 
 def blade_texts():
@@ -225,46 +285,47 @@ def blade_texts():
 def test_every_reboot_a_blade_page_asks_for_is_preceded_by_asking_the_site_operator():
     """A reboot ends a visitor's session on a blade, the same harm as a power-off: asking the site operator comes
     first."""
-    reboot = re.compile(r"\b(?:re)?boot the blade\b|\bthen boot\b|\bboot, and run\b|\band boot\b", re.I)
+    reboot = re.compile(
+        r"\b(?:re)?boot the blade\b|\bthen boot\b|\bboot, and run\b|\band boot\b|\breboot a blade\b", re.I
+    )
     seen = 0
     for text in blade_texts():
         for m in reboot.finditer(text):
             before = text[max(0, m.start() - 80) : m.start()].lower()
-            if "we reboot" in before or "was reboot" in before:  # the record of what was done, not an instruction
-                continue
             seen += 1
             asked = re.search(r"ask(?:ing)? the site operator", before + m.group(0).lower())
             assert asked, text[m.start() - 80 : m.end() + 20]
-    assert seen >= 4  # verifying 3 (twice), the rework line, and the install block's reboot
-    assert (
-        "ask the site operator before you reboot a blade" in blade_texts()[0].lower()
-    )  # verifying 1, where the installs are
-    assert "a reboot ends a visitor's session" in blade_texts()[-1]  # verifying 3 says why, once
+    assert seen >= 4  # the how-to's install step, the rework line, the JTAG page's undo and its step that boots
+    assert check.ASK_FIRST in blade_texts()[0]  # the how-to, where the installs are
+    assert "a reboot ends a visitor's session" in blade_texts()[-1].lower()  # the JTAG page says why, once
     assert blade_texts()[-1].count("Ask the site operator, then boot the blade again") == 1
 
 
-def test_the_jtag_list_has_no_exception_to_its_steps_2_and_3():
+def test_the_two_checks_of_gpio14_have_no_exception():
     page = check.pages(wiring.CARRIERS["blade"])[3]
-    at = page.index(f"### {check.JTAG_LIST}")
-    block = page[at : page.index("With the serial port off, `/dev/ttyAMA0`")]
+    free, driven = check.jtag_steps()
+    assert (free, driven) == (7, 8)
+    block = page[page.index(f"**{free}.** {check.GPIO_FREE}") : page.index(f"**{driven + 1}.** ")]
     flat = " ".join(block.split())
-    assert [int(n) for n in re.findall(r"^\d+(?=\. )", block, re.M)] == [1, 2, 3, 4]
-    assert "unless" not in flat and "if you know" not in flat.lower()
-    assert "Always run this step" in flat and "not yet measured by us" in flat
+    assert f"**{driven}.** {check.GPIO_DRIVEN}" in block
+    assert "unless" not in flat and "if you know" not in flat.lower() and "skip" not in flat.lower()
+    assert "Always run this step, on each blade you run JTAG on" in flat and "470 Ω resistor" in flat
+    assert f"only if steps {free} and {driven} passed" in page[page.index(f"**{driven + 1}.** ") :].split("\n")[0]
+    fails = page[page.index("## If it fails") : page.index("## Next")]
+    assert f"- Step {free} shows a consumer" in fails and f"- Step {driven} does not print 0 and then 1" in fails
 
 
-def test_the_list_steps_2_and_3_are_quoted_by_is_found_by_its_heading():
-    """ "The last list on the page" gives a printed sheet no way to be found: the pages quote the list's heading."""
-    blade = wiring.CARRIERS["blade"]
-    heading = f"### {check.JTAG_LIST}"
-    assert check.pages(blade)[3].count(heading) == 1
+def test_the_two_checks_of_gpio14_are_quoted_by_their_step_numbers_and_their_page():
+    """A page that gives a command that runs `jtag` on a blade says which two steps come first, by number and by a
+    link to their page: the numbers are counted from that page, here and in the tool's reference."""
+    free, driven = check.jtag_steps()
+    quote = f"steps {free} and {driven} of {check.BLADE_JTAG}"
     texts = [*blade_texts(), check.COMMON_FAILURES.read_text()]
     texts += [p.read_text() for p in sorted((wiring.HERE / "generated").glob("acorn-check-blade-*.md"))]
     for text in texts:
-        assert "last list" not in text
         flat = " ".join(text.split())
-        said = flat.count("steps 2 and 3 of the list")
-        assert said == flat.count(f'steps 2 and 3 of the list "{check.JTAG_LIST}" in {check.BLADE_JTAG}') + flat.count(
-            f'steps 2 and 3 of the list "{check.JTAG_LIST}" on that page'
-        )
-    assert sum(" ".join(t.split()).count("steps 2 and 3 of the list") for t in texts) >= 4
+        assert "last list" not in flat and "Before JTAG runs on a blade" not in flat
+        for m in re.finditer(r"steps (\d+) and (\d+) of \[How to make a Compute Blade boot ready for JTAG\]", flat):
+            assert (int(m[1]), int(m[2])) == (free, driven), flat[m.start() - 60 : m.end()]
+    assert sum(" ".join(t.split()).count(quote) for t in texts) >= 5
+    assert quote in check.JTAG_CONDITIONS

@@ -53,6 +53,23 @@ def test_every_title_is_unique_and_within_the_docs_limit():
     assert all(a.startswith(pages.BASE) and a.endswith(".html") for a in addresses)
 
 
+def test_the_check_s_explanation_is_one_page_for_both_carriers_and_its_reference_is_one_for_each():
+    """The split of the check pages by type (#207): the how-to keeps its page; what the check is, is one
+    explanation for both carriers; which test uses which wire is a reference for each."""
+    assert (
+        pages.link("pi5", "check-about")
+        == pages.link("blade", "check-about")
+        == ("[The Acorn check](https://docs.fpgas.online/en/latest/boards/acorn/checks/about.html)")
+    )
+    assert pages.link("pi5", "check-tests") == (
+        "[Acorn tests and their wires on a Raspberry Pi 5]"
+        "(https://docs.fpgas.online/en/latest/boards/acorn/checks/rpi-5-tests.html)"
+    )
+    assert pages.title("blade", "check-tests") == "Acorn tests and their wires on a Compute Blade"
+    assert pages.url("blade", "check-tests").endswith("/checks/compute-blade-tests.html")
+    assert [key for key, page in pages.every() if page == "check-about"] == [next(iter(pages.CARRIERS))]
+
+
 def test_a_how_to_page_s_title_starts_how_to_and_the_others_do_not():
     how_to = {"jtag-1", "jtag-2", "uart-1", "uart-2", "bench", "fit", "check-1", "check-3"}
     for key, page in pages.every():
@@ -160,7 +177,7 @@ def test_every_link_into_the_acorn_docs_is_a_page_of_the_table_with_its_title():
 
 @pytest.mark.parametrize("key", list(wiring.CARRIERS))
 def test_a_carrier_s_fragments_link_only_that_carrier_s_pages(key):
-    mine = {pages.url(key, page) for k, page in pages.every() if k == key}
+    mine = {pages.url(key, page) for k, page in pages.every() if k == key or page in pages.SHARED}
     for f in sorted(GENERATED.glob(f"acorn-*-{key}-*.md")) + sorted(GENERATED.glob(f"acorn-{key}-*.md")):
         for _, address in DOCS_LINK.findall(f.read_text()):
             assert address.split("#")[0] in mine, (f.name, address)
