@@ -187,6 +187,7 @@ def test_the_record_of_what_was_run_on_a_blade_is_an_issue_not_a_page():
     assert check.BLADE_RECORD == "https://github.com/fpgas-online/fpgas.online-test-designs/issues/241"
     for text in blade_texts():
         assert "What has been run on a Compute Blade" not in text and "Test 6" not in text and "our test" not in text
+        assert "been tried" not in text  # no link promises a record the linked page no longer holds
 
 
 def test_a_fragment_with_marks_that_do_not_pair_or_are_not_understood_stops_the_run(tmp_path, monkeypatch):

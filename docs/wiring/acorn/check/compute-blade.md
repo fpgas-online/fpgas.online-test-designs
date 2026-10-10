@@ -26,7 +26,7 @@ tr -d '\0' < /proc/device-tree/serial-number
 
 **5.** Ask the site operator, then boot the blade again. A reboot ends a visitor's session on the blade, the same harm as a power-off.
 
-**6.** Install the packages again, as in [How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html): on a blade whose root file system is in memory, the install is gone after the boot.
+**6.** On the blade, install the packages again, as in [How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html): on a blade whose root file system is in memory, the install is gone after the boot. Steps 7 to 9 run on the blade too.
 
 **7.** Check that GPIO14 is free. No line of the last command may show a consumer (`consumer="kernel"`) or `[used]`: that is a line the kernel will not hand out.
 
