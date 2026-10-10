@@ -9,6 +9,7 @@ it after following docs/verify.md.
 import json
 import pathlib
 import re
+import subprocess
 
 from fpgas_online_verify import conclusion, runner
 from fpgas_online_verify.boards import tt_fpga
@@ -249,7 +250,7 @@ def test_a_jtag_pin_the_serial_port_has_gets_the_blades_advice_and_any_other_hol
     assert "while the serial port is on, JTAG cannot be tested there" in uart and f"{conclusion.ISSUES}/127" in uart
     assert (
         "the gateway owner's choice" in uart and "change one blade's own copy" not in uart
-    )  # both ways, as verifying 3
+    )  # both ways, as the page about JTAG on a blade
     assert "Stop what has the pin" not in uart  # one line of advice for it, not two that disagree
     for holders in ({2: '"spi0 CS0"'}, {14: '"serial-test"'}):  # a program that asked for the line, whatever its name
         other = todo(holders)
@@ -358,6 +359,9 @@ def test_a_uio_bit_sharing_a_held_ui_in_line_gets_only_the_dip_switch_advice():
     assert len(says) == 1 and "DIP switches off" in says[0]
 
 
+THIS = pathlib.Path(__file__).name
+
+
 def test_the_blade_advice_links_the_page_about_jtag_on_a_blade_at_its_published_address():
     """docs.fpgas.online moved the Acorn pages and keeps no redirect: the address the tool prints is the page's."""
     page = "https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html"
@@ -368,8 +372,11 @@ def test_no_address_of_a_moved_acorn_docs_page_is_left_in_the_tool_or_the_pages(
     """The Acorn pages that were under boards/acorn/building/ and boards/acorn/wiring/rpi-5-host are now under
     setup/, checks/ and troubleshooting/, with no redirect: an old address anywhere here is a dead link."""
     root = pathlib.Path(__file__).resolve().parents[1]
-    files = [*(root / "verify" / "src").rglob("*.py"), *(root / "docs").rglob("*.md")]
-    files = [f for f in files if "plans" not in f.parts]
-    assert len(files) > 100
-    old = re.compile(r"boards/acorn/(?:building/|wiring/rpi-5-host)")
-    assert [(str(f.relative_to(root)), m.group(0)) for f in files for m in old.finditer(f.read_text())] == []
+    listed = subprocess.run(["git", "ls-files", "-z"], cwd=root, capture_output=True, text=True, check=True).stdout
+    # every tracked file but the plans (dated records) and this test, which names the old addresses to find them
+    names = [n for n in listed.split("\0") if n and not n.startswith("docs/plans/") and n != "tests/" + THIS]
+    names = [n for n in names if (root / n).is_file()]  # a submodule is listed as its directory
+    assert len(names) > 500 and "docs/wiring/acorn/wiring.toml" in names and "docs/verify/acorn-wiring.md" in names
+    old = re.compile(rb"boards/acorn/(?:building/|wiring/rpi-5-host)")
+    left = [(n, m.group(0).decode()) for n in names for m in old.finditer((root / n).read_bytes())]
+    assert left == []
