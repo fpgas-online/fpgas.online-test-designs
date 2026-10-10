@@ -91,17 +91,19 @@ RESULT: FAIL: a board did not pass.
 What to do:
   * The Acorn still runs the image it was sold with, not the fpgas.online one,
     so only its PCIe link and its JTAG could be tested. On a Compute Blade, do
-    not load a design into the card or convert it: that is not in the guide
-    yet. The only attempt (pi20 at ps1, 7 October 2026) lost the card's PCIe
-    endpoint (a bus rescan did not bring it back, and a root-complex re-probe
-    failed), and the reboot after it was followed by about two hours of
-    restarts, cause not known:
+    not load a design into the card or convert it. The one time a design was
+    loaded into a card on a blade, the card's PCIe endpoint did not come back:
+    neither a bus rescan nor a root-complex re-probe restored it
+    (fpgas.online-test-designs issue 241, the record of what has been run on
+    an Acorn on a Compute Blade):
+    https://github.com/fpgas-online/fpgas.online-test-designs/issues/241 To
+    test JTAG on a blade:
     https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html
   * openFPGALoader could not have one of the JTAG pins, because a driver holds
     it (on a Compute Blade the serial port holds GPIO14, which is also the
-    JTAG TMS wire). The check cannot test JTAG on such a host yet
-    (fpgas.online-test-designs issue 127, on a Compute Blade the JTAG test
-    cannot have GPIO14 while the serial port holds it):
+    JTAG TMS wire). The check cannot test JTAG on such a host while that
+    driver holds the pin (fpgas.online-test-designs issue 127, on a Compute
+    Blade the JTAG test cannot have GPIO14 while the serial port holds it):
     https://github.com/fpgas-online/fpgas.online-test-designs/issues/127
   * To look at the acorn board yourself: sudo fpgas-acorn-debug --help (sudo
     apt install fpgas-online-acorn-debug)
