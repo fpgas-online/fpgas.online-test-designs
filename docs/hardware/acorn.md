@@ -8,13 +8,13 @@ See [acorn-pinmap.md](acorn-pinmap.md) for the full RPi GPIO pinmap.
 
 ## Installing the Acorn Packages
 
+This is for an Acorn on a Raspberry Pi 5. On a Compute Blade, follow [How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html) instead: there the packages are installed after each boot.
+
 ### What you need
 
 - a Raspberry Pi 5 with the Acorn and both cables fitted ([How to fit the cables and the card (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/fitting.html))
 - the fpgas.online apt repository added on the Pi ([fpgas-verify: installing it](../verify/installing.md#installing))
 - on bookworm: the fpgas.online-fpga-tools apt repository added too (the same page). Debian bookworm's openFPGALoader is too old for the check
-
-On a Compute Blade, follow [How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html) instead: there the packages are installed after each boot.
 
 ### Steps
 
@@ -32,13 +32,13 @@ sudo fpgas-acorn-verify --no-publish
 
 ### Check
 
-The first line of the output starts with `fpgas-verify: pass`. The board's line under it ends in `pass`, and so does the line of each test. The result is `pass` only when every test passes.
+The first line of the output starts with `fpgas-verify: pass`. The board's line under it ends in `pass`, and so does the line of each test (`jtag       pass`, for one). The result is `pass` only when every test passes. [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result) shows a whole pass as the tool prints it.
 
 ### If it fails
 
 - The first line names the result, and the output ends with `RESULT:` and `What to do:`. [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result) says what each result means.
 - [A failing Acorn test on a Raspberry Pi 5](https://docs.fpgas.online/en/latest/boards/acorn/troubleshooting/rpi-5-failing-test.html) goes from a failing line to the wire.
-- A reason that starts `unconverted:` means the card still runs the image it was sold with. Convert it: [acorn-pcie-programming.md](acorn-pcie-programming.md).
+- A reason that starts `unconverted:` means the card runs the image it was sold with, or Xilinx's XDMA sample design, and not the fpgas.online one. If the card is an Acorn, convert it: [acorn-pcie-programming.md](acorn-pcie-programming.md). The XDMA sample can also be a NeTV2 on PCIe, which that page does not apply to. On a Compute Blade, do not convert a card.
 - To look at the card yourself, install `fpgas-online-acorn-debug` and run its two reads:
 
 ```bash
