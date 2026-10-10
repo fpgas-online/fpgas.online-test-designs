@@ -223,7 +223,7 @@ note = "for the M2x2.5 screw that holds the card in the M.2 slot. Uptime Lab's a
 [[tools]]
 carrier = "blade"
 tool = "a computer with ssh, on a network that reaches the blade"
-note = "to log in to the blade and run the check (the page \"verifying 1\")"
+note = "to log in to the blade and run the check ([How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html))"
 
 [carriers.pi5]
 name = "Raspberry Pi 5"

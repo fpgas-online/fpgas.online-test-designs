@@ -41,7 +41,7 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 | ☐ | masking tape and a fine marker pen, or a paint pen | to flag the six wires with their numbers, and to mark the pin 1 corner of each housing |
 | ☐ | a ruler marked in millimetres | the steps give lengths in millimetres: where a flag goes, how much of a wire is left, cut back or stripped |
 | ☐ | a PH1 (Phillips size 1) screwdriver | for the M2x2.5 screw that holds the card in the M.2 slot. Uptime Lab's assembly guide for the Compute Blade names a PH1 driver for that screw (and a 5 mm hex driver for its standoff, if that is not fitted yet); not verified by us on the blades |
-| ☐ | a computer with ssh, on a network that reaches the blade | to log in to the blade and run the check (the page "verifying 1") |
+| ☐ | a computer with ssh, on a network that reaches the blade | to log in to the blade and run the check ([How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html)) |
 
 ### Steps
 

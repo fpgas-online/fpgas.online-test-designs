@@ -16,6 +16,7 @@ import math
 import re
 from dataclasses import dataclass
 
+import pages
 import palette
 import tables
 import wiring
@@ -76,7 +77,8 @@ ASSUMPTIONS = [
 ]
 ASSUMED = (
     "Not yet checked against a cable in the hand:",
-    'Check wire 1 with a meter before cutting: step {n} of "{page}".',  # the step as its page shows it
+    # The step as its page shows it. A picture cannot link, so it names the task, never a page's title.
+    "Check wire 1 with a meter before cutting: step {n} of preparing this cable's wires.",
 )
 BOX_LINE = 20  # from line to line in the box of assumptions
 ACORN_PAD = (188, 0, 308, 80)  # the plated half-round mounting pad at the end of the card, in acorn-cw.jpg
@@ -1521,8 +1523,9 @@ def procedure(c):
 # ----------------------------------------------------------------------------------------------
 # The building guide as pages: an overview, then one page for each connector's cable, then the fitting
 # ----------------------------------------------------------------------------------------------
-# connector -> (file name part, the page's name). The parts list is tables.bom(), a page of its own.
-GUIDE = {"P1": ("jtag", "JTAG connector"), "P2": ("uart", "UART connector")}
+# connector -> (file name part, the cable's name). Part `<part>-1` prepares that cable's wires and `<part>-2` fills
+# its housing: the keys of those pages in pages.PAGES. The parts list is tables.bom(), a page of its own.
+GUIDE = {"P1": ("jtag", "JTAG"), "P2": ("uart", "UART")}
 
 
 def guide_name(c, part):
@@ -1546,7 +1549,8 @@ def needs(c, connector):
     items = [
         "one half of the Molex Pico-EZmate cable (a plug with six black wires)"
         if connector == next(iter(wiring.CONNECTORS))
-        else 'the other half of the Molex Pico-EZmate cable, which was cut in half on the page "JTAG connector 1" '
+        else "the other half of the Molex Pico-EZmate cable, which was cut in half in "
+        f"{pages.link(c.key, next(iter(GUIDE.values()))[0] + '-1')} "
         "(if it is still whole: cut it in the middle with side cutters; each half is one cable)",
         f"the {shape} Dupont housing",
         f"{len(wired)} Dupont crimp terminals, and a few spare",
@@ -1598,18 +1602,19 @@ def guide(c):
     head = parts["head"]
     will_have = head[head.index("### What you will have") + 2 : head.index("### Parts and tools")]
     not_run = "Not yet run by us on this hardware: written from the design."
-    order = ["Parts and tools: the list to tick off before starting."]
-    for connector, (_, title) in GUIDE.items():
+    order = [f"{pages.link(c.key, 'parts')}: the list to tick off before starting."]
+    for connector, (part, _) in GUIDE.items():
         order += [
-            f"{title} 1: "
+            f"{pages.link(c.key, f'{part}-1')}: "
             + ("the cable cut in half and each half checked for reach; " if connector == next(iter(GUIDE)) else "")
             + f"the {connector} cable's wires flagged, checked with a meter, cut back and crimped.",
-            f"{title} 2: the {connector} cable's housing filled and checked.",
+            f"{pages.link(c.key, f'{part}-2')}: the {connector} cable's housing filled and checked.",
         ]
     order += [
-        "Bench check: both cables checked on the host before power, the card out of its slot.",
-        "Fitting: the plugs, the card and the housings go in.",
-        "Verifying: the check run on the host, and what a failing line means.",
+        f"{pages.link(c.key, 'bench')}: both cables checked on the host before power, the card out of its slot.",
+        f"{pages.link(c.key, 'fit')}: the plugs, the card and the housings go in.",
+        f"{pages.link(c.key, 'check-1')}: the check run on the host. A failing line is followed to its wire in "
+        f"{pages.link(c.key, 'check-2')}.",
     ]
 
     def body(need, lines, *after):
@@ -1642,7 +1647,8 @@ def guide(c):
         prepare, fill = cut_at(parts[connector], "Hold the empty")
         out[guide_name(c, f"{part}-1")] = body(needs(c, connector), prepare)
         out[guide_name(c, f"{part}-2")] = body(
-            f"The {connector} cable with its wires flagged and a terminal crimped on each (the page before this one), "
+            f"The {connector} cable with its wires flagged and a terminal crimped on each "
+            f"({pages.link(c.key, f'{part}-1')}), "
             f"the empty {shape} Dupont housing, a paint pen or a dot of tape, and a multimeter with a continuity "
             "buzzer and a fine probe or a sewing pin.",
             fill,
@@ -1659,16 +1665,16 @@ def guide(c):
         "## If it fails",
         "Do not fit the cables. A contact 1 that does not beep means that cable's ground wire is open or in the wrong "
         "cavity; a contact 6 that beeps anywhere means the 3.3 V wire was not the one cut back. Go back to that "
-        'cable\'s second page, "JTAG connector 2" or "UART connector 2" (fill and check the housing), and check every '
-        "wire again.",
+        f"cable's housing, {' or '.join(pages.link(c.key, f'{part}-2') for part, _ in GUIDE.values())}, and check "
+        "every wire again.",
     )
     out[guide_name(c, "fit")] = body(
-        f"Both cables, checked on the bench (the page before this one), the Acorn and the {c.name}. As before: "
+        f"Both cables, checked on the bench ({pages.link(c.key, 'bench')}), the Acorn and the {c.name}. As before: "
         f"after action 1 (step {numbered(fit_, FIT_STEPS[0])} below), touch bare metal of the host before you pick "
         "up the card, and hold it by its edges.",
         fit_,
         "## Next",
-        'Power the host on and run the check: the page "verifying 1".'
+        f"Power the host on and run the check: {pages.link(c.key, 'check-1')}."
         + (
             " At ps1: on pi16 and pi20 at ps1 only, not yet on the two Compute Module 4 blades."
             if c.key == "blade"
@@ -1697,15 +1703,15 @@ def wire_one_check(connector):
 
 
 def wire_one_step(c, connector):
-    """(the number of the meter check of wire 1, the title of its page as the page shows it): "JTAG connector 1"."""
-    part, title = GUIDE[connector]
-    return step_number(c, f"{part}-1", wire_one_check(connector)), f"{title} 1"
+    """(the number of the meter check of wire 1, the key of its page in pages.PAGES): (3, "jtag-1")."""
+    part, _ = GUIDE[connector]
+    return step_number(c, f"{part}-1", wire_one_check(connector)), f"{part}-1"
 
 
 def assumed_check(c, connector):
     """The box's last line: where the check that settles its last item is, by step number and page."""
-    n, page = wire_one_step(c, connector)
-    return ASSUMED[1].format(n=n, page=page)
+    n, _ = wire_one_step(c, connector)
+    return ASSUMED[1].format(n=n)
 
 
 # The words the meter check of a finished cable starts with, on each connector's second page: how the probes go,

@@ -4,7 +4,7 @@
 
 Find the failing line in the table, then the wire in the two cavity pictures under it: the number in a cavity is the number on the wire's flag.
 
-**Before you touch a cable: Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE.** **After moving a wire, the cable goes through the same checks as a new one before any boot:** take the card out and pull both plugs from its sockets, check that cable's plug contacts against its housing with the meter as steps 3 and 4 of "JTAG connector 2" or "UART connector 2" do, run "the bench check" with the card out, and fit the cables as "Fitting" does. Then boot and run the check again. One test can be run on its own, `sudo fpgas-acorn-verify --test jtag` or `--test p2-serial`; it prints the usual summary, then the whole report as JSON.
+**Before you touch a cable: Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE.** **After moving a wire, the cable goes through the same checks as a new one before any boot:** take the card out and pull both plugs from its sockets, check that cable's plug contacts against its housing with the meter as steps 3 and 4 of [How to fill the JTAG cable's housing (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/jtag-housing.html) or [How to fill the UART cable's housing (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/uart-housing.html) do, run the bench check ([How to check the cables on the bench (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/bench-check.html)) with the card out, and fit the cables ([How to fit the cables and the card (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/fitting.html)). Then boot and run the check again. One test can be run on its own, `sudo fpgas-acorn-verify --test jtag` or `--test p2-serial`; it prints the usual summary, then the whole report as JSON.
 
 | The failing line | Look at |
 |---|---|
@@ -63,4 +63,4 @@ drove; H5 and GPIO4 follow each other:
 A correctly wired pair reads back what was driven: `FPGA drives 01: Pi reads GPIO14=1 GPIO15=0`, `Pi drives 01:
 FPGA reads 01`, and so on for every pattern.
 
-A failing line that is not in the table above is not about a wire of the cables: the page "verifying 2b" has every other message the check gives about an Acorn.
+A failing line that is not in the table above is not about a wire of the cables: [Other Acorn check messages on a Raspberry Pi 5](https://docs.fpgas.online/en/latest/boards/acorn/troubleshooting/rpi-5-other-messages.html) has every other message the check gives about an Acorn.

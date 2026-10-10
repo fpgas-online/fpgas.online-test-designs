@@ -9,6 +9,7 @@ import functools
 import html
 import re
 
+import pages as docs_pages
 import pytest
 import steps
 import tables
@@ -127,7 +128,7 @@ def test_every_picture_states_the_view_and_what_is_not_checked(key, connector):
     assert "Dupont housing, seen from the wire side," in text
     assert "You are looking down" in drawn
     assert steps.ASSUMED[0] in drawn
-    assert html.escape(steps.assumed_check(wiring.CARRIERS[key], connector)) in drawn
+    assert html.escape(steps.assumed_check(wiring.CARRIERS[key], connector), quote=False) in drawn
     assert re.search(r'viewBox="0 0 780 \d+"', picture(key, connector))
 
 
@@ -554,21 +555,30 @@ def test_no_words_stand_between_a_steps_pictures(key):
 
 
 def quotes(c):
-    """[(file, the page quoted, the step numbers)] of every quote of a building page's step by its number: in the
-    check's and the verify pages, in the generated pages and in the pictures of carrier `c`."""
+    """[(file, the key of the page quoted, the step numbers)] of every quote of a building page's step by its
+    number: in the check's and the verify pages, in the generated pages and in the pictures of carrier `c`.
+
+    Words quote a step as "steps 3 and 4 of <a link to the page>" (pages.link); a picture, which cannot link, as
+    "step 4 of preparing this cable's wires", which is the first page of the cable the picture is of."""
     docs = wiring.HERE.parent.parent
     texts = [*sorted((docs / "verify").glob("*.md")), *sorted((wiring.HERE / "check").glob("*.md"))]
     texts += sorted((wiring.HERE / "generated").glob("*.md"))
     texts += sorted((wiring.HERE / "generated").glob(f"acorn-cable-{c.key}-*.svg"))
-    quote = (
-        r'steps? (\d+)(?: and (\d+))? of (?:"|&quot;)((?:JTAG|UART) connector [12]|Fitting|[Bb]ench check)(?:"|&quot;)'
-    )
-    return [
-        (f.name, page, [int(a)] + ([int(b)] if b else []))
-        for f in texts
-        if not f.name.startswith("acorn-check-") or f"-{c.key}-" in f.name
-        for a, b, page in re.findall(quote, f.read_text())
-    ]
+    by_address = {docs_pages.url(c.key, page): page for key, page in docs_pages.every() if key == c.key}
+    linked = r"steps? (\d+)(?: and (\d+))? of \[[^\]]+\]\((https://[^)\s]+)\)"
+    drawn = r"steps? (\d+)(?: and (\d+))? of preparing this cable(?:'|&#x27;|&apos;)s wires"
+    found = []
+    for f in texts:
+        if f.name.startswith("acorn-check-") and f"-{c.key}-" not in f.name:
+            continue
+        text = f.read_text()
+        for a, b, address in re.findall(linked, text):
+            if address in by_address:  # a link to the other carrier's page is that carrier's quote
+                found.append((f.name, by_address[address], [int(a)] + ([int(b)] if b else [])))
+        for a, b in re.findall(drawn, text):  # only a cable's own picture says this: its name has the connector
+            (part,) = (part for connector, (part, _) in steps.GUIDE.items() if f"-{connector.lower()}" in f.name)
+            found.append((f.name, f"{part}-1", [int(a)] + ([int(b)] if b else [])))
+    return found
 
 
 @pytest.mark.parametrize("key", list(wiring.CARRIERS))
@@ -585,17 +595,17 @@ def test_a_quoted_step_number_is_the_step_it_means(key):
         assert steps.step_number(c, f"{part}-2", steps.CHECK_CAVITY) == n + 1
         assert f"**{n}.** {steps.CHECK_EACH}" in pages[steps.guide_name(c, f"{part}-2")]
         w1, page = steps.wire_one_step(c, connector)
-        assert page == f"{title} 1"
+        assert page == f"{part}-1" and docs_pages.title(c.key, page).startswith(f"How to prepare the {title} cable")
         assert f"**{w1}.** {steps.wire_one_check(connector)}" in pages[steps.guide_name(c, f"{part}-1")]
     fit = [steps.fit_step(c, half) for half in (1, 2)]
     assert fit == [1, 2]
-    meant = {f"{title} 2": [[n, n + 1]] for _, title in steps.GUIDE.values()}
-    meant |= {f"{steps.GUIDE[k][1]} 1": [[steps.wire_one_step(c, k)[0]]] for k in wiring.CONNECTORS}
-    meant["Fitting"] = [[f] for f in fit]
+    meant = {f"{part}-2": [[n, n + 1]] for part, _ in steps.GUIDE.values()}
+    meant |= {f"{steps.GUIDE[k][0]}-1": [[steps.wire_one_step(c, k)[0]]] for k in wiring.CONNECTORS}
+    meant["fit"] = [[f] for f in fit]
     bench = [steps.bench_step(c, w) for w in (steps.BENCH_START, steps.BENCH_BEEP)]
-    meant["Bench check"] = meant["bench check"] = [[b] for b in bench]
+    meant["bench"] = [[b] for b in bench]
     quoted = quotes(c)
-    assert {page for _, page, _ in quoted} >= {"JTAG connector 1", "UART connector 1", "JTAG connector 2"}
+    assert {page for _, page, _ in quoted} >= {"jtag-1", "uart-1", "jtag-2"}
     for name, page, numbers in quoted:
         assert numbers in meant[page], (name, page, numbers)
 

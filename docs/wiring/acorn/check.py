@@ -20,6 +20,7 @@ gen.py's build() calls build() here, so the pages are part of generated/ and of 
 import math
 import re
 
+import pages as docs_pages
 import steps
 import tables
 import wiring
@@ -322,7 +323,9 @@ INSTALL = {
         "file system is in memory (`overlayroot=tmpfs`), what you install is gone at the next boot:"
     ),
 }
-# What a blade owner can expect, said once, on the first verifying page (the third does not repeat it).
+# The Compute Blade pages the blade's own words send the reader to (pages.py has every title and address).
+BLADE_CHECK, BLADE_JTAG = docs_pages.link("blade", "check-1"), docs_pages.link("blade", "check-3")
+# What a blade owner can expect, said once, on the page of the check (the page about JTAG does not repeat it).
 TODAY = {
     "blade": [
         "",
@@ -330,31 +333,31 @@ TODAY = {
         "factory image or on the vendor's XDMA sample image (version 0.0.post1220 or newer). On a Compute "
         "Module 5 `jtag` cannot run in a boot that has the header's serial port on (kernel 6.18): the serial "
         "port holds GPIO14, which is also the JTAG TMS wire, so `jtag` fails there whatever the wiring. With "
-        'the port off at boot (a change to the gateway\'s boot files, on the page "verifying 3"), `jtag` '
+        f"the port off at boot (a change to the gateway's boot files, in {BLADE_JTAG}), `jtag` "
         "passes (it reads the IDCODE and device DNA): run on pi20 at ps1 on 7 October 2026. On a Compute "
         "Module 4 it has not been run by us under this kernel (on pi14 at ps1 on 20 September 2026, under "
         "kernel 6.12, JTAG got no response, TCK floating). Every other test but `rp1-pio` is `not run` until the card "
         "is converted to the fpgas.online design, and converting a card on a blade is not in this guide yet: "
-        'do not load a design into the card or convert it (the page "verifying 3" says why). So the result '
+        f"do not load a design into the card or convert it ({BLADE_JTAG} says why). So the result "
         "today is `fail` even with perfect cables: it shows that the card is seated "
         "and its PCIe link is up, and it cannot yet show that the two cables are right. The bench check with a "
         "meter, before fitting, is what the cables rest on until then.",
         "",
     ]
 }
-# When JTAG may be run on a blade, in the words of the page "verifying 3" (check/compute-blade.md): its last list's
+# When JTAG may be run on a blade, in the words of the page BLADE_JTAG (check/compute-blade.md): its last list's
 # steps 2 and 3. Said wherever a blade page gives a command that runs the `jtag` test.
-JTAG_LIST = "Before JTAG runs on a blade"  # the heading of that list on the page "verifying 3"
+JTAG_LIST = "Before JTAG runs on a blade"  # the heading of that list on the page BLADE_JTAG
 JTAG_CONDITIONS = (
     "in a boot with the header's serial port off, and only after steps 2 and 3 of the list "
-    f'"{JTAG_LIST}" on the page "verifying 3" pass (check that GPIO14 is free; check that nothing on the card '
+    f'"{JTAG_LIST}" in {BLADE_JTAG} pass (check that GPIO14 is free; check that nothing on the card '
     "drives GPIO14)"
 )
 JTAG_FIRST = {
     "blade": (
         "**The check runs `jtag` too, whose TMS wire is GPIO14.** In a boot with the header's serial port on, "
         "`jtag` fails without running the JTAG tool (the result printed below). In a boot with the header's "
-        'serial port off (the page "verifying 3"), run the check only after steps 2 and 3 of the list '
+        f"serial port off ({BLADE_JTAG}), run the check only after steps 2 and 3 of the list "
         f'"{JTAG_LIST}" on that page pass (check that GPIO14 is free; check that nothing on the card drives '
         "GPIO14). If either "
         "fails, do not run the check in that boot: something holds or drives the TMS wire."
@@ -392,7 +395,7 @@ def pages(c):
         "",
         INSTALL[c.key],
         "",
-        # before the commands: the last of them runs `jtag`, which must not run until verifying 3's checks pass
+        # before the commands: the last of them runs `jtag`, which must not run until BLADE_JTAG's checks pass
         *([JTAG_FIRST["blade"], ""] if c.key == "blade" else []),
         install.strip(),
         "",
@@ -425,8 +428,8 @@ def pages(c):
             "is the wiring or the installation: the card has not been converted to the fpgas.online design, and in "
             "this boot the JTAG test cannot have its TMS pin, which the header's serial port holds. Its "
             "`What to do:` lines are left out here: that version's advice was for a Raspberry Pi 5. **On a Compute "
-            "Blade, do not load a design into the card or convert it; that is not in this guide yet** (the page "
-            '"verifying 3" says why). From version 0.0.post1284 the check says so itself, and says that changing '
+            "Blade, do not load a design into the card or convert it; that is not in this guide yet** "
+            f"({BLADE_JTAG} says why). From version 0.0.post1284 the check says so itself, and says that changing "
             "the gateway's shared boot files or giving one blade its own copy is the gateway owner's choice.",
             "",
             without_advice(transcript(BLADE_FAIL, "pi16", "2026-10-07", "CLE-101", "0.0.post1216")),
@@ -471,13 +474,15 @@ def pages(c):
         f"**Before you touch a cable: {c.power_off}** **After moving a wire, the cable goes through the same checks "
         "as a new one before any boot:** take the card out and pull both plugs from its sockets, check that "
         "cable's plug contacts against its housing with the meter as "
-        f'{steps.meter_check_steps(c)} of "JTAG connector 2" or "UART connector 2" do, run "the bench check" with '
-        'the card out, and fit the cables as "Fitting" does. Then '
+        f"{steps.meter_check_steps(c)} of {docs_pages.link(c.key, 'jtag-2')} or "
+        f"{docs_pages.link(c.key, 'uart-2')} do, run "
+        f"the bench check ({docs_pages.link(c.key, 'bench')}) with the card out, and fit the cables "
+        f"({docs_pages.link(c.key, 'fit')}). Then "
         + ("ask Tim and boot, and run" if c.key == "blade" else "boot and run")
         + " the check again"
         + (
-            " (on a blade at ps1 the install is gone after the boot: install again, as on verifying 1; and "
-            "not on pi14 or pi18 at ps1 yet, as verifying 1 says)"
+            f" (on a blade at ps1 the install is gone after the boot: install again, as in {BLADE_CHECK}; and "
+            "not on pi14 or pi18 at ps1 yet, as that page says)"
             if c.key == "blade"
             else ""
         )
@@ -485,8 +490,8 @@ def pages(c):
         + (
             "`sudo fpgas-acorn-verify --no-publish --test p2-serial` or `sudo fpgas-acorn-verify --no-publish "
             "--test jtag`; it prints the usual summary, then the whole report as JSON. Run `--test jtag` only "
-            f'as the page "verifying 3" says: {JTAG_CONDITIONS}. In a boot with the header\'s serial port off, '
-            'the same goes for the whole check, which runs `jtag` too (the page "verifying 1").'
+            f"as {BLADE_JTAG} says: {JTAG_CONDITIONS}. In a boot with the header's serial port off, "
+            f"the same goes for the whole check, which runs `jtag` too ({BLADE_CHECK})."
             if c.key == "blade"
             else "`sudo fpgas-acorn-verify --test jtag` or `--test p2-serial`; it prints the usual summary, then "
             "the whole report as JSON."
@@ -503,8 +508,8 @@ def pages(c):
     fails += [
         wire_examples.strip(),
         "",
-        'A failing line that is not in the table above is not about a wire of the cables: the page "verifying 2b" '
-        "has every other message the check gives about an Acorn.",
+        "A failing line that is not in the table above is not about a wire of the cables: "
+        f"{docs_pages.link(c.key, 'check-2b')} has every other message the check gives about an Acorn.",
         "",
     ]
     others = [
@@ -513,8 +518,8 @@ def pages(c):
         "## Every other message about an Acorn",
         "",
         f"The check's own words, from the tool's list of [common failures]({FAILURES}), which has the other "
-        "boards' too. A wire of the cables is behind the `jtag` and `p2-…` lines only; for those, the page "
-        '"verifying 2" goes from the line to the wire.',
+        "boards' too. A wire of the cables is behind the `jtag` and `p2-…` lines only; for those, "
+        f"{docs_pages.link(c.key, 'check-2')} goes from the line to the wire.",
         "",
         failures(c).strip(),
         "",

@@ -25,4 +25,4 @@ Both finished cables, the Raspberry Pi 5, and a multimeter with a continuity buz
 
 ## If it fails
 
-Do not fit the cables. A contact 1 that does not beep means that cable's ground wire is open or in the wrong cavity; a contact 6 that beeps anywhere means the 3.3 V wire was not the one cut back. Go back to that cable's second page, "JTAG connector 2" or "UART connector 2" (fill and check the housing), and check every wire again.
+Do not fit the cables. A contact 1 that does not beep means that cable's ground wire is open or in the wrong cavity; a contact 6 that beeps anywhere means the 3.3 V wire was not the one cut back. Go back to that cable's housing, [How to fill the JTAG cable's housing (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/jtag-housing.html) or [How to fill the UART cable's housing (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/uart-housing.html), and check every wire again.

@@ -4,6 +4,7 @@
 import re
 
 import check
+import pages as docs_pages
 import pytest
 import steps
 import wiring
@@ -202,7 +203,9 @@ def test_moving_a_wire_sends_the_cable_through_the_new_cables_checks_before_a_bo
     for c in wiring.CARRIERS.values():
         body = "\n".join(check.pages(c).values())
         rework = body[body.index("After moving a wire") :].split("\n", 1)[0]
-        order = ["take the card out and pull both plugs", "with the meter", "the bench check", "Fitting", "Then "]
+        order = ["take the card out and pull both plugs", "with the meter", docs_pages.link(c.key, "jtag-2")]
+        order += ["the bench check", docs_pages.link(c.key, "bench"), "fit the cables", docs_pages.link(c.key, "fit")]
+        order += ["Then "]
         at = [rework.index(words) for words in order]  # each named, in this order
         assert at == sorted(at)
         assert re.search(r"Then (ask Tim and )?boot", rework)
@@ -260,7 +263,7 @@ def test_the_list_steps_2_and_3_are_quoted_by_is_found_by_its_heading():
         assert "last list" not in text
         flat = " ".join(text.split())
         said = flat.count("steps 2 and 3 of the list")
-        assert said == flat.count(
-            f'steps 2 and 3 of the list "{check.JTAG_LIST}" on the page "verifying 3"'
-        ) + flat.count(f'steps 2 and 3 of the list "{check.JTAG_LIST}" on that page')
+        assert said == flat.count(f'steps 2 and 3 of the list "{check.JTAG_LIST}" in {check.BLADE_JTAG}') + flat.count(
+            f'steps 2 and 3 of the list "{check.JTAG_LIST}" on that page'
+        )
     assert sum(" ".join(t.split()).count("steps 2 and 3 of the list") for t in texts) >= 4

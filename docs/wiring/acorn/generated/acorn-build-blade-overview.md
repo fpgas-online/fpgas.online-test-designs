@@ -15,14 +15,14 @@ Nothing in this guide cuts a wire to length. The bought cable is cut in half, on
 
 ## The order of work
 
-1. Parts and tools: the list to tick off before starting.
-2. JTAG connector 1: the cable cut in half and each half checked for reach; the P1 cable's wires flagged, checked with a meter, cut back and crimped.
-3. JTAG connector 2: the P1 cable's housing filled and checked.
-4. UART connector 1: the P2 cable's wires flagged, checked with a meter, cut back and crimped.
-5. UART connector 2: the P2 cable's housing filled and checked.
-6. Bench check: both cables checked on the host before power, the card out of its slot.
-7. Fitting: the plugs, the card and the housings go in.
-8. Verifying: the check run on the host, and what a failing line means.
+1. [Parts and tools for the Compute Blade cables](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/parts.html): the list to tick off before starting.
+2. [How to prepare the JTAG cable's wires (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/jtag-wires.html): the cable cut in half and each half checked for reach; the P1 cable's wires flagged, checked with a meter, cut back and crimped.
+3. [How to fill the JTAG cable's housing (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/jtag-housing.html): the P1 cable's housing filled and checked.
+4. [How to prepare the UART cable's wires (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/uart-wires.html): the P2 cable's wires flagged, checked with a meter, cut back and crimped.
+5. [How to fill the UART cable's housing (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/uart-housing.html): the P2 cable's housing filled and checked.
+6. [How to check the cables on the bench (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/bench-check.html): both cables checked on the host before power, the card out of its slot.
+7. [How to fit the cables and the card (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/fitting.html): the plugs, the card and the housings go in.
+8. [How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html): the check run on the host. A failing line is followed to its wire in [A failing Acorn test on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/troubleshooting/compute-blade-failing-test.html).
 
 ## Where the facts come from
 
