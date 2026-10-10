@@ -56,8 +56,10 @@ def test_every_title_is_unique_and_within_the_docs_limit():
 def test_the_check_s_explanation_is_one_page_for_both_carriers_and_its_reference_is_one_for_each():
     """The split of the check pages by type (#207): the how-to keeps its page; what the check is, is one
     explanation for both carriers; which test uses which wire is a reference for each."""
-    assert pages.link("pi5", "check-about") == pages.link("blade", "check-about") == (
-        "[The Acorn check](https://docs.fpgas.online/en/latest/boards/acorn/checks/about.html)"
+    assert (
+        pages.link("pi5", "check-about")
+        == pages.link("blade", "check-about")
+        == ("[The Acorn check](https://docs.fpgas.online/en/latest/boards/acorn/checks/about.html)")
     )
     assert pages.link("pi5", "check-tests") == (
         "[Acorn tests and their wires on a Raspberry Pi 5]"
