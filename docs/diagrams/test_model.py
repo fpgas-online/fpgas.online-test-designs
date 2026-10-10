@@ -17,6 +17,8 @@ GEOMETRY = ACORN / "geometry.toml"
 def write(tmp_path, text):
     path = tmp_path / "geometry.toml"
     path.write_text(text)
+    (tmp_path / "photos").mkdir(exist_ok=True)
+    (tmp_path / "photos" / "b.jpg").write_bytes(b"")  # the photo the PHOTO table names; only its presence is checked
     return path
 
 
@@ -106,11 +108,6 @@ def test_a_shown_range_that_is_not_part_of_the_thing_is_refused(tmp_path):
             model.load(write(tmp_path, THING + PHOTO.replace("[0, 12.5]", bad)))
 
 
-def test_a_photo_table_with_an_unknown_key_is_refused(tmp_path):
-    with pytest.raises(DiagramError, match="needs file, px_per_mm and origin"):
-        model.load(write(tmp_path, THING + PHOTO + "turn = 90\n"))
-
-
 @pytest.mark.parametrize("bad", ["10.0", "[10.0]", "[10.0, 0]", "[10.0, -9.5]", '[10.0, "9.5"]', "[1, 2, 3]"])
 def test_a_photos_scale_is_two_positive_numbers_across_and_down(tmp_path, bad):
     with pytest.raises(DiagramError, match=r"b: photo 'bottom': px_per_mm"):
@@ -149,3 +146,65 @@ def test_a_header_numbered_down_runs_down_each_column_in_turn(tmp_path):
     for n, at in want.items():
         assert centre(scene.item(f"b.h.pin.{n}").box) == pytest.approx(at)
     assert len(scene.select("b.h.pins.1-12")) == 12
+
+
+ITEM_X = '[things.b.items.x]\nkind = "pad"\nface = "top"\nbox = [1, 1, 3, 3]\nsource = "s"\n'
+
+
+def cut(text, line):
+    assert text.count(line) == 1
+    return text.replace(line, "")
+
+
+@pytest.mark.parametrize(
+    "text, message",
+    [
+        (THING + 'colour = "red"\n', r"b: unknown key \['colour'\]; the keys are .*name.*size"),
+        (THING + HEADER + 'gender = "pin"\n', r"b\.h: unknown key \['gender'\]; the keys are .*pitch"),
+        (THING + ITEM_X + 'colour = "red"\n', r"b\.x: unknown key \['colour'\]; the keys are .*kind"),
+        (THING + PHOTO + "turn = 90\n", r"b: photo 'bottom': unknown key \['turn'\]; the keys are .*file"),
+        (cut(THING, 'name = "B"\n'), "b: no name"),
+        (cut(THING, "size = [10.0, 20.0]\n"), "b: no size"),
+        (THING + cut(ITEM_X, 'kind = "pad"\n'), r"b\.x: no kind"),
+        (THING + cut(ITEM_X, 'face = "top"\n'), r"b\.x: no face"),
+        (THING + cut(ITEM_X, "box = [1, 1, 3, 3]\n"), r"b\.x: no box"),
+        (THING + cut(HEADER, "pitch = 2.0\n"), r"b\.h: no pitch"),
+        (THING + cut(HEADER, 'face = "top"\n'), r"b\.h: no face"),
+        (THING + cut(HEADER, "pin1 = [2.0, 3.0]\n"), r"b\.h: no pin1"),
+        (THING + cut(PHOTO, 'file = "b.jpg"\n'), "b: photo 'bottom': no file"),
+        (THING + cut(PHOTO, "origin = [0, 0]\n"), "b: photo 'bottom': no origin"),
+        (THING + ITEM_X.replace("[1, 1, 3, 3]", "[1, 1, 3]"), r"b\.x: box \[1, 1, 3\] is not 4 numbers"),
+        (THING + ITEM_X.replace("[1, 1, 3, 3]", '[1, 1, 3, "3"]'), r"b\.x: box .* is not 4 numbers"),
+        (THING + ITEM_X.replace("[1, 1, 3, 3]", "7"), r"b\.x: box 7 is not 4 numbers"),
+        (THING.replace("[10.0, 20.0]", "[10.0]"), r"b: size \[10\.0\] is not 2 positive numbers"),
+        (THING.replace("[10.0, 20.0]", "[10.0, -1]"), "b: size .* is not 2 positive numbers"),
+        (THING.replace("[10.0, 20.0]", '"big"'), "b: size 'big' is not 2 positive numbers"),
+        (THING + PHOTO.replace("[0, 0]", "[0]"), r"b: photo 'bottom': origin \[0\] is not 2 numbers"),
+        (THING + PHOTO.replace('"b.jpg"', '"c.jpg"'), r"b: photo 'bottom': .*photos.c\.jpg does not exist"),
+        (THING + PHOTO.replace("photos.bottom", "photos.side"), "b: photo 'side': a photo is of the top or the bottom"),
+        (THING + ITEM_X + "pin1 = [4, 2]\n", r"b\.x: pin1 \[4, 2\] is outside its own box"),
+        (THING + ITEM_X + "pin1 = [2]\n", r"b\.x: pin1 \[2\] is not 2 numbers"),
+        (THING + ITEM_X.replace('source = "s"', 'source = ""'), r"b\.x: no source"),
+        (THING + ITEM_X.replace('source = "s"', "source = 3"), r"b\.x: no source"),
+        (THING.replace('source = "a drawing"', 'source = ["a drawing"]'), "b: no source"),
+        (THING + HEADER + ITEM_X.replace("items.x", "items.h"), r"b\.h: an item and a header share this name"),
+        (THING + HEADER + ITEM_X.replace("items.x", 'items."h.pin.3"'), r"b\.h\.pin\.3: .*share this name"),
+        (THING + HEADER.replace("columns = 3", "columns = 0"), r"b\.h: columns 0 is not a whole number of 1 or more"),
+        (THING + HEADER.replace("rows = 4", "rows = 4.5"), r"b\.h: rows 4\.5 is not a whole number of 1 or more"),
+        (THING + HEADER.replace("pitch = 2.0", "pitch = 0"), r"b\.h: pitch 0 is not a positive number"),
+        (THING + HEADER.replace("pin = 0.5", 'pin = "thin"'), r"b\.h: pin 'thin' is not a positive number"),
+        (THING + HEADER.replace('"down"', '"snake"'), r"b\.h: numbering"),
+        (THING + ITEM_X + 'z = "high"\n', r"b\.x: z 'high' is not a whole number"),
+        (THING + ITEM_X + "label = 3\n", r"b\.x: label 3 is not text"),
+        ("[things]\nb = 3\n", "b: not a table"),
+        (THING + "[things.b.items]\nx = 3\n", r"b\.x: not a table"),
+    ],
+)
+def test_a_malformed_geometry_is_refused_naming_the_table_and_the_key(tmp_path, text, message):
+    with pytest.raises(DiagramError, match="geometry: " + message):
+        model.load(write(tmp_path, text))
+
+
+def test_the_well_formed_tables_those_cases_start_from_load(tmp_path):
+    scene = model.load(write(tmp_path, THING + HEADER + ITEM_X + "pin1 = [2, 2]\nz = 3\n" + PHOTO))
+    assert scene.item("b.x").pin1 == (2, 2) and scene.item("b.x").z == 3

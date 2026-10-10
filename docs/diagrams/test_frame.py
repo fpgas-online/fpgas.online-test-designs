@@ -7,6 +7,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 import pytest
 
 from diagrams import frame, model, views
+from diagrams.errors import DiagramError
 from diagrams.model import Box
 
 WHOLE = Box(0, 0, 10, 20)
@@ -125,3 +126,11 @@ def test_pin_1_of_a_header_on_a_turned_thing_lands_where_it_is_worked_out_by_han
     assert frame.view_frame(s, view(0, width=400), origin=(5.0, 7.0)).to_px(x, y) == pytest.approx((85.0, 127.0))
     box = frame.view_frame(s, view(90, width=400)).box_px(s.item("b.h.pin.1").box)
     assert ((box[0] + box[2]) / 2, (box[1] + box[3]) / 2) == pytest.approx((340.0, 40.0))
+
+
+def test_a_frame_of_no_known_face_or_turn_cannot_be_made():
+    with pytest.raises(DiagramError, match="face 'side'"):
+        make(face="side")
+    for turn in (45, -90, 360, "90"):
+        with pytest.raises(DiagramError, match="turn"):
+            make(turn=turn)

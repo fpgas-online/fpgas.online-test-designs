@@ -4,9 +4,11 @@
 from dataclasses import dataclass
 
 from . import views
-from .model import Box
+from .errors import DiagramError
+from .model import FACES, Box
 
 GRID = 0.1  # mm: the grid visible_fraction counts on
+TURNS = (0, 90, 180, 270)  # degrees clockwise
 
 
 @dataclass(frozen=True)
@@ -17,6 +19,12 @@ class Frame:
     turn: int
     scale: float
     origin: tuple
+
+    def __post_init__(self):
+        if self.face not in FACES:
+            raise DiagramError(f"a frame's face {self.face!r} is not one of {FACES}")
+        if self.turn not in TURNS:
+            raise DiagramError(f"a frame's turn {self.turn!r} is not one of {TURNS}")
 
     def _seen(self, x, y):
         """A point of the thing as seen from `face`, unturned, relative to the frame's own top left, in mm."""
