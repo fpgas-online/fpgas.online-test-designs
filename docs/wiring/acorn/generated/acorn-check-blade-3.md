@@ -6,7 +6,7 @@ What has been run on a Compute Blade, and what has not, as of 7 October 2026:
 
 | | State |
 |---|---|
-| Installing the packages and running the check (Raspberry Pi OS trixie, CM5) | run at ps1, by the page's own steps (pi16 and pi20 at ps1, 7 October 2026, version 0.0.post1216; on pi20 at ps1 updated to 0.0.post1220 the same day, the version every later run there used): the failing run printed on the page "verifying 1" is the result from pi16 at ps1, with 0.0.post1216. An install lasts until the blade's next boot |
+| Installing the packages and running the check (Raspberry Pi OS trixie, CM5) | run at ps1, by the page's own steps (pi16 and pi20 at ps1, 7 October 2026, version 0.0.post1216; on pi20 at ps1 updated to 0.0.post1220 the same day, the version every later run there used): the failing run printed in [How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html) is the result from pi16 at ps1, with 0.0.post1216. An install lasts until the blade's next boot |
 | `pcie-link` | run at ps1: passes (5.0 GT/s, x1); on a card on the vendor's XDMA sample image too, from version 0.0.post1220 (pi20 at ps1, 7 October 2026) |
 | `jtag` with the serial port on, kernel 6.18 | run at ps1: **cannot work**. TMS is GPIO14, which is also the serial port's TX; that kernel does not lend a pin a driver has, and the serial driver cannot be detached while the system runs (read on pi16 at ps1, 5 October 2026: the driver has no `unbind` file, and the port is a kernel console). From 0.0.post1111 the test fails saying so, without running the tool ([fpgas.online-test-designs issue 127, the Acorn check on a Compute Blade cannot have GPIO14 while the serial port holds it](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)). Seen on the two CM5 blades, where `gpioinfo` names the kernel as line 14's user; on the two CM4 blades `gpioinfo` names no user for line 14 although the pin is the serial port's TXD0 (7 October 2026): whether JTAG can have it there is **not yet run by us** |
 | `jtag` with the serial port off | run at ps1 on a CM5 (pi20 at ps1, 7 October 2026, our test 4, in the boot from 14:25 with the two changes below): **passes**: the test reads the IDCODE, `0x13631093` (an XC7A100T: AMD's 7 Series configuration user guide, UG470, Table 1-1, gives `X3631093` for the 7A100T, X being the revision digit), and the device DNA, `0x0028e5c45e304854` (the same as read from this card on 20 September 2026). Test 4 loaded no design and wrote no flash; later in the same boot test 6 loaded our design into the FPGA's SRAM (below the table), and the flash was never written. **Not yet run on a CM4 blade** |
@@ -81,10 +81,10 @@ boots from the shared directory, the second only the one blade.
 
 Ask Tim, then boot the blade again (a reboot ends a visitor's session on it, the same harm as a power-off), and in that boot (the one with the serial port off):
 
-1. Install the packages again, as on the page "verifying 1": the install is gone after the boot.
+1. Install the packages again, as in [How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html): the install is gone after the boot.
 2. Check that GPIO14 is free, with the commands at the end of this page: it must show no consumer.
 3. Check that nothing on the card drives GPIO14. Do this on each blade you run JTAG on (at ps1: pi16 and pi20
-   only, as the page "verifying 1" says). Always run this step: the 470 Ω resistor in J2's wire is designed
+   only, as that page says). Always run this step: the 470 Ω resistor in J2's wire is designed
    to protect against a card that drives GPIO14, not yet measured by us (pi20 at ps1's present serial pair,
    read on 31 August 2026, has none). Note what `pinctrl get 14` prints,
    then:

@@ -15,14 +15,14 @@ Nothing in this guide cuts a wire to length. The bought cable is cut in half, on
 
 ## The order of work
 
-1. Parts and tools: the list to tick off before starting.
-2. JTAG connector 1: the cable cut in half and each half checked for reach; the P1 cable's wires flagged, checked with a meter, cut back and crimped.
-3. JTAG connector 2: the P1 cable's housing filled and checked.
-4. UART connector 1: the P2 cable's wires flagged, checked with a meter, cut back and crimped.
-5. UART connector 2: the P2 cable's housing filled and checked.
-6. Bench check: both cables checked on the host before power, the card out of its slot.
-7. Fitting: the plugs, the card and the housings go in.
-8. Verifying: the check run on the host, and what a failing line means.
+1. [Parts and tools for the Raspberry Pi 5 cables](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/parts.html): the list to tick off before starting.
+2. [How to prepare the JTAG cable's wires (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/jtag-wires.html): the cable cut in half and each half checked for reach; the P1 cable's wires flagged, checked with a meter, cut back and crimped.
+3. [How to fill the JTAG cable's housing (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/jtag-housing.html): the P1 cable's housing filled and checked.
+4. [How to prepare the UART cable's wires (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/uart-wires.html): the P2 cable's wires flagged, checked with a meter, cut back and crimped.
+5. [How to fill the UART cable's housing (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/uart-housing.html): the P2 cable's housing filled and checked.
+6. [How to check the cables on the bench (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/bench-check.html): both cables checked on the host before power, the card out of its slot.
+7. [How to fit the cables and the card (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/fitting.html): the plugs, the card and the housings go in.
+8. [How to run the Acorn check on a Raspberry Pi 5](https://docs.fpgas.online/en/latest/boards/acorn/checks/rpi-5.html): the check run on the host. A failing line is followed to its wire in [A failing Acorn test on a Raspberry Pi 5](https://docs.fpgas.online/en/latest/boards/acorn/troubleshooting/rpi-5-failing-test.html).
 
 ## Where the facts come from
 

@@ -4,7 +4,7 @@ Not yet run by us on this hardware: written from the design. Photos: Waveshare (
 
 ## What you need
 
-Both cables, checked on the bench (the page before this one), the Acorn and the Raspberry Pi 5. As before: after action 1 (step 1 below), touch bare metal of the host before you pick up the card, and hold it by its edges.
+Both cables, checked on the bench ([How to check the cables on the bench (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/bench-check.html)), the Acorn and the Raspberry Pi 5. As before: after action 1 (step 1 below), touch bare metal of the host before you pick up the card, and hold it by its edges.
 
 ## Steps
 
@@ -28,4 +28,4 @@ Both cables, checked on the bench (the page before this one), the Acorn and the 
 
 ## Next
 
-Power the host on and run the check: the page "verifying 1".
+Power the host on and run the check: [How to run the Acorn check on a Raspberry Pi 5](https://docs.fpgas.online/en/latest/boards/acorn/checks/rpi-5.html).
