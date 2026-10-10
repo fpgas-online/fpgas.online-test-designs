@@ -86,7 +86,16 @@ def test_the_blade_pages_are_for_a_compute_module_5_and_hold_no_record_of_a_run(
             r"(?<![\w/-])acorn-[a-z]+\b(?!\.)",
         ):
             assert not re.search(record, prose.replace("acorn-check", "").replace("acorn-cable", "")), record
-        for unproven in ("not yet", "by us", "not measured", "not recorded", "not settled", "not in this guide"):
+        for unproven in (
+            "not yet",
+            "by us",
+            "not measured",
+            "not recorded",
+            "not settled",
+            "not in this guide",
+            "today",
+            "our test",
+        ):
             assert unproven not in prose, unproven
 
 
@@ -156,7 +165,7 @@ def test_each_check_page_is_one_type_of_page(key):
     assert 2 <= next_links <= 5
     if key == "blade":
         assert headings(pages[3]) == HOW_TO
-        assert steps_of(pages[3]) == list(range(1, 9))
+        assert steps_of(pages[3]) == list(range(1, 10))
 
 
 def test_what_the_check_is_is_one_explanation_for_both_carriers():
@@ -282,12 +291,10 @@ def test_every_reboot_a_blade_page_asks_for_is_preceded_by_asking_the_site_opera
     for text in blade_texts():
         for m in reboot.finditer(text):
             before = text[max(0, m.start() - 80) : m.start()].lower()
-            if "to undo it, point the link back" in before:  # the gateway operator's undo: step 4 has the asking
-                continue
             seen += 1
             asked = re.search(r"ask(?:ing)? the site operator", before + m.group(0).lower())
             assert asked, text[m.start() - 80 : m.end() + 20]
-    assert seen >= 3  # the how-to's install step, the rework line, and the JTAG page's step that boots
+    assert seen >= 4  # the how-to's install step, the rework line, the JTAG page's undo and its step that boots
     assert check.ASK_FIRST in blade_texts()[0]  # the how-to, where the installs are
     assert "a reboot ends a visitor's session" in blade_texts()[-1].lower()  # the JTAG page says why, once
     assert blade_texts()[-1].count("Ask the site operator, then boot the blade again") == 1
@@ -296,11 +303,12 @@ def test_every_reboot_a_blade_page_asks_for_is_preceded_by_asking_the_site_opera
 def test_the_two_checks_of_gpio14_have_no_exception():
     page = check.pages(wiring.CARRIERS["blade"])[3]
     free, driven = check.jtag_steps()
-    assert (free, driven) == (6, 7)
+    assert (free, driven) == (7, 8)
     block = page[page.index(f"**{free}.** {check.GPIO_FREE}") : page.index(f"**{driven + 1}.** ")]
     flat = " ".join(block.split())
     assert f"**{driven}.** {check.GPIO_DRIVEN}" in block
     assert "unless" not in flat and "if you know" not in flat.lower() and "skip" not in flat.lower()
+    assert "Always run this step, on each blade you run JTAG on" in flat and "470 Ω resistor" in flat
     assert f"only if steps {free} and {driven} passed" in page[page.index(f"**{driven + 1}.** ") :].split("\n")[0]
     fails = page[page.index("## If it fails") : page.index("## Next")]
     assert f"- Step {free} shows a consumer" in fails and f"- Step {driven} does not print 0 and then 1" in fails

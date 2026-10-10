@@ -2,7 +2,7 @@
 
 ## What you need
 
-- a Compute Blade with a Compute Module 5, the Acorn and both cables fitted ([How to fit the cables and the card (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/fitting.html))
+- a Compute Blade with a Compute Module 5, the Acorn and both cables fitted ([How to fit the cables and the card (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/fitting.html)). Do not run the check on a blade with a Compute Module 4 ([the record of what is open there](https://github.com/fpgas-online/fpgas.online-test-designs/issues/241))
 - a computer with ssh, on a network that reaches the blade
 - on the blade: a network that reaches `apt.fpgas.online` and `fpgas.online`, where the packages come from
 
@@ -29,7 +29,7 @@ sudo apt install fpgas-online-acorn
 fpgas-verify --list
 ```
 
-**2.** In a boot with the header's serial port off, check GPIO14 before the check runs: steps 6 and 7 of [How to make a Compute Blade boot ready for JTAG](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html) (check that GPIO14 is free; check that nothing on the card drives GPIO14). If either fails, do not run the check in that boot: something holds or drives the JTAG TMS wire. In a boot with the port on, go to the next step: `jtag` fails there without running the JTAG tool.
+**2.** In a boot with the header's serial port off, check GPIO14 before the check runs: steps 7 and 8 of [How to make a Compute Blade boot ready for JTAG](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html) (check that GPIO14 is free; check that nothing on the card drives GPIO14). If either fails, do not run the check in that boot: something holds or drives the JTAG TMS wire. In a boot with the port on, go to the next step: `jtag` fails there without running the JTAG tool.
 
 **3.** Run the check. Nothing is sent to the site: `--no-publish` makes sure.
 

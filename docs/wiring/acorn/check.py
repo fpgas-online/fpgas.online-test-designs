@@ -345,7 +345,8 @@ NEEDS = {
         f"on a Pi that does not boot the fleet's root: {REPOSITORIES}",
     ],
     "blade": [
-        "a Compute Blade with a Compute Module 5, the Acorn and both cables fitted ({fit})",
+        "a Compute Blade with a Compute Module 5, the Acorn and both cables fitted ({fit}). Do not run the check "
+        f"on a blade with a Compute Module 4 ([the record of what is open there]({BLADE_RECORD}))",
         "a computer with ssh, on a network that reaches the blade",
         f"on the blade: {REPOSITORIES}",
     ],
@@ -423,14 +424,17 @@ def about():
         "",
         "## On a Compute Blade",
         "",
-        "- Do not load a design into a card on a Compute Blade, and do not convert it. A design loaded into a card "
-        "on a blade took the card's PCIe endpoint away, and neither a bus rescan nor a re-probe of the PCIe "
-        f"controller brought it back ([the record of that run]({BLADE_RECORD})).",
+        "- Do not load a design into a card on a Compute Blade, and do not convert it. The one time a design was "
+        "loaded into a card on a blade, the card's PCIe endpoint did not come back: neither a bus rescan nor a "
+        "re-probe of the PCIe controller restored it. After the reboot that followed, the blade kept restarting for "
+        f"about two hours ([the record of that run]({BLADE_RECORD})).",
         "- So the check's result on a Compute Blade is `fail`, the card being on the image it was sold with. "
         "`pcie-link` passes when the card is seated, and the tests that need the fpgas.online design are `not run`.",
         "- JTAG's TMS wire is GPIO14, which the header's serial port also uses. In a boot with that port on (kernel "
-        "6.18), `jtag` fails without running the JTAG tool. In a boot with it off, `jtag` reads the FPGA's IDCODE "
-        f"and device DNA: {BLADE_JTAG}.",
+        "6.18), `jtag` fails without running the JTAG tool. In a boot with it off, on a Compute Module 5, `jtag` reads "
+        f"the FPGA's IDCODE and device DNA: {BLADE_JTAG}.",
+        "- The check is for a blade with a Compute Module 5. Do not run it on a blade with a Compute Module 4: "
+        f"what is open there is in [the record]({BLADE_RECORD}).",
         "- The check cannot show that the two cables are right while the card is not converted. The bench check "
         f"with a meter, before fitting, is what the cables rest on: {docs_pages.link('blade', 'bench')}.",
         "",
