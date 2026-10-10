@@ -375,15 +375,16 @@ def test_no_advice_the_tool_prints_holds_a_record_of_a_run_or_a_promise():
     record = re.compile(r"\bpi\d\d\b|\bps1\b|\bwelland\b|\b20\d\d\b|\b(?:the )?only attempt\b|\byet\b|not in the guide")
     for text in texts:
         assert not record.search(text), record.search(text)[0]
+        # an address is followed by a space, never by a bracket or a full stop a terminal would take into the link
+        assert not re.search(r"https://\S*[).,;:]( |$)", text), text
     blade = conclusion.NOT_ON_A_BLADE
     assert blade.startswith("On a Compute Blade, do not load a design into the card or convert it. ")
     # the reason stays, and the record it rests on is named by what it is and linked
     assert (
         "The one time a design was loaded into a card on a blade, the card's PCIe endpoint did not come back" in blade
     )
-    # an address is followed by a space, never by a bracket or a full stop a terminal would take into the link
     assert f"(fpgas.online-test-designs issue 241, {conclusion.ISSUE_241}): {conclusion.ISSUES}/241 To test" in blade
-    assert not re.search(r"https://\S*[).,]( |$)", blade)
+    assert re.search(r"https://\S*[).,;:]( |$)", "the record (https://example.org/issues/1). To")  # and finds one
     for found in ("pi20 at ps1", "7 October 2026", "welland", "not in the guide yet", "no JTAG there yet"):
         assert record.search(found), found  # the pattern finds what it is for
 

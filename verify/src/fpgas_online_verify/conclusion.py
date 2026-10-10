@@ -79,9 +79,9 @@ ADVICE = (
      "and wired as the board's page shows."),
     (r"did not say which Tiny Tapeout board it is",
      "The demo board could not be asked whether it carries an FPGA or a Tiny Tapeout chip, so nothing was "
-     "loaded into it. The reason above says what stopped the read; if rpi-hwid is not installed, install it "
-     f"(sudo apt install python3-rpi-hwid, from https://github.com/mithro/rpi-hwid): {DOCS}"
-     "/tt-fpga.html#which-tiny-tapeout-board-it-is"),
+     "loaded into it. The reason above says what stopped the read; if rpi-hwid is not installed, install it: "
+     "sudo apt install python3-rpi-hwid, whose source is https://github.com/mithro/rpi-hwid How the check asks the "
+     f"board: {DOCS}/tt-fpga.html#which-tiny-tapeout-board-it-is"),
     # A ribbon with a fault that is not a held line ("held", "holds its line"), anywhere among its named faults;
     # the faults of one ribbon are joined by "; ", and the lookaheads stop at the next part of the line.
     (r"the u\w+ ribbon \(to HAT J[ABC]\): (?:[^;]*\bh[eo]lds?\b[^;]*; (?!the )(?!and )(?!these )(?!uio and )"
