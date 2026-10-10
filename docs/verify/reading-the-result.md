@@ -96,7 +96,7 @@ What to do:
     endpoint (a bus rescan did not bring it back, and a root-complex re-probe
     failed), and the reboot after it was followed by about two hours of
     restarts, cause not known:
-    https://docs.fpgas.online/en/latest/boards/acorn/building/compute-blade/verifying-3.html
+    https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html
   * openFPGALoader could not have one of the JTAG pins, because a driver holds
     it (on a Compute Blade the serial port holds GPIO14, which is also the
     JTAG TMS wire). The check cannot test JTAG on such a host yet

@@ -11,9 +11,9 @@ The Acorn's check doubles as a wiring test: each of its tests uses a known set o
 the host, so which tests pass and what a failing one says point at the wire. That is a page of its own for
 each carrier, from installing after a boot to which wire a failing line means:
 
-* [an Acorn on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/building/compute-blade/verifying-1.html)
+* [an Acorn on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html)
   ([source](../wiring/acorn/generated/acorn-check-blade-1.md)), with what has and has not been run on a blade;
-* [an Acorn on a Raspberry Pi 5](https://docs.fpgas.online/en/latest/boards/acorn/building/rpi-5/verifying-1.html)
+* [an Acorn on a Raspberry Pi 5](https://docs.fpgas.online/en/latest/boards/acorn/checks/rpi-5.html)
   ([source](../wiring/acorn/generated/acorn-check-pi5-1.md)).
 
 What the Acorn's check does to the card and the host:

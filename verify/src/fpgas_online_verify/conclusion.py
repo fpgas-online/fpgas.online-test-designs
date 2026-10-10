@@ -132,12 +132,13 @@ ADVICE = (
 # load into a card on a blade lost its PCIe endpoint. Where the report names that setup, the conversion advice above
 # is replaced; where it names no setup, the warning is added to it, as the host may be a blade.
 BLADE = "Compute Blade"
-VERIFYING_3 = "https://docs.fpgas.online/en/latest/boards/acorn/building/compute-blade/verifying-3.html"
+# The docs page about JTAG on a Compute Blade, at its published address (docs.fpgas.online keeps no redirect).
+BLADE_JTAG_PAGE = "https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html"
 NOT_ON_A_BLADE = (
     "On a Compute Blade, do not load a design into the card or convert it: that is not in the guide yet. The "
     "only attempt (pi20 at ps1, 7 October 2026) lost the card's PCIe endpoint (a bus rescan did not bring it "
     "back, and a root-complex re-probe failed), and the reboot after it was followed by about two hours of "
-    f"restarts, cause not known: {VERIFYING_3}"
+    f"restarts, cause not known: {BLADE_JTAG_PAGE}"
 )
 ON_A_BLADE = {
     r"unconverted: runs SQRL's factory image": "The Acorn still runs the image it was sold with, not the "
