@@ -25,13 +25,17 @@ PAGES = {
     "uart-2": ("setup/{slug}/uart-housing", "How to fill the UART cable's housing ({name})"),
     "bench": ("setup/{slug}/bench-check", "How to check the cables on the bench ({name})"),
     "fit": ("setup/{slug}/fitting", "How to fit the cables and the card ({name})"),
+    "check-about": ("checks/about", "The Acorn check"),
     "check-1": ("checks/{slug}", "How to run the Acorn check on a {name}"),
+    "check-tests": ("checks/{slug}-tests", "Acorn tests and their wires on a {name}"),
     "check-2": ("troubleshooting/{slug}-failing-test", "A failing Acorn test on a {name}"),
     "check-2b": ("troubleshooting/{slug}-other-messages", "Other Acorn check messages on a {name}"),
     "check-3": ("checks/{slug}-jtag", "How to make a {name} boot ready for JTAG"),
 }
 # The pages only one carrier has.
 ONLY = {"check-3": ("blade",)}
+# The pages both carriers share: one page, the same title and address whichever carrier asks.
+SHARED = ("check-about",)
 
 
 class NoSuchPage(KeyError):
@@ -62,5 +66,11 @@ def link(key, page):
 
 
 def every():
-    """[(carrier key, page key)] of every page there is."""
-    return [(key, page) for key in CARRIERS for page in PAGES if key in ONLY.get(page, CARRIERS)]
+    """[(carrier key, page key)] of every page there is; a shared page once, under the first carrier."""
+    first = next(iter(CARRIERS))
+    return [
+        (key, page)
+        for key in CARRIERS
+        for page in PAGES
+        if key in ONLY.get(page, CARRIERS) and (page not in SHARED or key == first)
+    ]
