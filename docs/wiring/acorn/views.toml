@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# The views of the Acorn pages. A table's name is the id a page references: never rename one a page uses.
+# Fields: docs/superpowers/specs/2026-10-10-diagram-views-design.md.
+
+[views."pi5-hat.top"]
+thing = "hat"
+face = "top"
+
+[views."pi5-hat.top.header"]
+thing = "hat"
+face = "top"
+highlight = ["hat.header"]
+
+[views."pi5-hat.top.m2-slot"]
+thing = "hat"
+face = "top"
+crop = ["hat.m2-slot"]
+highlight = ["hat.m2-slot"]
+
+[views."pi5-hat.top.pins-19-26"]
+thing = "hat"
+face = "top"
+crop = ["hat.header.pins.19-26"]
+highlight = ["hat.header.pins.19-26"]
+
+[views."pi5-hat.top.pins-5-10"]
+thing = "hat"
+face = "top"
+crop = ["hat.header.pins.5-10"]
+highlight = ["hat.header.pins.5-10"]

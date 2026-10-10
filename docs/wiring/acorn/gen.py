@@ -8,7 +8,7 @@
 Run:  uv run gen.py           (writes generated/; --check compares instead, for CI)
 The sheets are generated/acorn-wiring-*.svg, the tables generated/*.md (tables.py). See GOALS.md for
 what the sheets have to show, and sheetlib.py for the layout checks that fail the build. Pillow and
-fontTools are pinned, and the fonts are in fonts/, so the output is the same on every machine.
+fontTools are pinned, and the fonts are in docs/diagrams/fonts/, so the output is the same on every machine.
 
 Wires whose pad is in the header column AWAY from the plugs reach it through the gap between two
 rows of pins, the way a trace escapes a connector. That keeps every wire to two bends outside the

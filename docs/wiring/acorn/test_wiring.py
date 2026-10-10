@@ -191,3 +191,51 @@ def test_where_things_are_in_the_hat_photo_is_what_measure_hat_measures():
     hat = wiring.DATA["carriers"]["pi5"]["hat"]
     got = measure_hat.measure(wiring.HERE / "photos" / hat["photo"])
     assert {k: hat[k] for k in measure_hat.STORED} == {k: got[k] for k in measure_hat.STORED}
+
+
+def test_the_hat_in_geometry_toml_is_what_measure_hat_measures():
+    import measure_hat
+    import tomllib
+
+    hat = tomllib.loads((wiring.HERE / "geometry.toml").read_text())["things"]["hat"]
+    photo = wiring.DATA["carriers"]["pi5"]["hat"]["photo"]
+    got = measure_hat.measure_mm(wiring.HERE / "photos" / photo)
+    assert hat["size"] == got["size"]
+    assert (
+        len(got["px_per_mm"]) == 2
+        and got["px_per_mm"] == measure_hat.measure(wiring.HERE / "photos" / photo)["scale_px_per_mm"]
+    )
+    assert hat["photos"]["top"]["px_per_mm"] == got["px_per_mm"] and hat["photos"]["top"]["origin"] == got["origin"]
+    assert hat["headers"]["header"]["pin1"] == got["pin1"]
+    assert hat["items"]["m2-slot"]["box"] == got["m2_slot"]
+
+
+def test_the_hat_measures_as_long_as_its_drawing_says():
+    import measure_hat
+
+    photo = wiring.DATA["carriers"]["pi5"]["hat"]["photo"]
+    length = measure_hat.measure_mm(wiring.HERE / "photos" / photo)["size"][1]
+    assert abs(length - measure_hat.BOARD_LONG) < 0.1
+    assert measure_hat.measure(wiring.HERE / "photos" / photo)["board_mm"] == length
+
+
+def test_measure_hat_prints_the_millimetres_and_checks_when_asked_for_both(capsys):
+    import measure_hat
+
+    measure_hat.main(["--mm", "--check"])
+    out = capsys.readouterr().out
+    assert "size = " in out and "wiring.toml matches the photo" in out
+
+
+def test_the_hat_header_in_geometry_toml_is_the_header_measure_hat_measures():
+    import measure_hat
+    import tomllib
+
+    hat = tomllib.loads((wiring.HERE / "geometry.toml").read_text())["things"]["hat"]
+    photo = wiring.DATA["carriers"]["pi5"]["hat"]["photo"]
+    assert hat["photos"]["top"]["file"] == photo
+    header = hat["headers"]["header"]
+    assert (header["pitch"], header["rows"], header["columns"]) == (measure_hat.PIN_PITCH, measure_hat.ROWS, 2)
+    px = measure_hat.measure(wiring.HERE / "photos" / photo)
+    assert len(px["columns"]) == header["columns"]
+    assert px["pitch"] / px["scale_px_per_mm"][1] == pytest.approx(header["pitch"], rel=0.02)  # rows run down

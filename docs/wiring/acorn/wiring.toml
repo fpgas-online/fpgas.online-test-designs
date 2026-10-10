@@ -252,10 +252,11 @@ note = "the M.2 M-key PCIe HAT the pictures show: it takes cards up to 2280 and 
 #     2280 Size M.2 Solid State Drive"). credit: the photo credit, as the pictures' footers print it.
 #   photo: the drawing as prep_photos.py cuts and turns it into photos/: header on the right edge, pin 1 at the top.
 # Every coordinate below is in that photo's pixels and is what measure_hat.py measures in it (`uv run
-# measure_hat.py --check`, and test_wiring.py, fail if they differ). From its run on 7 October 2026: 8.177 px/mm
-# from the four mounting holes (58.00 x 49.00 mm on the drawing); holes 3.33 and 23.54 mm from the board's ends
-# (the drawing: 3.50 and 23.50), board 84.88 mm long (85.00); 16 and 18 of the 20 pads of each column found, the
-# worst 1.15 px off the fitted rows; the M.2 socket 22.26 x 9.05 mm.
+# measure_hat.py --check`, and test_wiring.py, fail if they differ). From its run on 10 October 2026: 8.177 px/mm
+# down the photo and 8.173 across, from the four mounting holes (58.00 x 49.00 mm on the drawing); holes 3.39
+# and 23.60 mm from the board's ends
+# (the drawing: 3.50 and 23.50), board 84.99 mm long (85.00); 16 and 18 of the 20 pads of each column found, the
+# worst 1.15 px off the fitted rows; the M.2 socket 22.39 x 9.17 mm.
 #   columns: the centres of the header's two columns, pin 1's (odd) first; row: the centre of the first row (pins 1
 #     and 2); pitch: from one row to the next (2.54 mm at the holes' scale is 20.77 px).
 #   pin1_box: pins 1 to 26, boxed on the wiring sheet. crop: the part of the photo a cable picture shows.
