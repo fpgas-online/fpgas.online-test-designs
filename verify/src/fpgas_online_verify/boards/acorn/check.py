@@ -84,7 +84,8 @@ OTHER_BOARDS = {
     "pcileech": "PCIe Screamer (PCILeech image)",
     "xilinx-xdma": "Xilinx XDMA design (likely PicoEVB)",
 }
-NO_TEST_DESIGN = "fpgas.online has no test design for this board yet"
+# The issue is the one that tracks a test design and a check for these cards; the value says what is, not what will be.
+NO_TEST_DESIGN = "no test design for this board (fpgas.online-test-designs issue 238)"
 
 XADC_TEMPERATURE = ("temperature_c", "xadc_temperature")
 XADC_VOLTAGES = (("vccint_v", "xadc_vccint"), ("vccaux_v", "xadc_vccaux"), ("vccbram_v", "xadc_vccbram"))
