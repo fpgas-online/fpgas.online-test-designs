@@ -19,8 +19,9 @@ columns = 2
 rows = 20
 numbering = "across"
 pitch = 2.54
+pin = 0.64
 pin1 = [51.11, 8.27]
-source = "Raspberry Pi 40-pin header, 2.54 mm; position measured in the photo by measure_hat.py (x at the scale the holes' 49.00 mm gives, y at the scale their 58.00 mm gives)"
+source = "Raspberry Pi 40-pin header, 2.54 mm; 0.64 mm square pins: the 2.54 mm header's standard post; position measured in the photo by measure_hat.py (x at the scale the holes' 49.00 mm gives, y at the scale their 58.00 mm gives)"
 
 [things.hat.items.m2-slot]
 kind = "slot"

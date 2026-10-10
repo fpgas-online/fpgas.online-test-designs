@@ -5,6 +5,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 import pytest
+import tomllib
 
 from diagrams import model
 from diagrams.errors import DiagramError
@@ -106,3 +107,29 @@ def test_a_photo_table_with_an_unknown_key_is_refused(tmp_path):
 def test_a_photos_scale_is_two_positive_numbers_across_and_down(tmp_path, bad):
     with pytest.raises(DiagramError, match=r"b: photo 'bottom': px_per_mm"):
         model.load(write(tmp_path, THING + PHOTO.replace("[10.0, 9.5]", bad)))
+
+
+HEADER = """
+[things.b.headers.h]
+face = "top"
+columns = 3
+rows = 4
+numbering = "down"
+pitch = 2.0
+pin = 0.5
+pin1 = [2.0, 3.0]
+source = "a drawing; 0.5 mm square pins"
+"""
+
+
+def test_a_header_must_say_how_wide_its_pins_are(tmp_path):
+    with pytest.raises(DiagramError, match=r"b\.h: no pin"):
+        model.load(write(tmp_path, THING + HEADER.replace("pin = 0.5\n", "")))
+
+
+def test_a_pins_box_is_as_wide_as_the_header_says():
+    pin = tomllib.loads(GEOMETRY.read_text())["things"]["hat"]["headers"]["header"]["pin"]
+    scene = model.load(GEOMETRY)
+    for n in (1, 2, 40):
+        box = scene.item(f"hat.header.pin.{n}").box
+        assert (box.x1 - box.x0, box.y1 - box.y0) == pytest.approx((pin, pin))

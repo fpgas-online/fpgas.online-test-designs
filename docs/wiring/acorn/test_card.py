@@ -128,3 +128,8 @@ def test_the_old_pad_box_is_within_10_px_of_the_gold_at_its_left_right_and_botto
 
 def test_the_old_pad_box_starts_above_the_cards_end_and_the_measured_one_does_not():
     assert steps.ACORN_PAD[1] == 0 < PX["top"] <= PX["pad"][1]
+
+
+def test_geometry_toml_names_the_card_width_and_the_photo_the_script_measures():
+    assert ACORN["size"][0] == measure_card.CARD_WIDTH
+    assert ACORN["photos"]["bottom"]["file"] == measure_card.PHOTO

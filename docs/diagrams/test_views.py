@@ -71,3 +71,12 @@ def test_a_sequence_gives_its_views_their_viewpoint_and_allows_one_change(tmp_pa
     two = one + '[views."s.4"]\nsequence = "s"\nturn = 0\n'
     with pytest.raises(DiagramError, match="changes its viewpoint twice"):
         load(tmp_path, two)
+
+
+def test_a_crop_is_its_items_union_grown_by_the_margin_and_kept_on_the_thing(tmp_path):
+    view = load(tmp_path, '[views."a.b"]\nthing = "hat"\nface = "top"\ncrop = ["hat.header.pins.19-26"]\n')["a.b"]
+    union = SCENE.item("hat.header.pin.19").box.union(SCENE.item("hat.header.pin.26").box)
+    width = SCENE.things["hat"].size[0]
+    assert views.MARGIN == 3.0 and union.x1 + 3.0 > width  # the header is at the board's edge: the margin runs off it
+    box = views.crop_box(SCENE, view)
+    assert (box.x0, box.y0, box.x1, box.y1) == pytest.approx((union.x0 - 3.0, union.y0 - 3.0, width, union.y1 + 3.0))

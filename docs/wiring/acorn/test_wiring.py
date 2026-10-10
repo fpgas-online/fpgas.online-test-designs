@@ -225,3 +225,17 @@ def test_measure_hat_prints_the_millimetres_and_checks_when_asked_for_both(capsy
     measure_hat.main(["--mm", "--check"])
     out = capsys.readouterr().out
     assert "size = " in out and "wiring.toml matches the photo" in out
+
+
+def test_the_hat_header_in_geometry_toml_is_the_header_measure_hat_measures():
+    import measure_hat
+    import tomllib
+
+    hat = tomllib.loads((wiring.HERE / "geometry.toml").read_text())["things"]["hat"]
+    photo = wiring.DATA["carriers"]["pi5"]["hat"]["photo"]
+    assert hat["photos"]["top"]["file"] == photo
+    header = hat["headers"]["header"]
+    assert (header["pitch"], header["rows"], header["columns"]) == (measure_hat.PIN_PITCH, measure_hat.ROWS, 2)
+    px = measure_hat.measure(wiring.HERE / "photos" / photo)
+    assert len(px["columns"]) == header["columns"]
+    assert px["pitch"] / px["scale_px_per_mm"][1] == pytest.approx(header["pitch"], rel=0.02)  # rows run down

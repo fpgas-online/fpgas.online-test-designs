@@ -15,7 +15,6 @@ from .errors import DiagramError
 KINDS = ("board", "header", "pin", "socket", "contact", "slot", "standoff", "hole", "pad")
 FACES = ("top", "bottom")
 PIN_RANGE = re.compile(r"(?P<header>.+)\.pins\.(?P<first>\d+)-(?P<last>\d+)")
-PAD = 0.64  # the square a header pin is drawn as, mm: the pin's own section, 0.64 mm square (2.54 mm headers)
 
 
 @dataclass(frozen=True)
@@ -114,7 +113,9 @@ def _header(thing_key, size, key, raw):
     _source(raw, f"{thing_key}.{key}")
     if raw.get("numbering") not in ("across", "down"):
         raise DiagramError(f'geometry: {thing_key}.{key}: numbering must be "across" or "down"')
-    cols, rows, pitch = raw["columns"], raw["rows"], raw["pitch"]
+    if "pin" not in raw:
+        raise DiagramError(f"geometry: {thing_key}.{key}: no pin (the width of one square pin, in mm)")
+    cols, rows, pitch, pad = raw["columns"], raw["rows"], raw["pitch"], raw["pin"]
     x1, y1 = raw["pin1"]
     items, half = {}, pitch / 2
     body = Box(x1 - half, y1 - half, x1 + (cols - 1) * pitch + half, y1 + (rows - 1) * pitch + half)
@@ -125,7 +126,7 @@ def _header(thing_key, size, key, raw):
             n = (r * cols + c if raw["numbering"] == "across" else c * rows + r) + 1
             cx, cy = x1 + c * pitch, y1 + r * pitch
             pid = f"{hid}.pin.{n}"
-            box = Box(cx - PAD / 2, cy - PAD / 2, cx + PAD / 2, cy + PAD / 2)
+            box = Box(cx - pad / 2, cy - pad / 2, cx + pad / 2, cy + pad / 2)
             items[pid] = _item(size, pid, "pin", raw["face"], box, str(n), z=2)
     return items
 
