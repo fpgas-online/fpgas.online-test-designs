@@ -1221,6 +1221,21 @@ def card_out(c):
     return CARD_OUT[c.key] + CARD_OUT_REST
 
 
+# The words the first cable's two steps before any flag start with, as the overview quotes them by number.
+CUT_HALF = "Cut the Molex cable in half"
+REACH = "Check that each half reaches"
+# A cable's first step: its wires are found and flagged with the plug in the card's socket, the card in the hand.
+CARD_OUT_STEP = "Have the Acorn out of its slot."
+
+
+def card_out_step(c):
+    """The step that has the card out of its slot and in the hand: the power off first, the screw, and static."""
+    return (
+        f"{CARD_OUT_STEP} If it is fitted, {c.power_off[0].lower()}{c.power_off[1:]} Then take the card out. "
+        f"{card_out(c)} {STATIC}"
+    )
+
+
 def header_words(name):
     """A header's name as words in a sentence: \"UART\" becomes \"UART header\"."""
     return name if any(w in name.lower() for w in ("header", "port")) else f"{name} header"
@@ -1335,8 +1350,9 @@ def procedure_parts(c, restart=False):
         for alt, name in images:  # a picture shown again says why in the step's words (again)
             target.extend([markdown_image(alt, name), ""])
 
+    step(card_out_step(c))
     step(
-        "Cut the Molex cable in half with side cutters. Each half is one cable. The cut comes before the reach "
+        f"{CUT_HALF} with side cutters. Each half is one cable. The cut comes before the reach "
         f"check on purpose: a half is what goes between the card and the {c.name}, so a half is what is "
         "checked for reach, below.",
         ("The cable, cut in the middle", "acorn-cable-cut.png"),
@@ -1346,7 +1362,7 @@ def procedure_parts(c, restart=False):
         for k in wiring.CONNECTORS
     ]
     step(
-        "Check that each half reaches, before any wire is cut back or crimped. "
+        f"{REACH}, before any wire is cut back or crimped. "
         + power_off_if_on(c)
         + " With the card out of its slot, hold the card over the slot where it will sit, and lay "
         + " and ".join(pairs)
@@ -1378,6 +1394,8 @@ def procedure_parts(c, restart=False):
         if restart and not target:
             n = 0
         target.extend([f"#### The {connector} cable ({conn['what']})", ""])
+        if connector != next(iter(wiring.CONNECTORS)):  # the first cable's part has it as its first step, above
+            step(card_out_step(c))
         half = "one" if connector == next(iter(wiring.CONNECTORS)) else "the other"
         flag = [
             f"Press the plug of {half} half into socket {connector} on the underside of the Acorn. "
@@ -1492,7 +1510,12 @@ def procedure_parts(c, restart=False):
     why = "for which wire goes in which cavity, and which corner is marked"
     for i, (connector, picture) in enumerate(cavity.items()):
         step(
-            (f"{BENCH_START} {power_off_if_on(c)} Then fit {fits[i]}." if i == 0 else f"Fit {fits[i]}.")
+            (
+                f"{BENCH_START} {power_off_if_on(c)} The Acorn stays out of its slot; if it is fitted, take it out. "
+                f"{card_out(c)} Then fit {fits[i]}."
+                if i == 0
+                else f"Fit {fits[i]}."
+            )
             + " "
             + again(connector, why),
             picture,
@@ -1509,7 +1532,10 @@ def procedure_parts(c, restart=False):
     actions = fit_actions(c)
     for half, (words, numbers) in enumerate(zip(FIT_STEPS, FIT_HALVES), 1):
         step(
-            words + "\n\n" + "\n".join(f"{n}. {actions[n - 1]}" for n in numbers),  # a list from 4 starts at 4
+            words
+            + (f" {FIT_STATIC}" if half == 1 else "")
+            + "\n\n"
+            + "\n".join(f"{n}. {actions[n - 1]}" for n in numbers),  # a list from 4 starts at 4
             (fit_alt(c, numbers), png(fit_name(c, half))),
         )
     parts["tail"] = [CREDITS[c.key] + ".", ""]
@@ -1552,14 +1578,25 @@ STATIC = (
 )
 
 
+def need_lists(parts, tools=()):
+    """The lines under "What you need": the parts as a list, then the tools as a list. Items, not sentences. A
+    list has at least two items, so a single tool is listed with the parts."""
+    if len(tools) == 1:
+        return ["**Parts and tools**", "", *(f"- {item}" for item in (*parts, *tools)), ""]
+    lines = ["**Parts**", "", *(f"- {item}" for item in parts), ""]
+    if tools:
+        lines += ["**Tools**", "", *(f"- {item}" for item in tools), ""]
+    return lines
+
+
 def needs(c, connector):
-    """What one cable takes from the parts list, as a sentence: so its page can be started without the list."""
+    """What one cable's first page takes from the parts list, as lists: so the page can be started without it."""
     plan = housing(c, connector)
     data = c.headers[plan.header]
     pins = wiring.CONNECTORS[connector]["pins"]
     wired = [s for s in pins if s not in plan.cut]
     shape = f"{data.columns}×{(plan.last - plan.first + 1) // data.columns}"
-    items = [
+    parts = [
         "one half of the Molex Pico-EZmate cable (a plug with six black wires)"
         if connector == next(iter(wiring.CONNECTORS))
         else "the other half of the Molex Pico-EZmate cable, which was cut in half in "
@@ -1570,18 +1607,18 @@ def needs(c, connector):
         f"{wiring.LENGTHS['tube']} mm heat-shrink tube",
     ]
     if has_resistor(c, connector):
-        items += [f"the {c.resistor_value} resistor", f"{wiring.LENGTHS['resistor_tube']} mm heat-shrink tube"]
-    tools = (
-        "a multimeter with a continuity buzzer, a fine probe tip for it or a sewing pin to hold against a probe, a "
-        "ruler marked in millimetres, side cutters, wire strippers, the crimping tool, a hot-air tool"
-    )
-    if has_resistor(c, connector):
-        tools += ", a soldering iron"
-    return (
-        f"For this cable: {'; '.join(items)}. Tools: {tools}, masking tape and a fine pen. The Acorn itself, out of "
-        f"any slot, is needed for the first steps: if it is fitted, {c.power_off[0].lower()}{c.power_off[1:]} Then "
-        f"take the card out. {card_out(c)} {STATIC}"
-    )
+        parts += [f"the {c.resistor_value} resistor", f"{wiring.LENGTHS['resistor_tube']} mm heat-shrink tube"]
+    parts += ["the Acorn"]
+    tools = [
+        "a multimeter with a continuity buzzer, and a fine probe tip for it or a sewing pin to hold against a probe",
+        "a ruler marked in millimetres",
+        "side cutters and wire strippers",
+        "the crimping tool",
+        "a hot-air tool",
+        *(["a soldering iron"] if has_resistor(c, connector) else []),
+        "masking tape and a fine pen",
+    ]
+    return need_lists(parts, tools)
 
 
 def renumbered(lines):
@@ -1635,18 +1672,21 @@ def guide(c):
         lines = [line for line in lines if not line.startswith("#### ")]
         while lines and not lines[0]:
             lines.pop(0)
-        head = [tables.BANNER.strip(), "", not_run, "", parts["tail"][0], "", "## What you need", "", need, ""]
+        head = [tables.BANNER.strip(), "", not_run, "", parts["tail"][0], "", "## What you need", "", *need]
         return "\n".join([*head, "## Steps", "", *lines, *(line for extra in after for line in (extra, ""))])
 
+    first_part = next(iter(GUIDE.values()))[0]  # the first cable's first page: the one cut, then the reach check
+    first_page = parts[next(iter(GUIDE))]
     out = {
         guide_name(c, "overview"): "\n".join([
             tables.BANNER.strip(), "", not_run, "", "## What you will have", "", *will_have,
-            "Nothing in this guide cuts a wire to length. The bought cable is cut in half, once, as the first step "
-            "(before the meter check, which needs the cut faces); each half is then used at the length it has, "
+            "Nothing in this guide cuts a wire to length. The bought cable is cut in half, once "
+            f"(step {numbered(first_page, CUT_HALF)} of {pages.link(c.key, first_part + '-1')}, before the meter "
+            "check, which needs the cut faces); each half is then used at the length it has, "
             "apart from the wires that are cut back at the plug"
             + (" and the one wire that is cut to take the resistor" if c.resistors else "")
-            + f". Whether a half reaches from the card to the {c.name}'s headers has not been measured by us: "
-            "the guide checks it as its second step, before any wire is cut back or crimped.", "",
+            + f". Step {numbered(first_page, REACH)} of that page checks that each half reaches from the card to the "
+            f"{c.name}'s headers, before any wire is cut back or crimped.", "",
             "## The order of work", "", *(f"{i}. {line}" for i, line in enumerate(order, 1)), "",
             *parts["tail"],
         ]),
@@ -1658,10 +1698,17 @@ def guide(c):
         prepare, fill = cut_at(parts[connector], "Hold the empty")
         out[guide_name(c, f"{part}-1")] = body(needs(c, connector), prepare)
         out[guide_name(c, f"{part}-2")] = body(
-            f"The {connector} cable with its wires flagged and a terminal crimped on each "
-            f"({pages.link(c.key, f'{part}-1')}), "
-            f"the empty {shape} Dupont housing, a paint pen or a dot of tape, and a multimeter with a continuity "
-            "buzzer and a fine probe or a sewing pin.",
+            need_lists(
+                [
+                    f"the {connector} cable with its wires flagged and a terminal crimped on each "
+                    f"({pages.link(c.key, f'{part}-1')})",
+                    f"the empty {shape} Dupont housing",
+                ],
+                [
+                    "a paint pen, or a dot of tape",
+                    "a multimeter with a continuity buzzer, and a fine probe or a sewing pin",
+                ],
+            ),
             fill,
             "## If a terminal is in the wrong cavity",
             "A Dupont housing holds each terminal by a small plastic tab over its latch, in the window. Lift that tab "
@@ -1670,8 +1717,7 @@ def guide(c):
         )
     bench, fit_ = cut_at(parts["fit"], FIT_STEPS[0])
     out[guide_name(c, "bench")] = body(
-        f"Both finished cables, the {c.name}, and a multimeter with a continuity buzzer. {power_off_if_on(c)} "
-        f"The Acorn stays out of its slot; if it is fitted, take it out. {card_out(c)}",
+        need_lists(["both finished cables", f"the {c.name}"], ["a multimeter with a continuity buzzer"]),
         bench,
         "## If it fails",
         "Do not fit the cables. A contact 1 that does not beep means that cable's ground wire is open or in the wrong "
@@ -1680,9 +1726,7 @@ def guide(c):
         "every wire again.",
     )
     out[guide_name(c, "fit")] = body(
-        f"Both cables, checked on the bench ({pages.link(c.key, 'bench')}), the Acorn and the {c.name}. As before: "
-        f"after action 1 (step {numbered(fit_, FIT_STEPS[0])} below), touch bare metal of the host before you pick "
-        "up the card, and hold it by its edges.",
+        need_lists([f"both cables, checked on the bench ({pages.link(c.key, 'bench')})", "the Acorn", f"the {c.name}"]),
         fit_,
         "## Next",
         f"Power the host on and run the check: {pages.link(c.key, 'check-1')}."
@@ -1838,6 +1882,8 @@ def fit_actions(c):
 # with its own three actions, so that a half and its words fit on one printed sheet.
 FIT_HALVES = ((1, 2, 3), (4, 5, 6))
 FIT_SECOND = "Then the card and the housings:"
+# Said with the first fitting step, on the page: its action 1 powers the host off, and the card is picked up after.
+FIT_STATIC = "After action 1, touch bare metal of the host before you pick up the card, and hold it by its edges."
 # The two halves as two steps of the fitting page, one picture each; their actions keep the numbers 1 to 6 the
 # pictures print.
 FIT_STEPS = (

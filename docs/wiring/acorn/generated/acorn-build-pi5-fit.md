@@ -6,11 +6,15 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 
 ## What you need
 
-Both cables, checked on the bench ([How to check the cables on the bench (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/bench-check.html)), the Acorn and the Raspberry Pi 5. As before: after action 1 (step 1 below), touch bare metal of the host before you pick up the card, and hold it by its edges.
+**Parts**
+
+- both cables, checked on the bench ([How to check the cables on the bench (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/bench-check.html))
+- the Acorn
+- the Raspberry Pi 5
 
 ## Steps
 
-**1.** Fit the plugs into the card. The sockets are on the underside of the card and may not be reachable once it is in the slot, so the plugs go in first, in this order.
+**1.** Fit the plugs into the card. The sockets are on the underside of the card and may not be reachable once it is in the slot, so the plugs go in first, in this order. After action 1, touch bare metal of the host before you pick up the card, and hold it by its edges.
 
 1. Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE.
 2. If the housings are on the headers (after the bench check), take them off.

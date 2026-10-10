@@ -6,11 +6,15 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 
 ## What you need
 
-Both finished cables, the Compute Blade, and a multimeter with a continuity buzzer. If the Compute Blade is on, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. The Acorn stays out of its slot; if it is fitted, take it out. Take its screw out first (an M2x2.5 screw with an M2 nylon washer, put in with a PH1 driver: from Uptime Lab's assembly guide, not measured by us). How the card then comes out of the slot is not recorded by us.
+**Parts and tools**
+
+- both finished cables
+- the Compute Blade
+- a multimeter with a continuity buzzer
 
 ## Steps
 
-**1.** This is a bench check; the housings come off again before the cables are fitted. If the Compute Blade is on, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Then fit the P1 housing on the Extension Port with its marked corner on the pin printed 1 beside the header. The P1 cavity picture is shown again below, for which wire goes in which cavity, and which corner is marked.
+**1.** This is a bench check; the housings come off again before the cables are fitted. If the Compute Blade is on, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. The Acorn stays out of its slot; if it is fitted, take it out. Take its screw out first (an M2x2.5 screw with an M2 nylon washer, put in with a PH1 driver: from Uptime Lab's assembly guide, not measured by us). How the card then comes out of the slot is not recorded by us. Then fit the P1 housing on the Extension Port with its marked corner on the pin printed 1 beside the header. The P1 cavity picture is shown again below, for which wire goes in which cavity, and which corner is marked.
 
 ![Which wire goes in which cavity, P1 cable](acorn-cable-blade-p1.png){.only-light}
 ![Which wire goes in which cavity, P1 cable](acorn-cable-blade-p1-dark.png){.only-dark}

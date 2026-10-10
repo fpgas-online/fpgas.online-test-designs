@@ -6,11 +6,15 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 
 ## What you need
 
-Both finished cables, the Raspberry Pi 5, and a multimeter with a continuity buzzer. If the Raspberry Pi 5 is on, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. The Acorn stays out of its slot; if it is fitted, take it out. Take the screw at its far end out first (the HAT ships one SSD mounting screw: from Waveshare's page, not measured by us; its size and the driver are not recorded by us). How the card then comes out of the slot is not recorded by us.
+**Parts and tools**
+
+- both finished cables
+- the Raspberry Pi 5
+- a multimeter with a continuity buzzer
 
 ## Steps
 
-**1.** This is a bench check; the housings come off again before the cables are fitted. If the Raspberry Pi 5 is on, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. Then fit the P1 housing on the 40-pin header pins 19 to 26 with its marked corner on pin 19, counted as in the picture. The P1 cavity picture is shown again below, for which wire goes in which cavity, and which corner is marked.
+**1.** This is a bench check; the housings come off again before the cables are fitted. If the Raspberry Pi 5 is on, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. The Acorn stays out of its slot; if it is fitted, take it out. Take the screw at its far end out first (the HAT ships one SSD mounting screw: from Waveshare's page, not measured by us; its size and the driver are not recorded by us). How the card then comes out of the slot is not recorded by us. Then fit the P1 housing on the 40-pin header pins 19 to 26 with its marked corner on pin 19, counted as in the picture. The P1 cavity picture is shown again below, for which wire goes in which cavity, and which corner is marked.
 
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png){.only-light}
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1-dark.png){.only-dark}

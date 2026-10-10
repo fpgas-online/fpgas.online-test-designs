@@ -6,7 +6,15 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 
 ## What you need
 
-The P2 cable with its wires flagged and a terminal crimped on each ([How to prepare the UART cable's wires (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/uart-wires.html)), the empty 1×4 Dupont housing, a paint pen or a dot of tape, and a multimeter with a continuity buzzer and a fine probe or a sewing pin.
+**Parts**
+
+- the P2 cable with its wires flagged and a terminal crimped on each ([How to prepare the UART cable's wires (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/uart-wires.html))
+- the empty 1×4 Dupont housing
+
+**Tools**
+
+- a paint pen, or a dot of tape
+- a multimeter with a continuity buzzer, and a fine probe or a sewing pin
 
 ## Steps
 

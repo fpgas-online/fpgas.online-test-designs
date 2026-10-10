@@ -6,11 +6,31 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 
 ## What you need
 
-For this cable: the other half of the Molex Pico-EZmate cable, which was cut in half in [How to prepare the JTAG cable's wires (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/jtag-wires.html) (if it is still whole: cut it in the middle with side cutters; each half is one cable); the 1×4 Dupont housing; 3 Dupont crimp terminals, and a few spare; 2 mm heat-shrink tube; the 470 Ω resistor; 3 mm heat-shrink tube. Tools: a multimeter with a continuity buzzer, a fine probe tip for it or a sewing pin to hold against a probe, a ruler marked in millimetres, side cutters, wire strippers, the crimping tool, a hot-air tool, a soldering iron, masking tape and a fine pen. The Acorn itself, out of any slot, is needed for the first steps: if it is fitted, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Then take the card out. Take its screw out first (an M2x2.5 screw with an M2 nylon washer, put in with a PH1 driver: from Uptime Lab's assembly guide, not measured by us). How the card then comes out of the slot is not recorded by us. The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges.
+**Parts**
+
+- the other half of the Molex Pico-EZmate cable, which was cut in half in [How to prepare the JTAG cable's wires (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/jtag-wires.html) (if it is still whole: cut it in the middle with side cutters; each half is one cable)
+- the 1×4 Dupont housing
+- 3 Dupont crimp terminals, and a few spare
+- 2 mm heat-shrink tube
+- the 470 Ω resistor
+- 3 mm heat-shrink tube
+- the Acorn
+
+**Tools**
+
+- a multimeter with a continuity buzzer, and a fine probe tip for it or a sewing pin to hold against a probe
+- a ruler marked in millimetres
+- side cutters and wire strippers
+- the crimping tool
+- a hot-air tool
+- a soldering iron
+- masking tape and a fine pen
 
 ## Steps
 
-**1.** Find wire 1 of the P2 cable and flag the wires, before cutting any wire back.
+**1.** Have the Acorn out of its slot. If it is fitted, ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Then take the card out. Take its screw out first (an M2x2.5 screw with an M2 nylon washer, put in with a PH1 driver: from Uptime Lab's assembly guide, not measured by us). How the card then comes out of the slot is not recorded by us. The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges.
+
+**2.** Find wire 1 of the P2 cable and flag the wires, before cutting any wire back.
 
 1. Press the plug of the other half into socket P2 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost.
 2. Put a numbered tape flag on each of the 6 wires, 1 at the left to 6, about 25 mm back from the tip, clear of the end that will be cut and stripped later. Write P2 on the flag of wire 1 as well: off the card, the two halves look alike.
@@ -18,7 +38,7 @@ For this cable: the other half of the Molex Pico-EZmate cable, which was cut in 
 ![The P2 cable's plug in socket P2, all 6 wires whole, a flag on each](acorn-cable-p2-flag.png){.only-light}
 ![The P2 cable's plug in socket P2, all 6 wires whole, a flag on each](acorn-cable-p2-flag-dark.png){.only-dark}
 
-**2.** Check which wire of the P2 cable is wire 1, with a meter, before cutting any wire back.
+**3.** Check which wire of the P2 cable is wire 1, with a meter, before cutting any wire back.
 
 1. With the plug still in the socket (the Acorn out of any slot), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: it must beep.
 2. Do the same with the wire flagged 6: it must stay silent.
@@ -29,17 +49,17 @@ For this cable: the other half of the Molex Pico-EZmate cable, which was cut in 
 ![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check.png){.only-light}
 ![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check-dark.png){.only-dark}
 
-**3.** Cut wires 4, 5 and 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over each cut end. They go in no cavity. Wire 6 is VCC, 3.3 V from the Acorn (the LiteX wiki's legend names it so; not measured by us): it must never reach the host. Leave wires 1, 2 and 3 at full length.
+**4.** Cut wires 4, 5 and 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over each cut end. They go in no cavity. Wire 6 is VCC, 3.3 V from the Acorn (the LiteX wiki's legend names it so; not measured by us): it must never reach the host. Leave wires 1, 2 and 3 at full length.
 
 ![The P2 cable: its wires prepared](acorn-cable-blade-p2-prepare.png){.only-light}
 ![The P2 cable: its wires prepared](acorn-cable-blade-p2-prepare-dark.png){.only-dark}
 
-**4.** Cut wire 2 (J2) about 15 mm from its free end. Slide a piece of the 3 mm tube onto the wire, clear of the cut. Strip about 3 mm from each cut end. Trim the resistor's leads to about 5 mm each. Solder the 470 Ω resistor between the two cut ends. Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this. The resistor is there because J2 lands on GPIO14, which is also JTAG TMS: with 470 Ω in the wire, JTAG still gets through if the FPGA drives J2 (designed so, not yet measured).
+**5.** Cut wire 2 (J2) about 15 mm from its free end. Slide a piece of the 3 mm tube onto the wire, clear of the cut. Strip about 3 mm from each cut end. Trim the resistor's leads to about 5 mm each. Solder the 470 Ω resistor between the two cut ends. Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this. The resistor is there because J2 lands on GPIO14, which is also JTAG TMS: with 470 Ω in the wire, JTAG still gets through if the FPGA drives J2 (designed so, not yet measured).
 
 ![The resistor fitted into wire 2](acorn-cable-blade-p2-resistor.png){.only-light}
 ![The resistor fitted into wire 2](acorn-cable-blade-p2-resistor-dark.png){.only-dark}
 
-**5.** Strip about 3 mm from wires 1, 2 and 3. Crimp a Dupont terminal on each.
+**6.** Strip about 3 mm from wires 1, 2 and 3. Crimp a Dupont terminal on each.
 
 ![Stripping and crimping](acorn-cable-crimp.png){.only-light}
 ![Stripping and crimping](acorn-cable-crimp-dark.png){.only-dark}

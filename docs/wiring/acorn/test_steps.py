@@ -425,16 +425,19 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
         assert not pages[steps.guide_name(c, part)].rstrip().endswith("same PCB).")
     # a fitted card comes out, with the power off, before a cable's first step; the cuts the guide does make are named
     for part in ("jtag-1", "uart-1"):
-        need = pages[steps.guide_name(c, part)]
-        assert f"if it is fitted, {c.power_off[0].lower()}{c.power_off[1:]} Then take the card out." in need
+        first_step = dict(step_blocks(pages[steps.guide_name(c, part)]))[1]
+        assert first_step.startswith(f"**1.** {steps.CARD_OUT_STEP}")
+        assert f"If it is fitted, {c.power_off[0].lower()}{c.power_off[1:]} Then take the card out." in first_step
+        assert steps.STATIC in first_step
     assert "cut in half, once" in overview
     # the reach check is asked for at a moment the guide has: after the one cut, before any wire is cut back
-    assert "before you cut anything" not in overview and "as its second step, before any wire" in overview
+    assert "before you cut anything" not in overview and "first step" not in overview
+    assert "second step" not in overview  # a step is quoted by its number, which the generator counts
     first = pages[steps.guide_name(c, "jtag-1")]
     cut, reach = first.index("Cut the Molex cable in half"), first.index("Check that each half reaches")
     flag = first.index("flag the wires")
     assert cut < reach < flag  # after the one cut, before the first wire is flagged, cut back or crimped
-    reach_step = first[reach : first.index("**3.**")]
+    (reach_step,) = (b for _, b in step_blocks(first) if "Check that each half reaches" in b.split("\n", 1)[0])
     assert "in its slot" not in reach_step.replace("out of its slot", "")  # the card is out of its slot then
     for k in wiring.CONNECTORS:  # each half named with its own header
         assert (
@@ -604,6 +607,13 @@ def test_a_quoted_step_number_is_the_step_it_means(key):
     assert fit == [1, 2]
     meant = {f"{part}-2": [[n, n + 1]] for part, _ in steps.GUIDE.values()}
     meant |= {f"{steps.GUIDE[k][0]}-1": [[steps.wire_one_step(c, k)[0]]] for k in wiring.CONNECTORS}
+    # the overview quotes the first page's one cut and its reach check; "Step N of that page" is the same page
+    first = steps.guide(c)[steps.guide_name(c, "jtag-1")].splitlines()
+    cut, reach = steps.numbered(first, steps.CUT_HALF), steps.numbered(first, steps.REACH)
+    meant["jtag-1"] += [[cut]]
+    overview = steps.guide(c)[steps.guide_name(c, "overview")]
+    assert f"(step {cut} of {docs_pages.link(c.key, 'jtag-1')}" in overview
+    assert f"Step {reach} of that page checks that each half reaches" in overview and reach == cut + 1
     meant["fit"] = [[f] for f in fit]
     bench = [steps.bench_step(c, w) for w in (steps.BENCH_START, steps.BENCH_BEEP)]
     meant["bench"] = [[b] for b in bench]
@@ -618,7 +628,7 @@ def test_the_reach_step_has_its_own_picture(key):
     c = wiring.CARRIERS[key]
     body = steps.guide(c)[steps.guide_name(c, "jtag-1")]
     blocks = dict(step_blocks(body))
-    (block,) = (b for b in blocks.values() if b.startswith(f"**{list(blocks)[1]}.** Check that each half reaches"))
+    (block,) = (b for n, b in blocks.items() if b.startswith(f"**{n}.** Check that each half reaches"))
     assert light_images(block) == [steps.png(steps.reach_name(c))]
     assert steps.reach_name(c) in steps.build_names() and steps.reach_name(c) in steps.build()
 
@@ -699,3 +709,31 @@ def test_the_bench_run_line_names_the_carrier_s_issue(key):
     for body in steps.guide(c).values():
         lines = body.splitlines()
         assert lines[2] == steps.bench_run(c) and lines[3] == ""  # under the banner, a paragraph of its own
+
+
+HOW_TO = ("jtag-1", "jtag-2", "uart-1", "uart-2", "bench", "fit")
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_what_you_need_is_lists_of_parts_and_tools_and_nothing_to_do(key):
+    """ "What you need" is what to have on the bench: a list of parts and a list of tools, each of 2 to 7 items.
+    What the reader does before the first cut (power off, take the card out, mind static) is a step."""
+    c = wiring.CARRIERS[key]
+    for part in HOW_TO:
+        body = steps.guide(c)[steps.guide_name(c, part)]
+        need = body[body.index("## What you need") : body.index("## Steps")].splitlines()[1:]
+        lines = [line for line in need if line]
+        leads = [line for line in lines if not line.startswith("- ")]
+        assert leads in (["**Parts**", "**Tools**"], ["**Parts**"], ["**Parts and tools**"]), (part, leads)
+        lists, current = [], None
+        for line in lines:
+            if line.startswith("**"):
+                current = []
+                lists.append(current)
+            else:
+                current.append(line)
+        assert all(2 <= len(items) <= 7 for items in lists), (part, [len(items) for items in lists])
+        said = " ".join(lines).lower()
+        for doing in ("power off", "unplug", "take the card out", "take it out", "touch bare metal", "ask "):
+            assert doing not in said, (part, doing)
+        assert not any(line.rstrip().endswith(".") for line in lines), part  # items, not sentences

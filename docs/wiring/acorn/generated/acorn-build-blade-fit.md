@@ -6,11 +6,15 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 
 ## What you need
 
-Both cables, checked on the bench ([How to check the cables on the bench (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/bench-check.html)), the Acorn and the Compute Blade. As before: after action 1 (step 1 below), touch bare metal of the host before you pick up the card, and hold it by its edges.
+**Parts**
+
+- both cables, checked on the bench ([How to check the cables on the bench (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/bench-check.html))
+- the Acorn
+- the Compute Blade
 
 ## Steps
 
-**1.** Fit the plugs into the card. The sockets are on the underside of the card and may not be reachable once it is in the slot, so the plugs go in first, in this order.
+**1.** Fit the plugs into the card. The sockets are on the underside of the card and may not be reachable once it is in the slot, so the plugs go in first, in this order. After action 1, touch bare metal of the host before you pick up the card, and hold it by its edges.
 
 1. Ask Tim, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in.
 2. If the housings are on the headers (after the bench check), take them off.

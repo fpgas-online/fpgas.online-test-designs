@@ -6,22 +6,39 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 
 ## What you need
 
-For this cable: one half of the Molex Pico-EZmate cable (a plug with six black wires); the 2×4 Dupont housing; 5 Dupont crimp terminals, and a few spare; 2 mm heat-shrink tube. Tools: a multimeter with a continuity buzzer, a fine probe tip for it or a sewing pin to hold against a probe, a ruler marked in millimetres, side cutters, wire strippers, the crimping tool, a hot-air tool, masking tape and a fine pen. The Acorn itself, out of any slot, is needed for the first steps: if it is fitted, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. Then take the card out. Take the screw at its far end out first (the HAT ships one SSD mounting screw: from Waveshare's page, not measured by us; its size and the driver are not recorded by us). How the card then comes out of the slot is not recorded by us. The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges.
+**Parts**
+
+- one half of the Molex Pico-EZmate cable (a plug with six black wires)
+- the 2×4 Dupont housing
+- 5 Dupont crimp terminals, and a few spare
+- 2 mm heat-shrink tube
+- the Acorn
+
+**Tools**
+
+- a multimeter with a continuity buzzer, and a fine probe tip for it or a sewing pin to hold against a probe
+- a ruler marked in millimetres
+- side cutters and wire strippers
+- the crimping tool
+- a hot-air tool
+- masking tape and a fine pen
 
 ## Steps
 
-**1.** Cut the Molex cable in half with side cutters. Each half is one cable. The cut comes before the reach check on purpose: a half is what goes between the card and the Raspberry Pi 5, so a half is what is checked for reach, below.
+**1.** Have the Acorn out of its slot. If it is fitted, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. Then take the card out. Take the screw at its far end out first (the HAT ships one SSD mounting screw: from Waveshare's page, not measured by us; its size and the driver are not recorded by us). How the card then comes out of the slot is not recorded by us. The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges.
+
+**2.** Cut the Molex cable in half with side cutters. Each half is one cable. The cut comes before the reach check on purpose: a half is what goes between the card and the Raspberry Pi 5, so a half is what is checked for reach, below.
 
 ![The cable, cut in the middle](acorn-cable-cut.png){.only-light}
 ![The cable, cut in the middle](acorn-cable-cut-dark.png){.only-dark}
 
-**2.** Check that each half reaches, before any wire is cut back or crimped. If the Raspberry Pi 5 is on, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. With the card out of its slot, hold the card over the slot where it will sit, and lay the half for P1 from socket P1 to the 40-pin header and the half for P2 from socket P2 to the 40-pin header, along the way each cable will run. Its cut end must reach the header with some slack left to bend into the housing; how much is needed has not been measured by us. If a half does not reach, stop: this guide uses each half at the length it has, and a longer cable is not written here. Tell whoever gave you this guide. **Not yet done by us on this hardware.**
+**3.** Check that each half reaches, before any wire is cut back or crimped. If the Raspberry Pi 5 is on, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. With the card out of its slot, hold the card over the slot where it will sit, and lay the half for P1 from socket P1 to the 40-pin header and the half for P2 from socket P2 to the 40-pin header, along the way each cable will run. Its cut end must reach the header with some slack left to bend into the housing; how much is needed has not been measured by us. If a half does not reach, stop: this guide uses each half at the length it has, and a longer cable is not written here. Tell whoever gave you this guide. **Not yet done by us on this hardware.**
 
 ![Where each half must reach on a Raspberry Pi 5: from the M.2 slot, where the card will sit, to its header](acorn-cable-pi5-reach.png){.only-light}
 ![Where each half must reach on a Raspberry Pi 5: from the M.2 slot, where the card will sit, to its header](acorn-cable-pi5-reach-dark.png){.only-dark}
 
 
-**3.** Find wire 1 of the P1 cable and flag the wires, before cutting any wire back.
+**4.** Find wire 1 of the P1 cable and flag the wires, before cutting any wire back.
 
 1. Press the plug of one half into socket P1 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost.
 2. Put a numbered tape flag on each of the 6 wires, 1 at the left to 6, about 25 mm back from the tip, clear of the end that will be cut and stripped later. Write P1 on the flag of wire 1 as well: off the card, the two halves look alike.
@@ -29,7 +46,7 @@ For this cable: one half of the Molex Pico-EZmate cable (a plug with six black w
 ![The P1 cable's plug in socket P1, all 6 wires whole, a flag on each](acorn-cable-p1-flag.png){.only-light}
 ![The P1 cable's plug in socket P1, all 6 wires whole, a flag on each](acorn-cable-p1-flag-dark.png){.only-dark}
 
-**4.** Check which wire of the P1 cable is wire 1, with a meter, before cutting any wire back.
+**5.** Check which wire of the P1 cable is wire 1, with a meter, before cutting any wire back.
 
 1. With the plug still in the socket (the Acorn out of any slot), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: it must beep.
 2. Do the same with the wire flagged 6: it must stay silent.
@@ -40,12 +57,12 @@ For this cable: one half of the Molex Pico-EZmate cable (a plug with six black w
 ![Checking which wire is wire 1 with a meter, the plug in socket P1](acorn-cable-p1-ground-check.png){.only-light}
 ![Checking which wire is wire 1 with a meter, the plug in socket P1](acorn-cable-p1-ground-check-dark.png){.only-dark}
 
-**5.** Cut wire 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over the cut end. It goes in no cavity. Wire 6 is VCC, 3.3 V from the Acorn (the LiteX wiki's legend names it so; not measured by us): it must never reach the host. Leave wires 1 to 5 at full length.
+**6.** Cut wire 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over the cut end. It goes in no cavity. Wire 6 is VCC, 3.3 V from the Acorn (the LiteX wiki's legend names it so; not measured by us): it must never reach the host. Leave wires 1 to 5 at full length.
 
 ![The P1 cable: its wires prepared](acorn-cable-pi5-p1-prepare.png){.only-light}
 ![The P1 cable: its wires prepared](acorn-cable-pi5-p1-prepare-dark.png){.only-dark}
 
-**6.** Strip about 3 mm from wires 1 to 5. Crimp a Dupont terminal on each.
+**7.** Strip about 3 mm from wires 1 to 5. Crimp a Dupont terminal on each.
 
 ![Stripping and crimping](acorn-cable-crimp.png){.only-light}
 ![Stripping and crimping](acorn-cable-crimp-dark.png){.only-dark}

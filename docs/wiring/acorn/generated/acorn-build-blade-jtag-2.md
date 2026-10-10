@@ -6,7 +6,15 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 
 ## What you need
 
-The P1 cable with its wires flagged and a terminal crimped on each ([How to prepare the JTAG cable's wires (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/jtag-wires.html)), the empty 2×5 Dupont housing, a paint pen or a dot of tape, and a multimeter with a continuity buzzer and a fine probe or a sewing pin.
+**Parts**
+
+- the P1 cable with its wires flagged and a terminal crimped on each ([How to prepare the JTAG cable's wires (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/jtag-wires.html))
+- the empty 2×5 Dupont housing
+
+**Tools**
+
+- a paint pen, or a dot of tape
+- a multimeter with a continuity buzzer, and a fine probe or a sewing pin
 
 ## Steps
 

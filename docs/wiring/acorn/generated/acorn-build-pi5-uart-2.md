@@ -6,7 +6,15 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 
 ## What you need
 
-The P2 cable with its wires flagged and a terminal crimped on each ([How to prepare the UART cable's wires (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/uart-wires.html)), the empty 2×3 Dupont housing, a paint pen or a dot of tape, and a multimeter with a continuity buzzer and a fine probe or a sewing pin.
+**Parts**
+
+- the P2 cable with its wires flagged and a terminal crimped on each ([How to prepare the UART cable's wires (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/uart-wires.html))
+- the empty 2×3 Dupont housing
+
+**Tools**
+
+- a paint pen, or a dot of tape
+- a multimeter with a continuity buzzer, and a fine probe or a sewing pin
 
 ## Steps
 
