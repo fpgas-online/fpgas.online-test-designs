@@ -27,3 +27,40 @@ kind = "slot"
 face = "top"
 box = [6.85, 0.86, 29.23, 10.03]
 source = "measured in the photo by measure_hat.py (the grey socket moulding)"
+
+# The card: every figure marked "measured" is one `uv run docs/wiring/acorn/measure_card.py` prints, and
+# test_card.py checks them. Boxes are in the card's own frame (its top face from above, x mirrored from the
+# photo, which shows the underside); y runs from the end away from the M.2 edge. The photo covers only `shown`.
+[things.acorn]
+name = "SQRL Acorn"
+size = [22.0, 80.0]
+source = "22 x 80 mm, M.2 2280: the board maker's repository (wiring.toml [[sources]], \"The card's form\")"
+
+[things.acorn.photos.bottom]
+file = "acorn-cw.jpg"
+px_per_mm = 23.056
+origin = [0.9, 22]
+shown = [0, 46.76]
+
+[things.acorn.items.p1]
+kind = "socket"
+face = "bottom"
+label = "P1"
+box = [16.44, 13.23, 21.87, 22.64]
+pin1 = [19.06, 20.75]
+source = "measured in the vendor's underside photo by measure_card.py (the silkscreen outline round the socket; pin 1 the contact nearest the M.2 edge); scale from the card's 22.00 mm width, checked against the contacts' 1.20 mm pitch"
+
+[things.acorn.items.p2]
+kind = "socket"
+face = "bottom"
+label = "P2"
+box = [16.14, 2.95, 21.52, 12.4]
+pin1 = [19.48, 10.33]
+source = "measured in the vendor's underside photo by measure_card.py (the silkscreen outline round the socket; pin 1 the contact nearest the M.2 edge); scale from the card's 22.00 mm width, checked against the contacts' 1.20 mm pitch"
+
+[things.acorn.items.pad]
+kind = "pad"
+face = "bottom"
+label = ""
+box = [8.42, 0.04, 13.62, 2.6]
+source = "measured in the vendor's underside photo by measure_card.py (the gold of the half-round plated pad at the card's end); scale from the card's 22.00 mm width"
