@@ -16,6 +16,7 @@ host, kept as one table and turned into everything that shows it.
 | `GOALS.md` | What the sheets have to show, and what must not be on them. |
 | `photos/`, `prep_photos.py` | The board photos the sheets use, and the script that cut them from the vendors' originals. |
 | `measure_hat.py` | Measures where the HAT's header, pin 1 and M.2 slot are in its photo; `--check` compares with `wiring.toml`. |
+| `measure_card.py` | Measures the Acorn's underside photo: the scale from the card's 22.00 mm width (checked against the sockets' 1.20 mm contact pitch), and where P1, P2, their pin 1 and the plated pad are, in millimetres; `--check` compares with `geometry.toml`. |
 | `docs/diagrams/fonts/` | Liberation Sans and Mono (SIL Open Font License, `COPYRIGHT` in that directory), drawn as outlines in the sheets. |
 
 ## Changing the wiring
