@@ -110,6 +110,7 @@ GPIO that supports FPGA updates over PCIe.
 
 - JTAG can always load a bitstream into SRAM (volatile), but it is lost on power cycle
 - SPI flash (persistent) can only be written through our running SoC: `fpgas-acorn-flash` over PCIe (no kernel module; what the fleet uses) or over the P2 UART bridge (`--uart`, slow), or `litepcie_util` with `litepcie.ko` loaded
+- `fpgas-acorn-flash` refuses a card that a kernel driver (`litepcie.ko`) is bound to: the driver owns BAR0 then. Over the P2 UART it refuses while `litepcie.ko` is bound to any device. Unbind the driver first. (`fpgas-verify` instead unbinds the driver for its check and binds it again.)
 - PCIe→Flash requires our LiteX bitstream running (not the factory Sqrl firmware)
 - The golden bitstream at flash address 0x0 is **irreplaceable without PCIe** — if it is corrupted, recovery requires the SRAM bootstrap procedure (see below)
 

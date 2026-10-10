@@ -42,6 +42,18 @@ The two boards that are not Acorns are reported as `xilinx-pcie`, followed by wh
 
 * Both use openFPGALoader's `libgpiod` cable, and the P2 UART is `/dev/ttyAMA0`.
 * Any other host is an `error`; the tests that do not need the wiring still run.
+* On a Compute Blade J2 shares GPIO14 with TMS, through 470 Ω. So after the `jtag` test GPIO14 goes back to its
+  UART function. On a Compute Module 5 with kernel 6.18 the kernel does not lend GPIO14 while the serial port
+  has it: with the serial port on, `jtag` fails saying so, without running openFPGALoader
+  ([fpgas.online-test-designs issue 127: on a Compute Blade the JTAG test cannot have GPIO14 while the serial port holds it](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)).
+
+**The result:**
+
+* It is `pass` only when every test passes.
+* A board running its golden image fails: the operational slot did not boot.
+* A Pi with no Acorn is `missing`. That is fatal, since the host was set up for one.
+* `changed` compares the PCI slot and IDs, the device DNA, the flash's identity and the sha256 of each slot. So a
+  flash rewritten since the last run (by `fpgas-acorn-flash write`, say) is fatal until `sudo fpgas-verify --update`.
 
 **The expected data**, one copy each, in the repository and installed by `fpgas-online-acorn-tools`:
 
@@ -58,7 +70,7 @@ From a checkout, the check reads them from the repository.
 |---|---|---|
 | `pcie-link` | sysfs | `current_link_speed` and `current_link_width` are the setup's (5.0 GT/s, x1) |
 | `pcie-bar0` | BAR0 | the operational build runs (the golden build means the operational slot did not boot), the flash identifies itself and its SFDP header can be read (a flash with no SFDP passes), the device DNA is neither all zeros nor all ones, and the XADC temperature and VCCINT, VCCAUX and VCCBRAM are in range |
-| `rp1-pio` | the Pi's kernel | Pi 5 / CM5 (BCM2712) only, not run elsewhere: `/dev/pio0` is a character device that opens read-write, which openfpgaloader-rp1pio needs. No bootloader or `config.txt` setting is read. When it does not, the test also says whether `rp1_fw` and `rp1_pio` are loaded, and the kernel's own `rp1-pio` / RP1 firmware lines say why, e.g. `failed to contact RP1 firmware` on a bootloader rp1_pio cannot talk to (pi-sw2-p47 and p48, bootloader 2024/11/05, 2026-10-03) |
+| `rp1-pio` | the Pi's kernel | Pi 5 / CM5 (BCM2712) only, not run elsewhere: `/dev/pio0` is a character device that opens read-write, which openfpgaloader-rp1pio needs. No bootloader or `config.txt` setting is read. When it does not, the test also says whether `rp1_fw` and `rp1_pio` are loaded, and the kernel's own `rp1-pio` / RP1 firmware lines say why, e.g. `failed to contact RP1 firmware` on a bootloader rp1_pio cannot talk to (bootloader 2024/11/05) |
 | `jtag` | P1 | `openFPGALoader --detect` finds one device, the variant's part in any silicon version ([the JTAG IDCODE](idcode-and-dna.md#the-jtag-idcode)), and `openFPGALoader --read-dna` reads a device DNA that is neither all zeros nor all ones. When BAR0's DNA is good, the two must match; otherwise the JTAG DNA is not compared. The IDCODE read does not use TDI; the DNA read does |
 | `flash` | BAR0 | both 4 MiB slots (golden at `0x000000`, operational at `0x400000`), read whole with read opcodes only, hold the release's images |
 | `ddr` | BAR0 | after the BIOS console is read out, the DRAM BIST makes two passes over the whole DRAM: no errors, and write and read bandwidth at least the variant's minimum; details: [the `ddr` test in detail](acorn-power-cycle.md#the-acorns-tests-in-detail) |
