@@ -129,18 +129,18 @@ ADVICE = (
      "running the tests."),
 )  # fmt: skip
 
-# An Acorn on a Compute Blade (the report's `setup`, wiring.toml's carrier name) is not to be converted: a design
-# loaded into a card on a blade took its PCIe endpoint away. Where the report names that setup, the conversion advice
-# above is replaced; where it names no setup, the warning is added to it, as the host may be a blade. Which host and
-# which day is the record's (issue 241), not the tool's words.
+# An Acorn on a Compute Blade (the report's `setup`, wiring.toml's carrier name) is not to be converted: the one time
+# a design was loaded into a card on a blade, its PCIe endpoint did not come back. Where the report names that setup,
+# the conversion advice above is replaced; where it names no setup, the warning is added to it, as the host may be a
+# blade. Which host and which day is the record's (issue 241), not the tool's words.
 BLADE = "Compute Blade"
 # The docs page about JTAG on a Compute Blade, at its published address (docs.fpgas.online keeps no redirect).
 BLADE_JTAG_PAGE = "https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html"
 NOT_ON_A_BLADE = (
-    "On a Compute Blade, do not load a design into the card or convert it. A design loaded into a card on a "
-    "blade took the card's PCIe endpoint away, and neither a bus rescan nor a root-complex re-probe brought it "
-    f"back (fpgas.online-test-designs issue 241, {ISSUE_241}: {ISSUES}/241). To test JTAG on a blade: "
-    f"{BLADE_JTAG_PAGE}"
+    "On a Compute Blade, do not load a design into the card or convert it. The one time a design was loaded "
+    "into a card on a blade, the card's PCIe endpoint did not come back: neither a bus rescan nor a root-complex "
+    f"re-probe restored it (fpgas.online-test-designs issue 241, {ISSUE_241}): {ISSUES}/241 To test JTAG on a "
+    f"blade: {BLADE_JTAG_PAGE}"
 )
 ON_A_BLADE = {
     r"unconverted: runs SQRL's factory image": "The Acorn still runs the image it was sold with, not the "

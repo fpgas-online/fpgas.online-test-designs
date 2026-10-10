@@ -378,8 +378,12 @@ def test_no_advice_the_tool_prints_holds_a_record_of_a_run_or_a_promise():
     blade = conclusion.NOT_ON_A_BLADE
     assert blade.startswith("On a Compute Blade, do not load a design into the card or convert it. ")
     # the reason stays, and the record it rests on is named by what it is and linked
-    assert "took the card's PCIe endpoint away" in blade
-    assert f"(fpgas.online-test-designs issue 241, {conclusion.ISSUE_241}: {conclusion.ISSUES}/241)" in blade
+    assert (
+        "The one time a design was loaded into a card on a blade, the card's PCIe endpoint did not come back" in blade
+    )
+    # an address is followed by a space, never by a bracket or a full stop a terminal would take into the link
+    assert f"(fpgas.online-test-designs issue 241, {conclusion.ISSUE_241}): {conclusion.ISSUES}/241 To test" in blade
+    assert not re.search(r"https://\S*[).,]( |$)", blade)
     for found in ("pi20 at ps1", "7 October 2026", "welland", "not in the guide yet", "no JTAG there yet"):
         assert record.search(found), found  # the pattern finds what it is for
 

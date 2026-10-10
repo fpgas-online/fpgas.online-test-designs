@@ -91,11 +91,12 @@ RESULT: FAIL: a board did not pass.
 What to do:
   * The Acorn still runs the image it was sold with, not the fpgas.online one,
     so only its PCIe link and its JTAG could be tested. On a Compute Blade, do
-    not load a design into the card or convert it. A design loaded into a card
-    on a blade took the card's PCIe endpoint away, and neither a bus rescan
-    nor a root-complex re-probe brought it back (fpgas.online-test-designs
-    issue 241, the record of what has been run on an Acorn on a Compute Blade:
-    https://github.com/fpgas-online/fpgas.online-test-designs/issues/241). To
+    not load a design into the card or convert it. The one time a design was
+    loaded into a card on a blade, the card's PCIe endpoint did not come back:
+    neither a bus rescan nor a root-complex re-probe restored it
+    (fpgas.online-test-designs issue 241, the record of what has been run on
+    an Acorn on a Compute Blade):
+    https://github.com/fpgas-online/fpgas.online-test-designs/issues/241 To
     test JTAG on a blade:
     https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html
   * openFPGALoader could not have one of the JTAG pins, because a driver holds
