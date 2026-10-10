@@ -28,7 +28,8 @@ OLD_NAMES = re.compile(
 )
 # Words that send the reader to a page without saying which: a link from pages.py says it.
 VAGUE = re.compile(
-    rf"(?i)the page before|the previous page|the next page|the page after|the page {QUOTE}|\bpage {QUOTE}"
+    rf"(?i)the page before|the page after|\b(?:previous|next|first|second|third|last|other) page\b"
+    rf"|the page {QUOTE}|\bpage {QUOTE}"
     r"|\bsee (?:above|below)\b"
 )
 # A link into the three parts of the Acorn tree the table covers (the other Acorn pages are not this table's).
@@ -122,7 +123,7 @@ def test_the_pattern_leaves_the_plain_words_alone(words):
 
 def test_no_fragment_sends_the_reader_to_a_page_without_saying_which():
     """In the generated pages and the words they are made from: "the page before this one", 'the page "..."'."""
-    files = [f for f in _texts() if f.suffix != ".svg" and f.parent.name != "verify"]
+    files = _texts()  # the pictures and the two shared verify pages too
     left = [(f.name, m.group(0)) for f in files for m in VAGUE.finditer(f.read_text())]
     assert left == []
 
