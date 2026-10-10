@@ -36,7 +36,7 @@ Each test checks its bitstream's sha256 against the `-bitstreams` package's mani
   ([the JTAG IDCODE](idcode-and-dna.md#the-jtag-idcode)): a part that is not the variant's fails the board. Then their device
   DNA is read over the same JTAG ([the device DNA](idcode-and-dna.md#the-device-dna)): one that cannot be read, or is all zeros
   or all ones, fails the board.
-* The Fomu EVT sits on the Pi's header ([how it is wired](../hardware/fomu-pin-mapping.md#the-pis-header)). Finding it
+* The Fomu EVT sits on the Pi's header ([Fomu EVT wiring to a Raspberry Pi](https://docs.fpgas.online/en/latest/boards/fomu-evt/setup/wiring.html#connections-to-the-pi)). Finding it
   reads its CDONE (GPIO17) and drives nothing: high means its iCE40 runs a design, whatever is on its USB. The
   check then identifies it before any test
   ([#200](https://github.com/fpgas-online/fpgas.online-test-designs/issues/200)): `fomu_header_id.py` holds the iCE40 in
@@ -56,7 +56,7 @@ Each test checks its bitstream's sha256 against the `-bitstreams` package's mani
   runs only if nothing was found on USB or PCI (or only a Xilinx PCIe design the Acorn check cannot name);
   `--no-probe` turns it off.
 
-### The Arty check at boot
+### The Arty A7 check at boot
 
 The check finds the Arty by its FT2232H on USB (`0403:6010`). Then, in this order:
 
@@ -76,7 +76,7 @@ About two of the tests:
 - The Ethernet test pings the design through the Pi's USB Ethernet adapter cabled to the Arty's RJ45. It never
   touches an interface the Pi uses itself.
 - The pin identification scan checks the PMOD HAT cabling against the expected map (HAT JA/JB/JC to Arty
-  JA/JB/JC, [PMOD Cable Routing](../hardware/arty-a7-pin-mapping.md#pmod-cable-routing-hat--arty)).
+  JA/JB/JC, [Arty A7 wiring to a Raspberry Pi: PMOD cables](https://docs.fpgas.online/en/latest/boards/arty-a7/setup/wiring.html#pmod-cables)).
 
 A failure in either fails the board, like any other test.
 
@@ -114,9 +114,9 @@ Then, in this order:
 
 What `changed` compares is the IDCODE, the device DNA, the flash's JEDEC ID and the sha256 of that flash region.
 
-### The Fomu check at boot
+### The Fomu EVT check at boot
 
-The EVT sits on the Pi's GPIO header ([how it is wired](../hardware/fomu-pin-mapping.md#the-pis-header)).
+The EVT sits on the Pi's GPIO header ([Fomu EVT wiring to a Raspberry Pi](https://docs.fpgas.online/en/latest/boards/fomu-evt/setup/wiring.html#connections-to-the-pi)).
 
 How the check works with it:
 - **Finding it.** The check reads the iCE40's CDONE (GPIO17), which drives nothing: high means the board is there and running a design. foboot's DFU bootloader on USB (`1209:5bf0`) finds it too, but is not needed. A Fomu whose USB is being analysed, or that runs a design with no USB, is still found.

@@ -10,7 +10,9 @@ The Digilent Arty A7 is a Xilinx Artix-7 development board used in the fpgas.onl
 
 - a Raspberry Pi with the Arty on one of its USB ports
 - the fpgas.online apt repository added on the Pi ([fpgas-verify: installing it](../verify/installing.md#installing))
-- on bookworm: the fpgas.online-fpga-tools apt repository added too (the same page). Debian bookworm's openFPGALoader is too old for the check
+- on bookworm: the fpgas.online-fpga-tools apt repository added too ([fpgas-verify: installing it](../verify/installing.md#installing) has it). Debian bookworm's openFPGALoader is too old for the check
+
+`grep VERSION_CODENAME /etc/os-release` says which release the Pi runs.
 
 ### Steps
 
@@ -42,8 +44,8 @@ sudo fpgas-arty-debug test ddr
 
 ### Next
 
-- [The Arty check at boot](../verify/tests.md#the-arty-check-at-boot): what the check does, test by test.
-- [Arty packages](../verify/installing.md#arty-packages): what each package installs.
+- [The Arty A7 check at boot](../verify/tests.md#the-arty-a7-check-at-boot): what the check does, test by test.
+- [Arty A7 packages](../verify/installing.md#arty-a7-packages): what each package installs.
 - [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result): the report, `changed` and `--update`.
 
 ## Key Specifications

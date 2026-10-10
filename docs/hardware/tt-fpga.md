@@ -10,20 +10,28 @@ The TinyTapeout (TT) FPGA Demo Board is a development platform that combines an 
 
 - a Raspberry Pi with the Tiny Tapeout demo board on one of its USB ports
 - the fpgas.online apt repository added on the Pi ([fpgas-verify: installing it](../verify/installing.md#installing))
-- [rpi-hwid](https://github.com/mithro/rpi-hwid)'s own apt repository added on the Pi, as its page says
-- on bookworm: bookworm-backports among the Pi's apt sources
+- a network that reaches `mith.ro`, where rpi-hwid's apt repository is, and on bookworm `deb.debian.org`
+
+`grep VERSION_CODENAME /etc/os-release` says which release the Pi runs.
 
 ### Steps
 
-**1.** Install rpi-hwid. Without it the check cannot ask the board which Tiny Tapeout board it is, and its result is `error`.
+**1.** Add [rpi-hwid](https://github.com/mithro/rpi-hwid)'s apt repository and install rpi-hwid. Without it the check cannot ask the board which Tiny Tapeout board it is, and its result is `error`.
 
 ```bash
+sudo install -d -m0755 /etc/apt/keyrings
+curl -fsSL https://mith.ro/rpi-hwid/rpi-hwid.gpg | sudo tee /etc/apt/keyrings/rpi-hwid.gpg > /dev/null
+echo "deb [signed-by=/etc/apt/keyrings/rpi-hwid.gpg] https://mith.ro/rpi-hwid/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
+  | sudo tee /etc/apt/sources.list.d/rpi-hwid.list
+sudo apt update
 sudo apt install python3-rpi-hwid
 ```
 
-**2.** On bookworm only, install `mpremote` from bookworm-backports. On trixie the next step installs it.
+**2.** On bookworm only, add bookworm-backports and install `mpremote` from it. On trixie the next step installs it.
 
 ```bash
+echo "deb http://deb.debian.org/debian bookworm-backports main" | sudo tee /etc/apt/sources.list.d/bookworm-backports.list
+sudo apt update
 sudo apt install -t bookworm-backports micropython-mpremote
 ```
 

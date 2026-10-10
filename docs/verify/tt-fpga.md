@@ -16,7 +16,7 @@ Before the first test, while it holds `/dev/ttyACM0`:
 1. The check reads whether the board's `main.py` is still the SDK's own (`tt_main_py.py`, with or without
    rpi-hwid). A changed one is an `error`.
 2. It starts the board's SDK (`tt_sdk_start.py`:
-   [The SDK's main.py](../hardware/tt-fpga.md#the-sdks-mainpy)).
+   [The firmware on a Tiny Tapeout FPGA demo board](https://docs.fpgas.online/en/latest/boards/tt-fpga/overview/firmware.html)).
 3. It runs `rpi-hwid tinytapeout --json --no-stop-service`. rpi-hwid asks the Tiny Tapeout SDK on the RP2350
    which microcontroller, chip, demo board and SDK release this is. The answer goes into the board's identity,
    for rpi-hwid's Tiny Tapeout label ([TT FPGA identity](#tt-fpga-identity),
@@ -45,7 +45,7 @@ Steps 2 to 5 are for an FPGA board. A board with a Tiny Tapeout chip runs `sdk` 
 What the check does not do, and why:
 
 - Nothing is written to the demo board. For every load the microcontroller reads the bitstream from the Pi over
-  the serial link ([Programming](../hardware/tt-fpga.md#programming)).
+  the serial link ([Programming a Tiny Tapeout FPGA demo board](https://docs.fpgas.online/en/latest/boards/tt-fpga/overview/programming.html)).
 - There is no SPI flash test: the breakout has no flash. So what `changed` compares is the board's USB serial
   number.
 - Only the PMOD loopback test is left to `fpgas-tt-fpga-debug`.
