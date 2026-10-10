@@ -65,7 +65,7 @@ The tools package depends on one exact bitstreams version. Which release that is
 
 The [fpgas.online-fpga-tools repository](https://github.com/fpgas-online/fpgas.online-fpga-tools#debian-packages-bookworm-trixie-sid-arm64-armhf) has the fpgas.online openFPGALoader build, with the RP1 PIO JTAG cable and SPI flash info. Add it **before** installing. Otherwise apt installs Debian's own package (bookworm 0.10.0, trixie 0.13.1). Adding the repository afterwards does not replace it: run `sudo apt install openfpgaloader-fpgasonline` to switch.
 
-### Arty packages
+### Arty A7 packages
 
 | Package | Installs |
 |---------|----------|
@@ -87,7 +87,7 @@ Without the [fpgas.online-fpga-tools repository](https://github.com/fpgas-online
 
 On a Raspberry Pi 5 the [fpgas.online-fpga-tools repository](https://github.com/fpgas-online/fpgas.online-fpga-tools#debian-packages-bookworm-trixie-sid-arm64-armhf) is needed: only its openFPGALoader builds have the `rp1pio` cable. They also have the SPI-over-JTAG bridge for the XC7A35T-FGG484, which Debian bookworm's `openfpgaloader` lacks, so on bookworm the flash readback of an XC7A35T board fails without them.
 
-### Fomu packages
+### Fomu EVT packages
 
 | Package | Installs |
 |---------|----------|
