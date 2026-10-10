@@ -55,31 +55,20 @@ NEITHER = (
     "If neither wire beeps, strip about {strip} mm from wires 1 and {last} and try again; "
     "if still neither beeps, stop: the ground point is not confirmed."
 )
-# The other result that proves nothing. That the last wire is silent rests on something nobody has measured.
+# The other result that proves nothing: the reader stops, and sends what the meter reads.
 BOTH = (
     "If both wires beep, first see that the two probes do not touch each other and that the cut faces of wires "
     "1 and {last} do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires "
-    "apart. Leave the flags on and take the plug out. Wire {last} is the card's 3.3 V by the LiteX wiki's legend; "
-    "that it stays silent "
-    "to ground on a card with no power is expected and has not been measured by us. Set the meter to ohms, "
+    "apart. Leave the flags on and take the plug out. Wire {last} is the card's 3.3 V by the LiteX wiki's legend, "
+    "and is expected to stay silent to ground on a card with no power. Set the meter to ohms, "
     "write down what each of the two wires reads to the pad, and send both readings to {contact}."
 )
 NOT_TOLD_APART = "If neither wire beeps, or both do, cut nothing: the step's words above say what to do in each case."
 
-ASSUMPTIONS = [
-    "the wire-side view is not mirrored",
-    "the header's pin numbers run as shown",
-    "plug pin 1 is nearest the M.2 edge",
-    "the plug's shape, drawn from a photo",
-    "where the housing's windows are",
-    "which face of the plug shows its contacts",
-    "the card's mounting pad is taken to be ground (not measured by us)",
-]
-ASSUMED = (
-    "Not yet checked against a cable in the hand:",
-    # The step as its page shows it. A picture cannot link, so it names the task, never a page's title.
-    "Check wire 1 with a meter before cutting: step {n} of preparing this cable's wires.",
-)
+# The note on every cavity picture: the step as its page shows it. A picture cannot link, so it names the task,
+# never a page's title. What the picture assumes of the cable in the hand is an item of the carrier's bench-run
+# issue (BENCH_RUN), not words on the picture.
+WIRE_ONE_NOTE = "Check wire 1 with a meter before cutting: step {n} of preparing this cable's wires."
 BOX_LINE = 20  # from line to line in the box of assumptions
 ACORN_PAD = (188, 0, 308, 80)  # the plated half-round mounting pad at the end of the card, in acorn-cw.jpg
 
@@ -156,21 +145,24 @@ def turned_harms(c, plan):
 def ground_shows_way_round(c):
     """What the bench check's ground beep says about which way round each housing is, from the wiring: it shows it
     where the housing turned round puts its GND wire on a pin that is not ground."""
-    out = []
-    for connector, conn in wiring.CONNECTORS.items():
-        plan = housing(c, connector)
-        on = turned(c, plan)[conn["pins"][0]]
-        if on == "GND":
-            out.append(
-                f"The beep does not show which way round the {connector} housing is: turned round, its GND wire "
-                "still sits on a ground pin, so look at its marked corner."
-            )
-        else:
-            out.append(
-                f"The beep is also meant to show that the {connector} housing is the right way round: turned round, "
-                f"its GND wire would sit on {on}, not a ground pin; that a turned housing would then stay silent is "
-                "not tried by us."
-            )
+    lands = {k: turned(c, housing(c, k))[conn["pins"][0]] for k, conn in wiring.CONNECTORS.items()}
+    if set(lands.values()) == {"GND"}:
+        return (
+            "The beep does not show which way round either housing is: turned round, its GND wire still sits on a "
+            "ground pin, so look at each marked corner."
+        )
+    out = [
+        f"The beep does not show which way round the {connector} housing is: turned round, its GND wire still sits "
+        "on a ground pin, so look at its marked corner."
+        for connector, on in lands.items()
+        if on == "GND"
+    ]
+    off = [f"the {connector} housing's GND wire would sit on {on}" for connector, on in lands.items() if on != "GND"]
+    if off:  # said once, however many housings it is true of
+        out.append(
+            f"Turned round, {' and '.join(off)}, not a ground pin. Do not rely on the beep for which way round a "
+            f"housing is: look at {'its' if len(off) == 1 else 'each'} marked corner."
+        )
     return " ".join(out)
 
 
@@ -245,28 +237,14 @@ def token(sh, cx, cy, n, s=30):
 # ----------------------------------------------------------------------------------------------
 # Pieces
 # ----------------------------------------------------------------------------------------------
-def assumptions(sh, x, y, w, c, connector):
-    """The box of what is not yet checked, for the cable of `connector` on carrier `c`. Returns its bottom."""
-    pad, gap = 8, 24
-    col_w = (w - 2 * pad - gap) / 2
-    items = [wrap(sh, item, col_w - 14) for item in ASSUMPTIONS]
-    # two columns of items, split where the taller column is shortest
-    split = min(range(len(items) + 1), key=lambda k: max(sum(map(len, items[:k])), sum(map(len, items[k:]))) * 10 - k)
-    columns = [items[:split], items[split:]]
-    rows = max(sum(map(len, col)) for col in columns)
-    h = (2 + rows) * BOX_LINE + 2 * pad - 2
+def wire_one_note(sh, x, y, w, c, connector):
+    """The boxed note that sends the reader to the meter check of wire 1, for the cable of `connector` on carrier
+    `c`. Returns its bottom."""
+    pad = 8
+    h = BOX_LINE + 2 * pad - 2
     box = (x, y, x + w, y + h)
     sh.rect(x, y, w, h, fill=role("note-fill"), stroke=INK, sw=1.5, rx=8)
-    top = y + pad + T * 0.8
-    sh.text(x + pad, top, ASSUMED[0], T, "bold", INK, box=box)
-    for i, col in enumerate(columns):
-        cx, ty = x + pad + i * (col_w + gap), top + BOX_LINE
-        for item in col:
-            sh.add(f'<circle cx="{cx + 4}" cy="{ty - T * 0.3:.1f}" r="3" fill="{INK}"/>')
-            for line in item:
-                sh.text(cx + 14, ty, line, T, "regular", INK, box=box)
-                ty += BOX_LINE
-    sh.text(x + pad, top + (1 + rows) * BOX_LINE, assumed_check(c, connector), T, "bold", INK, box=box)
+    sh.text(x + pad, y + pad + T * 0.8, assumed_check(c, connector), T, "bold", INK, box=box)
     return y + h
 
 
@@ -650,7 +628,7 @@ def cable(c, connector):
         "bold",
         RED,
     )
-    ty = assumptions(sh, 30, ty - LINE + 5, W - 40, c, connector) + LINE
+    ty = wire_one_note(sh, 30, ty - LINE + 5, W - 40, c, connector) + LINE
     sh.h = math.ceil(ty - LINE + 4)
     sh.check(file_name(c, connector))
     return sh.svg(), score
@@ -1046,8 +1024,7 @@ def ground_check(connector):
         sh,
         30,
         y + 4,
-        "The pad is taken to be ground, not measured by us: wire 1's beep shows only that wire 1 and the pad are "
-        "joined. The plug, the flags and the meter are sketched.",
+        "Wire 1's beep shows only that wire 1 and the pad are joined. The plug, the flags and the meter are sketched.",
         W - 40,
         fill=MUTED,
     )
@@ -1075,16 +1052,10 @@ def card():
         ),
         (
             "The half-round plated pad",
-            "at the end of the card (boxed, right): the card's mounting pad, taken to be "
-            "ground; not measured by us (the beep of wire 1 in the meter check shows only that wire 1 and the pad "
-            "are joined).",
+            "at the end of the card (boxed, right): the card's mounting pad. The meter check of wire 1 puts a "
+            "probe on it.",
         ),
         ("The M.2 edge connector", "is off the picture to the left: this is the end of the card away from it."),
-        (
-            "Not in this photograph",
-            "the other face of the card, the one with the FPGA: no photograph of it is in these pages yet, and "
-            "where the LEDs are has not been read off a card by us.",
-        ),
     )
     for name, words in rows:
         sh.text(30, y, name, T, "bold")
@@ -1200,25 +1171,60 @@ SHEETS = {"pi5": "acorn-wiring-pi5", "blade": "acorn-wiring-computeblade"}
 
 def power_off_if_on(c):
     """The carrier's own power-off sentence, for a step that needs the host off: every page that powers a host
-    off, or presumes it off, says it in these words (on a blade, Tim is asked first)."""
+    off, or presumes it off, says it in these words (on a blade, the site operator is asked first)."""
     return f"If the {c.name} is on, {c.power_off[0].lower()}{c.power_off[1:]}"
 
 
 # Taking the card out of its slot: only what the repo records. The blade's screw and driver are in the parts
 # list (wiring.toml, the PH1 screwdriver); the Pi 5's HAT is recorded as holding the card by a screw at its far end,
 # and no size or driver for it. How the card then leaves the slot is recorded for neither.
-CARD_OUT = {
-    "blade": "Take its screw out first (an M2x2.5 screw with an M2 nylon washer, put in with a PH1 driver: from "
-    "Uptime Lab's assembly guide, not measured by us).",
-    "pi5": "Take the screw at its far end out first (the HAT ships one SSD mounting screw: from Waveshare's "
-    "page, not measured by us; its size and the driver are not recorded by us).",
+# The maker's own page for how a card is held in each carrier's slot: (the link's words, its address). What the
+# pages say of the screw and of putting the card in is from there, and links it once where it is said.
+MAKER = {
+    "blade": (
+        "the Compute Blade's assembly guide",
+        "https://github.com/uptime-lab/compute-blade/blob/main/docs/docs/blade/getting-started/assembly.mdx",
+    ),
+    "pi5": ("Waveshare's page for the HAT", "https://www.waveshare.com/poe-m.2-hat-plus-b.htm"),
 }
-CARD_OUT_REST = " How the card then comes out of the slot is not recorded by us."
+
+
+def maker_link(c):
+    text, address = MAKER[c.key]
+    return f"[{text}]({address})"
+
+
+CARD_OUT = {
+    "blade": "Take its screw out first: an M2x2.5 screw with an M2 nylon washer, which takes a PH1 driver ({maker}).",
+    "pi5": "Take the screw at its far end out first: the SSD mounting screw the HAT ships with ({maker}).",
+}
+# Said with the second fitting step, on the page: its action 4 is drawn in the fitting picture, which cannot link.
+CARD_IN = {
+    "blade": "How the card goes in (action 4) is from {maker}.",
+    "pi5": "The screw of action 4 is the one {maker} lists.",
+}
 
 
 def card_out(c):
     """The sentence that says how a card is taken out of its slot, for a step that needs it out."""
-    return CARD_OUT[c.key] + CARD_OUT_REST
+    return CARD_OUT[c.key].format(maker=maker_link(c))
+
+
+# Said with the first step of a later cable's page, for a reader who starts there.
+STILL_WHOLE = "If the Molex cable is still whole, cut it in the middle with side cutters: each half is one cable."
+# The words the first cable's two steps before any flag start with, as the overview quotes them by number.
+CUT_HALF = "Cut the Molex cable in half"
+REACH = "Check that each half reaches"
+# A cable's first step: its wires are found and flagged with the plug in the card's socket, the card in the hand.
+CARD_OUT_STEP = "Have the Acorn out of its slot."
+
+
+def card_out_step(c):
+    """The step that has the card out of its slot and in the hand: the power off first, the screw, and static."""
+    return (
+        f"{CARD_OUT_STEP} If it is fitted, {c.power_off[0].lower()}{c.power_off[1:]} Then take the card out. "
+        f"{card_out(c)} {STATIC}"
+    )
 
 
 def header_words(name):
@@ -1245,7 +1251,7 @@ def through_resistor(c, connector):
     return (
         f"**Wire {n} is the exception: it has the {c.resistor_value} resistor in it. Leave wire {n} until last and "
         "read it in ohms, not by the buzzer.** A continuity buzzer usually sounds only below some tens of ohms, so "
-        "through the resistor it will usually stay silent (we have not tried your meter). Set the meter to ohms, on "
+        "through the resistor it will usually stay silent. Set the meter to ohms, on "
         "auto-range or the 2 kΩ range, and touch the two probes together first: it must read close to 0. Then, "
         f"between wire {n}'s contact on the plug and its terminal, it must read close to {c.resistor_value}. Close "
         "to 0 there means the resistor is bridged or was left out. Over-range (OL, or a lone 1 at the left of the "
@@ -1275,9 +1281,8 @@ def resistor_reason(c, sig):
     if not gpio or not shared:
         raise wiring.WiringError(f"{c.key}: {sig} has a series resistor and shares its pin with no JTAG wire: say why")
     return (
-        f"The resistor is there because {label_of(sig)} lands on {gpio}, which is also JTAG {shared[0]}: with "
-        f"{c.resistor_value} in the wire, JTAG still gets through if the FPGA drives {label_of(sig)} (designed so, "
-        "not yet measured)."
+        f"The resistor is there because {label_of(sig)} lands on {gpio}, which is also JTAG {shared[0]}: the "
+        f"{c.resistor_value} in the wire is meant to let JTAG through if the FPGA drives {label_of(sig)}."
     )
 
 
@@ -1305,12 +1310,13 @@ def procedure_parts(c, restart=False):
     out = [
         tables.BANNER.strip(),
         "",
-        "Not yet run by us on this hardware: written from the design.",
+        bench_run(c),
         "",
         "### What you will have",
         "",
-        f"Two short cables from the Acorn's two connectors to the {c.name}: the P1 cable carries JTAG, the P2 "
-        f"cable carries the serial port{spare}.",
+        f"Two short cables from the Acorn's two connectors to the {c.name}"
+        + (f" with the {c.hat.name}" if c.hat else "")
+        + f": the P1 cable carries JTAG, the P2 cable carries the serial port{spare}.",
         "",
         f"{listed(labels)} are the names on the pictures for each wire; {listed(balls)} are the FPGA's pin names.",
         "",
@@ -1334,8 +1340,9 @@ def procedure_parts(c, restart=False):
         for alt, name in images:  # a picture shown again says why in the step's words (again)
             target.extend([markdown_image(alt, name), ""])
 
+    step(card_out_step(c))
     step(
-        "Cut the Molex cable in half with side cutters. Each half is one cable. The cut comes before the reach "
+        f"{CUT_HALF} with side cutters. Each half is one cable. The cut comes before the reach "
         f"check on purpose: a half is what goes between the card and the {c.name}, so a half is what is "
         "checked for reach, below.",
         ("The cable, cut in the middle", "acorn-cable-cut.png"),
@@ -1345,14 +1352,13 @@ def procedure_parts(c, restart=False):
         for k in wiring.CONNECTORS
     ]
     step(
-        "Check that each half reaches, before any wire is cut back or crimped. "
+        f"{REACH}, before any wire is cut back or crimped. "
         + power_off_if_on(c)
         + " With the card out of its slot, hold the card over the slot where it will sit, and lay "
         + " and ".join(pairs)
         + ", along the way each cable will run. Its cut end must reach the header with some slack left to "
-        "bend into the housing; how much is needed has not been measured by us. If a half does not reach, "
-        "stop: this guide uses each half at the length it has, and a longer cable is not written here. Tell "
-        f"{c.contact}. **Not yet done by us on this hardware.**",
+        "bend into the housing. If a half does not reach, stop: this guide uses each half at the length it has. "
+        f"Tell {c.contact}.",
         (
             f"Where each half must reach on a {c.name}: from the M.2 slot, where the card will sit, to its header",
             png(reach_name(c)),
@@ -1377,6 +1383,8 @@ def procedure_parts(c, restart=False):
         if restart and not target:
             n = 0
         target.extend([f"#### The {connector} cable ({conn['what']})", ""])
+        if connector != next(iter(wiring.CONNECTORS)):  # the first cable's part has it as its first step, above
+            step(f"{card_out_step(c)} {STILL_WHOLE}")
         half = "one" if connector == next(iter(wiring.CONNECTORS)) else "the other"
         flag = [
             f"Press the plug of {half} half into socket {connector} on the underside of the Acorn. "
@@ -1414,8 +1422,8 @@ def procedure_parts(c, restart=False):
             f"Cut {cut_who} off about {lengths['cut_back']} mm from the plug and shrink a piece of the "
             f"{lengths['tube']} mm tube over "
             f"{'the cut end' if one else 'each cut end'}. {'It goes' if one else 'They go'} in no cavity. "
-            f"Wire {len(pins)} is VCC, 3.3 V from the Acorn (the LiteX wiki's legend names it so; not measured "
-            "by us): it must never reach the host. "
+            f"Wire {len(pins)} is VCC, 3.3 V from the Acorn by the LiteX wiki's legend: it must never reach the "
+            "host. "
             f"Leave {number_list(kept)} at full length.",
             prep,
         )
@@ -1491,7 +1499,12 @@ def procedure_parts(c, restart=False):
     why = "for which wire goes in which cavity, and which corner is marked"
     for i, (connector, picture) in enumerate(cavity.items()):
         step(
-            (f"{BENCH_START} {power_off_if_on(c)} Then fit {fits[i]}." if i == 0 else f"Fit {fits[i]}.")
+            (
+                f"{BENCH_START} {power_off_if_on(c)} The Acorn stays out of its slot; if it is fitted, take it out. "
+                f"{card_out(c)} Then fit {fits[i]}."
+                if i == 0
+                else f"Fit {fits[i]}."
+            )
             + " "
             + again(connector, why),
             picture,
@@ -1500,15 +1513,17 @@ def procedure_parts(c, restart=False):
         f"{BENCH_BEEP} Put one meter probe "
         f"on contact 1 ({label_of(first)}) of a plug and the other on {c.shell}: it must "
         f"beep. Do the same for the other plug. Then contact {len(pins)} of each plug ({label_of(pins[-1])}, the wire "
-        "you cut back): against the shell and against every other contact it must be silent. That the shell is the "
-        "host's ground is taken as given, not measured by us: contact 1's beep shows only that contact 1 and the "
-        "shell are joined. " + ground_shows_way_round(c),
+        "you cut back): against the shell and against every other contact it must be silent. Contact 1's beep "
+        "shows only that contact 1 and the shell are joined. " + ground_shows_way_round(c),
         (f"The bench check on a {c.name}", png(shell_check_name(c))),
     )
     actions = fit_actions(c)
     for half, (words, numbers) in enumerate(zip(FIT_STEPS, FIT_HALVES), 1):
         step(
-            words + "\n\n" + "\n".join(f"{n}. {actions[n - 1]}" for n in numbers),  # a list from 4 starts at 4
+            words
+            + (f" {FIT_STATIC}" if half == 1 else f" {CARD_IN[c.key].format(maker=maker_link(c))}")
+            + "\n\n"
+            + "\n".join(f"{n}. {actions[n - 1]}" for n in numbers),  # a list from 4 starts at 4
             (fit_alt(c, numbers), png(fit_name(c, half))),
         )
     parts["tail"] = [CREDITS[c.key] + ".", ""]
@@ -1523,6 +1538,18 @@ def procedure(c):
 # ----------------------------------------------------------------------------------------------
 # The building guide as pages: an overview, then one page for each connector's cable, then the fitting
 # ----------------------------------------------------------------------------------------------
+# The issue of each carrier's bench run: nobody has followed the building pages on the hardware. While the docs are
+# reworked, every building page says so once, at its top, by naming this issue; the run then confirms the page or
+# removes it. What a page cannot say for sure is an item of that issue, not a sentence of the page.
+BENCH_RUN = {"pi5": 218, "blade": 219}
+ISSUES = "https://github.com/fpgas-online/fpgas.online-test-designs/issues/"
+
+
+def bench_run(c):
+    """The line at the top of a building page of carrier `c`: it waits for its bench run, and which issue that is."""
+    return f"This procedure is waiting for its bench run: [issue #{BENCH_RUN[c.key]}]({ISSUES}{BENCH_RUN[c.key]})."
+
+
 # connector -> (file name part, the cable's name). Part `<part>-1` prepares that cable's wires and `<part>-2` fills
 # its housing: the keys of those pages in pages.PAGES. The parts list is tables.bom(), a page of its own.
 GUIDE = {"P1": ("jtag", "JTAG"), "P2": ("uart", "UART")}
@@ -1539,36 +1566,48 @@ STATIC = (
 )
 
 
+def need_lists(parts, tools=()):
+    """The lines under "What you need": the parts as a list, then the tools as a list. Items, not sentences. A
+    list has at least two items, so a single tool is listed with the parts."""
+    if len(tools) == 1:
+        return ["**Parts and tools**", "", *(f"- {item}" for item in (*parts, *tools)), ""]
+    lines = ["**Parts**", "", *(f"- {item}" for item in parts), ""]
+    if tools:
+        lines += ["**Tools**", "", *(f"- {item}" for item in tools), ""]
+    return lines
+
+
 def needs(c, connector):
-    """What one cable takes from the parts list, as a sentence: so its page can be started without the list."""
+    """What one cable's first page takes from the parts list, as lists: so the page can be started without it."""
     plan = housing(c, connector)
     data = c.headers[plan.header]
     pins = wiring.CONNECTORS[connector]["pins"]
     wired = [s for s in pins if s not in plan.cut]
     shape = f"{data.columns}×{(plan.last - plan.first + 1) // data.columns}"
-    items = [
+    parts = [
         "one half of the Molex Pico-EZmate cable (a plug with six black wires)"
         if connector == next(iter(wiring.CONNECTORS))
         else "the other half of the Molex Pico-EZmate cable, which was cut in half in "
-        f"{pages.link(c.key, next(iter(GUIDE.values()))[0] + '-1')} "
-        "(if it is still whole: cut it in the middle with side cutters; each half is one cable)",
+        f"{pages.link(c.key, next(iter(GUIDE.values()))[0] + '-1')}",
         f"the {shape} Dupont housing",
         f"{len(wired)} Dupont crimp terminals, and a few spare",
         f"{wiring.LENGTHS['tube']} mm heat-shrink tube",
     ]
     if has_resistor(c, connector):
-        items += [f"the {c.resistor_value} resistor", f"{wiring.LENGTHS['resistor_tube']} mm heat-shrink tube"]
-    tools = (
-        "a multimeter with a continuity buzzer, a fine probe tip for it or a sewing pin to hold against a probe, a "
-        "ruler marked in millimetres, side cutters, wire strippers, the crimping tool, a hot-air tool"
-    )
-    if has_resistor(c, connector):
-        tools += ", a soldering iron"
-    return (
-        f"For this cable: {'; '.join(items)}. Tools: {tools}, masking tape and a fine pen. The Acorn itself, out of "
-        f"any slot, is needed for the first steps: if it is fitted, {c.power_off[0].lower()}{c.power_off[1:]} Then "
-        f"take the card out. {card_out(c)} {STATIC}"
-    )
+        parts += [f"the {c.resistor_value} resistor", f"{wiring.LENGTHS['resistor_tube']} mm heat-shrink tube"]
+    parts += ["the Acorn"]
+    if connector == next(iter(wiring.CONNECTORS)):
+        parts += [f"the {c.name}" + (f" with the {c.hat.name}" if c.hat else "")]
+    tools = [
+        "a multimeter with a continuity buzzer, and a fine probe tip for it or a sewing pin to hold against a probe",
+        "a ruler marked in millimetres",
+        "side cutters and wire strippers",
+        "the crimping tool",
+        "a hot-air tool",
+        *(["a soldering iron"] if has_resistor(c, connector) else []),
+        "masking tape and a fine pen",
+    ]
+    return need_lists(parts, tools)
 
 
 def renumbered(lines):
@@ -1601,7 +1640,7 @@ def guide(c):
     parts = procedure_parts(c, restart=True)
     head = parts["head"]
     will_have = head[head.index("### What you will have") + 2 : head.index("### Parts and tools")]
-    not_run = "Not yet run by us on this hardware: written from the design."
+    not_run = bench_run(c)
     order = [f"{pages.link(c.key, 'parts')}: the list to tick off before starting."]
     for connector, (part, _) in GUIDE.items():
         order += [
@@ -1622,21 +1661,22 @@ def guide(c):
         lines = [line for line in lines if not line.startswith("#### ")]
         while lines and not lines[0]:
             lines.pop(0)
-        head = [tables.BANNER.strip(), "", f"{not_run} {parts['tail'][0]}", "", "## What you need", "", need, ""]
+        head = [tables.BANNER.strip(), "", not_run, "", parts["tail"][0], "", "## What you need", "", *need]
         return "\n".join([*head, "## Steps", "", *lines, *(line for extra in after for line in (extra, ""))])
 
+    first_part = next(iter(GUIDE.values()))[0]  # the first cable's first page: the one cut, then the reach check
+    first_page = parts[next(iter(GUIDE))]
     out = {
         guide_name(c, "overview"): "\n".join([
             tables.BANNER.strip(), "", not_run, "", "## What you will have", "", *will_have,
-            "Nothing in this guide cuts a wire to length. The bought cable is cut in half, once, as the first step "
-            "(before the meter check, which needs the cut faces); each half is then used at the length it has, "
+            "Nothing in this guide cuts a wire to length. The bought cable is cut in half, once "
+            f"(step {numbered(first_page, CUT_HALF)} of {pages.link(c.key, first_part + '-1')}, before the meter "
+            "check, which needs the cut faces); each half is then used at the length it has, "
             "apart from the wires that are cut back at the plug"
             + (" and the one wire that is cut to take the resistor" if c.resistors else "")
-            + f". Whether a half reaches from the card to the {c.name}'s headers has not been measured by us: "
-            "the guide checks it as its second step, before any wire is cut back or crimped.", "",
+            + f". Step {numbered(first_page, REACH)} of that page checks that each half reaches from the card to the "
+            f"{c.name}'s headers, before any wire is cut back or crimped.", "",
             "## The order of work", "", *(f"{i}. {line}" for i, line in enumerate(order, 1)), "",
-            "## Where the facts come from", "",
-            *(f"- {s['claim']}: {s['source']}." for s in wiring.SOURCES if s.get("carrier", c.key) == c.key), "",
             *parts["tail"],
         ]),
     }  # fmt: skip
@@ -1647,20 +1687,26 @@ def guide(c):
         prepare, fill = cut_at(parts[connector], "Hold the empty")
         out[guide_name(c, f"{part}-1")] = body(needs(c, connector), prepare)
         out[guide_name(c, f"{part}-2")] = body(
-            f"The {connector} cable with its wires flagged and a terminal crimped on each "
-            f"({pages.link(c.key, f'{part}-1')}), "
-            f"the empty {shape} Dupont housing, a paint pen or a dot of tape, and a multimeter with a continuity "
-            "buzzer and a fine probe or a sewing pin.",
+            need_lists(
+                [
+                    f"the {connector} cable with its wires flagged and a terminal crimped on each "
+                    f"({pages.link(c.key, f'{part}-1')})",
+                    f"the empty {shape} Dupont housing",
+                ],
+                [
+                    "a paint pen, or a dot of tape",
+                    "a multimeter with a continuity buzzer, and a fine probe or a sewing pin",
+                ],
+            ),
             fill,
-            "## If a terminal is in the wrong cavity",
-            "A Dupont housing holds each terminal by a small plastic tab over its latch, in the window. Lift that tab "
-            "a little with a pin and pull the wire gently: the terminal comes out, and can be pushed into the right "
-            "cavity. (How these housings release; not yet done by us on these cables.)",
+            "## If it fails",
+            "A terminal is in the wrong cavity: a Dupont housing holds each terminal by a small plastic tab over its "
+            "latch, in the window. Lift that tab a little with a pin and pull the wire gently: the terminal comes "
+            "out, and can be pushed into the right cavity.",
         )
     bench, fit_ = cut_at(parts["fit"], FIT_STEPS[0])
     out[guide_name(c, "bench")] = body(
-        f"Both finished cables, the {c.name}, and a multimeter with a continuity buzzer. {power_off_if_on(c)} "
-        f"The Acorn stays out of its slot; if it is fitted, take it out. {card_out(c)}",
+        need_lists(["both finished cables", f"the {c.name}"], ["a multimeter with a continuity buzzer"]),
         bench,
         "## If it fails",
         "Do not fit the cables. A contact 1 that does not beep means that cable's ground wire is open or in the wrong "
@@ -1669,17 +1715,10 @@ def guide(c):
         "every wire again.",
     )
     out[guide_name(c, "fit")] = body(
-        f"Both cables, checked on the bench ({pages.link(c.key, 'bench')}), the Acorn and the {c.name}. As before: "
-        f"after action 1 (step {numbered(fit_, FIT_STEPS[0])} below), touch bare metal of the host before you pick "
-        "up the card, and hold it by its edges.",
+        need_lists([f"both cables, checked on the bench ({pages.link(c.key, 'bench')})", "the Acorn", f"the {c.name}"]),
         fit_,
         "## Next",
-        f"Power the host on and run the check: {pages.link(c.key, 'check-1')}."
-        + (
-            " At ps1: on pi16 and pi20 at ps1 only, not yet on the two Compute Module 4 blades."
-            if c.key == "blade"
-            else ""
-        ),
+        f"Power the host on and run the check: {pages.link(c.key, 'check-1')}.",
     )
     return out
 
@@ -1711,7 +1750,7 @@ def wire_one_step(c, connector):
 def assumed_check(c, connector):
     """The box's last line: where the check that settles its last item is, by step number and page."""
     n, _ = wire_one_step(c, connector)
-    return ASSUMED[1].format(n=n)
+    return WIRE_ONE_NOTE.format(n=n)
 
 
 # The words the meter check of a finished cable starts with, on each connector's second page: how the probes go,
@@ -1805,14 +1844,12 @@ def fit_actions(c):
         "round it was when you put the flags on, until fully seated.",
         "Put the Acorn in the M.2 slot and fit its screw"
         + (
-            f", in the standoff marked {c.hat.largest_card} at the far end of the {c.hat.name}. The HAT ships one "
-            "SSD mounting screw (from Waveshare's page, not measured by us); its size, the driver and how the "
-            "card goes in are not recorded by us."
+            f", in the standoff marked {c.hat.largest_card} at the far end of the {c.hat.name}: the SSD mounting "
+            "screw the HAT ships with."
             if c.hat
             else ": the M2x2.5 standoff goes in the threaded insert for the card's size, with a 5 mm hex driver; "
             "put the M2 nylon washer on the M2x2.5 screw, insert the card at a 30° angle and press down, then "
-            "secure the screw to the standoff with a PH1 driver (from Uptime Lab's assembly guide, not measured "
-            "by us)."
+            "secure the screw to the standoff with a PH1 driver."
         ),
         f"Fit {on[0]}, and {on[1]}.",
         f"Before powering on, look at both housings again, as on the bench check: the {c1} housing's marked corner "
@@ -1827,6 +1864,8 @@ def fit_actions(c):
 # with its own three actions, so that a half and its words fit on one printed sheet.
 FIT_HALVES = ((1, 2, 3), (4, 5, 6))
 FIT_SECOND = "Then the card and the housings:"
+# Said with the first fitting step, on the page: its action 1 powers the host off, and the card is picked up after.
+FIT_STATIC = "After action 1, touch bare metal of the host before you pick up the card, and hold it by its edges."
 # The two halves as two steps of the fitting page, one picture each; their actions keep the numbers 1 to 6 the
 # pictures print.
 FIT_STEPS = (
@@ -1978,7 +2017,7 @@ FIT_HOSTS = {"blade": fit_host_blade, "pi5": fit_host_pi5}
 MARKED_NOTE = "The red corner of each box is the housing's marked corner, on the pin printed 1."
 REACH_NOTE = (
     "Each half must reach from the card, once it sits in the M.2 slot, to its box. The card and its sockets are "
-    "not drawn here, and how far that is has not been measured by us."
+    "not drawn here."
 )
 
 
@@ -2056,8 +2095,7 @@ def shell_check(c):
     y = para(sh, 30, y, "Contact 1 of each plug to the shell: the meter must beep.", W - 40, "bold")
     y = para(sh, 30, y + 4, "Contact 6 of each plug (VCC, cut back): silent to the shell and to every other contact.",
              W - 40, "bold")  # fmt: skip
-    y = para(sh, 30, y + 4, "The plug and the meter are sketched. The shell being ground is not measured on this host.",
-             W - 40, fill=MUTED)  # fmt: skip
+    y = para(sh, 30, y + 4, "The plug and the meter are sketched.", W - 40, fill=MUTED)
     sh.h = math.ceil(y - LINE + 14)
     sh.check(f"shell check {c.key}")
     return sh.svg()

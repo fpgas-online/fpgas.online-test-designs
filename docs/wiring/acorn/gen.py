@@ -770,8 +770,7 @@ def blade(nudge=0):
         sh,
         "ACORN WIRING  ·  COMPUTE BLADE",
         "SQRL Acorn to Compute Blade",
-        "JTAG on these pins run by us on a CM5, not yet on a CM4. Pins carry the numbers printed on the blade: "
-        "Extension Port 1 to 5 left, 6 to 10 right; UART 1 to 4.",
+        "Pins carry the numbers printed on the blade: Extension Port 1 to 5 left, 6 to 10 right; UART 1 to 4.",
         f"--pins {c.jtag_pins}",
         "These are GPIO (IO) numbers, not the printed pin numbers",
     )

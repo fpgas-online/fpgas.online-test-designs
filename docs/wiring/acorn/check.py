@@ -304,8 +304,8 @@ INSTALL = {
     "blade": (
         "The Compute Blades at ps1 boot from the network with their root file system in memory "
         "(`overlayroot=tmpfs`): what you install is gone at the next boot, and so is the check that would run at "
-        "boot. So after each boot, install and run by hand. **Ask Tim before you reboot a blade:** a reboot "
-        "ends a visitor's session on it, the same harm as a power-off.\n\n"
+        "boot. So after each boot, install and run by hand. **Ask the site operator before you reboot a blade:** "
+        "a reboot ends a visitor's session on it, the same harm as a power-off.\n\n"
         "**Not on pi14 at ps1 or pi18 at ps1 yet.** Those two carry a Compute Module 4; the check has been "
         "run as written only on the two Compute Module 5 blades (pi16 and pi20 at ps1, 7 October 2026), and "
         "`vcgencmd` hung for good on both CM4 blades that day. Until the check has been tried on a CM4 blade, "
@@ -479,7 +479,7 @@ def pages(c):
         f"{docs_pages.link(c.key, 'uart-2')} do, run "
         f"the bench check ({docs_pages.link(c.key, 'bench')}) with the card out, and fit the cables "
         f"({docs_pages.link(c.key, 'fit')}). Then "
-        + ("ask Tim and boot, and run" if c.key == "blade" else "boot and run")
+        + ("ask the site operator and boot, and run" if c.key == "blade" else "boot and run")
         + " the check again"
         + (
             f" (on a blade at ps1 the install is gone after the boot: install again, as in {BLADE_CHECK}; and "
