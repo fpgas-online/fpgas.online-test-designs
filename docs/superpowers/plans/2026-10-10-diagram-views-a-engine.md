@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-10-diagram-views-design.md`
 
+**As built (tasks 1 to 5):** review changed some interfaces after this plan was written. Where they differ, the code is right: a photo's `px_per_mm` is two numbers, `[across, down]`; a header table carries `pin` (the width of a pin, with its source) in place of `model.PAD`; the card's figures are stored to 0.1 mm; `measure_card.measure_mm` returns both scales and no `contact_pitch_mm`; `Frame` refuses an unknown face or turn; a views file with no views is refused. Tasks 6 to 9 are to be read against the code.
+
 ## Global Constraints
 
 - Python only through `uv run`; never `python -c`; no file in the system temp directory (use `./tmp/`, git-ignored, and remove it); never redirect stderr to `/dev/null`.

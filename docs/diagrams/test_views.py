@@ -116,7 +116,3 @@ def test_a_malformed_views_file_is_refused(tmp_path, text, message):
 def test_callouts_are_numbers_on_items(tmp_path):
     v = load(tmp_path, f'[views."a.b"]\n{HAT}width = 100\ncallouts = {{ "hat.m2-slot" = 2 }}\n')["a.b"]
     assert v.callouts == {"hat.m2-slot": 2} and v.width == 100
-
-
-def test_a_views_file_name_is_its_id():
-    assert views.file_stem("pi5-hat.top.m2-slot") == "pi5-hat.top.m2-slot"

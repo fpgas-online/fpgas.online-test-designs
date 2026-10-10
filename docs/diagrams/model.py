@@ -4,6 +4,7 @@
 Every table of the file names its source. Nothing here supplies a figure the file lacks."""
 
 import difflib
+import math
 import pathlib
 import re
 from dataclasses import dataclass
@@ -112,8 +113,16 @@ def _table(raw, what, keys):
             raise DiagramError(f"geometry: {what}: no {key}")
 
 
+def _tables(parent, name, what):
+    """The tables under `name` in `parent`, by key; none if it has no such key."""
+    value = parent.get(name, {})
+    if not isinstance(value, dict):
+        raise DiagramError(f"geometry: {what}{name} is not a table")
+    return value
+
+
 def _is_number(v):
-    return isinstance(v, (int, float)) and not isinstance(v, bool)
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
 def _numbers(value, n, what, positive=False):
@@ -219,15 +228,15 @@ def load(geometry_path):
     geometry_path = pathlib.Path(geometry_path)
     data = tomllib.loads(geometry_path.read_text())
     things = {}
-    for key, raw in (data.get("things") or {}).items():
+    for key, raw in _tables(data, "things", "").items():
         _table(raw, key, THING_KEYS)
         size = _numbers(raw["size"], 2, f"{key}: size", positive=True)
         if not isinstance(raw["name"], str):
             raise DiagramError(f"geometry: {key}: name {raw['name']!r} is not text")
         items = {key: Item(key, "board", "top", Box(0, 0, *size), raw["name"])}
-        for hk, h in raw.get("headers", {}).items():
+        for hk, h in _tables(raw, "headers", f"{key}: ").items():
             items.update(_header(key, size, hk, h))
-        for ik, it in raw.get("items", {}).items():
+        for ik, it in _tables(raw, "items", f"{key}: ").items():
             iid = f"{key}.{ik}"
             if iid in items:
                 raise DiagramError(f"geometry: {iid}: an item and a header share this name")
@@ -236,7 +245,7 @@ def load(geometry_path):
             pin1 = _numbers(it["pin1"], 2, f"{iid}: pin1") if "pin1" in it else None
             z = _whole(it.get("z", 1), f"{iid}: z")
             items[iid] = _item(size, iid, it["kind"], it["face"], box, _label(it, iid), pin1, z)
-        for face, photo in raw.get("photos", {}).items():
+        for face, photo in _tables(raw, "photos", f"{key}: ").items():
             _photo(key, size, face, photo, items, geometry_path.parent / "photos")
         things[key] = Thing(key, raw["name"], size, items, raw.get("photos", {}))
     if not things:

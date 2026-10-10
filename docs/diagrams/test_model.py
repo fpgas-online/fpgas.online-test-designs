@@ -208,3 +208,20 @@ def test_a_malformed_geometry_is_refused_naming_the_table_and_the_key(tmp_path, 
 def test_the_well_formed_tables_those_cases_start_from_load(tmp_path):
     scene = model.load(write(tmp_path, THING + HEADER + ITEM_X + "pin1 = [2, 2]\nz = 3\n" + PHOTO))
     assert scene.item("b.x").pin1 == (2, 2) and scene.item("b.x").z == 3
+
+
+@pytest.mark.parametrize("name", ["headers", "items", "photos"])
+def test_a_things_headers_items_or_photos_that_is_not_a_table_is_refused(tmp_path, name):
+    with pytest.raises(DiagramError, match=rf"b: {name} is not a table"):
+        model.load(write(tmp_path, THING + f"{name} = 3\n"))
+
+
+def test_things_that_is_not_a_table_is_refused(tmp_path):
+    with pytest.raises(DiagramError, match="things is not a table"):
+        model.load(write(tmp_path, "things = 3\n"))
+
+
+@pytest.mark.parametrize("bad", ["inf", "nan"])
+def test_a_size_that_is_not_finite_is_refused(tmp_path, bad):
+    with pytest.raises(DiagramError, match="b: size"):
+        model.load(write(tmp_path, THING.replace("[10.0, 20.0]", f"[10.0, {bad}]")))
