@@ -43,13 +43,27 @@ Install **one** of these. They conflict, so a host is never set up for two board
   need only USB.
 * Versions are `0.0.postN` from `git describe` (for example `0.0.post771`). Each package depends on the others'
   exact version, so `sudo apt upgrade` moves them together.
-* What each board's packages pull in is listed [below](#what-each-boards-packages-install); the Acorn's are on
-  [its page](../hardware/acorn.md#installing-the-acorn-packages).
+* What each board's packages pull in is listed [below](#what-each-boards-packages-install).
 * CI builds every package and checks its install rules in clean bookworm and trixie
   ([`collect-bitstreams.yml`](../../.github/workflows/collect-bitstreams.yml),
   [`build_debs.py`](../../packaging/debs/build_debs.py), [`install_test.sh`](../../packaging/debs/install_test.sh)).
 
 ## What each board's packages install
+
+### Acorn packages
+
+| Package | Version scheme | Installs |
+|---|---|---|
+| `fpgas-online-acorn` | `X.Y.postN` from `git describe` (e.g. `0.0.post576`) | installs everything below to check an Acorn, and turns the boot check (`fpgas-verify.service`) on for it |
+| `fpgas-online-acorn-tools` | `X.Y.postN` | the Acorn's module of `fpgas_online_verify` (`suite.py`, `check.py`, `bist.py`, `links.py`, `setup.py`, `spi_flash.py`, `uartbone_link.py`, and `data/wiring.toml` and `data/expected.toml`), `/usr/bin/fpgas-acorn-verify` and `/usr/bin/fpgas-acorn-flash`; with openFPGALoader for the P1 JTAG check (recommending `raspi-utils-core`, whose `pinctrl` puts the JTAG pins back after it and drives the Pi's side of J5/H5; Raspberry Pi OS only), and `python3-serial` for the P2 UART check |
+| `fpgas-online-acorn-bitstreams` | pinned release date + commit (e.g. `20260923+ge48a750c8303`) | `/usr/share/fpgas-online/acorn-pcie/images/`: `manifest.json`, and for each of `cle-215p` / `cle-101` the golden (`0x000000`) and operational (`0x400000`) flash images, the operational `.bit`, and the CSR maps |
+| `fpgas-online-verify` | `X.Y.postN` | `fpgas-verify` and its unit |
+
+The tools package depends on one exact bitstreams version. Which release that is comes from [`packaging/acorn-pcie/release.toml`](../../packaging/acorn-pcie/release.toml), and a new release reaches hosts only when a reviewed PR moves that pin. Every package is built, and its install rules are checked in clean Debian bookworm and trixie, by [`collect-bitstreams.yml`](../../.github/workflows/collect-bitstreams.yml).
+
+`fpgas-online-acorn-debug` adds `fpgas-acorn-debug`. It brings openFPGALoader for loading the `.bit` over GPIO JTAG, which is how a card still on the image it was sold with is converted, and `python3-serial` for `fpgas-acorn-flash --uart`.
+
+The [fpgas.online-fpga-tools repository](https://github.com/fpgas-online/fpgas.online-fpga-tools#debian-packages-bookworm-trixie-sid-arm64-armhf) has the fpgas.online openFPGALoader build, with the RP1 PIO JTAG cable and SPI flash info. Add it **before** installing. Otherwise apt installs Debian's own package (bookworm 0.10.0, trixie 0.13.1). Adding the repository afterwards does not replace it: run `sudo apt install openfpgaloader-fpgasonline` to switch.
 
 ### Arty packages
 
