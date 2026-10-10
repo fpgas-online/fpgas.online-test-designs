@@ -67,7 +67,7 @@ are two ways, and the choice belongs to whoever runs the gateway (at ps1: Carl):
    next boot.
 2. **Give one blade its own copy.** Copy the directory (any name), make the two changes in the copy, and point
    that blade's link in `/srv/tftp/` at the copy. Only that blade is changed, from its next boot. To undo it,
-   point the link back at `/srv/nfs/rpi/trixie/boot` and, after asking Tim, boot the blade again. This is how pi20 at ps1 was
+   point the link back at `/srv/nfs/rpi/trixie/boot` and, after asking the site operator, boot the blade again. This is how pi20 at ps1 was
    tested on 7 October 2026: its link, `/srv/tftp/de59093d`, was pointed at a copy for the test, and the changes were
    made in the copy only. The link was put back at 17:19:48 and the copy was removed then, and the shared
    `config.txt` and `cmdline.txt` read the same as before it.
@@ -79,7 +79,7 @@ boots from the shared directory, the second only the one blade.
 
 ### Before JTAG runs on a blade
 
-Ask Tim, then boot the blade again (a reboot ends a visitor's session on it, the same harm as a power-off), and in that boot (the one with the serial port off):
+Ask the site operator, then boot the blade again (a reboot ends a visitor's session on it, the same harm as a power-off), and in that boot (the one with the serial port off):
 
 1. Install the packages again, as in [How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html): the install is gone after the boot.
 2. Check that GPIO14 is free, with the commands at the end of this page: it must show no consumer.

@@ -208,8 +208,8 @@ def test_moving_a_wire_sends_the_cable_through_the_new_cables_checks_before_a_bo
         order += ["Then "]
         at = [rework.index(words) for words in order]  # each named, in this order
         assert at == sorted(at)
-        assert re.search(r"Then (ask Tim and )?boot", rework)
-        assert ("Then ask Tim and boot" in rework) == (c.key == "blade")  # a blade's reboot is asked for
+        assert re.search(r"Then (ask the site operator and )?boot", rework)
+        assert ("Then ask the site operator and boot" in rework) == (c.key == "blade")  # a blade's reboot is asked for
 
 
 def test_a_blade_page_says_when_jtag_may_run_before_the_command_that_runs_it():
@@ -225,21 +225,25 @@ def blade_texts():
     return [*check.pages(blade).values(), check.fragment("compute-blade.md", blade)]
 
 
-def test_every_reboot_a_blade_page_asks_for_is_preceded_by_ask_tim():
-    """A reboot ends a visitor's session on a blade, the same harm as a power-off: "ask Tim" comes first."""
+def test_every_reboot_a_blade_page_asks_for_is_preceded_by_asking_the_site_operator():
+    """A reboot ends a visitor's session on a blade, the same harm as a power-off: asking the site operator comes
+    first."""
     reboot = re.compile(r"\b(?:re)?boot the blade\b|\bthen boot\b|\bboot, and run\b|\band boot\b", re.I)
     seen = 0
     for text in blade_texts():
         for m in reboot.finditer(text):
-            before = text[max(0, m.start() - 60) : m.start()].lower()
+            before = text[max(0, m.start() - 80) : m.start()].lower()
             if "we reboot" in before or "was reboot" in before:  # the record of what was done, not an instruction
                 continue
             seen += 1
-            assert re.search(r"ask(?:ing)? tim", before + m.group(0).lower()), text[m.start() - 80 : m.end() + 20]
+            asked = re.search(r"ask(?:ing)? the site operator", before + m.group(0).lower())
+            assert asked, text[m.start() - 80 : m.end() + 20]
     assert seen >= 4  # verifying 3 (twice), the rework line, and the install block's reboot
-    assert "ask tim before you reboot a blade" in blade_texts()[0].lower()  # verifying 1, where the installs are
+    assert (
+        "ask the site operator before you reboot a blade" in blade_texts()[0].lower()
+    )  # verifying 1, where the installs are
     assert "a reboot ends a visitor's session" in blade_texts()[-1]  # verifying 3 says why, once
-    assert blade_texts()[-1].count("Ask Tim, then boot the blade again") == 1
+    assert blade_texts()[-1].count("Ask the site operator, then boot the blade again") == 1
 
 
 def test_the_jtag_list_has_no_exception_to_its_steps_2_and_3():

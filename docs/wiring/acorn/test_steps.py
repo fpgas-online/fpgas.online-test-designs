@@ -122,12 +122,12 @@ def test_which_cables_the_warning_names_a_rail_on():
 
 
 @pytest.mark.parametrize(("key", "connector"), CABLES)
-def test_every_picture_states_the_view_and_what_is_not_checked(key, connector):
+def test_every_picture_states_the_view_and_sends_the_reader_to_the_check_of_wire_one(key, connector):
     drawn = words(picture(key, connector))
     text = " ".join(drawn)
     assert "Dupont housing, seen from the wire side," in text
     assert "You are looking down" in drawn
-    assert steps.ASSUMED[0] in drawn
+    assert "Not yet checked" not in text and "taken to be" not in text  # what it assumes is the bench run's
     assert html.escape(steps.assumed_check(wiring.CARRIERS[key], connector), quote=False) in drawn
     assert re.search(r'viewBox="0 0 780 \d+"', picture(key, connector))
 
@@ -338,7 +338,6 @@ def test_the_ground_check_is_in_each_flag_step_and_on_the_box():
         assert "This is a bench check; the housings come off again before the cables are fitted." in text
         assert ("Trim the resistor's leads to about" in text) == bool(c.resistors)
         assert text.index("If wire 6 beeps instead") < text.index("Cut wire")
-    assert any("mounting pad is taken to be ground" in item and "not measured" in item for item in steps.ASSUMPTIONS)
     assert wiring.LENGTHS["flag_back"] > wiring.LENGTHS["resistor"]
 
 
@@ -449,11 +448,11 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
     # the wire-1 check has an outcome for every result, and says what the last wire's silence rests on
     for part in ("jtag-1", "uart-1"):
         body = pages[steps.guide_name(c, part)]
-        assert "If both still beep, stop and cut nothing" in body and "has not been measured by us" in body
+        assert "If both still beep, stop and cut nothing" in body and "expected to stay silent to ground" in body
         assert f"send both readings to {c.contact}." in body
         assert "If neither wire beeps" in body and "beeps instead, stop" in body
-    # whom to tell is the carrier's: Tim for the ps1 blades, the public wording for the Raspberry Pi 5
-    assert c.contact == {"blade": "Tim", "pi5": wiring.CONTACT}[c.key]
+    # whom to tell is the carrier's, by role: the site operator for the ps1 blades, the public wording for the Pi 5
+    assert c.contact == {"blade": "the site operator", "pi5": wiring.CONTACT}[c.key]
     assert f"Tell {c.contact}." in reach_step
     # a wire with the series resistor in it is not told to beep: its page gives the reading to expect
     for part, connector in (("jtag-2", "P1"), ("uart-2", "P2")):
@@ -476,10 +475,13 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
         # the wire-1 picture leaves what to do when the check proves nothing to its step's words, on its sheet
         picture = " ".join(words(steps.ground_check(connector)))
         assert steps.NOT_TOLD_APART in picture and "If both still beep" not in picture and "send" not in picture
-        assert "not measured by us" in picture
+        assert "shows only that wire 1 and the pad are joined" in picture and "by us" not in picture
     assert ("the one wire that is cut to take the resistor" in overview) == bool(c.resistors)
     if c.resistors:
-        assert f"lands on GPIO14, which is also JTAG TMS: with {c.resistor_value} in the wire" in steps.procedure(c)
+        said = (
+            f"lands on GPIO14, which is also JTAG TMS: the {c.resistor_value} in the wire is there to let JTAG through"
+        )
+        assert said in steps.procedure(c)
     # the meter check of wire 1 is on the page that cuts wires, before the cut
     for part in ("jtag-1", "uart-1"):
         body = pages[steps.guide_name(c, part)]
@@ -491,13 +493,15 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
         for half, words in enumerate(steps.FIT_STEPS, 1)
     )
     assert "This is a bench check" in pages[steps.guide_name(c, "bench")]
-    # what the ground beep shows about a turned housing is what it is meant to show: the silence is not tried
+    # the ground beep is never given as proof of which way round a housing is: the marked corner is
     bench = pages[steps.guide_name(c, "bench")]
-    assert "The beep also shows" not in bench and "(that it would then stay silent" not in bench
+    assert "The beep also shows" not in bench and "meant to show" not in bench and "would then stay silent" not in bench
     for connector in wiring.CONNECTORS:
-        if f"The beep is also meant to show that the {connector} housing" in bench:
-            after = bench[bench.index(f"meant to show that the {connector} housing") :]
-            assert after.index("; that a turned housing would then stay silent is not tried by us.") < after.index("\n")
+        assert (
+            f"The beep does not show which way round the {connector} housing is" in bench
+            or f"Turned round, the {connector} housing's GND wire would sit on" in bench
+        )
+    assert bench.count("look at its marked corner") == len(wiring.CONNECTORS)
 
 
 def step_blocks(body):
@@ -637,17 +641,15 @@ def test_the_reach_step_has_its_own_picture(key):
 def test_no_page_has_a_beep_show_that_ground_is_ground(key):
     """Wire 1's beep to the pad (and contact 1's to the shell) only shows they are joined: ground is taken as given."""
     c = wiring.CARRIERS[key]
-    texts = [*steps.guide(c).values(), steps.procedure(c), *steps.ASSUMPTIONS]
-    texts += [(wiring.HERE / "building-leads.md").read_text()]
+    texts = [*steps.guide(c).values(), steps.procedure(c)]
     for text in texts:
         flat = " ".join(text.split())
         assert "beep shows it" not in flat and "beep is what shows it" not in flat and "is what shows it" not in flat
         assert "reaches nothing" not in flat
     bench = " ".join(steps.guide(c)[steps.guide_name(c, "bench")].split())
     assert "shows only that contact 1 and the shell are joined" in bench
-    assert "taken as given, not measured by us" in bench
-    leads = " ".join((wiring.HERE / "building-leads.md").read_text().split())
-    assert "It does not show whether any wire reaches the right header pin" in leads
+    for connector in wiring.CONNECTORS:
+        assert "shows only that wire 1 and the pad are joined" in " ".join(words(steps.ground_check(connector)))
 
 
 @pytest.mark.parametrize("key", list(wiring.CARRIERS))
@@ -669,11 +671,11 @@ def test_taking_the_card_out_says_only_what_the_repo_records(key):
         page = steps.guide(c)[steps.guide_name(c, part)]
         assert steps.card_out(c) in page, part
     out = steps.card_out(c)
-    assert "not recorded by us" in out
-    if key == "blade":  # the PH1 screwdriver is in the parts list, "not verified by us on the blades"
-        assert "PH1" in out and "Uptime Lab's assembly guide, not measured by us" in out
-    else:  # no screw size or driver for the Pi 5's HAT is recorded: needs a fact
-        assert "PH1" not in out and "M2" not in out and "SSD mounting screw" in out
+    assert "by us" not in out and out.count("](https://") == 1  # one link, to the maker's own page
+    if key == "blade":  # the PH1 screwdriver is in the parts list
+        assert "PH1" in out and "uptime-lab/compute-blade" in out and "assembly guide" in out
+    else:  # no screw size or driver for the Pi 5's HAT is recorded: the bench run's issue has it
+        assert "PH1" not in out and "M2" not in out and "SSD mounting screw" in out and "waveshare.com" in out
 
 
 @pytest.mark.parametrize("key", list(wiring.CARRIERS))
@@ -685,9 +687,8 @@ def test_putting_the_card_back_is_from_the_makers_pages_and_the_bench_intro_orde
             assert words in action
         assert any("assembly.mdx" in s["source"] for s in wiring.SOURCES if s.get("carrier") == "blade")
     else:
-        assert "SSD mounting screw" in action and "not recorded by us" in action
+        assert "SSD mounting screw" in action and "by us" not in action
         assert any("SSD mounting screw x1" in s["source"] for s in wiring.SOURCES if s.get("carrier") == "pi5")
-    assert "not measured by us" in action or key == "pi5"
     intro = steps.guide(c)[steps.guide_name(c, "bench")]
     assert "take it out first" not in intro and "if it is fitted, take it out. Take " in intro
     assert steps.REACH_NOTE.count("not drawn") == 1

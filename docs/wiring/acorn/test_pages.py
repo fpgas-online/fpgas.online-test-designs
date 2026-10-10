@@ -164,3 +164,61 @@ def test_a_carrier_s_fragments_link_only_that_carrier_s_pages(key):
     for f in sorted(GENERATED.glob(f"acorn-*-{key}-*.md")) + sorted(GENERATED.glob(f"acorn-{key}-*.md")):
         for _, address in DOCS_LINK.findall(f.read_text()):
             assert address.split("#")[0] in mine, (f.name, address)
+
+
+# What a reader page may not say during or after the docs rework: that something is unproven, untried or to come.
+# The unknown is an item of the carrier's bench-run issue (steps.BENCH_RUN), and the page's one line names it.
+UNPROVEN = re.compile(
+    r"(?i)\bnot yet\b|\bby us\b|\bnot (?:been )?(?:measured|verified|recorded|tried|checked|seen|run)\b"
+    r"|\btaken (?:as given|to be)\b|\bwe have not\b|\bunverified\b|\bTODO\b|\bas read on\b|\bFuture:"
+    r"|\bis not written here\b|\bSources:"
+)
+# A person named in what ships: a role is named instead ("the site operator").
+PERSON = re.compile(r"\bTim\b")
+
+
+def _build_texts(key):
+    """The building pages of carrier `key`, the parts list, the fitting list, the whole procedure, and every
+    picture they show (the pictures' drawn words)."""
+    names = [f"acorn-build-{key}-*.md", f"acorn-cables-{key}.md", f"acorn-fit-{key}.md", f"acorn-{key}-*.md"]
+    files = [f for pattern in names for f in sorted(GENERATED.glob(pattern))]
+    shown = {m for f in files for m in re.findall(r"\]\(([a-z0-9-]+)\.png\)", f.read_text())}
+    return files + [GENERATED / f"{name}.svg" for name in sorted(shown)]
+
+
+def _words(f):
+    """A page's text, or the words drawn in a picture."""
+    text = f.read_text()
+    return "\n".join(re.findall(r'aria-label="([^"]*)"', text)) if f.suffix == ".svg" else text
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_a_building_page_or_its_picture_says_nothing_unproven_and_names_no_person(key):
+    files = _build_texts(key)
+    assert len(files) > 20 and any(f.suffix == ".svg" for f in files)
+    left = [(f.name, m.group(0), _words(f)[max(0, m.start() - 50) : m.end() + 30]) for f in files
+            for m in UNPROVEN.finditer(_words(f))]  # fmt: skip
+    assert left == []
+    assert [(f.name, m.group(0)) for f in files for m in PERSON.finditer(_words(f))] == []
+
+
+@pytest.mark.parametrize(
+    "words",
+    [
+        "Not yet run by us on this hardware", "has not been measured by us", "not recorded by us",
+        "(designed so, not yet measured)", "is taken as given", "taken to be ground", "we have not tried your meter",
+        "not tried by us", "is not written here",
+        "The shell being ground is not measured on this host", "Sources: the wiki", "Future: more",
+    ],
+)  # fmt: skip
+def test_the_unproven_pattern_finds_the_sentences_the_pages_had(words):
+    assert UNPROVEN.search(words)
+
+
+@pytest.mark.parametrize(
+    "words",
+    ["This procedure is waiting for its bench run: [issue #218](x).", "it must not beep", "the card is not fitted",
+     "Photos: Waveshare (PoE M.2 HAT+ (B))", "run the check"],
+)  # fmt: skip
+def test_the_unproven_pattern_leaves_plain_instructions_alone(words):
+    assert not UNPROVEN.search(words)

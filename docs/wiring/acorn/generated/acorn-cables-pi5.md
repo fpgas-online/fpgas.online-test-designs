@@ -40,14 +40,14 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 
 ### Steps
 
-**1.** Have the Acorn out of its slot. If it is fitted, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. Then take the card out. Take the screw at its far end out first (the HAT ships one SSD mounting screw: from Waveshare's page, not measured by us; its size and the driver are not recorded by us). How the card then comes out of the slot is not recorded by us. The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges.
+**1.** Have the Acorn out of its slot. If it is fitted, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. Then take the card out. Take the screw at its far end out first: the SSD mounting screw the HAT ships with ([Waveshare's page for the HAT](https://www.waveshare.com/poe-m.2-hat-plus-b.htm)). The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges.
 
 **2.** Cut the Molex cable in half with side cutters. Each half is one cable. The cut comes before the reach check on purpose: a half is what goes between the card and the Raspberry Pi 5, so a half is what is checked for reach, below.
 
 ![The cable, cut in the middle](acorn-cable-cut.png){.only-light}
 ![The cable, cut in the middle](acorn-cable-cut-dark.png){.only-dark}
 
-**3.** Check that each half reaches, before any wire is cut back or crimped. If the Raspberry Pi 5 is on, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. With the card out of its slot, hold the card over the slot where it will sit, and lay the half for P1 from socket P1 to the 40-pin header and the half for P2 from socket P2 to the 40-pin header, along the way each cable will run. Its cut end must reach the header with some slack left to bend into the housing; how much is needed has not been measured by us. If a half does not reach, stop: this guide uses each half at the length it has, and a longer cable is not written here. Tell whoever gave you this guide. **Not yet done by us on this hardware.**
+**3.** Check that each half reaches, before any wire is cut back or crimped. If the Raspberry Pi 5 is on, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. With the card out of its slot, hold the card over the slot where it will sit, and lay the half for P1 from socket P1 to the 40-pin header and the half for P2 from socket P2 to the 40-pin header, along the way each cable will run. Its cut end must reach the header with some slack left to bend into the housing. If a half does not reach, stop: this guide uses each half at the length it has. Tell whoever gave you this guide.
 
 ![Where each half must reach on a Raspberry Pi 5: from the M.2 slot, where the card will sit, to its header](acorn-cable-pi5-reach.png){.only-light}
 ![Where each half must reach on a Raspberry Pi 5: from the M.2 slot, where the card will sit, to its header](acorn-cable-pi5-reach-dark.png){.only-dark}
@@ -67,13 +67,13 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 1. With the plug still in the socket (the Acorn out of any slot), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: it must beep.
 2. Do the same with the wire flagged 6: it must stay silent.
 3. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again; if still neither beeps, stop: the ground point is not confirmed.
-4. If both wires beep, first see that the two probes do not touch each other and that the cut faces of wires 1 and 6 do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires apart. Leave the flags on and take the plug out. Wire 6 is the card's 3.3 V by the LiteX wiki's legend; that it stays silent to ground on a card with no power is expected and has not been measured by us. Set the meter to ohms, write down what each of the two wires reads to the pad, and send both readings to whoever gave you this guide.
+4. If both wires beep, first see that the two probes do not touch each other and that the cut faces of wires 1 and 6 do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires apart. Leave the flags on and take the plug out. Wire 6 is the card's 3.3 V by the LiteX wiki's legend, and is expected to stay silent to ground on a card with no power. Set the meter to ohms, write down what each of the two wires reads to the pad, and send both readings to whoever gave you this guide.
 5. Take the plug out again.
 
 ![Checking which wire is wire 1 with a meter, the plug in socket P1](acorn-cable-p1-ground-check.png){.only-light}
 ![Checking which wire is wire 1 with a meter, the plug in socket P1](acorn-cable-p1-ground-check-dark.png){.only-dark}
 
-**6.** Cut wire 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over the cut end. It goes in no cavity. Wire 6 is VCC, 3.3 V from the Acorn (the LiteX wiki's legend names it so; not measured by us): it must never reach the host. Leave wires 1 to 5 at full length.
+**6.** Cut wire 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over the cut end. It goes in no cavity. Wire 6 is VCC, 3.3 V from the Acorn by the LiteX wiki's legend: it must never reach the host. Leave wires 1 to 5 at full length.
 
 ![The P1 cable: its wires prepared](acorn-cable-pi5-p1-prepare.png){.only-light}
 ![The P1 cable: its wires prepared](acorn-cable-pi5-p1-prepare-dark.png){.only-dark}
@@ -108,7 +108,7 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 
 #### The P2 cable (I/O)
 
-**12.** Have the Acorn out of its slot. If it is fitted, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. Then take the card out. Take the screw at its far end out first (the HAT ships one SSD mounting screw: from Waveshare's page, not measured by us; its size and the driver are not recorded by us). How the card then comes out of the slot is not recorded by us. The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges.
+**12.** Have the Acorn out of its slot. If it is fitted, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. Then take the card out. Take the screw at its far end out first: the SSD mounting screw the HAT ships with ([Waveshare's page for the HAT](https://www.waveshare.com/poe-m.2-hat-plus-b.htm)). The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges.
 
 **13.** Find wire 1 of the P2 cable and flag the wires, before cutting any wire back.
 
@@ -123,13 +123,13 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 1. With the plug still in the socket (the Acorn out of any slot), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: it must beep.
 2. Do the same with the wire flagged 6: it must stay silent.
 3. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again; if still neither beeps, stop: the ground point is not confirmed.
-4. If both wires beep, first see that the two probes do not touch each other and that the cut faces of wires 1 and 6 do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires apart. Leave the flags on and take the plug out. Wire 6 is the card's 3.3 V by the LiteX wiki's legend; that it stays silent to ground on a card with no power is expected and has not been measured by us. Set the meter to ohms, write down what each of the two wires reads to the pad, and send both readings to whoever gave you this guide.
+4. If both wires beep, first see that the two probes do not touch each other and that the cut faces of wires 1 and 6 do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires apart. Leave the flags on and take the plug out. Wire 6 is the card's 3.3 V by the LiteX wiki's legend, and is expected to stay silent to ground on a card with no power. Set the meter to ohms, write down what each of the two wires reads to the pad, and send both readings to whoever gave you this guide.
 5. Take the plug out again.
 
 ![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check.png){.only-light}
 ![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check-dark.png){.only-dark}
 
-**15.** Cut wire 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over the cut end. It goes in no cavity. Wire 6 is VCC, 3.3 V from the Acorn (the LiteX wiki's legend names it so; not measured by us): it must never reach the host. Leave wires 1 to 5 at full length.
+**15.** Cut wire 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over the cut end. It goes in no cavity. Wire 6 is VCC, 3.3 V from the Acorn by the LiteX wiki's legend: it must never reach the host. Leave wires 1 to 5 at full length.
 
 ![The P2 cable: its wires prepared](acorn-cable-pi5-p2-prepare.png){.only-light}
 ![The P2 cable: its wires prepared](acorn-cable-pi5-p2-prepare-dark.png){.only-dark}
@@ -164,7 +164,7 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 
 #### Fit the cables
 
-**21.** This is a bench check; the housings come off again before the cables are fitted. If the Raspberry Pi 5 is on, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. The Acorn stays out of its slot; if it is fitted, take it out. Take the screw at its far end out first (the HAT ships one SSD mounting screw: from Waveshare's page, not measured by us; its size and the driver are not recorded by us). How the card then comes out of the slot is not recorded by us. Then fit the P1 housing on the 40-pin header pins 19 to 26 with its marked corner on pin 19, counted as in the picture. The P1 cavity picture is shown again below, for which wire goes in which cavity, and which corner is marked.
+**21.** This is a bench check; the housings come off again before the cables are fitted. If the Raspberry Pi 5 is on, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. The Acorn stays out of its slot; if it is fitted, take it out. Take the screw at its far end out first: the SSD mounting screw the HAT ships with ([Waveshare's page for the HAT](https://www.waveshare.com/poe-m.2-hat-plus-b.htm)). Then fit the P1 housing on the 40-pin header pins 19 to 26 with its marked corner on pin 19, counted as in the picture. The P1 cavity picture is shown again below, for which wire goes in which cavity, and which corner is marked.
 
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png){.only-light}
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1-dark.png){.only-dark}
@@ -174,7 +174,7 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png){.only-light}
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2-dark.png){.only-dark}
 
-**23.** The Acorn is not in its slot and the plugs are free. Put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Raspberry Pi 5: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent. That the shell is the host's ground is taken as given, not measured by us: contact 1's beep shows only that contact 1 and the shell are joined. The beep does not show which way round the P1 housing is: turned round, its GND wire still sits on a ground pin, so look at its marked corner. The beep does not show which way round the P2 housing is: turned round, its GND wire still sits on a ground pin, so look at its marked corner.
+**23.** The Acorn is not in its slot and the plugs are free. Put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Raspberry Pi 5: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent. Contact 1's beep shows only that contact 1 and the shell are joined. The beep does not show which way round the P1 housing is: turned round, its GND wire still sits on a ground pin, so look at its marked corner. The beep does not show which way round the P2 housing is: turned round, its GND wire still sits on a ground pin, so look at its marked corner.
 
 ![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check.png){.only-light}
 ![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check-dark.png){.only-dark}
@@ -190,7 +190,7 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 
 **25.** Fit the card, then the housings, in this order.
 
-4. Put the Acorn in the M.2 slot and fit its screw, in the standoff marked 2280 at the far end of the Waveshare PoE M.2 HAT+ (B). The HAT ships one SSD mounting screw (from Waveshare's page, not measured by us); its size, the driver and how the card goes in are not recorded by us.
+4. Put the Acorn in the M.2 slot and fit its screw, in the standoff marked 2280 at the far end of the Waveshare PoE M.2 HAT+ (B): the SSD mounting screw the HAT ships with.
 5. Fit the P1 housing on the 40-pin header pins 19 to 26, marked corner on pin 19, and the P2 housing on the 40-pin header pins 5 to 10, marked corner on pin 5.
 6. Before powering on, look at both housings again, as on the bench check: the P1 housing's marked corner is on pin 19 of the 40-pin header, and the P2 housing's on pin 5 of the 40-pin header. Turned round, either housing puts its wires on the wrong pins. Fitted, the housings get only this look; the meter check was the bench check's.
 

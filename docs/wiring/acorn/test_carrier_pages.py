@@ -2,8 +2,8 @@
 """Two rules that hold on every page printed for a carrier, read from generated/ as the reader gets it.
 
 1. Power: every sentence that powers the host off, unplugs it, or presumes it off carries the carrier's own
-   `power_off` sentence (wiring.toml). On a Compute Blade that sentence starts "Ask Tim": no blade page tells its
-   reader to power off or unplug a blade, or presumes it off, without asking Tim first.
+   `power_off` sentence (wiring.toml). On a Compute Blade that sentence starts "Ask the site operator": no blade
+   page tells its reader to power off or unplug a blade, or presumes it off, without asking the site operator first.
 2. JTAG on a blade: every command on a blade page that runs the check has `--no-publish`, and a page that runs
    `jtag` (the whole check, `--update`, or `--test jtag`) names the conditions of the page "verifying 3".
 
@@ -53,8 +53,12 @@ def units(path):
     if path.suffix == ".svg":
         lines = re.findall(r'aria-label="([^"]*)"', text)
         out = []
-        for line in lines:  # a line that starts in lower case continues the one before (steps.para wraps them)
-            if out and line[:1].islower() and not re.search(r"[.!?]$", out[-1]):
+        # a line continues the one before (steps.para wraps them) when it starts in lower case, or when the one
+        # before is plainly unfinished: it ends in a comma or in "a", "and", "the" and the like
+        unfinished = re.compile(r"(?:,|\b(?:a|an|the|and|or|of|to|in|on|with|its))$")
+        for line in lines:
+            ends = bool(out) and bool(re.search(r"[.!?]$", out[-1]))
+            if out and not ends and (line[:1].islower() or unfinished.search(out[-1])):
                 out[-1] += " " + line
             else:
                 out.append(line)
@@ -96,7 +100,7 @@ def test_every_power_off_on_a_carriers_pages_is_in_its_own_words(key):
         assert steps.guide_name(c, page) in said, page
     assert f"acorn-check-{key}-2.md" in said and f"acorn-cable-{key}-shell-check.svg" in said
     if key == "blade":
-        assert c.power_off.startswith("Ask Tim, then power off the Compute Blade")
+        assert c.power_off.startswith("Ask the site operator, then power off the Compute Blade")
 
 
 def test_the_power_off_scan_finds_what_it_is_for(tmp_path):

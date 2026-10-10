@@ -137,7 +137,8 @@ HAT_NAME = "Waveshare PoE M.2 HAT+ (B)"
 
 
 def test_the_pictures_draw_the_poe_m2_hat_plus_b_and_it_takes_the_acorn():
-    # Tim, 7 October 2026: only the (B) is drawn. The PoE M.2 HAT+ without the (B) takes 2230 and 2242 cards only.
+    # The project lead, 7 October 2026: only the (B) is drawn. The PoE M.2 HAT+ without the (B) takes 2230 and 2242
+    # cards only.
     hat = wiring.CARRIERS["pi5"].hat
     assert hat.name == hat.product == HAT_NAME
     assert hat.page == "https://www.waveshare.com/poe-m.2-hat-plus-b.htm"
