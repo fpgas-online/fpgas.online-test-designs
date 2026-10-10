@@ -130,6 +130,20 @@ def _header(thing_key, size, key, raw):
     return items
 
 
+def _shown(key, size, face, shown, items):
+    """A photo that covers only `shown` = [y0, y1] mm of the thing's length: nothing on that face can be placed
+    beyond it, because there is nothing to measure it in."""
+    if not (len(shown) == 2 and 0 <= shown[0] < shown[1] <= size[1]):
+        raise DiagramError(f"geometry: {key}: photo {face!r}: shown {shown} is not a range of its {size[1]} mm")
+    part = Box(0, shown[0], size[0], shown[1])
+    for item in items.values():
+        if item.kind != "board" and item.face == face and not part.contains(item.box):
+            raise DiagramError(
+                f"geometry: {item.id}: {item.box} is outside the photographed part of the {face} face, "
+                f"y {shown[0]} to {shown[1]} mm"
+            )
+
+
 def load(geometry_path):
     data = tomllib.loads(pathlib.Path(geometry_path).read_text())
     things = {}
@@ -147,10 +161,12 @@ def load(geometry_path):
                 size, iid, it["kind"], it["face"], Box(*it["box"]), it.get("label", ""), pin1, it.get("z", 1)
             )
         for face, photo in raw.get("photos", {}).items():
-            if face not in FACES or set(photo) != {"file", "px_per_mm", "origin"}:
+            if face not in FACES or set(photo) - {"shown"} != {"file", "px_per_mm", "origin"}:
                 raise DiagramError(
                     f"geometry: {key}: photo {face!r} needs file, px_per_mm and origin, on top or bottom"
                 )
+            if "shown" in photo:
+                _shown(key, size, face, photo["shown"], items)
         things[key] = Thing(key, raw["name"], size, items, raw.get("photos", {}))
     if not things:
         raise DiagramError(f"geometry: {geometry_path}: no things")

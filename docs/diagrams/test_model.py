@@ -71,3 +71,32 @@ def test_box_arithmetic():
     assert a.intersect(b) == model.Box(2, 2, 4, 4) and a.intersect(model.Box(5, 5, 6, 6)) is None
     assert a.union(b) == model.Box(0, 0, 6, 6) and a.grow(1) == model.Box(-1, -1, 5, 5)
     assert a.area() == 16 and a.contains(model.Box(1, 1, 3, 3)) and not a.contains(b)
+
+
+PHOTO = '[things.b.photos.bottom]\nfile = "b.jpg"\npx_per_mm = 10.0\norigin = [0, 0]\nshown = [0, 12.5]\n'
+ITEM = '[things.b.items.x]\nkind = "pad"\nface = "{face}"\nbox = [1, {y0}, 3, {y1}]\nsource = "s"\n'
+
+
+def test_a_photo_may_say_how_much_of_the_things_length_it_shows(tmp_path):
+    scene = model.load(write(tmp_path, THING + PHOTO + ITEM.format(face="bottom", y0=10, y1=12.5)))
+    assert scene.things["b"].photos["bottom"]["shown"] == [0, 12.5]
+
+
+def test_an_item_beyond_what_its_faces_photo_shows_is_refused(tmp_path):
+    with pytest.raises(DiagramError, match=r"b\.x.*outside the photographed part"):
+        model.load(write(tmp_path, THING + PHOTO + ITEM.format(face="bottom", y0=10, y1=13)))
+
+
+def test_an_item_on_the_other_face_is_not_held_to_that_photo(tmp_path):
+    model.load(write(tmp_path, THING + PHOTO + ITEM.format(face="top", y0=10, y1=13)))
+
+
+def test_a_shown_range_that_is_not_part_of_the_thing_is_refused(tmp_path):
+    for bad in ("[0, 25.0]", "[5, 5]", "[0]"):
+        with pytest.raises(DiagramError, match="shown"):
+            model.load(write(tmp_path, THING + PHOTO.replace("[0, 12.5]", bad)))
+
+
+def test_a_photo_table_with_an_unknown_key_is_refused(tmp_path):
+    with pytest.raises(DiagramError, match="needs file, px_per_mm and origin"):
+        model.load(write(tmp_path, THING + PHOTO + "turn = 90\n"))
