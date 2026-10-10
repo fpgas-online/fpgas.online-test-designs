@@ -340,7 +340,8 @@ TODAY = {
         "is converted to the fpgas.online design, and converting a card on a blade is not in this guide yet: "
         f"do not load a design into the card or convert it ({BLADE_JTAG} says why). So the result "
         "today is `fail` even with perfect cables: it shows that the card is seated "
-        "and its PCIe link is up, and it cannot yet show that the two cables are right. The bench check with a "
+        "and its PCIe link is up, and it cannot yet show that the two cables are right. The bench check "
+        f"({docs_pages.link('blade', 'bench')}) with a "
         "meter, before fitting, is what the cables rest on until then.",
         "",
     ]
