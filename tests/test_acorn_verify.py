@@ -269,7 +269,9 @@ def test_xilinx_boards_that_are_not_acorns_are_named_and_fail_with_no_bar_traffi
     report = suite.check_board(dev, {"images": images, "open_bar": fk.refuse, "run": fk.FakePi(), "model": fk.PI5,
                                      "event": lambda s, d: events.append(s)})  # fmt: skip
     assert report["result"] == "fail"
-    assert report["reason"] == f"{title}: fpgas.online has no test design for this board yet"
+    # the reason names the issue that tracks a test design for such a card, and promises nothing ("yet")
+    assert report["reason"] == f"{title}: no test design for this board (fpgas.online-test-designs issue 238)"
+    assert "yet" not in report["reason"]
     assert report["tests"] == [] and "unconverted" not in report["reason"]
     assert events == ["fpga-board-identified"]
     # told to people, and to the registry, as a Xilinx PCIe card, not as an Acorn; no Acorn debug tool offered

@@ -33,7 +33,7 @@ Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
 | `fail`: `the JTAG chain has N devices (…), not one` | more than the board's FPGA answers on its JTAG chain (an Arty or a NeTV2): another device wired into it, or a fault on the cable |
 | `fail`: `unconverted: …` | an Acorn on SQRL's factory image (or the XDMA sample). On a Raspberry Pi 5: convert it ([acorn-pcie-programming.md](../hardware/acorn-pcie-programming.md)). On a Compute Blade: **do not** load a design into the card or convert it. The one time a design was loaded into a card on a blade, the card's PCIe endpoint did not come back: neither a bus rescan nor a root-complex re-probe restored it ([the record of that run](https://github.com/fpgas-online/fpgas.online-test-designs/issues/241)) |
 | `fail`: `… is not a design we built` | a Xilinx PCIe design the Acorn check does not know; its flash is not read |
-| `fail`: `… has no test design for this board yet` | a Xilinx PCIe board that is not an Acorn (a PCIe Screamer, a PicoEVB) |
+| `fail`: `… no test design for this board (fpgas.online-test-designs issue 238)` | a Xilinx PCIe board that is not an Acorn (a PCIe Screamer, a PicoEVB). The check has no test design for it: [fpgas.online-test-designs issue 238: a test design and a check for other PCIe Xilinx cards](https://github.com/fpgas-online/fpgas.online-test-designs/issues/238) |
 | `fail`: `running the golden image` | the Acorn's operational slot did not boot; it fell back to golden |
 | `fail`: `link is x2, expected x1` | the Acorn's PCIe link is not the setup's (`expected.toml`) |
 | `fail`: `no device on the P1 JTAG chain` / `no UARTBone reply on /dev/ttyAMA0` | an Acorn's JTAG or P2 UART cable is off or miswired |
