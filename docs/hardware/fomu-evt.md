@@ -9,7 +9,7 @@ The Fomu is a tiny FPGA board that fits inside a USB port, designed by Sean Cros
 ### What you need
 
 - a Raspberry Pi with the Fomu EVT on its GPIO header ([how it is wired](fomu-pin-mapping.md#the-pis-header))
-- the fpgas.online apt repository and the fpgas.online-fpga-tools apt repository added on the Pi ([fpgas-verify: installing it](../verify/installing.md#installing))
+- the fpgas.online apt repository added on the Pi ([fpgas-verify: installing it](../verify/installing.md#installing))
 
 ### Steps
 
@@ -27,7 +27,7 @@ sudo fpgas-fomu-verify --no-publish
 
 ### Check
 
-The first line of the output reads `fpgas-verify: pass`. The board's line under it ends in `pass`, and so does the line of each test.
+The first line of the output starts with `fpgas-verify: pass`. The board's line under it ends in `pass`, and so does the line of each test.
 
 ### If it fails
 

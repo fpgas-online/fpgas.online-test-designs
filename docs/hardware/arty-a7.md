@@ -9,7 +9,8 @@ The Digilent Arty A7 is a Xilinx Artix-7 development board used in the fpgas.onl
 ### What you need
 
 - a Raspberry Pi with the Arty on one of its USB ports
-- the fpgas.online apt repository and the fpgas.online-fpga-tools apt repository added on the Pi ([fpgas-verify: installing it](../verify/installing.md#installing))
+- the fpgas.online apt repository added on the Pi ([fpgas-verify: installing it](../verify/installing.md#installing))
+- on bookworm: the fpgas.online-fpga-tools apt repository added too (the same page). Debian bookworm's openFPGALoader is too old for the check
 
 ### Steps
 
@@ -27,7 +28,7 @@ sudo fpgas-arty-verify --no-publish
 
 ### Check
 
-The first line of the output reads `fpgas-verify: pass`. The board's line under it ends in `pass`, and so does the line of each test.
+The first line of the output starts with `fpgas-verify: pass`. The board's line under it ends in `pass`, and so does the line of each test.
 
 ### If it fails
 

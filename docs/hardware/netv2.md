@@ -9,7 +9,8 @@ The NeTV2 is a Xilinx Artix-7 based video overlay/processing board designed by b
 ### What you need
 
 - a Raspberry Pi 3, 4 or 5 with the NeTV2 on its GPIO header ([JTAG via RPi GPIO](#jtag-via-rpi-gpio))
-- the fpgas.online apt repository and the fpgas.online-fpga-tools apt repository added on the Pi ([fpgas-verify: installing it](../verify/installing.md#installing))
+- the fpgas.online apt repository added on the Pi ([fpgas-verify: installing it](../verify/installing.md#installing))
+- on a Raspberry Pi 5, and on bookworm: the fpgas.online-fpga-tools apt repository added too (the same page). Only its openFPGALoader has the `rp1pio` cable a Pi 5 needs, and Debian bookworm's cannot read back an XC7A35T board's flash
 
 ### Steps
 
@@ -27,7 +28,7 @@ sudo fpgas-netv2-verify --no-publish
 
 ### Check
 
-The first line of the output reads `fpgas-verify: pass`. The board's line under it ends in `pass`, and so does the line of each test.
+The first line of the output starts with `fpgas-verify: pass`. The board's line under it ends in `pass`, and so does the line of each test.
 
 ### If it fails
 

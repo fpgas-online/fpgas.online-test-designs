@@ -26,19 +26,21 @@ Steps 2 and 3 run only when [rpi-hwid](https://github.com/mithro/rpi-hwid) is in
 which `fpgas-online-verify` suggests, from rpi-hwid's own apt repository). Without rpi-hwid the board cannot be
 asked which Tiny Tapeout board it is: the check is an `error` and nothing is loaded.
 
-Then the tests, in this order:
+Then the tests of an FPGA board, in this order:
 
-1. [The `sdk` test](#the-sdk-test) judges what the board said, on every board. It loads nothing. For a board
-   with a Tiny Tapeout chip it is the only test, and such a board fails, because the check cannot test its Pmod
-   cabling (the report says so).
-2. On an FPGA board the check loads the PMOD pin identification design and checks the PMOD HAT cabling against
+1. [The `sdk` test](#the-sdk-test) judges what the board said, on every board. It loads nothing.
+2. [The `dip-switches` test](#the-dip-switches): a switch that is on fails the board.
+3. The `pin-id` test: the check loads the PMOD pin identification design and checks the PMOD HAT cabling against
    the expected map (ui_in on HAT JA, uio on JB, uo_out on JC:
    [tt-fpga-pin-mapping.md](../hardware/tt-fpga-pin-mapping.md)). A miswired HAT fails the board.
-3. It loads the UART test design through the microcontroller (`tt_fpga_program.py`, over `mpremote`), and runs
-   its host test through the UART bridge on `/dev/ttyACM0`.
-4. When the tests are done it streams one more design, which moves the seven-segment display and is left running
+4. The `uart` test: the check loads the UART test design through the microcontroller (`tt_fpga_program.py`, over
+   `mpremote`), and runs its host test through the UART bridge on `/dev/ttyACM0`.
+5. When the tests are done it streams one more design, which moves the seven-segment display and is left running
    ([what the TT FPGA is left running](#what-the-tt-fpga-is-left-running)). If that load fails the board still
    passes, with a warning in the report.
+
+Steps 2 to 5 are for an FPGA board. A board with a Tiny Tapeout chip runs `sdk` and then
+[the wiring test](#the-wiring-test) of its three Pmod ribbons. Nothing is loaded into it.
 
 What the check does not do, and why:
 

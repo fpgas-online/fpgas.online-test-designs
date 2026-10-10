@@ -9,19 +9,31 @@ The TinyTapeout (TT) FPGA Demo Board is a development platform that combines an 
 ### What you need
 
 - a Raspberry Pi with the Tiny Tapeout demo board on one of its USB ports
-- the fpgas.online apt repository and the fpgas.online-fpga-tools apt repository added on the Pi ([fpgas-verify: installing it](../verify/installing.md#installing))
-- `python3-rpi-hwid` installed, from [rpi-hwid](https://github.com/mithro/rpi-hwid)'s own apt repository: without it the check cannot ask the board which Tiny Tapeout board it is, and is an `error`
-- on bookworm: bookworm-backports enabled, where `micropython-mpremote` comes from
+- the fpgas.online apt repository added on the Pi ([fpgas-verify: installing it](../verify/installing.md#installing))
+- [rpi-hwid](https://github.com/mithro/rpi-hwid)'s own apt repository added on the Pi, as its page says
+- on bookworm: bookworm-backports among the Pi's apt sources
 
 ### Steps
 
-**1.** Install the TT FPGA's packages. This also turns the check at boot on (`fpgas-verify.service`). `fpgas-online-tt` is a different package: the TT site's own.
+**1.** Install rpi-hwid. Without it the check cannot ask the board which Tiny Tapeout board it is, and its result is `error`.
+
+```bash
+sudo apt install python3-rpi-hwid
+```
+
+**2.** On bookworm only, install `mpremote` from bookworm-backports. On trixie the next step installs it.
+
+```bash
+sudo apt install -t bookworm-backports micropython-mpremote
+```
+
+**3.** Install the TT FPGA's packages. This also turns the check at boot on (`fpgas-verify.service`). `fpgas-online-tt` is a different package: the TT site's own.
 
 ```bash
 sudo apt install fpgas-online-tt-fpga
 ```
 
-**2.** Check the board now. Nothing is sent to the site: `--no-publish` makes sure.
+**4.** Check the board now. Nothing is sent to the site: `--no-publish` makes sure.
 
 ```bash
 sudo fpgas-tt-fpga-verify --no-publish
@@ -29,7 +41,7 @@ sudo fpgas-tt-fpga-verify --no-publish
 
 ### Check
 
-The first line of the output reads `fpgas-verify: pass`. The board's line under it ends in `pass`, and so does the line of each test.
+The first line of the output starts with `fpgas-verify: pass`. The board's line under it ends in `pass`, and so does the line of each test.
 
 ### If it fails
 
