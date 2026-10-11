@@ -927,8 +927,10 @@ def test_foboot_not_coming_back_after_the_reset_fails_foboot_not_the_identity(tm
     assert "usb" not in report["identity"] and report["result"] == "fail"
 
 
-KERNEL_USB = (
-    "[  61.2] usb 1-1.2: USB disconnect, device number 5\n[  62.0] usb 1-1.2: device descriptor read/64, error -71\n"
+KERNEL_USB = (  # journalctl -k -o short-monotonic, as it prints them
+    "[   12.345678] pi kernel: usbcore: registered new interface driver usbhid\n"
+    "[   61.234567] pi kernel: usb 1-1.2: USB disconnect, device number 5\n"
+    "[   62.012345] pi kernel: usb 1-1.2: device descriptor read/64, error -71\n"
 )
 
 
@@ -945,7 +947,21 @@ def test_a_foboot_that_was_on_usb_before_the_reset_and_not_after_says_so(tmp_pat
     foboot = next(t for t in report["tests"] if t["test"] == "foboot")
     assert foboot["result"] == "fail" and "it was on USB before the reset" in foboot["reason"]
     assert "usb 1-1.2: device descriptor read/64, error -71" in " ".join(foboot["output"])
-    assert any("CDONE before 1, in reset 0, after 1" in line for line in foboot["output"])
+    assert not any("usbcore" in line for line in foboot["output"])  # a driver's registration says nothing
+    assert foboot["output"][-1] == "CDONE before 1, in reset 0, after 1"  # last: the console shows the last 8
+
+
+def test_a_journal_that_cannot_be_read_leaves_the_foboot_failure_standing(tmp_path, fomu_usb):
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", (1, "No journal files were found."))])
+    foboot = next(t for t in _check(FOMU, tmp_path, {"variant": "evt"}, run)["tests"] if t["test"] == "foboot")
+    assert foboot["result"] == "fail" and foboot["output"] == ["CDONE before 1, in reset 0, after 1"]
+
+
+def test_a_test_asked_for_by_name_runs_without_its_needs(tmp_path, fomu_usb):
+    """The fact tests do not run when tests are named, so `needs` has nothing to judge: what was asked for runs."""
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run, tests=["uart"])
+    assert [t["test"] for t in report["tests"]] == ["uart"] and "not_run" not in report
 
 
 def test_a_foboot_that_was_not_on_usb_before_the_reset_either_says_so(tmp_path, fomu_usb):
