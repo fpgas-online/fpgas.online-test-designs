@@ -45,7 +45,8 @@ VCC = { label = "VCC", what = "3.3 V from the Acorn" }
 #   printed: true where the pin numbers are printed on the board beside the header.
 # host (on the carrier): the host in a word, put before a pin name that does not say whose it is ("blade TX").
 # power_off (on the carrier): how the host is made dead before the cables are fitted, as a sentence.
-# shell (on the carrier): bare metal of the host that is its ground, for a meter probe.
+# shell (on the carrier): bare metal of the host that is its ground, for a meter probe. A carrier with none has a header
+#   with `grounds` (the ground pins of its header, by number) and the probe goes on the first of them that no housing covers.
 # wires maps each connected signal to [header, pin]. Signals not listed are cut back: VCC always.
 #
 # What fpgas-verify reads to check a host of this carrier (verify/.../boards/acorn/setup.py):
@@ -69,7 +70,7 @@ note = "M.2 M-key, 2280"
 qty = 1
 part = "Molex Pico-EZmate cable assembly, 6 circuits, a plug at each end"
 number = "Molex 0369200601"
-note = "cut in half: one half is the P1 cable, the other the P2 cable. All six wires are black"
+note = "100 mm, as listed by DigiKey and RS Components. Cut in half: one half is the P1 cable, the other the P2 cable. All six wires are black"
 
 [[parts]]
 qty = 1
@@ -117,6 +118,11 @@ source = "Waveshare's product page (https://www.waveshare.com/poe-m.2-hat-plus-b
 
 [[sources]]
 carrier = "pi5"
+claim = "That pins 6, 9, 14, 20, 25, 30, 34 and 39 of the 40-pin header are ground, so that the bench check can probe pin 14, which neither housing covers"
+source = "Raspberry Pi's pinout of the 40-pin header, in the section \"GPIO and the 40-pin header\" of its computer hardware documentation (https://www.raspberrypi.com/documentation/computers/raspberry-pi.html#gpio). That a probe reaches pin 14 on a Pi 5 under the HAT, on the stacking header's pin: not verified by us"
+
+[[sources]]
+carrier = "pi5"
 claim = "How high the HAT stands over the Pi, and that a Dupont housing on the header clears the parts beside it on the HAT (the inductors)"
 source = "not verified by us: Waveshare's page and drawing do not say"
 
@@ -128,6 +134,10 @@ source = "read off Uptime Lab's board photo and their GPIO table; no Compute Bla
 [[sources]]
 claim = "The Molex cable (part 0369200601: six circuits, a plug at each end, all six wires black, contacts 1.2 mm apart)"
 source = "not verified by us for this guide: from the part's description and the cables in use at welland"
+
+[[sources]]
+claim = "The Molex cable's length, 100 mm (part 0369200601)"
+source = "DigiKey's page for the part (https://www.digikey.fi/en/products/detail/molex/0369200601/10233018), opened by us on 11 October 2026: \"Length: 0.328' (100.00mm, 3.94\")\". RS Components' page for the part, 36920-0601 (https://uk.rs-online.com/web/p/wire-to-board-cables/1907923): its search listing gives it as a 6 way to 6 way Pico-EZmate cable, 100mm; its page refused our request (HTTP 403, 11 October 2026), so we have not read its length line ourselves. Not measured by us on a cable in the hand: the guide has the reader measure the cable before cutting it"
 
 [[sources]]
 claim = "That an Acorn CLE-215+, CLE-215 and CLE-101 are the same card, also sold as NiteFury and LiteFury, so that a LiteFury photo can stand for an Acorn"
@@ -153,7 +163,7 @@ claim = "That a Compute Module 4 takes the same wiring as a Compute Module 5"
 source = "Uptime Lab's assembly guide names both as modules for the Compute Blade, and its GPIO guide gives the blade's pins by GPIO number and names no difference between the two; the wiring's JTAG has been run by us on a CM5 only (pi20 at ps1, 7 October 2026). On a CM4: not run by us"
 
 [[sources]]
-claim = "The lengths (how far a wire is cut back, stripped, flagged)"
+claim = "The lengths (how far a wire is cut back, stripped, flagged, and the slack a run must leave)"
 source = "our choice, not measured"
 
 
@@ -177,6 +187,9 @@ resistor_tube = 3
 # flag_back: how far from its free end a wire's numbered flag goes: further than `resistor`, so the flag
 #   survives that cut. resistor_lead: how long each lead of a series resistor is left.
 flag_back = 25
+# slack: how much shorter than half the cable each run must be, for the wire that is stripped, crimped and bent
+#   into the housing beyond the point where the wires reach the header.
+slack = 15
 resistor_lead = 5
 
 # tools: what building the two cables takes, whatever the carrier. `when = "resistor"` is needed only on a
@@ -221,6 +234,11 @@ tool = "a PH1 (Phillips size 1) screwdriver"
 note = "for the M2x2.5 screw that holds the card in the M.2 slot. Uptime Lab's assembly guide for the Compute Blade names a PH1 driver for that screw (and a 5 mm hex driver for its standoff, where the standoff is not fitted)"
 
 [[tools]]
+carrier = "pi5"
+tool = "a screwdriver for the HAT's M.2 mounting screw"
+note = "the screw is the one the HAT ships with; Waveshare's page does not give its size or its driver, so have a few sizes of screwdriver to hand"
+
+[[tools]]
 carrier = "blade"
 tool = "a computer with ssh, on a network that reaches the blade"
 note = "to log in to the blade and run the check ([How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html))"
@@ -228,7 +246,6 @@ note = "to log in to the blade and run the check ([How to run the Acorn check on
 [carriers.pi5]
 name = "Raspberry Pi 5"
 host = "Pi"
-shell = "the metal shell of a USB socket on the Raspberry Pi 5"
 power_off = "Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE."
 jtag_pins = "10:9:11:8"
 jtag_cable = "libgpiod"
@@ -286,6 +303,8 @@ columns = 2
 numbering = "across"
 count = 40
 housings = [[5, 10], [19, 26]]
+# The 40-pin header's ground pins (Raspberry Pi's pinout); `pins` lists only those near the wiring.
+grounds = [6, 9, 14, 20, 25, 30, 34, 39]
 
 [carriers.pi5.headers.gpio.pins]
 1 = { name = "3.3 V" }

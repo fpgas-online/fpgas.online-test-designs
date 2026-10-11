@@ -8,7 +8,7 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 
 **Parts**
 
-- one half of the Molex Pico-EZmate cable (a plug with six black wires)
+- the Molex Pico-EZmate cable, still whole (a plug at each end, six black wires)
 - the 2×5 Dupont housing
 - 5 Dupont crimp terminals, and a few spare
 - 2 mm heat-shrink tube
@@ -19,10 +19,10 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 
 - a multimeter with a continuity buzzer, and a fine probe tip for it or a sewing pin to hold against a probe
 - a ruler marked in millimetres
-- side cutters and wire strippers
-- the crimping tool
+- side cutters, wire strippers and the crimping tool
 - a hot-air tool
 - masking tape and a fine pen
+- a PH1 (Phillips size 1) screwdriver
 
 ## Steps
 
@@ -32,34 +32,40 @@ Then take the card out. Take its screw out first: an M2x2.5 screw with an M2 nyl
 
 The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges.
 
-**2.** Cut the Molex cable in half with side cutters. Each half is one cable. The cut comes before the reach check on purpose. A half is what goes between the card and the Compute Blade, so a half is what is checked for reach, below.
+**2.** Check that each half reaches, before the cable is cut and before any wire is cut back or crimped. If the Compute Blade is on, it must be off first. Ask the site operator, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in.
 
-![The cable, cut in the middle](acorn-cable-cut.png){.only-light}
-![The cable, cut in the middle](acorn-cable-cut-dark.png){.only-dark}
+With the card out of its slot, hold the card over the slot where it will sit. Leave the cable whole. First straighten the cable and measure its wires, from where they leave one plug to where they leave the other. Half of that length is the longest run a half can have.
 
-**3.** Check that each half reaches, before any wire is cut back or crimped. If the Compute Blade is on, it must be off first. Ask the site operator, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in.
+Hold one plug at socket P1, and lay its wires from there to the Extension Port, along the way that cable will run. Put a strip of tape on the wires where they reach the header. Straighten the wires and measure that run, from the plug to the tape.
 
-With the card out of its slot, hold the card over the slot where it will sit. Lay the half for P1 from socket P1 to the Extension Port, along the way that cable will run. Lay the half for P2 from socket P2 to the UART header, along the way that cable will run. Its cut end must reach the header with some slack left to bend into the housing.
+Hold the other plug at socket P2, and lay its wires from there to the UART header, along the way that cable will run. Put a strip of tape on the wires where they reach the header. Straighten the wires and measure that run, from the plug to the tape.
 
-If a half does not reach, stop: this guide uses each half at the length it has. Tell the site operator which half falls short, and by about how many millimetres.
+Each run must be at least 15 mm shorter than half the cable's length. That is the wire that is stripped, crimped and bent into the housing.
+
+If a run is longer, stop before you cut: this guide uses each half at the length it has. Tell the site operator which run falls short, and by about how many millimetres.
 
 ![Where each half must reach on a Compute Blade](acorn-cable-blade-reach.png){.only-light}
 ![Where each half must reach on a Compute Blade](acorn-cable-blade-reach-dark.png){.only-dark}
 
+**3.** Cut the Molex cable in half with side cutters, in the middle. Each half is one cable. The reach check above comes first on purpose: a cut cable cannot be made longer.
+
+![The cable, cut in the middle](acorn-cable-cut.png){.only-light}
+![The cable, cut in the middle](acorn-cable-cut-dark.png){.only-dark}
+
 
 **4.** Find wire 1 of the P1 cable and flag the wires, before cutting any wire back.
 
-1. Press the plug of one half into socket P1 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost.
-2. Put a numbered tape flag on each of the 6 wires, 1 at the left to 6, about 25 mm back from the tip. Keep each flag clear of the end that will be cut and stripped later. Write P1 on the flag of wire 1 as well: off the card, the two halves look alike.
+1. Press the plug of one half into socket P1 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost. In the picture under this step, the card in the photograph has a cable already in P1 and nothing in P2. Your card has nothing in either socket until you press a plug in.
+2. Put a numbered tape flag on each of the 6 wires, 1 at the left to 6, about 25 mm from the cut end. Keep each flag clear of the end that will be cut and stripped later. Write P1 on the flag of wire 1 as well: off the card, the two halves look alike.
 
 ![The P1 plug in socket P1, a flag on each wire](acorn-cable-p1-flag.png){.only-light}
 ![The P1 plug in socket P1, a flag on each wire](acorn-cable-p1-flag-dark.png){.only-dark}
 
 **5.** Check which wire of the P1 cable is wire 1, with a meter, before cutting any wire back.
 
-1. With the plug still in the socket (the Acorn out of any slot), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet). Put the other probe on the plated half-round mounting pad at the end of the card: it must beep.
+1. With the plug still in the socket (the Acorn out of any slot), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet). Put the other probe on the plated half-round mounting pad at the end of the card, not on the round holes. It must beep.
 2. Do the same with the wire flagged 6: it must stay silent.
-3. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again. If still neither beeps, stop: the ground point is not confirmed.
+3. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. Then do items 1 and 2 of this step again, with the flags renumbered. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again. If still neither beeps, stop: the ground point is not confirmed.
 4. If both wires beep, first see that the two probes do not touch each other. See also that the cut faces of wires 1 and 6 do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires apart. Leave the flags on and take the plug out. Wire 6 is the card's 3.3 V by the LiteX wiki's legend. It is expected to stay silent to ground on a card with no power. Set the meter to ohms. Write down what each of the two wires reads to the pad. Send both readings to the site operator.
 5. Take the plug out again.
 

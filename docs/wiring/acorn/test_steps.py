@@ -319,6 +319,22 @@ def test_each_half_of_the_fitting_picture_follows_its_own_three_actions(key):
 
 
 @pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_renumbering_sends_the_reader_back_to_the_two_checks_of_wire_1_and_the_last_wire(key):
+    c = wiring.CARRIERS[key]
+    for connector in wiring.CONNECTORS:
+        last = len(wiring.CONNECTORS[connector]["pins"])
+        part, _ = steps.GUIDE[connector]
+        page = steps.guide(c)[steps.guide_name(c, f"{part}-1")]
+        items = dict(re.findall(r"^(\d+)\. (.*)$", page.split(steps.wire_one_check(connector), 1)[1], re.M))
+        assert "must beep" in items[str(steps.REDO[0])]
+        assert f"the wire flagged {last}: it must stay silent" in items[str(steps.REDO[1])]
+        again = f"number from the other end. Then do items {steps.REDO[0]} and {steps.REDO[1]} of this step again"
+        assert again in items["3"]
+        assert "with the flags renumbered" in items["3"]
+        assert "then check again." in " ".join(words(steps.ground_check(connector)))
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
 def test_the_finished_wiring_sheet_is_on_the_overview_not_on_the_fitting_page(key):
     c = wiring.CARRIERS[key]
     pages = steps.guide(c)
@@ -335,7 +351,7 @@ def test_the_ground_check_is_in_each_flag_step_and_on_the_box():
         for connector in wiring.CONNECTORS:
             assert text.count(steps.png(steps.ground_check_name(connector))) == 1
         assert text.count("If wire 6 beeps instead, stop") == len(wiring.CONNECTORS)
-        assert text.count(f"about {wiring.LENGTHS['flag_back']} mm back from the tip") == len(wiring.CONNECTORS)
+        assert text.count(f"about {wiring.LENGTHS['flag_back']} mm from the cut end") == len(wiring.CONNECTORS)
         assert text.count("Every other cavity must stay silent for that contact.") == len(wiring.CONNECTORS)
         assert "This is a bench check; the housings come off again before the cables are fitted." in text
         assert ("Trim the resistor's leads to about" in text) == bool(c.resistors)
@@ -514,20 +530,27 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
         )
         assert steps.STATIC in first_step
     assert "cut in half, once" in overview
-    # the reach check is asked for at a moment the guide has: after the one cut, before any wire is cut back
+    # the reach check is asked for at a moment the guide has: before the one cut, so that a cable too short is not cut
     assert "before you cut anything" not in overview and "first step" not in overview
     assert "second step" not in overview  # a step is quoted by its number, which the generator counts
     first = pages[steps.guide_name(c, "jtag-1")]
     cut, reach = first.index("Cut the Molex cable in half"), first.index("Check that each half reaches")
     flag = first.index("flag the wires")
-    assert cut < reach < flag  # after the one cut, before the first wire is flagged, cut back or crimped
+    assert reach < cut < flag  # before the one cut, which is before the first wire is flagged, cut back or crimped
     (reach_step,) = (b for _, b in step_blocks(first) if "Check that each half reaches" in b.split("\n", 1)[0])
     assert "in its slot" not in reach_step.replace("out of its slot", "")  # the card is out of its slot then
-    for k in wiring.CONNECTORS:  # each half named with its own header
-        assert (
-            f"the half for {k} from socket {k} to the {steps.header_words(c.headers[steps.housing(c, k).header].name)}"
-            in reach_step
-        )
+    for k in wiring.CONNECTORS:  # each run named with its own socket and header
+        header = steps.header_words(c.headers[steps.housing(c, k).header].name)
+        assert f"at socket {k}, and lay its wires from there to the {header}" in reach_step
+    assert "Leave the cable whole." in reach_step
+    assert "First straighten the cable and measure its wires" in reach_step
+    assert "Half of that length is the longest run a half can have." in reach_step
+    assert reach_step.count("Put a strip of tape on the wires where they reach the header.") == len(wiring.CONNECTORS)
+    assert reach_step.count("Straighten the wires and measure that run, from the plug to the tape.") == len(
+        wiring.CONNECTORS
+    )
+    assert f"Each run must be at least {wiring.LENGTHS['slack']} mm shorter than half the cable's length." in reach_step
+    assert "If a run is longer, stop before you cut" in reach_step
     numbers = [int(n) for n in re.findall(r"^\*\*(\d+)\.\*\*", steps.procedure(c), re.M)]
     assert numbers == list(range(1, len(numbers) + 1))  # the whole procedure numbered 1 to N
     # the wire-1 check has an outcome for every result, and says what the last wire's silence rests on
@@ -539,7 +562,7 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
     # whom to tell is the carrier's, by role: the site operator for the ps1 blades, the public wording for the Pi 5
     assert c.contact == {"blade": "the site operator", "pi5": wiring.CONTACT}[c.key]
     assert "(https://github.com/fpgas-online/fpgas.online-test-designs/issues)" in wiring.CONTACT
-    assert f"Tell {c.contact} which half falls short, and by about how many millimetres." in reach_step
+    assert f"Tell {c.contact} which run falls short, and by about how many millimetres." in reach_step
     # a wire with the series resistor in it is not told to beep: its page gives the reading to expect
     for part, connector in (("jtag-2", "P1"), ("uart-2", "P2")):
         body = pages[steps.guide_name(c, part)]
@@ -707,10 +730,13 @@ def test_a_quoted_step_number_is_the_step_it_means(key):
     # the overview quotes the first page's one cut and its reach check; "Step N of that page" is the same page
     first = steps.guide(c)[steps.guide_name(c, "jtag-1")].splitlines()
     cut, reach = steps.numbered(first, steps.CUT_HALF), steps.numbered(first, steps.REACH)
-    meant["jtag-1"] += [[cut]]
+    meant["jtag-1"] += [[cut], [reach]]
     overview = steps.guide(c)[steps.guide_name(c, "overview")]
-    assert f", in step {cut} of {docs_pages.link(c.key, 'jtag-1')}." in overview
-    assert f"Step {reach} of that page checks that each half reaches" in overview and reach == cut + 1
+    assert (
+        f"Step {reach} of {docs_pages.link(c.key, 'jtag-1')} is the reach check. Each half must reach from the card to"
+        in overview
+    )
+    assert f", once, in step {cut} of that page." in overview and cut == reach + 1
     meant["fit"] = [[f] for f in fit]
     meant["check-3"] = [list(check.jtag_steps())]  # the two checks of GPIO14, on the page about JTAG on a blade
     bench = [steps.bench_step(c, w) for w in (steps.BENCH_START, steps.BENCH_BEEP)]
@@ -741,7 +767,7 @@ def test_no_page_has_a_beep_show_that_ground_is_ground(key):
         assert "beep shows it" not in flat and "beep is what shows it" not in flat and "is what shows it" not in flat
         assert "reaches nothing" not in flat
     bench = " ".join(steps.guide(c)[steps.guide_name(c, "bench")].split())
-    assert "shows only that contact 1 and the shell are joined" in bench
+    assert f"shows only that contact 1 and {c.reference_short} are joined" in bench
     for connector in wiring.CONNECTORS:
         assert "shows only that wire 1 and the pad are joined" in " ".join(words(steps.ground_check(connector)))
 
@@ -854,7 +880,7 @@ def test_how_the_card_goes_in_and_comes_out_each_links_the_maker_s_page(key):
     assert "](" not in steps.fit_actions(c)[3]  # the action itself, as the picture draws it, has no link
     # a cable's second-cable page says what to do with a cable that is still whole, as a step, not as a part
     uart = dict(step_blocks(steps.guide(c)[steps.guide_name(c, "uart-1")]))[1]
-    assert "If the Molex cable is still whole, cut it in the middle with side cutters" in uart
+    assert steps.still_whole(c, 2) in uart and "Then cut it in the middle with side cutters" in uart
 
 
 @pytest.mark.parametrize("key", list(wiring.CARRIERS))
@@ -876,3 +902,87 @@ def test_every_building_how_to_has_the_five_headings_and_says_what_comes_next(ke
         nxt = text[text.index("## Next") :]
         wanted = docs_pages.link(c.key, order[i + 1]) if i + 1 < len(order) else docs_pages.link(c.key, "check-1")
         assert wanted in nxt, page
+
+
+def test_every_picture_with_the_card_photograph_says_it_has_a_cable_in_p1_and_the_readers_has_none():
+    """The card photograph has a mated cable in P1: each picture that crops it says so (acorn-cw.jpg)."""
+    said = steps.PHOTO_CABLE
+    assert "already in P1" in said and "nothing in P2" in said and "Your card has nothing in either" in said
+    for key, c in wiring.CARRIERS.items():
+        pictures = [picture(key, connector) for connector in wiring.CONNECTORS]
+        pictures += [steps.fit(c, 1)]
+        for connector in wiring.CONNECTORS:
+            pictures += [steps.prepare(c, connector)]
+        for svg in pictures:
+            assert said in " ".join(words(svg))
+    for connector in wiring.CONNECTORS:
+        assert said in " ".join(words(steps.flag(connector)))
+        assert said in " ".join(words(steps.ground_check(connector)))
+    assert said in " ".join(words(steps.card()))
+    for c in wiring.CARRIERS.values():
+        text = steps.procedure(c)
+        assert text.count("the card in the photograph has a cable already in P1 and nothing in P2.") == 2
+
+
+def test_the_wire_1_check_says_to_probe_the_half_round_pad_and_not_the_round_holes():
+    for c in wiring.CARRIERS.values():
+        text = steps.procedure(c)
+        assert text.count("mounting pad at the end of the card, not on the round holes. It must beep.") == 2
+    for connector in wiring.CONNECTORS:
+        assert "not the round holes" in " ".join(words(steps.ground_check(connector)))
+
+
+def test_the_pi_5_tool_list_has_a_screwdriver_for_the_hats_screw_and_gives_no_size():
+    c = wiring.CARRIERS["pi5"]
+    found = [t for t in wiring.TOOLS if t.get("carrier") == "pi5" and "screwdriver" in t["tool"]]
+    assert len(found) == 1 and "does not give its size" in found[0]["note"]
+    assert not re.search(r"\b(PH|M)\d|\bmm\b", found[0]["tool"] + found[0]["note"])
+    assert found[0]["tool"] in tables.bom(c)
+    for part, _ in steps.GUIDE.values():
+        assert f"- {found[0]['tool']}" in steps.guide(c)[steps.guide_name(c, f"{part}-1")]
+
+
+def test_the_bench_check_and_the_fitting_say_the_hat_has_its_stacking_header_and_the_housings_go_on_its_pins():
+    c = wiring.CARRIERS["pi5"]
+    said = (
+        "The Waveshare PoE M.2 HAT+ (B) is on the Raspberry Pi 5, with its stacking header fitted. "
+        "Each housing goes on the pins that come up through the HAT."
+    )
+    assert said == steps.hat_header(c)
+    assert said in steps.guide(c)[steps.guide_name(c, "bench")]
+    assert said in steps.guide(c)[steps.guide_name(c, "fit")]
+    assert said in " ".join(words(steps.fit(c, 2)))
+    assert steps.hat_header(wiring.CARRIERS["blade"]) == ""
+    # the pictures' captions use the same name for the header
+    assert "without its stacking header" in " ".join(words(steps.reach(c)))
+
+
+def test_the_pi_5_bench_check_probes_a_ground_pin_no_housing_covers_and_the_blade_keeps_its_shell():
+    pi, blade = wiring.CARRIERS["pi5"], wiring.CARRIERS["blade"]
+    key, pin = pi.free_ground()
+    header = pi.headers[key]
+    assert pin in header.grounds and pin not in {n for a, b in header.housings for n in range(a, b + 1)}
+    assert (key, pin) == ("gpio", 14) and pi.reference_short == "pin 14" and pi.shell == ""
+    bench = " ".join(steps.guide(pi)[steps.guide_name(pi, "bench")].split())
+    assert "Put the other on pin 14 of the 40-pin header, a ground pin that no housing covers: it must beep." in bench
+    prose = re.sub(r"!\[[^\]]*\]\([^)]*\)(\{[^}]*\})?", "", bench)  # a picture's file name says "shell"
+    assert "USB" not in prose and "shell" not in prose
+    picture = " ".join(words(steps.shell_check(pi)))
+    assert "Touch pin 14 of the 40-pin header" in picture and "header pin 14 (GND)" in picture and "USB" not in picture
+    assert blade.shell == "the metal shell of a USB socket on the Compute Blade" and blade.free_ground() is None
+    assert "Put the other on the metal shell of a USB socket on the Compute Blade: it must beep." in " ".join(
+        steps.guide(blade)[steps.guide_name(blade, "bench")].split()
+    )
+    assert any("Raspberry Pi's pinout" in s["source"] and s.get("carrier") == "pi5" for s in wiring.SOURCES)
+    assert all(wiring.CARRIERS["pi5"].headers["gpio"].pins[p]["name"] == "GND" for p in (6, 9, 20, 25))
+
+
+def test_the_molex_cables_length_is_in_the_parts_note_and_its_source_names_both_listings():
+    (part,) = (p for p in wiring.DATA["parts"] if p.get("number") == "Molex 0369200601")
+    assert part["note"].startswith("100 mm, as listed by DigiKey and RS Components.")
+    (source,) = (s for s in wiring.SOURCES if s["claim"].startswith("The Molex cable's length"))
+    assert "https://www.digikey.fi/en/products/detail/molex/0369200601/10233018" in source["source"]
+    assert "https://uk.rs-online.com/web/p/wire-to-board-cables/1907923" in source["source"]
+    assert "100.00mm" in source["source"]
+    for c in wiring.CARRIERS.values():
+        assert "100 mm, as listed by DigiKey and RS Components." in tables.bom(c)

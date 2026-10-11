@@ -76,8 +76,8 @@ def flatten(path):
 
 
 def acorn():
-    """Acorn / LiteFury underside (RHS Research "contents" photo): fan end left, M.2 edge right, connectors on the
-    bottom edge."""
+    """Acorn / LiteFury underside (RHS Research "contents" photo): the end away from the M.2 edge on the
+    left, the M.2 edge on the right, connectors on the bottom edge."""
     acorn = keep_largest_object(flatten(REF / "rhs-contents.PNG").crop((200, 740, 1990, 1262)))
     acorn.save(OUT / "acorn-flat.jpg", quality=90)
     end = acorn.crop((0, 0, 1100, 522))  # only the connector end: the connectors are a few mm long and need the pixels
