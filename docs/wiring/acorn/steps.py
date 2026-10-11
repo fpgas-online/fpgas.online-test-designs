@@ -1707,8 +1707,8 @@ def guide(c):
         out[guide_name(c, f"{part}-1")] = body(
             needs(c, connector),
             prepare,
-            f"Wire 1 of the {connector} cable is the one the meter check of step {one} found. Every wire carries its "
-            "numbered flag, and each wire that goes in the housing has a terminal crimped on.",
+            f"Wire 1 of the {connector} cable is the one the meter check of step {one} found. Each wire that "
+            "goes in the housing carries its numbered flag and has a terminal crimped on.",
             f"The meter check of step {one} finds the numbering reversed, or finds both wires beeping: that step says "
             "what to do, and when to stop.",
             next_page(f"{part}-1"),

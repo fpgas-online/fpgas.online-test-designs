@@ -58,7 +58,7 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 
 ## Check
 
-Wire 1 of the P2 cable is the one the meter check of step 3 found. Every wire carries its numbered flag, and each wire that goes in the housing has a terminal crimped on.
+Wire 1 of the P2 cable is the one the meter check of step 3 found. Each wire that goes in the housing carries its numbered flag and has a terminal crimped on.
 
 ## If it fails
 

@@ -70,7 +70,7 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 
 ## Check
 
-Wire 1 of the P1 cable is the one the meter check of step 5 found. Every wire carries its numbered flag, and each wire that goes in the housing has a terminal crimped on.
+Wire 1 of the P1 cable is the one the meter check of step 5 found. Each wire that goes in the housing carries its numbered flag and has a terminal crimped on.
 
 ## If it fails
 
