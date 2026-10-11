@@ -550,6 +550,11 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
         wiring.CONNECTORS
     )
     assert f"Each run must be at least {wiring.LENGTHS['slack']} mm shorter than half the cable's length." in reach_step
+    # the number itself, from the cable's listed length (fpgas.online-docs #212's review): 100 mm gives 35 mm a run
+    listed = next(p["listed_mm"] for p in wiring.DATA["parts"] if "Pico-EZmate" in p["part"])
+    most = listed // 2 - wiring.LENGTHS["slack"]
+    assert listed == 100 and most == 35
+    assert f"For the {listed} mm cable the listing gives, that is at most about {most} mm a run." in reach_step
     assert "If a run is longer, stop before you cut" in reach_step
     numbers = [int(n) for n in re.findall(r"^\*\*(\d+)\.\*\*", steps.procedure(c), re.M)]
     assert numbers == list(range(1, len(numbers) + 1))  # the whole procedure numbered 1 to N

@@ -40,7 +40,7 @@ Hold one plug at socket P1, and lay its wires from there to the Extension Port, 
 
 Hold the other plug at socket P2, and lay its wires from there to the UART header, along the way that cable will run. Put a strip of tape on the wires where they reach the header. Straighten the wires and measure that run, from the plug to the tape.
 
-Each run must be at least 15 mm shorter than half the cable's length. That is the wire that is stripped, crimped and bent into the housing.
+Each run must be at least 15 mm shorter than half the cable's length. That is the wire that is stripped, crimped and bent into the housing. For the 100 mm cable the listing gives, that is at most about 35 mm a run.
 
 If a run is longer, stop before you cut: this guide uses each half at the length it has. Tell the site operator which run falls short, and by about how many millimetres.
 

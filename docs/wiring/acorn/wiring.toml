@@ -70,6 +70,7 @@ note = "M.2 M-key, 2280"
 qty = 1
 part = "Molex Pico-EZmate cable assembly, 6 circuits, a plug at each end"
 number = "Molex 0369200601"
+listed_mm = 100  # its length as DigiKey and RS Components list it (not measured by us); the reach step's number
 note = "100 mm, as listed by DigiKey and RS Components. Cut in half: one half is the P1 cable, the other the P2 cable. All six wires are black"
 
 [[parts]]

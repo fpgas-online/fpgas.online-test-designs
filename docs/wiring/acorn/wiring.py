@@ -248,8 +248,10 @@ def _check(c):
     for part in c.parts:
         if not isinstance(part.get("qty"), int) or part["qty"] < 1 or not part.get("part"):
             errors.append(f"{c.key}: a part needs a whole `qty` of 1 or more and a `part`: {part}")
-        if set(part) - {"qty", "part", "number", "note"}:
-            errors.append(f"{c.key}: part {part.get('part')!r} has keys other than qty, part, number, note")
+        if set(part) - {"qty", "part", "number", "note", "listed_mm"}:
+            errors.append(f"{c.key}: part {part.get('part')!r} has keys other than qty, part, number, note, listed_mm")
+        if "listed_mm" in part and (not isinstance(part["listed_mm"], int) or part["listed_mm"] < 1):
+            errors.append(f"{c.key}: part {part.get('part')!r}: listed_mm must be a whole number of millimetres")
     if not c.shell and not c.free_ground():
         errors.append(f"{c.key}: no `shell`, and no ground pin outside every housing for a probe")
     for hk, h in c.headers.items():
