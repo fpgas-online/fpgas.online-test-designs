@@ -179,12 +179,37 @@ class _Run:
         return type("R", (), {"stdout": self.GET if argv[1] == "get" else "", "returncode": 0})()
 
 
-def test_the_scan_puts_back_the_uart_and_i2c_functions_it_takes_away():
+def test_the_scan_puts_back_only_the_functions_that_listen(capsys):
+    """The pin-ID design still drives every scanned pin, so TXD0 and SDA1 would drive against it (#308): they stay
+    inputs, and the reader is told how to give them back after the FPGA is reset. RXD0 only listens."""
     run = _Run()
     functions = ident.alt_functions([14, 15, 8, 2], run=run)
-    assert functions == {14: "a0", 15: "a0", 2: "a0"}  # GPIO8 was a plain input: nothing to put back
+    # GPIO8 was a plain input: nothing to put back
+    assert functions == {14: ("a0", "TXD0"), 15: ("a0", "RXD0"), 2: ("a0", "SDA1")}
     ident.restore_alt_functions(functions, run=run)
-    assert run.sets == [["2", "a0"], ["14", "a0"], ["15", "a0"]]
+    assert run.sets == [["15", "a0"]]
+    out = capsys.readouterr().out
+    for gpio in (2, 14):
+        assert f"GPIO{gpio} left an input" in out and f"pinctrl set {gpio} a0" in out
+
+
+def test_an_spi_slaves_miso_drives_and_is_not_put_back():
+    class Slave(_Run):
+        GET = "19: a3    pn | lo // GPIO19 = I2CSL_MISO\n9: a0    pn | lo // GPIO9 = SPI0_MISO\n"
+
+    run = Slave()
+    ident.restore_alt_functions(ident.alt_functions([19, 9], run=run), run=run)
+    assert run.sets == [["9", "a0"]]  # the SPI master's MISO listens; the slave's MISO drives
+
+
+def test_a_function_whose_name_cannot_be_read_is_not_put_back(capsys):
+    class Unnamed(_Run):
+        GET = "14: a4    pn | hi\n"  # an older pinctrl prints no "// GPIO14 = …" name
+
+    run = Unnamed()
+    ident.restore_alt_functions(ident.alt_functions([14], run=run), run=run)
+    assert run.sets == []  # it might drive the pin: not knowing is not safe
+    assert "pinctrl set 14 a4" in capsys.readouterr().out
 
 
 def test_no_pinctrl_means_nothing_to_restore():
