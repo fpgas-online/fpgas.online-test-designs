@@ -33,7 +33,7 @@ sudo fpgas-acorn-verify --no-publish
 
 ### Check
 
-The first line of the output starts with `fpgas-verify: pass`. The board's line (two spaces in, the board's name first) ends in `pass`. So does each test line under it (four spaces in, the test's name first: `jtag       pass`, for one). The result is `pass` only when every test passes. [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result) shows a whole pass as the tool prints it.
+The first line of the output starts with `fpgas-verify: pass`. The board's line (two spaces in, the board's name first) ends in `pass`. So does each test line under it (four spaces in, the test's name first: `jtag       pass`, for one). The two lines `flash 0x000000 match` and `flash 0x400000 match` are the flash test's slots, not tests. The result is `pass` only when every test passes. [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result) shows a whole pass as the tool prints it.
 
 ### If it fails
 
