@@ -22,7 +22,7 @@ Only that repository's openFPGALoader has the `rp1pio` cable a Raspberry Pi 5 ne
 sudo apt install fpgas-online-netv2
 ```
 
-**2.** Check the board now. Nothing is sent to the site: `--no-publish` makes sure.
+**2.** Check the board. Nothing is sent to the site: `--no-publish` makes sure.
 
 ```bash
 sudo fpgas-netv2-verify --no-publish
@@ -36,14 +36,10 @@ The first line of the output starts with `fpgas-verify: pass`. The board's line 
 
 - The first line names the result, and the output ends with `RESULT:` and `What to do:`. [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result) says what each result means.
 - [fpgas-verify: common failures](../verify/common-failures.md#common-failures) lists the messages and what to do about each.
-- To run one test with its output live, install `fpgas-online-netv2-debug` and run it:
-
-```bash
-sudo fpgas-netv2-debug test uart
-```
 
 ### Next
 
+- To run one test with its output live: install `fpgas-online-netv2-debug`, then `sudo fpgas-netv2-debug test uart`.
 - [The NeTV2 check at boot](../verify/tests.md#the-netv2-check-at-boot): what the check does, test by test.
 - [NeTV2 packages](../verify/installing.md#netv2-packages): what each package installs.
 - [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result): the report, `changed` and `--update`.

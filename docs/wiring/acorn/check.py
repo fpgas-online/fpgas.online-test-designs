@@ -202,7 +202,7 @@ def site_links(text, page=None):
     A link to a heading of a page of the tool's reference goes to that heading on the site's copy of the page;
     one written as `#heading` is to a heading of `page`, the page of docs/verify/ the text is from."""
     for source in ("../hardware/acorn-pcie-programming.md", "hardware/acorn-pcie-programming.md"):
-        text = text.replace(f"[acorn-pcie-programming.md]({source})", f"[converting a card]({CONVERTING})")
+        text = text.replace(f"[converting a card]({source})", f"[converting a card]({CONVERTING})")
         text = text.replace(f"]({source})", f"]({CONVERTING})")
     unplaced = re.search(r"\]\(#[^)]*\)", text)
     if page is None and unplaced:

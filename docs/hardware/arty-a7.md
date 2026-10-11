@@ -22,7 +22,7 @@ The Digilent Arty A7 is a Xilinx Artix-7 development board used in the fpgas.onl
 sudo apt install fpgas-online-arty
 ```
 
-**2.** Check the board now. Nothing is sent to the site: `--no-publish` makes sure.
+**2.** Check the board. Nothing is sent to the site: `--no-publish` makes sure.
 
 ```bash
 sudo fpgas-arty-verify --no-publish
@@ -36,14 +36,10 @@ The first line of the output starts with `fpgas-verify: pass`. The board's line 
 
 - The first line names the result, and the output ends with `RESULT:` and `What to do:`. [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result) says what each result means.
 - [fpgas-verify: common failures](../verify/common-failures.md#common-failures) lists the messages and what to do about each.
-- To run one test with its output live, install `fpgas-online-arty-debug` and run it:
-
-```bash
-sudo fpgas-arty-debug test ddr
-```
 
 ### Next
 
+- To run one test with its output live: install `fpgas-online-arty-debug`, then `sudo fpgas-arty-debug test ddr`.
 - [The Arty A7 check at boot](../verify/tests.md#the-arty-a7-check-at-boot): what the check does, test by test.
 - [Arty A7 packages](../verify/installing.md#arty-a7-packages): what each package installs.
 - [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result): the report, `changed` and `--update`.

@@ -25,7 +25,7 @@ This is for an Acorn on a Raspberry Pi 5. On a Compute Blade, follow [How to run
 sudo apt install fpgas-online-acorn
 ```
 
-**2.** Check the board now. Nothing is sent to the site: `--no-publish` makes sure.
+**2.** Check the board. Nothing is sent to the site: `--no-publish` makes sure.
 
 ```bash
 sudo fpgas-acorn-verify --no-publish
