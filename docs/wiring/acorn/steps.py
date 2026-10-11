@@ -169,7 +169,7 @@ def ground_shows_way_round(c):
 # Said after a warning that names a rail on a signal wire.
 HARM = (
     "That is above the most AMD's Artix 7 data sheet allows on an FPGA pin (DS181, Table 1). The most it allows is "
-    "VCCO + 0.55 V, with VCCO at most 3.6 V. That can destroy the FPGA pin on the Acorn that wire reaches."
+    "VCCO + 0.55 V, with VCCO at most 3.6 V. 5 V there can destroy the FPGA pin on the Acorn that wire reaches."
 )
 
 
@@ -1854,7 +1854,7 @@ def fit_actions(c):
         "Put the Acorn in the M.2 slot"
         + (
             f". Fit its screw, in the standoff marked {c.hat.largest_card} at the far end of the {c.hat.name}. "
-            "It is the SSD mounting screw the HAT ships with."
+            "The screw is the SSD mounting screw the HAT ships with."
             if c.hat
             else " and fit its screw. The M2x2.5 standoff goes in the threaded insert for the card's size, with a "
             "5 mm hex driver. Put the M2 nylon washer on the M2x2.5 screw, insert the card at a 30° angle and press "
