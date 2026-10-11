@@ -1252,6 +1252,16 @@ def card_out_step(c):
     return f"{CARD_OUT_STEP} {power_off_when(c, 'it is fitted')}\n\nThen take the card out. {card_out(c)}\n\n{STATIC}"
 
 
+def hat_header(c):
+    """Where the housings go on a host with a HAT: on the pins of its stacking header; empty where there is no HAT."""
+    if not c.hat:
+        return ""
+    return (
+        f"The {c.hat.name} is on the {c.name}, with its stacking header fitted. Each housing goes on the pins that "
+        "come up through the HAT."
+    )
+
+
 def header_words(name):
     """A header's name as words in a sentence: \"UART\" becomes \"UART header\"."""
     return name if any(w in name.lower() for w in ("header", "port")) else f"{name} header"
@@ -1529,10 +1539,12 @@ def procedure_parts(c, restart=False):
     first = next(iter(wiring.CONNECTORS.values()))["pins"][0]
     # The bench check, one picture to a step: each housing fitted with its cavity picture again, then the beeps.
     why = "for which wire goes in which cavity, and which corner is marked"
+    hat_para = f"{hat_header(c)}\n\n" if hat_header(c) else ""
     for i, (connector, picture) in enumerate(cavity.items()):
         step(
             (
                 f"{BENCH_START} {power_off_when(c, f'the {c.name} is on')}\n\n"
+                f"{hat_para}"
                 "The Acorn stays out of its slot; if it is fitted, take it out. "
                 f"{card_out(c)}\n\nThen fit {fits[i]}."
                 if i == 0
@@ -1912,7 +1924,7 @@ def fit_actions(c):
             "5 mm hex driver. Put the M2 nylon washer on the M2x2.5 screw, insert the card at a 30° angle and press "
             "down. Then secure the screw to the standoff with a PH1 driver."
         ),
-        f"Fit {on[0]}. Fit {on[1]}.",
+        (f"{hat_header(c)} " if hat_header(c) else "") + f"Fit {on[0]}. Fit {on[1]}.",
         f"Before powering on, look at both housings again, as on the bench check. The {c1} housing's marked corner "
         f"is on {at1}, and the {c2} housing's on {at2}. Turned round, {turned}."
         + (f" {HARM}" if harms else "")

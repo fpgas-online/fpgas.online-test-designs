@@ -853,3 +853,18 @@ def test_the_pi_5_tool_list_has_a_screwdriver_for_the_hats_screw_and_gives_no_si
     assert found[0]["tool"] in tables.bom(c)
     for part, _ in steps.GUIDE.values():
         assert f"- {found[0]['tool']}" in steps.guide(c)[steps.guide_name(c, f"{part}-1")]
+
+
+def test_the_bench_check_and_the_fitting_say_the_hat_has_its_stacking_header_and_the_housings_go_on_its_pins():
+    c = wiring.CARRIERS["pi5"]
+    said = (
+        "The Waveshare PoE M.2 HAT+ (B) is on the Raspberry Pi 5, with its stacking header fitted. "
+        "Each housing goes on the pins that come up through the HAT."
+    )
+    assert said == steps.hat_header(c)
+    assert said in steps.guide(c)[steps.guide_name(c, "bench")]
+    assert said in steps.guide(c)[steps.guide_name(c, "fit")]
+    assert said in " ".join(words(steps.fit(c, 2)))
+    assert steps.hat_header(wiring.CARRIERS["blade"]) == ""
+    # the pictures' captions use the same name for the header
+    assert "without its stacking header" in " ".join(words(steps.reach(c)))
