@@ -31,7 +31,7 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 
 ## Check
 
-Contact 1 of each plug beeps to the shell, and contact 6 of each plug is silent against the shell and every other contact (step 3). Each housing's marked corner is on the pin its step names.
+Contact 1 of each plug beeps to the shell (step 3). Contact 6 of each plug is silent against the shell and every other contact. Each housing's marked corner is on the pin its step names.
 
 ## If it fails
 

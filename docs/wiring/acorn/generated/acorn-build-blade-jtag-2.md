@@ -43,7 +43,7 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 
 ## Check
 
-Each wire beeps from its contact on the plug to the terminal in its own cavity, and every other cavity stays silent for that contact (steps 3 and 4).
+Each wire beeps from its contact on the plug to the terminal in its own cavity (steps 3 and 4). Every other cavity stays silent for that contact.
 
 ## If it fails
 

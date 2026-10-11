@@ -1727,8 +1727,8 @@ def guide(c):
                 ],
             ),
             fill,
-            f"Each wire beeps from its contact on the plug to the terminal in its own cavity, and every other cavity "
-            f"stays silent for that contact (steps {meter} and {meter + 1}).",
+            f"Each wire beeps from its contact on the plug to the terminal in its own cavity (steps {meter} and "
+            f"{meter + 1}). Every other cavity stays silent for that contact.",
             "A terminal is in the wrong cavity: a Dupont housing holds each terminal by a small plastic tab over its "
             "latch, in the window. Lift that tab a little with a pin and pull the wire gently: the terminal comes "
             "out, and can be pushed into the right cavity.",
@@ -1739,8 +1739,8 @@ def guide(c):
     out[guide_name(c, "bench")] = body(
         need_lists(["both finished cables", f"the {c.name}"], ["a multimeter with a continuity buzzer"]),
         bench,
-        f"Contact 1 of each plug beeps to the shell, and contact 6 of each plug is silent against the shell and every "
-        f"other contact (step {shell}). Each housing's marked corner is on the pin its step names.",
+        f"Contact 1 of each plug beeps to the shell (step {shell}). Contact 6 of each plug is silent against the shell "
+        "and every other contact. Each housing's marked corner is on the pin its step names.",
         "Do not fit the cables. A contact 1 that does not beep means that cable's ground wire is open or in the wrong "
         "cavity. A contact 6 that beeps anywhere means the 3.3 V wire was not the one cut back. Go back to that "
         "cable's housing and check every wire again. The pages are "
