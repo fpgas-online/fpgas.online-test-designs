@@ -105,7 +105,12 @@ source = "Waveshare's dimension drawing of the HAT (https://www.waveshare.com/im
 [[sources]]
 carrier = "blade"
 claim = "How a card is put into the Compute Blade's M.2 slot (the standoff with a 5 mm hex driver, only if it is missing; washer, 30 degree angle, press down, PH1 driver)"
-source = "Uptime Lab's assembly guide (https://raw.githubusercontent.com/uptime-lab/compute-blade/main/docs/docs/blade/getting-started/assembly.mdx) and its image page (docs.computeblade.com): not measured by us. The guide fits the included standoff with a 5 mm hex driver every time; that it is fitted only if missing is our reading, as the card comes out with only its screw taken out and the standoff left in place. How a card comes out is not given there, and is not recorded by us"
+source = "Uptime Lab's assembly guide (https://raw.githubusercontent.com/uptime-lab/compute-blade/main/docs/docs/blade/getting-started/assembly.mdx) and its image page (docs.computeblade.com): not measured by us. The guide fits the included standoff with a 5 mm hex driver every time. That it is fitted only if missing is our reading, from how our bench check takes the card out (its screw only, the standoff left in place); the guide does not say how a card comes out"
+
+[[sources]]
+carrier = "blade"
+claim = "That the Compute Blade's box holds the M2x2.5 screw, the M2x2.5 standoff and the M2 nylon washer"
+source = "Uptime Lab's assembly guide (https://raw.githubusercontent.com/uptime-lab/compute-blade/main/docs/docs/blade/getting-started/assembly.mdx), read on 12 October 2026: \"When you get your Compute Blade, the box will include: ... M2x2.5 Screw, M2x2.5 Standoff, M2 Nylon Washer\". Not checked by us against a box"
 
 [[sources]]
 carrier = "pi5"
@@ -367,6 +372,12 @@ resistor_value = "470 Ω"
 qty = 1
 part = "Compute Blade (Uptime Lab)"
 note = "its M.2 slot takes the card"
+
+[[carriers.blade.parts]]
+qty = 1
+part = "M2x2.5 screw, M2x2.5 standoff and M2 nylon washer, from the Compute Blade's box"
+note = "they hold the card in the M.2 slot (the fitting, action 4)"
+fit = true
 
 [[carriers.blade.parts]]
 qty = 1

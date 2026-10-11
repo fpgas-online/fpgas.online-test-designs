@@ -1831,7 +1831,12 @@ def guide(c):
     )
     out[guide_name(c, "fit")] = body(
         need_lists(
-            [f"both cables, checked on the bench ({pages.link(c.key, 'bench')})", "the Acorn", f"the {c.name}"],
+            [
+                f"both cables, checked on the bench ({pages.link(c.key, 'bench')})",
+                "the Acorn",
+                f"the {c.name}",
+                *(p["part"] for p in c.parts if p.get("fit")),
+            ],
             [*card_screwdrivers(c), *standoff_drivers(c)],
         ),
         fit_,
