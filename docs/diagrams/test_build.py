@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+import hashlib
 import json
 import pathlib
 import shutil
@@ -8,7 +9,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 import pytest
 
-from diagrams import build
+from diagrams import build, draw, model, views
 from diagrams.errors import DiagramError
 
 ACORN = pathlib.Path(__file__).resolve().parents[1] / "wiring" / "acorn"
@@ -106,3 +107,27 @@ def test_photos_wanted_that_is_not_an_array_of_tables_is_refused(tmp_path):
     path.write_text('photos_wanted = "a photo"\n')
     with pytest.raises(DiagramError, match="photos_wanted"):
         build.photos_wanted(path)
+
+
+def test_each_manifest_entry_agrees_with_its_view_and_its_drawing_and_its_files():
+    """Not the committed file: what build() makes now, entry by entry, against the sources it came from."""
+    scene = model.load(ACORN / "geometry.toml")
+    declared = views.load(ACORN / "views.toml", scene)
+    files, manifest = build.build(ACORN)
+    assert list(manifest["views"]) == list(declared)
+    for view_id, view in declared.items():
+        entry, facts = manifest["views"][view_id], draw.render(scene, view)[1]
+        assert (entry["thing"], entry["face"], entry["turn"], entry["sequence"]) == (
+            view.thing,
+            view.face,
+            view.turn,
+            view.sequence,
+        ), view_id
+        assert (entry["size"], entry["highlight"], entry["inset"]) == (
+            facts["size"],
+            facts["highlight"],
+            facts["inset"],
+        ), view_id
+        assert entry["photo_matched"] is False, view_id
+        for theme, name in (("light", f"{view_id}.svg"), ("dark", f"{view_id}-dark.svg")):
+            assert entry["svg_sha256"][theme] == hashlib.sha256(files[name].encode()).hexdigest(), (view_id, theme)

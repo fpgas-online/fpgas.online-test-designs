@@ -241,7 +241,7 @@ def test_a_muted_connector_shown_whole_has_no_pin_1_marker():
 
 
 def test_a_view_about_nothing_marks_pin_1_of_every_connector_shown_and_so_does_its_inset():
-    svg, f = draw.render(SCENE, VIEWS["acorn.bottom.sockets"])
+    svg = draw.render(SCENE, VIEWS["acorn.bottom.sockets"])[0]
     assert sorted(pin1_of(svg, inset=False)) == sorted(pin1_of(svg, inset=True)) == ["acorn.p1", "acorn.p2"]
 
 
