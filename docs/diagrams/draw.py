@@ -25,6 +25,7 @@ MARK_PAD = 4  # px between an item and its mark outline
 LABEL_SIZE, LABEL_H, LABEL_GAP = 13, 20, 4  # a label: its words, its tag, its distance from its item
 NUMBERED_PITCH = 22  # px: pins this far apart or more carry their number
 NUMBER_SIDE = 26  # px: the most a numbered pin is drawn wider than its own box
+EDGE_TOL = 0.01  # mm: an item this near its thing's edge is cut by it
 WORDS = 4  # the most words a label holds
 TEXT_MARGIN = 8  # px: the canvas refuses text nearer its edge than this
 
@@ -88,12 +89,17 @@ def _grow_for_pin1(thing, view, box, marked, sides):
 
 
 # ---- the board and its parts -------------------------------------------------------------------
-def _board_edge(fr, board, box):
-    """The side of the board ("left", "right", "top", "bottom") that a part's box (on the canvas) lies on."""
-    for side, a, b in (("left", box[0], board[0]), ("top", box[1], board[1]), ("right", box[2], board[2])):
-        if abs(a - b) < 0.5:
-            return side
-    return "bottom" if abs(box[3] - board[3]) < 0.5 else None
+def _on_thing_edge(thing, item):
+    """Whether the item's box touches the edge of its thing, in millimetres, to EDGE_TOL."""
+    b, (w, h) = item.box, thing.size
+    return min(b.x0, b.y0, w - b.x1, h - b.y1) <= EDGE_TOL
+
+
+def _board_edge(board, box):
+    """The side of the board on the canvas ("left", "right", "top", "bottom") that a part's box lies nearest."""
+    gaps = {"left": abs(box[0] - board[0]), "top": abs(box[1] - board[1]), "right": abs(box[2] - board[2])}
+    gaps["bottom"] = abs(box[3] - board[3])
+    return min(gaps, key=gaps.get)
 
 
 def _board(pic, thing, clip):
@@ -122,7 +128,7 @@ def _pitch_px(thing, scale):
     return out
 
 
-def _part(pic, item, muted, pitch, inset=False):
+def _part(pic, thing, item, muted, pitch, inset=False):
     """One item, in its own group. Returns its box on the canvas, or None if it is too small to draw."""
     sh, fr = pic.sh, pic.frame
     x0, y0, x1, y1 = fr.box_px(item.box)
@@ -146,8 +152,8 @@ def _part(pic, item, muted, pitch, inset=False):
         fill = "none" if muted else (GOLD if item.kind == "pad" else PART)
         stroke = GREY if muted else ("none" if item.kind == "pad" else PART_EDGE)
         cx, cy, rx, ry = (x0 + x1) / 2, (y0 + y1) / 2, w / 2, h / 2
-        edge = _board_edge(fr, pic.thing_px, (x0, y0, x1, y1))
-        if edge is not None:  # cut by the board's edge, as a half-round pad is: its centre is on that edge
+        if _on_thing_edge(thing, item):  # cut by the board's edge, as a half-round pad is: its centre is on it
+            edge = _board_edge(pic.thing_px, (x0, y0, x1, y1))
             cx, cy, rx, ry = {"left": (x0, cy, w, ry), "right": (x1, cy, w, ry), "top": (cx, y0, rx, h)}.get(
                 edge, (cx, y1, rx, h)
             )
@@ -261,7 +267,7 @@ def _inset(pic, thing, place, k, marked):
     sh.add(f'height="{iy1 - iy0:.1f}"/></clipPath>')
     _board(small, thing, "inset-frame")
     for item in _on_face(thing, view, whole):
-        _part(small, item, True, {}, inset=True)
+        _part(small, thing, item, True, {}, inset=True)
     for item in _on_face(thing, view, whole):
         if item.id in marked:  # pin 1 of the connectors marked in the picture, no other
             pin1.draw(small, item, pin1.side(item, whole), pin1.INSET_TRI, number=False)
@@ -321,7 +327,7 @@ def render(scene, view):
     seen = {}
     sh.add('<g clip-path="url(#frame)">')
     for item in drawn:
-        seen[item.id] = _cut(_part(pic, item, item.id in muted, pitch), frame_px)
+        seen[item.id] = _cut(_part(pic, thing, item, item.id in muted, pitch), frame_px)
     sh.add("</g>")
     for item_id, b in seen.items():
         pic.taken.append((*b, item_id))

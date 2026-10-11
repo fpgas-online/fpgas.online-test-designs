@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 import dataclasses
+import math
 import pathlib
 import re
 import sys
@@ -281,3 +282,32 @@ def test_the_inset_takes_another_corner_when_the_farthest_covers_more_than_a_ten
     at_left, at_top = box[0] == fx0 + draw.INSET_GAP, box[1] == fy0 + draw.INSET_GAP
     assert at_left != at_top  # top right or bottom left
     assert all(draw._area(draw._cut(box, t)) <= draw.INSET_COVER * draw._area(t) for t in (top_left, bottom_right))
+
+
+def pad_area_ratio(box, width=None):
+    """The drawn plated pad's ellipse area over its box's area, with the pad's box set to `box` (mm), in the
+    sockets view at `width` px if given."""
+    scene = with_item(dataclasses.replace(SCENE.item("acorn.pad"), box=model.Box(*box)))
+    view = dataclasses.replace(VIEWS["acorn.bottom.sockets"], width=width or VIEWS["acorn.bottom.sockets"].width)
+    svg, f = draw.render(scene, view)
+    scale = draw._make_frame(scene.things["acorn"], view, model.Box(*f["frame_mm"])).scale
+    (group,) = groups(svg, "acorn.pad")
+    e = next(group.iter(f"{SVG}ellipse"))
+    return math.pi * float(e.get("rx")) * float(e.get("ry")) / (scale**2 * (box[2] - box[0]) * (box[3] - box[1]))
+
+
+def test_a_pad_is_half_round_when_its_box_touches_the_things_edge_in_millimetres():
+    # a half ellipse's centre is on the edge: it is twice the area of the full ellipse that fits the box
+    assert pad_area_ratio((8.4, 0.0, 13.6, 2.7)) == pytest.approx(math.pi / 2, rel=0.01)
+    assert pad_area_ratio((8.4, 0.005, 13.6, 2.7)) == pytest.approx(math.pi / 2, rel=0.01)  # within 0.01 mm
+
+
+def test_a_pad_is_a_whole_ellipse_when_its_box_is_more_than_a_hundredth_of_a_millimetre_from_the_edge():
+    assert pad_area_ratio((8.4, 0.02, 13.6, 2.7)) == pytest.approx(math.pi / 4, rel=0.01)
+    assert pad_area_ratio((8.4, 0.3, 13.6, 3.0)) == pytest.approx(math.pi / 4, rel=0.01)
+
+
+def test_the_half_round_does_not_depend_on_the_scale_of_the_picture():
+    # at this width half a pixel is 0.055 mm: a pad 0.05 mm from the edge is still whole
+    assert pad_area_ratio((8.4, 0.05, 13.6, 2.7), width=240) == pytest.approx(math.pi / 4, rel=0.01)
+    assert pad_area_ratio((8.4, 0.005, 13.6, 2.7), width=240) == pytest.approx(math.pi / 2, rel=0.01)
