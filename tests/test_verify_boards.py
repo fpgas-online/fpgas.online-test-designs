@@ -843,7 +843,7 @@ def test_a_fomu_is_identified_by_its_flash_over_the_header_and_foboot_is_waited_
     run = Runner([("fomu_header_id.py", _says(FOMU_READING))])
     report = _check(FOMU, tmp_path, {"variant": "evt", "cdone": "hi"}, run)
     assert report["result"] == "pass", report
-    assert [t["test"] for t in report["tests"]] == ["header", "foboot", "uart"]
+    assert [t["test"] for t in report["tests"]] == ["header", "foboot", "uart", "foboot-after"]
     assert report["identity"] == {
         "board": "fomu", "kind": "fomu", "variant": "evt", "usb": "1-1.2", "flash": "W25Q128JV",
         "flash_jedec": "0xef7018", "flash_size_bytes": 16777216, "flash_status": "0x00", "flash_uid": FOMU_UID,
@@ -856,6 +856,25 @@ def test_a_fomu_is_identified_by_its_flash_over_the_header_and_foboot_is_waited_
     assert run.calls[header + 1] == ["pinctrl", "get", "8,9,10,11,17,24,25,27"]
     load = next(i for i, c in enumerate(run.calls) if c[0] == "openFPGALoader")
     assert header < load
+    # #135: the check ends by resetting the Fomu through the header again, so foboot is on USB for the next user
+    closing = [i for i, c in enumerate(run.calls) if c[-1].endswith("fomu_header_id.py")]
+    assert len(closing) == 2 and closing[1] > load
+    after = report["tests"][-1]
+    assert after["result"] == "pass" and "foboot (1209:5bf0) back on USB" in after["output"][0]
+
+
+def test_foboot_not_back_after_the_closing_reset_fails_the_board_loud(tmp_path, monkeypatch):
+    """#135: a Fomu left without foboot cannot be loaded by the next user; the check says so, not passes."""
+    looks = [[FOBOOT_USB], [FOBOOT_USB]]  # before the first reset, and its wait; nothing after the closing reset
+    monkeypatch.setattr(fomu, "usb_devices", lambda: looks.pop(0) if looks else [])
+    now = [0.0]
+    monkeypatch.setattr(fomu, "_clock", lambda: now[0])
+    monkeypatch.setattr(fomu, "_sleep", lambda s: now.__setitem__(0, now[0] + s))
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", (0, ""))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run)
+    after = report["tests"][-1]
+    assert after["test"] == "foboot-after" and after["result"] == "fail"
+    assert "did not come back on USB" in after["reason"] and report["result"] == "fail"
 
 
 def test_the_fomu_label_is_its_flash_unique_id_which_only_the_boot_check_reads():

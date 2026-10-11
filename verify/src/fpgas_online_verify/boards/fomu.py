@@ -209,6 +209,33 @@ class Fomu(TestBoard):
             _sleep(0.5)
         return facts
 
+    def finish(self, variant, host, found, report, runner=run):
+        """#135: the tests leave a design with no USB running, so the next user could not load one over DFU until
+        the Fomu was power-cycled. The check ends by resetting the iCE40 through the header (fomu_header_id.py,
+        the same safe reset as before the tests), which brings foboot back on USB (sw1 p17, 11 Oct 2026, about
+        1 s), and fails loud if it does not come back. Only on a Fomu whose `header` test passed: the reset
+        drives CRESET and SPI0, which must be a Fomu's."""
+        header = next((t for t in report["tests"] if t["test"] == "header"), None)
+        if header is None or header["result"] != "pass":
+            return None
+        entry = {"test": "foboot-after", "output": []}
+        try:
+            read_header(host, runner)
+        except Problem as p:
+            return {**entry, "result": p.result, "reason": f"the closing reset could not be done: {p.reason}"}
+        start = _clock()
+        while True:
+            if usb_matching(usb_devices(), (FOBOOT,)):
+                seconds = round(_clock() - start, 1)
+                return {**entry, "result": "pass", "output": [f"foboot (1209:5bf0) back on USB {seconds} s after "
+                                                               "the closing reset: the next user can load over DFU"]}  # fmt: skip
+            if _clock() - start >= FOBOOT_WAIT:
+                return {**entry, "result": "fail", "output": kernel_usb_lines(runner),
+                        "reason": (f"foboot (1209:5bf0) did not come back on USB within {FOBOOT_WAIT:g} s of the "
+                                   "closing reset: no design can be loaded over DFU until the Fomu is "
+                                   "power-cycled (#135)")}  # fmt: skip
+            _sleep(0.5)
+
     def identity(self, found):
         """The state: the variant and the flash's IDs read over the header (foboot has no USB serial)."""
         return {**super().identity(found), **{k: found[k] for k in ("flash_jedec", "flash_uid") if k in found}}

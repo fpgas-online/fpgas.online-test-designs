@@ -407,6 +407,11 @@ class TestBoard(Board):
     def fact_tests_for(self, variant):
         return [name for name, t in self.fact_tests.items() if variant in t["variants"]]
 
+    def finish(self, variant, host, found, report, runner=run):
+        """A last step after every test, judged like one: a test entry, or None for nothing to do. The Fomu
+        resets its iCE40 so foboot is on USB for the next user (#135)."""
+        return None
+
     def run_fact_test(self, test, variant, facts, found=None):
         result, reason, output = self.fact_tests[test]["check"](variant, facts, found or {})
         return {"test": test, "result": result, **({"reason": reason} if reason else {}), "output": list(output)}
@@ -523,6 +528,12 @@ class TestBoard(Board):
                     report.setdefault("warnings", []).append(
                         f"the {name} design, which the check leaves running, could not be loaded ({why_not}): the "
                         "board is left as its last test left it")  # fmt: skip
+            closing = None if refused else self.finish(variant, host, found, report, runner)
+            if closing:  # what the board is left as, judged like a test (the Fomu: foboot back on USB, #135)
+                event("fpga-test-started", {"test": closing["test"]})
+                report["tests"].append(closing)
+                event("fpga-test-finished", {"test": closing["test"], "result": closing["result"],
+                                             "reason": closing.get("reason", "")})  # fmt: skip
         if held["stopped"]:
             report["services_stopped"] = held["stopped"]
         jtag = report.get("jtag", {})
