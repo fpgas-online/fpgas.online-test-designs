@@ -54,6 +54,7 @@ class NeTV2(TestBoard):
         "a7-35": 0x220000,
         "a7-100": 0x3B0000,
     }  # a .bit for each part: 2,192,122 / 3,825,899 bytes
+    jtag_loads_7_series = True  # openFPGALoader's `done` line says whether it loaded (#300)
     tests: ClassVar[dict] = {
         "uart": {"artifact": "uart-test-netv2-{v}/kosagi_netv2.bit", "script": "test_uart.py",
                  "args": ["--port", "{port}", "--board", "netv2", "--skip-banner"], "verify": True},

@@ -145,8 +145,13 @@ class WiringError(Exception):
     pass
 
 
-# Whom a reader tells what the guide cannot settle, unless a carrier names someone (the public guide's wording).
-CONTACT = "whoever gave you this guide"
+# Whom a reader tells what the guide cannot settle, unless a carrier names someone: the public guide's readers,
+# in an issue on this repository, which writes the guide (the docs site's Compute Module bootloader page sends its
+# readers to an issue in the same form).
+CONTACT = (
+    "the fpgas.online project in an issue at "
+    "[fpgas-online/fpgas.online-test-designs](https://github.com/fpgas-online/fpgas.online-test-designs/issues)"
+)
 
 
 def _carrier(key, raw):
