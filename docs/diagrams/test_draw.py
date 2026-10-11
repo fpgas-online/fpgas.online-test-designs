@@ -206,3 +206,40 @@ def test_a_muted_item_is_a_grey_outline_and_its_name_of_whatever_kind(view_id, i
             fill = e.get("fill")
             if fill is not None and e.tag not in (f"{SVG}g", f"{SVG}text"):  # a name's text is grey; shapes are not
                 assert fill == "none", f"{item_id}: a muted {e.tag} is filled with {fill}"
+
+
+def pin1_of(svg, inset):
+    """The ids of the connectors that carry a pin 1 marker in the picture (inset False) or in its inset."""
+    root = ET.fromstring(svg)
+    parent = {c: p for p in root.iter() for c in p}
+    out = []
+    for e in root.iter():
+        if e.get("data-pin1-of"):
+            p, within = e, False
+            while p in parent:
+                p = parent[p]
+                within = within or p.get("data-inset") == "1"
+            if within == inset:
+                out.append(e.get("data-pin1-of"))
+    return out
+
+
+def test_pin_1_is_marked_only_on_the_connectors_drawn_at_full_strength():
+    for view_id, marked in (("acorn.bottom.p1", ["acorn.p1"]), ("acorn.bottom.p2", ["acorn.p2"])):
+        svg, f = draw.render(SCENE, VIEWS[view_id])
+        assert f["pin1"] == marked
+        assert pin1_of(svg, inset=False) == marked
+        assert pin1_of(svg, inset=True) == marked  # the muted socket's triangle is left off the inset too
+
+
+def test_a_muted_connector_shown_whole_has_no_pin_1_marker():
+    both = dataclasses.replace(VIEWS["acorn.bottom.p1"], crop=("acorn.p1", "acorn.p2"))
+    svg, f = draw.render(SCENE, both)
+    assert "acorn.p2" in f["muted"] and f["pin1"] == ["acorn.p1"]
+    assert "acorn.p2" not in pin1_of(svg, inset=False)
+    assert "acorn.p2" not in pin1_of(svg, inset=True)
+
+
+def test_a_view_about_nothing_marks_pin_1_of_every_connector_shown_and_so_does_its_inset():
+    svg, f = draw.render(SCENE, VIEWS["acorn.bottom.sockets"])
+    assert sorted(pin1_of(svg, inset=False)) == sorted(pin1_of(svg, inset=True)) == ["acorn.p1", "acorn.p2"]

@@ -248,7 +248,7 @@ def _inset_place(pic, thing, targets, keep):
     raise DiagramError(f"view {view.id}: no corner has room for the inset")
 
 
-def _inset(pic, scene, thing, place, k):
+def _inset(pic, thing, place, k, marked):
     (x0, y0, x1, y1), view = place, pic.view
     sh = pic.sh
     sh.add('<g data-inset="1">')
@@ -263,7 +263,7 @@ def _inset(pic, scene, thing, place, k):
     for item in _on_face(thing, view, whole):
         _part(small, item, True, {}, inset=True)
     for item in _on_face(thing, view, whole):
-        if item.kind in pin1.CONNECTORS and item.pin1 is not None:
+        if item.id in marked:  # pin 1 of the connectors marked in the picture, no other
             pin1.draw(small, item, pin1.side(item, whole), pin1.INSET_TRI, number=False)
     mx0, my0, mx1, my1 = inner.box_px(pic.frame.box.intersect(whole) or pic.frame.box)
     sh.rect(mx0, my0, mx1 - mx0, my1 - my0, stroke=MARK_EDGE, sw=3.5, rx=2)
@@ -356,7 +356,7 @@ def render(scene, view):
         (muted_labels if is_muted else labels).append(item.label)
 
     if inset is not None:
-        _inset(pic, scene, thing, *inset)
+        _inset(pic, thing, *inset, {i.id for i in marked})
     try:
         sh.check(view.id)
     except SystemExit as e:
