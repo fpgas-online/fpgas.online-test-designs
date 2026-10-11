@@ -243,3 +243,41 @@ def test_a_muted_connector_shown_whole_has_no_pin_1_marker():
 def test_a_view_about_nothing_marks_pin_1_of_every_connector_shown_and_so_does_its_inset():
     svg, f = draw.render(SCENE, VIEWS["acorn.bottom.sockets"])
     assert sorted(pin1_of(svg, inset=False)) == sorted(pin1_of(svg, inset=True)) == ["acorn.p1", "acorn.p2"]
+
+
+def inset_picture():
+    """A picture of the hat's pins-19-26 view with nothing drawn on it: what _inset_place reads. Returns it and
+    the inset's size and the frame's corners, in px."""
+    view = VIEWS["pi5-hat.top.pins-19-26"]
+    thing = SCENE.things[view.thing]
+    fr = draw._make_frame(thing, view, views.crop_box(SCENE, view))
+    pic = draw.Picture(None, fr, view, [])
+    fx0, fy0 = draw.BORDER, draw.BORDER
+    fx1, fy1 = fx0 + fr.px_size[0], fy0 + fr.px_size[1]
+    return pic, thing, (fx0, fy0, fx1, fy1)
+
+
+def around(x, y, side):
+    """A box of `side` px centred on (x, y)."""
+    return (x - side / 2, y - side / 2, x + side / 2, y + side / 2)
+
+
+def test_the_inset_is_refused_where_every_corner_would_cover_more_than_a_tenth_of_what_is_shown():
+    pic, thing, (fx0, fy0, fx1, fy1) = inset_picture()
+    side = 2 * draw.INSET  # an inset on one covers about a quarter of it: more than a tenth, far less than all
+    pad = draw.INSET_GAP + draw.INSET_PAD
+    targets = [around(x, y, side) for x in (fx0 + pad, fx1 - pad) for y in (fy0 + pad, fy1 - pad)]
+    with pytest.raises(DiagramError, match="no corner has room for the inset"):
+        draw._inset_place(pic, thing, targets, [])
+
+
+def test_the_inset_takes_another_corner_when_the_farthest_covers_more_than_a_tenth_of_what_is_shown():
+    pic, thing, (fx0, fy0, fx1, fy1) = inset_picture()
+    side = 2 * draw.INSET
+    pad = draw.INSET_GAP + draw.INSET_PAD
+    top_left, bottom_right = around(fx0 + pad, fy0 + pad, side), around(fx1 - pad, fy1 - pad, side)
+    box, _ = draw._inset_place(pic, thing, [top_left, bottom_right], [])
+    # the corners at the top left and the bottom right each cover a quarter of a target; the other two are free
+    at_left, at_top = box[0] == fx0 + draw.INSET_GAP, box[1] == fy0 + draw.INSET_GAP
+    assert at_left != at_top  # top right or bottom left
+    assert all(draw._area(draw._cut(box, t)) <= draw.INSET_COVER * draw._area(t) for t in (top_left, bottom_right))
