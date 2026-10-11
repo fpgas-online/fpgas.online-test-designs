@@ -62,8 +62,8 @@ With the card out of its slot, hold the card over the slot where it will sit. La
 
 If a half does not reach, stop: this guide uses each half at the length it has. Tell the site operator.
 
-![Where each half must reach on a Compute Blade: from the M.2 slot, where the card will sit, to its header](acorn-cable-blade-reach.png){.only-light}
-![Where each half must reach on a Compute Blade: from the M.2 slot, where the card will sit, to its header](acorn-cable-blade-reach-dark.png){.only-dark}
+![Where each half must reach on a Compute Blade](acorn-cable-blade-reach.png){.only-light}
+![Where each half must reach on a Compute Blade](acorn-cable-blade-reach-dark.png){.only-dark}
 
 #### The P1 cable (JTAG)
 
@@ -72,8 +72,8 @@ If a half does not reach, stop: this guide uses each half at the length it has. 
 1. Press the plug of one half into socket P1 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost.
 2. Put a numbered tape flag on each of the 6 wires, 1 at the left to 6, about 25 mm back from the tip. Keep each flag clear of the end that will be cut and stripped later. Write P1 on the flag of wire 1 as well: off the card, the two halves look alike.
 
-![The P1 cable's plug in socket P1, all 6 wires whole, a flag on each](acorn-cable-p1-flag.png){.only-light}
-![The P1 cable's plug in socket P1, all 6 wires whole, a flag on each](acorn-cable-p1-flag-dark.png){.only-dark}
+![The P1 plug in socket P1, a flag on each wire](acorn-cable-p1-flag.png){.only-light}
+![The P1 plug in socket P1, a flag on each wire](acorn-cable-p1-flag-dark.png){.only-dark}
 
 **5.** Check which wire of the P1 cable is wire 1, with a meter, before cutting any wire back.
 
@@ -83,8 +83,8 @@ If a half does not reach, stop: this guide uses each half at the length it has. 
 4. If both wires beep, first see that the two probes do not touch each other. See also that the cut faces of wires 1 and 6 do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires apart. Leave the flags on and take the plug out. Wire 6 is the card's 3.3 V by the LiteX wiki's legend. It is expected to stay silent to ground on a card with no power. Set the meter to ohms. Write down what each of the two wires reads to the pad, and send both readings to the site operator.
 5. Take the plug out again.
 
-![Checking which wire is wire 1 with a meter, the plug in socket P1](acorn-cable-p1-ground-check.png){.only-light}
-![Checking which wire is wire 1 with a meter, the plug in socket P1](acorn-cable-p1-ground-check-dark.png){.only-dark}
+![Checking wire 1 with a meter, plug in socket P1](acorn-cable-p1-ground-check.png){.only-light}
+![Checking wire 1 with a meter, plug in socket P1](acorn-cable-p1-ground-check-dark.png){.only-dark}
 
 **6.** Cut wire 6 off about 10 mm from the plug. Shrink a piece of the 2 mm tube over the cut end. It goes in no cavity. Wire 6 is VCC, 3.3 V from the Acorn by the LiteX wiki's legend: it must never reach the host. Leave wires 1 to 5 at full length.
 
@@ -138,8 +138,8 @@ If the Molex cable is still whole, cut it in the middle with side cutters: each 
 1. Press the plug of the other half into socket P2 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost.
 2. Put a numbered tape flag on each of the 6 wires, 1 at the left to 6, about 25 mm back from the tip. Keep each flag clear of the end that will be cut and stripped later. Write P2 on the flag of wire 1 as well: off the card, the two halves look alike.
 
-![The P2 cable's plug in socket P2, all 6 wires whole, a flag on each](acorn-cable-p2-flag.png){.only-light}
-![The P2 cable's plug in socket P2, all 6 wires whole, a flag on each](acorn-cable-p2-flag-dark.png){.only-dark}
+![The P2 plug in socket P2, a flag on each wire](acorn-cable-p2-flag.png){.only-light}
+![The P2 plug in socket P2, a flag on each wire](acorn-cable-p2-flag-dark.png){.only-dark}
 
 **14.** Check which wire of the P2 cable is wire 1, with a meter, before cutting any wire back.
 
@@ -149,8 +149,8 @@ If the Molex cable is still whole, cut it in the middle with side cutters: each 
 4. If both wires beep, first see that the two probes do not touch each other. See also that the cut faces of wires 1 and 6 do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires apart. Leave the flags on and take the plug out. Wire 6 is the card's 3.3 V by the LiteX wiki's legend. It is expected to stay silent to ground on a card with no power. Set the meter to ohms. Write down what each of the two wires reads to the pad, and send both readings to the site operator.
 5. Take the plug out again.
 
-![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check.png){.only-light}
-![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check-dark.png){.only-dark}
+![Checking wire 1 with a meter, plug in socket P2](acorn-cable-p2-ground-check.png){.only-light}
+![Checking wire 1 with a meter, plug in socket P2](acorn-cable-p2-ground-check-dark.png){.only-dark}
 
 **15.** Cut wires 4, 5 and 6 off about 10 mm from the plug. Shrink a piece of the 2 mm tube over each cut end. They go in no cavity. Wire 6 is VCC, 3.3 V from the Acorn by the LiteX wiki's legend: it must never reach the host. Leave wires 1, 2 and 3 at full length.
 
@@ -231,8 +231,8 @@ Then contact 6 of each plug (VCC, the wire you cut back): against the shell and 
 2. If the housings are on the headers (after the bench check), take them off.
 3. Press the P1 plug into socket P1 and the P2 plug into socket P2 on the underside of the Acorn. Each goes the way round it was when you put the flags on. Press each until fully seated.
 
-![Fitting the cables on a Compute Blade, actions 1 to 3](acorn-cable-blade-fit-1.png){.only-light}
-![Fitting the cables on a Compute Blade, actions 1 to 3](acorn-cable-blade-fit-1-dark.png){.only-dark}
+![Fitting on a Compute Blade, actions 1 to 3](acorn-cable-blade-fit-1.png){.only-light}
+![Fitting on a Compute Blade, actions 1 to 3](acorn-cable-blade-fit-1-dark.png){.only-dark}
 
 **26.** Fit the card, then the housings, in this order. How the card goes in (action 4) is from [the Compute Blade's assembly guide](https://github.com/uptime-lab/compute-blade/blob/main/docs/docs/blade/getting-started/assembly.mdx).
 
@@ -240,7 +240,7 @@ Then contact 6 of each plug (VCC, the wire you cut back): against the shell and 
 5. Fit the P1 housing on the Extension Port, marked corner on pin 1. Fit the P2 housing on the UART, marked corner on pin 1.
 6. Before powering on, look at both housings again, as on the bench check. The P1 housing's marked corner is on pin 1 of the Extension Port, and the P2 housing's on pin 1 of the UART. Turned round, the P1 housing puts 5 V on the TCK wire and the P2 housing puts 5 V on the K2 wire. That is above the most AMD's Artix 7 data sheet allows on an FPGA pin (DS181, Table 1). The most it allows is VCCO + 0.55 V, with VCCO at most 3.6 V. Exceeding it can destroy the FPGA pin on the Acorn that wire reaches. Fitted, the housings get only this look; the meter check was the bench check's.
 
-![Fitting the cables on a Compute Blade, actions 4 to 6](acorn-cable-blade-fit-2.png){.only-light}
-![Fitting the cables on a Compute Blade, actions 4 to 6](acorn-cable-blade-fit-2-dark.png){.only-dark}
+![Fitting on a Compute Blade, actions 4 to 6](acorn-cable-blade-fit-2.png){.only-light}
+![Fitting on a Compute Blade, actions 4 to 6](acorn-cable-blade-fit-2-dark.png){.only-dark}
 
 Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn is the same PCB).

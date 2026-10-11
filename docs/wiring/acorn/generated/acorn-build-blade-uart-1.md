@@ -41,8 +41,8 @@ If the Molex cable is still whole, cut it in the middle with side cutters: each 
 1. Press the plug of the other half into socket P2 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost.
 2. Put a numbered tape flag on each of the 6 wires, 1 at the left to 6, about 25 mm back from the tip. Keep each flag clear of the end that will be cut and stripped later. Write P2 on the flag of wire 1 as well: off the card, the two halves look alike.
 
-![The P2 cable's plug in socket P2, all 6 wires whole, a flag on each](acorn-cable-p2-flag.png){.only-light}
-![The P2 cable's plug in socket P2, all 6 wires whole, a flag on each](acorn-cable-p2-flag-dark.png){.only-dark}
+![The P2 plug in socket P2, a flag on each wire](acorn-cable-p2-flag.png){.only-light}
+![The P2 plug in socket P2, a flag on each wire](acorn-cable-p2-flag-dark.png){.only-dark}
 
 **3.** Check which wire of the P2 cable is wire 1, with a meter, before cutting any wire back.
 
@@ -52,8 +52,8 @@ If the Molex cable is still whole, cut it in the middle with side cutters: each 
 4. If both wires beep, first see that the two probes do not touch each other. See also that the cut faces of wires 1 and 6 do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires apart. Leave the flags on and take the plug out. Wire 6 is the card's 3.3 V by the LiteX wiki's legend. It is expected to stay silent to ground on a card with no power. Set the meter to ohms. Write down what each of the two wires reads to the pad, and send both readings to the site operator.
 5. Take the plug out again.
 
-![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check.png){.only-light}
-![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check-dark.png){.only-dark}
+![Checking wire 1 with a meter, plug in socket P2](acorn-cable-p2-ground-check.png){.only-light}
+![Checking wire 1 with a meter, plug in socket P2](acorn-cable-p2-ground-check-dark.png){.only-dark}
 
 **4.** Cut wires 4, 5 and 6 off about 10 mm from the plug. Shrink a piece of the 2 mm tube over each cut end. They go in no cavity. Wire 6 is VCC, 3.3 V from the Acorn by the LiteX wiki's legend: it must never reach the host. Leave wires 1, 2 and 3 at full length.
 

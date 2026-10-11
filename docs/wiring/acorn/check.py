@@ -522,7 +522,7 @@ def pages(c):
         "## Which test uses which wire",
         "",
         steps.markdown_image(
-            f"Both cables of an Acorn on a {c.name}: each wire, where it lands, and the test that proves it",
+            "Each wire of both cables, where it lands, and its test",
             steps.png(picture_name(c)),
         ),
         "",

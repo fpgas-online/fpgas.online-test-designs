@@ -1368,7 +1368,7 @@ def procedure_parts(c, restart=False):
         "\n\nIf a half does not reach, stop: this guide uses each half at the length it has. "
         f"Tell {c.contact}.",
         (
-            f"Where each half must reach on a {c.name}: from the M.2 slot, where the card will sit, to its header",
+            f"Where each half must reach on a {c.name}",
             png(reach_name(c)),
         ),
     )
@@ -1381,7 +1381,7 @@ def procedure_parts(c, restart=False):
         cavity[connector] = (f"Which wire goes in which cavity, {connector} cable", png(file_name(c, connector)))
         prep = (f"The {connector} cable: its wires prepared", png(prepare_name(c, connector)))
         flags = (
-            f"The {connector} cable's plug in socket {connector}, all {len(pins)} wires whole, a flag on each",
+            f"The {connector} plug in socket {connector}, a flag on each wire",
             png(flag_name(connector)),
         )
         kept = [pins.index(s) + 1 for s in pins if s not in plan.cut]
@@ -1422,7 +1422,7 @@ def procedure_parts(c, restart=False):
             f"{wire_one_check(connector)}, with a meter, before cutting any wire back.\n\n"
             + "\n".join(f"{i}. {line}" for i, line in enumerate(check, 1)),
             (
-                f"Checking which wire is wire 1 with a meter, the plug in socket {connector}",
+                f"Checking wire 1 with a meter, plug in socket {connector}",
                 png(ground_check_name(connector)),
             ),
         )
@@ -1914,7 +1914,7 @@ FIT_STEPS = (
 
 
 def fit_alt(c, numbers):
-    return f"Fitting the cables on a {c.name}, actions {numbers[0]} to {numbers[-1]}"
+    return f"Fitting on a {c.name}, actions {numbers[0]} to {numbers[-1]}"
 
 
 def fit_name(c, half):
