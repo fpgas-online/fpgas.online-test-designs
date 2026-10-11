@@ -821,6 +821,9 @@ def test_putting_the_card_back_is_from_the_makers_pages_and_the_bench_intro_orde
         (fitting,) = [s for s in wiring.SOURCES if s.get("carrier") == "blade" and "put into" in s["claim"]]
         assert "assembly.mdx" in fitting["source"] and "5 mm hex driver" in fitting["claim"]
         assert "only if it is missing" in fitting["claim"] and "our reading" in fitting["source"]
+        # what is ours and what is the guide's, said once each (#323's review)
+        assert "the guide does not say how a card comes out" in fitting["source"]
+        assert "is not given there" not in fitting["source"]
     else:
         assert "SSD mounting screw" in action and "by us" not in action
         assert any("SSD mounting screw x1" in s["source"] for s in wiring.SOURCES if s.get("carrier") == "pi5")
@@ -1004,6 +1007,25 @@ def test_every_driver_a_page_s_steps_use_is_on_its_list(key):
         assert (steps.guide_name(c, "fit"), "5 mm hex driver") in found, found
         for part in ("fit", "bench"):
             assert (steps.guide_name(c, part), "PH1 driver") in found, found
+
+
+def test_the_blade_s_fitting_and_parts_list_name_the_screw_standoff_and_washer_from_its_box():
+    """Action 4 uses an M2x2.5 screw, an M2 nylon washer and (if missing) an M2x2.5 standoff: the fitting's list and
+    the parts list name them, and say where they come from, the Compute Blade's box, as Uptime Lab's guide says
+    (fpgas.online-docs #214's review)."""
+    c = wiring.CARRIERS["blade"]
+    page = steps.guide(c)[steps.guide_name(c, "fit")]
+    bom = (wiring.HERE / "generated" / "acorn-blade-bom.md").read_text()
+    for thing in ("M2x2.5 screw", "M2x2.5 standoff", "M2 nylon washer"):  # one each: a part each, Qty 1
+        item = f"{thing}, from the Compute Blade's box"
+        (part,) = [p for p in c.parts if p["part"] == item]
+        assert part.get("fit") is True and part["qty"] == 1
+        assert f"- {item}" in page[: page.index("## Steps")]
+        assert f"| 1 | {item} |" in bom
+    (box,) = [s for s in wiring.SOURCES if s.get("carrier") == "blade" and "box" in s["claim"]]
+    assert "M2x2.5 Screw" in box["source"] and "M2x2.5 Standoff" in box["source"] and "M2 Nylon Washer" in box["source"]
+    # the Pi 5's fitting lists no such part: its screw is the HAT's, named in the step
+    assert not [p for p in wiring.CARRIERS["pi5"].parts if p.get("fit")]
 
 
 def test_the_bench_check_and_the_fitting_say_the_hat_has_its_stacking_header_and_the_housings_go_on_its_pins():

@@ -110,7 +110,8 @@ class Carrier:
     resistor_value: str
     headers: dict  # key -> Header
     wires: dict  # signal -> (header key, pin)
-    parts: list  # [{qty, part, number?, note?, listed_mm?}] besides what the wiring itself counts
+    parts: list  # [{qty, part, number?, note?, listed_mm?, fit?}] besides what the wiring itself counts; fit: on the
+    # fitting's list too
     host: str = ""  # the host in a word, for a pin name that needs its owner: "blade TX"
     shell: str = ""  # bare metal of the host that is its ground, for a meter probe; "" where a header pin does it
     power_off: str = ""  # how the host is made dead before the cables are fitted, as a sentence
@@ -255,8 +256,11 @@ def _check(c):
     for part in c.parts:
         if not isinstance(part.get("qty"), int) or part["qty"] < 1 or not part.get("part"):
             errors.append(f"{c.key}: a part needs a whole `qty` of 1 or more and a `part`: {part}")
-        if set(part) - {"qty", "part", "number", "note", "listed_mm"}:
-            errors.append(f"{c.key}: part {part.get('part')!r} has keys other than qty, part, number, note, listed_mm")
+        keys = ("qty", "part", "number", "note", "listed_mm", "fit")
+        if set(part) - set(keys):
+            errors.append(f"{c.key}: part {part.get('part')!r} has keys other than {', '.join(keys)}")
+        if not isinstance(part.get("fit", False), bool):
+            errors.append(f"{c.key}: part {part.get('part')!r}: fit must be true or false")
         if "listed_mm" in part:
             mm = part["listed_mm"]
             if isinstance(mm, bool) or not isinstance(mm, int) or mm < 1:  # TOML true is an int to Python

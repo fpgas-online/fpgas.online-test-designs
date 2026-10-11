@@ -275,3 +275,7 @@ def test_the_shortest_listed_length_with_a_run_left_loads(monkeypatch):
     shared = [p | {"listed_mm": mm} if "listed_mm" in p else p for p in wiring.DATA["parts"]]
     monkeypatch.setitem(wiring.DATA, "parts", shared)
     wiring._carrier("blade", copy.deepcopy(BLADE))
+
+
+def test_a_part_s_fit_flag_is_true_or_false():
+    rejects(lambda d: d["parts"].append({"qty": 1, "part": "x", "fit": "yes"}), "fit must be true or false")

@@ -1,0 +1,72 @@
+# .github/workflows/howto-install.yml
+#
+# The install how-tos, run as written against the published repositories, as 64-bit and 32-bit Raspberry Pi OS
+# bookworm and trixie see them (#307). packaging/debs/howto_install_check.py takes the commands from
+# docs/verify/installing.md and each docs/hardware/ page's install section, runs them in a Debian container of
+# the release with apt set to the Pi's architecture, and simulates every install. It fails on a source that is
+# not signed by the key its page names, a dependency that does not resolve, or a board that pulls in another
+# board's packages. No Pi and no board are needed.
+#
+# It reads the published indexes, not this commit's packages (collect-bitstreams.yml tests those), so it also runs
+# each day: a published index can break with no change here.
+name: "Install how-tos"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "docs/verify/installing.md"
+      - "docs/hardware/**"
+      - "packaging/debs/howto_install_*"
+      - "tests/test_howto_install_check.py"
+      - ".github/workflows/howto-install.yml"
+  schedule:
+    - cron: "17 19 * * *"  # 04:47 or 05:47 in Adelaide
+  workflow_dispatch:
+
+# A new push to a pull request cancels that pull request's older, now stale, run.
+# Anything else (main, schedule, workflow_dispatch) is grouped by commit, so it never cancels another run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: "Install how-tos: reading the pages"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Lint
+        run: |
+          uv run --no-project --with ruff ruff check packaging/debs/howto_install_check.py tests/test_howto_install_check.py
+          uv run --no-project --with ruff ruff format --check packaging/debs/howto_install_check.py tests/test_howto_install_check.py
+
+      - name: Tests
+        run: uv run --no-project --python 3.12 --with pytest pytest -v tests/test_howto_install_check.py
+
+  install:
+    name: "Install how-tos: ${{ matrix.system }} ${{ matrix.suite }}"
+    needs: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30  # a run takes a few minutes; a host that hangs fails it rather than holding the runner
+    strategy:
+      fail-fast: false
+      matrix:
+        system: [rpios64, rpios32]
+        suite: [bookworm, trixie]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The pages' commands, against the published repositories
+        run: |
+          docker run --rm -v "$PWD:/src:ro" "debian:${{ matrix.suite }}" \
+            sh /src/packaging/debs/howto_install_container.sh "${{ matrix.system }}"

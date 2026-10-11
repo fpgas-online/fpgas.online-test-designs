@@ -11,6 +11,9 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 - both cables, checked on the bench ([How to check the cables on the bench (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/bench-check.html))
 - the Acorn
 - the Compute Blade
+- M2x2.5 screw, from the Compute Blade's box
+- M2x2.5 standoff, from the Compute Blade's box
+- M2 nylon washer, from the Compute Blade's box
 
 **Tools**
 
