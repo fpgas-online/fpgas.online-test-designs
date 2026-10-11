@@ -25,7 +25,7 @@ This is for an Acorn on a Raspberry Pi 5. On a Compute Blade, follow [How to run
 sudo apt install fpgas-online-acorn
 ```
 
-**2.** Check the board now. Nothing is sent to the site: `--no-publish` makes sure.
+**2.** Check the board. Nothing is sent to the site: `--no-publish` makes sure.
 
 ```bash
 sudo fpgas-acorn-verify --no-publish
@@ -39,7 +39,7 @@ The first line of the output starts with `fpgas-verify: pass`. The board's line 
 
 - The first line names the result, and the output ends with `RESULT:` and `What to do:`. [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result) says what each result means.
 - [A failing Acorn test on a Raspberry Pi 5](https://docs.fpgas.online/en/latest/boards/acorn/troubleshooting/rpi-5-failing-test.html) goes from a failing line to the wire.
-- A reason that starts `unconverted:` means the card runs the image it was sold with, or Xilinx's XDMA sample design, and not the fpgas.online one. If the card is an Acorn, convert it: [Acorn PCIe programming and multiboot](acorn-pcie-programming.md). The XDMA sample can also be a NeTV2 on PCIe, which that page does not apply to. On a Compute Blade, do not convert a card.
+- A reason that starts `unconverted:` means the card runs the image it was sold with, or Xilinx's XDMA sample design, and not the fpgas.online one. If the card is an Acorn, convert it: [How to install the fpgas.online images on an Acorn](https://docs.fpgas.online/en/latest/boards/acorn/setup/install-images.html). The XDMA sample can also be a NeTV2 on PCIe, which that page does not apply to. On a Compute Blade, do not convert a card.
 - To look at the card yourself, install `fpgas-online-acorn-debug` and run its two reads:
 
 ```bash

@@ -33,7 +33,7 @@ VERIFY = wiring.HERE.parent.parent / "verify"  # docs/verify/, the tool's refere
 RESULTS = VERIFY / "reading-the-result.md"  # the transcripts of real runs
 COMMON_FAILURES = VERIFY / "common-failures.md"  # the table of messages and what to do
 SITE = "https://docs.fpgas.online/en/latest"
-CONVERTING = f"{SITE}/boards/acorn/pcie-programming.html"
+CONVERTING = docs_pages.url("pi5", "convert")  # the docs site's how-to that converts a card (a Pi 5 only)
 FAILURES = f"{SITE}/verify/common-failures.html#common-failures"
 
 # Which test proves which wire. A ground wire is every test's return.
@@ -202,7 +202,7 @@ def site_links(text, page=None):
     A link to a heading of a page of the tool's reference goes to that heading on the site's copy of the page;
     one written as `#heading` is to a heading of `page`, the page of docs/verify/ the text is from."""
     for source in ("../hardware/acorn-pcie-programming.md", "hardware/acorn-pcie-programming.md"):
-        text = text.replace(f"[acorn-pcie-programming.md]({source})", f"[converting a card]({CONVERTING})")
+        text = text.replace(f"[converting a card]({source})", docs_pages.link("pi5", "convert"))
         text = text.replace(f"]({source})", f"]({CONVERTING})")
     unplaced = re.search(r"\]\(#[^)]*\)", text)
     if page is None and unplaced:
@@ -414,7 +414,7 @@ def about():
         "",
         "Two tests need no design of ours in the card: `pcie-link` and `jtag`. They are the wiring tests of a card "
         "that has not been converted. The tests of the P2 wires need the fpgas.online design running in the card "
-        f"([converting a card]({CONVERTING})). Which test uses which wire is a table for each host. "
+        f"({docs_pages.link('pi5', 'convert')}). Which test uses which wire is a table for each host. "
         f"The tables: {tests}.",
         "",
         "## On a Compute Blade",

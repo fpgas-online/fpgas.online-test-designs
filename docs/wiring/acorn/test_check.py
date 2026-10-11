@@ -220,10 +220,10 @@ def test_a_caption_cannot_outlive_its_transcript_and_a_swap_stays_on_one_cable()
         wiring.CARRIERS["pi5"]
     )
     pi5 = wiring.CARRIERS["pi5"]  # the link to converting is the Pi 5's only: a blade is told not to convert
-    assert "[converting a card](https://" in check.failures(pi5) and "acorn-pcie-programming.md]" not in check.failures(
+    assert docs_pages.link("pi5", "convert") in check.failures(
         pi5
-    )
-    assert "[converting a card]" not in check.failures(blade)
+    ) and "acorn-pcie-programming.md]" not in check.failures(pi5)
+    assert docs_pages.url("pi5", "convert") not in check.failures(blade)
 
 
 def test_a_blade_page_prints_the_blades_own_advice_and_never_advice_to_convert():

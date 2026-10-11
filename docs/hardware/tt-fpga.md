@@ -41,7 +41,7 @@ sudo apt install -t bookworm-backports micropython-mpremote
 sudo apt install fpgas-online-tt-fpga
 ```
 
-**4.** Check the board now. Nothing is sent to the site: `--no-publish` makes sure.
+**4.** Check the board. Nothing is sent to the site: `--no-publish` makes sure.
 
 ```bash
 sudo fpgas-tt-fpga-verify --no-publish
@@ -55,14 +55,10 @@ The first line of the output starts with `fpgas-verify: pass`. The board's line 
 
 - The first line names the result, and the output ends with `RESULT:` and `What to do:`. [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result) says what each result means.
 - [fpgas-verify: common failures](../verify/common-failures.md#common-failures) lists the messages and what to do about each.
-- To run one test with its output live, install `fpgas-online-tt-fpga-debug` and run it:
-
-```bash
-sudo fpgas-tt-fpga-debug test uart
-```
 
 ### Next
 
+- To run one test with its output live: install `fpgas-online-tt-fpga-debug`, then `sudo fpgas-tt-fpga-debug test uart`.
 - [The TT FPGA check at boot](../verify/tt-fpga.md#the-tt-fpga-check-at-boot): what the check does, test by test.
 - [TT FPGA packages](../verify/installing.md#tt-fpga-packages): what each package installs.
 - [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result): the report, `changed` and `--update`.

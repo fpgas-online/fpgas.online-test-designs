@@ -31,9 +31,10 @@ PAGES = {
     "check-2": ("troubleshooting/{slug}-failing-test", "A failing Acorn test on a {name}"),
     "check-2b": ("troubleshooting/{slug}-other-messages", "Other Acorn check messages on a {name}"),
     "check-3": ("checks/{slug}-jtag", "How to make a {name} boot ready for JTAG"),
+    "convert": ("setup/install-images", "How to install the fpgas.online images on an Acorn"),
 }
 # The pages only one carrier has.
-ONLY = {"check-3": ("blade",)}
+ONLY = {"check-3": ("blade",), "convert": ("pi5",)}  # a card on a blade is not converted
 # The pages both carriers share: one page, the same title and address whichever carrier asks.
 SHARED = ("check-about",)
 
