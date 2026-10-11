@@ -229,3 +229,6 @@ tmp/
 
 # The vendors' originals prep_photos.py cuts the Acorn wiring photos from: not ours to commit.
 docs/wiring/acorn/ref/
+
+# The views build writes here before it moves the PNGs to generated/views/.
+tmp-views/
