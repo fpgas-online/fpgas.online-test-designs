@@ -164,6 +164,64 @@
       "thing": "hat",
       "turn": 0
     },
+    "pi5-hat.top.p1-pins": {
+      "dark": "pi5-hat.top.p1-pins-dark.png",
+      "face": "top",
+      "highlight": [
+        "hat.header.pin.19",
+        "hat.header.pin.21",
+        "hat.header.pin.23",
+        "hat.header.pin.24",
+        "hat.header.pin.25"
+      ],
+      "inset": true,
+      "light": "pi5-hat.top.p1-pins.png",
+      "photo_matched": false,
+      "png_sha256": {
+        "dark": "3a66745e7076da00ea5bd5985eaabd8ff1ed394454b505a3b6343ec2c328aaf7",
+        "light": "d25a47dbfdc52eb7a793c51ea1db731e302f929fb98b7bdca0a295b496dc0935"
+      },
+      "sequence": null,
+      "size": [
+        724,
+        1252
+      ],
+      "svg_sha256": {
+        "dark": "cf3b34517d0a59c3a1a00e5818ed3b46cc89930cbdb381993a46b6b0d83e5706",
+        "light": "7cb9ef5138990be4924d4cb88a1deafc72551e81c6b39de615d4d324ae3da2e3"
+      },
+      "thing": "hat",
+      "turn": 0
+    },
+    "pi5-hat.top.p2-pins": {
+      "dark": "pi5-hat.top.p2-pins-dark.png",
+      "face": "top",
+      "highlight": [
+        "hat.header.pin.5",
+        "hat.header.pin.6",
+        "hat.header.pin.7",
+        "hat.header.pin.8",
+        "hat.header.pin.10"
+      ],
+      "inset": true,
+      "light": "pi5-hat.top.p2-pins.png",
+      "photo_matched": false,
+      "png_sha256": {
+        "dark": "ce704e4fc6e7c560ffdb54d0337ee44643ea94d533368b41a2e584ca2a51105f",
+        "light": "754f94a8bbc253e27f0c94517e92efec3a493685bde02184777a775bf94a8e44"
+      },
+      "sequence": null,
+      "size": [
+        724,
+        1034
+      ],
+      "svg_sha256": {
+        "dark": "79569d445e6f0b63df9b04c6b3149d3a2abfd7c8d41bbe6d0c940953037dff59",
+        "light": "47217fddd20e314515432eb67eea23dfb1b17db1fdb8ff6b42f46fd3823c184f"
+      },
+      "thing": "hat",
+      "turn": 0
+    },
     "pi5-hat.top.pins-19-26": {
       "dark": "pi5-hat.top.pins-19-26-dark.png",
       "face": "top",
