@@ -166,8 +166,7 @@ internal VREF of 0.75 V (per Vivado's IO report and bit2fasm of its image). The 
 | RESET_N    | K16                                                             | LVCMOS15                         |
 
 Source: `_io["ddram"]` in [LiteX sqrl_acorn.py](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/sqrl_acorn.py)
-(litex-boards dc89d11, as pinned in `uv.lock`). The DDR memory test built from these pins passes memtest on
-pi-sw2-p48 (2026-09-29).
+(litex-boards dc89d11, as pinned in `uv.lock`). The DDR memory test built from these pins has passed memtest on a CLE-215+.
 
 ## Programming
 
@@ -297,45 +296,18 @@ reopen the link at 1200 baud (break, probe, raise the rate), as at any other sta
 On a Compute Blade, J2 shares GPIO14 with JTAG TMS through a 470 Ω resistor, so do not run JTAG while J2 is a
 GPIO.
 
-## Host Inventory
+## Where the Acorns are
 
-### Welland Site ([site-welland.md](site-welland.md))
+Which hosts carry an Acorn is in the site records [site-welland.md](site-welland.md) and [site-ps1.md](site-ps1.md); each site lists its live boards at [welland.fpgas.online/fpgas](https://welland.fpgas.online/fpgas/) and [ps1.fpgas.online/fpgas](https://ps1.fpgas.online/fpgas/).
 
-Seven Acorn CLE-215+ hosts, all Raspberry Pi 5, on the S3300 switch (switch
-index 2) under the [VLAN-per-port scheme](site-welland.md#network-topology):
-hostname `pi-sw2-p<port>`, IP `10.21.2.<port>`. Their MACs and revision codes
-are in [site-welland.md](site-welland.md#sqrl-acorn-cle-215).
-What each board runs and whether its JTAG and P2 links pass is in the
-[current verify results](../verify/current-results.md#current-results); moving them all to the
-pinned release is
-[#53](https://github.com/fpgas-online/fpgas.online-test-designs/issues/53).
+| Variant                  | FPGA          | DDR3   |
+| ------------------------ | ------------- | ------ |
+| Acorn CLE-215+           | XC7A200T (-3) | 1 GB   |
+| LiteFury / Acorn CLE-101 | XC7A100T (-2) | 512 MB |
 
-Hosts: pi-sw2-p29, p37, p43, p44, p46, p47 and p48. All run the shared NFS root
-(`overlayroot=tmpfs`) and have `/dev/ttyAMA0` enabled with the kernel console on
-`ttyAMA10`; p29 and p43–p48 also have an ov5647 camera.
+A card on the factory image with the PCI ID `1e24:0101` is a Sqrl Acorn CLE-101: the LiteFury's PCB family, an XC7A100T, 512 MB.
 
-### PS1 Site ([site-ps1.md](site-ps1.md))
-
-Four Compute Blades (val2 gateway, flat `10.21.0.1xx` addressing).
-
-| Host | Port | IP          | Module               | Flash contents                                   | JTAG (P1)                     | P2 serial                   |
-| ---- | ---- | ----------- | -------------------- | ------------------------------------------------ | ----------------------------- | --------------------------- |
-| pi14 | e14  | 10.21.0.114 | CM4 Rev 1.1 4 GB     | Sqrl Acorn CLE-101 `1e24:0101`                   | no response — P1 unmated      | untested                    |
-| pi16 | e16  | 10.21.0.116 | CM5 Lite Rev 1.0 8 GB| Sqrl Acorn CLE-101 `1e24:0101`                   | no response — P1 unmated      | untested                    |
-| pi18 | e18  | 10.21.0.118 | CM4 Rev 1.1 4 GB     | none — M.2 slot empty                            | n/a                           | n/a                         |
-| pi20 | e20  | 10.21.0.120 | CM5 Lite Rev 1.0 8 GB| XC7A100T design `10ee:7011`, DNA `0x0028e5c45e304854` | OK (openFPGALoader 0.13.1) | OK, crossover present       |
-
-The factory PCI ID on pi14/pi16 identifies these boards as Sqrl Acorn CLE-101
-(the LiteFury's PCB family, XC7A100T, 512 MB).
-
-### Deployment Summary
-
-| Variant                  | FPGA          | DDR3   | Welland (deployed) | Welland (pending) | PS1 (deployed) | PS1 (pending)        |
-| ------------------------ | ------------- | ------ | ------------------ | ----------------- | -------------- | -------------------- |
-| Acorn CLE-215+           | XC7A200T (-3) | 1 GB   | ×7                 | —                 | —              | —                    |
-| LiteFury / Acorn CLE-101 | XC7A100T (-2) | 512 MB | —                  | —                 | ×3             | ×1 host (pi18) empty |
-
-No USB serial devices on any host — JTAG and UART are connected via adapted Pico-EZmate cables to the RPi GPIO header (see [acorn-pinmap.md](acorn-pinmap.md)). PCIe is via the M.2 HAT.
+A host has no USB serial device for the Acorn. JTAG and the UART come over the two cables to the Raspberry Pi's GPIO header ([acorn-pinmap.md](acorn-pinmap.md)), and PCIe over the M.2 slot.
 
 ## LiteX Support
 

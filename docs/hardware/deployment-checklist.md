@@ -33,8 +33,8 @@ This checklist does NOT cover adding a new device type — that requires new gat
 
 **File**: The board's own doc file (e.g. `acorn.md`, `fomu-evt.md`, etc.)
 
-- If the device doc has a host inventory section, add the new host to the appropriate site table
-- Update the deployment summary counts if present
+- The board pages hold no host inventory: which host carries which board is in the site's record
+  (`site-welland.md`, `site-ps1.md`, step 2). Update that, not the board's page.
 
 ### 5. Test infrastructure configuration
 
