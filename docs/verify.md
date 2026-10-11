@@ -13,14 +13,14 @@ board, tests the board and its wiring to the Pi, and gives one result, pass or f
 
 This page has two parts:
 
-1. [Using verify as a standalone tool](#1-using-verify-as-a-standalone-tool): installing, running, reading the
+1. [Using verify as a standalone tool](#using-verify-as-a-standalone-tool): installing, running, reading the
    result, and what each board's check tests.
-2. [How verify is used in fpgas.online](#2-how-verify-is-used-in-fpgasonline): at every boot of every
+2. [How the fleet uses verify](#how-the-fleet-uses-verify): at every boot of every
    netbooted Pi, the events it sends the site, and the [current results](verify/current-results.md#current-results).
 
 ---
 
-## 1. Using verify as a standalone tool
+## Using verify as a standalone tool
 
 One page for each task, in this order:
 
@@ -44,7 +44,7 @@ One page for each task, in this order:
 
 <a id="help"></a>
 
-* [`--help`](verify/help.md#--help): for you if you want the options and commands of each tool without installing it.
+* [`--help`](verify/help.md#the-help-of-each-tool): for you if you want the options and commands of each tool without installing it.
 
 <a id="what-each-board-s-check-tests"></a>
 
@@ -52,7 +52,7 @@ One page for each task, in this order:
 
 <a id="arty-netv2-fomu-and-tt-fpga"></a>
 
-* [What each board's check tests](verify/tests.md#what-the-check-tests-on-each-board): for you if you have an Arty, NeTV2, Fomu or TT FPGA and want to know what each test does.
+* [What the check tests on each board](verify/tests.md#what-the-check-tests-on-each-board): for you if you have an Arty, NeTV2, Fomu or TT FPGA and want to know what each test does.
 
 <a id="which-tiny-tapeout-board-it-is"></a>
 
@@ -100,7 +100,7 @@ One page for each task, in this order:
 
 ---
 
-## 2. How verify is used in fpgas.online
+## How the fleet uses verify
 
 <a id="events"></a>
 

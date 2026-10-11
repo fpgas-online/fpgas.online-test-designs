@@ -1,4 +1,4 @@
-# fpgas-verify: checking an Acorn's wiring
+# fpgas-verify: checking the wiring of an Acorn
 
 You have built the cables between an Acorn and its host and want to find the page that checks them, and to
 know what the check does to the card and the host, how the packages survive a reboot and which bitstreams it

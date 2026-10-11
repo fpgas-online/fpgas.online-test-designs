@@ -236,7 +236,9 @@ def test_a_blade_page_prints_the_blades_own_advice_and_never_advice_to_convert()
     ]
     assert fenced  # the blade pages do print transcripts: the check below is not empty
     for block in fenced:
-        assert "It has to be converted" not in block and "acorn-pcie-programming" not in block
+        flat = " ".join(block.split())
+        assert "It has to be converted" not in flat and "converted once" not in flat
+        assert "acorn-pcie-programming" not in flat and "If it is an Acorn, convert it" not in flat
     assert any("do not load a design into the card or convert it" in " ".join(b.split()) for b in fenced)
 
 

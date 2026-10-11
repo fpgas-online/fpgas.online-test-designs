@@ -99,7 +99,7 @@ The whole report, for a program to read (JSON): /run/fpgas-online/verify.json
 
 A blade whose own name does not resolve prints `sudo: unable to resolve host …` before the output. It does not change the result.
 
-A card on the vendor's XDMA sample image gets the same tests as one on SQRL's image (version 0.0.post1220 or newer): `pcie-link` and `rp1-pio` pass, `jtag` fails on GPIO14 as above, and the rest are `not run`. Its summary line reads `acorn -: fail`, naming no variant, and the first `What to do:` line says the board runs Xilinx's XDMA sample design.
+A card on the vendor's XDMA sample image gets the same tests as one on SQRL's image (version 0.0.post1220 or newer): `pcie-link` and `rp1-pio` pass, `jtag` fails as above, and the rest are `not run`. Its summary line reads `acorn -: fail`, naming no variant, and the first `What to do:` line says the board runs Xilinx's XDMA sample design.
 
 A pass lists every test with `pass` and ends there, with no `RESULT:` part. On a Compute Blade `p2-gpio` stays `not run`, because J5 and H5 are not wired.
 

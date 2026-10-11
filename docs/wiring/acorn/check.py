@@ -488,7 +488,7 @@ def pages(c):
             "It does not change the result.",
             "",
             "A card on the vendor's XDMA sample image gets the same tests as one on SQRL's image (version "
-            "0.0.post1220 or newer): `pcie-link` and `rp1-pio` pass, `jtag` fails on GPIO14 as above, and the rest "
+            "0.0.post1220 or newer): `pcie-link` and `rp1-pio` pass, `jtag` fails as above, and the rest "
             "are `not run`. Its summary line reads `acorn -: fail`, naming no variant, and the first `What to do:` "
             "line says the board runs Xilinx's XDMA sample design.",
             "",
