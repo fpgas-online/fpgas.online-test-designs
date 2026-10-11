@@ -79,16 +79,16 @@ Source: [kosagi_netv2.py](https://github.com/litex-hub/litex-boards/blob/master/
 
 The NeTV2 is designed to sit on top of a Raspberry Pi, connecting through the 40-pin GPIO header and optionally through a PCIe link.
 
-### RPi5 Setup (rpi5-netv2.iot.welland.mithis.com)
+### On a Raspberry Pi 5
 
-- **Board type**: Bare developer NeTV2 (unpackaged)
+- **Board type**: in one setup, a bare developer NeTV2 (unpackaged)
 - **GPIO connection**: JTAG (4 signals + SRST) and UART (TX/RX)
 - **PCIe connection**: Gen2 x1 via RPi5 PCIe connector
-- **lspci**: Xilinx device with vendor `10ee`, device `7011`
+- **lspci**: a Xilinx device, vendor `10ee`, device `7011`, once a design with a PCIe endpoint is loaded
 
-### RPi3 Setup (rpi3-netv2.iot.welland.mithis.com)
+### On a Raspberry Pi 3
 
-- **Board type**: Stock packaged NeTV2 (as shipped by bunnie via Crowd Supply)
+- **Board type**: in one setup, a stock packaged NeTV2 (as sold through Crowd Supply)
 - **GPIO connection**: JTAG (4 signals + SRST) and UART (TX/RX)
 - **PCIe connection**: Not available (RPi3 has no PCIe interface)
 
@@ -110,9 +110,9 @@ openFPGALoader is the primary tool for programming the NeTV2. It supports multip
 
 The boot check itself loads with OpenOCD on a Raspberry Pi 3 or 4, and with openFPGALoader's `rp1pio` cable on a Raspberry Pi 5 ([what the NeTV2 check does](../verify/tests.md#the-netv2-check-at-boot)). The openFPGALoader commands below are for loading by hand.
 
-#### RPi 3B+ (GPIO bitbang — current deployed hosts)
+#### RPi 3B+ (GPIO bitbang)
 
-On RPi 3B+ hosts (pi10, pi12, pi14, pi16, pi18), openFPGALoader uses `libgpiod` to drive the JTAG signals through the Linux GPIO subsystem:
+On a Raspberry Pi 3B+, openFPGALoader uses `libgpiod` to drive the JTAG signals through the Linux GPIO subsystem:
 
 ```bash
 # Volatile load
