@@ -1662,8 +1662,8 @@ def guide(c):
         ]
     order += [
         f"{pages.link(c.key, 'bench')}: both cables checked on the host before power, the card out of its slot.",
-        f"{pages.link(c.key, 'fit')}: the plugs, the card and the housings go in.",
-        f"{pages.link(c.key, 'check-1')}: the check run on the host. A failing line is followed to its wire in "
+        f"{pages.link(c.key, 'fit')}: the plugs, the card and the housings go in. Then the check is run on the host, "
+        f"as in {pages.link(c.key, 'check-1')}. A failing line is followed to its wire in "
         f"{pages.link(c.key, 'check-2')}.",
     ]
 
