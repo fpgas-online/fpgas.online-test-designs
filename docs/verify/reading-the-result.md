@@ -22,12 +22,14 @@ There is one result: **pass** or **fail**. A fail is named for its worst cause:
   * every test in the order it ran, with its result, and a failed test's last 8 output lines;
   * for a check that did not pass, a plain conclusion, last, so it is what is left on the terminal. It holds,
     in order:
-    * `RESULT:` and what it means;
-    * each board with how many tests passed, failed and were not run;
-    * a `fault:` line for each thing wrong that is no one test's (the board runs SQRL's image, say);
-    * a `failed:` line for each failed test, with its reason;
-    * a `not run:` line for the tests that did not run, and why (a test that does not apply to the setup is
-      `not run`, and is not a failure);
+    * `RESULT:` and what it means, with the check's reason on the next line when it has one;
+    * each board with how many tests passed, failed and were not run, and under it:
+      * a `fault:` line for each thing wrong that is no one test's (the board runs SQRL's image, say);
+      * a `failed:` line for each failed test, with its reason;
+      * a `not run:` line for the tests that did not run, and why (a test that does not apply to the setup
+        is `not run`, and is not a failure);
+      * a `warning (not why it did not pass):` line for each warning;
+    * a `changed:` line for each board or flash that differs from what was last recorded;
     * `What to do:`, chosen from the faults found;
     * where the JSON report is.
 * A reason is always one line, however long, so it can be searched for as it is ([Common
