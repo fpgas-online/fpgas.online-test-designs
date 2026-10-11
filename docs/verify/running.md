@@ -5,6 +5,44 @@ Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
 
 ## Running it
 
+### What you need
+
+- the packages for your board installed ([Installing](installing.md#installing))
+- `sudo` on the host
+
+### Steps
+
+**1.** Run the check. Nothing is sent to the site: `--no-publish` makes sure.
+
+```bash
+sudo fpgas-verify --no-publish
+```
+
+**2.** To run one test on its own, name it: the names are in [What the check tests on each board](tests.md#what-the-check-tests-on-each-board)
+and, for an Acorn, [What an Acorn check tests](acorn.md#acorn). The report then goes to stdout.
+
+```bash
+sudo fpgas-verify --no-publish --test TEST
+```
+
+### Check
+
+The first line of the output starts with `fpgas-verify: pass`. The board's line under it ends in `pass`, and so
+does the line of each test.
+
+### If it fails
+
+- [Reading the result](reading-the-result.md#reading-the-result) says what each result and each line mean.
+- [Common failures](common-failures.md#common-failures) lists the messages and what to do about each.
+- `fpgas-<board>-debug` (package `fpgas-online-<board>-debug`) loads one test's design and shows all its output.
+
+### Next
+
+- [Identity and labels](identity-and-labels.md#identity-and-labels): who the board is, and its labels.
+- The commands and settings below.
+
+## Commands and settings
+
 ```bash
 sudo fpgas-verify                          # check this host's board, as the boot does
 sudo fpgas-arty-verify                     # check the Arty, whatever this host is set up for
