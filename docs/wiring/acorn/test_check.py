@@ -258,7 +258,9 @@ def test_moving_a_wire_sends_the_cable_through_the_new_cables_checks_before_a_bo
     """Moving a wire is numbered steps, in this order: power off, card out, move, meter, bench check, fit, boot."""
     for c in wiring.CARRIERS.values():
         body = "\n".join(check.pages(c).values())
-        start = body.index("To move a wire, the cable goes through the same checks as a new one before any boot:")
+        start = body.index(
+            "To move a wire, the cable goes through the same checks as when the cable was built, before any boot:"
+        )
         block = body[start : body.index("\n\n", body.index("\n1. ", start))]
         steps_ = re.findall(r"^(\d)\. (.*)$", block, re.M)
         assert [int(n) for n, _ in steps_] == list(range(1, 8))

@@ -522,7 +522,7 @@ def pages(c):
         "## Which test uses which wire",
         "",
         steps.markdown_image(
-            f"Both cables of an Acorn on a {c.name}: each wire, where it lands, and the test that proves it",
+            "Each wire of both cables, where it lands, and its test",
             steps.png(picture_name(c)),
         ),
         "",
@@ -537,7 +537,7 @@ def pages(c):
         "Find the failing line in the table, then the wire in the two cavity pictures under it. The number in a "
         "cavity is the number on the wire's flag.",
         "",
-        "To move a wire, the cable goes through the same checks as a new one before any boot:",
+        "To move a wire, the cable goes through the same checks as when the cable was built, before any boot:",
         "",
         f"1. {c.power_off}",
         "2. Take the card out and pull both plugs from its sockets.",
@@ -557,7 +557,7 @@ def pages(c):
         "One test can be run on its own"
         + (
             ": `sudo fpgas-acorn-verify --no-publish --test p2-serial`, or `sudo fpgas-acorn-verify --no-publish "
-            f"--test jtag`. Run `--test jtag` only {JTAG_CONDITIONS}. In a boot with the header's serial port off, "
+            f"--test jtag`. Run `--test jtag` only {JTAG_CONDITIONS}.\n\nIn a boot with the header's serial port off, "
             "the same goes for the whole check, which runs `jtag` too. "
             f"The whole check: {BLADE_CHECK}. Each prints the usual summary, then the whole report as JSON."
             if c.key == "blade"

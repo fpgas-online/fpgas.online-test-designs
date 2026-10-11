@@ -4,8 +4,8 @@
 2. If the housings are on the headers (after the bench check), take them off.
 3. Press the P1 plug into socket P1 and the P2 plug into socket P2 on the underside of the Acorn. Each goes the way round it was when you put the flags on. Press each until fully seated.
 
-![Fitting the cables on a Raspberry Pi 5, actions 1 to 3](acorn-cable-pi5-fit-1.png){.only-light}
-![Fitting the cables on a Raspberry Pi 5, actions 1 to 3](acorn-cable-pi5-fit-1-dark.png){.only-dark}
+![Fitting on a Raspberry Pi 5, actions 1 to 3](acorn-cable-pi5-fit-1.png){.only-light}
+![Fitting on a Raspberry Pi 5, actions 1 to 3](acorn-cable-pi5-fit-1-dark.png){.only-dark}
 
 Then the card and the housings:
 
@@ -13,5 +13,5 @@ Then the card and the housings:
 5. Fit the P1 housing on the 40-pin header pins 19 to 26, marked corner on pin 19. Fit the P2 housing on the 40-pin header pins 5 to 10, marked corner on pin 5.
 6. Before powering on, look at both housings again, as on the bench check. The P1 housing's marked corner is on pin 19 of the 40-pin header, and the P2 housing's on pin 5 of the 40-pin header. Turned round, either housing puts its wires on the wrong pins. Fitted, the housings get only this look; the meter check was the bench check's.
 
-![Fitting the cables on a Raspberry Pi 5, actions 4 to 6](acorn-cable-pi5-fit-2.png){.only-light}
-![Fitting the cables on a Raspberry Pi 5, actions 4 to 6](acorn-cable-pi5-fit-2-dark.png){.only-dark}
+![Fitting on a Raspberry Pi 5, actions 4 to 6](acorn-cable-pi5-fit-2.png){.only-light}
+![Fitting on a Raspberry Pi 5, actions 4 to 6](acorn-cable-pi5-fit-2-dark.png){.only-dark}
