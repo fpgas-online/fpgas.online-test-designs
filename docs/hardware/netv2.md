@@ -30,7 +30,7 @@ sudo fpgas-netv2-verify --no-publish
 
 ### Check
 
-The first line of the output starts with `fpgas-verify: pass`. The board's line under it ends in `pass`, and so does the line of each test.
+The first line of the output starts with `fpgas-verify: pass`. The board's line (two spaces in, the board's name first) ends in `pass`. So does each test line under it (four spaces in, the test's name first).
 
 ### If it fails
 

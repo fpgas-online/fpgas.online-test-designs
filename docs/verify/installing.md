@@ -8,7 +8,7 @@ Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
 ### What you need
 
 - a Raspberry Pi, or another host running Debian or Raspberry Pi OS bookworm or trixie, with the board attached
-- `sudo` on it, and a network that reaches `apt.fpgas.online` and `fpgas.online`
+- `sudo` and `curl` on it, and a network that reaches `apt.fpgas.online` and `fpgas.online`
 
 `grep VERSION_CODENAME /etc/os-release` says which release the host runs.
 
