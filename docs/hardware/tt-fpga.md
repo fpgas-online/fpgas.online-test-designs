@@ -28,9 +28,15 @@ sudo apt install python3-rpi-hwid
 ```
 
 **2.** On bookworm only, add bookworm-backports and install `mpremote` from it. On trixie the next step installs it.
+Debian's archive key is not on 32-bit Raspberry Pi OS, so the source names it. Its fingerprint is
+`B8B8 0B5B 623E AB6A D877 5C45 B7C5 D7D6 3509 47F8`.
 
 ```bash
-echo "deb http://deb.debian.org/debian bookworm-backports main" | sudo tee /etc/apt/sources.list.d/bookworm-backports.list
+sudo install -d -m0755 /etc/apt/keyrings
+curl -fsSL https://ftp-master.debian.org/keys/archive-key-12.asc \
+  | sudo tee /etc/apt/keyrings/debian-archive-key-12.asc > /dev/null
+echo "deb [signed-by=/etc/apt/keyrings/debian-archive-key-12.asc] http://deb.debian.org/debian bookworm-backports main" \
+  | sudo tee /etc/apt/sources.list.d/bookworm-backports.list
 sudo apt update
 sudo apt install -t bookworm-backports micropython-mpremote
 ```
