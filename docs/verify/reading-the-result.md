@@ -30,7 +30,8 @@ There is one result: **pass** or **fail**. A fail is named for its worst cause:
         is `not run`, and is not a failure);
       * a `warning (not why it did not pass):` line for each warning;
     * a `changed:` line for each board or flash that differs from what was last recorded;
-    * `What to do:`, chosen from the faults found;
+    * `What to do:`, chosen from the faults found (for a `changed:` line that was meant, it says to accept the
+      change with `sudo fpgas-verify --update`);
     * where the JSON report is.
 * A reason is always one line, however long, so it can be searched for as it is ([Common
   failures](common-failures.md#common-failures)).

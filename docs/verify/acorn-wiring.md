@@ -30,7 +30,7 @@ What the Acorn's check does to the card and the host:
 * The check needs no bitstream file of yours. The images it compares the card's flash with, and the design
   that converts a card, are installed with it by `fpgas-online-acorn-bitstreams`, in
   `/usr/share/fpgas-online/acorn-pcie/images/` (for a CLE-101: `acorn-cle-101-sqrl_acorn.bit` and the two
-  flash images). Converting a card is
+  flash images). To convert a card, follow
   [How to install the fpgas.online images on an Acorn](https://docs.fpgas.online/en/latest/boards/acorn/setup/install-images.html).
   No package installs a pin-id or loopback design for the Acorn; the check does not use one.
 
