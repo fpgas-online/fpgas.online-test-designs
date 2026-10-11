@@ -575,7 +575,7 @@ def test_no_words_stand_between_a_steps_pictures(key):
             # the words before the pictures are the step's paragraphs and numbered list: no heading, table, code,
             # bullet, quote or line of bold alone (a heading in all but name) between them
             for line in lines[1:first]:
-                assert not line.startswith(("#", "|", "`", "- ", "* ", "> ")), (name, n, line)
+                assert not line.lstrip().startswith(("#", "|", "`", "- ", "* ", "> ")), (name, n, line)
                 assert not re.fullmatch(r"\*\*[^*]+\*\*:?", line), (name, n, line)
 
 
