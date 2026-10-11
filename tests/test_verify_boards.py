@@ -838,12 +838,46 @@ def fomu_usb(monkeypatch):
     return usb
 
 
+@pytest.mark.parametrize("reading, answer", [
+    ({**FOMU_READING, "cdone_in_reset": 1, "flash": None}, None),  # CDONE stuck high: not a Fomu's (a NeTV2's TMS)
+    (None, (2, "fomu-header-error: python3-libgpiod (the gpiod module) is not installed\n")),  # the header unread
+])  # fmt: skip
+def test_a_board_whose_header_did_not_pass_is_not_reset_again(tmp_path, fomu_usb, reading, answer):
+    fomu_usb.append(FOBOOT_USB)
+    run = Runner([("fomu_header_id.py", answer or _says(reading))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run)
+    assert sum(1 for c in run.calls if c[-1].endswith("fomu_header_id.py")) == 1
+    assert "foboot-after" not in [t["test"] for t in report["tests"]]
+
+
+def test_a_closing_reset_that_cannot_be_done_is_an_error_not_a_crash(tmp_path, fomu_usb):
+    fomu_usb.append(FOBOOT_USB)
+    run = Runner([("fomu_header_id.py", [_says(FOMU_READING), (2, "fomu-header-error: GPIO27 is busy\n")])])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run)
+    after = report["tests"][-1]
+    assert after["test"] == "foboot-after" and after["result"] == "error" and report["result"] != "pass"
+    assert "the closing reset could not be done" in after["reason"] and "GPIO27 is busy" in after["reason"]
+
+
+def test_no_closing_reset_when_foboot_did_not_come_back_the_first_time(tmp_path, fomu_usb):
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", (0, ""))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run)
+    assert sum(1 for c in run.calls if c[-1].endswith("fomu_header_id.py")) == 1
+    assert "foboot-after" not in [t["test"] for t in report["tests"]]
+
+
+def test_tests_asked_for_by_name_are_not_followed_by_a_closing_reset(tmp_path, fomu_usb):
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run, tests=["uart"])
+    assert [t["test"] for t in report["tests"]] == ["uart"]  # the header is not known to be a Fomu's: no reset
+
+
 def test_a_fomu_is_identified_by_its_flash_over_the_header_and_foboot_is_waited_for(tmp_path, fomu_usb):
     fomu_usb.append(FOBOOT_USB)
     run = Runner([("fomu_header_id.py", _says(FOMU_READING))])
     report = _check(FOMU, tmp_path, {"variant": "evt", "cdone": "hi"}, run)
     assert report["result"] == "pass", report
-    assert [t["test"] for t in report["tests"]] == ["header", "foboot", "uart"]
+    assert [t["test"] for t in report["tests"]] == ["header", "foboot", "uart", "foboot-after"]
     assert report["identity"] == {
         "board": "fomu", "kind": "fomu", "variant": "evt", "usb": "1-1.2", "flash": "W25Q128JV",
         "flash_jedec": "0xef7018", "flash_size_bytes": 16777216, "flash_status": "0x00", "flash_uid": FOMU_UID,
@@ -856,6 +890,25 @@ def test_a_fomu_is_identified_by_its_flash_over_the_header_and_foboot_is_waited_
     assert run.calls[header + 1] == ["pinctrl", "get", "8,9,10,11,17,24,25,27"]
     load = next(i for i, c in enumerate(run.calls) if c[0] == "openFPGALoader")
     assert header < load
+    # #135: the check ends by resetting the Fomu through the header again, so foboot is on USB for the next user
+    closing = [i for i, c in enumerate(run.calls) if c[-1].endswith("fomu_header_id.py")]
+    assert len(closing) == 2 and closing[1] > load
+    after = report["tests"][-1]
+    assert after["result"] == "pass" and "foboot (1209:5bf0) back on USB" in after["output"][0]
+
+
+def test_foboot_not_back_after_the_closing_reset_fails_the_board_loud(tmp_path, monkeypatch):
+    """#135: a Fomu left without foboot cannot be loaded by the next user; the check says so, not passes."""
+    looks = [[FOBOOT_USB], [FOBOOT_USB]]  # before the first reset, and its wait; nothing after the closing reset
+    monkeypatch.setattr(fomu, "usb_devices", lambda: looks.pop(0) if looks else [])
+    now = [0.0]
+    monkeypatch.setattr(fomu, "_clock", lambda: now[0])
+    monkeypatch.setattr(fomu, "_sleep", lambda s: now.__setitem__(0, now[0] + s))
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", (0, ""))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run)
+    after = report["tests"][-1]
+    assert after["test"] == "foboot-after" and after["result"] == "fail"
+    assert "did not come back on USB" in after["reason"] and report["result"] == "fail"
 
 
 def test_the_fomu_label_is_its_flash_unique_id_which_only_the_boot_check_reads():
@@ -902,8 +955,87 @@ def test_foboot_not_coming_back_after_the_reset_fails_foboot_not_the_identity(tm
     results = {t["test"]: t for t in report["tests"]}
     assert results["header"]["result"] == "pass" and report["identity"]["flash_uid"] == FOMU_UID
     assert results["foboot"]["result"] == "fail" and "did not appear on USB within 10 s" in results["foboot"]["reason"]
-    assert results["uart"]["result"] == "fail"
-    assert "usb" not in report["identity"]
+    # the DFU tests need foboot: they are not run, rather than failing a second time on a load that cannot work
+    assert "uart" not in results and report["not_run"]["uart"] == "it needs foboot to pass first"
+    assert not any(c[0] == "openFPGALoader" for c in run.calls)
+    assert "usb" not in report["identity"] and report["result"] == "fail"
+
+
+KERNEL_USB = (  # journalctl -k -o short-monotonic, as it prints them
+    "[   12.345678] pi kernel: usbcore: registered new interface driver usbhid\n"
+    "[   61.234567] pi kernel: usb 1-1.2: USB disconnect, device number 5\n"
+    "[   62.012345] pi kernel: usb 1-1.2: device descriptor read/64, error -71\n"
+)
+
+
+def test_a_foboot_that_was_on_usb_before_the_reset_and_not_after_says_so(tmp_path, monkeypatch):
+    """What tells the root 3 cases apart (sw1 p17): foboot there before the header's reset and gone after it is
+    the reset's doing; the kernel's USB lines say how it went."""
+    seen = [[FOBOOT_USB]]  # the first look, before the reset; every later one sees nothing
+    monkeypatch.setattr(fomu, "usb_devices", lambda: seen.pop(0) if seen else [])
+    now = [0.0]
+    monkeypatch.setattr(fomu, "_clock", lambda: now[0])
+    monkeypatch.setattr(fomu, "_sleep", lambda s: now.__setitem__(0, now[0] + s))
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", (0, KERNEL_USB))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run)
+    foboot = next(t for t in report["tests"] if t["test"] == "foboot")
+    assert foboot["result"] == "fail" and "it was on USB before the reset" in foboot["reason"]
+    assert "usb 1-1.2: device descriptor read/64, error -71" in " ".join(foboot["output"])
+    assert not any("usbcore" in line for line in foboot["output"])  # a driver's registration says nothing
+    assert foboot["output"][-1] == "CDONE before 1, in reset 0, after 1"  # last: the console shows the last 8
+
+
+def test_a_journal_that_cannot_be_read_leaves_the_foboot_failure_standing(tmp_path, fomu_usb):
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", (1, "No journal files were found."))])
+    foboot = next(t for t in _check(FOMU, tmp_path, {"variant": "evt"}, run)["tests"] if t["test"] == "foboot")
+    assert foboot["result"] == "fail" and foboot["output"] == ["CDONE before 1, in reset 0, after 1"]
+
+
+def test_only_the_last_six_device_lines_are_kept_and_cdone_stays_last(tmp_path, fomu_usb):
+    lines = "".join(f"[  {60 + i}.000000] pi kernel: usb 1-1.2: line {i}\n" for i in range(10))
+    port = "[   70.000000] pi kernel: usb 1-1-port2: disabled by hub (EMI?), re-enabling...\n"
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", (0, lines + port))])
+    foboot = next(t for t in _check(FOMU, tmp_path, {"variant": "evt"}, run)["tests"] if t["test"] == "foboot")
+    assert len(foboot["output"]) == 7 and foboot["output"][-1].startswith("CDONE before")
+    assert "line 5" in foboot["output"][0] and "port2: disabled by hub" in foboot["output"][-2]
+
+
+@pytest.mark.parametrize("line, kept", [
+    ("[   70.1] pi kernel: usb usb1-port2: disabled by hub (EMI?), re-enabling...", True),  # a root hub's port
+    ("[   70.2] pi kernel: usb usb1-port2: attempt power cycle", True),
+    ("[   70.3] pi kernel: usb 1-1-port3: unable to enumerate USB device", True),
+    ("[   70.4] pi kernel: usb 1-1.2: New USB device found, idVendor=1209, idProduct=5bf0", True),
+    ("[ 1209.123456] pi kernel: brcmfmac: power management disabled", False),  # a timestamp is not an ID
+    ("[   12.3] pi kernel: usbcore: registered new interface driver usbhid", False),  # says nothing of a device
+    ("[   12.4] fomu1209 kernel: mmc0: new high speed SDHC card", False),  # nor a hostname
+    ("[    1.5] pi kernel: dwc_otg 3f980000.usb: DWC OTG Controller", False),  # a controller, not a device
+])  # fmt: skip
+def test_the_kernel_lines_kept_are_a_usb_devices_or_ports(tmp_path, fomu_usb, line, kept):
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", (0, line + "\n"))])
+    foboot = next(t for t in _check(FOMU, tmp_path, {"variant": "evt"}, run)["tests"] if t["test"] == "foboot")
+    assert (line in foboot["output"]) == kept
+
+
+def test_a_journal_that_cannot_be_run_leaves_the_foboot_failure_standing(tmp_path, fomu_usb):
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", core.Problem("error", "timed out"))])
+    foboot = next(t for t in _check(FOMU, tmp_path, {"variant": "evt"}, run)["tests"] if t["test"] == "foboot")
+    assert foboot["result"] == "fail" and foboot["output"] == ["CDONE before 1, in reset 0, after 1"]
+    journal = next(c for c in run.calls if c[0] == "journalctl")
+    assert journal[:3] == ["journalctl", "-k", "-b"]
+
+
+def test_a_test_asked_for_by_name_runs_without_its_needs(tmp_path, fomu_usb):
+    """The fact tests do not run when tests are named, so `needs` has nothing to judge: what was asked for runs."""
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run, tests=["uart"])
+    assert [t["test"] for t in report["tests"]] == ["uart"] and "not_run" not in report
+
+
+def test_a_foboot_that_was_not_on_usb_before_the_reset_either_says_so(tmp_path, fomu_usb):
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", (0, ""))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run)
+    foboot = next(t for t in report["tests"] if t["test"] == "foboot")
+    assert foboot["result"] == "fail" and "not on USB before the reset either" in foboot["reason"]
 
 
 @pytest.mark.parametrize("answer, said", [
@@ -930,7 +1062,7 @@ def test_a_test_board_says_when_each_test_starts_and_how_it_ended(tmp_path, fomu
     _check(FOMU, tmp_path, {"variant": "evt"}, Runner([("fomu_header_id.py", _says(FOMU_READING))]),
            event=lambda stage, d: events.append((stage, d)))  # fmt: skip
     assert events[0][0] == "fpga-board-identified" and events[0][1]["flash_uid"] == FOMU_UID
-    assert events[1:] == [(stage, {"test": test, **extra}) for test in ("header", "foboot", "uart")
+    assert events[1:] == [(stage, {"test": test, **extra}) for test in ("header", "foboot", "uart", "foboot-after")
                           for stage, extra in (("fpga-test-started", {}),
                                                ("fpga-test-finished", {"result": "pass", "reason": ""}))]  # fmt: skip
 
@@ -1178,6 +1310,71 @@ def test_debug_test_loads_then_runs_with_extra_arguments(tmp_path, monkeypatch):
 def test_the_acorn_debug_tool_can_identify_and_has_no_test_loading():
     assert set(debug.commands(ACORN)) == {"detect", "identify"}
     assert {"detect", "list", "check", "program", "test"} == set(debug.commands(ARTY))
+    assert set(debug.commands(FOMU)) == {"detect", "list", "check", "program", "test", "reset"}  # foboot back (#135)
+
+
+def _fomu_debug(monkeypatch, command, **more):
+    monkeypatch.setattr(FOMU, "facts", lambda port=None: _host(FOMU))
+    monkeypatch.setattr(debug, "hold_lock", lambda *a: _Nothing())
+    return cli.argparse.Namespace(command=command, images=None, variant=None, port=None, **more)
+
+
+@pytest.mark.parametrize("comes_back, rc, said", [(True, 0, "foboot (1209:5bf0) back on USB"),
+                                                  (False, 1, "did not come back on USB")])  # fmt: skip
+def test_fpgas_fomu_debug_reset_puts_foboot_back(monkeypatch, capsys, fomu_usb, comes_back, rc, said):
+    """#135: after a by-name test the Fomu runs a design with no USB; the operator finishes with `reset`."""
+    if comes_back:
+        fomu_usb.append(FOBOOT_USB)
+    monkeypatch.setattr(fomu, "run", Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", (0, ""))]))
+    assert debug.run(FOMU, _fomu_debug(monkeypatch, "reset")) == rc
+    assert said in capsys.readouterr().out
+
+
+def test_a_by_name_fomu_load_says_how_to_put_foboot_back(tmp_path, monkeypatch, capsys):
+    args = _fomu_debug(monkeypatch, "program", test="uart", extra=[])
+    args.images = _install(tmp_path, FOMU)
+    monkeypatch.setattr(debug, "_live", lambda argv: 0)
+    assert debug.run(FOMU, args) == 0
+    assert "fpgas-fomu-debug reset" in capsys.readouterr().out
+
+
+def test_a_failed_by_name_fomu_load_does_not_say_the_design_runs(tmp_path, monkeypatch, capsys):
+    args = _fomu_debug(monkeypatch, "program", test="uart", extra=[])
+    args.images = _install(tmp_path, FOMU)
+    monkeypatch.setattr(debug, "_live", lambda argv: 1)  # the DFU load failed: foboot may still be there
+    assert debug.run(FOMU, args) == 1
+    assert "fpgas-fomu-debug reset" not in capsys.readouterr().out
+
+
+def test_a_by_name_fomu_test_whose_host_test_fails_still_says_the_design_runs(tmp_path, monkeypatch, capsys):
+    args = _fomu_debug(monkeypatch, "test", test="uart", extra=[])
+    args.images = _install(tmp_path, FOMU)
+    # the load worked; the host test failed: the design runs all the same (the serial-getty stop in pre_steps
+    # runs through _live too, so answers in call order would not reach the load)
+    monkeypatch.setattr(debug, "_live", lambda argv: 1 if any(str(a).endswith("test_uart.py") for a in argv) else 0)
+    assert debug.run(FOMU, args) == 1
+    assert "fpgas-fomu-debug reset" in capsys.readouterr().out
+
+
+def test_fpgas_fomu_debug_reset_holds_the_boards_lock(monkeypatch, fomu_usb):
+    held = []
+    args = _fomu_debug(monkeypatch, "reset")
+    monkeypatch.setattr(debug, "hold_lock", lambda lock, title: held.append(lock) or _Nothing())
+    fomu_usb.append(FOBOOT_USB)
+    monkeypatch.setattr(fomu, "run", Runner([("fomu_header_id.py", _says(FOMU_READING))]))
+    assert debug.run(FOMU, args) == 0 and held == [FOMU.lock]
+
+
+def test_a_full_fomu_check_gives_no_by_name_warning(tmp_path, fomu_usb):
+    fomu_usb.append(FOBOOT_USB)
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, Runner([("fomu_header_id.py", _says(FOMU_READING))]))
+    assert "warnings" not in report
+
+
+def test_a_by_name_fomu_check_warns_that_foboot_is_off_usb(tmp_path, fomu_usb):
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run, tests=["uart"])
+    assert any("fpgas-fomu-debug reset" in w for w in report.get("warnings", []))
 
 
 class _Nothing:

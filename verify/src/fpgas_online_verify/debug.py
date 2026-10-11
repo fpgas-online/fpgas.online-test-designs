@@ -120,6 +120,7 @@ def _program(board, host, args, bitstream, then_test):
         return _live([sys.executable, "-m", "fpgas_online_verify.listen", host["port"], str(len(test)), *test,
                       *board.program_argv(bitstream, host, args.test)])  # fmt: skip
     rc = _live(board.program_argv(bitstream, host, args.test))
+    args.loaded = rc == 0  # what the board now runs, whatever its test then says (the Fomu's note, #135)
     if rc != 0 or not then_test:
         return rc
     return _live([*board.test_argv(args.test, host, bitstream), *args.extra])
@@ -143,16 +144,32 @@ def commands(board):
         })  # fmt: skip
     if board.name == "acorn":
         out["identify"] = (acorn_identify, "print who the board is (as fpgas-acorn-verify --identify)", False)
+    if board.name == "fomu":
+        out["reset"] = (fomu_reset, "reset the Fomu so foboot is back on USB (#135)", False)
     return out
+
+
+def fomu_reset(board, host, args):
+    """What the boot check ends with: the iCE40 reset through the header, then foboot waited for on USB."""
+    entry = board.reset_to_foboot(host)
+    for line in entry["output"]:
+        print(line, flush=True)
+    if entry["result"] != "pass":
+        print(f"fpgas-{board.slug}-debug reset: {entry['result']}: {entry['reason']}", flush=True)
+        return 1
+    return 0
 
 
 def run(board, args):
     host = board.facts(getattr(args, "port", None))
     func = commands(board)[args.command][0]
     try:
-        if args.command in ("program", "test"):
+        if args.command in ("program", "test", "reset"):
             with hold_lock(board.lock, board.title):
-                return func(board, host, args)
+                rc = func(board, host, args)
+            if getattr(args, "loaded", False) and getattr(board, "by_name_note", ""):
+                print(f"fpgas-{board.slug}-debug: {board.by_name_note}", flush=True)
+            return rc
         return func(board, host, args)
     except Problem as p:
         print(f"fpgas-{board.slug}-debug: {p.result}: {p.reason}", flush=True)
