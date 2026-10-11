@@ -260,3 +260,18 @@ def test_the_listed_length_is_the_molex_cable_s():
         assert wiring.listed_mm(c) == 100
         (part,) = (p for p in c.parts if "listed_mm" in p)
         assert "Pico-EZmate cable assembly" in part["part"]
+
+
+@pytest.mark.parametrize("mm", [30, 31, 20])
+def test_a_listed_length_that_leaves_no_run_after_the_slack_is_refused(monkeypatch, mm):
+    # the reach step says "at most {mm // 2 - slack} mm a run": 0 or less would be no cable at all
+    shared = [p | {"listed_mm": mm} if "listed_mm" in p else p for p in wiring.DATA["parts"]]
+    monkeypatch.setitem(wiring.DATA, "parts", shared)
+    rejects(lambda d: None, f"listed_mm {mm} leaves no run")
+
+
+def test_the_shortest_listed_length_with_a_run_left_loads(monkeypatch):
+    mm = 2 * wiring.LENGTHS["slack"] + 2  # 1 mm a run
+    shared = [p | {"listed_mm": mm} if "listed_mm" in p else p for p in wiring.DATA["parts"]]
+    monkeypatch.setitem(wiring.DATA, "parts", shared)
+    wiring._carrier("blade", copy.deepcopy(BLADE))
