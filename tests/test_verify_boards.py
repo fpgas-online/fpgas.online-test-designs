@@ -957,6 +957,25 @@ def test_a_journal_that_cannot_be_read_leaves_the_foboot_failure_standing(tmp_pa
     assert foboot["result"] == "fail" and foboot["output"] == ["CDONE before 1, in reset 0, after 1"]
 
 
+def test_only_the_last_six_device_lines_are_kept_and_cdone_stays_last(tmp_path, fomu_usb):
+    noise = "[ 1209.123456] pi kernel: brcmfmac: power management disabled\n"  # a timestamp is not an ID
+    lines = "".join(f"[  {60 + i}.000000] pi kernel: usb 1-1.2: line {i}\n" for i in range(10))
+    port = "[   70.000000] pi kernel: usb 1-1-port2: disabled by hub (EMI?), re-enabling...\n"
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", (0, noise + lines + port))])
+    foboot = next(t for t in _check(FOMU, tmp_path, {"variant": "evt"}, run)["tests"] if t["test"] == "foboot")
+    assert len(foboot["output"]) == 7 and foboot["output"][-1].startswith("CDONE before")
+    assert "port2: disabled by hub" in foboot["output"][-2] and "line 5" in foboot["output"][0]
+    assert not any("brcmfmac" in line for line in foboot["output"])
+
+
+def test_a_journal_that_cannot_be_run_leaves_the_foboot_failure_standing(tmp_path, fomu_usb):
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", core.Problem("error", "timed out"))])
+    foboot = next(t for t in _check(FOMU, tmp_path, {"variant": "evt"}, run)["tests"] if t["test"] == "foboot")
+    assert foboot["result"] == "fail" and foboot["output"] == ["CDONE before 1, in reset 0, after 1"]
+    journal = next(c for c in run.calls if c[0] == "journalctl")
+    assert journal[:3] == ["journalctl", "-k", "-b"]
+
+
 def test_a_test_asked_for_by_name_runs_without_its_needs(tmp_path, fomu_usb):
     """The fact tests do not run when tests are named, so `needs` has nothing to judge: what was asked for runs."""
     run = Runner([("fomu_header_id.py", _says(FOMU_READING))])
