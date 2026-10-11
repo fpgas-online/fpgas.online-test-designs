@@ -992,14 +992,27 @@ def test_a_journal_that_cannot_be_read_leaves_the_foboot_failure_standing(tmp_pa
 
 
 def test_only_the_last_six_device_lines_are_kept_and_cdone_stays_last(tmp_path, fomu_usb):
-    noise = "[ 1209.123456] pi kernel: brcmfmac: power management disabled\n"  # a timestamp is not an ID
     lines = "".join(f"[  {60 + i}.000000] pi kernel: usb 1-1.2: line {i}\n" for i in range(10))
     port = "[   70.000000] pi kernel: usb 1-1-port2: disabled by hub (EMI?), re-enabling...\n"
-    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", (0, noise + lines + port))])
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", (0, lines + port))])
     foboot = next(t for t in _check(FOMU, tmp_path, {"variant": "evt"}, run)["tests"] if t["test"] == "foboot")
     assert len(foboot["output"]) == 7 and foboot["output"][-1].startswith("CDONE before")
-    assert "port2: disabled by hub" in foboot["output"][-2] and "line 5" in foboot["output"][0]
-    assert not any("brcmfmac" in line for line in foboot["output"])
+    assert "line 5" in foboot["output"][0] and "port2: disabled by hub" in foboot["output"][-2]
+
+
+@pytest.mark.parametrize("line, kept", [
+    ("[   70.1] pi kernel: usb usb1-port2: disabled by hub (EMI?), re-enabling...", True),  # a root hub's port
+    ("[   70.2] pi kernel: usb usb1-port2: attempt power cycle", True),
+    ("[   70.3] pi kernel: usb 1-1-port3: unable to enumerate USB device", True),
+    ("[   70.4] pi kernel: usb 1-1.2: New USB device found, idVendor=1209, idProduct=5bf0", True),
+    ("[ 1209.123456] pi kernel: brcmfmac: power management disabled", False),  # a timestamp is not an ID
+    ("[   12.3] pi kernel: usbcore: registered new interface driver usbhid", False),  # says nothing of a device
+    ("[   12.4] fomu1209 kernel: mmc0: new high speed SDHC card", False),  # nor a hostname
+])  # fmt: skip
+def test_the_kernel_lines_kept_are_a_usb_devices_or_ports(tmp_path, fomu_usb, line, kept):
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", (0, line + "\n"))])
+    foboot = next(t for t in _check(FOMU, tmp_path, {"variant": "evt"}, run)["tests"] if t["test"] == "foboot")
+    assert (line in foboot["output"]) == kept
 
 
 def test_a_journal_that_cannot_be_run_leaves_the_foboot_failure_standing(tmp_path, fomu_usb):

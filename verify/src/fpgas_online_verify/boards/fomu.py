@@ -41,7 +41,8 @@ FOBOOT_WAIT = 10.0  # s for foboot to appear on USB after the reset
 # A port's own lines too ("usb 1-1-port2: disabled by hub …"): what an enumeration that never ends prints. The IDs
 # only as the kernel writes them, so a timestamp such as [ 1209.1] is not taken for one.
 USB_KERNEL_RE = re.compile(
-    r"\busb \d+-[\d.]+(?:-port\d+)?:|unable to enumerate USB device|idVendor=1209|idProduct=5bf0|\b1209:5bf0\b"
+    r"\busb (?:usb\d+|\d+-[\d.]+)(?:-port\d+)?:|unable to enumerate USB device"
+    r"|idVendor=1209|idProduct=5bf0|\b1209:5bf0\b"
 )
 # The EVT's flash, U4: a Winbond W25Q128JV-IM (tomu-fpga.sch), RDID EFh 70h 18h.
 FLASH_JEDEC = "ef7018"
