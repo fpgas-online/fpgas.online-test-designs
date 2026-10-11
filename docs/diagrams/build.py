@@ -13,8 +13,10 @@ tmp-views/ and any PNG there that no view owns.
 
 With --check: builds the SVGs in memory only (it never starts Chrome) and compares the manifest built now with
 the committed views.json. A changed geometry.toml or views.toml, or a changed drawing, shows in the SVGs' SHA-256
-sums. It does NOT re-render the PNGs: it reports a PNG that is missing or that no view owns, but not one that
-is out of date with its SVG. Rebuild after any change and commit the PNGs with the manifest.
+sums. Each committed PNG's bytes are checked against the SHA-256 that views.json records for it (written by the
+build that rendered it, beside its SVG's), so a PNG replaced or edited by hand, or a missing one, or one that no
+view owns, is reported. It does NOT re-render the PNGs: it cannot say that a PNG shows what its SVG draws, only
+that it is the file the last build wrote. Rebuild after any change and commit the PNGs with the manifest.
 """
 
 import hashlib

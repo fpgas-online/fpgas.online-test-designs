@@ -93,7 +93,10 @@ A view is one picture of the HAT or the card: a crop, a highlight, a turn, light
 
 Build them with `uv run docs/diagrams/build.py docs/wiring/acorn`. This needs Chrome or Chromium.
 Check them with `uv run docs/diagrams/build.py docs/wiring/acorn --check`; it needs no browser.
-The check compares the manifest built now with the committed one, so it catches a changed drawing.
-It does not render the PNGs again. After any change, build and commit the PNGs with the manifest.
-It also lists a PNG that is missing and a PNG that no view owns.
+A build records the SHA-256 of each view's SVGs and of the PNGs rendered from them, in the same run.
+The check builds the SVGs in memory and compares their hashes with the manifest, so it catches a changed
+`geometry.toml`, `views.toml` or drawing. It also checks each committed PNG's bytes against the hash recorded for
+it, so it catches a PNG replaced or edited by hand, a PNG that is missing and a PNG that no view owns.
+It does not render the PNGs again, so it cannot prove that a PNG shows what its SVG draws: only that it is the
+file the last build wrote. After any change, build and commit the PNGs with the manifest.
 Views with no photo of their state are line drawings, marked `"photo_matched": false` in the manifest.

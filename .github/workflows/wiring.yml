@@ -49,5 +49,5 @@ jobs:
 
       - name: generated/views/ matches views.toml and geometry.toml
         # Builds the SVGs in memory and compares their hashes with views.json; it starts no browser, so it
-        # does not render the PNGs again.
+        # does not render the PNGs again; it holds each PNG to the hash the last build recorded.
         run: uv run --python 3.12 docs/diagrams/build.py docs/wiring/acorn --check
