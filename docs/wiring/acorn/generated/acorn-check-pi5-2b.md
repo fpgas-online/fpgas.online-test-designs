@@ -6,7 +6,7 @@ The check's own words, from the tool's list of [common failures](https://docs.fp
 
 | It says | Meaning, and what to do |
 |---|---|
-| `fail`: `unconverted: …` | an Acorn on SQRL's factory image (or the XDMA sample). Convert it ([converting a card](https://docs.fpgas.online/en/latest/boards/acorn/pcie-programming.html)). |
+| `fail`: `unconverted: …` | an Acorn on SQRL's factory image (or the XDMA sample). Convert it ([How to install the fpgas.online images on an Acorn](https://docs.fpgas.online/en/latest/boards/acorn/setup/install-images.html)). |
 | `fail`: `… is not a design we built` | a Xilinx PCIe design the Acorn check does not know; its flash is not read |
 | `fail`: `running the golden image` | the Acorn's operational slot did not boot; it fell back to golden |
 | `fail`: `link is x2, expected x1` | the Acorn's PCIe link is not the setup's (`expected.toml`) |

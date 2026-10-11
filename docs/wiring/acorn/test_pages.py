@@ -71,7 +71,7 @@ def test_the_check_s_explanation_is_one_page_for_both_carriers_and_its_reference
 
 
 def test_a_how_to_page_s_title_starts_how_to_and_the_others_do_not():
-    how_to = {"jtag-1", "jtag-2", "uart-1", "uart-2", "bench", "fit", "check-1", "check-3"}
+    how_to = {"jtag-1", "jtag-2", "uart-1", "uart-2", "bench", "fit", "check-1", "check-3", "convert"}
     for key, page in pages.every():
         assert pages.title(key, page).startswith("How to ") == (page in how_to), (key, page)
 
