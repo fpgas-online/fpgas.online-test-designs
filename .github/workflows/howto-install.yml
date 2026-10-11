@@ -38,6 +38,7 @@ jobs:
   unit:
     name: "Install how-tos: reading the pages"
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -56,6 +57,7 @@ jobs:
     name: "Install how-tos: ${{ matrix.system }} ${{ matrix.suite }}"
     needs: unit
     runs-on: ubuntu-latest
+    timeout-minutes: 30  # a run takes a few minutes; a host that hangs fails it rather than holding the runner
     strategy:
       fail-fast: false
       matrix:

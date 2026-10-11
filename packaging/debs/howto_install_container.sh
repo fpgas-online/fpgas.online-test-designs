@@ -9,5 +9,6 @@
 set -eu
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -qq -y --no-install-recommends python3 curl ca-certificates gnupg > /var/log/howto-tools.log
+apt-get install -qq -y --no-install-recommends python3 curl ca-certificates gnupg > /var/log/howto-tools.log 2>&1 \
+  || { cat /var/log/howto-tools.log; exit 1; }
 exec python3 /src/packaging/debs/howto_install_check.py "$@"
