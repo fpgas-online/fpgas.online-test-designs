@@ -942,6 +942,18 @@ def test_the_pi_5_tool_list_has_a_screwdriver_for_the_hats_screw_and_gives_no_si
         assert f"- {found[0]['tool']}" in steps.guide(c)[steps.guide_name(c, f"{part}-1")]
 
 
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_every_page_that_takes_the_card_s_screw_in_or_out_lists_the_screwdriver(key):
+    """The bench check takes the card out (its screw first) and the fitting puts it back (its screw): each lists the
+    carrier's screwdriver, as the first cable page does (fpgas.online-docs #212's review)."""
+    c = wiring.CARRIERS[key]
+    (screwdriver,) = steps.card_screwdrivers(c)
+    for part in ("bench", "fit"):
+        page = steps.guide(c)[steps.guide_name(c, part)]
+        head = page[: page.index("## Steps")]
+        assert f"- {screwdriver}" in head, (key, part)
+
+
 def test_the_bench_check_and_the_fitting_say_the_hat_has_its_stacking_header_and_the_housings_go_on_its_pins():
     c = wiring.CARRIERS["pi5"]
     said = (

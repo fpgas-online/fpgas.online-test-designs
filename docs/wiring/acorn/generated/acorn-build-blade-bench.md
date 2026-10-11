@@ -6,11 +6,15 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 
 ## What you need
 
-**Parts and tools**
+**Parts**
 
 - both finished cables
 - the Compute Blade
+
+**Tools**
+
 - a multimeter with a continuity buzzer
+- a PH1 (Phillips size 1) screwdriver
 
 ## Steps
 

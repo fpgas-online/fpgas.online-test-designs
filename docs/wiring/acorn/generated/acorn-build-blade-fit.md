@@ -6,11 +6,12 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 
 ## What you need
 
-**Parts**
+**Parts and tools**
 
 - both cables, checked on the bench ([How to check the cables on the bench (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/bench-check.html))
 - the Acorn
 - the Compute Blade
+- a PH1 (Phillips size 1) screwdriver
 
 ## Steps
 

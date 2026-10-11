@@ -1667,9 +1667,15 @@ def needs(c, connector):
         "a hot-air tool",
         *(["a soldering iron"] if has_resistor(c, connector) else []),
         "masking tape and a fine pen",
-        *(t["tool"] for t in wiring.TOOLS if "screwdriver" in t["tool"] and t.get("carrier") == c.key),
+        *card_screwdrivers(c),
     ]
     return need_lists(parts, tools)
+
+
+def card_screwdrivers(c):
+    """The carrier's screwdriver for the screw that holds the card in its M.2 slot (wiring.toml's tools): listed on
+    every page that takes that screw out or puts it back."""
+    return [t["tool"] for t in wiring.TOOLS if "screwdriver" in t["tool"] and t.get("carrier") == c.key]
 
 
 def renumbered(lines):
@@ -1796,7 +1802,9 @@ def guide(c):
     bench, fit_ = cut_at(parts["fit"], FIT_STEPS[0])
     shell = numbered(bench, "The Acorn is not in its slot and the plugs are free.", guide_name(c, "bench"))
     out[guide_name(c, "bench")] = body(
-        need_lists(["both finished cables", f"the {c.name}"], ["a multimeter with a continuity buzzer"]),
+        need_lists(
+            ["both finished cables", f"the {c.name}"], ["a multimeter with a continuity buzzer", *card_screwdrivers(c)]
+        ),
         bench,
         f"Contact 1 of each plug beeps to {c.reference_short} (step {shell}). "
         f"Contact 6 of each plug is silent against {c.reference_short} "
@@ -1808,7 +1816,10 @@ def guide(c):
         next_page("bench"),
     )
     out[guide_name(c, "fit")] = body(
-        need_lists([f"both cables, checked on the bench ({pages.link(c.key, 'bench')})", "the Acorn", f"the {c.name}"]),
+        need_lists(
+            [f"both cables, checked on the bench ({pages.link(c.key, 'bench')})", "the Acorn", f"the {c.name}"],
+            card_screwdrivers(c),
+        ),
         fit_,
         "Both housings sit on the pins action 5 names, each marked corner on its pin, as action 6 looks for before "
         "power.",
