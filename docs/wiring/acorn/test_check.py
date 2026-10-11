@@ -255,16 +255,22 @@ def test_a_row_split_by_host_keeps_only_this_carriers_clause():
 
 
 def test_moving_a_wire_sends_the_cable_through_the_new_cables_checks_before_a_boot():
+    """Moving a wire is numbered steps, in this order: power off, card out, move, meter, bench check, fit, boot."""
     for c in wiring.CARRIERS.values():
         body = "\n".join(check.pages(c).values())
-        rework = body[body.index("After moving a wire") :].split("\n", 1)[0]
-        order = ["take the card out and pull both plugs", "with the meter", docs_pages.link(c.key, "jtag-2")]
-        order += ["the bench check", docs_pages.link(c.key, "bench"), "fit the cables", docs_pages.link(c.key, "fit")]
-        order += ["Then "]
-        at = [rework.index(words) for words in order]  # each named, in this order
-        assert at == sorted(at)
-        assert re.search(r"Then (ask the site operator and )?boot", rework)
-        assert ("Then ask the site operator and boot" in rework) == (c.key == "blade")  # a blade's reboot is asked for
+        start = body.index("To move a wire, the cable goes through the same checks as a new one before any boot:")
+        block = body[start : body.index("\n\n", body.index("\n1. ", start))]
+        steps_ = re.findall(r"^(\d)\. (.*)$", block, re.M)
+        assert [int(n) for n, _ in steps_] == list(range(1, 8))
+        text = [s for _, s in steps_]
+        assert text[0] == c.power_off and text[1].startswith("Take the card out and pull both plugs")
+        assert text[2] == "Move the wire." and "with the meter" in text[3]
+        assert docs_pages.link(c.key, "jtag-2") in text[3] and docs_pages.link(c.key, "bench") in text[4]
+        assert "with the card out" in text[4]
+        assert docs_pages.link(c.key, "fit") in text[5]
+        assert text[6].startswith("Ask the site operator, then boot the blade" if c.key == "blade" else "Boot the Pi")
+        assert "run the check again" in text[6]
+        assert ("install the packages again" in text[6]) == (c.key == "blade")  # a blade's install is gone after a boot
 
 
 def test_a_blade_page_says_when_jtag_may_run_before_the_command_that_runs_it():
