@@ -2,16 +2,16 @@
 
 1. Ask the site operator, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in.
 2. If the housings are on the headers (after the bench check), take them off.
-3. Press the P1 plug into socket P1 and the P2 plug into socket P2 on the underside of the Acorn, each the way round it was when you put the flags on, until fully seated.
+3. Press the P1 plug into socket P1 and the P2 plug into socket P2 on the underside of the Acorn. Each goes the way round it was when you put the flags on. Press each until fully seated.
 
 ![Fitting the cables on a Compute Blade, actions 1 to 3](acorn-cable-blade-fit-1.png){.only-light}
 ![Fitting the cables on a Compute Blade, actions 1 to 3](acorn-cable-blade-fit-1-dark.png){.only-dark}
 
 Then the card and the housings:
 
-4. Put the Acorn in the M.2 slot and fit its screw: the M2x2.5 standoff goes in the threaded insert for the card's size, with a 5 mm hex driver; put the M2 nylon washer on the M2x2.5 screw, insert the card at a 30° angle and press down, then secure the screw to the standoff with a PH1 driver.
-5. Fit the P1 housing on the Extension Port, marked corner on pin 1, and the P2 housing on the UART, marked corner on pin 1.
-6. Before powering on, look at both housings again, as on the bench check: the P1 housing's marked corner is on pin 1 of the Extension Port, and the P2 housing's on pin 1 of the UART. Turned round, the P1 housing puts 5 V on the TCK wire and the P2 housing puts 5 V on the K2 wire, above the most AMD's Artix 7 data sheet allows on an FPGA pin (DS181, Table 1: VCCO + 0.55 V, with VCCO at most 3.6 V), which can destroy the FPGA pin on the Acorn that wire reaches. Fitted, the housings get only this look; the meter check was the bench check's.
+4. Put the Acorn in the M.2 slot and fit its screw. The M2x2.5 standoff goes in the threaded insert for the card's size, with a 5 mm hex driver. Put the M2 nylon washer on the M2x2.5 screw, insert the card at a 30° angle and press down. Then secure the screw to the standoff with a PH1 driver.
+5. Fit the P1 housing on the Extension Port, marked corner on pin 1. Fit the P2 housing on the UART, marked corner on pin 1.
+6. Before powering on, look at both housings again, as on the bench check. The P1 housing's marked corner is on pin 1 of the Extension Port, and the P2 housing's on pin 1 of the UART. Turned round, the P1 housing puts 5 V on the TCK wire and the P2 housing puts 5 V on the K2 wire. That is above the most AMD's Artix 7 data sheet allows on an FPGA pin (DS181, Table 1). The most it allows is VCCO + 0.55 V, with VCCO at most 3.6 V. That can destroy the FPGA pin on the Acorn that wire reaches. Fitted, the housings get only this look; the meter check was the bench check's.
 
 ![Fitting the cables on a Compute Blade, actions 4 to 6](acorn-cable-blade-fit-2.png){.only-light}
 ![Fitting the cables on a Compute Blade, actions 4 to 6](acorn-cable-blade-fit-2-dark.png){.only-dark}

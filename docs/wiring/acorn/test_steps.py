@@ -206,7 +206,7 @@ def test_the_procedure_is_complete_in_itself(key):
     assert ("Solder the 470 Ω resistor between the two cut ends." in text) == bool(RAW[key].get("resistors"))
     assert ("heat-shrink tube, about 3 mm" in text) == bool(RAW[key].get("resistors"))
     building = text.replace(steps.fit_actions(c)[-1], "")  # the fitting look says it again, for both
-    assert building.count(f", {steps.HARM}.") == sum(
+    assert building.count(steps.HARM) == sum(
         "puts 5 V on" in steps.turned_warning(c, steps.housing(c, conn)) for conn in wiring.CONNECTORS
     )
     assert f"about {CUT} mm from the plug" in text and "buy a few more than this, as spares" in text
@@ -273,7 +273,7 @@ def test_the_last_step_fits_plugs_then_card_then_both_housings_on_their_headers(
 
 def test_the_look_before_power_names_each_marked_pin_and_says_what_a_turned_housing_does():
     """The last fitting action, per carrier, from the wiring: a Pi 5 housing has no 5 V to turn onto."""
-    assert steps.HARM.endswith("which can destroy the FPGA pin on the Acorn that wire reaches")
+    assert steps.HARM.endswith("That can destroy the FPGA pin on the Acorn that wire reaches.")
     assert "DS181, Table 1" in steps.HARM  # the limit it is over, with its source
     for c in wiring.CARRIERS.values():
         last = steps.fit_actions(c)[-1]
@@ -289,8 +289,8 @@ def test_the_look_before_power_names_each_marked_pin_and_says_what_a_turned_hous
     assert "P1 housing's marked corner is on pin 1 of the Extension Port" in blade
     assert "P2 housing's on pin 1 of the UART" in blade
     assert (
-        "Turned round, the P1 housing puts 5 V on the TCK wire and the P2 housing puts 5 V on the K2 wire, "
-        f"{steps.HARM}." in blade
+        "Turned round, the P1 housing puts 5 V on the TCK wire and the P2 housing puts 5 V on the K2 wire. "
+        f"{steps.HARM}" in blade
     )
 
 

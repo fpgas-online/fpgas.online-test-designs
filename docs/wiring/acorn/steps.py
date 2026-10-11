@@ -168,8 +168,8 @@ def ground_shows_way_round(c):
 
 # Said after a warning that names a rail on a signal wire.
 HARM = (
-    "above the most AMD's Artix 7 data sheet allows on an FPGA pin (DS181, Table 1: VCCO + 0.55 V, with VCCO at "
-    "most 3.6 V), which can destroy the FPGA pin on the Acorn that wire reaches"
+    "That is above the most AMD's Artix 7 data sheet allows on an FPGA pin (DS181, Table 1). The most it allows is "
+    "VCCO + 0.55 V, with VCCO at most 3.6 V. That can destroy the FPGA pin on the Acorn that wire reaches."
 )
 
 
@@ -1449,7 +1449,7 @@ def procedure_parts(c, restart=False):
         )
         warning = turned_warning(c, plan)
         if turned_harms(c, plan):
-            warning = f"{warning[:-1]}, {HARM}."
+            warning = f"{warning} {HARM}"
         step(
             f"Hold the empty {shape} housing with the wire openings facing you and its long side upright, as in "
             "the picture. Until it is marked, either way up is the same. "
@@ -1846,21 +1846,21 @@ def fit_actions(c):
     return [
         c.power_off,
         "If the housings are on the headers (after the bench check), take them off.",
-        "Press the P1 plug into socket P1 and the P2 plug into socket P2 on the underside of the Acorn, each the way "
-        "round it was when you put the flags on, until fully seated.",
-        "Put the Acorn in the M.2 slot and fit its screw"
+        "Press the P1 plug into socket P1 and the P2 plug into socket P2 on the underside of the Acorn. Each goes the "
+        "way round it was when you put the flags on. Press each until fully seated.",
+        "Put the Acorn in the M.2 slot"
         + (
-            f", in the standoff marked {c.hat.largest_card} at the far end of the {c.hat.name}: the SSD mounting "
-            "screw the HAT ships with."
+            f". Fit its screw, in the standoff marked {c.hat.largest_card} at the far end of the {c.hat.name}. "
+            "It is the SSD mounting screw the HAT ships with."
             if c.hat
-            else ": the M2x2.5 standoff goes in the threaded insert for the card's size, with a 5 mm hex driver; "
-            "put the M2 nylon washer on the M2x2.5 screw, insert the card at a 30° angle and press down, then "
-            "secure the screw to the standoff with a PH1 driver."
+            else " and fit its screw. The M2x2.5 standoff goes in the threaded insert for the card's size, with a "
+            "5 mm hex driver. Put the M2 nylon washer on the M2x2.5 screw, insert the card at a 30° angle and press "
+            "down. Then secure the screw to the standoff with a PH1 driver."
         ),
-        f"Fit {on[0]}, and {on[1]}.",
-        f"Before powering on, look at both housings again, as on the bench check: the {c1} housing's marked corner "
-        f"is on {at1}, and the {c2} housing's on {at2}. Turned round, {turned}"
-        + (f", {HARM}." if harms else ".")
+        f"Fit {on[0]}. Fit {on[1]}.",
+        f"Before powering on, look at both housings again, as on the bench check. The {c1} housing's marked corner "
+        f"is on {at1}, and the {c2} housing's on {at2}. Turned round, {turned}."
+        + (f" {HARM}" if harms else "")
         + " Fitted, the housings get only this look; the meter check was the bench check's.",
     ]
 
@@ -1876,7 +1876,7 @@ FIT_STATIC = "After action 1, touch bare metal of the host before you pick up th
 # pictures print.
 FIT_STEPS = (
     "Fit the plugs into the card. The sockets are on the underside of the card and may not be reachable once it is "
-    "in the slot, so the plugs go in first, in this order.",
+    "in the slot. So the plugs go in first, in this order.",
     "Fit the card, then the housings, in this order.",
 )
 
