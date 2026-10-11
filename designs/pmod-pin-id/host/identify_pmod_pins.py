@@ -589,11 +589,17 @@ _MODULES_TO_UNLOAD = [
 ]
 
 
-_PINCTRL_RE = re.compile(r"^\s*(\d+):\s+(a\d)\b", re.M)
+# pinctrl get: "14: a4    pn | hi // GPIO14 = TXD0": the pin, its function, and the function's name (older
+# pinctrl prints no name).
+_PINCTRL_RE = re.compile(r"^\s*(\d+):\s+(a\d)\b[^\n]*?(?://\s*GPIO\d+\s*=\s*(\S+))?[ \t]*$", re.M)
+# The alternate functions that only listen. The pin-ID design drives every pin it is scanned on, so only these
+# are safe to give back while it still runs; a UART TX, an SPI clock or MOSI, or I2C would drive against it.
+_LISTEN_ONLY = re.compile(r"^(RXD\d*|\w*_RX\d*|CTS\d*|\w*_CTS\d*|MISO\d*|\w*_MISO\d*)$")
 
 
 def alt_functions(gpio_list, run=subprocess.run):
-    """{gpio: "aN"} for the scanned pins that are set to an alternate function (UART, I2C, SPI).
+    """{gpio: ("aN", name)} for the scanned pins that are set to an alternate function (UART, I2C, SPI); the name
+    is pinctrl's ("TXD0"), or "" where it prints none.
 
     Reading a pin through libgpiod leaves it a plain GPIO input, so without this the scan cut the Pi's own
     UART on GPIO14/15 until the next reboot (four Welland NeTV2 Pis, 2026-09-29). Empty without pinctrl.
@@ -602,19 +608,30 @@ def alt_functions(gpio_list, run=subprocess.run):
         out = run(["pinctrl", "get", ",".join(map(str, gpio_list))], capture_output=True, text=True).stdout
     except OSError:
         return {}
-    return {int(gpio): func for gpio, func in _PINCTRL_RE.findall(out) if int(gpio) in gpio_list}
+    return {int(gpio): (func, name) for gpio, func, name in _PINCTRL_RE.findall(out) if int(gpio) in gpio_list}
 
 
 def restore_alt_functions(functions, run=subprocess.run):
-    """Set each pin back to the alternate function alt_functions() found."""
-    for gpio, func in sorted(functions.items()):
+    """Set each pin back to the alternate function alt_functions() found, if that function only listens.
+
+    The pin-ID design is still running and drives every scanned pin, so a function that drives the pin (UART TX,
+    SPI, I2C), or one whose name pinctrl did not print, is not given back: the pin stays an input, and the line
+    says how to give it back once the FPGA has been reset (#308)."""
+    restored = []
+    for gpio, (func, name) in sorted(functions.items()):
+        if not _LISTEN_ONLY.match(name):
+            what = f"{func} ({name})" if name else f"{func} (a function pinctrl did not name)"
+            print(f"GPIO{gpio} left an input: its function {what} could drive the pin, and the pin-ID design still "
+                  f"drives it. After the FPGA is reset: pinctrl set {gpio} {func}")
+            continue
         try:
             run(["pinctrl", "set", str(gpio), func], capture_output=True, text=True)
         except OSError as e:
             print(f"Could not restore GPIO{gpio} to {func}: {e}")
             return
-    if functions:
-        print("Restored " + ", ".join(f"GPIO{g}={f}" for g, f in sorted(functions.items())))
+        restored.append(f"GPIO{gpio}={func}")
+    if restored:
+        print("Restored " + ", ".join(restored))
 
 
 def release_kernel_gpio_drivers():
