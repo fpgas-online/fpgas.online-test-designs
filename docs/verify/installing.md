@@ -92,8 +92,9 @@ Where step 2 applies, `dpkg -l 'openfpgaloader*'` lists `openfpgaloader-fpgasonl
 
 * `fpgas-online-<board>-debug` adds `fpgas-<board>-debug` and the tools for the tests the boot check skips.
 * Installing does not run the check. It runs at the next boot, or when you run it.
-* The packages are `Architecture: all`. On bookworm they need openFPGALoader from the fpga-tools repository,
-  which is built for arm64 and armhf only, so there they install on Raspberry Pi OS and not on x86. The NeTV2
+* The packages are `Architecture: all`. On bookworm, every board's packages but the TT FPGA board's need
+  openFPGALoader from the fpga-tools repository. It is built for arm64 and armhf only, so on bookworm those
+  packages do not install on x86. The NeTV2
   and the Acorn need a Pi's GPIO header, and so does the Fomu EVT, which sits on it; the Arty and TT FPGA board
   need only USB.
 * Versions are `0.0.postN` from `git describe`. Each package depends on the others'
