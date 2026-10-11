@@ -4,7 +4,7 @@ You have an Arty, NeTV2, Fomu or TT FPGA board and want to know what each test o
 it passes.
 Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
 
-## What each board's check tests
+## What the check tests on each board
 
 ### Arty, NeTV2, Fomu and TT FPGA
 
@@ -124,4 +124,4 @@ How the check works with it:
 - **The board's label** is the flash's unique ID (`flash_uid`): foboot has no USB serial number.
 - **The `foboot` test** passes when foboot appears on USB within 10 s of the reset.
 - **The UART test.** The check loads the UART test design with openFPGALoader over DFU and runs its host test on `/dev/serial0`. That is the only test that loads a design at boot. A DFU load replaces the bootloader until the next reset, and it writes the design into the flash's user image. So the flash's contents are not part of what `changed` compares; its IDs are.
-- `fpgas-fomu-debug` runs the SPI flash, PMOD loopback and pin identification tests, one per power cycle. The PMOD tests assume a PMOD HAT ([not a loopback on the EVT](../hardware/fomu-pin-mapping.md#not-a-loopback-on-the-evt)).
+- `fpgas-fomu-debug` runs the SPI flash, PMOD loopback and pin identification tests, one per power cycle. The PMOD tests assume a PMOD HAT ([Fomu EVT wiring to a Raspberry Pi: not a loopback on the EVT](https://docs.fpgas.online/en/latest/boards/fomu-evt/setup/wiring.html#not-a-loopback-on-the-evt)).

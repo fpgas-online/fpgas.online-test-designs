@@ -1,18 +1,18 @@
-# fpgas-verify: checking an Acorn's wiring
+# fpgas-verify: checking the wiring of an Acorn
 
 You have built the cables between an Acorn and its host and want to find the page that checks them, and to
 know what the check does to the card and the host, how the packages survive a reboot and which bitstreams it
 needs.
 Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
 
-## Checking an Acorn's wiring
+## Checking the wiring of an Acorn
 
 The Acorn's check doubles as a wiring test: each of its tests uses a known set of wires between the card and
 the host, so which tests pass and what a failing one says point at the wire. That is a page of its own for
 each carrier, from installing after a boot to which wire a failing line means:
 
 * [an Acorn on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html)
-  ([source](../wiring/acorn/generated/acorn-check-blade-1.md)), with what has and has not been run on a blade;
+  ([source](../wiring/acorn/generated/acorn-check-blade-1.md));
 * [an Acorn on a Raspberry Pi 5](https://docs.fpgas.online/en/latest/boards/acorn/checks/rpi-5.html)
   ([source](../wiring/acorn/generated/acorn-check-pi5-1.md)).
 

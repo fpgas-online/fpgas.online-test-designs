@@ -41,10 +41,10 @@ sudo fpgas-acorn-verify --no-publish
 
 There is one result, **pass** or **fail**, and only a pass exits 0. The summary on the terminal lists every test in the order it ran, with its result. A check that did not pass ends with `RESULT:`, a `failed:` line for each failed test, a `not run:` line for the tests that did not run and why, and `What to do:`.
 
-On a Compute Blade the result is `fail`: [The Acorn check](https://docs.fpgas.online/en/latest/boards/acorn/checks/about.html) says why. A Compute Blade with a Compute Module 5 and an Acorn CLE-101 on the image it was sold with prints this, in a boot with the header's serial port on (version 0.0.post1216). Its `What to do:` lines are left out: that version's advice was for a Raspberry Pi 5. From version 0.0.post1284 the check tells a Compute Blade's reader not to convert the card.
+On a Compute Blade the result is `fail`: [The Acorn check](https://docs.fpgas.online/en/latest/boards/acorn/checks/about.html) says why. A Compute Blade with a Compute Module 5 and an Acorn CLE-101 on the image it was sold with prints this, in a boot with the header's serial port on (`fpgas-verify` and `fpgas-acorn-verify` print the same on a host set up for an Acorn):
 
 ```text
-$ sudo fpgas-acorn-verify --no-publish
+$ sudo fpgas-verify --no-publish
 
 ******************************************************************************
 *** FPGA VERIFY: FAIL ******************************************************
@@ -54,7 +54,8 @@ fpgas-verify: fail (mode acorn, configured: acorn)
     unconverted: runs SQRL's factory image, not the fpgas.online design
     pcie-link  pass
     rp1-pio    pass
-    jtag       fail: P1 JTAG could not be probed: GPIO14 (TMS) is held by 1f00030000.serial (uart0): the kernel does not hand out a pin that is held, so the JTAG chain cannot be scanned
+    jtag       fail: P1 JTAG: openFPGALoader --detect failed (exit -6) before scanning the JTAG chain: openFPGALoader: line-request.c:199: gpiod_line_request_set_values_subset: Assertion `request' failed.
+        openFPGALoader: line-request.c:199: gpiod_line_request_set_values_subset: Assertion `request' failed.
     pcie-bar0  not run: unconverted: runs SQRL's factory image, not the fpgas.online design
     flash      not run: unconverted: runs SQRL's factory image, not the fpgas.online design
     ddr        not run: unconverted: runs SQRL's factory image, not the fpgas.online design
@@ -67,16 +68,38 @@ fpgas-verify: fail (mode acorn, configured: acorn)
 RESULT: FAIL: a board did not pass.
   acorn cle-101: fail (2 tests passed, 1 failed, 7 not run)
     fault: unconverted: runs SQRL's factory image, not the fpgas.online design
-    failed: jtag: P1 JTAG could not be probed: GPIO14 (TMS) is held by 1f00030000.serial (uart0): the kernel does not hand out a pin that is held, so the JTAG chain cannot be scanned
+    failed: jtag: P1 JTAG: openFPGALoader --detect failed (exit -6) before scanning the JTAG chain: openFPGALoader: line-request.c:199: gpiod_line_request_set_values_subset: Assertion `request' failed.
     not run: pcie-bar0, flash, ddr, p2-serial, scratch: unconverted: runs SQRL's factory image, not the fpgas.online design
     not run: p2-uart: the board does not run a known build
     not run: p2-gpio: J5 and H5 are not wired on the Compute Blade setup
-What to do: (left out here; see the text above)
+What to do:
+  * The Acorn still runs the image it was sold with, not the fpgas.online one,
+    so only its PCIe link and its JTAG could be tested. On a Compute Blade, do
+    not load a design into the card or convert it. The one time a design was
+    loaded into a card on a blade, the card's PCIe endpoint did not come back:
+    neither a bus rescan nor a root-complex re-probe restored it
+    (fpgas.online-test-designs issue 241, the record of what has been run on
+    an Acorn on a Compute Blade):
+    https://github.com/fpgas-online/fpgas.online-test-designs/issues/241 To
+    test JTAG on a blade:
+    https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html
+  * openFPGALoader could not have one of the JTAG pins, because a driver holds
+    it (on a Compute Blade the serial port holds GPIO14, which is also the
+    JTAG TMS wire). The check cannot test JTAG on such a host while that
+    driver holds the pin (fpgas.online-test-designs issue 127, on a Compute
+    Blade the JTAG test cannot have GPIO14 while the serial port holds it):
+    https://github.com/fpgas-online/fpgas.online-test-designs/issues/127
+  * To look at the acorn board yourself: sudo fpgas-acorn-debug --help (sudo
+    apt install fpgas-online-acorn-debug)
+  * What each message means:
+    https://docs.fpgas.online/en/latest/verify/common-failures.html#common-failures
+The whole report, for a program to read (JSON): /run/fpgas-online/verify.json
+******************************************************************************
 ```
 
-A blade whose own name does not resolve prints `sudo: unable to resolve host …` before each `sudo`'s output. Those lines are left out above.
+A blade whose own name does not resolve prints `sudo: unable to resolve host …` before the output. It does not change the result.
 
-A card on the vendor's XDMA sample image gets the same tests as one on SQRL's image (version 0.0.post1220 or newer): `pcie-link` and `rp1-pio` pass, `jtag` fails on GPIO14 as above, and the rest are `not run`. Its summary line reads `acorn -: fail`, naming no variant, and the first `What to do:` line says the board runs Xilinx's XDMA sample design.
+A card on the vendor's XDMA sample image gets the same tests as one on SQRL's image (version 0.0.post1220 or newer): `pcie-link` and `rp1-pio` pass, `jtag` fails as above, and the rest are `not run`. Its summary line reads `acorn -: fail`, naming no variant, and the first `What to do:` line says the board runs Xilinx's XDMA sample design.
 
 A pass lists every test with `pass` and ends there, with no `RESULT:` part. On a Compute Blade `p2-gpio` stays `not run`, because J5 and H5 are not wired.
 

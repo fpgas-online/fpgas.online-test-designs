@@ -154,16 +154,6 @@ def transcript(marker, *said):
     return block[0]
 
 
-def without_advice(block):
-    """A ```text transcript without its `What to do:` lines, marked as left out: the advice an older version printed
-    there must not be printed on a page whose reader it does not apply to."""
-    lines = block.strip().split("\n")
-    at = [n for n, line in enumerate(lines) if line == "What to do:"]
-    if len(at) != 1 or lines[-1] != "```":
-        raise wiring.WiringError("a transcript without exactly one `What to do:` line, or not closed by ```")
-    return "\n".join([*lines[: at[0]], "What to do: (left out here; see the text above)", "```"])
-
-
 def failures(c):
     """The Acorn rows of verify/common-failures.md's "Common failures" table that can be met on carrier `c`, as a
     table."""
@@ -336,7 +326,7 @@ ASK_FIRST = (
     "power-off."
 )
 PASS = "**pass**: an Acorn on the Pi 5 setup"
-BLADE_FAIL = "**fail, the docs' install steps run on a Compute Blade**"
+BLADE_FAIL = "**fail, a Compute Blade**"
 REPOSITORIES = "a network that reaches `apt.fpgas.online` and `fpgas.online`, where the packages come from"
 NEEDS = {
     "pi5": [
@@ -490,17 +480,15 @@ def pages(c):
         out += [
             f"On a Compute Blade the result is `fail`: {ABOUT} says why. A Compute Blade with a Compute Module 5 and "
             "an Acorn CLE-101 on the image it was sold with prints this, in a boot with the header's serial port on "
-            "(version 0.0.post1216). Its `What to do:` lines are left out: that version's advice was for a "
-            "Raspberry Pi 5. From version 0.0.post1284 the check tells a Compute Blade's reader not to convert the "
-            "card.",
+            "(`fpgas-verify` and `fpgas-acorn-verify` print the same on a host set up for an Acorn):",
             "",
-            without_advice(transcript(BLADE_FAIL)),
+            transcript(BLADE_FAIL).strip(),
             "",
-            "A blade whose own name does not resolve prints `sudo: unable to resolve host …` before each `sudo`'s "
-            "output. Those lines are left out above.",
+            "A blade whose own name does not resolve prints `sudo: unable to resolve host …` before the output. "
+            "It does not change the result.",
             "",
             "A card on the vendor's XDMA sample image gets the same tests as one on SQRL's image (version "
-            "0.0.post1220 or newer): `pcie-link` and `rp1-pio` pass, `jtag` fails on GPIO14 as above, and the rest "
+            "0.0.post1220 or newer): `pcie-link` and `rp1-pio` pass, `jtag` fails as above, and the rest "
             "are `not run`. Its summary line reads `acorn -: fail`, naming no variant, and the first `What to do:` "
             "line says the board runs Xilinx's XDMA sample design.",
             "",
@@ -542,26 +530,30 @@ def pages(c):
         "Find the failing line in the table, then the wire in the two cavity pictures under it: the number in a "
         "cavity is the number on the wire's flag.",
         "",
-        f"**Before you touch a cable: {c.power_off}** **After moving a wire, the cable goes through the same checks "
-        "as a new one before any boot:** take the card out and pull both plugs from its sockets, check that "
-        "cable's plug contacts against its housing with the meter as "
-        f"{steps.meter_check_steps(c)} of {link('jtag-2')} or {link('uart-2')} do, run "
-        f"the bench check ({link('bench')}) with the card out, and fit the cables ({link('fit')}). Then "
-        + ("ask the site operator and boot, and run" if c.key == "blade" else "boot and run")
-        + " the check again"
-        + (
-            f" (on a blade the install is gone after the boot: install again, as in {BLADE_CHECK})"
+        "To move a wire, the cable goes through the same checks as a new one before any boot:",
+        "",
+        f"1. {c.power_off}",
+        "2. Take the card out and pull both plugs from its sockets.",
+        "3. Move the wire.",
+        f"4. Check that cable's plug contacts against its housing with the meter, as {steps.meter_check_steps(c)} of "
+        f"{link('jtag-2')} or {link('uart-2')} do.",
+        f"5. Run the bench check, with the card out: {link('bench')}.",
+        f"6. Fit the cables: {link('fit')}.",
+        (
+            f"7. Ask the site operator, then boot the blade. The install is gone after the boot: install the packages "
+            f"again, as in {BLADE_CHECK}, and run the check again."
             if c.key == "blade"
-            else ""
-        )
-        + ". One test can be run on its own, "
+            else "7. Boot the Pi and run the check again."
+        ),
+        "",
+        "One test can be run on its own"
         + (
-            "`sudo fpgas-acorn-verify --no-publish --test p2-serial` or `sudo fpgas-acorn-verify --no-publish "
-            "--test jtag`; it prints the usual summary, then the whole report as JSON. Run `--test jtag` only "
-            f"{JTAG_CONDITIONS}. In a boot with the header's serial port off, "
-            f"the same goes for the whole check, which runs `jtag` too ({BLADE_CHECK})."
+            ": `sudo fpgas-acorn-verify --no-publish --test p2-serial`, or `sudo fpgas-acorn-verify --no-publish "
+            f"--test jtag`. Run `--test jtag` only {JTAG_CONDITIONS}. In a boot with the header's serial port off, "
+            f"the same goes for the whole check, which runs `jtag` too ({BLADE_CHECK}). Each prints the usual summary, "
+            "then the whole report as JSON."
             if c.key == "blade"
-            else "`sudo fpgas-acorn-verify --test jtag` or `--test p2-serial`; it prints the usual summary, then "
+            else ": `sudo fpgas-acorn-verify --test jtag`, or `--test p2-serial`. Each prints the usual summary, then "
             "the whole report as JSON."
         ),
         "",

@@ -101,7 +101,7 @@ def test_the_blade_pages_are_for_a_compute_module_5_and_hold_no_record_of_a_run(
 
 def test_the_transcripts_and_failure_rows_come_from_the_tool_reference():
     verify = check.RESULTS.read_text()
-    command = {check.PASS: "fpgas-verify", check.BLADE_FAIL: "fpgas-acorn-verify"}  # as each was run
+    command = {check.PASS: "fpgas-verify", check.BLADE_FAIL: "fpgas-verify"}  # as each was run
     for marker, tool in command.items():
         block = check.transcript(marker)
         assert block in verify and block.startswith(f"```text\n$ sudo {tool} --no-publish\n")
@@ -226,11 +226,9 @@ def test_a_caption_cannot_outlive_its_transcript_and_a_swap_stays_on_one_cable()
     assert "[converting a card]" not in check.failures(blade)
 
 
-def test_a_blade_page_prints_no_older_advice_and_no_convert_in_its_transcripts():
-    block = "```text\nresult\nWhat to do:\n  * convert it\n```\n"
-    assert check.without_advice(block) == "```text\nresult\nWhat to do: (left out here; see the text above)\n```"
-    with pytest.raises(wiring.WiringError):
-        check.without_advice("```text\nno advice\n```\n")
+def test_a_blade_page_prints_the_blades_own_advice_and_never_advice_to_convert():
+    """The blade's transcript is the one the code prints today (test_verify_conclusion holds it): its advice is the
+    blade's, which says not to convert, and nothing in it tells the reader to convert."""
     fenced = [
         b
         for page in check.pages(wiring.CARRIERS["blade"]).values()
@@ -238,7 +236,10 @@ def test_a_blade_page_prints_no_older_advice_and_no_convert_in_its_transcripts()
     ]
     assert fenced  # the blade pages do print transcripts: the check below is not empty
     for block in fenced:
-        assert "convert" not in block.replace("unconverted", "")
+        flat = " ".join(block.split())
+        assert "It has to be converted" not in flat and "converted once" not in flat
+        assert "acorn-pcie-programming" not in flat and "If it is an Acorn, convert it" not in flat
+    assert any("do not load a design into the card or convert it" in " ".join(b.split()) for b in fenced)
 
 
 def test_a_row_split_by_host_keeps_only_this_carriers_clause():
@@ -254,16 +255,22 @@ def test_a_row_split_by_host_keeps_only_this_carriers_clause():
 
 
 def test_moving_a_wire_sends_the_cable_through_the_new_cables_checks_before_a_boot():
+    """Moving a wire is numbered steps, in this order: power off, card out, move, meter, bench check, fit, boot."""
     for c in wiring.CARRIERS.values():
         body = "\n".join(check.pages(c).values())
-        rework = body[body.index("After moving a wire") :].split("\n", 1)[0]
-        order = ["take the card out and pull both plugs", "with the meter", docs_pages.link(c.key, "jtag-2")]
-        order += ["the bench check", docs_pages.link(c.key, "bench"), "fit the cables", docs_pages.link(c.key, "fit")]
-        order += ["Then "]
-        at = [rework.index(words) for words in order]  # each named, in this order
-        assert at == sorted(at)
-        assert re.search(r"Then (ask the site operator and )?boot", rework)
-        assert ("Then ask the site operator and boot" in rework) == (c.key == "blade")  # a blade's reboot is asked for
+        start = body.index("To move a wire, the cable goes through the same checks as a new one before any boot:")
+        block = body[start : body.index("\n\n", body.index("\n1. ", start))]
+        steps_ = re.findall(r"^(\d)\. (.*)$", block, re.M)
+        assert [int(n) for n, _ in steps_] == list(range(1, 8))
+        text = [s for _, s in steps_]
+        assert text[0] == c.power_off and text[1].startswith("Take the card out and pull both plugs")
+        assert text[2] == "Move the wire." and "with the meter" in text[3]
+        assert docs_pages.link(c.key, "jtag-2") in text[3] and docs_pages.link(c.key, "bench") in text[4]
+        assert "with the card out" in text[4]
+        assert docs_pages.link(c.key, "fit") in text[5]
+        assert text[6].startswith("Ask the site operator, then boot the blade" if c.key == "blade" else "Boot the Pi")
+        assert "run the check again" in text[6]
+        assert ("install the packages again" in text[6]) == (c.key == "blade")  # a blade's install is gone after a boot
 
 
 def test_a_blade_page_says_when_jtag_may_run_before_the_command_that_runs_it():
