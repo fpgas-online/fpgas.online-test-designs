@@ -329,7 +329,7 @@ def test_renumbering_sends_the_reader_back_to_the_two_checks_of_wire_1_and_the_l
         assert f"the wire flagged {last}: it must stay silent" in items[str(steps.REDO[1])]
         again = f"number from the other end. Then do items {steps.REDO[0]} and {steps.REDO[1]} of this step again"
         assert again in items["3"]
-        assert "with the new numbers" in items["3"]
+        assert "with the flags renumbered" in items["3"]
         assert "then check again." in " ".join(words(steps.ground_check(connector)))
 
 
@@ -453,20 +453,20 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
         )
         assert steps.STATIC in first_step
     assert "cut in half, once" in overview
-    # the reach check is asked for at a moment the guide has: after the one cut, before any wire is cut back
+    # the reach check is asked for at a moment the guide has: before the one cut, so that a cable too short is not cut
     assert "before you cut anything" not in overview and "first step" not in overview
     assert "second step" not in overview  # a step is quoted by its number, which the generator counts
     first = pages[steps.guide_name(c, "jtag-1")]
     cut, reach = first.index("Cut the Molex cable in half"), first.index("Check that each half reaches")
     flag = first.index("flag the wires")
-    assert cut < reach < flag  # after the one cut, before the first wire is flagged, cut back or crimped
+    assert reach < cut < flag  # before the one cut, which is before the first wire is flagged, cut back or crimped
     (reach_step,) = (b for _, b in step_blocks(first) if "Check that each half reaches" in b.split("\n", 1)[0])
     assert "in its slot" not in reach_step.replace("out of its slot", "")  # the card is out of its slot then
-    for k in wiring.CONNECTORS:  # each half named with its own header
-        assert (
-            f"the half for {k} from socket {k} to the {steps.header_words(c.headers[steps.housing(c, k).header].name)}"
-            in reach_step
-        )
+    for k in wiring.CONNECTORS:  # each run named with its own socket and header
+        header = steps.header_words(c.headers[steps.housing(c, k).header].name)
+        assert f"at socket {k}, and lay its wires from there to the {header}" in reach_step
+    assert "Leave the cable whole." in reach_step and "Each run must be at most half the cable's length" in reach_step
+    assert "If a run is longer, stop before you cut" in reach_step
     numbers = [int(n) for n in re.findall(r"^\*\*(\d+)\.\*\*", steps.procedure(c), re.M)]
     assert numbers == list(range(1, len(numbers) + 1))  # the whole procedure numbered 1 to N
     # the wire-1 check has an outcome for every result, and says what the last wire's silence rests on
@@ -478,7 +478,7 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
     # whom to tell is the carrier's, by role: the site operator for the ps1 blades, the public wording for the Pi 5
     assert c.contact == {"blade": "the site operator", "pi5": wiring.CONTACT}[c.key]
     assert "(https://github.com/fpgas-online/fpgas.online-test-designs/issues)" in wiring.CONTACT
-    assert f"Tell {c.contact} which half falls short, and by about how many millimetres." in reach_step
+    assert f"Tell {c.contact} which run falls short, and by about how many millimetres." in reach_step
     # a wire with the series resistor in it is not told to beep: its page gives the reading to expect
     for part, connector in (("jtag-2", "P1"), ("uart-2", "P2")):
         body = pages[steps.guide_name(c, part)]
@@ -646,10 +646,13 @@ def test_a_quoted_step_number_is_the_step_it_means(key):
     # the overview quotes the first page's one cut and its reach check; "Step N of that page" is the same page
     first = steps.guide(c)[steps.guide_name(c, "jtag-1")].splitlines()
     cut, reach = steps.numbered(first, steps.CUT_HALF), steps.numbered(first, steps.REACH)
-    meant["jtag-1"] += [[cut]]
+    meant["jtag-1"] += [[cut], [reach]]
     overview = steps.guide(c)[steps.guide_name(c, "overview")]
-    assert f", in step {cut} of {docs_pages.link(c.key, 'jtag-1')}." in overview
-    assert f"Step {reach} of that page checks that each half reaches" in overview and reach == cut + 1
+    assert (
+        f"Step {reach} of {docs_pages.link(c.key, 'jtag-1')} is the reach check. Each half must reach from the card to"
+        in overview
+    )
+    assert f", once, in step {cut} of that page." in overview and cut == reach + 1
     meant["fit"] = [[f] for f in fit]
     meant["check-3"] = [list(check.jtag_steps())]  # the two checks of GPIO14, on the page about JTAG on a blade
     bench = [steps.bench_step(c, w) for w in (steps.BENCH_START, steps.BENCH_BEEP)]
@@ -793,7 +796,7 @@ def test_how_the_card_goes_in_and_comes_out_each_links_the_maker_s_page(key):
     assert "](" not in steps.fit_actions(c)[3]  # the action itself, as the picture draws it, has no link
     # a cable's second-cable page says what to do with a cable that is still whole, as a step, not as a part
     uart = dict(step_blocks(steps.guide(c)[steps.guide_name(c, "uart-1")]))[1]
-    assert "If the Molex cable is still whole, cut it in the middle with side cutters" in uart
+    assert steps.still_whole(c, 2) in uart and "Then cut it in the middle with side cutters" in uart
 
 
 @pytest.mark.parametrize("key", list(wiring.CARRIERS))
@@ -888,3 +891,14 @@ def test_the_pi_5_bench_check_probes_a_ground_pin_no_housing_covers_and_the_blad
     )
     assert any("Raspberry Pi's pinout" in s["source"] and s.get("carrier") == "pi5" for s in wiring.SOURCES)
     assert all(wiring.CARRIERS["pi5"].headers["gpio"].pins[p]["name"] == "GND" for p in (6, 9, 20, 25))
+
+
+def test_the_molex_cables_length_is_in_the_parts_note_and_its_source_names_both_listings():
+    (part,) = (p for p in wiring.DATA["parts"] if p.get("number") == "Molex 0369200601")
+    assert part["note"].startswith("100 mm, as listed by DigiKey and RS Components.")
+    (source,) = (s for s in wiring.SOURCES if s["claim"].startswith("The Molex cable's length"))
+    assert "https://www.digikey.fi/en/products/detail/molex/0369200601/10233018" in source["source"]
+    assert "https://uk.rs-online.com/web/p/wire-to-board-cables/1907923" in source["source"]
+    assert "100.00mm" in source["source"]
+    for c in wiring.CARRIERS.values():
+        assert "100 mm, as listed by DigiKey and RS Components." in tables.bom(c)

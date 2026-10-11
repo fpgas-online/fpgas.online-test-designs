@@ -70,7 +70,7 @@ note = "M.2 M-key, 2280"
 qty = 1
 part = "Molex Pico-EZmate cable assembly, 6 circuits, a plug at each end"
 number = "Molex 0369200601"
-note = "cut in half: one half is the P1 cable, the other the P2 cable. All six wires are black"
+note = "100 mm, as listed by DigiKey and RS Components. Cut in half: one half is the P1 cable, the other the P2 cable. All six wires are black"
 
 [[parts]]
 qty = 1
@@ -134,6 +134,10 @@ source = "read off Uptime Lab's board photo and their GPIO table; no Compute Bla
 [[sources]]
 claim = "The Molex cable (part 0369200601: six circuits, a plug at each end, all six wires black, contacts 1.2 mm apart)"
 source = "not verified by us for this guide: from the part's description and the cables in use at welland"
+
+[[sources]]
+claim = "The Molex cable's length, 100 mm (part 0369200601)"
+source = "DigiKey's page for the part (https://www.digikey.fi/en/products/detail/molex/0369200601/10233018), opened by us on 11 October 2026: \"Length: 0.328' (100.00mm, 3.94\")\". RS Components' page for the part, 36920-0601 (https://uk.rs-online.com/web/p/wire-to-board-cables/1907923): its search listing gives it as a 6 way to 6 way Pico-EZmate cable, 100mm; its page refused our request (HTTP 403, 11 October 2026), so we have not read its length line ourselves. Not measured by us on a cable in the hand: the guide has the reader measure the cable before cutting it"
 
 [[sources]]
 claim = "That an Acorn CLE-215+, CLE-215 and CLE-101 are the same card, also sold as NiteFury and LiteFury, so that a LiteFury photo can stand for an Acorn"

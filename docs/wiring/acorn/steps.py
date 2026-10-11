@@ -1239,7 +1239,16 @@ def card_out(c):
 
 
 # Said with the first step of a later cable's page, for a reader who starts there.
-STILL_WHOLE = "If the Molex cable is still whole, cut it in the middle with side cutters: each half is one cable."
+def still_whole(c, reach_n):
+    """What the first step of a later cable's page says about a Molex cable that is still whole: the reach check is
+    done before the cut, in step `reach_n` of the first cable's first page."""
+    first = pages.link(c.key, next(iter(GUIDE.values()))[0] + "-1")
+    return (
+        f"If the Molex cable is still whole, do the reach check first: step {reach_n} of {first}. "
+        "Then cut it in the middle with side cutters: each half is one cable."
+    )
+
+
 # The words the first cable's two steps before any flag start with, as the overview quotes them by number.
 CUT_HALF = "Cut the Molex cable in half"
 REACH = "Check that each half reaches"
@@ -1378,29 +1387,32 @@ def procedure_parts(c, restart=False):
             target.extend([markdown_image(alt, name), ""])
 
     step(card_out_step(c))
-    step(
-        f"{CUT_HALF} with side cutters. Each half is one cable. The cut comes before the reach "
-        f"check on purpose. A half is what goes between the card and the {c.name}, so a half is what is "
-        "checked for reach, below.",
-        ("The cable, cut in the middle", "acorn-cable-cut.png"),
-    )
     pairs = [
-        f"Lay the half for {k} from socket {k} to the {header_words(c.headers[housing(c, k).header].name)}, "
-        "along the way that cable will run."
-        for k in wiring.CONNECTORS
+        f"Hold {'one plug' if i == 0 else 'the other plug'} at socket {k}, and lay its wires from there to the "
+        f"{header_words(c.headers[housing(c, k).header].name)}, along the way that cable will run. "
+        "Measure that run, from the plug to the header."
+        for i, k in enumerate(wiring.CONNECTORS)
     ]
     step(
-        f"{REACH}, before any wire is cut back or crimped. "
+        f"{REACH}, before the cable is cut and before any wire is cut back or crimped. "
         + power_off_when(c, f"the {c.name} is on")
-        + "\n\nWith the card out of its slot, hold the card over the slot where it will sit. "
+        + "\n\nWith the card out of its slot, hold the card over the slot where it will sit. Leave the cable whole. "
+        "First measure the cable: its wires, from where they leave one plug to where they leave the other. "
+        "Half of that length is the longest run a half can have.\n\n"
         + " ".join(pairs)
-        + " Its cut end must reach the header with some slack left to bend into the housing."
-        "\n\nIf a half does not reach, stop: this guide uses each half at the length it has. "
-        f"Tell {c.contact} which half falls short, and by about how many millimetres.",
+        + " Each run must be at most half the cable's length, with some slack left to bend into the housing."
+        "\n\nIf a run is longer, stop before you cut: this guide uses each half at the length it has. "
+        f"Tell {c.contact} which run falls short, and by about how many millimetres.",
         (
             f"Where each half must reach on a {c.name}",
             png(reach_name(c)),
         ),
+    )
+    reach_n = n  # the number of the reach check, for the step that says what to do if the cable is still whole
+    step(
+        f"{CUT_HALF} with side cutters, in the middle. Each half is one cable. The reach check above comes first on "
+        "purpose: a cut cable cannot be made longer.",
+        ("The cable, cut in the middle", "acorn-cable-cut.png"),
     )
     cavity = {}
     for connector, conn in wiring.CONNECTORS.items():
@@ -1422,7 +1434,7 @@ def procedure_parts(c, restart=False):
             n = 0
         target.extend([f"#### The {connector} cable ({conn['what']})", ""])
         if connector != next(iter(wiring.CONNECTORS)):  # the first cable's part has it as its first step, above
-            step(f"{card_out_step(c)}\n\n{STILL_WHOLE}")
+            step(f"{card_out_step(c)}\n\n{still_whole(c, reach_n)}")
         half = "one" if connector == next(iter(wiring.CONNECTORS)) else "the other"
         flag = [
             f"Press the plug of {half} half into socket {connector} on the underside of the Acorn. "
@@ -1441,7 +1453,7 @@ def procedure_parts(c, restart=False):
             "not on the round holes. It must beep.",
             f"Do the same with the wire flagged {len(pins)}: it must stay silent.",
             f"If wire {len(pins)} beeps instead, stop: the numbering is reversed; take the flags off and number from "
-            f"the other end. Then do items {REDO[0]} and {REDO[1]} of this step again with the new numbers. "
+            f"the other end. Then do items {REDO[0]} and {REDO[1]} of this step again, with the flags renumbered. "
             + NEITHER.format(strip=lengths["strip"], last=len(pins)),
             BOTH.format(last=len(pins), contact=c.contact),
             "Take the plug out again.",
@@ -1632,7 +1644,7 @@ def needs(c, connector):
     wired = [s for s in pins if s not in plan.cut]
     shape = f"{data.columns}×{(plan.last - plan.first + 1) // data.columns}"
     parts = [
-        "one half of the Molex Pico-EZmate cable (a plug with six black wires)"
+        "the Molex Pico-EZmate cable, still whole (a plug at each end, six black wires)"
         if connector == next(iter(wiring.CONNECTORS))
         else "the other half of the Molex Pico-EZmate cable, which was cut in half in "
         f"{pages.link(c.key, next(iter(GUIDE.values()))[0] + '-1')}",
@@ -1692,7 +1704,11 @@ def guide(c):
     for connector, (part, _) in GUIDE.items():
         order += [
             f"{pages.link(c.key, f'{part}-1')}: "
-            + ("the cable cut in half and each half checked for reach. Then " if connector == next(iter(GUIDE)) else "")
+            + (
+                "each half of the cable checked for reach, and the cable cut in half. Then "
+                if connector == next(iter(GUIDE))
+                else ""
+            )
             + f"the {connector} cable's wires flagged, checked with a meter, cut back and crimped.",
             f"{pages.link(c.key, f'{part}-2')}: the {connector} cable's housing filled and checked.",
         ]
@@ -1725,13 +1741,15 @@ def guide(c):
     out = {
         guide_name(c, "overview"): "\n".join([
             tables.BANNER.strip(), "", not_run, "", "## What you will have", "", *will_have,
-            "Nothing in this guide cuts a wire to length. The bought cable is cut in half, once, in "
-            f"step {numbered(first_page, CUT_HALF)} of {pages.link(c.key, first_part + '-1')}. "
+            "Nothing in this guide cuts a wire to length. "
+            f"Step {numbered(first_page, REACH)} of {pages.link(c.key, first_part + '-1')} is the reach check. "
+            f"Each half must reach from the card to the {c.name}'s headers. "
+            "That is before the cable is cut, and before any wire is cut back or crimped.\n\n"
+            f"The bought cable is then cut in half, once, in step {numbered(first_page, CUT_HALF)} of that page. "
             "That is before the meter check, which needs the cut faces.\n\n"
             "Each half is then used at the length it has. The exception is the wires that are cut back at the plug"
             + (" and the one wire that is cut to take the resistor" if c.resistors else "")
-            + f". Step {numbered(first_page, REACH)} of that page checks that each half reaches from the card to the "
-            f"{c.name}'s headers. That is before any wire is cut back or crimped.", "",
+            + ".", "",
             "## The order of work", "", *(f"{i}. {line}" for i, line in enumerate(order, 1)), "",
             *parts["tail"],
         ]),
@@ -2092,7 +2110,7 @@ def fit_host_pi5(sh, c, y, reach=False):
 FIT_HOSTS = {"blade": fit_host_blade, "pi5": fit_host_pi5}
 MARKED_NOTE = "The red corner of each box is the housing's marked corner, on the pin printed 1."
 REACH_NOTE = (
-    "Each half must reach from the card, once it sits in the M.2 slot, to its box. The card and its sockets are "
+    "Each run must reach from the card, once it sits in the M.2 slot, to its box. The card and its sockets are "
     "not drawn here."
 )
 

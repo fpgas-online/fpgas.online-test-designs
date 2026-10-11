@@ -31,7 +31,7 @@ Then take the card out. Take the screw at its far end out first: the SSD mountin
 
 The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges.
 
-If the Molex cable is still whole, cut it in the middle with side cutters: each half is one cable.
+If the Molex cable is still whole, do the reach check first: step 2 of [How to prepare the JTAG cable's wires (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/jtag-wires.html). Then cut it in the middle with side cutters: each half is one cable.
 
 **2.** Find wire 1 of the P2 cable and flag the wires, before cutting any wire back.
 
@@ -45,7 +45,7 @@ If the Molex cable is still whole, cut it in the middle with side cutters: each 
 
 1. With the plug still in the socket (the Acorn out of any slot), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet). Put the other probe on the plated half-round mounting pad at the end of the card, not on the round holes. It must beep.
 2. Do the same with the wire flagged 6: it must stay silent.
-3. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. Then do items 1 and 2 of this step again with the new numbers. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again. If still neither beeps, stop: the ground point is not confirmed.
+3. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. Then do items 1 and 2 of this step again, with the flags renumbered. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again. If still neither beeps, stop: the ground point is not confirmed.
 4. If both wires beep, first see that the two probes do not touch each other. See also that the cut faces of wires 1 and 6 do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires apart. Leave the flags on and take the plug out. Wire 6 is the card's 3.3 V by the LiteX wiki's legend. It is expected to stay silent to ground on a card with no power. Set the meter to ohms. Write down what each of the two wires reads to the pad. Send both readings to the fpgas.online project in an issue at [fpgas-online/fpgas.online-test-designs](https://github.com/fpgas-online/fpgas.online-test-designs/issues).
 5. Take the plug out again.
 

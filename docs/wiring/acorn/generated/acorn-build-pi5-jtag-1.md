@@ -8,7 +8,7 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 
 **Parts**
 
-- one half of the Molex Pico-EZmate cable (a plug with six black wires)
+- the Molex Pico-EZmate cable, still whole (a plug at each end, six black wires)
 - the 2×4 Dupont housing
 - 5 Dupont crimp terminals, and a few spare
 - 2 mm heat-shrink tube
@@ -32,19 +32,21 @@ Then take the card out. Take the screw at its far end out first: the SSD mountin
 
 The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges.
 
-**2.** Cut the Molex cable in half with side cutters. Each half is one cable. The cut comes before the reach check on purpose. A half is what goes between the card and the Raspberry Pi 5, so a half is what is checked for reach, below.
+**2.** Check that each half reaches, before the cable is cut and before any wire is cut back or crimped. If the Raspberry Pi 5 is on, it must be off first. Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE.
 
-![The cable, cut in the middle](acorn-cable-cut.png){.only-light}
-![The cable, cut in the middle](acorn-cable-cut-dark.png){.only-dark}
+With the card out of its slot, hold the card over the slot where it will sit. Leave the cable whole. First measure the cable: its wires, from where they leave one plug to where they leave the other. Half of that length is the longest run a half can have.
 
-**3.** Check that each half reaches, before any wire is cut back or crimped. If the Raspberry Pi 5 is on, it must be off first. Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE.
+Hold one plug at socket P1, and lay its wires from there to the 40-pin header, along the way that cable will run. Measure that run, from the plug to the header. Hold the other plug at socket P2, and lay its wires from there to the 40-pin header, along the way that cable will run. Measure that run, from the plug to the header. Each run must be at most half the cable's length, with some slack left to bend into the housing.
 
-With the card out of its slot, hold the card over the slot where it will sit. Lay the half for P1 from socket P1 to the 40-pin header, along the way that cable will run. Lay the half for P2 from socket P2 to the 40-pin header, along the way that cable will run. Its cut end must reach the header with some slack left to bend into the housing.
-
-If a half does not reach, stop: this guide uses each half at the length it has. Tell the fpgas.online project in an issue at [fpgas-online/fpgas.online-test-designs](https://github.com/fpgas-online/fpgas.online-test-designs/issues) which half falls short, and by about how many millimetres.
+If a run is longer, stop before you cut: this guide uses each half at the length it has. Tell the fpgas.online project in an issue at [fpgas-online/fpgas.online-test-designs](https://github.com/fpgas-online/fpgas.online-test-designs/issues) which run falls short, and by about how many millimetres.
 
 ![Where each half must reach on a Raspberry Pi 5](acorn-cable-pi5-reach.png){.only-light}
 ![Where each half must reach on a Raspberry Pi 5](acorn-cable-pi5-reach-dark.png){.only-dark}
+
+**3.** Cut the Molex cable in half with side cutters, in the middle. Each half is one cable. The reach check above comes first on purpose: a cut cable cannot be made longer.
+
+![The cable, cut in the middle](acorn-cable-cut.png){.only-light}
+![The cable, cut in the middle](acorn-cable-cut-dark.png){.only-dark}
 
 
 **4.** Find wire 1 of the P1 cable and flag the wires, before cutting any wire back.
@@ -59,7 +61,7 @@ If a half does not reach, stop: this guide uses each half at the length it has. 
 
 1. With the plug still in the socket (the Acorn out of any slot), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet). Put the other probe on the plated half-round mounting pad at the end of the card, not on the round holes. It must beep.
 2. Do the same with the wire flagged 6: it must stay silent.
-3. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. Then do items 1 and 2 of this step again with the new numbers. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again. If still neither beeps, stop: the ground point is not confirmed.
+3. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. Then do items 1 and 2 of this step again, with the flags renumbered. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again. If still neither beeps, stop: the ground point is not confirmed.
 4. If both wires beep, first see that the two probes do not touch each other. See also that the cut faces of wires 1 and 6 do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires apart. Leave the flags on and take the plug out. Wire 6 is the card's 3.3 V by the LiteX wiki's legend. It is expected to stay silent to ground on a card with no power. Set the meter to ohms. Write down what each of the two wires reads to the pad. Send both readings to the fpgas.online project in an issue at [fpgas-online/fpgas.online-test-designs](https://github.com/fpgas-online/fpgas.online-test-designs/issues).
 5. Take the plug out again.
 
