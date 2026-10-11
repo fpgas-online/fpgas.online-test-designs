@@ -64,7 +64,7 @@ def test_a_command_the_check_does_not_know_ends_the_install_steps_and_no_apt_ste
     ]
     assert check.install_plan("p", steps, "bookworm") == [(1, "install", "sudo apt install fpgas-online-x")]
     steps.append(check.Step("p", 3, "", "sudo apt install fpgas-online-x-debug"))
-    with pytest.raises(ValueError, match="after 'sudo fpgas-x-verify --no-publish'"):
+    with pytest.raises(ValueError, match="after 'sudo fpgas-x-verify --no-publish', a command this check does not run"):
         check.install_plan("p", steps, "bookworm")
 
 
@@ -101,6 +101,21 @@ def test_installed_reads_apt_s_inst_lines():
         "Inst fpgas-online-arty (0.1 [all])\n"
     )
     assert check.installed(out) == ["libc6", "fpgas-online-arty"]
+
+
+def test_install_problems_are_apt_s_errors_and_unmet_dependencies():
+    out = (
+        "Reading package lists...\n"
+        "Some packages could not be installed.\n"
+        "The following packages have unmet dependencies:\n"
+        " fpgas-online-arty-tools : Depends: openfpgaloader-fpgasonline but it is not installable or\n"
+        "                                    openfpgaloader (>= 0.13.0) but it is not going to be installed\n"
+        "E: Unable to correct problems, you have held broken packages.\n"
+    )
+    assert check.install_problems(out) == [
+        "fpgas-online-arty-tools : Depends: openfpgaloader-fpgasonline but it is not installable or",
+        "E: Unable to correct problems, you have held broken packages.",
+    ]
 
 
 def test_another_board_s_package_or_tool_is_foreign():

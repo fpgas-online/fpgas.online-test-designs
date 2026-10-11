@@ -230,7 +230,10 @@ def install_plan(page, step_list, suite):
             k = kind(command)
             if stopped:
                 if k in ("update", "install", "source", "key"):
-                    raise ValueError(f"{page}: apt step {command!r} after {stopped!r}, which needs the board")
+                    raise ValueError(
+                        f"{page}: apt step {command!r} after {stopped!r}, a command this check does not run (one "
+                        "that needs the board, or one it does not know, such as a source line with no signed-by=)"
+                    )
                 continue
             if k is None:
                 stopped = command
@@ -287,6 +290,11 @@ def update_problems(output):
         else:
             out.append(None)  # a line that is neither: what follows it is not a reason
     return [line for line in out if line is not None]
+
+
+def install_problems(output):
+    """What apt says is wrong with an install: its `E:` lines and the unmet dependencies it lists."""
+    return [line.strip() for line in output.splitlines() if line.startswith("E:") or " : Depends: " in line]
 
 
 def installed(output):
@@ -406,7 +414,7 @@ def execute(plan, label, failures):
                 failures.append(f"{where}: exit {rc}; " + "; ".join(problems or [out.strip()[-500:]]))
         elif k == "install":
             if rc:
-                failures.append(f"{where}: exit {rc}: {out.strip()[-1500:]}")
+                failures.append(f"{where}: exit {rc}; " + "; ".join(install_problems(out) or [out.strip()[-500:]]))
             got = installed(out)
             print("    " + " ".join(sorted(got)))
             packages += got
