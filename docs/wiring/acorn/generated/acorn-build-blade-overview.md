@@ -11,7 +11,9 @@ GND, TCK, TDO, TMS, TDI, J2 and K2 are the names on the pictures for each wire. 
 ![The finished wiring: Acorn to Compute Blade](acorn-wiring-computeblade.png){.only-light}
 ![The finished wiring: Acorn to Compute Blade](acorn-wiring-computeblade-dark.png){.only-dark}
 
-Nothing in this guide cuts a wire to length. The bought cable is cut in half, once, in step 2 of [How to prepare the JTAG cable's wires (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/jtag-wires.html). That is before the meter check, which needs the cut faces. Each half is then used at the length it has. The exception is the wires that are cut back at the plug and the one wire that is cut to take the resistor. Step 3 of that page checks that each half reaches from the card to the Compute Blade's headers. That is before any wire is cut back or crimped.
+Nothing in this guide cuts a wire to length. The bought cable is cut in half, once, in step 2 of [How to prepare the JTAG cable's wires (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/jtag-wires.html). That is before the meter check, which needs the cut faces.
+
+Each half is then used at the length it has. The exception is the wires that are cut back at the plug and the one wire that is cut to take the resistor. Step 3 of that page checks that each half reaches from the card to the Compute Blade's headers. That is before any wire is cut back or crimped.
 
 ## The order of work
 
@@ -21,7 +23,6 @@ Nothing in this guide cuts a wire to length. The bought cable is cut in half, on
 4. [How to prepare the UART cable's wires (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/uart-wires.html): the P2 cable's wires flagged, checked with a meter, cut back and crimped.
 5. [How to fill the UART cable's housing (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/uart-housing.html): the P2 cable's housing filled and checked.
 6. [How to check the cables on the bench (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/bench-check.html): both cables checked on the host before power, the card out of its slot.
-7. [How to fit the cables and the card (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/fitting.html): the plugs, the card and the housings go in.
-8. [How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html): the check run on the host. A failing line is followed to its wire in [A failing Acorn test on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/troubleshooting/compute-blade-failing-test.html).
+7. [How to fit the cables and the card (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/fitting.html): the plugs, the card and the housings go in. Then the check is run on the host, as in [How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html). A failing line is followed to its wire in [A failing Acorn test on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/troubleshooting/compute-blade-failing-test.html).
 
 Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn is the same PCB).

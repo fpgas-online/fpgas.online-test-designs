@@ -16,7 +16,7 @@ An Acorn is sold as a CLE-215+, a CLE-215 or a CLE-101. The check's summary name
 
 ## A card on the image it was sold with
 
-Two tests need no design of ours in the card: `pcie-link` and `jtag`. They are the wiring tests of a card that has not been converted. The tests of the P2 wires need the fpgas.online design running in the card ([converting a card](https://docs.fpgas.online/en/latest/boards/acorn/pcie-programming.html)). Which test uses which wire is a table for each host. The tables: [Acorn tests and their wires on a Raspberry Pi 5](https://docs.fpgas.online/en/latest/boards/acorn/checks/rpi-5-tests.html) and [Acorn tests and their wires on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-tests.html).
+Two tests need no design of ours in the card: `pcie-link` and `jtag`. They are the wiring tests of a card that has not been converted. The tests of the P2 wires need the fpgas.online design running in the card ([How to install the fpgas.online images on an Acorn](https://docs.fpgas.online/en/latest/boards/acorn/setup/install-images.html)). Which test uses which wire is a table for each host. The tables: [Acorn tests and their wires on a Raspberry Pi 5](https://docs.fpgas.online/en/latest/boards/acorn/checks/rpi-5-tests.html) and [Acorn tests and their wires on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-tests.html).
 
 ## On a Compute Blade
 
