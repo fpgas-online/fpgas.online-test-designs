@@ -16,6 +16,7 @@ import importlib.util
 import pathlib
 import re
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -77,34 +78,57 @@ def _target(board):
     return _load(GATEWARE / f"pmod_pin_id_{board}.py", f"pmod_pin_id_{board}")
 
 
+def _senders(module):
+    """Every UARTTxIdentifier in the module tree, as the design built it."""
+    out, stack = [], [module]
+    while stack:
+        m = stack.pop()
+        if type(m).__name__ == "UARTTxIdentifier":
+            out.append(m)
+        stack += [sub for _name, sub in m._submodules]
+    return out
+
+
 def _elaborate(board, variant, toolchain):
     target = _target(board)
     kwargs = {"toolchain": toolchain} | ({"variant": variant} if variant else {})
     platform, pin_list, module = target.design(**kwargs)
+    senders = _senders(module)
     # as LiteX's toolchain build does it (litex/build/generic_toolchain.py): finalize, which gives a design with
     # no clock domain of its own the board's default clock as sys, then convert to Verilog
     fragment = module.get_fragment()
+    # a sender on a shared wire drives a tristate's output, not the pad: the tristate says which pad (read before
+    # the conversion lowers it to the vendor's IO cell)
+    tristates = {id(s.o): s.target for s in fragment.specials if type(s).__name__ == "Tristate"}
     platform.finalize(fragment)
     verilog = str(platform.get_verilog(fragment, name=platform.name))
-    driven = {}
-    for _sig, pins, _others, (name, number, _sub) in platform.constraint_manager.get_sig_constraints():
+    pads, driven = {}, {}
+    for sig, pins, _others, (name, number, _sub) in platform.constraint_manager.get_sig_constraints():
         if name.startswith("pin_id_"):
             assert number == 0 and name not in driven, name
             driven[name] = pins
-    return target, platform, pin_list, driven, verilog
+            pads[id(sig)] = pins
+    # what each sender sends, and the balls of the pad it drives
+    sent = []
+    for tx in senders:
+        pad = tx.pin if id(tx.pin) in pads else tristates[id(tx.pin)]
+        sent.append((pads[id(pad)], tx.label))
+    return SimpleNamespace(
+        target=target, platform=platform, pin_list=pin_list, driven=driven, verilog=verilog, sent=sent
+    )
 
 
 @pytest.mark.parametrize(("board", "variant", "toolchain"), CASES)
 def test_the_target_elaborates_and_each_driven_ball_sends_its_own_name(board, variant, toolchain):
-    _target_mod, _platform, pin_list, driven, verilog = _elaborate(board, variant, toolchain)
-    assert "module" in verilog and "endmodule" in verilog
-    labels = [label for _resource, label in pin_list]
-    assert labels and all(label.endswith("\r\n") for label in labels), labels
-    # pin_id_<i> sends pin_list[i]'s label, and the platform puts it on exactly that ball
-    assert sorted(driven) == sorted(f"pin_id_{i}" for i in range(len(pin_list)))
-    for i, label in enumerate(labels):
-        assert driven[f"pin_id_{i}"] == [label.removesuffix("\r\n")], (board, i, label)
-    assert len(set(labels)) == len(labels), "two pins send the same name"
+    e = _elaborate(board, variant, toolchain)
+    assert "module" in e.verilog and "endmodule" in e.verilog
+    # read from the senders the module holds: each drives one pin_id_* ball and sends that ball's own name
+    assert len(e.sent) == len(e.driven) == len(e.pin_list) > 0
+    for balls, label in e.sent:
+        assert label.endswith("\r\n") and balls == [label.removesuffix("\r\n")], (board, balls, label)
+    assert len({tuple(b) for b, _label in e.sent}) == len(e.sent), "two senders on one ball"
+    # and the pin list design() returns (which main() prints) is what the senders send
+    assert sorted(label for _b, label in e.sent) == sorted(label for _r, label in e.pin_list)
 
 
 def _connector_balls(platform, connectors):
@@ -114,22 +138,22 @@ def _connector_balls(platform, connectors):
 
 @pytest.mark.parametrize("board", ["arty", "fomu", "tt"])
 def test_a_connector_target_sends_every_ball_of_its_connectors(board):
-    target, platform, pin_list, _driven, _verilog = _elaborate(board, *TARGETS[board][0])
-    balls = [label.removesuffix("\r\n") for _resource, label in pin_list]
-    assert balls == _connector_balls(platform, target.CONNECTORS)
+    e = _elaborate(board, *TARGETS[board][0])
+    balls = [label.removesuffix("\r\n") for _resource, label in e.pin_list]
+    assert balls == _connector_balls(e.platform, e.target.CONNECTORS)
 
 
 def test_the_acorn_target_sends_the_fleet_s_wired_p2_pins():
-    _target_mod, _platform, pin_list, _driven, _verilog = _elaborate("acorn", *TARGETS["acorn"][0])
-    balls = [label.removesuffix("\r\n") for _resource, label in pin_list]
+    e = _elaborate("acorn", *TARGETS["acorn"][0])
+    balls = [label.removesuffix("\r\n") for _resource, label in e.pin_list]
     assert balls == [acorn_p2.SERIAL_TX, acorn_p2.SERIAL_RX, *acorn_p2.SPARE_GPIO]
 
 
 def test_the_netv2_target_sends_on_the_platform_s_serial_pins():
-    _target_mod, platform, pin_list, _driven, _verilog = _elaborate("netv2", *TARGETS["netv2"][0])
-    balls = [label.removesuffix("\r\n") for _resource, label in pin_list]
+    e = _elaborate("netv2", *TARGETS["netv2"][0])
+    balls = [label.removesuffix("\r\n") for _resource, label in e.pin_list]
     # the serial pins as litex-boards' platform lists them: the pins the NeTV2 wires to the Pi
-    (serial,) = [r for r in sys.modules[type(platform).__module__]._io if r[:2] == ("serial", 0)]
+    (serial,) = [r for r in sys.modules[type(e.platform).__module__]._io if r[:2] == ("serial", 0)]
     subs = [s for s in serial[2:] if isinstance(s, Subsignal)]
     pins = {s.name: next(c.identifiers for c in s.constraints if isinstance(c, Pins)) for s in subs}
     assert balls == [*pins["tx"], *pins["rx"]]
@@ -137,8 +161,7 @@ def test_the_netv2_target_sends_on_the_platform_s_serial_pins():
 
 @pytest.mark.parametrize("board", sorted(HOST.BOARDS))
 def test_the_host_scanner_s_map_names_only_balls_the_design_sends(board):
-    _target_mod, _platform, pin_list, _driven, _verilog = _elaborate(board, *TARGETS[board][0])
-    sent = {label.removesuffix("\r\n") for _resource, label in pin_list}
+    sent = {label.removesuffix("\r\n") for _balls, label in _elaborate(board, *TARGETS[board][0]).sent}
     mapped = [ball for _gpio, ball, _label in HOST.BOARDS[board]["pins"]]
     assert set(mapped) <= sent, sorted(set(mapped) - sent)
     if "untested" not in HOST.BOARDS[board]:  # a map that leaves nothing out checks every ball the design sends
@@ -146,8 +169,8 @@ def test_the_host_scanner_s_map_names_only_balls_the_design_sends(board):
 
 
 def test_the_scanner_s_table_of_every_arty_pmod_ball_is_the_platform_s():
-    target, platform, _pin_list, _driven, _verilog = _elaborate("arty", *TARGETS["arty"][0])
-    table = platform.constraint_manager.connector_manager.connector_table
-    assert {f"Arty J{c[-1].upper()}": set(table[c]) for c in target.CONNECTORS} == {
+    e = _elaborate("arty", *TARGETS["arty"][0])
+    table = e.platform.constraint_manager.connector_manager.connector_table
+    assert {f"Arty J{c[-1].upper()}": set(table[c]) for c in e.target.CONNECTORS} == {
         conn: set(balls) for conn, balls in HOST.ARTY_PMODS.items()
     }
