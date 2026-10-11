@@ -955,6 +955,7 @@ def test_only_the_last_six_device_lines_are_kept_and_cdone_stays_last(tmp_path, 
     ("[ 1209.123456] pi kernel: brcmfmac: power management disabled", False),  # a timestamp is not an ID
     ("[   12.3] pi kernel: usbcore: registered new interface driver usbhid", False),  # says nothing of a device
     ("[   12.4] fomu1209 kernel: mmc0: new high speed SDHC card", False),  # nor a hostname
+    ("[    1.5] pi kernel: dwc_otg 3f980000.usb: DWC OTG Controller", False),  # a controller, not a device
 ])  # fmt: skip
 def test_the_kernel_lines_kept_are_a_usb_devices_or_ports(tmp_path, fomu_usb, line, kept):
     run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", (0, line + "\n"))])

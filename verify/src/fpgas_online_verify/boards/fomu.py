@@ -36,14 +36,12 @@ CRESET, CDONE = 27, 17
 HEADER_GPIOS = (8, 9, 10, 11, 17, 24, 25, 27)  # the lines fomu_header_id.py takes
 HEADER_TIMEOUT = 60
 FOBOOT_WAIT = 10.0  # s for foboot to appear on USB after the reset
-# The kernel's lines about a USB device ("usb 1-1.2: …"), kept when foboot does not come back: how the reset went on
-# the USB side. Not the drivers' registration lines ("usbcore: registered …"), which say nothing about a device.
-# A port's own lines too ("usb 1-1-port2: disabled by hub …"): what an enumeration that never ends prints. The IDs
-# only as the kernel writes them, so a timestamp such as [ 1209.1] is not taken for one.
-USB_KERNEL_RE = re.compile(
-    r"\busb (?:usb\d+|\d+-[\d.]+)(?:-port\d+)?:|unable to enumerate USB device"
-    r"|idVendor=1209|idProduct=5bf0|\b1209:5bf0\b"
-)
+# The kernel's lines about a USB device or port ("usb 1-1.2: …", "usb 1-1-port2: disabled by hub …", a root hub's
+# "usb usb1-port2: …"), kept when foboot does not come back: how the reset went on the USB side. The kernel names
+# the device or port on every such line (hub.c), its IDs included ("usb 1-1.2: New USB device found, idVendor=1209
+# …"), so that prefix is the whole pattern: not the drivers' registration lines ("usbcore: registered …"), and not
+# a 1209 in a timestamp or a hostname.
+USB_KERNEL_RE = re.compile(r"\busb (?:usb\d+|\d+-[\d.]+)(?:-port\d+)?:")
 # The EVT's flash, U4: a Winbond W25Q128JV-IM (tomu-fpga.sch), RDID EFh 70h 18h.
 FLASH_JEDEC = "ef7018"
 FLASH_PART, FLASH_BYTES = "W25Q128JV", 16 * 1024 * 1024
