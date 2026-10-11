@@ -81,14 +81,14 @@ The NeTV2 is designed to sit on top of a Raspberry Pi, connecting through the 40
 
 ### On a Raspberry Pi 5
 
-- **Board type**: a bare developer NeTV2 (unpackaged)
+- **Board type**: in one setup, a bare developer NeTV2 (unpackaged)
 - **GPIO connection**: JTAG (4 signals + SRST) and UART (TX/RX)
 - **PCIe connection**: Gen2 x1 via RPi5 PCIe connector
-- **lspci**: Xilinx device with vendor `10ee`, device `7011`
+- **lspci**: a Xilinx device, vendor `10ee`, device `7011`, once a design with a PCIe endpoint is loaded
 
 ### On a Raspberry Pi 3
 
-- **Board type**: a stock packaged NeTV2 (as sold through Crowd Supply)
+- **Board type**: in one setup, a stock packaged NeTV2 (as sold through Crowd Supply)
 - **GPIO connection**: JTAG (4 signals + SRST) and UART (TX/RX)
 - **PCIe connection**: Not available (RPi3 has no PCIe interface)
 

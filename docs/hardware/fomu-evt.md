@@ -225,7 +225,7 @@ iceprog design.bin
 Source: [Fomu Workshop](https://workshop.fomu.im)
 
 ## Test Infrastructure Hosts
-Which host carries the Fomu EVT is on [the welland site](https://docs.fpgas.online/en/latest/sites/welland.html)'s page. An [OpenVizsla](https://github.com/openvizsla/ov_ftdi) OV3 USB protocol analyser (`1d50:607c`, serial
+Which host carries the Fomu EVT is in the site records [site-welland.md](site-welland.md) and [site-ps1.md](site-ps1.md); each site lists its live boards at [welland.fpgas.online/fpgas](https://welland.fpgas.online/fpgas/) and [ps1.fpgas.online/fpgas](https://ps1.fpgas.online/fpgas/). An [OpenVizsla](https://github.com/openvizsla/ov_ftdi) OV3 USB protocol analyser (`1d50:607c`, serial
 OV100662) sits inline on the Fomu's USB, to debug the Fomu's USB stack (DFU programming, CDC-ACM serial, custom
 USB protocols) without changing the FPGA design or host software. The check names it as a debug tool, not a
 board.

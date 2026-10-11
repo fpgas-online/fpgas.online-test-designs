@@ -166,7 +166,7 @@ internal VREF of 0.75 V (per Vivado's IO report and bit2fasm of its image). The 
 | RESET_N    | K16                                                             | LVCMOS15                         |
 
 Source: `_io["ddram"]` in [LiteX sqrl_acorn.py](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/sqrl_acorn.py)
-(litex-boards dc89d11, as pinned in `uv.lock`). The DDR memory test built from these pins passes memtest on a CLE-215+.
+(litex-boards dc89d11, as pinned in `uv.lock`). The DDR memory test built from these pins has passed memtest on a CLE-215+.
 
 ## Programming
 
@@ -298,7 +298,7 @@ GPIO.
 
 ## Where the Acorns are
 
-Which hosts carry an Acorn, at which site, is on the docs site's site pages: [The welland site](https://docs.fpgas.online/en/latest/sites/welland.html) and [the ps1 site](https://docs.fpgas.online/en/latest/sites/ps1.html). What each host's check last reported is on the site itself.
+Which hosts carry an Acorn is in the site records [site-welland.md](site-welland.md) and [site-ps1.md](site-ps1.md); each site lists its live boards at [welland.fpgas.online/fpgas](https://welland.fpgas.online/fpgas/) and [ps1.fpgas.online/fpgas](https://ps1.fpgas.online/fpgas/).
 
 | Variant                  | FPGA          | DDR3   |
 | ------------------------ | ------------- | ------ |

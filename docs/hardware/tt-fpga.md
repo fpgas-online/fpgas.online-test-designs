@@ -226,7 +226,7 @@ The TT FPGA board does not have a dedicated LiteX platform file in litex-boards.
 
 ## Deployment
 
-Which hosts carry a TT FPGA demo board, at which site, is on the docs site's site pages: [the welland site](https://docs.fpgas.online/en/latest/sites/welland.html) and [the ps1 site](https://docs.fpgas.online/en/latest/sites/ps1.html). The public boards are on [tinytapeout.fpgas.online](https://tinytapeout.fpgas.online).
+Which hosts carry a TT FPGA demo board is in the site records [site-welland.md](site-welland.md) and [site-ps1.md](site-ps1.md); each site lists its live boards at [welland.fpgas.online/fpgas](https://welland.fpgas.online/fpgas/) and [ps1.fpgas.online/fpgas](https://ps1.fpgas.online/fpgas/). The public boards are on [tinytapeout.fpgas.online](https://tinytapeout.fpgas.online).
 
 Each RPi connects to a TT FPGA board via USB-C, has a Digilent Pmod HAT for
 GPIO-level control of the TT I/O pins, and an ov5647 camera publishing a live
