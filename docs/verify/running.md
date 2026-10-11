@@ -27,8 +27,8 @@ sudo fpgas-verify --no-publish --test TEST
 
 ### Check
 
-The summary, on stderr, starts with `fpgas-verify: pass`. The board's line under it ends in `pass`, and
-so does the line of each test that ran.
+The summary, on stderr, starts with `fpgas-verify: pass`. The board's line (two spaces in, the board's name
+first) ends in `pass`. So does each test line under it (four spaces in, the test's name first).
 
 ### If it fails
 
