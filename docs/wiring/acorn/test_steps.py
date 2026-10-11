@@ -815,3 +815,23 @@ def test_every_building_how_to_has_the_five_headings_and_says_what_comes_next(ke
         nxt = text[text.index("## Next") :]
         wanted = docs_pages.link(c.key, order[i + 1]) if i + 1 < len(order) else docs_pages.link(c.key, "check-1")
         assert wanted in nxt, page
+
+
+def test_every_picture_with_the_card_photograph_says_it_has_a_cable_in_p1_and_the_readers_has_none():
+    """The card photograph has a mated cable in P1: each picture that crops it says so (acorn-cw.jpg)."""
+    said = steps.PHOTO_CABLE
+    assert "already in P1" in said and "nothing in P2" in said and "Your card has nothing in either" in said
+    for key, c in wiring.CARRIERS.items():
+        pictures = [picture(key, connector) for connector in wiring.CONNECTORS]
+        pictures += [steps.fit(c, 1)]
+        for connector in wiring.CONNECTORS:
+            pictures += [steps.prepare(c, connector)]
+        for svg in pictures:
+            assert said in " ".join(words(svg))
+    for connector in wiring.CONNECTORS:
+        assert said in " ".join(words(steps.flag(connector)))
+        assert said in " ".join(words(steps.ground_check(connector)))
+    assert said in " ".join(words(steps.card()))
+    for c in wiring.CARRIERS.values():
+        text = steps.procedure(c)
+        assert text.count("the card in the photograph has a cable already in P1 and nothing in P2.") == 2

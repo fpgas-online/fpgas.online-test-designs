@@ -631,6 +631,7 @@ def cable(c, connector):
         "bold",
         RED,
     )
+    ty = para(sh, 30, ty + 4, PHOTO_CABLE, W - 40, fill=MUTED)
     ty = wire_one_note(sh, 30, ty - LINE + 5, W - 40, c, connector) + LINE
     sh.h = math.ceil(ty - LINE + 4)
     sh.check(file_name(c, connector))
@@ -695,6 +696,12 @@ def title(sh, first, second):
 
 
 SKETCHED = "Sketched, not from a photograph."
+# Said under every picture that shows the card's photograph: the photograph is of a card with a cable in P1, and the
+# reader's card has none there until the plug goes in.
+PHOTO_CABLE = (
+    "The photograph has a cable already in P1 and nothing in P2. Your card has nothing in either until you press a "
+    "plug in."
+)
 
 
 # ----------------------------------------------------------------------------------------------
@@ -779,6 +786,7 @@ def prepare(c, connector):
         )
     y = para(sh, 30, y + 4, COLOURS, W - 40)
     y = para(sh, 30, y + 4, "The plug and the terminals are sketched, not from a photograph.", W - 40, fill=MUTED)
+    y = para(sh, 30, y + 4, PHOTO_CABLE, W - 40, fill=MUTED)
     sh.h = math.ceil(y - LINE + 14)
     sh.check(f"prepare {c.key} {connector}")
     return sh.svg()
@@ -953,7 +961,7 @@ def flag(connector):
         sh,
         30,
         y + 4,
-        f"All {count} wires are black. The plug and the flags are sketched.",
+        f"All {count} wires are black. The plug and the flags are sketched. {PHOTO_CABLE}",
         W - 40,
         fill=MUTED,
         dark_tail=DRAWN_LIGHT,
@@ -1027,7 +1035,8 @@ def ground_check(connector):
         sh,
         30,
         y + 4,
-        "Wire 1's beep shows only that wire 1 and the pad are joined. The plug, the flags and the meter are sketched.",
+        "Wire 1's beep shows only that wire 1 and the pad are joined. The plug, the flags and the meter are sketched. "
+        + PHOTO_CABLE,
         W - 40,
         fill=MUTED,
     )
@@ -1063,7 +1072,14 @@ def card():
     for name, words in rows:
         sh.text(30, y, name, T, "bold")
         y = para(sh, 30, y + LINE, words, W - 40) + 6
-    y = para(sh, 30, y + 2, "Photo: RHS Research (LiteFury underside; the Acorn is the same PCB).", W - 40, fill=MUTED)
+    y = para(
+        sh,
+        30,
+        y + 2,
+        f"Photo: RHS Research (LiteFury underside; the Acorn is the same PCB). {PHOTO_CABLE}",
+        W - 40,
+        fill=MUTED,
+    )
     sh.h = math.ceil(y - LINE + 14)
     sh.check("card")
     return sh.svg()
@@ -1399,7 +1415,9 @@ def procedure_parts(c, restart=False):
         half = "one" if connector == next(iter(wiring.CONNECTORS)) else "the other"
         flag = [
             f"Press the plug of {half} half into socket {connector} on the underside of the Acorn. "
-            "Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost.",
+            "Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost. "
+            "In the picture under this step, the card in the photograph has a cable already in P1 and nothing in P2. "
+            "Your card has nothing in either socket until you press a plug in.",
             f"Put a numbered tape flag on each of the {len(pins)} wires, 1 at the left to {len(pins)}, about "
             f"{lengths['flag_back']} mm from the cut end. "
             "Keep each flag clear of the end that will be cut and stripped later. "
@@ -1971,7 +1989,8 @@ def fit(c, half):
         tx = px + pw + 16
         same = "Wire 1 at the pin 1 end of each socket: the same way round as when you put the flags on."
         ty = para(sh, tx, py + 20, same, W - 10 - tx)
-        para(sh, tx, ty + 4, "The plugs are sketched.", W - 10 - tx, fill=MUTED)
+        ty = para(sh, tx, ty + 4, "The plugs are sketched.", W - 10 - tx, fill=MUTED)
+        para(sh, tx, ty + 2, PHOTO_CABLE, W - 10 - tx, fill=MUTED)
         y = plug_y + 58 + 74
     else:
         title(sh, f"{c.name}: the card, then the housings", "after the plugs are in their sockets")
