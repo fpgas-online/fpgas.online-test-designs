@@ -3,8 +3,9 @@
 The pins, the cable and the GPIO chip come from the host's setup (setup.py, from wiring.toml).
 
   rp1-pio  On a Pi 5 / CM5 (BCM2712): /dev/pio0 a character device that opens read-write, for
-           openfpgaloader-rp1pio. No bootloader setting is read; when it fails, whether rp1_fw and rp1_pio
-           are loaded and the kernel's rp1-pio / RP1 firmware lines say why. Not run on other hosts.
+           openFPGALoader's rp1pio cable (openfpgaloader-fpgasonline-git). No bootloader setting is read;
+           when it fails, whether rp1_fw and rp1_pio are loaded and the kernel's rp1-pio / RP1 firmware
+           lines say why. Not run on other hosts.
   jtag     `openFPGALoader --detect` over the P1 cable must find one device, the variant's part (any silicon
            version: the whole IDCODE is read from openFPGALoader's raw scan and decoded, idcode.py), and
            `openFPGALoader --read-dna` must read the device DNA the SoC reports over BAR0. An IDCODE read
@@ -148,7 +149,7 @@ def held_pins(chip, gpios, sysfs=SYSFS_GPIO, debugfs=DEBUGFS_PINCTRL):
     return held
 
 
-# -- The Pi 5's RP1 PIO, for openfpgaloader-rp1pio ---------------------------------------------------------
+# -- The Pi 5's RP1 PIO, for openFPGALoader's rp1pio cable --------------------------------------------------------
 
 DT_COMPATIBLE = "/proc/device-tree/compatible"
 SYSFS_MODULE = "/sys/module"
@@ -169,7 +170,7 @@ def not_rp1_host(compatible=DT_COMPATIBLE):
 
 
 def rp1_pio(run, sysfs_module=SYSFS_MODULE, dev=PIO_DEV):
-    """openfpgaloader-rp1pio drives JTAG through /dev/pio0: it must be there and open. Only when it does not are
+    """openFPGALoader's rp1pio cable drives JTAG through /dev/pio0: it must be there and open. Only when it does not are
     the modules looked at (a built-in driver has no /sys/module entry) and the kernel's own words added: a
     bootloader whose firmware rp1_pio cannot talk to logs "failed to contact RP1 firmware" and never creates
     /dev/pio0. The journal only explains a failure; a journal that cannot be read changes nothing."""
