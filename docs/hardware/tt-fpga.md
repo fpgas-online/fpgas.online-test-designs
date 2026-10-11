@@ -55,7 +55,7 @@ sudo fpgas-tt-fpga-verify --no-publish
 
 ### Check
 
-The first line of the output starts with `fpgas-verify: pass`. The board's line (two spaces in, the board's name first) ends in `pass`. So does each test line under it (four spaces in, the test's name first).
+The first line of the output starts with `fpgas-verify: pass`. The board's line (two spaces in, the board's name first) ends in `pass`. So does the line of each test that ran (four spaces in, the test's name first). The `flash none: …` line is a note, not a test.
 
 ### If it fails
 
