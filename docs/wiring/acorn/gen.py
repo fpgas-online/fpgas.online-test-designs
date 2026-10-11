@@ -584,13 +584,15 @@ def acorn_photo(sh, x, centre_y, w, rotation):
     (ax, ay, _aw, ah), k = sh.photo(f"acorn-{rotation}.jpg", x, centre_y - (top + bottom) / 2 * k, w)
     if rotation == "cw":  # connectors on the left edge, P2 on top, pin 1 at the bottom, M.2 edge below
         p1, p2 = ((ax + x0 * k, ay + y0 * k, ax + x1 * k, ay + y1 * k) for x0, y0, x1, y1 in ACORN_CW.values())
-        sh.text(x + w / 2, ay - 10, "Acorn underside, fan end", 12.5, "bold", INK, "middle")
+        sh.text(x + w / 2, ay - 25, "Acorn underside, the end", 12.5, "bold", INK, "middle")
+        sh.text(x + w / 2, ay - 10, "away from the M.2 edge", 12.5, "bold", INK, "middle")
         sh.text(x + w / 2, ay + ah + 17, "M.2 edge connector this way", 11.5, "bold", MUTED, "middle")
         sh.add(f'<path d="M{x + w / 2 - 7},{ay + ah + 24} l14,0 l-7,10 z" fill="{MUTED}"/>')
     else:  # connectors on the right edge, P1 on top, pin 1 at the top, M.2 edge above
         p1 = (ax + 394 * k, ay + 550 * k, ax + 516 * k, ay + 764 * k)
         p2 = (ax + 394 * k, ay + 796 * k, ax + 512 * k, ay + 1006 * k)
-        sh.text(x + w / 2, ay + ah + 17, "Acorn underside, fan end", 12.5, "bold", INK, "middle")
+        sh.text(x + w / 2, ay + ah + 17, "Acorn underside, the end", 12.5, "bold", INK, "middle")
+        sh.text(x + w / 2, ay + ah + 17 + 15, "away from the M.2 edge", 12.5, "bold", INK, "middle")
         sh.text(x + w / 2, ay - 10, "M.2 edge connector this way", 11.5, "bold", MUTED, "middle")
         sh.add(f'<path d="M{x + w / 2 - 7},{ay - 26} l14,0 l-7,-10 z" fill="{MUTED}"/>')
     for rect, name in ((p1, "P1"), (p2, "P2")):
