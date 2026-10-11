@@ -14,7 +14,7 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 
 ## Steps
 
-**1.** This is a bench check; the housings come off again before the cables are fitted. If the Compute Blade is on, ask the site operator, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. The Acorn stays out of its slot; if it is fitted, take it out. Take its screw out first: an M2x2.5 screw with an M2 nylon washer, which takes a PH1 driver ([the Compute Blade's assembly guide](https://github.com/uptime-lab/compute-blade/blob/main/docs/docs/blade/getting-started/assembly.mdx)). Then fit the P1 housing on the Extension Port with its marked corner on the pin printed 1 beside the header. The P1 cavity picture is shown again below, for which wire goes in which cavity, and which corner is marked.
+**1.** This is a bench check; the housings come off again before the cables are fitted. If the Compute Blade is on, it must be off first. Ask the site operator, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. The Acorn stays out of its slot; if it is fitted, take it out. Take its screw out first: an M2x2.5 screw with an M2 nylon washer, which takes a PH1 driver ([the Compute Blade's assembly guide](https://github.com/uptime-lab/compute-blade/blob/main/docs/docs/blade/getting-started/assembly.mdx)). Then fit the P1 housing on the Extension Port with its marked corner on the pin printed 1 beside the header. The P1 cavity picture is shown again below, for which wire goes in which cavity, and which corner is marked.
 
 ![Which wire goes in which cavity, P1 cable](acorn-cable-blade-p1.png){.only-light}
 ![Which wire goes in which cavity, P1 cable](acorn-cable-blade-p1-dark.png){.only-dark}
@@ -24,11 +24,19 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 ![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2.png){.only-light}
 ![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2-dark.png){.only-dark}
 
-**3.** The Acorn is not in its slot and the plugs are free. Put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Compute Blade: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent. Contact 1's beep shows only that contact 1 and the shell are joined. Turned round, the P1 housing's GND wire would sit on IO3 and the P2 housing's GND wire would sit on TX, not a ground pin. Do not rely on the beep for which way round a housing is: look at each marked corner.
+**3.** The Acorn is not in its slot and the plugs are free. Put one meter probe on contact 1 (GND) of a plug. Put the other on the metal shell of a USB socket on the Compute Blade: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent. Contact 1's beep shows only that contact 1 and the shell are joined. Turned round, the P1 housing's GND wire would sit on IO3 and the P2 housing's GND wire would sit on TX, not a ground pin. Do not rely on the beep for which way round a housing is: look at each marked corner.
 
 ![The bench check on a Compute Blade](acorn-cable-blade-shell-check.png){.only-light}
 ![The bench check on a Compute Blade](acorn-cable-blade-shell-check-dark.png){.only-dark}
 
+## Check
+
+Contact 1 of each plug beeps to the shell (step 3). Contact 6 of each plug is silent against the shell and every other contact. Each housing's marked corner is on the pin its step names.
+
 ## If it fails
 
-Do not fit the cables. A contact 1 that does not beep means that cable's ground wire is open or in the wrong cavity; a contact 6 that beeps anywhere means the 3.3 V wire was not the one cut back. Go back to that cable's housing, [How to fill the JTAG cable's housing (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/jtag-housing.html) or [How to fill the UART cable's housing (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/uart-housing.html), and check every wire again.
+Do not fit the cables. A contact 1 that does not beep means that cable's ground wire is open or in the wrong cavity. A contact 6 that beeps anywhere means the 3.3 V wire was not the one cut back. Go back to that cable's housing and check every wire again. The pages are [How to fill the JTAG cable's housing (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/jtag-housing.html) or [How to fill the UART cable's housing (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/uart-housing.html).
+
+## Next
+
+[How to fit the cables and the card (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/fitting.html).

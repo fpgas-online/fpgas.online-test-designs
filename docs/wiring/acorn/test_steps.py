@@ -206,7 +206,7 @@ def test_the_procedure_is_complete_in_itself(key):
     assert ("Solder the 470 Ω resistor between the two cut ends." in text) == bool(RAW[key].get("resistors"))
     assert ("heat-shrink tube, about 3 mm" in text) == bool(RAW[key].get("resistors"))
     building = text.replace(steps.fit_actions(c)[-1], "")  # the fitting look says it again, for both
-    assert building.count(f", {steps.HARM}.") == sum(
+    assert building.count(steps.HARM) == sum(
         "puts 5 V on" in steps.turned_warning(c, steps.housing(c, conn)) for conn in wiring.CONNECTORS
     )
     assert f"about {CUT} mm from the plug" in text and "buy a few more than this, as spares" in text
@@ -273,7 +273,7 @@ def test_the_last_step_fits_plugs_then_card_then_both_housings_on_their_headers(
 
 def test_the_look_before_power_names_each_marked_pin_and_says_what_a_turned_housing_does():
     """The last fitting action, per carrier, from the wiring: a Pi 5 housing has no 5 V to turn onto."""
-    assert steps.HARM.endswith("which can destroy the FPGA pin on the Acorn that wire reaches")
+    assert steps.HARM.endswith("Exceeding it can destroy the FPGA pin on the Acorn that wire reaches.")
     assert "DS181, Table 1" in steps.HARM  # the limit it is over, with its source
     for c in wiring.CARRIERS.values():
         last = steps.fit_actions(c)[-1]
@@ -289,8 +289,8 @@ def test_the_look_before_power_names_each_marked_pin_and_says_what_a_turned_hous
     assert "P1 housing's marked corner is on pin 1 of the Extension Port" in blade
     assert "P2 housing's on pin 1 of the UART" in blade
     assert (
-        "Turned round, the P1 housing puts 5 V on the TCK wire and the P2 housing puts 5 V on the K2 wire, "
-        f"{steps.HARM}." in blade
+        "Turned round, the P1 housing puts 5 V on the TCK wire and the P2 housing puts 5 V on the K2 wire. "
+        f"{steps.HARM}" in blade
     )
 
 
@@ -427,7 +427,7 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
     for part in ("jtag-1", "uart-1"):
         first_step = dict(step_blocks(pages[steps.guide_name(c, part)]))[1]
         assert first_step.startswith(f"**1.** {steps.CARD_OUT_STEP}")
-        assert f"If it is fitted, {c.power_off[0].lower()}{c.power_off[1:]} Then take the card out." in first_step
+        assert f"If it is fitted, the {c.name} must be off first. {c.power_off} Then take the card out." in first_step
         assert steps.STATIC in first_step
     assert "cut in half, once" in overview
     # the reach check is asked for at a moment the guide has: after the one cut, before any wire is cut back
@@ -480,7 +480,7 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
     assert ("the one wire that is cut to take the resistor" in overview) == bool(c.resistors)
     if c.resistors:
         said = (
-            f"lands on GPIO14, which is also JTAG TMS: the {c.resistor_value} in the wire is meant to let JTAG through"
+            f"lands on GPIO14, which is also JTAG TMS. The {c.resistor_value} in the wire is meant to let JTAG through"
         )
         assert said in steps.procedure(c)
     # the meter check of wire 1 is on the page that cuts wires, before the cut
@@ -620,7 +620,7 @@ def test_a_quoted_step_number_is_the_step_it_means(key):
     cut, reach = steps.numbered(first, steps.CUT_HALF), steps.numbered(first, steps.REACH)
     meant["jtag-1"] += [[cut]]
     overview = steps.guide(c)[steps.guide_name(c, "overview")]
-    assert f"(step {cut} of {docs_pages.link(c.key, 'jtag-1')}" in overview
+    assert f", in step {cut} of {docs_pages.link(c.key, 'jtag-1')}." in overview
     assert f"Step {reach} of that page checks that each half reaches" in overview and reach == cut + 1
     meant["fit"] = [[f] for f in fit]
     meant["check-3"] = [list(check.jtag_steps())]  # the two checks of GPIO14, on the page about JTAG on a blade
@@ -766,3 +766,24 @@ def test_how_the_card_goes_in_and_comes_out_each_links_the_maker_s_page(key):
     # a cable's second-cable page says what to do with a cable that is still whole, as a step, not as a part
     uart = dict(step_blocks(steps.guide(c)[steps.guide_name(c, "uart-1")]))[1]
     assert "If the Molex cable is still whole, cut it in the middle with side cutters" in uart
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_every_building_how_to_has_the_five_headings_and_says_what_comes_next(key):
+    """Each building page but the overview is a how-to: its headings are a how-to's five, in order, its Check and
+    If it fails are not empty, and its Next names the page that follows in the order of work."""
+    c = wiring.CARRIERS[key]
+    built = steps.guide(c)
+    order = [f"{part}-{n}" for part, _ in steps.GUIDE.values() for n in (1, 2)] + ["bench", "fit"]
+    for i, page in enumerate(order):
+        text = built[steps.guide_name(c, page)]
+        prose = re.sub(r"```.*?```", "", text, flags=re.S)
+        assert re.findall(r"^#+ .*$", prose, re.M) == [
+            "## What you need", "## Steps", "## Check", "## If it fails", "## Next"
+        ], page  # fmt: skip
+        for head, following in (("## Check", "## If it fails"), ("## If it fails", "## Next")):
+            body = text[text.index(head) + len(head) : text.index(following)].strip()
+            assert len(body) > 40, (page, head)
+        nxt = text[text.index("## Next") :]
+        wanted = docs_pages.link(c.key, order[i + 1]) if i + 1 < len(order) else docs_pages.link(c.key, "check-1")
+        assert wanted in nxt, page
