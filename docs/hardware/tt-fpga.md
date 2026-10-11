@@ -226,23 +226,7 @@ The TT FPGA board does not have a dedicated LiteX platform file in litex-boards.
 
 ## Deployment
 
-Eight TT FPGA Demo Boards across two sites. Four are deployed at
-Welland on S3300 ports 33–36 (Tim's rule for that switch: port N carries
-Tiny Tapeout board N; the FPGA emulation boards take the 33–36 block), four
-are pending deployment at PS1. The Welland four are the public
-**fpga-1 … fpga-4** boards on [tinytapeout.fpgas.online](https://tinytapeout.fpgas.online).
-Probed live 2026-09-03.
-
-| Site    | Host       | Board page | RPi (rev)                | IP         | Switch Port | RPi MAC           | RP2350 Serial      | `verify_hardware.py` |
-|---------|------------|------------|--------------------------|------------|-------------|-------------------|--------------------|----------------------|
-| Welland | pi-sw2-p33 | [fpga-1](https://tinytapeout.fpgas.online/board/fpga-1/) | RPi 4 2 GB Rev 1.5 (b03115) | 10.21.2.33 | S3300 33 | e4:5f:01:97:0e:77 | `4df39a7a6856f86f` | welland-pi27 |
-| Welland | pi-sw2-p34 | [fpga-2](https://tinytapeout.fpgas.online/board/fpga-2/) | RPi 4 2 GB Rev 1.5 (b03115) | 10.21.2.34 | S3300 34 | e4:5f:01:97:27:f2 | `fd1a167bd863a198` | welland-pi29 |
-| Welland | pi-sw2-p35 | [fpga-3](https://tinytapeout.fpgas.online/board/fpga-3/) | RPi 4 2 GB Rev 1.5 (b03115) | 10.21.2.35 | S3300 35 | e4:5f:01:97:0c:e3 | `8c46329b33590ecb` | welland-pi31 |
-| Welland | pi-sw2-p36 | [fpga-4](https://tinytapeout.fpgas.online/board/fpga-4/) | RPi 4 8 GB Rev 1.5 (d03115) | 10.21.2.36 | S3300 36 | e4:5f:01:8e:02:27 | `a2961e5cac65b25f` | welland-pi33 |
-| PS1     | TBD        | —          | TBD                      | TBD        | TBD         | TBD               | TBD                | —                    |
-| PS1     | TBD        | —          | TBD                      | TBD        | TBD         | TBD               | TBD                | —                    |
-| PS1     | TBD        | —          | TBD                      | TBD        | TBD         | TBD               | TBD                | —                    |
-| PS1     | TBD        | —          | TBD                      | TBD        | TBD         | TBD               | TBD                | —                    |
+Which hosts carry a TT FPGA demo board, at which site, is on the docs site's site pages: [the welland site](https://docs.fpgas.online/en/latest/sites/welland.html) and [the ps1 site](https://docs.fpgas.online/en/latest/sites/ps1.html). The public boards are on [tinytapeout.fpgas.online](https://tinytapeout.fpgas.online).
 
 Each RPi connects to a TT FPGA board via USB-C, has a Digilent Pmod HAT for
 GPIO-level control of the TT I/O pins, and an ov5647 camera publishing a live
@@ -306,13 +290,11 @@ Tests are orchestrated by [`verify_hardware.py`](../../verify_hardware.py), whic
 scripts and bitstreams to the RPi, then runs the appropriate test:
 
 ```bash
-uv run python verify_hardware.py --board tt --host welland-pi33
+uv run python verify_hardware.py --board tt --host <host>   # a name in verify_hardware.py's HOSTS table
 ```
 
-`verify_hardware.py`'s `HOSTS` table names these boards `welland-pi27` …
-`welland-pi33`, with flat `10.21.0.1xx` addresses that Welland does not use
-([#17](https://github.com/fpgas-online/fpgas.online-test-designs/issues/17));
-the boards are `pi-sw2-p33` … `pi-sw2-p36` at `10.21.2.33` … `10.21.2.36`. The
+`verify_hardware.py`'s `HOSTS` table names these boards by old host names and addresses that the site does not
+use ([#17](https://github.com/fpgas-online/fpgas.online-test-designs/issues/17)). The
 `fpgas-tt` daemon must be stopped before the wrapper can open the serial port
 (see [Deployment](#deployment)).
 

@@ -229,15 +229,14 @@ the Micron part in or out and no more. Telling the two Spansion parts apart
 takes the package marking or the sticker, read by eye, or an SFDP probe
 (5Ah), which only the S25FL127S answers. openFPGALoader needs the bridge
 bitstream at `/usr/share/openFPGALoader/spiOverJtag_xc7a35tcsg324.bit.gz`
-(and the `xc7a100t` one for a -100); the rp1-jtag build of openFPGALoader
-on the welland pool image does not ship them, so fetch them from
+(and the `xc7a100t` one for a -100); a build of openFPGALoader that does not
+ship them needs them fetched from
 [upstream](https://github.com/trabucayre/openFPGALoader/tree/master/spiOverJtag)
 by hand.
 
-**What the welland pool has.** Read through each board's own FT2232: every
-Welland Arty is an XC7A35T (`--detect` prints `idcode 0x362d093`, the IDCODE without its version) with a Spansion part at JEDEC
-`0x012018`, so none has the Micron flash. The other three signals worth reading at the same time, since
-neither the serial nor the model badge gives them:
+**What to read from a board.** Read through the board's own FT2232: `--detect` names the FPGA (an XC7A35T prints
+`idcode 0x362d093`, the IDCODE without its version), and the flash read above names its part. The other three
+signals worth reading at the same time, since neither the serial nor the model badge gives them:
 
 ```bash
 sudo openFPGALoader -c digilent --detect        # idcode -> 35T or 100T

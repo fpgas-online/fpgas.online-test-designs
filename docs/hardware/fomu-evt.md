@@ -225,11 +225,10 @@ iceprog design.bin
 Source: [Fomu Workshop](https://workshop.fomu.im)
 
 ## Test Infrastructure Hosts
-Welland's Fomu EVT sits on the GPIO header of the RPi 3B+ 00000000cc479fd1 (seen on switch 1 port 17 on 8 Oct
-2026). An [OpenVizsla](https://github.com/openvizsla/ov_ftdi) OV3 USB protocol analyser (`1d50:607c`, serial
+Which host carries the Fomu EVT is on [the welland site](https://docs.fpgas.online/en/latest/sites/welland.html)'s page. An [OpenVizsla](https://github.com/openvizsla/ov_ftdi) OV3 USB protocol analyser (`1d50:607c`, serial
 OV100662) sits inline on the Fomu's USB, to debug the Fomu's USB stack (DFU programming, CDC-ACM serial, custom
 USB protocols) without changing the FPGA design or host software. The check names it as a debug tool, not a
-board. Its state is in the [current verify results](../verify/current-results.md#current-results).
+board.
 
 ## LiteX Integration
 
