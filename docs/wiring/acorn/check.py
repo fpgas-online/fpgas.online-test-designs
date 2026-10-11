@@ -542,9 +542,9 @@ def pages(c):
         f"1. {c.power_off}",
         "2. Take the card out and pull both plugs from its sockets.",
         "3. Move the wire.",
-        "4. Check that cable's plug contacts against its housing with the meter. "
-        f"Do that check as {steps.meter_check_steps(c)} of {link('jtag-2')} do for the JTAG cable. "
-        f"Do that check as {steps.meter_check_steps(c)} of {link('uart-2')} do for the UART cable.",
+        "4. Check that cable's plug contacts against its housing with the meter, as when the cable was built:",
+        f"   * the JTAG cable: {steps.meter_check_steps(c)} of {link('jtag-2')};",
+        f"   * the UART cable: {steps.meter_check_steps(c)} of {link('uart-2')}.",
         f"5. Run the bench check, with the card out: {link('bench')}.",
         f"6. Fit the cables: {link('fit')}.",
         (
