@@ -36,8 +36,9 @@ CRESET, CDONE = 27, 17
 HEADER_GPIOS = (8, 9, 10, 11, 17, 24, 25, 27)  # the lines fomu_header_id.py takes
 HEADER_TIMEOUT = 60
 FOBOOT_WAIT = 10.0  # s for foboot to appear on USB after the reset
-# The kernel's USB lines kept when foboot does not come back: how the reset went on the USB side.
-USB_KERNEL_RE = re.compile(r"usb|1209|5bf0", re.I)
+# The kernel's lines about a USB device ("usb 1-1.2: …"), kept when foboot does not come back: how the reset went on
+# the USB side. Not the drivers' registration lines ("usbcore: registered …"), which say nothing about a device.
+USB_KERNEL_RE = re.compile(r"\busb \d+-[\d.]+:|1209|5bf0")
 # The EVT's flash, U4: a Winbond W25Q128JV-IM (tomu-fpga.sch), RDID EFh 70h 18h.
 FLASH_JEDEC = "ef7018"
 FLASH_PART, FLASH_BYTES = "W25Q128JV", 16 * 1024 * 1024
@@ -112,11 +113,11 @@ def header_check(variant, facts, found):
     return ("fail", "; ".join(faults), lines) if faults else ("pass", None, lines)
 
 
-def kernel_usb_lines(runner, keep=12):
+def kernel_usb_lines(runner, keep=6):
     """The kernel's last USB lines this boot, for a foboot that did not come back. A journal that cannot be read
     gives none: it only explains a failure, which stands without it."""
     try:
-        rc, text = runner(["journalctl", "-k", "-b", "--no-pager", "-o", "short-monotonic"], 30)
+        rc, text = runner(["journalctl", "-k", "-b", "--no-pager", "-o", "short-monotonic"], 10)
     except Problem:
         return []
     return [line.strip() for line in text.splitlines() if USB_KERNEL_RE.search(line)][-keep:] if rc == 0 else []
@@ -134,8 +135,9 @@ def foboot_check(variant, facts, found):
     before = ("it was on USB before the reset" if found.get("foboot_before_reset")
               else "it was not on USB before the reset either: a design with no USB was running")  # fmt: skip
     reading = found["header"]
-    output = [f"CDONE before {reading.get('cdone_before')}, in reset {reading.get('cdone_in_reset')}, "
-              f"after {reading.get('cdone_after')}", *found.get("usb_kernel", [])]  # fmt: skip
+    # the kernel's lines first and CDONE last: the console shows a failed test's last 8 lines (runner.summary)
+    output = [*found.get("usb_kernel", []), f"CDONE before {reading.get('cdone_before')}, in reset "
+              f"{reading.get('cdone_in_reset')}, after {reading.get('cdone_after')}"]  # fmt: skip
     return "fail", (f"foboot (1209:5bf0) did not appear on USB within {FOBOOT_WAIT:g} s of the reset, so no "
                     f"design can be loaded over DFU ({before}): look at the Fomu's USB path (an OpenVizsla, "
                     "when one is inline, is on it)"), output  # fmt: skip
