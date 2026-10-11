@@ -16,4 +16,4 @@
 | `rp1-pio` | no wire: `/dev/pio0` on a Pi 5 or CM5 | nothing about the wiring (not run on other hosts) | yes |
 | `flash`, `ddr`, `scratch` | no wire of the cable, except that `scratch` also goes over the serial pair | nothing about the wiring | no |
 
-On a card that has not been converted, `pcie-link` and `jtag` are the wiring tests. The P2 wires are tested only on a card that runs the fpgas.online design, and a card on a Compute Blade is not converted: [The Acorn check](https://docs.fpgas.online/en/latest/boards/acorn/checks/about.html) says why.
+On a card that has not been converted, `pcie-link` and `jtag` are the wiring tests. The P2 wires are tested only on a card that runs the fpgas.online design. A card on a Compute Blade is not converted: [The Acorn check](https://docs.fpgas.online/en/latest/boards/acorn/checks/about.html) says why.

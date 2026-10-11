@@ -2,7 +2,7 @@
 
 ## Every other message about an Acorn
 
-The check's own words, from the tool's list of [common failures](https://docs.fpgas.online/en/latest/verify/common-failures.html#common-failures), which has the other boards' too. A wire of the cables is behind the `jtag` and `p2-…` lines only; for those, [A failing Acorn test on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/troubleshooting/compute-blade-failing-test.html) goes from the line to the wire.
+The check's own words, from the tool's list of [common failures](https://docs.fpgas.online/en/latest/verify/common-failures.html#common-failures), which has the other boards' too. A wire of the cables is behind the `jtag` and `p2-…` lines only. For those, [A failing Acorn test on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/troubleshooting/compute-blade-failing-test.html) goes from the line to the wire.
 
 | It says | Meaning, and what to do |
 |---|---|

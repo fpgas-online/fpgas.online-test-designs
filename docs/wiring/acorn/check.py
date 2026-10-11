@@ -317,8 +317,11 @@ def jtag_steps():
 
 # When JTAG may be run on a blade. Said wherever a blade page gives a command that runs the `jtag` test.
 JTAG_CONDITIONS = (
-    "in a boot with the header's serial port off, and only after steps {} and {} of ".format(*jtag_steps())
-    + f"{BLADE_JTAG} pass (check that GPIO14 is free; check that nothing on the card drives GPIO14)"
+    "in a boot with the header's serial port off. Run `--test jtag` only after steps {} and {} of ".format(
+        *jtag_steps()
+    )
+    + f"{BLADE_JTAG} pass. Step {jtag_steps()[0]} checks that GPIO14 is free, and step {jtag_steps()[1]} checks "
+    "that nothing on the card drives GPIO14"
 )
 # Whom a blade's reader asks first, and why: a reboot is not theirs to do alone.
 ASK_FIRST = (
@@ -531,7 +534,7 @@ def pages(c):
         "",
         "## From a failing line to the wire",
         "",
-        "Find the failing line in the table, then the wire in the two cavity pictures under it: the number in a "
+        "Find the failing line in the table, then the wire in the two cavity pictures under it. The number in a "
         "cavity is the number on the wire's flag.",
         "",
         "To move a wire, the cable goes through the same checks as a new one before any boot:",
@@ -539,13 +542,14 @@ def pages(c):
         f"1. {c.power_off}",
         "2. Take the card out and pull both plugs from its sockets.",
         "3. Move the wire.",
-        f"4. Check that cable's plug contacts against its housing with the meter, as {steps.meter_check_steps(c)} of "
-        f"{link('jtag-2')} or {link('uart-2')} do.",
+        "4. Check that cable's plug contacts against its housing with the meter. "
+        f"Do that check as {steps.meter_check_steps(c)} of {link('jtag-2')} do for the JTAG cable. "
+        f"Do that check as {steps.meter_check_steps(c)} of {link('uart-2')} do for the UART cable.",
         f"5. Run the bench check, with the card out: {link('bench')}.",
         f"6. Fit the cables: {link('fit')}.",
         (
-            f"7. Ask the site operator, then boot the blade. The install is gone after the boot: install the packages "
-            f"again, as in {BLADE_CHECK}, and run the check again."
+            f"7. Ask the site operator, then boot the blade. The install is gone after the boot, so install the "
+            f"packages again, as in {BLADE_CHECK}. Then run the check again."
             if c.key == "blade"
             else "7. Boot the Pi and run the check again."
         ),
@@ -554,8 +558,8 @@ def pages(c):
         + (
             ": `sudo fpgas-acorn-verify --no-publish --test p2-serial`, or `sudo fpgas-acorn-verify --no-publish "
             f"--test jtag`. Run `--test jtag` only {JTAG_CONDITIONS}. In a boot with the header's serial port off, "
-            f"the same goes for the whole check, which runs `jtag` too ({BLADE_CHECK}). Each prints the usual summary, "
-            "then the whole report as JSON."
+            "the same goes for the whole check, which runs `jtag` too. "
+            f"The whole check: {BLADE_CHECK}. Each prints the usual summary, then the whole report as JSON."
             if c.key == "blade"
             else ": `sudo fpgas-acorn-verify --test jtag`, or `--test p2-serial`. Each prints the usual summary, then "
             "the whole report as JSON."
@@ -572,7 +576,7 @@ def pages(c):
     fails += [
         wire_examples.strip(),
         "",
-        "A failing line that is not in the table above is not about a wire of the cables: "
+        "A failing line that is not in the table above is not about a wire of the cables. "
         f"{link('check-2b')} has every other message the check gives about an Acorn.",
         "",
     ]
@@ -582,7 +586,7 @@ def pages(c):
         "## Every other message about an Acorn",
         "",
         f"The check's own words, from the tool's list of [common failures]({FAILURES}), which has the other "
-        "boards' too. A wire of the cables is behind the `jtag` and `p2-…` lines only; for those, "
+        "boards' too. A wire of the cables is behind the `jtag` and `p2-…` lines only. For those, "
         f"{link('check-2')} goes from the line to the wire.",
         "",
         failures(c).strip(),

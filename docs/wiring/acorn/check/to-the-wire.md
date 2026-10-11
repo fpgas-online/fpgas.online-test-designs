@@ -16,8 +16,8 @@
 
 <!-- pi5:begin -->
 **A crossed pair.** The `p2-serial` test
-drives each wire as a plain pin, first from the FPGA and then from the host. `FPGA drives 01` raises J2, which
-should arrive on GPIO14; it arrives on GPIO15:
+drives each wire as a plain pin, first from the FPGA and then from the host. The line `FPGA drives 01` raises J2, which
+should arrive on GPIO14; J2 arrives on GPIO15:
 
 ```text
     p2-serial  fail: J2 -> GPIO14: the FPGA drove 1, the Pi read 0; K2 -> GPIO15: the FPGA drove 0, the Pi read 1; J2 -> GPIO14: the FPGA drove 0, the Pi read 1; K2 -> GPIO15: the FPGA drove 1, the Pi read 0; GPIO14 -> J2: the Pi drove 1, the FPGA read 0; GPIO15 -> K2: the Pi drove 0, the FPGA read 1; GPIO14 -> J2: the Pi drove 0, the FPGA read 1; GPIO15 -> K2: the Pi drove 1, the FPGA read 0; the UARTBone does not answer on /dev/ttyAMA0 after the switch (no fpgas.online SoC answered at 1200 baud after a break)
@@ -32,9 +32,9 @@ should arrive on GPIO14; it arrives on GPIO15:
 ```
 
 **One open wire**, a J5 wire that does not reach GPIO3. GPIO3
-reads 1 whatever the FPGA drives (the Pi's own pull-up on GPIO3 wins over the test's pull-down; on GPIO4 an
-open wire would read the opposite of what was driven), and on this card the FPGA read J5 as 1 whatever the Pi
-drove; H5 and GPIO4 follow each other:
+reads 1 whatever the FPGA drives. The Pi's own pull-up on GPIO3 wins over the test's pull-down. On GPIO4 an
+open wire would read the opposite of what was driven. On this card the FPGA read J5 as 1 whatever the Pi
+drove, and H5 and GPIO4 follow each other:
 
 ```text
     p2-gpio    fail: J5 -> GPIO3: the FPGA drove 0, the Pi read 1; J5 -> GPIO3: the FPGA drove 0, the Pi read 1; GPIO3 -> J5: the Pi drove 0, the FPGA read 1; GPIO3 -> J5: the Pi drove 0, the FPGA read 1
