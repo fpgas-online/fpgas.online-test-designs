@@ -16,6 +16,8 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 
 **1.** This is a bench check; the housings come off again before the cables are fitted. If the Raspberry Pi 5 is on, it must be off first. Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE.
 
+The Waveshare PoE M.2 HAT+ (B) is on the Raspberry Pi 5, with its stacking header fitted. Each housing goes on the pins that come up through the HAT.
+
 The Acorn stays out of its slot; if it is fitted, take it out. Take the screw at its far end out first: the SSD mounting screw the HAT ships with ([Waveshare's page for the HAT](https://www.waveshare.com/poe-m.2-hat-plus-b.htm)).
 
 Then fit the P1 housing on the 40-pin header pins 19 to 26 with its marked corner on pin 19, counted as in the picture. The P1 cavity picture is shown again below, for which wire goes in which cavity, and which corner is marked.
@@ -28,16 +30,16 @@ Then fit the P1 housing on the 40-pin header pins 19 to 26 with its marked corne
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png){.only-light}
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2-dark.png){.only-dark}
 
-**3.** The Acorn is not in its slot and the plugs are free. Put one meter probe on contact 1 (GND) of a plug. Put the other on the metal shell of a USB socket on the Raspberry Pi 5: it must beep. Do the same for the other plug.
+**3.** The Acorn is not in its slot and the plugs are free. Put one meter probe on contact 1 (GND) of a plug. Put the other on pin 14 of the 40-pin header, a ground pin that no housing covers: it must beep. Do the same for the other plug.
 
-Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent. Contact 1's beep shows only that contact 1 and the shell are joined. The beep does not show which way round either housing is. Turned round, its GND wire still sits on a ground pin, so look at each marked corner.
+Then contact 6 of each plug (VCC, the wire you cut back): against pin 14 and against every other contact it must be silent. Contact 1's beep shows only that contact 1 and pin 14 are joined. The beep does not show which way round either housing is. Turned round, its GND wire still sits on a ground pin, so look at each marked corner.
 
 ![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check.png){.only-light}
 ![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check-dark.png){.only-dark}
 
 ## Check
 
-Contact 1 of each plug beeps to the shell (step 3). Contact 6 of each plug is silent against the shell and every other contact. Each housing's marked corner is on the pin its step names.
+Contact 1 of each plug beeps to pin 14 (step 3). Contact 6 of each plug is silent against pin 14 and every other contact. Each housing's marked corner is on the pin its step names.
 
 ## If it fails
 

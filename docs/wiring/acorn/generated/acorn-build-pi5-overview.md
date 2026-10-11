@@ -11,14 +11,16 @@ GND, TCK, TDO, TMS, TDI, J2, K2, J5 and H5 are the names on the pictures for eac
 ![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5.png){.only-light}
 ![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5-dark.png){.only-dark}
 
-Nothing in this guide cuts a wire to length. The bought cable is cut in half, once, in step 2 of [How to prepare the JTAG cable's wires (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/jtag-wires.html). That is before the meter check, which needs the cut faces.
+Nothing in this guide cuts a wire to length. Step 2 of [How to prepare the JTAG cable's wires (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/jtag-wires.html) is the reach check. Each half must reach from the card to the Raspberry Pi 5's headers. That is before the cable is cut, and before any wire is cut back or crimped.
 
-Each half is then used at the length it has. The exception is the wires that are cut back at the plug. Step 3 of that page checks that each half reaches from the card to the Raspberry Pi 5's headers. That is before any wire is cut back or crimped.
+The bought cable is then cut in half, once, in step 3 of that page. That is before the meter check, which needs the cut faces.
+
+Each half is then used at the length it has. The exception is the wires that are cut back at the plug.
 
 ## The order of work
 
 1. [Parts and tools for the Raspberry Pi 5 cables](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/parts.html): the list to tick off before starting.
-2. [How to prepare the JTAG cable's wires (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/jtag-wires.html): the cable cut in half and each half checked for reach. Then the P1 cable's wires flagged, checked with a meter, cut back and crimped.
+2. [How to prepare the JTAG cable's wires (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/jtag-wires.html): each half of the cable checked for reach, and the cable cut in half. Then the P1 cable's wires flagged, checked with a meter, cut back and crimped.
 3. [How to fill the JTAG cable's housing (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/jtag-housing.html): the P1 cable's housing filled and checked.
 4. [How to prepare the UART cable's wires (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/uart-wires.html): the P2 cable's wires flagged, checked with a meter, cut back and crimped.
 5. [How to fill the UART cable's housing (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/uart-housing.html): the P2 cable's housing filled and checked.
