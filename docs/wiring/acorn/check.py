@@ -388,7 +388,7 @@ def about():
         "",
         "`fpgas-verify` is the program that checks an FPGA board from the machine it is attached to. For an Acorn "
         "its check doubles as a wiring test. Each of its tests uses a known set of wires between the card and its "
-        "host, so which tests pass, and what a failing one says, point at the wire.",
+        "host. So which tests pass, and what a failing one says, point at the wire.",
         "",
         "## What the check does to the card",
         "",
@@ -398,8 +398,8 @@ def about():
         "## The two programs",
         "",
         "`fpgas-verify` checks whichever board this host is set up for, as the check at boot does. "
-        "`fpgas-acorn-verify` checks the Acorn whatever the host is set up for. On a host set up for an Acorn the "
-        "two print the same.",
+        "The program `fpgas-acorn-verify` checks the Acorn whatever the host is set up for. On a host set up for an "
+        "Acorn the two print the same.",
         "",
         "## The variants",
         "",
@@ -410,19 +410,21 @@ def about():
         "",
         "Two tests need no design of ours in the card: `pcie-link` and `jtag`. They are the wiring tests of a card "
         "that has not been converted. The tests of the P2 wires need the fpgas.online design running in the card "
-        f"([converting a card]({CONVERTING})). Which test uses which wire is a table for each host: {tests}.",
+        f"([converting a card]({CONVERTING})). Which test uses which wire is a table for each host. "
+        f"The tables: {tests}.",
         "",
         "## On a Compute Blade",
         "",
         "- Do not load a design into a card on a Compute Blade, and do not convert it. The one time a design was "
-        "loaded into a card on a blade, the card's PCIe endpoint did not come back: neither a bus rescan nor a "
+        "loaded into a card on a blade, the card's PCIe endpoint did not come back. Neither a bus rescan nor a "
         "re-probe of the PCIe controller restored it. After the reboot that followed, the blade kept restarting for "
         f"about two hours ([the record of that run]({BLADE_RECORD})).",
         "- So the check's result on a Compute Blade is `fail`, the card being on the image it was sold with. "
-        "`pcie-link` passes when the card is seated, and the tests that need the fpgas.online design are `not run`.",
+        "The test `pcie-link` passes when the card is seated, and the tests that need the fpgas.online design are "
+        "`not run`.",
         "- JTAG's TMS wire is GPIO14, which the header's serial port also uses. In a boot with that port on (kernel "
-        "6.18), `jtag` fails without running the JTAG tool. In a boot with it off, on a Compute Module 5, `jtag` reads "
-        f"the FPGA's IDCODE and device DNA: {BLADE_JTAG}.",
+        "6.18), `jtag` fails without running the JTAG tool. In a boot with that port off, on a Compute Module 5, "
+        f"`jtag` reads the FPGA's IDCODE and device DNA. How to make that boot: {BLADE_JTAG}.",
         "- The check is for a blade with a Compute Module 5. Do not run it on a blade with a Compute Module 4: "
         f"what is open there is in [the record]({BLADE_RECORD}).",
         "- The check cannot show that the two cables are right while the card is not converted. The bench check "
