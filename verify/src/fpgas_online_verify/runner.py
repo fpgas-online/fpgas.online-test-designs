@@ -109,7 +109,7 @@ def find(boards, mode, options, usb, pci):
             how = ("auto: USB/PCI IDs and probed (" if spotted else "auto: probed (") + names + ")"
             return spotted + probed, how + not_taken
         if spotted:
-            return spotted, "auto: USB/PCI IDs, and probing found nothing more"
+            return spotted, "auto: USB/PCI IDs, and probing found nothing more" + not_taken
         how = "auto: USB/PCI IDs, then probing"
     raise Problem("missing", f"none of the installed boards ({', '.join(boards)}) was found ({how})")
 

@@ -139,6 +139,14 @@ def test_a_fomu_claimed_by_cdone_alone_yields_to_a_netv2_found_on_the_same_lines
     assert "fomu not taken: GPIO17 high is the NeTV2's TMS, not a Fomu's CDONE" in report["chosen_by"]
 
 
+def test_a_claim_that_yields_to_a_spotted_board_is_said_even_when_only_the_spotted_claim_is_left(opts):
+    acorn = Fake("acorn", seen=[{"kind": "vendor-xdma"}], weak=True, result="fail")  # weak: probing goes on
+    fomu = Fake("fomu", probes=True, probed=[{"variant": "evt", "cdone": "hi"}])
+    fomu.yields_to, fomu.yield_reason = ("acorn",), "a reason"
+    report = runner.verify(opts, _boards(acorn, fomu), usb=[], pci=[], mode=("auto", "test"))
+    assert [b["board"] for b in report["boards"]] == ["acorn"] and "fomu not taken: a reason" in report["chosen_by"]
+
+
 def test_the_fomu_yields_its_cdone_claim_to_a_netv2():
     from fpgas_online_verify.boards import fomu
 
