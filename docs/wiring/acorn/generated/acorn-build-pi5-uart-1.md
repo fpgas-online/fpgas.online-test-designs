@@ -36,7 +36,7 @@ If the Molex cable is still whole, cut it in the middle with side cutters: each 
 **2.** Find wire 1 of the P2 cable and flag the wires, before cutting any wire back.
 
 1. Press the plug of the other half into socket P2 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost.
-2. Put a numbered tape flag on each of the 6 wires, 1 at the left to 6, about 25 mm back from the tip. Keep each flag clear of the end that will be cut and stripped later. Write P2 on the flag of wire 1 as well: off the card, the two halves look alike.
+2. Put a numbered tape flag on each of the 6 wires, 1 at the left to 6, about 25 mm from the cut end. Keep each flag clear of the end that will be cut and stripped later. Write P2 on the flag of wire 1 as well: off the card, the two halves look alike.
 
 ![The P2 plug in socket P2, a flag on each wire](acorn-cable-p2-flag.png){.only-light}
 ![The P2 plug in socket P2, a flag on each wire](acorn-cable-p2-flag-dark.png){.only-dark}

@@ -334,7 +334,7 @@ def test_the_ground_check_is_in_each_flag_step_and_on_the_box():
         for connector in wiring.CONNECTORS:
             assert text.count(steps.png(steps.ground_check_name(connector))) == 1
         assert text.count("If wire 6 beeps instead, stop") == len(wiring.CONNECTORS)
-        assert text.count(f"about {wiring.LENGTHS['flag_back']} mm back from the tip") == len(wiring.CONNECTORS)
+        assert text.count(f"about {wiring.LENGTHS['flag_back']} mm from the cut end") == len(wiring.CONNECTORS)
         assert text.count("Every other cavity must stay silent for that contact.") == len(wiring.CONNECTORS)
         assert "This is a bench check; the housings come off again before the cables are fitted." in text
         assert ("Trim the resistor's leads to about" in text) == bool(c.resistors)

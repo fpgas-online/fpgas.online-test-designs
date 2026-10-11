@@ -698,7 +698,7 @@ SKETCHED = "Sketched, not from a photograph."
 # Step pictures
 # ----------------------------------------------------------------------------------------------
 FLAGS = (
-    f"Put a numbered tape flag on each wire, 1 to 6, about {wiring.LENGTHS['flag_back']} mm back from the tip, "
+    f"Put a numbered tape flag on each wire, 1 to 6, about {wiring.LENGTHS['flag_back']} mm from the cut end, "
     "clear of the end that will be cut and stripped later."
 )
 
@@ -902,7 +902,7 @@ FLAG_AT = 62  # a flag's centre, as drawn, above the cut face
 def flagged(sh, connector, sockets, x1, y, mark=True):
     """The half cable before anything is cut: its plug under socket `connector`, six full black wires, a flag on each.
 
-    x1: the x of wire 1. mark: draw how far back from the tip the flags are.
+    x1: the x of wire 1. mark: draw how far from the cut end the flags are.
     Returns ({signal: its wire's cut face}, the plug's body).
     """
     pins = wiring.CONNECTORS[connector]["pins"]
@@ -928,7 +928,7 @@ def flagged(sh, connector, sockets, x1, y, mark=True):
             f'stroke="{INK}" stroke-width="1.5" fill="none"/>'
         )
         sh.text(x + 10, end - FLAG_AT / 2 - 5, f"about {wiring.LENGTHS['flag_back']} mm", T)
-        sh.text(x + 10, end - FLAG_AT / 2 - 5 + LINE, "back from the tip", T)
+        sh.text(x + 10, end - FLAG_AT / 2 - 5 + LINE, "from the cut end", T)
     return ends, body
 
 
@@ -1398,7 +1398,7 @@ def procedure_parts(c, restart=False):
             f"Press the plug of {half} half into socket {connector} on the underside of the Acorn. "
             "Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost.",
             f"Put a numbered tape flag on each of the {len(pins)} wires, 1 at the left to {len(pins)}, about "
-            f"{lengths['flag_back']} mm back from the tip. "
+            f"{lengths['flag_back']} mm from the cut end. "
             "Keep each flag clear of the end that will be cut and stripped later. "
             f"Write {connector} on the flag of wire 1 as well: off the card, the two halves look alike.",
         ]
