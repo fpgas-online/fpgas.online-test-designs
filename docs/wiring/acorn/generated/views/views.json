@@ -178,8 +178,8 @@
       "light": "pi5-hat.top.p1-pins.png",
       "photo_matched": false,
       "png_sha256": {
-        "dark": "3a66745e7076da00ea5bd5985eaabd8ff1ed394454b505a3b6343ec2c328aaf7",
-        "light": "d25a47dbfdc52eb7a793c51ea1db731e302f929fb98b7bdca0a295b496dc0935"
+        "dark": "2c14baa55792b8cec6284e6626d24d83eba6db580cc099a0335008472602c7a5",
+        "light": "22a2fe8ba622ae0baafbd5d12eadc111b546b657a3550fcd97c6f4ce8f25a6e1"
       },
       "sequence": null,
       "size": [
@@ -187,8 +187,8 @@
         1252
       ],
       "svg_sha256": {
-        "dark": "cf3b34517d0a59c3a1a00e5818ed3b46cc89930cbdb381993a46b6b0d83e5706",
-        "light": "7cb9ef5138990be4924d4cb88a1deafc72551e81c6b39de615d4d324ae3da2e3"
+        "dark": "7d3a0f57163839c55a673f07f09914840c24ffd383e85fce8d48c32843da8ce8",
+        "light": "c61e560b02c755ef2208ce31b8357641f1ecd9004f756c0e19ae7d63798edd92"
       },
       "thing": "hat",
       "turn": 0
@@ -207,8 +207,8 @@
       "light": "pi5-hat.top.p2-pins.png",
       "photo_matched": false,
       "png_sha256": {
-        "dark": "ce704e4fc6e7c560ffdb54d0337ee44643ea94d533368b41a2e584ca2a51105f",
-        "light": "754f94a8bbc253e27f0c94517e92efec3a493685bde02184777a775bf94a8e44"
+        "dark": "5c94dcb8aefa66af756b46ee34a21dd8539d9519ddb0a0ad2b4ccae7a737d7f6",
+        "light": "c7ee86f3cc31bd9a4d02d7aea00daacf5c529ba0a9b13c9ef207cea6ca09a9b5"
       },
       "sequence": null,
       "size": [
@@ -216,8 +216,8 @@
         1034
       ],
       "svg_sha256": {
-        "dark": "79569d445e6f0b63df9b04c6b3149d3a2abfd7c8d41bbe6d0c940953037dff59",
-        "light": "47217fddd20e314515432eb67eea23dfb1b17db1fdb8ff6b42f46fd3823c184f"
+        "dark": "7aa8761fc32b7f1c0cc28d1b2adcfc3be4c64d298f5e29a93b93af7d55863824",
+        "light": "bc70f04c076f692d58fbd9c0199b279511b80a56c751747e6f3538097e4eeaac"
       },
       "thing": "hat",
       "turn": 0
@@ -239,8 +239,8 @@
       "light": "pi5-hat.top.pins-19-26.png",
       "photo_matched": false,
       "png_sha256": {
-        "dark": "54916d1c30b509daada2eb9ee19773490f18a97726b4c2bdaf0e9579e6a7bbf5",
-        "light": "b6b330cb89ba399fc2cc76848609d34436ecd005f6d60fa6db57269fde43889e"
+        "dark": "785da4f5f14a691687e6a0765561a33cce15235a160f624e21fb12bc32f25d58",
+        "light": "61cbdfeb459d08d488f6baaccc53f1378da0544dec233d36fde3ebb455d60a3f"
       },
       "sequence": null,
       "size": [
@@ -248,8 +248,8 @@
         1252
       ],
       "svg_sha256": {
-        "dark": "675c89d183c8eae3bdc6e9db45670e558107cc01064c5ecb082c902a6143fae8",
-        "light": "9cb269bba5a6f1ad07d5a5be7fa14fbfc1686d62d57a203fc659e18b7f72ad51"
+        "dark": "125a0c49cc2c19da092ac9b0ecf7bbd43a632e287da9724edce5dc144dc99951",
+        "light": "c912088c8f48c117747492f00fad897aee2662b77b8533eb5df6e6b436d67934"
       },
       "thing": "hat",
       "turn": 0
@@ -269,8 +269,8 @@
       "light": "pi5-hat.top.pins-5-10.png",
       "photo_matched": false,
       "png_sha256": {
-        "dark": "d225bc70237d76d863ef330608d51ee6088b33603a4f4118563809ebdab95e81",
-        "light": "888758910d78e37553cde92ef0890cd16324f7cb2b0e54fff3144cf5b2f8537f"
+        "dark": "1d730be792e466fb30b30d19701be5e22fe0c25244b872c3cd9ca2cd2091f37d",
+        "light": "5e3aad8ffc3c420ce470a6309fff3ab9c3bbb1ebf8121d6b1117070c4a8ae9f5"
       },
       "sequence": null,
       "size": [
@@ -278,8 +278,8 @@
         1034
       ],
       "svg_sha256": {
-        "dark": "1bb435e781a1369e59a792fd4b9fa8ceb6c8d67d76ce72866d204c1b7dc200c0",
-        "light": "fffd94e69dbe84272953a7e7f81bd2f104eede103ce03530300f55e39bd8add2"
+        "dark": "bfd672a11c29129deae5e19150788516c325c823fe44c43a81573871a17766c7",
+        "light": "fefb4a6babd37d1ed05de64d0ffb71e1ee933b52aaa084e4c55d001b652117e5"
       },
       "thing": "hat",
       "turn": 0
