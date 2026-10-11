@@ -120,6 +120,7 @@ def _program(board, host, args, bitstream, then_test):
         return _live([sys.executable, "-m", "fpgas_online_verify.listen", host["port"], str(len(test)), *test,
                       *board.program_argv(bitstream, host, args.test)])  # fmt: skip
     rc = _live(board.program_argv(bitstream, host, args.test))
+    args.loaded = rc == 0  # what the board now runs, whatever its test then says (the Fomu's note, #135)
     if rc != 0 or not then_test:
         return rc
     return _live([*board.test_argv(args.test, host, bitstream), *args.extra])
@@ -166,7 +167,7 @@ def run(board, args):
         if args.command in ("program", "test", "reset"):
             with hold_lock(board.lock, board.title):
                 rc = func(board, host, args)
-            if args.command in ("program", "test") and getattr(board, "by_name_note", ""):
+            if getattr(args, "loaded", False) and getattr(board, "by_name_note", ""):
                 print(f"fpgas-{board.slug}-debug: {board.by_name_note}", flush=True)
             return rc
         return func(board, host, args)
