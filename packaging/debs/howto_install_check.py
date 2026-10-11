@@ -348,13 +348,13 @@ def installed(output):
 
 
 def foreign(board, packages, all_boards, asked=()):
-    """The packages of `packages` that belong to another board, or that `board` must not pull in: its own debug
-    package, and `NEVER`, unless the page asks for them (`asked`)."""
+    """The packages of `packages` that belong to another board, or that `board` must not pull in. A page may ask
+    (`asked`) for its board's own debug package, or for one of `NEVER`; not for another board's package or tool."""
     out = []
     for p in packages:
-        if p in asked:
-            continue
         own = p == f"fpgas-online-{board}" or p.startswith(f"fpgas-online-{board}-")
+        if p in asked and ((own and p.endswith("-debug")) or p in NEVER):
+            continue
         ours = p.startswith("fpgas-online-") and p != "fpgas-online-verify"
         not_this_board = ours and (not own or p.endswith("-debug"))
         tool = TOOL_OF.get(p, board) != board or p in NOT_FOR.get(board, ()) or p in NEVER
@@ -490,17 +490,23 @@ def execute(plan, label, failures):
     return packages
 
 
-def page_sources():
-    """The repository URLs the pages added (every source file but the base one), as `deb` lines give them."""
+def source_urls(path):
+    """The repository URLs of a sources file's `deb` lines, each ending in a slash."""
     urls = []
-    for f in sorted(pathlib.Path("/etc/apt/sources.list.d").glob("*.list")):
-        if f.name == "base.list":
-            continue
-        for line in f.read_text().splitlines():
-            m = re.match(r"^deb (?:\[[^\]]*\] )?(\S+)", line)
-            if m:
-                urls.append(m.group(1).rstrip("/") + "/")
+    for line in path.read_text().splitlines():
+        m = re.match(r"^deb (?:\[[^\]]*\] )?(\S+)", line)
+        if m:
+            urls.append(m.group(1).rstrip("/") + "/")
     return urls
+
+
+def page_sources():
+    """The repository URLs the pages added (every source file but the base one), less any that is also a base
+    archive's: on 64-bit the TT page's bookworm-backports is deb.debian.org/debian, whose pool is the base's, so its
+    files are not told apart by URL and are the base's to serve."""
+    d = pathlib.Path("/etc/apt/sources.list.d")
+    base = set(source_urls(d / "base.list"))
+    return [u for f in sorted(d.glob("*.list")) if f.name != "base.list" for u in source_urls(f) if u not in base]
 
 
 def page_uris(print_uris, sources):

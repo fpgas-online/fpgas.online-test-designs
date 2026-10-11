@@ -235,6 +235,13 @@ def test_another_board_s_package_or_tool_is_foreign():
     # a board's own debug package, and sudo, only when the page asks for them (install_test.sh forbids them)
     assert check.foreign("arty", ["fpgas-online-arty-debug", "sudo"], boards) == ["fpgas-online-arty-debug", "sudo"]
     assert check.foreign("arty", ["fpgas-online-arty-debug"], boards, {"fpgas-online-arty-debug"}) == []
+    # but a page asking for another board's package or tool does not make it this board's
+    assert check.foreign(
+        "acorn", ["openocd", "fpgas-online-netv2-tools"], boards, {"openocd", "fpgas-online-netv2-tools"}
+    ) == [
+        "openocd",
+        "fpgas-online-netv2-tools",
+    ]
 
 
 def test_a_keyring_must_hold_exactly_the_pinned_primary_key():
