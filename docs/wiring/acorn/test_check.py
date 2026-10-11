@@ -265,9 +265,11 @@ def test_moving_a_wire_sends_the_cable_through_the_new_cables_checks_before_a_bo
         assert text[0] == c.power_off and text[1].startswith("Take the card out and pull both plugs")
         assert text[2] == "Move the wire." and "with the meter" in text[3]
         assert docs_pages.link(c.key, "jtag-2") in text[3] and docs_pages.link(c.key, "bench") in text[4]
+        assert "with the card out" in text[4]
         assert docs_pages.link(c.key, "fit") in text[5]
         assert text[6].startswith("Ask the site operator, then boot the blade" if c.key == "blade" else "Boot the Pi")
         assert "run the check again" in text[6]
+        assert ("install the packages again" in text[6]) == (c.key == "blade")  # a blade's install is gone after a boot
 
 
 def test_a_blade_page_says_when_jtag_may_run_before_the_command_that_runs_it():

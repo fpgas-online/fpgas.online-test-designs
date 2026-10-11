@@ -191,8 +191,8 @@ CM5) and the pins are `--pins 2:3:4:14`. Detach the endpoint first there too (th
 root complex; we have not tried a CM4 without it). `/dev/gpiochip0` is already the header's chip on a CM4; on
 a CM5 run `gpiodetect` and use the chip it lists as `pinctrl-rp1` (it was `gpiochip0` under kernel 6.18; a
 Pi 5 under 6.12 had `gpiochip15`), so the `ln` line above may not apply. The differences are listed in
-[acorn-pcie-programming.md](acorn-pcie-programming.md#on-a-compute-blade). **Not yet run by us on a Compute
-Blade with these packages.**
+[acorn-pcie-programming.md](acorn-pcie-programming.md#on-a-compute-blade). **Do not convert a card on a Compute
+Blade.**
 
 Pin order, the Pi 5 `gpiochip15` trap, the PCIe detach rule and the
 `overlayroot=tmpfs` gotcha are all in [acorn-pinmap.md](acorn-pinmap.md).

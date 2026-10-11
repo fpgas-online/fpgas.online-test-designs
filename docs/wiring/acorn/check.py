@@ -552,8 +552,8 @@ def pages(c):
         f"5. Run the bench check, with the card out: {link('bench')}.",
         f"6. Fit the cables: {link('fit')}.",
         (
-            f"7. Ask the site operator, then boot the blade. Install the packages again, as in {BLADE_CHECK}, and run "
-            "the check again."
+            f"7. Ask the site operator, then boot the blade. The install is gone after the boot: install the packages "
+            f"again, as in {BLADE_CHECK}, and run the check again."
             if c.key == "blade"
             else "7. Boot the Pi and run the check again."
         ),

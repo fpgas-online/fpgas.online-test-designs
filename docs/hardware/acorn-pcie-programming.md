@@ -36,7 +36,7 @@ returns read completions of up to 512 bytes, the 7-series PCIe core rejects
 them as malformed TLPs and sets FatalErr, and LitePCIe's DMA waits forever for
 its read data. With the mismatch, `litepcie_util dma_test` moves nothing
 (TX 128, RX 0, no MSI); with the endpoint's MPS set to 512 it moves data
-(3.6 Gb/s on a CLE-215+ on a Raspberry Pi 5).
+(3.6 Gb/s, measured on one CLE-215+ on a Raspberry Pi 5).
 
 ```bash
 sudo lspci -vv -s 0001:00:00.0 | grep MaxPayload   # root port: 512
