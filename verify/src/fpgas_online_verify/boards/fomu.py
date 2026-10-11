@@ -214,18 +214,35 @@ class Fomu(TestBoard):
             _sleep(0.5)
         return facts
 
+    # What a run of tests by name leaves (#135): said by fpgas-fomu-debug after `program` and `test`, and by the
+    # check as a warning, since only the boot check's own run ends with the closing reset.
+    by_name_note = (
+        "the Fomu now runs a design with no USB, so nothing can be loaded over DFU: `sudo fpgas-fomu-debug reset` "
+        "puts foboot back on USB (a power cycle does too)"
+    )
+
     def finish(self, variant, host, found, report, runner=run):
         """#135: the tests leave a design with no USB running, so the next user could not load one over DFU until
-        the Fomu was power-cycled. The check ends by resetting the iCE40 through the header (fomu_header_id.py,
-        the same safe reset as before the tests), which brings foboot back on USB (sw1 p17, 11 Oct 2026, about
-        1 s), and fails loud if it does not come back. Only on a Fomu whose `header` test passed: the reset
-        drives CRESET and SPI0, which must be a Fomu's. Not when `foboot` did not pass: then no design was loaded
-        (the tests need foboot) and the reset would only repeat the first. Not either when tests are asked for by
-        name: the fact tests do not run then, so the header is not known to be a Fomu's, and the Fomu is left as
-        its last test left it (the safe default)."""
+        the Fomu was power-cycled. The check ends by resetting the iCE40 through the header (reset_to_foboot) and
+        fails loud if foboot does not come back. Only when `header` and `foboot` both passed: the reset drives
+        CRESET and SPI0, which must be a Fomu's, and without foboot no design was loaded (the tests need it).
+        Tests asked for by name run without the fact tests, so the header is not known to be a Fomu's: no reset
+        then (the safe default), and the report says how to put foboot back."""
         results = {t["test"]: t["result"] for t in report["tests"]}
-        if results.get("header") != "pass" or results.get("foboot") != "pass":
+        if "header" not in results:
+            if any(t["test"] in self.tests for t in report["tests"]):
+                report.setdefault("warnings", []).append(self.by_name_note)
             return None
+        if results["header"] != "pass" or results.get("foboot") != "pass":
+            return None
+        return self.reset_to_foboot(host, runner)
+
+    def reset_to_foboot(self, host, runner=None):
+        """Reset the iCE40 through the header with fomu_header_id.py (the same safe reset as before the tests, every
+        line checked to be an input afterwards), then wait for foboot on USB (sw1 p17, 11 Oct 2026: about 1 s).
+        A test entry, `foboot-after`: pass, fail with the kernel's USB lines, or error when the reset could not be
+        done. fpgas-fomu-debug reset runs it by name."""
+        runner = runner or run
         entry = {"test": "foboot-after", "output": []}
         try:
             read_header(host, runner)
@@ -238,10 +255,15 @@ class Fomu(TestBoard):
                 said = f"foboot (1209:5bf0) back on USB {seconds} s after the closing reset: the next user can load"
                 return {**entry, "result": "pass", "output": [said + " over DFU"]}
             if _clock() - start >= FOBOOT_WAIT:
-                return {**entry, "result": "fail", "output": kernel_usb_lines(runner),
-                        "reason": (f"foboot (1209:5bf0) did not come back on USB within {FOBOOT_WAIT:g} s of the "
-                                   "closing reset: no design can be loaded over DFU until the Fomu is "
-                                   "power-cycled (#135)")}  # fmt: skip
+                return {
+                    **entry,
+                    "result": "fail",
+                    "output": kernel_usb_lines(runner),
+                    "reason": (
+                        f"foboot (1209:5bf0) did not come back on USB within {FOBOOT_WAIT:g} s of the closing reset: "
+                        "no design can be loaded over DFU until the Fomu is power-cycled (#135)"
+                    ),
+                }
             _sleep(0.5)
 
     def identity(self, found):

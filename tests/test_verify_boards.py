@@ -1310,6 +1310,38 @@ def test_debug_test_loads_then_runs_with_extra_arguments(tmp_path, monkeypatch):
 def test_the_acorn_debug_tool_can_identify_and_has_no_test_loading():
     assert set(debug.commands(ACORN)) == {"detect", "identify"}
     assert {"detect", "list", "check", "program", "test"} == set(debug.commands(ARTY))
+    assert set(debug.commands(FOMU)) == {"detect", "list", "check", "program", "test", "reset"}  # foboot back (#135)
+
+
+def _fomu_debug(monkeypatch, command, **more):
+    monkeypatch.setattr(FOMU, "facts", lambda port=None: _host(FOMU))
+    monkeypatch.setattr(debug, "hold_lock", lambda *a: _Nothing())
+    return cli.argparse.Namespace(command=command, images=None, variant=None, port=None, **more)
+
+
+@pytest.mark.parametrize("comes_back, rc, said", [(True, 0, "foboot (1209:5bf0) back on USB"),
+                                                  (False, 1, "did not come back on USB")])  # fmt: skip
+def test_fpgas_fomu_debug_reset_puts_foboot_back(monkeypatch, capsys, fomu_usb, comes_back, rc, said):
+    """#135: after a by-name test the Fomu runs a design with no USB; the operator finishes with `reset`."""
+    if comes_back:
+        fomu_usb.append(FOBOOT_USB)
+    monkeypatch.setattr(fomu, "run", Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", (0, ""))]))
+    assert debug.run(FOMU, _fomu_debug(monkeypatch, "reset")) == rc
+    assert said in capsys.readouterr().out
+
+
+def test_a_by_name_fomu_load_says_how_to_put_foboot_back(tmp_path, monkeypatch, capsys):
+    args = _fomu_debug(monkeypatch, "program", test="uart", extra=[])
+    args.images = _install(tmp_path, FOMU)
+    monkeypatch.setattr(debug, "_live", lambda argv: 0)
+    assert debug.run(FOMU, args) == 0
+    assert "fpgas-fomu-debug reset" in capsys.readouterr().out
+
+
+def test_a_by_name_fomu_check_warns_that_foboot_is_off_usb(tmp_path, fomu_usb):
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run, tests=["uart"])
+    assert any("fpgas-fomu-debug reset" in w for w in report.get("warnings", []))
 
 
 class _Nothing:

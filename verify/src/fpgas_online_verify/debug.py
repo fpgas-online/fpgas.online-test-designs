@@ -143,16 +143,32 @@ def commands(board):
         })  # fmt: skip
     if board.name == "acorn":
         out["identify"] = (acorn_identify, "print who the board is (as fpgas-acorn-verify --identify)", False)
+    if board.name == "fomu":
+        out["reset"] = (fomu_reset, "reset the Fomu so foboot is back on USB (#135)", False)
     return out
+
+
+def fomu_reset(board, host, args):
+    """What the boot check ends with: the iCE40 reset through the header, then foboot waited for on USB."""
+    entry = board.reset_to_foboot(host)
+    for line in entry["output"]:
+        print(line, flush=True)
+    if entry["result"] != "pass":
+        print(f"fpgas-{board.slug}-debug reset: {entry['result']}: {entry['reason']}", flush=True)
+        return 1
+    return 0
 
 
 def run(board, args):
     host = board.facts(getattr(args, "port", None))
     func = commands(board)[args.command][0]
     try:
-        if args.command in ("program", "test"):
+        if args.command in ("program", "test", "reset"):
             with hold_lock(board.lock, board.title):
-                return func(board, host, args)
+                rc = func(board, host, args)
+            if args.command in ("program", "test") and getattr(board, "by_name_note", ""):
+                print(f"fpgas-{board.slug}-debug: {board.by_name_note}", flush=True)
+            return rc
         return func(board, host, args)
     except Problem as p:
         print(f"fpgas-{board.slug}-debug: {p.result}: {p.reason}", flush=True)
