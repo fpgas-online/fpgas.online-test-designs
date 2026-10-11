@@ -353,7 +353,7 @@ def test_a_uio_bit_sharing_a_held_ui_in_line_gets_only_the_dip_switch_advice():
     reason = (
         "wiring fail: the ui_in ribbon (to HAT JA): ui_in[1] (Pmod pin 2) is held high on the demo board (a DIP "
         "switch that is on? set all DIP switches off); the uio ribbon (to HAT JB): uio[1] (Pmod pin 2) could not be "
-        "tested: it shares its HAT line with ui_in[1], which is held high"
+        "tested: HAT JA/JB pin 2 is one Pi line, where ui_in[1] is held high"
     )
     says = advice_for(reason)
     assert len(says) == 1 and "DIP switches off" in says[0]
