@@ -18,7 +18,9 @@ The parts for **one** Compute Blade host; for several hosts, that many of each.
 | Have it | Qty | Part | Part number | What it is for |
 |---|---|---|---|---|
 | ☐ | 1 | Compute Blade (Uptime Lab) | — | its M.2 slot takes the card |
-| ☐ | 1 | M2x2.5 screw, M2x2.5 standoff and M2 nylon washer, from the Compute Blade's box | — | they hold the card in the M.2 slot (the fitting, action 4) |
+| ☐ | 1 | M2x2.5 screw, from the Compute Blade's box | — | it holds the card in the M.2 slot (the fitting, action 4) |
+| ☐ | 1 | M2x2.5 standoff, from the Compute Blade's box | — | the screw goes into it; it is fitted only if its threaded insert has none (the fitting, action 4) |
+| ☐ | 1 | M2 nylon washer, from the Compute Blade's box | — | it goes on the screw (the fitting, action 4) |
 | ☐ | 1 | Raspberry Pi Compute Module 4 or 5 | — | the host: it sits on the Compute Blade |
 | ☐ | 1 | SQRL Acorn CLE-215+, CLE-215 or CLE-101 (the same card is sold as LiteFury and NiteFury) | — | M.2 M-key, 2280 |
 | ☐ | 1 | Molex Pico-EZmate cable assembly, 6 circuits, a plug at each end | Molex 0369200601 | 100 mm, as listed by DigiKey and RS Components. Cut in half: one half is the P1 cable, the other the P2 cable. All six wires are black |

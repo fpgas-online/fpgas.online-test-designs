@@ -1014,13 +1014,14 @@ def test_the_blade_s_fitting_and_parts_list_name_the_screw_standoff_and_washer_f
     the parts list name them, and say where they come from, the Compute Blade's box, as Uptime Lab's guide says
     (fpgas.online-docs #214's review)."""
     c = wiring.CARRIERS["blade"]
-    item = "M2x2.5 screw, M2x2.5 standoff and M2 nylon washer, from the Compute Blade's box"
-    (part,) = [p for p in c.parts if p["part"] == item]
-    assert part.get("fit") is True
     page = steps.guide(c)[steps.guide_name(c, "fit")]
-    assert f"- {item}" in page[: page.index("## Steps")]
     bom = (wiring.HERE / "generated" / "acorn-blade-bom.md").read_text()
-    assert f"| {item} |" in bom
+    for thing in ("M2x2.5 screw", "M2x2.5 standoff", "M2 nylon washer"):  # one each: a part each, Qty 1
+        item = f"{thing}, from the Compute Blade's box"
+        (part,) = [p for p in c.parts if p["part"] == item]
+        assert part.get("fit") is True and part["qty"] == 1
+        assert f"- {item}" in page[: page.index("## Steps")]
+        assert f"| 1 | {item} |" in bom
     (box,) = [s for s in wiring.SOURCES if s.get("carrier") == "blade" and "box" in s["claim"]]
     assert "M2x2.5 Screw" in box["source"] and "M2x2.5 Standoff" in box["source"] and "M2 Nylon Washer" in box["source"]
     # the Pi 5's fitting lists no such part: its screw is the HAT's, named in the step
