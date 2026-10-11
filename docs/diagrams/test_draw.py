@@ -311,3 +311,29 @@ def test_the_half_round_does_not_depend_on_the_scale_of_the_picture():
     # at this width half a pixel is 0.055 mm: a pad 0.05 mm from the edge is still whole
     assert pad_area_ratio((8.4, 0.05, 13.6, 2.7), width=240) == pytest.approx(math.pi / 4, rel=0.01)
     assert pad_area_ratio((8.4, 0.005, 13.6, 2.7), width=240) == pytest.approx(math.pi / 2, rel=0.01)
+
+
+def pin_centres(svg):
+    """{n: (x, y)}: the centre on the canvas of each pin of the hat's header, from its group hat.header.pin.N."""
+    out = {}
+    for n in range(1, 41):
+        (g,) = groups(svg, f"hat.header.pin.{n}")
+        r = next(g.iter(f"{SVG}rect"))
+        out[n] = (float(r.get("x")) + float(r.get("width")) / 2, float(r.get("y")) + float(r.get("height")) / 2)
+    return out
+
+
+def test_the_pins_of_the_hat_header_are_numbered_as_printed_across_its_rows():
+    svg = draw.render(SCENE, VIEWS["pi5-hat.top.header"])[0]
+    c = pin_centres(svg)
+    assert c[1][0] < c[2][0] and c[1][1] == pytest.approx(c[2][1])  # 1 is left of 2, in the same row
+    assert c[1][1] < c[3][1] and c[1][0] == pytest.approx(c[3][0])  # 1 is above 3, in the same column
+    assert all(c[40][0] >= x and c[40][1] >= y for x, y in c.values())  # 40 is the last, bottom right
+    assert c[40][0] > c[39][0] and c[40][1] == pytest.approx(c[39][1])
+
+
+def test_each_highlighted_pin_is_labelled_with_its_number():
+    svg = draw.render(SCENE, VIEWS["pi5-hat.top.pins-19-26"])[0]
+    for n in range(19, 27):
+        (g,) = groups(svg, f"hat.header.pin.{n}")
+        assert [e.get("aria-label") for e in g.iter(f"{SVG}g") if e.get("aria-label")] == [str(n)]
