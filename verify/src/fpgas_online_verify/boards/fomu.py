@@ -139,15 +139,17 @@ class Fomu(TestBoard):
         "header": {"variants": ("evt",), "check": header_check},
         "foboot": {"variants": ("evt",), "check": foboot_check},
     }
+    # Every test loads its design over DFU, which needs foboot on USB: when `foboot` did not pass, they are not run.
     tests: ClassVar[dict] = {
         "uart": {"artifact": "uart-test-fomu/kosagi_fomu_evt.bin", "script": "test_uart.py",
-                 "args": ["--port", "{port}", "--board", "fomu", "--skip-banner"], "verify": True},
+                 "args": ["--port", "{port}", "--board", "fomu", "--skip-banner"], "verify": True,
+                 "needs": ("foboot",)},
         "spiflash": {"artifact": "spiflash-test-fomu/kosagi_fomu_evt.bin", "script": "test_spiflash.py",
-                     "args": ["--port", "{port}", "--board", "fomu"]},
+                     "args": ["--port", "{port}", "--board", "fomu"], "needs": ("foboot",)},
         "pmod": {"artifact": "gpio-loopback-fomu-{v}/kosagi_fomu_evt.bin", "script": "test_pmod_loopback.py",
-                 "args": ["--board", "fomu"], "pre": PMOD_PRE},
+                 "args": ["--board", "fomu"], "pre": PMOD_PRE, "needs": ("foboot",)},
         "pin-id": {"artifact": "pmod-pin-id-fomu-{v}/kosagi_fomu_evt.bin", "script": "identify_pmod_pins.py",
-                   "args": [], "pre": PMOD_PRE},
+                   "args": [], "pre": PMOD_PRE, "needs": ("foboot",)},
     }  # fmt: skip
 
     def probe(self, host, runner=run):

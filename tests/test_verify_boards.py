@@ -902,8 +902,10 @@ def test_foboot_not_coming_back_after_the_reset_fails_foboot_not_the_identity(tm
     results = {t["test"]: t for t in report["tests"]}
     assert results["header"]["result"] == "pass" and report["identity"]["flash_uid"] == FOMU_UID
     assert results["foboot"]["result"] == "fail" and "did not appear on USB within 10 s" in results["foboot"]["reason"]
-    assert results["uart"]["result"] == "fail"
-    assert "usb" not in report["identity"]
+    # the DFU tests need foboot: they are not run, rather than failing a second time on a load that cannot work
+    assert "uart" not in results and report["not_run"]["uart"] == "it needs foboot to pass first"
+    assert not any(c[0] == "openFPGALoader" for c in run.calls)
+    assert "usb" not in report["identity"] and report["result"] == "fail"
 
 
 @pytest.mark.parametrize("answer, said", [

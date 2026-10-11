@@ -501,13 +501,19 @@ class TestBoard(Board):
                 report["tests"].append(self.run_script_test(test, host, runner))
                 done = report["tests"][-1]
                 event("fpga-test-finished", {"test": test, "result": done["result"], "reason": done.get("reason", "")})
-            if not_run:
-                report["not_run"] = not_run
             for test in tests:
+                # a test that needs a fact test (the Fomu's DFU loads need foboot) is not run when that did not pass
+                failed = [t["test"] for t in report["tests"] if t["test"] in self.tests[test].get("needs", ())
+                          and t["result"] != "pass"]  # fmt: skip
+                if failed:
+                    not_run[test] = f"it needs {' and '.join(failed)} to pass first"
+                    continue
                 event("fpga-test-started", {"test": test})
                 report["tests"].append(self.run_test(test, variant, host, images, manifest, runner))
                 done = report["tests"][-1]
                 event("fpga-test-finished", {"test": test, "result": done["result"], "reason": done.get("reason", "")})
+            if not_run:
+                report["not_run"] = not_run
             if not refused and manifest is not None and variant in self.left_running:  # last: nothing follows it
                 left, why_not = self.leave_running(variant, host, images, manifest, runner)
                 if left:
