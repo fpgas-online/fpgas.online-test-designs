@@ -108,6 +108,8 @@ The NeTV2 JTAG interface is directly wired to specific Raspberry Pi GPIO pins. T
 
 openFPGALoader is the primary tool for programming the NeTV2. It supports multiple JTAG transports over the same GPIO wiring.
 
+The boot check itself loads with OpenOCD on a Raspberry Pi 3 or 4, and with openFPGALoader's `rp1pio` cable on a Raspberry Pi 5 ([what the NeTV2 check does](../verify/tests.md#the-netv2-check-at-boot)). The openFPGALoader commands below are for loading by hand.
+
 #### RPi 3B+ (GPIO bitbang — current deployed hosts)
 
 On RPi 3B+ hosts (pi10, pi12, pi14, pi16, pi18), openFPGALoader uses `libgpiod` to drive the JTAG signals through the Linux GPIO subsystem:

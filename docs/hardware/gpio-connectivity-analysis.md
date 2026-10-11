@@ -1,5 +1,7 @@
 # GPIO Connectivity Analysis Using FPGA Pin Identification
 
+This page is older than `designs/pmod-pin-id/host/identify_pmod_pins.py` (its numeric labels, `--board`, and how it captures). Where the two differ, the script is right ([#265](https://github.com/fpgas-online/fpgas.online-test-designs/issues/265)).
+
 This document describes how to use the `pmod-pin-id` FPGA design to automatically determine the physical wiring between an FPGA board and a host (such as a Raspberry Pi with a PMOD HAT). Instead of manually tracing cables or trusting documentation, the FPGA tells you exactly what pin you're looking at.
 
 ## How It Works
