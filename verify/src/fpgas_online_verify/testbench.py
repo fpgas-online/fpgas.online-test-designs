@@ -44,6 +44,10 @@ DNA_SKIPPED = "not read: --read-dna runs only once the JTAG scan has found the o
 JEDEC_RE = re.compile(r"JEDEC ID: 0x([0-9A-Fa-f]{2}) 0x([0-9A-Fa-f]{2}) 0x([0-9A-Fa-f]{2})")
 
 
+# openFPGALoader's last line after loading a 7-series FPGA over JTAG: "ir: 1 isc_done 1 isc_ena 0 init 1 done 1".
+DONE_RE = re.compile(r"^ir: [0-9a-f]+ isc_done [01] isc_ena [01] init [01] done ([01])\s*$", re.M)
+
+
 class TestBoard(Board):
     usb = ()  # (vendor, product) pairs that mean this board, product None for any
     variants: ClassVar[dict] = {}  # variant -> artifact suffix
@@ -51,10 +55,27 @@ class TestBoard(Board):
     tests: ClassVar[dict] = {}
     doc = ""
 
+    # A 7-series FPGA loaded over JTAG by openFPGALoader: it exits 0 even when the FPGA did not configure (#300),
+    # so the load is judged by the `done` bit it prints last (load_failure).
+    jtag_loads_7_series = False
+
     # -- what varies by board ------------------------------------------------------------------------------
 
     def program_argv(self, bitstream, host, test):
         raise NotImplementedError
+
+    def load_failure(self, argv, text):
+        """Why a load that exited 0 did not configure the FPGA, or None. Only an openFPGALoader load of a 7-series
+        FPGA over JTAG is judged: its last lines end with `ir: … done 1` when it configured (src/xilinx.cpp,
+        Xilinx::program_mem), and it exits 0 either way."""
+        if not (self.jtag_loads_7_series and argv and argv[0] == "openFPGALoader"):
+            return None
+        done = DONE_RE.findall(text)
+        if not done:
+            return "openFPGALoader printed no 'done' line, so whether the FPGA configured is not known"
+        if done[-1] != "1":
+            return "the FPGA did not configure: openFPGALoader's last line says done 0 (it exits 0 all the same)"
+        return None
 
     def flash_dump_argv(self, host, variant, size, out):
         """openFPGALoader (or similar) reading `size` bytes of flash from 0 into `out`; None if not possible."""
@@ -202,15 +223,23 @@ class TestBoard(Board):
                     runner(step, 30)
             if t.get("listen"):  # the test must be listening before the design starts: listen.py
                 test_argv = self.test_argv(test, host, bitstream)
+                program = self.program_argv(bitstream, host, test)
                 argv = [sys.executable, "-m", "fpgas_online_verify.listen", host["port"], str(len(test_argv)),
-                        *test_argv, *self.program_argv(bitstream, host, test)]  # fmt: skip
+                        *test_argv, *program]  # fmt: skip
                 rc, text = runner(argv, PROGRAM_TIMEOUT + TEST_TIMEOUT + 60)  # more than listen.py allows itself
+                why = self.load_failure(program, text)  # the test may pass on stale output; the load says first
+                if why:
+                    return {**out, "result": "fail", "reason": f"loading it failed: {why}", "output": tail(text)}
             else:
                 if t.get("runner") != "tt-bridge":  # the bridge loads the design itself
-                    rc, text = runner(self.program_argv(bitstream, host, test), PROGRAM_TIMEOUT)
+                    program = self.program_argv(bitstream, host, test)
+                    rc, text = runner(program, PROGRAM_TIMEOUT)
                     if rc != 0:
                         return {**out, "result": "fail", "reason": f"loading it failed (exit {rc})",
                                 "output": tail(text)}  # fmt: skip
+                    why = self.load_failure(program, text)
+                    if why:
+                        return {**out, "result": "fail", "reason": f"loading it failed: {why}", "output": tail(text)}
                 rc, text = runner(self.test_argv(test, host, bitstream), TEST_TIMEOUT)
         except Problem as p:
             return {**out, "result": p.result, "reason": p.reason}
@@ -396,6 +425,9 @@ class TestBoard(Board):
             return None, p.reason
         if rc != 0:
             return None, f"loading it failed (exit {rc}): {' '.join(tail(text, 2))}"
+        why = self.load_failure(argv, text)
+        if why:
+            return None, f"loading it failed: {why}"
         return {"design": spec["design"], "bitstream": spec["artifact"]}, None
 
     def settle(self, asked, found, facts):
