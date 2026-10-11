@@ -1176,9 +1176,11 @@ def power_off_if_on(c):
 
 
 def power_off_when(c, when):
-    """The same words as a sentence of a page, as two sentences so that neither is long: the carrier's own
-    power-off sentence, then the condition (`when`: "the Compute Blade is on") under which it is done."""
-    return f"{c.power_off} Do this only if {when}."
+    """The same words as a sentence of a page, as two sentences so that neither is long: the condition first
+    (`when`: "the Compute Blade is on"), so that nobody acts before reading it, then the carrier's own power-off
+    sentence."""
+    host = "it" if when.startswith(f"the {c.name}") else f"the {c.name}"
+    return f"If {when}, {host} must be off first. {c.power_off}"
 
 
 # Taking the card out of its slot: only what the repo records. The blade's screw and driver are in the parts
