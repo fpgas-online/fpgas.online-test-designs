@@ -219,7 +219,7 @@ class Fomu(TestBoard):
     # check as a warning, since only the boot check's own run ends with the closing reset.
     by_name_note = (
         "the Fomu now runs a design with no USB, so nothing can be loaded over DFU: `sudo fpgas-fomu-debug reset` "
-        "puts foboot back on USB (a power cycle does too)"
+        "puts foboot back on USB (a power cycle of the Pi, by the site operator, does too)"
     )
 
     def finish(self, variant, host, found, report, runner=run):

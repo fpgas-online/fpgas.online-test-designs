@@ -1403,7 +1403,10 @@ def procedure_parts(c, restart=False):
         "Half of that length is the longest run a half can have.\n\n"
         + "\n\n".join(pairs)
         + f"\n\nEach run must be at least {wiring.LENGTHS['slack']} mm shorter than half the cable's length. "
-        "That is the wire that is stripped, crimped and bent into the housing."
+        + "That is the wire that is stripped, crimped and bent into the housing. "
+        # the number itself, from the cable's listed length, so a builder can compare a measured run with it
+        + f"For the {wiring.listed_mm(c)} mm cable the listing gives, that is at most "
+        + f"{wiring.listed_mm(c) // 2 - wiring.LENGTHS['slack']} mm a run."
         "\n\nIf a run is longer, stop before you cut: this guide uses each half at the length it has. "
         f"Tell {c.contact} which run falls short, and by about how many millimetres.",
         (
@@ -1667,9 +1670,15 @@ def needs(c, connector):
         "a hot-air tool",
         *(["a soldering iron"] if has_resistor(c, connector) else []),
         "masking tape and a fine pen",
-        *(t["tool"] for t in wiring.TOOLS if "screwdriver" in t["tool"] and t.get("carrier") == c.key),
+        *card_screwdrivers(c),
     ]
     return need_lists(parts, tools)
+
+
+def card_screwdrivers(c):
+    """The carrier's screwdriver for the screw that holds the card in its M.2 slot (wiring.toml's tools): listed on
+    every page that takes that screw out or puts it back."""
+    return [t["tool"] for t in wiring.TOOLS if "screwdriver" in t["tool"] and t.get("carrier") == c.key]
 
 
 def renumbered(lines):
@@ -1796,7 +1805,9 @@ def guide(c):
     bench, fit_ = cut_at(parts["fit"], FIT_STEPS[0])
     shell = numbered(bench, "The Acorn is not in its slot and the plugs are free.", guide_name(c, "bench"))
     out[guide_name(c, "bench")] = body(
-        need_lists(["both finished cables", f"the {c.name}"], ["a multimeter with a continuity buzzer"]),
+        need_lists(
+            ["both finished cables", f"the {c.name}"], ["a multimeter with a continuity buzzer", *card_screwdrivers(c)]
+        ),
         bench,
         f"Contact 1 of each plug beeps to {c.reference_short} (step {shell}). "
         f"Contact 6 of each plug is silent against {c.reference_short} "
@@ -1808,7 +1819,10 @@ def guide(c):
         next_page("bench"),
     )
     out[guide_name(c, "fit")] = body(
-        need_lists([f"both cables, checked on the bench ({pages.link(c.key, 'bench')})", "the Acorn", f"the {c.name}"]),
+        need_lists(
+            [f"both cables, checked on the bench ({pages.link(c.key, 'bench')})", "the Acorn", f"the {c.name}"],
+            card_screwdrivers(c),
+        ),
         fit_,
         "Both housings sit on the pins action 5 names, each marked corner on its pin, as action 6 looks for before "
         "power.",
