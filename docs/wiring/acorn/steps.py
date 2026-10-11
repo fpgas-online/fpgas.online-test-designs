@@ -987,9 +987,10 @@ def ground_check(connector):
     pad = (px + (crop[3] - y1) * k, py + (x0 - crop[0]) * k, px + (crop[3] - y0) * k, py + (x1 - crop[0]) * k)
     highlight(sh, pad)
     tx = px + pw + 16
-    sh.text(tx, (pad[1] + pad[3]) / 2 - 16, "the plated half-round", T, "bold")
-    sh.text(tx, (pad[1] + pad[3]) / 2 + 6, "mounting pad at the", T, "bold")
-    sh.text(tx, (pad[1] + pad[3]) / 2 + 28, "end of the card", T, "bold")
+    sh.text(tx, (pad[1] + pad[3]) / 2 - 38, "the plated half-round", T, "bold")
+    sh.text(tx, (pad[1] + pad[3]) / 2 - 16, "mounting pad at the", T, "bold")
+    sh.text(tx, (pad[1] + pad[3]) / 2 + 6, "end of the card", T, "bold")
+    sh.text(tx, (pad[1] + pad[3]) / 2 + 28, "not the round holes", T, "bold", RED)
     mx = 620  # the meter's left edge: the plug is under its socket where that leaves the meter room
     socket_middle = (sockets[connector][0] + sockets[connector][2]) / 2
     x1p = min(max(socket_middle - 2.5 * PITCH, 64), mx - 5 * PITCH - 64)
@@ -1426,8 +1427,8 @@ def procedure_parts(c, restart=False):
         check = [
             "With the plug still in the socket (the Acorn out of any slot), set the meter to continuity. "
             "Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not "
-            "stripped yet). Put the other probe on the plated half-round mounting pad at the end of the card: "
-            "it must beep.",
+            "stripped yet). Put the other probe on the plated half-round mounting pad at the end of the card, "
+            "not on the round holes. It must beep.",
             f"Do the same with the wire flagged {len(pins)}: it must stay silent.",
             f"If wire {len(pins)} beeps instead, stop: the numbering is reversed; take the flags off and number from "
             f"the other end. Then do items {REDO[0]} and {REDO[1]} of this step again with the new numbers. "

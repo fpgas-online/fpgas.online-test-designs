@@ -835,3 +835,11 @@ def test_every_picture_with_the_card_photograph_says_it_has_a_cable_in_p1_and_th
     for c in wiring.CARRIERS.values():
         text = steps.procedure(c)
         assert text.count("the card in the photograph has a cable already in P1 and nothing in P2.") == 2
+
+
+def test_the_wire_1_check_says_to_probe_the_half_round_pad_and_not_the_round_holes():
+    for c in wiring.CARRIERS.values():
+        text = steps.procedure(c)
+        assert text.count("mounting pad at the end of the card, not on the round holes. It must beep.") == 2
+    for connector in wiring.CONNECTORS:
+        assert "not the round holes" in " ".join(words(steps.ground_check(connector)))
