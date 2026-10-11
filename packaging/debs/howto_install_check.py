@@ -511,9 +511,10 @@ def page_sources():
 
 def page_uris(print_uris, sources):
     """From `apt-get --print-uris` output, the (URI, package, version) of each file that comes from a repository a
-    page added. The lines are `'URI' file size hash` (apt prints MD5Sum here; the hash is apt's to check)."""
+    page added. The lines are `'URI' file size [hash]`: apt prints MD5Sum, or for a bookworm-backports file no
+    hash at all; the hash is apt's to check, when it downloads."""
     out = []
-    for uri, name in re.findall(r"^'(\S+)' (\S+) \d+ \S+$", print_uris, re.M):
+    for uri, name in re.findall(r"^'(\S+)' (\S+) \d+(?: \S+)?$", print_uris, re.M):
         if any(uri.startswith(s) for s in sources):
             package, version, _arch = name.removesuffix(".deb").split("_")
             out.append((uri, package, urllib.parse.unquote(version)))  # an epoch is written %3a in the file name

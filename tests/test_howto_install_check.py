@@ -207,13 +207,21 @@ def test_page_uris_are_the_files_from_the_pages_repositories_whatever_hash_apt_p
         "'http://archive.raspberrypi.com/debian/pool/main/z/zlib/zlib1g_1.2.13.dfsg-1%2brpt1_arm64.deb' "
         "zlib1g_1%3a1.2.13.dfsg-1+rpt1_arm64.deb 94290 MD5Sum:774312206118f372f3a9bf2b15f601b9\n"
         "'https://apt.fpgas.online/bookworm/./x_1%3a2.0_all.deb' x_1%3a2.0_all.deb 10 SHA256:ab\n"
+        # a bookworm-backports file, as apt printed it in a 32-bit bookworm container: no hash at all
+        "'http://deb.debian.org/debian/pool/main/m/micropython-mpremote/micropython-mpremote_1.24.0-1%7ebpo12%2b1"
+        "_all.deb' micropython-mpremote_1.24.0-1~bpo12+1_all.deb 28656\n"
     )
-    sources = ["https://apt.fpgas.online/bookworm/", "https://fpgas.online/fpgas.online-fpga-tools/bookworm/"]
+    sources = [
+        "https://apt.fpgas.online/bookworm/",
+        "https://fpgas.online/fpgas.online-fpga-tools/bookworm/",
+        "http://deb.debian.org/debian/",
+    ]
     got = check.page_uris(out, sources)
     assert [(p, v) for _u, p, v in got] == [
         ("librp1jtag0", "0.0.post107+fpgasonline.0.0.post101~deb12"),
         ("fpgas-online-arty", "0.0.post1652"),
         ("x", "1:2.0"),  # an epoch, written %3a in the file name
+        ("micropython-mpremote", "1.24.0-1~bpo12+1"),
     ]
 
 
