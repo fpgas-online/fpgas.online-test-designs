@@ -949,14 +949,21 @@ def test_the_pi_5_tool_list_has_a_screwdriver_for_the_hats_screw_and_gives_no_si
 
 @pytest.mark.parametrize("key", list(wiring.CARRIERS))
 def test_every_page_that_takes_the_card_s_screw_in_or_out_lists_the_screwdriver(key):
-    """The bench check takes the card out (its screw first) and the fitting puts it back (its screw): each lists the
-    carrier's screwdriver, as the first cable page does (fpgas.online-docs #212's review)."""
+    """Every printed page of the carrier whose steps touch the card's screw (the bench check takes it out, the
+    fitting puts it back, the first cable pages take the card out) lists the carrier's screwdriver before its steps
+    (fpgas.online-docs #212's review). Read from generated/, so a page added later is held to it too."""
     c = wiring.CARRIERS[key]
     (screwdriver,) = steps.card_screwdrivers(c)
-    for part in ("bench", "fit"):
-        page = steps.guide(c)[steps.guide_name(c, part)]
-        head = page[: page.index("## Steps")]
-        assert f"- {screwdriver}" in head, (key, part)
+    pages = [p for p in sorted((wiring.HERE / "generated").glob(f"*{key}*.md")) if "## Steps" in p.read_text()]
+    touching = []
+    for p in pages:
+        head, body = p.read_text().split("## Steps", 1)
+        if re.search(r"\bscrew\b", body):
+            touching.append(p.name)
+            # a guide page lists it as a bullet, a whole-procedure page in its tick-box table
+            assert f"- {screwdriver}\n" in head or f"| ☐ | {screwdriver} |" in head, (key, p.name)
+    # the pages that do touch it are found, so the rule is not met by matching nothing
+    assert {steps.guide_name(c, part) for part in ("bench", "fit")} <= set(touching), (key, touching)
 
 
 def test_the_bench_check_and_the_fitting_say_the_hat_has_its_stacking_header_and_the_housings_go_on_its_pins():
