@@ -101,7 +101,7 @@ def test_the_blade_pages_are_for_a_compute_module_5_and_hold_no_record_of_a_run(
 
 def test_the_transcripts_and_failure_rows_come_from_the_tool_reference():
     verify = check.RESULTS.read_text()
-    command = {check.PASS: "fpgas-verify", check.BLADE_FAIL: "fpgas-acorn-verify"}  # as each was run
+    command = {check.PASS: "fpgas-verify", check.BLADE_FAIL: "fpgas-verify"}  # as each was run
     for marker, tool in command.items():
         block = check.transcript(marker)
         assert block in verify and block.startswith(f"```text\n$ sudo {tool} --no-publish\n")
@@ -226,11 +226,9 @@ def test_a_caption_cannot_outlive_its_transcript_and_a_swap_stays_on_one_cable()
     assert "[converting a card]" not in check.failures(blade)
 
 
-def test_a_blade_page_prints_no_older_advice_and_no_convert_in_its_transcripts():
-    block = "```text\nresult\nWhat to do:\n  * convert it\n```\n"
-    assert check.without_advice(block) == "```text\nresult\nWhat to do: (left out here; see the text above)\n```"
-    with pytest.raises(wiring.WiringError):
-        check.without_advice("```text\nno advice\n```\n")
+def test_a_blade_page_prints_the_blades_own_advice_and_never_advice_to_convert():
+    """The blade's transcript is the one the code prints today (test_verify_conclusion holds it): its advice is the
+    blade's, which says not to convert, and nothing in it tells the reader to convert."""
     fenced = [
         b
         for page in check.pages(wiring.CARRIERS["blade"]).values()
@@ -238,7 +236,8 @@ def test_a_blade_page_prints_no_older_advice_and_no_convert_in_its_transcripts()
     ]
     assert fenced  # the blade pages do print transcripts: the check below is not empty
     for block in fenced:
-        assert "convert" not in block.replace("unconverted", "")
+        assert "It has to be converted" not in block and "acorn-pcie-programming" not in block
+    assert any("do not load a design into the card or convert it" in " ".join(b.split()) for b in fenced)
 
 
 def test_a_row_split_by_host_keeps_only_this_carriers_clause():
