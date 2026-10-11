@@ -1,5 +1,3 @@
-\[[top](./README.md)\] \[[spec](./acorn.md)\] \[[pinmap](./acorn-pinmap.md)\] \[[wiring](./acorn-pinmap.md)\]
-
 # Acorn PCIe Programming & Multiboot
 
 How to program the Acorn CLE-215+ / LiteFury FPGA via PCIe, and how to use Xilinx 7-series multiboot for safe recovery from bad bitstreams.
@@ -37,8 +35,8 @@ bytes while the root port `0001:00:00.0` stays at 512. The root port then
 returns read completions of up to 512 bytes, the 7-series PCIe core rejects
 them as malformed TLPs and sets FatalErr, and LitePCIe's DMA waits forever for
 its read data. With the mismatch, `litepcie_util dma_test` moves nothing
-(TX 128, RX 0, no MSI); with the endpoint's MPS set to 512 it runs at
-3.6 Gb/s (pi-sw2-p48).
+(TX 128, RX 0, no MSI); with the endpoint's MPS set to 512 it moves data
+(3.6 Gb/s on a CLE-215+ on a Raspberry Pi 5).
 
 ```bash
 sudo lspci -vv -s 0001:00:00.0 | grep MaxPayload   # root port: 512
@@ -65,10 +63,10 @@ safe on a live endpoint.
 
 There is no need to build locally. GitHub release
 [`vivado-bitstreams-v0.0-496-gf162f60`](https://github.com/fpgas-online/fpgas.online-test-designs/releases/tag/vivado-bitstreams-v0.0-496-gf162f60)
-(Vivado 2025.2, published 2026-04-17) carries every test design × Acorn variant
+(Vivado 2025.2) carries every test design × Acorn variant
 (`cle-101`, `cle-215`, `cle-215p`), each as plain `.bit`/`.bin` plus the
 `_fallback` and `_operational` multiboot variants described below, and a
-`manifest.json` with a SHA-256 per file. For the Welland CLE-215+ boards use the
+`manifest.json` with a SHA-256 per file. For a CLE-215+ use the
 `*_acorn-cle-215p_*` files; their `.bit` header reads `7a200tfbg484`, matching
 IDCODE `0x3636093`.
 
@@ -86,10 +84,7 @@ repository.
 
 ### Sqrl's factory firmware
 
-What each Welland Acorn runs is in the
-[current verify results](../verify/current-results.md#current-results);
-[#53](https://github.com/fpgas-online/fpgas.online-test-designs/issues/53)
-tracks moving them all to the pinned release. A board still on Sqrl's factory
+A board still on Sqrl's factory
 (cryptocurrency mining) firmware cannot be programmed over PCIe.
 
 Factory firmware characteristics:
@@ -138,6 +133,8 @@ The Acorn has a Spansion S25FL256S (256 Mbit = 32 MB) quad-SPI NOR flash.
 ```
 
 ## Multiboot Mechanism
+
+The two flash images use Xilinx 7-series multiboot ([XAPP1247, MultiBoot with SPI](https://docs.amd.com/v/u/en-US/xapp1247-multiboot-spi)), with LiteX's ICAP core ([`icap.py`](https://github.com/enjoy-digital/litex/blob/master/litex/soc/cores/icap.py)) for the warm reboot.
 
 ### How It Works
 
@@ -382,7 +379,7 @@ board identity, filling in the values `fpgas-acorn-flash id` and the board's
 DNA give:
 
 ```bash
-HOST=pi-sw2-pNN
+HOST=the-pi        # the Pi the card is on
 OUT=acorn-cle-215p_dna-DNA_flashuid-UNIQUEID_${HOST}_factory_YYYY-MM-DD.bin
 ssh "pi@$HOST" cat /home/pi/factory.bin > "$OUT"
 sha256sum "$OUT"
@@ -447,7 +444,7 @@ A board already running one of our releases skips step 1.
 
 ### On a Compute Blade
 
-The steps are the same, with these differences (pins from
+**Do not convert a card on a Compute Blade.** What differs on a blade, for reading a card there by hand (pins from
 [`docs/wiring/acorn/wiring.toml`](../wiring/acorn/wiring.toml), `[carriers.blade]`):
 
 | | Pi 5 + Waveshare HAT | Compute Blade |
@@ -457,16 +454,7 @@ The steps are the same, with these differences (pins from
 | PCIe address (`D=`, and `--bdf` for `fpgas-acorn-flash`) | `0001:01:00.0` | the one `lspci -D` shows (`0000:01:00.0` on a CM4, `0001:01:00.0` on a CM5) |
 | Pins after openFPGALoader | `8 9 10 11` to `ip pd` | `2 3 4` to `ip pd`. `14` is shared with the P2 UART (J2, through 470 Ω), so put it back to its UART function: `pinctrl set 14 a0` on a CM4, `a4` on a CM5 |
 
-**Not yet run by us on this hardware**: nobody has converted a card on a
-Compute Blade with these steps. Two things are known to stand in the way:
-
-- Steps 1 and 4 need JTAG, and on a CM5 with kernel 6.18 JTAG cannot have its
-  TMS pin (GPIO14) while the header's serial port is on
-  ([How to make a Compute Blade boot ready for JTAG](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html)).
-  Check that the pin is free before step 1.
-- The boot check reads each setup's pins from `wiring.toml`, so on a Blade it
-  probes `2:3:4:14`; but no Compute Blade has passed the whole check yet, so
-  what step 5 prints there for a good board is not known.
+[The Acorn check](https://docs.fpgas.online/en/latest/boards/acorn/checks/about.html) says why not to convert there. On a Compute Module 5 with kernel 6.18, JTAG cannot have its TMS pin (GPIO14) while the header's serial port is on ([How to make a Compute Blade boot ready for JTAG](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html)).
 
 `fpgas-acorn-flash --uart PORT` reaches the flash over the P2 UART bridge
 instead of PCIe. It works, but slowly.
@@ -569,23 +557,3 @@ write_cfgmem -force -format bin -interface spix4 -size 16 \
 5. **Detach the PCIe endpoint before every JTAG load** (see the top of this page). A Pi 5 host crashes otherwise.
 
 6. **The golden bitstream must be a minimal LiteX SoC** with only PCIe, SPI Flash, ICAP, and UART — no complex user logic that might fail.
-
-## Future: Flash-via-JTAG Support
-
-When openFPGALoader gains working `--write-flash` support for the Acorn (via GPIO JTAG), the recovery story simplifies significantly:
-
-- Initial setup becomes a single JTAG flash write instead of the SRAM bootstrap
-- Golden recovery no longer requires a volatile SRAM intermediate step
-- The "bricked" scenario in the recovery table disappears — JTAG can always reflash
-
-This is tracked as an openFPGALoader enhancement. The SRAM bootstrap procedure documented above works reliably in the meantime.
-
-## References
-
-- Xilinx XAPP1247 — MultiBoot with SPI: <https://docs.amd.com/v/u/en-US/xapp1247-multiboot-spi>
-- LiteX Acorn CLE-215 wiki: <https://github.com/enjoy-digital/litex/wiki/Use-LiteX-on-the-Acorn-CLE-215>
-- LitePCIe: <https://github.com/enjoy-digital/litepcie>
-- LiteX ICAP core: <https://github.com/enjoy-digital/litex/blob/master/litex/soc/cores/icap.py>
-- Acorn board spec: [acorn.md](acorn.md)
-- Acorn pinmap: [acorn-pinmap.md](acorn-pinmap.md)
-- GPIO JTAG wiring: [acorn-pinmap.md](acorn-pinmap.md)
