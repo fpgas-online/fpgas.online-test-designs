@@ -5,26 +5,50 @@ Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
 
 ## Installing
 
+### What you need
+
+- a Raspberry Pi, or another host running Debian or Raspberry Pi OS bookworm or trixie, with the board attached
+- `sudo` on it, and a network that reaches `apt.fpgas.online` and `fpgas.online`
+
+`grep VERSION_CODENAME /etc/os-release` says which release the host runs.
+
+### Steps
+
+**1.** Add the fpgas.online apt repository.
+
 ```bash
 # The fpgas.online apt repository (bookworm or trixie).
 sudo install -d -m0755 /etc/apt/keyrings
 curl -fsSL https://apt.fpgas.online/apt.gpg | sudo tee /etc/apt/keyrings/apt.gpg > /dev/null
 echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
   | sudo tee /etc/apt/sources.list.d/apt.list
+```
 
+**2.** Add the fpgas.online-fpga-tools repository, before installing. On bookworm every board but the TT FPGA board
+needs it: Debian bookworm's openFPGALoader cannot read the device DNA. A NeTV2 on a Raspberry Pi 5 needs it
+on any release: only its build has the `rp1pio` cable.
+
+```bash
 # fpgas.online's openFPGALoader; add it before installing. A NeTV2 on a Pi 5 needs it. Elsewhere Debian's own
 # works from 0.13.0 on (trixie), but bookworm's (0.10.0) is too old: it cannot read the device DNA.
 curl -fsSL https://fpgas.online/fpgas.online-fpga-tools/fpgas.online-fpga-tools.gpg \
   | sudo tee /etc/apt/keyrings/fpgas.online-fpga-tools.gpg > /dev/null
 echo "deb [signed-by=/etc/apt/keyrings/fpgas.online-fpga-tools.gpg] https://fpgas.online/fpgas.online-fpga-tools/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
   | sudo tee /etc/apt/sources.list.d/fpgas.online-fpga-tools.list
-
-sudo apt update
-sudo apt install fpgas-online-arty         # the package for your board: see the table
-sudo apt install fpgas-online-arty-debug   # optional: fpgas-arty-debug, for when the check fails
 ```
 
-Install **one** of these. They conflict, so a host is never set up for two boards by accident.
+**3.** Read the new repositories' package lists.
+
+```bash
+sudo apt update
+```
+
+**4.** Install the package for your board, **one** of the table below. They conflict, so a host is never set up
+for two boards by accident.
+
+```bash
+sudo apt install fpgas-online-arty         # the package for your board
+```
 
 | Package | Installs |
 |---|---|
@@ -35,6 +59,32 @@ Install **one** of these. They conflict, so a host is never set up for two board
 | `fpgas-online-tt-fpga` | everything to check a TT FPGA Demo Board, and turns the boot check on for it |
 | `fpgas-online-all-boards` | everything to check any of the boards, and turns the boot check on for whichever is found |
 | `fpgas-online-multi-board` | turns the boot check on for whichever board is found, of those whose `fpgas-online-<board>-tools` you also install |
+
+**5.** If you want the debug tool for when the check fails, install the board's `-debug` package too.
+
+```bash
+sudo apt install fpgas-online-arty-debug   # fpgas-arty-debug
+```
+
+### Check
+
+`fpgas-verify --list` lists the installed boards and the one this host is set up for.
+
+### If it fails
+
+- `apt` cannot find a package: the repository line of step 1 is missing, or step 3 was not run after it.
+- On bookworm, `apt` reports an unmet dependency on `openfpgaloader (>= 0.13.0)`: step 2 was not done. Do
+  steps 2 and 3, then step 4 again.
+- On trixie, Debian's own openFPGALoader was installed because step 2 came after step 4; it does not have the
+  `rp1pio` cable a NeTV2 on a Raspberry Pi 5 needs. Run step 3, then
+  `sudo apt install openfpgaloader-fpgasonline` to switch to the repository's build.
+
+### Next
+
+- [Running it](running.md#running-it): run the check now, without waiting for a boot.
+- The packages of each board, below.
+
+## Notes
 
 * `fpgas-online-<board>-debug` adds `fpgas-<board>-debug` and the tools for the tests the boot check skips.
 * Installing does not run the check. It runs at the next boot, or when you run it.
