@@ -6,12 +6,12 @@ Pin mapping for the Digilent Arty A7-35T as connected in the fpgas.online test i
 
 ## FPGA Device
 
-| Parameter    | Value                           |
-| ------------ | ------------------------------- |
+| Parameter    | Value                            |
+| ------------ | -------------------------------- |
 | FPGA         | Xilinx Artix-7 XC7A35TICSG324-1L |
 | Package      | CSG324                           |
-| System clock | 100 MHz (pin E3, LVCMOS33)      |
-| Toolchain    | openXC7 (open source) or Vivado |
+| System clock | 100 MHz (pin E3, LVCMOS33)       |
+| Toolchain    | openXC7 (open source) or Vivado  |
 
 Source: [digilent_arty.py](https://github.com/litex-hub/litex-boards/blob/master/litex_boards/platforms/digilent_arty.py)
 
@@ -199,10 +199,10 @@ Verified using the `pmod-pin-id` design which transmits each FPGA pin's ball nam
 | 9       | GPIO3    | K15              | K15                | yes   |
 | 10      | GPIO2    | J15              | J15                | yes   |
 
-#### HAT JC → Arty JC (pins 1 and 2 read in the connector's order)
+#### HAT JC → Arty JC (pins 1 and 2 read reversed)
 
-| HAT Pin | RPi GPIO | Scanned FPGA Pin | Expected (Arty JC) | Match |
-| ------- | -------- | ---------------- | ------------------ | ----- |
+| HAT Pin | RPi GPIO | Scanned FPGA Pin | Expected by the boot check | Match |
+| ------- | -------- | ---------------- | -------------------------- | ----- |
 | 1       | GPIO16   | V12              | V12                | yes   |
 | 2       | GPIO14   | U12              | U12                | yes   |
 | 3       | GPIO15   | V10              | V10                | yes   |
