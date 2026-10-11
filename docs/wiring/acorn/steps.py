@@ -61,7 +61,7 @@ BOTH = (
     "wires 1 and {last} do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires "
     "apart. Leave the flags on and take the plug out. Wire {last} is the card's 3.3 V by the LiteX wiki's legend. "
     "It is expected to stay silent to ground on a card with no power. Set the meter to ohms. "
-    "Write down what each of the two wires reads to the pad, and send both readings to {contact}."
+    "Write down what each of the two wires reads to the pad. Send both readings to {contact}."
 )
 NOT_TOLD_APART = "If neither wire beeps, or both do, cut nothing: the step's words above say what to do in each case."
 
