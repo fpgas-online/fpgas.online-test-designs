@@ -1338,6 +1338,29 @@ def test_a_by_name_fomu_load_says_how_to_put_foboot_back(tmp_path, monkeypatch, 
     assert "fpgas-fomu-debug reset" in capsys.readouterr().out
 
 
+def test_a_failed_by_name_fomu_load_does_not_say_the_design_runs(tmp_path, monkeypatch, capsys):
+    args = _fomu_debug(monkeypatch, "program", test="uart", extra=[])
+    args.images = _install(tmp_path, FOMU)
+    monkeypatch.setattr(debug, "_live", lambda argv: 1)  # the DFU load failed: foboot may still be there
+    assert debug.run(FOMU, args) == 1
+    assert "fpgas-fomu-debug reset" not in capsys.readouterr().out
+
+
+def test_fpgas_fomu_debug_reset_holds_the_boards_lock(monkeypatch, fomu_usb):
+    held = []
+    args = _fomu_debug(monkeypatch, "reset")
+    monkeypatch.setattr(debug, "hold_lock", lambda lock, title: held.append(lock) or _Nothing())
+    fomu_usb.append(FOBOOT_USB)
+    monkeypatch.setattr(fomu, "run", Runner([("fomu_header_id.py", _says(FOMU_READING))]))
+    assert debug.run(FOMU, args) == 0 and held == [FOMU.lock]
+
+
+def test_a_full_fomu_check_gives_no_by_name_warning(tmp_path, fomu_usb):
+    fomu_usb.append(FOBOOT_USB)
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, Runner([("fomu_header_id.py", _says(FOMU_READING))]))
+    assert "warnings" not in report
+
+
 def test_a_by_name_fomu_check_warns_that_foboot_is_off_usb(tmp_path, fomu_usb):
     run = Runner([("fomu_header_id.py", _says(FOMU_READING))])
     report = _check(FOMU, tmp_path, {"variant": "evt"}, run, tests=["uart"])

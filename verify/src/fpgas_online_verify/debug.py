@@ -166,7 +166,7 @@ def run(board, args):
         if args.command in ("program", "test", "reset"):
             with hold_lock(board.lock, board.title):
                 rc = func(board, host, args)
-            if args.command in ("program", "test") and getattr(board, "by_name_note", ""):
+            if rc == 0 and args.command in ("program", "test") and getattr(board, "by_name_note", ""):
                 print(f"fpgas-{board.slug}-debug: {board.by_name_note}", flush=True)
             return rc
         return func(board, host, args)
