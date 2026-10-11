@@ -208,19 +208,29 @@ def commands(code):
     return out
 
 
+# The two ways the pages write the release into a URL: the release itself, or on 32-bit Raspberry Pi OS (ID=raspbian)
+# raspbian-<release>. Only these substitutions are let into a source line, so nothing else can run inside one.
+SUITE = (
+    r"\$\(\. /etc/os-release; echo \$VERSION_CODENAME\)",
+    r'\$\(\. /etc/os-release; if \[ "\$ID" = raspbian \]; then echo "raspbian-\$VERSION_CODENAME"; '
+    r'else echo "\$VERSION_CODENAME"; fi\)',
+)
+URL = r"https?://(?:[\w.:/~+%-]|" + "|".join(SUITE) + r")+"
+# Each form is the whole command, with no room for a second one chained on (`;`, `&&`, `|`, `$(...)`, backticks):
+# round 2 of #324's review chained an apt-get onto a board command and onto a source line, and both passed.
 KINDS = (
     ("mkdir", re.compile(r"^sudo install -d -m0755 /etc/apt/keyrings$")),
-    ("key", re.compile(r"^curl -fsSL \S+ \| sudo tee /etc/apt/keyrings/[\w.-]+ > /dev/null$")),
+    ("key", re.compile(r"^curl -fsSL https://[\w.:/~+%-]+ \| sudo tee /etc/apt/keyrings/[\w.-]+ > /dev/null$")),
     (
         "source",
         re.compile(
-            r'^echo "deb \[signed-by=/etc/apt/keyrings/[\w.-]+\] .*"'
+            r'^echo "deb \[signed-by=/etc/apt/keyrings/[\w.-]+\] ' + URL + r'( [\w./-]+)+"'
             r" \| sudo tee /etc/apt/sources\.list\.d/[\w.-]+\.list$"
         ),
     ),
     ("update", re.compile(r"^sudo apt update$")),
     ("install", re.compile(r"^sudo apt install( -t [\w-]+)? [\w.+-]+( [\w.+-]+)*$")),
-    ("board", re.compile(r"^(sudo )?fpgas-[\w-]+( .*)?$")),  # needs the board: the install steps end here
+    ("board", re.compile(r"^(sudo )?fpgas-[\w-]+( [\w.=/:-]+)*$")),  # needs the board: the install steps end here
 )
 
 
@@ -328,7 +338,10 @@ def update_problems(output):
     (apt gives the reason there: "  Sub-process /usr/bin/sqv returned an error code ...")."""
     out = []
     for line in output.splitlines():
-        if re.match(r"^(W|E|Err|Warning|Error):", line):  # apt 2 and apt 3 (trixie) wording
+        # apt 2 and apt 3 (trixie) wording; and the notice that a repository has no build for the Pi's architecture
+        if re.match(r"^(W|E|Err|Warning|Error):", line) or re.match(
+            r"^(N|Notice): .*doesn't support architecture", line
+        ):
             out.append(line)
         elif out and line.startswith(" ") and out[-1] is not None:
             out[-1] += " " + line.strip()
@@ -555,7 +568,8 @@ def downloads(plan, done, failures, label):
             done.add(uri)
             rc, out = run(f"cd {debs} && apt-get -o APT::Get::Simulate=false -qq download '{package}={version}'")
             if rc:
-                failures.append(f"{label}: {uri} does not download as its index says: {out.strip()[-500:]}")
+                said = [line for line in out.splitlines() if re.match(r"^(E|Err|Error):", line)]
+                failures.append(f"{label}: {uri} does not download as its index says: {'; '.join(said) or out[-500:]}")
             else:
                 print(f"    downloaded and checked: {uri}")
 

@@ -92,6 +92,33 @@ def test_a_command_the_check_does_not_know_is_refused_wherever_it_is(command):
             check.install_plan("p", steps, "bookworm")
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        # round 2's F12: a second command chained onto a known one, which `.*` let ride along unseen
+        "sudo fpgas-arty-verify --no-publish && sudo apt-get install -y openocd",
+        "sudo fpgas-arty-verify --no-publish; sudo apt-get install -y openocd",
+        "sudo fpgas-arty-verify $(sudo apt-get install -y openocd)",
+        'echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/bookworm/ ./"; sudo apt-get install '
+        '-y openocd; echo "x" | sudo tee /etc/apt/sources.list.d/apt.list',
+        'echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(sudo apt-get install -y openocd)/ '
+        './" | sudo tee /etc/apt/sources.list.d/apt.list',
+        "curl -fsSL https://apt.fpgas.online/apt.gpg;sudo apt-get install -y openocd | sudo tee "
+        "/etc/apt/keyrings/apt.gpg > /dev/null",
+    ],
+)
+def test_a_known_command_with_another_chained_on_is_refused(command):
+    assert check.kind(command) is None
+
+
+def test_every_command_the_pages_have_is_known():
+    # the tightened forms still take every command the pages write
+    for suite in ("bookworm", "trixie"):
+        setup, own = check.installing_plan(suite)
+        plans = [setup, own] + [check.board_plan(page, suite) for page, _p in check.boards().values()]
+        assert all(k for plan in plans for _n, k, _c in plan)
+
+
 def test_a_command_that_names_a_release_must_be_in_a_step_limited_to_it():
     line = (
         'echo "deb [signed-by=/etc/apt/keyrings/k.asc] http://deb.debian.org/debian bookworm-backports main" \\\n'
@@ -179,6 +206,17 @@ def test_install_problems_are_apt_s_errors_and_unmet_dependencies():
         "fpgas-online-arty-tools : Depends: openfpgaloader-fpgasonline but it is not installable or",
         "E: Unable to correct problems, you have held broken packages.",
     ]
+
+
+def test_a_repository_without_the_pi_s_architecture_is_a_problem_in_either_apt_s_words():
+    # round 2's F14: apt says this as a notice, so a page repository with no armhf build passed its update
+    for prefix in ("N:", "Notice:"):
+        line = (
+            f"{prefix} Skipping acquire of configured file 'main/binary-armhf/Packages' as repository "
+            "'https://x bookworm InRelease' doesn't support architecture 'armhf'"
+        )
+        assert check.update_problems(line + "\n") == [line]
+    assert check.update_problems("Notice: Some sources can be modernized.\n") == []
 
 
 def test_install_problems_include_apt_3_s_errors():
