@@ -8,7 +8,7 @@ Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
 ### What you need
 
 - a Raspberry Pi, or another host running Debian or Raspberry Pi OS bookworm or trixie, with the board attached
-- `sudo` on it, and a network that reaches `apt.fpgas.online` and `fpgas.online`
+- `sudo` and `curl` on it, and a network that reaches `apt.fpgas.online` and `fpgas.online`
 
 `grep VERSION_CODENAME /etc/os-release` says which release the host runs.
 
@@ -26,14 +26,15 @@ echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(. /et
 
 **2.** Add the fpgas.online-fpga-tools repository, before installing. On bookworm every board but the TT FPGA board
 needs it: Debian bookworm's openFPGALoader cannot read the device DNA. A NeTV2 on a Raspberry Pi 5 needs it
-on any release: only its build has the `rp1pio` cable.
+on any release: only its build has the `rp1pio` cable. On 32-bit Raspberry Pi OS (`ID=raspbian`) the suite is
+`raspbian-<release>`, which is built for every Pi down to the Pi 1 and Zero.
 
 ```bash
 # fpgas.online's openFPGALoader; add it before installing. A NeTV2 on a Pi 5 needs it. Elsewhere Debian's own
 # works from 0.13.0 on (trixie), but bookworm's (0.10.0) is too old: it cannot read the device DNA.
 curl -fsSL https://fpgas.online/fpgas.online-fpga-tools/fpgas.online-fpga-tools.gpg \
   | sudo tee /etc/apt/keyrings/fpgas.online-fpga-tools.gpg > /dev/null
-echo "deb [signed-by=/etc/apt/keyrings/fpgas.online-fpga-tools.gpg] https://fpgas.online/fpgas.online-fpga-tools/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
+echo "deb [signed-by=/etc/apt/keyrings/fpgas.online-fpga-tools.gpg] https://fpgas.online/fpgas.online-fpga-tools/$(. /etc/os-release; if [ "$ID" = raspbian ]; then echo "raspbian-$VERSION_CODENAME"; else echo "$VERSION_CODENAME"; fi)/ ./" \
   | sudo tee /etc/apt/sources.list.d/fpgas.online-fpga-tools.list
 ```
 
@@ -91,7 +92,9 @@ Where step 2 applies, `dpkg -l 'openfpgaloader*'` lists `openfpgaloader-fpgasonl
 
 * `fpgas-online-<board>-debug` adds `fpgas-<board>-debug` and the tools for the tests the boot check skips.
 * Installing does not run the check. It runs at the next boot, or when you run it.
-* The packages are `Architecture: all`: they install on Raspberry Pi OS and on an x86 machine alike. The NeTV2
+* The packages are `Architecture: all`. On bookworm, every board's packages but the TT FPGA board's need
+  openFPGALoader from the fpga-tools repository. It is built for arm64 and armhf only, so on bookworm those
+  packages do not install on x86. The NeTV2
   and the Acorn need a Pi's GPIO header, and so does the Fomu EVT, which sits on it; the Arty and TT FPGA board
   need only USB.
 * Versions are `0.0.postN` from `git describe`. Each package depends on the others'

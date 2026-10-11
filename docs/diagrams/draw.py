@@ -138,7 +138,8 @@ def _part(pic, thing, item, muted, pitch, inset=False):
     sh.add(f'<g id="{item.id}">' if not inset else "<g>")
     outline = {"fill": "none", "stroke": GREY, "sw": 1.5}
     if item.kind == "pin":
-        numbered = not muted and not inset and pitch.get(_parent(item.id), 0) >= NUMBERED_PITCH
+        # a muted pin keeps its name, its number, in grey (issue 267)
+        numbered = not inset and pitch.get(_parent(item.id), 0) >= NUMBERED_PITCH
         if numbered:
             side = max(w, min(0.8 * pitch[_parent(item.id)], NUMBER_SIDE))
             cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
@@ -147,7 +148,8 @@ def _part(pic, thing, item, muted, pitch, inset=False):
         frame_px = (BORDER, BORDER, BORDER + fr.px_size[0], BORDER + fr.px_size[1])
         if numbered and _within((x0, y0, x1, y1), frame_px):
             size = max(9.0, min(22.0, side * 0.45))
-            sh.text((x0 + x1) / 2, (y0 + y1) / 2 + size * 0.35, item.label, size, "bold", ON_GOLD, "middle")
+            fg = GREY if muted else ON_GOLD
+            sh.text((x0 + x1) / 2, (y0 + y1) / 2 + size * 0.35, item.label, size, "bold", fg, "middle")
     elif item.kind in ("standoff", "hole", "pad"):
         fill = "none" if muted else (GOLD if item.kind == "pad" else PART)
         stroke = GREY if muted else ("none" if item.kind == "pad" else PART_EDGE)

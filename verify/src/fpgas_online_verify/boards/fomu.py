@@ -21,6 +21,7 @@ The OpenVizsla OV3 that may sit inline on the Fomu's USB to debug its USB stack 
 named in the report, never taken for a board or for "no board"."""
 
 import json
+import re
 import sys
 import time
 from typing import ClassVar
@@ -35,6 +36,13 @@ CRESET, CDONE = 27, 17
 HEADER_GPIOS = (8, 9, 10, 11, 17, 24, 25, 27)  # the lines fomu_header_id.py takes
 HEADER_TIMEOUT = 60
 FOBOOT_WAIT = 10.0  # s for foboot to appear on USB after the reset
+# The kernel's lines about a USB device or port ("usb 1-1.2: …", "usb 1-1-port2: disabled by hub …", a root hub's
+# "usb usb1-port2: …"), kept when foboot does not come back: how the reset went on the USB side. In mainline hub.c
+# the enumeration messages print with the device or port ("usb 1-1-port3: unable to enumerate USB device", "usb
+# 1-1.2: New USB device found, idVendor=1209 …"), so that prefix is the pattern. It leaves out the drivers'
+# registration lines ("usbcore: registered …"), a 1209 in a timestamp or a hostname, and the hub's own lines
+# ("hub 1-0:1.0: …", e.g. over-current), which are about the hub, not the Fomu.
+USB_KERNEL_RE = re.compile(r"\busb (?:usb\d+|\d+-[\d.]+)(?:-port\d+)?:")
 # The EVT's flash, U4: a Winbond W25Q128JV-IM (tomu-fpga.sch), RDID EFh 70h 18h.
 FLASH_JEDEC = "ef7018"
 FLASH_PART, FLASH_BYTES = "W25Q128JV", 16 * 1024 * 1024
@@ -109,6 +117,16 @@ def header_check(variant, facts, found):
     return ("fail", "; ".join(faults), lines) if faults else ("pass", None, lines)
 
 
+def kernel_usb_lines(runner, keep=6):
+    """The kernel's last USB lines this boot, for a foboot that did not come back. A journal that cannot be read
+    gives none: it only explains a failure, which stands without it."""
+    try:
+        rc, text = runner(["journalctl", "-k", "-b", "--no-pager", "-o", "short-monotonic"], 10)
+    except Problem:
+        return []
+    return [line.strip() for line in text.splitlines() if USB_KERNEL_RE.search(line)][-keep:] if rc == 0 else []
+
+
 def foboot_check(variant, facts, found):
     """The `foboot` test: did foboot answer on USB after the reset? The tests' DFU loads need it."""
     seconds = found.get("foboot_seconds")
@@ -116,9 +134,17 @@ def foboot_check(variant, facts, found):
         return "pass", None, [f"foboot (1209:5bf0) on USB {seconds} s after the reset"]
     if "header" not in found:
         return "error", "not looked for: the header was not read, so the Fomu was not reset", []
+    # What tells the cases apart: foboot there before the reset and gone after it is the reset's doing; not there
+    # before either means a design with no USB was running (#135), which only a power cycle ends.
+    before = ("it was on USB before the reset" if found.get("foboot_before_reset")
+              else "it was not on USB before the reset either: a design with no USB was running")  # fmt: skip
+    reading = found["header"]
+    # the kernel's lines first and CDONE last: the console shows a failed test's last 8 lines (runner.summary)
+    output = [*found.get("usb_kernel", []), f"CDONE before {reading.get('cdone_before')}, in reset "
+              f"{reading.get('cdone_in_reset')}, after {reading.get('cdone_after')}"]  # fmt: skip
     return "fail", (f"foboot (1209:5bf0) did not appear on USB within {FOBOOT_WAIT:g} s of the reset, so no "
-                    "design can be loaded over DFU: look at the Fomu's USB path (an OpenVizsla, when one is "
-                    "inline, is on it)"), []  # fmt: skip
+                    f"design can be loaded over DFU ({before}): look at the Fomu's USB path (an OpenVizsla, "
+                    "when one is inline, is on it)"), output  # fmt: skip
 
 
 class Fomu(TestBoard):
@@ -131,21 +157,25 @@ class Fomu(TestBoard):
     variants: ClassVar[dict] = {"evt": "evt"}
     label_fields = ("flash_uid",)  # --identify takes it from the boot report: reading it resets the FPGA
     one_per_host = True  # on the Pi's header
+    yields_to = ("netv2",)  # GPIO17 is the NeTV2's TMS and GPIO27 its TDI: a NeTV2 found by its IDCODE explains it
+    yield_reason = "GPIO17 high is the NeTV2's TMS, not a Fomu's CDONE"
     port = "/dev/serial0"
     flash_note = "not read back: every verify rewrites the user image by DFU; its IDs are read over the header"
     fact_tests: ClassVar[dict] = {
         "header": {"variants": ("evt",), "check": header_check},
         "foboot": {"variants": ("evt",), "check": foboot_check},
     }
+    # Every test loads its design over DFU, which needs foboot on USB: when `foboot` did not pass, they are not run.
     tests: ClassVar[dict] = {
         "uart": {"artifact": "uart-test-fomu/kosagi_fomu_evt.bin", "script": "test_uart.py",
-                 "args": ["--port", "{port}", "--board", "fomu", "--skip-banner"], "verify": True},
+                 "args": ["--port", "{port}", "--board", "fomu", "--skip-banner"], "verify": True,
+                 "needs": ("foboot",)},
         "spiflash": {"artifact": "spiflash-test-fomu/kosagi_fomu_evt.bin", "script": "test_spiflash.py",
-                     "args": ["--port", "{port}", "--board", "fomu"]},
+                     "args": ["--port", "{port}", "--board", "fomu"], "needs": ("foboot",)},
         "pmod": {"artifact": "gpio-loopback-fomu-{v}/kosagi_fomu_evt.bin", "script": "test_pmod_loopback.py",
-                 "args": ["--board", "fomu"], "pre": PMOD_PRE},
+                 "args": ["--board", "fomu"], "pre": PMOD_PRE, "needs": ("foboot",)},
         "pin-id": {"artifact": "pmod-pin-id-fomu-{v}/kosagi_fomu_evt.bin", "script": "identify_pmod_pins.py",
-                   "args": [], "pre": PMOD_PRE},
+                   "args": [], "pre": PMOD_PRE, "needs": ("foboot",)},
     }  # fmt: skip
 
     def probe(self, host, runner=run):
@@ -163,6 +193,7 @@ class Fomu(TestBoard):
         """The flash's IDs over the header (the iCE40 reset; see the module's docstring), then foboot on USB.
         The whole reading is left in found["header"] for the `header` test and the report, and the IDs in
         found for the state."""
+        found["foboot_before_reset"] = bool(usb_matching(usb_devices(), (FOBOOT,)))
         try:
             reading = read_header(host, runner)
         except Problem as p:
@@ -179,9 +210,62 @@ class Fomu(TestBoard):
                 found["usb"] = dfu[0]["path"]
                 break
             if _clock() - start >= FOBOOT_WAIT:
+                found["usb_kernel"] = kernel_usb_lines(runner)
                 break
             _sleep(0.5)
         return facts
+
+    # What a run of tests by name leaves (#135): said by fpgas-fomu-debug after `program` and `test`, and by the
+    # check as a warning, since only the boot check's own run ends with the closing reset.
+    by_name_note = (
+        "the Fomu now runs a design with no USB, so nothing can be loaded over DFU: `sudo fpgas-fomu-debug reset` "
+        "puts foboot back on USB (a power cycle does too)"
+    )
+
+    def finish(self, variant, host, found, report, runner=run):
+        """#135: the tests leave a design with no USB running, so the next user could not load one over DFU until
+        the Fomu was power-cycled. The check ends by resetting the iCE40 through the header (reset_to_foboot) and
+        fails loud if foboot does not come back. Only when `header` and `foboot` both passed: the reset drives
+        CRESET and SPI0, which must be a Fomu's, and without foboot no design was loaded (the tests need it).
+        Tests asked for by name run without the fact tests, so the header is not known to be a Fomu's: no reset
+        then (the safe default), and the report says how to put foboot back."""
+        results = {t["test"]: t["result"] for t in report["tests"]}
+        if "header" not in results:
+            if any(t["test"] in self.tests for t in report["tests"]):
+                report.setdefault("warnings", []).append(self.by_name_note)
+            return None
+        if results["header"] != "pass" or results.get("foboot") != "pass":
+            return None
+        return self.reset_to_foboot(host, runner)
+
+    def reset_to_foboot(self, host, runner=None):
+        """Reset the iCE40 through the header with fomu_header_id.py (the same safe reset as before the tests, every
+        line checked to be an input afterwards), then wait for foboot on USB (sw1 p17, 11 Oct 2026: about 1 s).
+        A test entry, `foboot-after`: pass, fail with the kernel's USB lines, or error when the reset could not be
+        done. fpgas-fomu-debug reset runs it by name."""
+        runner = runner or run
+        entry = {"test": "foboot-after", "output": []}
+        try:
+            read_header(host, runner)
+        except Problem as p:
+            return {**entry, "result": p.result, "reason": f"the closing reset could not be done: {p.reason}"}
+        start = _clock()
+        while True:
+            if usb_matching(usb_devices(), (FOBOOT,)):
+                seconds = round(_clock() - start, 1)
+                said = f"foboot (1209:5bf0) back on USB {seconds} s after the closing reset: the next user can load"
+                return {**entry, "result": "pass", "output": [said + " over DFU"]}
+            if _clock() - start >= FOBOOT_WAIT:
+                return {
+                    **entry,
+                    "result": "fail",
+                    "output": kernel_usb_lines(runner),
+                    "reason": (
+                        f"foboot (1209:5bf0) did not come back on USB within {FOBOOT_WAIT:g} s of the closing reset: "
+                        "no design can be loaded over DFU until the Fomu is power-cycled (#135)"
+                    ),
+                }
+            _sleep(0.5)
 
     def identity(self, found):
         """The state: the variant and the flash's IDs read over the header (foboot has no USB serial)."""

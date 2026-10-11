@@ -127,6 +127,41 @@ def test_auto_probes_only_when_nothing_is_seen(opts):
     assert [b["board"] for b in report["boards"]] == ["netv2"] and report["chosen_by"] == "auto: probed (netv2)"
 
 
+def test_a_fomu_claimed_by_cdone_alone_yields_to_a_netv2_found_on_the_same_lines(opts):
+    """Root 3 on the welland NeTV2 hosts: GPIO17 is the NeTV2's TMS, which idles high, so the Fomu's passive CDONE
+    probe claimed a Fomu there, and its check then drove CRESET (GPIO27, the NeTV2's TDI) and SPI0. A NeTV2
+    found by its JTAG IDCODE explains the high line: the Fomu is not taken, never checked, and the report says why."""
+    netv2 = Fake("netv2", probes=True, probed=[{"variant": "a7-35", "idcode": "0x0362d093"}])
+    fomu = Fake("fomu", probes=True, probed=[{"variant": "evt", "cdone": "hi"}])
+    fomu.yields_to, fomu.yield_reason = ("netv2",), "GPIO17 high is the NeTV2's TMS, not a Fomu's CDONE"
+    report = runner.verify(opts, _boards(netv2, fomu), usb=[], pci=[], mode=("auto", "test"))
+    assert [b["board"] for b in report["boards"]] == ["netv2"] and fomu.checked == []
+    assert "fomu not taken: GPIO17 high is the NeTV2's TMS, not a Fomu's CDONE" in report["chosen_by"]
+
+
+def test_a_claim_that_yields_to_a_spotted_board_is_said_even_when_only_the_spotted_claim_is_left(opts):
+    acorn = Fake("acorn", seen=[{"kind": "vendor-xdma"}], weak=True, result="fail")  # weak: probing goes on
+    fomu = Fake("fomu", probes=True, probed=[{"variant": "evt", "cdone": "hi"}])
+    fomu.yields_to, fomu.yield_reason = ("acorn",), "a reason"
+    report = runner.verify(opts, _boards(acorn, fomu), usb=[], pci=[], mode=("auto", "test"))
+    assert [b["board"] for b in report["boards"]] == ["acorn"] and "fomu not taken: a reason" in report["chosen_by"]
+
+
+def test_the_fomu_yields_its_cdone_claim_to_a_netv2():
+    from fpgas_online_verify.boards import fomu
+
+    assert fomu.BOARD.yields_to == ("netv2",)
+    assert fomu.BOARD.yield_reason == "GPIO17 high is the NeTV2's TMS, not a Fomu's CDONE"
+
+
+def test_a_fomu_claimed_by_cdone_with_no_other_board_found_is_still_checked(opts):
+    netv2 = Fake("netv2", probes=True, probed=[])  # no NeTV2 answers on JTAG: nothing explains GPIO17 high
+    fomu = Fake("fomu", probes=True, probed=[{"variant": "evt", "cdone": "hi"}])
+    fomu.yields_to, fomu.yield_reason = ("netv2",), "GPIO17 high is the NeTV2's TMS, not a Fomu's CDONE"
+    report = runner.verify(opts, _boards(netv2, fomu), usb=[], pci=[], mode=("auto", "test"))
+    assert [b["board"] for b in report["boards"]] == ["fomu"]
+
+
 def test_auto_still_probes_when_every_claim_is_weak_and_keeps_the_claim(opts):
     """A Xilinx PCIe design the Acorn module cannot name may be a NeTV2 on PCIe: its JTAG is probed too."""
     acorn = Fake("acorn", seen=[{"kind": "vendor-xdma"}], weak=True, result="fail")

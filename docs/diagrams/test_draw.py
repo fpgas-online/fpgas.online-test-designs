@@ -337,3 +337,16 @@ def test_each_highlighted_pin_is_labelled_with_its_number():
     for n in range(19, 27):
         (g,) = groups(svg, f"hat.header.pin.{n}")
         assert [e.get("aria-label") for e in g.iter(f"{SVG}g") if e.get("aria-label")] == [str(n)]
+
+
+def test_a_muted_pin_keeps_its_number_in_grey():
+    """Issue 267: a muted part is its grey outline and its name, and a pin's name is its number. The reader of a
+    pins-only view names the empty cavities between the lit pins by these."""
+    svg, f = draw.render(SCENE, VIEWS["pi5-hat.top.p1-pins"])
+    muted = [i for i in f["muted"] if i.startswith("hat.header.pin.")]
+    assert {"hat.header.pin.20", "hat.header.pin.22", "hat.header.pin.26"} <= set(muted)
+    for item_id in muted:
+        (g,) = groups(svg, item_id)
+        labels = [e for e in g.iter(f"{SVG}g") if e.get("aria-label")]
+        assert [e.get("aria-label") for e in labels] == [item_id.rsplit(".", 1)[1]], item_id
+        assert {e.get("fill") for e in labels} == {palette.role("render-muted")}, item_id
