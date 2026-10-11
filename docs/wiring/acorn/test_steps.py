@@ -427,7 +427,7 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
     for part in ("jtag-1", "uart-1"):
         first_step = dict(step_blocks(pages[steps.guide_name(c, part)]))[1]
         assert first_step.startswith(f"**1.** {steps.CARD_OUT_STEP}")
-        assert f"If it is fitted, {c.power_off[0].lower()}{c.power_off[1:]} Then take the card out." in first_step
+        assert f"{c.power_off} Do this only if it is fitted. Then take the card out." in first_step
         assert steps.STATIC in first_step
     assert "cut in half, once" in overview
     # the reach check is asked for at a moment the guide has: after the one cut, before any wire is cut back
@@ -480,7 +480,7 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
     assert ("the one wire that is cut to take the resistor" in overview) == bool(c.resistors)
     if c.resistors:
         said = (
-            f"lands on GPIO14, which is also JTAG TMS: the {c.resistor_value} in the wire is meant to let JTAG through"
+            f"lands on GPIO14, which is also JTAG TMS. The {c.resistor_value} in the wire is meant to let JTAG through"
         )
         assert said in steps.procedure(c)
     # the meter check of wire 1 is on the page that cuts wires, before the cut

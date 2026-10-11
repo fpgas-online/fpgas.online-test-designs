@@ -14,7 +14,7 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 
 ## Steps
 
-**1.** This is a bench check; the housings come off again before the cables are fitted. If the Raspberry Pi 5 is on, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. The Acorn stays out of its slot; if it is fitted, take it out. Take the screw at its far end out first: the SSD mounting screw the HAT ships with ([Waveshare's page for the HAT](https://www.waveshare.com/poe-m.2-hat-plus-b.htm)). Then fit the P1 housing on the 40-pin header pins 19 to 26 with its marked corner on pin 19, counted as in the picture. The P1 cavity picture is shown again below, for which wire goes in which cavity, and which corner is marked.
+**1.** This is a bench check; the housings come off again before the cables are fitted. Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. Do this only if the Raspberry Pi 5 is on. The Acorn stays out of its slot; if it is fitted, take it out. Take the screw at its far end out first: the SSD mounting screw the HAT ships with ([Waveshare's page for the HAT](https://www.waveshare.com/poe-m.2-hat-plus-b.htm)). Then fit the P1 housing on the 40-pin header pins 19 to 26 with its marked corner on pin 19, counted as in the picture. The P1 cavity picture is shown again below, for which wire goes in which cavity, and which corner is marked.
 
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png){.only-light}
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1-dark.png){.only-dark}

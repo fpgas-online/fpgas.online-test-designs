@@ -52,16 +52,16 @@ CABLES = [("blade", "P1"), ("blade", "P2"), ("pi5", "P1"), ("pi5", "P2")]
 # says NOT_TOLD_APART, so that the step and its picture fit one sheet (and the picture, shared by both carriers,
 # names no one to send readings to).
 NEITHER = (
-    "If neither wire beeps, strip about {strip} mm from wires 1 and {last} and try again; "
-    "if still neither beeps, stop: the ground point is not confirmed."
+    "If neither wire beeps, strip about {strip} mm from wires 1 and {last} and try again. If still neither beeps, "
+    "stop: the ground point is not confirmed."
 )
 # The other result that proves nothing: the reader stops, and sends what the meter reads.
 BOTH = (
-    "If both wires beep, first see that the two probes do not touch each other and that the cut faces of wires "
-    "1 and {last} do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires "
-    "apart. Leave the flags on and take the plug out. Wire {last} is the card's 3.3 V by the LiteX wiki's legend, "
-    "and is expected to stay silent to ground on a card with no power. Set the meter to ohms, "
-    "write down what each of the two wires reads to the pad, and send both readings to {contact}."
+    "If both wires beep, first see that the two probes do not touch each other. See also that the cut faces of "
+    "wires 1 and {last} do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires "
+    "apart. Leave the flags on and take the plug out. Wire {last} is the card's 3.3 V by the LiteX wiki's legend. "
+    "It is expected to stay silent to ground on a card with no power. Set the meter to ohms. "
+    "Write down what each of the two wires reads to the pad, and send both readings to {contact}."
 )
 NOT_TOLD_APART = "If neither wire beeps, or both do, cut nothing: the step's words above say what to do in each case."
 
@@ -1175,6 +1175,12 @@ def power_off_if_on(c):
     return f"If the {c.name} is on, {c.power_off[0].lower()}{c.power_off[1:]}"
 
 
+def power_off_when(c, when):
+    """The same words as a sentence of a page, as two sentences so that neither is long: the carrier's own
+    power-off sentence, then the condition (`when`: "the Compute Blade is on") under which it is done."""
+    return f"{c.power_off} Do this only if {when}."
+
+
 # Taking the card out of its slot: only what the repo records. The blade's screw and driver are in the parts
 # list (wiring.toml, the PH1 screwdriver); the Pi 5's HAT is recorded as holding the card by a screw at its far end,
 # and no size or driver for it. How the card then leaves the slot is recorded for neither.
@@ -1221,10 +1227,7 @@ CARD_OUT_STEP = "Have the Acorn out of its slot."
 
 def card_out_step(c):
     """The step that has the card out of its slot and in the hand: the power off first, the screw, and static."""
-    return (
-        f"{CARD_OUT_STEP} If it is fitted, {c.power_off[0].lower()}{c.power_off[1:]} Then take the card out. "
-        f"{card_out(c)} {STATIC}"
-    )
+    return f"{CARD_OUT_STEP} {power_off_when(c, 'it is fitted')} Then take the card out. {card_out(c)} {STATIC}"
 
 
 def header_words(name):
@@ -1281,7 +1284,7 @@ def resistor_reason(c, sig):
     if not gpio or not shared:
         raise wiring.WiringError(f"{c.key}: {sig} has a series resistor and shares its pin with no JTAG wire: say why")
     return (
-        f"The resistor is there because {label_of(sig)} lands on {gpio}, which is also JTAG {shared[0]}: the "
+        f"The resistor is there because {label_of(sig)} lands on {gpio}, which is also JTAG {shared[0]}. The "
         f"{c.resistor_value} in the wire is meant to let JTAG through if the FPGA drives {label_of(sig)}."
     )
 
@@ -1343,20 +1346,21 @@ def procedure_parts(c, restart=False):
     step(card_out_step(c))
     step(
         f"{CUT_HALF} with side cutters. Each half is one cable. The cut comes before the reach "
-        f"check on purpose: a half is what goes between the card and the {c.name}, so a half is what is "
+        f"check on purpose. A half is what goes between the card and the {c.name}, so a half is what is "
         "checked for reach, below.",
         ("The cable, cut in the middle", "acorn-cable-cut.png"),
     )
     pairs = [
-        f"the half for {k} from socket {k} to the {header_words(c.headers[housing(c, k).header].name)}"
+        f"Lay the half for {k} from socket {k} to the {header_words(c.headers[housing(c, k).header].name)}, "
+        "along the way that cable will run."
         for k in wiring.CONNECTORS
     ]
     step(
         f"{REACH}, before any wire is cut back or crimped. "
-        + power_off_if_on(c)
-        + " With the card out of its slot, hold the card over the slot where it will sit, and lay "
-        + " and ".join(pairs)
-        + ", along the way each cable will run. Its cut end must reach the header with some slack left to "
+        + power_off_when(c, f"the {c.name} is on")
+        + " With the card out of its slot, hold the card over the slot where it will sit. "
+        + " ".join(pairs)
+        + " Its cut end must reach the header with some slack left to "
         "bend into the housing. If a half does not reach, stop: this guide uses each half at the length it has. "
         f"Tell {c.contact}.",
         (
@@ -1390,13 +1394,14 @@ def procedure_parts(c, restart=False):
             f"Press the plug of {half} half into socket {connector} on the underside of the Acorn. "
             "Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost.",
             f"Put a numbered tape flag on each of the {len(pins)} wires, 1 at the left to {len(pins)}, about "
-            f"{lengths['flag_back']} mm back from the tip, clear of the end that will be cut and stripped later. "
+            f"{lengths['flag_back']} mm back from the tip. "
+            "Keep each flag clear of the end that will be cut and stripped later. "
             f"Write {connector} on the flag of wire 1 as well: off the card, the two halves look alike.",
         ]
         check = [
             "With the plug still in the socket (the Acorn out of any slot), set the meter to continuity. "
             "Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not "
-            "stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: "
+            "stripped yet). Put the other probe on the plated half-round mounting pad at the end of the card: "
             "it must beep.",
             f"Do the same with the wire flagged {len(pins)}: it must stay silent.",
             f"If wire {len(pins)} beeps instead, stop: the numbering is reversed; take the flags off and number from "
@@ -1419,7 +1424,7 @@ def procedure_parts(c, restart=False):
         )
         one = len(cut_n) == 1
         step(
-            f"Cut {cut_who} off about {lengths['cut_back']} mm from the plug and shrink a piece of the "
+            f"Cut {cut_who} off about {lengths['cut_back']} mm from the plug. Shrink a piece of the "
             f"{lengths['tube']} mm tube over "
             f"{'the cut end' if one else 'each cut end'}. {'It goes' if one else 'They go'} in no cavity. "
             f"Wire {len(pins)} is VCC, 3.3 V from the Acorn by the LiteX wiki's legend: it must never reach the "
@@ -1500,7 +1505,8 @@ def procedure_parts(c, restart=False):
     for i, (connector, picture) in enumerate(cavity.items()):
         step(
             (
-                f"{BENCH_START} {power_off_if_on(c)} The Acorn stays out of its slot; if it is fitted, take it out. "
+                f"{BENCH_START} {power_off_when(c, f'the {c.name} is on')} "
+                "The Acorn stays out of its slot; if it is fitted, take it out. "
                 f"{card_out(c)} Then fit {fits[i]}."
                 if i == 0
                 else f"Fit {fits[i]}."

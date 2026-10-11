@@ -25,28 +25,28 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 
 ## Steps
 
-**1.** Have the Acorn out of its slot. If it is fitted, power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. Then take the card out. Take the screw at its far end out first: the SSD mounting screw the HAT ships with ([Waveshare's page for the HAT](https://www.waveshare.com/poe-m.2-hat-plus-b.htm)). The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges. If the Molex cable is still whole, cut it in the middle with side cutters: each half is one cable.
+**1.** Have the Acorn out of its slot. Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE. Do this only if it is fitted. Then take the card out. Take the screw at its far end out first: the SSD mounting screw the HAT ships with ([Waveshare's page for the HAT](https://www.waveshare.com/poe-m.2-hat-plus-b.htm)). The Acorn is a bare circuit board. Before you pick it up, touch bare metal of the host, or wear an anti-static wrist strap; hold the card by its edges. If the Molex cable is still whole, cut it in the middle with side cutters: each half is one cable.
 
 **2.** Find wire 1 of the P2 cable and flag the wires, before cutting any wire back.
 
 1. Press the plug of the other half into socket P2 on the underside of the Acorn. Hold the card underside up with the M.2 edge to your left: wire 1 is the leftmost.
-2. Put a numbered tape flag on each of the 6 wires, 1 at the left to 6, about 25 mm back from the tip, clear of the end that will be cut and stripped later. Write P2 on the flag of wire 1 as well: off the card, the two halves look alike.
+2. Put a numbered tape flag on each of the 6 wires, 1 at the left to 6, about 25 mm back from the tip. Keep each flag clear of the end that will be cut and stripped later. Write P2 on the flag of wire 1 as well: off the card, the two halves look alike.
 
 ![The P2 cable's plug in socket P2, all 6 wires whole, a flag on each](acorn-cable-p2-flag.png){.only-light}
 ![The P2 cable's plug in socket P2, all 6 wires whole, a flag on each](acorn-cable-p2-flag-dark.png){.only-dark}
 
 **3.** Check which wire of the P2 cable is wire 1, with a meter, before cutting any wire back.
 
-1. With the plug still in the socket (the Acorn out of any slot), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet), and put the other probe on the plated half-round mounting pad at the end of the card: it must beep.
+1. With the plug still in the socket (the Acorn out of any slot), set the meter to continuity. Press the probe tip, or a pin held to it, against the cut face of the wire flagged 1 (it is not stripped yet). Put the other probe on the plated half-round mounting pad at the end of the card: it must beep.
 2. Do the same with the wire flagged 6: it must stay silent.
-3. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again; if still neither beeps, stop: the ground point is not confirmed.
-4. If both wires beep, first see that the two probes do not touch each other and that the cut faces of wires 1 and 6 do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires apart. Leave the flags on and take the plug out. Wire 6 is the card's 3.3 V by the LiteX wiki's legend, and is expected to stay silent to ground on a card with no power. Set the meter to ohms, write down what each of the two wires reads to the pad, and send both readings to whoever gave you this guide.
+3. If wire 6 beeps instead, stop: the numbering is reversed; take the flags off and number from the other end. If neither wire beeps, strip about 3 mm from wires 1 and 6 and try again. If still neither beeps, stop: the ground point is not confirmed.
+4. If both wires beep, first see that the two probes do not touch each other. See also that the cut faces of wires 1 and 6 do not touch. If both still beep, stop and cut nothing: the check cannot tell the wires apart. Leave the flags on and take the plug out. Wire 6 is the card's 3.3 V by the LiteX wiki's legend. It is expected to stay silent to ground on a card with no power. Set the meter to ohms. Write down what each of the two wires reads to the pad, and send both readings to whoever gave you this guide.
 5. Take the plug out again.
 
 ![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check.png){.only-light}
 ![Checking which wire is wire 1 with a meter, the plug in socket P2](acorn-cable-p2-ground-check-dark.png){.only-dark}
 
-**4.** Cut wire 6 off about 10 mm from the plug and shrink a piece of the 2 mm tube over the cut end. It goes in no cavity. Wire 6 is VCC, 3.3 V from the Acorn by the LiteX wiki's legend: it must never reach the host. Leave wires 1 to 5 at full length.
+**4.** Cut wire 6 off about 10 mm from the plug. Shrink a piece of the 2 mm tube over the cut end. It goes in no cavity. Wire 6 is VCC, 3.3 V from the Acorn by the LiteX wiki's legend: it must never reach the host. Leave wires 1 to 5 at full length.
 
 ![The P2 cable: its wires prepared](acorn-cable-pi5-p2-prepare.png){.only-light}
 ![The P2 cable: its wires prepared](acorn-cable-pi5-p2-prepare-dark.png){.only-dark}

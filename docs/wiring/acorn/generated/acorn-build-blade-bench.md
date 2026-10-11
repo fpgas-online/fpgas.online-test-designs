@@ -14,7 +14,7 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 
 ## Steps
 
-**1.** This is a bench check; the housings come off again before the cables are fitted. If the Compute Blade is on, ask the site operator, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. The Acorn stays out of its slot; if it is fitted, take it out. Take its screw out first: an M2x2.5 screw with an M2 nylon washer, which takes a PH1 driver ([the Compute Blade's assembly guide](https://github.com/uptime-lab/compute-blade/blob/main/docs/docs/blade/getting-started/assembly.mdx)). Then fit the P1 housing on the Extension Port with its marked corner on the pin printed 1 beside the header. The P1 cavity picture is shown again below, for which wire goes in which cavity, and which corner is marked.
+**1.** This is a bench check; the housings come off again before the cables are fitted. Ask the site operator, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Do this only if the Compute Blade is on. The Acorn stays out of its slot; if it is fitted, take it out. Take its screw out first: an M2x2.5 screw with an M2 nylon washer, which takes a PH1 driver ([the Compute Blade's assembly guide](https://github.com/uptime-lab/compute-blade/blob/main/docs/docs/blade/getting-started/assembly.mdx)). Then fit the P1 housing on the Extension Port with its marked corner on the pin printed 1 beside the header. The P1 cavity picture is shown again below, for which wire goes in which cavity, and which corner is marked.
 
 ![Which wire goes in which cavity, P1 cable](acorn-cable-blade-p1.png){.only-light}
 ![Which wire goes in which cavity, P1 cable](acorn-cable-blade-p1-dark.png){.only-dark}
