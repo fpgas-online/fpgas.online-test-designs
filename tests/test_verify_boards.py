@@ -565,6 +565,25 @@ def test_a_netv2_on_a_pi5_loads_with_rp1pio_and_muxes_its_uart(tmp_path):
     assert any(c[:3] == ["openFPGALoader", "-c", "rp1pio"] and c[-1].endswith("kosagi_netv2.bit") for c in run.calls)
 
 
+def _netv2_pi5_listen(tmp_path, answer):
+    """The NeTV2 on a Pi 5's first listening test, with listen.py answering `answer`."""
+    run = Runner([("fpgas_online_verify.listen", answer)], flash=b"\0" * NETV2.flash_region["a7-35"])
+    report = NETV2.check(_host(NETV2, PI5, None), {"variant": "a7-35"},
+                         {"images": _install(tmp_path, NETV2)}, runner=run)  # fmt: skip
+    return next(t for t in report["tests"] if NETV2.tests[t["test"]].get("listen"))
+
+
+def test_a_listened_load_that_ends_done_0_fails_as_a_load(tmp_path):
+    test = _netv2_pi5_listen(tmp_path, (0, NOT_LOADED + "PASS"))  # the test passed on stale output
+    assert test["result"] == "fail" and "did not configure" in test["reason"]
+
+
+def test_a_listened_load_that_exits_non_zero_says_so_not_that_the_done_line_is_missing(tmp_path):
+    test = _netv2_pi5_listen(tmp_path, (2, "$ openFPGALoader -c rp1pio\nunable to open /dev/pio0\n"
+                                           "loading the design failed (exit 2)\n"))  # fmt: skip
+    assert test["result"] == "fail" and test["reason"] == "loading it failed (exit 2)"
+
+
 def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_read_flash(tmp_path, monkeypatch):
     _installed(monkeypatch)
     run = Runner([E6_SAYS_FPGA])

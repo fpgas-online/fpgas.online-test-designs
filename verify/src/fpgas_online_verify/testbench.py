@@ -46,6 +46,8 @@ JEDEC_RE = re.compile(r"JEDEC ID: 0x([0-9A-Fa-f]{2}) 0x([0-9A-Fa-f]{2}) 0x([0-9A
 
 # openFPGALoader's last line after loading a 7-series FPGA over JTAG: "ir: 1 isc_done 1 isc_ena 0 init 1 done 1".
 DONE_RE = re.compile(r"^ir: [0-9a-f]+ isc_done [01] isc_ena [01] init [01] done ([01])\s*$", re.M)
+# listen.py's line when the programmer exited non-zero.
+LISTEN_LOAD_FAILED = re.compile(r"^loading the design failed \(exit (\d+)\)$", re.M)
 
 
 class TestBoard(Board):
@@ -227,7 +229,13 @@ class TestBoard(Board):
                 argv = [sys.executable, "-m", "fpgas_online_verify.listen", host["port"], str(len(test_argv)),
                         *test_argv, *program]  # fmt: skip
                 rc, text = runner(argv, PROGRAM_TIMEOUT + TEST_TIMEOUT + 60)  # more than listen.py allows itself
-                why = self.load_failure(program, text)  # the test may pass on stale output; the load says first
+                # listen.py says a programmer that exited non-zero in its own words; otherwise the load is judged
+                # by its output, which listen.py passes on (the test may pass on stale output: the load says first)
+                failed = LISTEN_LOAD_FAILED.search(text)
+                if failed:
+                    return {**out, "result": "fail", "reason": f"loading it failed (exit {failed[1]})",
+                            "output": tail(text)}  # fmt: skip
+                why = self.load_failure(program, text)
                 if why:
                     return {**out, "result": "fail", "reason": f"loading it failed: {why}", "output": tail(text)}
             else:
