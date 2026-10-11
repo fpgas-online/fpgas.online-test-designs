@@ -177,3 +177,32 @@ def test_muted_parts_are_grey_lines_that_show_on_the_board_and_their_names_read_
         assert palette.contrast(grey, ground) >= canvas.TEXT_SMALL  # its name, drawn on the board
         part = palette.value(palette.role("render-part"), theme)
         assert palette.contrast(part, ground) >= 3.0
+
+
+def muted_items():
+    """(view id, item id) for every muted item of every committed view that has a highlight."""
+    out = []
+    for view_id, view in VIEWS.items():
+        if view.highlight:
+            out += [pytest.param(view_id, i, id=f"{view_id}:{i}") for i in facts(view_id)["muted"]]
+    return out
+
+
+def test_every_kind_of_item_is_muted_somewhere_in_the_committed_views():
+    kinds = {SCENE.item(i.values[1]).kind for i in muted_items()}
+    assert {"header", "pin", "socket", "slot", "pad"} <= kinds
+
+
+@pytest.mark.parametrize(("view_id", "item_id"), muted_items())
+def test_a_muted_item_is_a_grey_outline_and_its_name_of_whatever_kind(view_id, item_id):
+    """Issue 267: a muted part is a grey outline and its name, nothing else: no colour token but render-muted
+    and no fill other than none, in its own group and in its label's."""
+    svg = draw.render(SCENE, VIEWS[view_id])[0]
+    drawn = groups(svg, item_id)
+    assert drawn, f"{item_id} is muted but not drawn"
+    for g in drawn:
+        assert tokens(g) <= {"render-muted"}, f"{item_id}: {tokens(g)}"
+        for e in g.iter():
+            fill = e.get("fill")
+            if fill is not None and e.tag not in (f"{SVG}g", f"{SVG}text"):  # a name's text is grey; shapes are not
+                assert fill == "none", f"{item_id}: a muted {e.tag} is filled with {fill}"
