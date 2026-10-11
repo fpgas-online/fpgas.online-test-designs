@@ -530,26 +530,30 @@ def pages(c):
         "Find the failing line in the table, then the wire in the two cavity pictures under it: the number in a "
         "cavity is the number on the wire's flag.",
         "",
-        f"**Before you touch a cable: {c.power_off}** **After moving a wire, the cable goes through the same checks "
-        "as a new one before any boot:** take the card out and pull both plugs from its sockets, check that "
-        "cable's plug contacts against its housing with the meter as "
-        f"{steps.meter_check_steps(c)} of {link('jtag-2')} or {link('uart-2')} do, run "
-        f"the bench check ({link('bench')}) with the card out, and fit the cables ({link('fit')}). Then "
-        + ("ask the site operator and boot, and run" if c.key == "blade" else "boot and run")
-        + " the check again"
-        + (
-            f" (on a blade the install is gone after the boot: install again, as in {BLADE_CHECK})"
+        "To move a wire, the cable goes through the same checks as a new one before any boot:",
+        "",
+        f"1. {c.power_off}",
+        "2. Take the card out and pull both plugs from its sockets.",
+        "3. Move the wire.",
+        f"4. Check that cable's plug contacts against its housing with the meter, as {steps.meter_check_steps(c)} of "
+        f"{link('jtag-2')} or {link('uart-2')} do.",
+        f"5. Run the bench check, with the card out: {link('bench')}.",
+        f"6. Fit the cables: {link('fit')}.",
+        (
+            f"7. Ask the site operator, then boot the blade. The install is gone after the boot: install the packages "
+            f"again, as in {BLADE_CHECK}, and run the check again."
             if c.key == "blade"
-            else ""
-        )
-        + ". One test can be run on its own, "
+            else "7. Boot the Pi and run the check again."
+        ),
+        "",
+        "One test can be run on its own"
         + (
-            "`sudo fpgas-acorn-verify --no-publish --test p2-serial` or `sudo fpgas-acorn-verify --no-publish "
-            "--test jtag`; it prints the usual summary, then the whole report as JSON. Run `--test jtag` only "
-            f"{JTAG_CONDITIONS}. In a boot with the header's serial port off, "
-            f"the same goes for the whole check, which runs `jtag` too ({BLADE_CHECK})."
+            ": `sudo fpgas-acorn-verify --no-publish --test p2-serial`, or `sudo fpgas-acorn-verify --no-publish "
+            f"--test jtag`. Run `--test jtag` only {JTAG_CONDITIONS}. In a boot with the header's serial port off, "
+            f"the same goes for the whole check, which runs `jtag` too ({BLADE_CHECK}). Each prints the usual summary, "
+            "then the whole report as JSON."
             if c.key == "blade"
-            else "`sudo fpgas-acorn-verify --test jtag` or `--test p2-serial`; it prints the usual summary, then "
+            else ": `sudo fpgas-acorn-verify --test jtag`, or `--test p2-serial`. Each prints the usual summary, then "
             "the whole report as JSON."
         ),
         "",

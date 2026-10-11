@@ -32,7 +32,7 @@ Then the tests of an FPGA board, in this order:
 2. [The `dip-switches` test](#the-dip-switches): a switch that is on fails the board.
 3. The `pin-id` test: the check loads the PMOD pin identification design and checks the PMOD HAT cabling against
    the expected map (ui_in on HAT JA, uio on JB, uo_out on JC:
-   [tt-fpga-pin-mapping.md](../hardware/tt-fpga-pin-mapping.md)). A miswired HAT fails the board.
+   [Tiny Tapeout FPGA demo board pin mapping](https://docs.fpgas.online/en/latest/boards/tt-fpga/overview/pin-mapping.html)). A miswired HAT fails the board.
 4. The `uart` test: the check loads the UART test design through the microcontroller (`tt_fpga_program.py`, over
    `mpremote`), and runs its host test through the UART bridge on `/dev/ttyACM0`.
 5. When the tests are done it streams one more design, which moves the seven-segment display and is left running

@@ -4,7 +4,17 @@
 
 Find the failing line in the table, then the wire in the two cavity pictures under it: the number in a cavity is the number on the wire's flag.
 
-**Before you touch a cable: Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE.** **After moving a wire, the cable goes through the same checks as a new one before any boot:** take the card out and pull both plugs from its sockets, check that cable's plug contacts against its housing with the meter as steps 3 and 4 of [How to fill the JTAG cable's housing (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/jtag-housing.html) or [How to fill the UART cable's housing (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/uart-housing.html) do, run the bench check ([How to check the cables on the bench (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/bench-check.html)) with the card out, and fit the cables ([How to fit the cables and the card (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/fitting.html)). Then boot and run the check again. One test can be run on its own, `sudo fpgas-acorn-verify --test jtag` or `--test p2-serial`; it prints the usual summary, then the whole report as JSON.
+To move a wire, the cable goes through the same checks as a new one before any boot:
+
+1. Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE.
+2. Take the card out and pull both plugs from its sockets.
+3. Move the wire.
+4. Check that cable's plug contacts against its housing with the meter, as steps 3 and 4 of [How to fill the JTAG cable's housing (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/jtag-housing.html) or [How to fill the UART cable's housing (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/uart-housing.html) do.
+5. Run the bench check, with the card out: [How to check the cables on the bench (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/bench-check.html).
+6. Fit the cables: [How to fit the cables and the card (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/fitting.html).
+7. Boot the Pi and run the check again.
+
+One test can be run on its own: `sudo fpgas-acorn-verify --test jtag`, or `--test p2-serial`. Each prints the usual summary, then the whole report as JSON.
 
 | The failing line | Look at |
 |---|---|
