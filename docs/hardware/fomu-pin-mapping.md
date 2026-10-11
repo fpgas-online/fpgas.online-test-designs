@@ -63,14 +63,14 @@ only reads CDONE.
 
 ## Programming Interface
 
-The Fomu boots from SPI flash into a DFU bootloader. Programming loads a new bitstream into volatile SRAM via USB DFU.
+The Fomu boots from SPI flash into a DFU bootloader, foboot. A DFU load writes the bitstream into the flash's user image, at offset 0x40000, and starts it ([foboot's README](https://github.com/im-tomu/foboot#loading-and-running-other-bitstreams)). A power cycle starts foboot again; the user image stays in the flash until the next DFU load replaces it.
 
 | Parameter | Value |
 |-----------|-------|
-| Interface | USB DFU (iCE40 SRAM load) |
+| Interface | USB DFU (written to the flash's user image, then started) |
 | USB VID:PID | `1209:5bf0` (DFU bootloader) |
 | Tool | `openFPGALoader -b fomu <bitstream>` |
-| Bitstream type | `.bin` (volatile SRAM load) |
+| Bitstream type | `.bin` |
 | Bootloader | DFU Bootloader v2.0.4 |
 
 ### DFU Bootloader Timeout
