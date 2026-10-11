@@ -104,6 +104,19 @@ class AcornPinIdentifier(Module):
             self.submodules += tx
 
 
+def design(variant="cle-215+", toolchain="openxc7"):
+    """The platform with one output per P2 pin, the pin list [(ball, label)] and the module: everything main()
+    builds but the toolchain's own fixes and the build. tests/test_pmod_pin_id_elaborate.py elaborates it without
+    a toolchain."""
+    platform = Platform(variant=variant, toolchain=toolchain)
+    # The platform's own serial and spisdcard resources name these balls too; they are not requested here, so the
+    # pin_id_* outputs below are the only users of the pins.
+    platform.add_extension(_pin_id_io)
+    pin_list = [(fpga_pin, f"{fpga_pin}\r\n") for fpga_pin, _resource in P2_PINS]
+    module = AcornPinIdentifier(platform)  # its CRG calls require_timing
+    return platform, pin_list, module
+
+
 def main():
     import argparse
 
@@ -117,14 +130,7 @@ def main():
     parser.add_argument("--build", action="store_true")
     args = parser.parse_args()
 
-    platform = Platform(variant=args.variant, toolchain=args.toolchain)
-
-    # Remove the default serial and sdcard extensions so our pin_id_io can claim the pins.
-    # The Platform.__init__ auto-adds _serial_io and _sdcard_io which would conflict.
-    # We need to create a fresh platform without those extensions.
-    # Workaround: just add our IO — LiteX will error if pins conflict, so we skip
-    # requesting "serial" or "spisdcard" and use direct pin assignments instead.
-    platform.add_extension(_pin_id_io)
+    platform, _pin_list, module = design(args.variant, args.toolchain)
 
     if args.toolchain == "openxc7":
         fix_openxc7_device_name(platform)
@@ -133,8 +139,6 @@ def main():
     print(f"Pin ID: {len(P2_PINS)} pins")
     for fpga_pin, resource in P2_PINS:
         print(f"  {resource:20s} -> {fpga_pin!r}")
-
-    module = AcornPinIdentifier(platform)
 
     if args.toolchain == "openxc7" and hasattr(platform.toolchain, "_yosys_template"):
         platform.toolchain._yosys_template = list(YOSYS_TEMPLATE_STRIP_SCOPEINFO)
