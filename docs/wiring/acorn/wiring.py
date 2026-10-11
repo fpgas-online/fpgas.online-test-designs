@@ -261,8 +261,8 @@ def _check(c):
             mm = part["listed_mm"]
             if isinstance(mm, bool) or not isinstance(mm, int) or mm < 1:  # TOML true is an int to Python
                 errors.append(f"{c.key}: part {part.get('part')!r}: listed_mm must be a whole number of millimetres")
-            elif mm // 2 - LENGTHS["slack"] < 1:  # the reach step's "at most N mm a run" would be 0 mm or less
-                errors.append(f"{c.key}: listed_mm {mm} leaves no run: {mm} // 2 - slack is {mm // 2 - LENGTHS['slack']} mm")
+            elif (run := mm // 2 - LENGTHS["slack"]) < 1:  # the reach step's "at most {run} mm a run"
+                errors.append(f"{c.key}: listed_mm {mm} leaves no run: {mm} // 2 - slack is {run} mm")
     if sum("listed_mm" in part for part in c.parts) != 1:  # the reach step's number comes from that one part
         errors.append(f"{c.key}: exactly one part has listed_mm, the cable's length as it is listed")
     if not c.shell and not c.free_ground():
