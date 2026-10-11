@@ -1,0 +1,230 @@
+{
+  "photos_wanted": [
+    {
+      "blocks": "the whole-board top figure",
+      "what": "a photo of the Acorn's top face"
+    },
+    {
+      "blocks": "the card in its slot (family B); the as-laid view (family D)",
+      "what": "a photo of an Acorn in the HAT with its cables fitted"
+    },
+    {
+      "blocks": "the reach in the as-laid view (family D)",
+      "what": "the length of a half cable"
+    },
+    {
+      "blocks": "the plug drawn to scale (families B and C)",
+      "what": "the outside size of the Pico-EZmate plug"
+    }
+  ],
+  "views": {
+    "acorn.bottom.p1": {
+      "dark": "acorn.bottom.p1-dark.png",
+      "face": "bottom",
+      "highlight": [
+        "acorn.p1"
+      ],
+      "inset": true,
+      "light": "acorn.bottom.p1.png",
+      "photo_matched": false,
+      "png_sha256": {
+        "dark": "420450113cfc674051b4783f17c53891c0a47d4eda8173ebecfd5e343a2a09e5",
+        "light": "691d5d151522b554aa8d569dec469308bc25e7db4554eb684d5c569072210982"
+      },
+      "sequence": null,
+      "size": [
+        724,
+        410
+      ],
+      "svg_sha256": {
+        "dark": "856d66878f3325b8856f681e281bbe389ef4a7d1623c52d3aeaf0a3f37ca2f20",
+        "light": "8941013c75d5cd1f1720c7bffb2338b3d98467bf2a2242807f07624a51796f0b"
+      },
+      "thing": "acorn",
+      "turn": 90
+    },
+    "acorn.bottom.p2": {
+      "dark": "acorn.bottom.p2-dark.png",
+      "face": "bottom",
+      "highlight": [
+        "acorn.p2"
+      ],
+      "inset": true,
+      "light": "acorn.bottom.p2.png",
+      "photo_matched": false,
+      "png_sha256": {
+        "dark": "3dbd0ae0de460c2229589d346ca0fe9c56b391aca81a3c8bdea0910109a164de",
+        "light": "781ac8efab9b53501b2dfe311c7665d2f9a09441ca18a1e5c4a80e582f364231"
+      },
+      "sequence": null,
+      "size": [
+        724,
+        421
+      ],
+      "svg_sha256": {
+        "dark": "d488a08925dd055c741057304c9dac235fd5251f9925d31fd25125e996794c14",
+        "light": "95820e100495971b2f9c2e4dc103b9be05c6271791e5cca30496dbdf48b5cf12"
+      },
+      "thing": "acorn",
+      "turn": 90
+    },
+    "acorn.bottom.sockets": {
+      "dark": "acorn.bottom.sockets-dark.png",
+      "face": "bottom",
+      "highlight": [],
+      "inset": true,
+      "light": "acorn.bottom.sockets.png",
+      "photo_matched": false,
+      "png_sha256": {
+        "dark": "e715dee7984ca202bb9f0ead741ea1bedc1212eebcb9941f22dea60dc5c593d4",
+        "light": "3396e4cdf01e64980dc1c09f864e237c049d7afe74c68457b64500598617a2a4"
+      },
+      "sequence": null,
+      "size": [
+        724,
+        494
+      ],
+      "svg_sha256": {
+        "dark": "4e103766bef96f2ba8df34ddb46b83b2186d644e833e67476df0d71533ab9404",
+        "light": "b33e2ccd8f92c467b052e4b12352f8cad4882b836dd2e4796cebd7656e42fca5"
+      },
+      "thing": "acorn",
+      "turn": 90
+    },
+    "pi5-hat.top": {
+      "dark": "pi5-hat.top-dark.png",
+      "face": "top",
+      "highlight": [],
+      "inset": false,
+      "light": "pi5-hat.top.png",
+      "photo_matched": false,
+      "png_sha256": {
+        "dark": "0d8bab116953e7871c960fa2c9132f8945e3acae9a7ebe7fbe61226a6d791825",
+        "light": "8d82c1af21347579575e264aaf7d7338e698109949152d75767f3c61d2c4eb1e"
+      },
+      "sequence": null,
+      "size": [
+        724,
+        1088
+      ],
+      "svg_sha256": {
+        "dark": "fb7669ae6ab3fcb06b7541153a914904ea3c7058249d9840191f9cd2b60008b6",
+        "light": "770617099c9e4ea64d3f1d4028a61ec2f8051050055fafdb371b43b3409bbdd2"
+      },
+      "thing": "hat",
+      "turn": 0
+    },
+    "pi5-hat.top.header": {
+      "dark": "pi5-hat.top.header-dark.png",
+      "face": "top",
+      "highlight": [
+        "hat.header"
+      ],
+      "inset": false,
+      "light": "pi5-hat.top.header.png",
+      "photo_matched": false,
+      "png_sha256": {
+        "dark": "7e242f03961fd3129c90ee0430c0d5371646d3c381e0e23b429fa0790db81310",
+        "light": "4722e231c017c6468316fd6fa4957c5ef8728900a7d0051bfae853bcdc74d8ec"
+      },
+      "sequence": null,
+      "size": [
+        724,
+        1088
+      ],
+      "svg_sha256": {
+        "dark": "3e9d8e5ff115295e76292d043a034a19593b692c71ef127defab958c2ec95480",
+        "light": "c1b45f63b6127099c436267048b656ad147a0243a352309d00afef30b8490baa"
+      },
+      "thing": "hat",
+      "turn": 0
+    },
+    "pi5-hat.top.m2-slot": {
+      "dark": "pi5-hat.top.m2-slot-dark.png",
+      "face": "top",
+      "highlight": [
+        "hat.m2-slot"
+      ],
+      "inset": true,
+      "light": "pi5-hat.top.m2-slot.png",
+      "photo_matched": false,
+      "png_sha256": {
+        "dark": "8010b4e29dfc618a0e0a9fd7ac7c77fb25b95cf45af39b7b17c9dc9a7a38cd6c",
+        "light": "a2c492d3cf9e14af5d11ea3ac82b28a308b63b95ba020712cec0e73c3ff15659"
+      },
+      "sequence": null,
+      "size": [
+        724,
+        346
+      ],
+      "svg_sha256": {
+        "dark": "af32b8b19b8e228d55947fc3f77adfaca34378192f46395be13ca034cfc43cd9",
+        "light": "246603d32c6fe83dac862866e9a4f89511e27a7b129546ad36ce2d3b2f9d78ef"
+      },
+      "thing": "hat",
+      "turn": 0
+    },
+    "pi5-hat.top.pins-19-26": {
+      "dark": "pi5-hat.top.pins-19-26-dark.png",
+      "face": "top",
+      "highlight": [
+        "hat.header.pin.19",
+        "hat.header.pin.20",
+        "hat.header.pin.21",
+        "hat.header.pin.22",
+        "hat.header.pin.23",
+        "hat.header.pin.24",
+        "hat.header.pin.25",
+        "hat.header.pin.26"
+      ],
+      "inset": true,
+      "light": "pi5-hat.top.pins-19-26.png",
+      "photo_matched": false,
+      "png_sha256": {
+        "dark": "54916d1c30b509daada2eb9ee19773490f18a97726b4c2bdaf0e9579e6a7bbf5",
+        "light": "b6b330cb89ba399fc2cc76848609d34436ecd005f6d60fa6db57269fde43889e"
+      },
+      "sequence": null,
+      "size": [
+        724,
+        1252
+      ],
+      "svg_sha256": {
+        "dark": "675c89d183c8eae3bdc6e9db45670e558107cc01064c5ecb082c902a6143fae8",
+        "light": "9cb269bba5a6f1ad07d5a5be7fa14fbfc1686d62d57a203fc659e18b7f72ad51"
+      },
+      "thing": "hat",
+      "turn": 0
+    },
+    "pi5-hat.top.pins-5-10": {
+      "dark": "pi5-hat.top.pins-5-10-dark.png",
+      "face": "top",
+      "highlight": [
+        "hat.header.pin.5",
+        "hat.header.pin.6",
+        "hat.header.pin.7",
+        "hat.header.pin.8",
+        "hat.header.pin.9",
+        "hat.header.pin.10"
+      ],
+      "inset": true,
+      "light": "pi5-hat.top.pins-5-10.png",
+      "photo_matched": false,
+      "png_sha256": {
+        "dark": "d225bc70237d76d863ef330608d51ee6088b33603a4f4118563809ebdab95e81",
+        "light": "888758910d78e37553cde92ef0890cd16324f7cb2b0e54fff3144cf5b2f8537f"
+      },
+      "sequence": null,
+      "size": [
+        724,
+        1034
+      ],
+      "svg_sha256": {
+        "dark": "1bb435e781a1369e59a792fd4b9fa8ceb6c8d67d76ce72866d204c1b7dc200c0",
+        "light": "fffd94e69dbe84272953a7e7f81bd2f104eede103ce03530300f55e39bd8add2"
+      },
+      "thing": "hat",
+      "turn": 0
+    }
+  }
+}
