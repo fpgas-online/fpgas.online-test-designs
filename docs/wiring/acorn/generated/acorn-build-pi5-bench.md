@@ -6,11 +6,15 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 
 ## What you need
 
-**Parts and tools**
+**Parts**
 
 - both finished cables
 - the Raspberry Pi 5
+
+**Tools**
+
 - a multimeter with a continuity buzzer
+- a screwdriver for the HAT's M.2 mounting screw
 
 ## Steps
 

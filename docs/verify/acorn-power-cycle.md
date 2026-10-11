@@ -25,7 +25,7 @@ ends by leaving a marker there, 32 bits of a hash of the kernel's boot id. At th
 | this boot's marker | the check already ran in this boot (an operator running it again) | pass |
 | anything else | the card kept its configuration across the Pi's restart, or something else wrote the register | fail |
 
-A board that fails is left as it was found, so it fails again until the card restarts (a power cycle does it).
+A board that fails is left as it was found, so it fails again until the card restarts. A power cycle restarts it, and the site operator does that.
 `--test scratch` on its own leaves no marker; `--test power-cycle`, when it passes, does leave it. The report says when the check was on: `"power_cycle_check": {"on": true, "configured_by":
 "/etc/fpgas-verify/…ini"}`.
 

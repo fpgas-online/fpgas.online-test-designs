@@ -6,11 +6,12 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 
 ## What you need
 
-**Parts**
+**Parts and tools**
 
 - both cables, checked on the bench ([How to check the cables on the bench (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/bench-check.html))
 - the Acorn
 - the Raspberry Pi 5
+- a screwdriver for the HAT's M.2 mounting screw
 
 ## Steps
 

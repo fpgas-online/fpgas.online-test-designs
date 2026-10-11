@@ -240,3 +240,23 @@ def test_the_hat_header_in_geometry_toml_is_the_header_measure_hat_measures():
     px = measure_hat.measure(wiring.HERE / "photos" / photo)
     assert len(px["columns"]) == header["columns"]
     assert px["pitch"] / px["scale_px_per_mm"][1] == pytest.approx(header["pitch"], rel=0.02)  # rows run down
+
+
+def test_the_cable_s_listed_length_is_a_whole_number_of_millimetres_and_true_is_not_one():
+    rejects(lambda d: d["parts"].append({"qty": 1, "part": "x", "listed_mm": True}), "listed_mm must be a whole")
+    rejects(lambda d: d["parts"].append({"qty": 1, "part": "x", "listed_mm": 99.5}), "listed_mm must be a whole")
+
+
+def test_exactly_one_part_gives_the_listed_length_the_reach_step_works_from(monkeypatch):
+    # a second part with a length would leave the reach step to pick one by order
+    rejects(lambda d: d["parts"].append({"qty": 1, "part": "x", "listed_mm": 200}), "exactly one part has listed_mm")
+    shared = [{k: v for k, v in p.items() if k != "listed_mm"} for p in wiring.DATA["parts"]]
+    monkeypatch.setitem(wiring.DATA, "parts", shared)
+    rejects(lambda d: None, "exactly one part has listed_mm")
+
+
+def test_the_listed_length_is_the_molex_cable_s():
+    for c in wiring.CARRIERS.values():
+        assert wiring.listed_mm(c) == 100
+        (part,) = (p for p in c.parts if "listed_mm" in p)
+        assert "Pico-EZmate cable assembly" in part["part"]

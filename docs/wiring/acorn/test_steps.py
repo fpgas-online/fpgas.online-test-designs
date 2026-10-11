@@ -550,6 +550,11 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
         wiring.CONNECTORS
     )
     assert f"Each run must be at least {wiring.LENGTHS['slack']} mm shorter than half the cable's length." in reach_step
+    # the number itself, from the cable's listed length (fpgas.online-docs #212's review): 100 mm gives 35 mm a run
+    listed = next(p["listed_mm"] for p in wiring.DATA["parts"] if "Pico-EZmate" in p["part"])
+    most = listed // 2 - wiring.LENGTHS["slack"]
+    assert listed == 100 and most == 35
+    assert f"For the {listed} mm cable the listing gives, that is at most {most} mm a run." in reach_step
     assert "If a run is longer, stop before you cut" in reach_step
     numbers = [int(n) for n in re.findall(r"^\*\*(\d+)\.\*\*", steps.procedure(c), re.M)]
     assert numbers == list(range(1, len(numbers) + 1))  # the whole procedure numbered 1 to N
@@ -940,6 +945,25 @@ def test_the_pi_5_tool_list_has_a_screwdriver_for_the_hats_screw_and_gives_no_si
     assert found[0]["tool"] in tables.bom(c)
     for part, _ in steps.GUIDE.values():
         assert f"- {found[0]['tool']}" in steps.guide(c)[steps.guide_name(c, f"{part}-1")]
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_every_page_that_takes_the_card_s_screw_in_or_out_lists_the_screwdriver(key):
+    """Every printed page of the carrier whose steps touch the card's screw (the bench check takes it out, the
+    fitting puts it back, the first cable pages take the card out) lists the carrier's screwdriver before its steps
+    (fpgas.online-docs #212's review). Read from generated/, so a page added later is held to it too."""
+    c = wiring.CARRIERS[key]
+    (screwdriver,) = steps.card_screwdrivers(c)
+    pages = [p for p in sorted((wiring.HERE / "generated").glob(f"*{key}*.md")) if "## Steps" in p.read_text()]
+    touching = []
+    for p in pages:
+        head, body = p.read_text().split("## Steps", 1)
+        if re.search(r"\bscrew\b", body):
+            touching.append(p.name)
+            # a guide page lists it as a bullet, a whole-procedure page in its tick-box table
+            assert f"- {screwdriver}\n" in head or f"| ☐ | {screwdriver} |" in head, (key, p.name)
+    # the pages that do touch it are found, so the rule is not met by matching nothing
+    assert {steps.guide_name(c, part) for part in ("bench", "fit")} <= set(touching), (key, touching)
 
 
 def test_the_bench_check_and_the_fitting_say_the_hat_has_its_stacking_header_and_the_housings_go_on_its_pins():
