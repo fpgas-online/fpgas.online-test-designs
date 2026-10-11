@@ -1,0 +1,198 @@
+{
+  "photos_wanted": [
+    {
+      "blocks": "the whole-board top figure",
+      "what": "a photo of the Acorn's top face"
+    },
+    {
+      "blocks": "the card in its slot (family B); the as-laid view (family D)",
+      "what": "a photo of an Acorn in the HAT with its cables fitted"
+    },
+    {
+      "blocks": "the reach in the as-laid view (family D)",
+      "what": "the length of a half cable"
+    },
+    {
+      "blocks": "the plug drawn to scale (families B and C)",
+      "what": "the outside size of the Pico-EZmate plug"
+    }
+  ],
+  "views": {
+    "acorn.bottom.p1": {
+      "dark": "acorn.bottom.p1-dark.png",
+      "face": "bottom",
+      "highlight": [
+        "acorn.p1"
+      ],
+      "inset": true,
+      "light": "acorn.bottom.p1.png",
+      "photo_matched": false,
+      "sequence": null,
+      "size": [
+        724,
+        410
+      ],
+      "svg_sha256": {
+        "dark": "c6459e85f1236fce1b01c074e06cfb352366d601fe8c1605b09f915c41917797",
+        "light": "23eb5dc0f7d1b7b49f1f72fbbf6778ef3aa15c6feeb83d0c6af728f95157acc8"
+      },
+      "thing": "acorn",
+      "turn": 90
+    },
+    "acorn.bottom.p2": {
+      "dark": "acorn.bottom.p2-dark.png",
+      "face": "bottom",
+      "highlight": [
+        "acorn.p2"
+      ],
+      "inset": true,
+      "light": "acorn.bottom.p2.png",
+      "photo_matched": false,
+      "sequence": null,
+      "size": [
+        724,
+        421
+      ],
+      "svg_sha256": {
+        "dark": "99301f023e5286f2ac726740b5809ff3df81093e2320d2b98e46375678cf1c94",
+        "light": "d9e59e55ecebf4053305b6ff6bcf2ae50e4ef25dc75bf09357246e8d58a8b492"
+      },
+      "thing": "acorn",
+      "turn": 90
+    },
+    "acorn.bottom.sockets": {
+      "dark": "acorn.bottom.sockets-dark.png",
+      "face": "bottom",
+      "highlight": [],
+      "inset": true,
+      "light": "acorn.bottom.sockets.png",
+      "photo_matched": false,
+      "sequence": null,
+      "size": [
+        724,
+        494
+      ],
+      "svg_sha256": {
+        "dark": "4e103766bef96f2ba8df34ddb46b83b2186d644e833e67476df0d71533ab9404",
+        "light": "b33e2ccd8f92c467b052e4b12352f8cad4882b836dd2e4796cebd7656e42fca5"
+      },
+      "thing": "acorn",
+      "turn": 90
+    },
+    "pi5-hat.top": {
+      "dark": "pi5-hat.top-dark.png",
+      "face": "top",
+      "highlight": [],
+      "inset": false,
+      "light": "pi5-hat.top.png",
+      "photo_matched": false,
+      "sequence": null,
+      "size": [
+        724,
+        1088
+      ],
+      "svg_sha256": {
+        "dark": "fb7669ae6ab3fcb06b7541153a914904ea3c7058249d9840191f9cd2b60008b6",
+        "light": "770617099c9e4ea64d3f1d4028a61ec2f8051050055fafdb371b43b3409bbdd2"
+      },
+      "thing": "hat",
+      "turn": 0
+    },
+    "pi5-hat.top.header": {
+      "dark": "pi5-hat.top.header-dark.png",
+      "face": "top",
+      "highlight": [
+        "hat.header"
+      ],
+      "inset": false,
+      "light": "pi5-hat.top.header.png",
+      "photo_matched": false,
+      "sequence": null,
+      "size": [
+        724,
+        1088
+      ],
+      "svg_sha256": {
+        "dark": "3e9d8e5ff115295e76292d043a034a19593b692c71ef127defab958c2ec95480",
+        "light": "c1b45f63b6127099c436267048b656ad147a0243a352309d00afef30b8490baa"
+      },
+      "thing": "hat",
+      "turn": 0
+    },
+    "pi5-hat.top.m2-slot": {
+      "dark": "pi5-hat.top.m2-slot-dark.png",
+      "face": "top",
+      "highlight": [
+        "hat.m2-slot"
+      ],
+      "inset": true,
+      "light": "pi5-hat.top.m2-slot.png",
+      "photo_matched": false,
+      "sequence": null,
+      "size": [
+        724,
+        346
+      ],
+      "svg_sha256": {
+        "dark": "4ec76d013653fc49139760b5507f19b03e72d5b46d4e265fe8b34555146bcb52",
+        "light": "db08c60b7a78787114a0dae53f860282fda8955c54480084ceabb6b4e26c3e19"
+      },
+      "thing": "hat",
+      "turn": 0
+    },
+    "pi5-hat.top.pins-19-26": {
+      "dark": "pi5-hat.top.pins-19-26-dark.png",
+      "face": "top",
+      "highlight": [
+        "hat.header.pin.19",
+        "hat.header.pin.20",
+        "hat.header.pin.21",
+        "hat.header.pin.22",
+        "hat.header.pin.23",
+        "hat.header.pin.24",
+        "hat.header.pin.25",
+        "hat.header.pin.26"
+      ],
+      "inset": true,
+      "light": "pi5-hat.top.pins-19-26.png",
+      "photo_matched": false,
+      "sequence": null,
+      "size": [
+        724,
+        1252
+      ],
+      "svg_sha256": {
+        "dark": "1b6905aebd101c92881289cbba400718d692937bf4382b4212c00058b9c9a4ef",
+        "light": "505ee7c378d0c7af01bd7c9e90fbf3e0121619d38f9624fe099261145f56170e"
+      },
+      "thing": "hat",
+      "turn": 0
+    },
+    "pi5-hat.top.pins-5-10": {
+      "dark": "pi5-hat.top.pins-5-10-dark.png",
+      "face": "top",
+      "highlight": [
+        "hat.header.pin.5",
+        "hat.header.pin.6",
+        "hat.header.pin.7",
+        "hat.header.pin.8",
+        "hat.header.pin.9",
+        "hat.header.pin.10"
+      ],
+      "inset": true,
+      "light": "pi5-hat.top.pins-5-10.png",
+      "photo_matched": false,
+      "sequence": null,
+      "size": [
+        724,
+        1034
+      ],
+      "svg_sha256": {
+        "dark": "007aea41f46750c0f5d508100fc9b553db63a3aacd91f15aceab625606badef4",
+        "light": "7f99576395ba2c8d6184d52254b940c991c613b6a3ab100131b59f74cb876508"
+      },
+      "thing": "hat",
+      "turn": 0
+    }
+  }
+}
