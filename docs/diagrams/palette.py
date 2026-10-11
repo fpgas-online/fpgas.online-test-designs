@@ -62,6 +62,11 @@ ROLES = {
     "meter-display": ("#dfe8d8", "#dfe8d8", "the meter's display"),
     "on-meter": ("#15181d", "#15181d", "the word on the meter's display"),
     "knob": ("#1d1f23", "#1d1f23", "the meter's black knob"),
+    # the render layer of a view (docs/diagrams/draw.py): a board drawn from its geometry, not photographed
+    "render-board": ("#2f5d4a", "#27493c", "a board in the render layer"),
+    "render-part": ("#c9ced6", "#8d96a3", "a socket, a slot, a standoff in the render layer"),
+    "render-part-edge": ("#15181d", "#e3e6ea", "its outline"),
+    "render-muted": ("#c9ced6", "#b4bac3", "a part the view is not about: its outline and its name, grey"),
 }
 
 # The wire colours of wiring.toml (light, as written there) and each one's dark counterpart: the same named
