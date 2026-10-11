@@ -9,7 +9,9 @@ To move a wire, the cable goes through the same checks as when the cable was bui
 1. Ask the site operator, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in.
 2. Take the card out and pull both plugs from its sockets.
 3. Move the wire.
-4. Check that cable's plug contacts against its housing with the meter. Do that check as steps 3 and 4 of [How to fill the JTAG cable's housing (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/jtag-housing.html) do for the JTAG cable. Do that check as steps 3 and 4 of [How to fill the UART cable's housing (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/uart-housing.html) do for the UART cable.
+4. Check that cable's plug contacts against its housing with the meter, as when the cable was built:
+   * the JTAG cable: steps 3 and 4 of [How to fill the JTAG cable's housing (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/jtag-housing.html);
+   * the UART cable: steps 3 and 4 of [How to fill the UART cable's housing (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/uart-housing.html).
 5. Run the bench check, with the card out: [How to check the cables on the bench (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/bench-check.html).
 6. Fit the cables: [How to fit the cables and the card (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/fitting.html).
 7. Ask the site operator, then boot the blade. The install is gone after the boot, so install the packages again, as in [How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html). Then run the check again.
