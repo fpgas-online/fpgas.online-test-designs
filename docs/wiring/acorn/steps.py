@@ -1794,7 +1794,7 @@ def assumed_check(c, connector):
 # The words the meter check of a finished cable starts with, on each connector's second page: how the probes go,
 # then the check of each wire against the cavity picture, the next step.
 CHECK_EACH = "Check each wire with a meter on continuity."
-CHECK_CAVITY = "Now check each wire against its cavity."
+CHECK_CAVITY = "Then check each wire against its cavity."
 
 
 # The words the bench check's steps start with: fitting the first housing, and the beeps once both are fitted.

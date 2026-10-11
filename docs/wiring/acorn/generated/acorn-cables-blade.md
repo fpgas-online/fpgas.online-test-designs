@@ -116,7 +116,7 @@ Turned round, the housing puts 5 V on the TCK wire. That is above the most AMD's
 ![A meter between the plug and the housing](acorn-cable-check.png){.only-light}
 ![A meter between the plug and the housing](acorn-cable-check-dark.png){.only-dark}
 
-**11.** Now check each wire against its cavity. For each wire: read the number on its flag and find it in the picture. Put one probe on that wire's contact on the plug and the other on the terminal in that cavity: it must beep. Every other cavity must stay silent for that contact.
+**11.** Then check each wire against its cavity. For each wire: read the number on its flag and find it in the picture. Put one probe on that wire's contact on the plug and the other on the terminal in that cavity: it must beep. Every other cavity must stay silent for that contact.
 
 The P1 cavity picture is shown again below, to read each wire's cavity from.
 
@@ -191,7 +191,7 @@ Turned round, the housing puts 5 V on the K2 wire. That is above the most AMD's 
 ![A meter between the plug and the housing](acorn-cable-check-blade-p2.png){.only-light}
 ![A meter between the plug and the housing](acorn-cable-check-blade-p2-dark.png){.only-dark}
 
-**21.** Now check each wire against its cavity. For each wire: read the number on its flag and find it in the picture. Put one probe on that wire's contact on the plug and the other on the terminal in that cavity: it must beep. Every other cavity must stay silent for that contact.
+**21.** Then check each wire against its cavity. For each wire: read the number on its flag and find it in the picture. Put one probe on that wire's contact on the plug and the other on the terminal in that cavity: it must beep. Every other cavity must stay silent for that contact.
 
 **Wire 2 is the exception: it has the 470 Ω resistor in it. Leave wire 2 until last and read it in ohms, not by the buzzer**. A continuity buzzer usually sounds only below some tens of ohms, so through the resistor it will usually stay silent. Set the meter to ohms, on auto-range or the 2 kΩ range, and touch the two probes together first: it must read close to 0.
 

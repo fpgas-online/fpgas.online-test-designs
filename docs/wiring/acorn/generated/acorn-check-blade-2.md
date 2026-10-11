@@ -4,7 +4,7 @@
 
 Find the failing line in the table, then the wire in the two cavity pictures under it. The number in a cavity is the number on the wire's flag.
 
-To move a wire, the cable goes through the same checks as a new one before any boot:
+To move a wire, the cable goes through the same checks as when the cable was built, before any boot:
 
 1. Ask the site operator, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in.
 2. Take the card out and pull both plugs from its sockets.

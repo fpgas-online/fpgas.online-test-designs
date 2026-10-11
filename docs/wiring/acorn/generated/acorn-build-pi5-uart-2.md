@@ -38,7 +38,7 @@ Turned round, the housing puts its wires on the wrong pins. Wire 6 goes in no ca
 ![A meter between the plug and the housing](acorn-cable-check.png){.only-light}
 ![A meter between the plug and the housing](acorn-cable-check-dark.png){.only-dark}
 
-**4.** Now check each wire against its cavity. For each wire: read the number on its flag and find it in the picture. Put one probe on that wire's contact on the plug and the other on the terminal in that cavity: it must beep. Every other cavity must stay silent for that contact.
+**4.** Then check each wire against its cavity. For each wire: read the number on its flag and find it in the picture. Put one probe on that wire's contact on the plug and the other on the terminal in that cavity: it must beep. Every other cavity must stay silent for that contact.
 
 The P2 cavity picture is shown again below, to read each wire's cavity from.
 

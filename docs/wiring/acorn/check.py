@@ -537,7 +537,7 @@ def pages(c):
         "Find the failing line in the table, then the wire in the two cavity pictures under it. The number in a "
         "cavity is the number on the wire's flag.",
         "",
-        "To move a wire, the cable goes through the same checks as a new one before any boot:",
+        "To move a wire, the cable goes through the same checks as when the cable was built, before any boot:",
         "",
         f"1. {c.power_off}",
         "2. Take the card out and pull both plugs from its sockets.",
