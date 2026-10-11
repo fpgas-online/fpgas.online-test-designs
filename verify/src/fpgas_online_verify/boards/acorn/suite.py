@@ -13,7 +13,8 @@ read; and the FPGA is never reconfigured.
   pcie-link  the link speed and width in sysfs, against the setup's expected figures (expected.toml)
   pcie-bar0  over BAR0: which build runs (golden is a fault: the operational slot did not boot), the
              flash's identity, the device DNA and the XADC temperature and voltages
-  rp1-pio    on a Pi 5 / CM5: the RP1 PIO openFPGALoader's rp1pio cable uses, /dev/pio0 there and openable (links.py)
+  rp1-pio    on a Pi 5 / CM5: the RP1 PIO that openFPGALoader's rp1pio cable uses, /dev/pio0 there and
+             openable (links.py)
   jtag       IDCODE and device DNA over P1 (links.py); the DNA must be BAR0's
   flash      both flash slots read whole and compared with the release's images
   ddr        the BIOS console read out (it lets the BIOS finish DRAM set-up, #47), then the DRAM BIST over
