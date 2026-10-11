@@ -318,6 +318,22 @@ def test_each_half_of_the_fitting_picture_follows_its_own_three_actions(key):
 
 
 @pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_renumbering_sends_the_reader_back_to_the_two_checks_of_wire_1_and_the_last_wire(key):
+    c = wiring.CARRIERS[key]
+    for connector in wiring.CONNECTORS:
+        last = len(wiring.CONNECTORS[connector]["pins"])
+        part, _ = steps.GUIDE[connector]
+        page = steps.guide(c)[steps.guide_name(c, f"{part}-1")]
+        items = dict(re.findall(r"^(\d+)\. (.*)$", page.split(steps.wire_one_check(connector), 1)[1], re.M))
+        assert "must beep" in items[str(steps.REDO[0])]
+        assert f"the wire flagged {last}: it must stay silent" in items[str(steps.REDO[1])]
+        again = f"number from the other end. Then do items {steps.REDO[0]} and {steps.REDO[1]} of this step again"
+        assert again in items["3"]
+        assert "with the new numbers" in items["3"]
+        assert "then check again." in " ".join(words(steps.ground_check(connector)))
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
 def test_the_finished_wiring_sheet_is_on_the_overview_not_on_the_fitting_page(key):
     c = wiring.CARRIERS[key]
     pages = steps.guide(c)

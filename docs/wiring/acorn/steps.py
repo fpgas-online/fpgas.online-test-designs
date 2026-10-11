@@ -63,6 +63,9 @@ BOTH = (
     "It is expected to stay silent to ground on a card with no power. Set the meter to ohms. "
     "Write down what each of the two wires reads to the pad. Send both readings to {contact}."
 )
+# The items of the wire 1 check's list that the reader does again after renumbering: wire 1 to the pad (item 1),
+# then the last wire (item 2). test_steps.py reads them back from the list.
+REDO = (1, 2)
 NOT_TOLD_APART = "If neither wire beeps, or both do, cut nothing: the step's words above say what to do in each case."
 
 # The note on every cavity picture: the step as its page shows it. A picture cannot link, so it names the task,
@@ -1014,7 +1017,7 @@ def ground_check(connector):
         30,
         y + 4,
         f"If wire {len(pins)} beeps instead, the numbering is reversed: take the flags off and number from the "
-        "other end.",
+        "other end, then check again.",
         W - 40,
         "bold",
         RED,
@@ -1409,7 +1412,8 @@ def procedure_parts(c, restart=False):
             "it must beep.",
             f"Do the same with the wire flagged {len(pins)}: it must stay silent.",
             f"If wire {len(pins)} beeps instead, stop: the numbering is reversed; take the flags off and number from "
-            "the other end. " + NEITHER.format(strip=lengths["strip"], last=len(pins)),
+            f"the other end. Then do items {REDO[0]} and {REDO[1]} of this step again with the new numbers. "
+            + NEITHER.format(strip=lengths["strip"], last=len(pins)),
             BOTH.format(last=len(pins), contact=c.contact),
             "Take the plug out again.",
         ]
