@@ -511,10 +511,16 @@ def page_sources():
 
 def page_uris(print_uris, sources):
     """From `apt-get --print-uris` output, the (URI, package, version) of each file that comes from a repository a
-    page added. The lines are `'URI' file size [hash]`: apt prints MD5Sum, or for a bookworm-backports file no
-    hash at all; the hash is apt's to check, when it downloads."""
+    page added. The lines are `'URI' file size hash`: apt prints MD5Sum, or for a bookworm-backports file an
+    empty hash after the space; the hash is apt's to check, when it downloads."""
     out = []
-    for uri, name in re.findall(r"^'(\S+)' (\S+) \d+(?: \S+)?$", print_uris, re.M):
+    for line in print_uris.splitlines():
+        if not line.startswith("'"):
+            continue
+        m = re.match(r"^'(\S+)' (\S+) \d+(?: \S*)?$", line)
+        if not m:  # a file line this cannot read would be a file not checked: refuse it, do not skip it
+            raise ValueError(f"an apt-get --print-uris line this check cannot read: {line!r}")
+        uri, name = m.groups()
         if any(uri.startswith(s) for s in sources):
             package, version, _arch = name.removesuffix(".deb").split("_")
             out.append((uri, package, urllib.parse.unquote(version)))  # an epoch is written %3a in the file name
@@ -536,7 +542,11 @@ def downloads(plan, done, failures, label):
         )
         if rc:
             continue  # the install itself failed; that is reported already
-        ours = page_uris(out, sources)
+        try:
+            ours = page_uris(out, sources)
+        except ValueError as e:
+            failures.append(f"{label}: {command}: {e}")
+            continue
         if not ours and any(p.startswith("fpgas-online-") for p in named([(0, k, command)])):
             failures.append(f"{label}: {command}: no file from a page's repository found; the download check read none")
         for uri, package, version in ours:

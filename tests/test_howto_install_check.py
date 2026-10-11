@@ -207,9 +207,10 @@ def test_page_uris_are_the_files_from_the_pages_repositories_whatever_hash_apt_p
         "'http://archive.raspberrypi.com/debian/pool/main/z/zlib/zlib1g_1.2.13.dfsg-1%2brpt1_arm64.deb' "
         "zlib1g_1%3a1.2.13.dfsg-1+rpt1_arm64.deb 94290 MD5Sum:774312206118f372f3a9bf2b15f601b9\n"
         "'https://apt.fpgas.online/bookworm/./x_1%3a2.0_all.deb' x_1%3a2.0_all.deb 10 SHA256:ab\n"
-        # a bookworm-backports file, as apt printed it in a 32-bit bookworm container: no hash at all
+        # a bookworm-backports file, byte for byte as apt printed it in a 32-bit bookworm container: the size, a
+        # space, and no hash
         "'http://deb.debian.org/debian/pool/main/m/micropython-mpremote/micropython-mpremote_1.24.0-1%7ebpo12%2b1"
-        "_all.deb' micropython-mpremote_1.24.0-1~bpo12+1_all.deb 28656\n"
+        "_all.deb' micropython-mpremote_1.24.0-1~bpo12+1_all.deb 28656 \n"
     )
     sources = [
         "https://apt.fpgas.online/bookworm/",
@@ -223,6 +224,11 @@ def test_page_uris_are_the_files_from_the_pages_repositories_whatever_hash_apt_p
         ("x", "1:2.0"),  # an epoch, written %3a in the file name
         ("micropython-mpremote", "1.24.0-1~bpo12+1"),
     ]
+
+
+def test_a_print_uris_file_line_that_cannot_be_read_is_refused_not_skipped():
+    with pytest.raises(ValueError, match="cannot read"):
+        check.page_uris("'https://apt.fpgas.online/bookworm/./a_1_all.deb' a_1_all.deb size?\n", [])
 
 
 def test_another_board_s_package_or_tool_is_foreign():
