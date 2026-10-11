@@ -51,3 +51,21 @@ face = "bottom"
 turn = 90
 crop = ["acorn.p2"]
 highlight = ["acorn.p2"]
+
+# The photos and figures still wanted. Views that wait for one ship as line drawings, marked photo_matched =
+# false in generated/views/views.json, and this list is copied into it.
+[[photos_wanted]]
+what = "a photo of the Acorn's top face"
+blocks = "the whole-board top figure"
+
+[[photos_wanted]]
+what = "a photo of an Acorn in the HAT with its cables fitted"
+blocks = "the card in its slot (family B); the as-laid view (family D)"
+
+[[photos_wanted]]
+what = "the length of a half cable"
+blocks = "the reach in the as-laid view (family D)"
+
+[[photos_wanted]]
+what = "the outside size of the Pico-EZmate plug"
+blocks = "the plug drawn to scale (families B and C)"

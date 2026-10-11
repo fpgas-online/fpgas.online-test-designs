@@ -82,3 +82,18 @@ it takes, and where its header, pin 1 and M.2 slot are in the photo.
 mounting holes; `measure_hat.py --check` (and the tests) fail if `wiring.toml`
 says otherwise. Only the (B) is drawn: the PoE M.2 HAT+ without the (B) takes
 2230 and 2242 cards only, and an Acorn is a 2280.
+
+## Views
+
+A view is one picture of the HAT or the card: a crop, a highlight, a turn, light and dark.
+
+`geometry.toml` holds the two boards in millimetres, each table with its source.
+`views.toml` names the views and lists the photos still wanted.
+`generated/views/` holds a PNG pair for each view and `views.json`, the manifest pages look views up in.
+
+Build them with `uv run docs/diagrams/build.py docs/wiring/acorn`. This needs Chrome or Chromium.
+Check them with `uv run docs/diagrams/build.py docs/wiring/acorn --check`; it needs no browser.
+The check compares the manifest built now with the committed one, so it catches a changed drawing.
+It does not render the PNGs again. After any change, build and commit the PNGs with the manifest.
+It also lists a PNG that is missing and a PNG that no view owns.
+Views with no photo of their state are line drawings, marked `"photo_matched": false` in the manifest.
