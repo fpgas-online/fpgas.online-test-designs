@@ -163,7 +163,7 @@ claim = "That a Compute Module 4 takes the same wiring as a Compute Module 5"
 source = "Uptime Lab's assembly guide names both as modules for the Compute Blade, and its GPIO guide gives the blade's pins by GPIO number and names no difference between the two; the wiring's JTAG has been run by us on a CM5 only (pi20 at ps1, 7 October 2026). On a CM4: not run by us"
 
 [[sources]]
-claim = "The lengths (how far a wire is cut back, stripped, flagged)"
+claim = "The lengths (how far a wire is cut back, stripped, flagged, and the slack a run must leave)"
 source = "our choice, not measured"
 
 
@@ -187,6 +187,9 @@ resistor_tube = 3
 # flag_back: how far from its free end a wire's numbered flag goes: further than `resistor`, so the flag
 #   survives that cut. resistor_lead: how long each lead of a series resistor is left.
 flag_back = 25
+# slack: how much shorter than half the cable each run must be, for the wire that is stripped, crimped and bent
+#   into the housing beyond the point where the wires reach the header.
+slack = 15
 resistor_lead = 5
 
 # tools: what building the two cables takes, whatever the carrier. `when = "resistor"` is needed only on a

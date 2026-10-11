@@ -28,7 +28,7 @@ for _tool in TOOLS:
             f'wiring.toml: a tool needs a `tool`, and may have `note`, `when = "resistor"` and `carrier`: {_tool}'
         )
 SOURCES = DATA["sources"]  # [{claim, source, carrier (optional)}]: where a fact on the pages comes from
-LENGTHS = DATA["lengths"]  # {cut_back, resistor, strip, tube, resistor_tube, flag_back, resistor_lead} in mm
+LENGTHS = DATA["lengths"]  # {cut_back, resistor, strip, tube, resistor_tube, flag_back, resistor_lead, slack} in mm
 if LENGTHS["flag_back"] <= LENGTHS["resistor"]:
     raise ValueError("wiring.toml: [lengths] flag_back must be greater than resistor, or the flag is cut off")
 if not any(f"heat-shrink tube, about {LENGTHS['tube']} mm" in p["part"] for p in DATA.get("parts", [])):

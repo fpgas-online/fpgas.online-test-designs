@@ -1398,10 +1398,12 @@ def procedure_parts(c, restart=False):
         f"{REACH}, before the cable is cut and before any wire is cut back or crimped. "
         + power_off_when(c, f"the {c.name} is on")
         + "\n\nWith the card out of its slot, hold the card over the slot where it will sit. Leave the cable whole. "
-        "First measure the cable: its wires, from where they leave one plug to where they leave the other. "
+        "First straighten the cable and measure its wires, from where they leave one plug to where they leave "
+        "the other. "
         "Half of that length is the longest run a half can have.\n\n"
         + "\n\n".join(pairs)
-        + "\n\nEach run must be at most half the cable's length, with some slack left to bend into the housing."
+        + f"\n\nEach run must be at least {wiring.LENGTHS['slack']} mm shorter than half the cable's length. "
+        "That is the wire that is stripped, crimped and bent into the housing."
         "\n\nIf a run is longer, stop before you cut: this guide uses each half at the length it has. "
         f"Tell {c.contact} which run falls short, and by about how many millimetres.",
         (

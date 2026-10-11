@@ -465,7 +465,14 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
     for k in wiring.CONNECTORS:  # each run named with its own socket and header
         header = steps.header_words(c.headers[steps.housing(c, k).header].name)
         assert f"at socket {k}, and lay its wires from there to the {header}" in reach_step
-    assert "Leave the cable whole." in reach_step and "Each run must be at most half the cable's length" in reach_step
+    assert "Leave the cable whole." in reach_step
+    assert "First straighten the cable and measure its wires" in reach_step
+    assert "Half of that length is the longest run a half can have." in reach_step
+    assert reach_step.count("Put a strip of tape on the wires where they reach the header.") == len(wiring.CONNECTORS)
+    assert reach_step.count("Straighten the wires and measure that run, from the plug to the tape.") == len(
+        wiring.CONNECTORS
+    )
+    assert f"Each run must be at least {wiring.LENGTHS['slack']} mm shorter than half the cable's length." in reach_step
     assert "If a run is longer, stop before you cut" in reach_step
     numbers = [int(n) for n in re.findall(r"^\*\*(\d+)\.\*\*", steps.procedure(c), re.M)]
     assert numbers == list(range(1, len(numbers) + 1))  # the whole procedure numbered 1 to N

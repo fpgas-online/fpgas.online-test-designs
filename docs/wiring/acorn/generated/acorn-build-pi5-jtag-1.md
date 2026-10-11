@@ -34,13 +34,13 @@ The Acorn is a bare circuit board. Before you pick it up, touch bare metal of th
 
 **2.** Check that each half reaches, before the cable is cut and before any wire is cut back or crimped. If the Raspberry Pi 5 is on, it must be off first. Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE.
 
-With the card out of its slot, hold the card over the slot where it will sit. Leave the cable whole. First measure the cable: its wires, from where they leave one plug to where they leave the other. Half of that length is the longest run a half can have.
+With the card out of its slot, hold the card over the slot where it will sit. Leave the cable whole. First straighten the cable and measure its wires, from where they leave one plug to where they leave the other. Half of that length is the longest run a half can have.
 
 Hold one plug at socket P1, and lay its wires from there to the 40-pin header, along the way that cable will run. Put a strip of tape on the wires where they reach the header. Straighten the wires and measure that run, from the plug to the tape.
 
 Hold the other plug at socket P2, and lay its wires from there to the 40-pin header, along the way that cable will run. Put a strip of tape on the wires where they reach the header. Straighten the wires and measure that run, from the plug to the tape.
 
-Each run must be at most half the cable's length, with some slack left to bend into the housing.
+Each run must be at least 15 mm shorter than half the cable's length. That is the wire that is stripped, crimped and bent into the housing.
 
 If a run is longer, stop before you cut: this guide uses each half at the length it has. Tell the fpgas.online project in an issue at [fpgas-online/fpgas.online-test-designs](https://github.com/fpgas-online/fpgas.online-test-designs/issues) which run falls short, and by about how many millimetres.
 
