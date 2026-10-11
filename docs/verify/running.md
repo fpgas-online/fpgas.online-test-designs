@@ -41,7 +41,7 @@ sudo fpgas-acorn-debug identify            # the same as fpgas-acorn-verify --id
   naming the file and its owner: remove it, or reboot.
 * Which board a host checks is `[verify] fpga-board = <board>` or `auto`, in `*.ini` files: the board's
   package puts one in `/usr/share/fpgas-online/verify/mode.d/`; one in `/etc/fpgas-verify/` overrides it.
-* `[verify] publish = on` in the same files makes the check tell the fleet how it went ([events](fleet.md#events)). It
+* `[verify] publish = on` in the same files makes the check tell the fleet how it went. It
   is off unless a file says so; a value that is neither `on` nor `off`, or two files that disagree, is an
   error and nothing is sent. Accepted values are `on`, `yes`, `true`, `1` and `off`, `no`, `false`, `0`, as for `power-cycle-check`.
   Every report and summary says whether the run was published and why: `"publish": {"on": true,

@@ -5,18 +5,12 @@
 `fpgas-verify` answers one question per Pi: **is this Pi and its FPGA board ready for users?** It finds the
 board, tests the board and its wiring to the Pi, and gives one result, pass or fail, with every fault it found.
 
-* What the tool must do: [verify-goals.md](verify-goals.md). Where this page and that one disagree,
-  verify-goals.md says what the tool should do.
 * The code: [`verify/`](../verify/).
 * `verify_hardware.py` ([verify-hardware.md](verify-hardware.md)) is a different tool: a developer's script
   that loads freshly built bitstreams from a workstation over SSH.
 
-This page has two parts:
-
-1. [Using verify as a standalone tool](#using-verify-as-a-standalone-tool): installing, running, reading the
-   result, and what each board's check tests.
-2. [How the fleet uses verify](#how-the-fleet-uses-verify): at every boot of every
-   netbooted Pi, the events it sends the site, and the [current results](verify/current-results.md#current-results).
+This page lists the pages for [using verify](#using-verify-as-a-standalone-tool): installing, running, reading
+the result, and what each board's check tests.
 
 ---
 
@@ -80,10 +74,6 @@ One page for each task, in this order:
 
 * [The JTAG IDCODE and the device DNA](verify/idcode-and-dna.md): for you if you have an Acorn, Arty or NeTV2 and want to know how its IDCODE and DNA are read and judged.
 
-<a id="not-done-yet"></a>
-
-* [Not done yet](verify/not-done-yet.md#not-done-yet): for you if you want to know what the check does not do yet.
-
 <a id="checking-an-acorn-s-wiring"></a>
 
 <a id="checking-an-acorns-wiring"></a>
@@ -97,21 +87,3 @@ One page for each task, in this order:
 <a id="the-report-and-the-recorded-state"></a>
 
 * [The report and the recorded state](verify/report-and-state.md#the-report-and-the-recorded-state): for you if you want to read the JSON report, or know when a board is `changed`.
-
----
-
-## How the fleet uses verify
-
-<a id="events"></a>
-
-<a id="how-a-deploy-picks-up-new-packages"></a>
-
-<a id="collecting-every-pi-s-result"></a>
-
-<a id="collecting-every-pis-result"></a>
-
-* [How it is used in fpgas.online](verify/fleet.md): for you if you run the fleet and want to know how the check is installed and run there, its events, how a deploy reaches it and how to collect every Pi's result.
-
-<a id="current-results"></a>
-
-* [Current results](verify/current-results.md#current-results): for you if you want the last collected results of the fleet's Pis.
