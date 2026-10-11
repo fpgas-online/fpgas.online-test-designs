@@ -41,6 +41,14 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 ![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2.png){.only-light}
 ![Which wire goes in which cavity, P2 cable](acorn-cable-blade-p2-dark.png){.only-dark}
 
+## Check
+
+Each wire beeps from its contact on the plug to the terminal in its own cavity, and every other cavity stays silent for that contact (steps 3 and 4).
+
 ## If it fails
 
 A terminal is in the wrong cavity: a Dupont housing holds each terminal by a small plastic tab over its latch, in the window. Lift that tab a little with a pin and pull the wire gently: the terminal comes out, and can be pushed into the right cavity.
+
+## Next
+
+[How to check the cables on the bench (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/bench-check.html).

@@ -29,6 +29,14 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 ![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check.png){.only-light}
 ![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check-dark.png){.only-dark}
 
+## Check
+
+Contact 1 of each plug beeps to the shell, and contact 6 of each plug is silent against the shell and every other contact (step 3). Each housing's marked corner is on the pin its step names.
+
 ## If it fails
 
 Do not fit the cables. A contact 1 that does not beep means that cable's ground wire is open or in the wrong cavity. A contact 6 that beeps anywhere means the 3.3 V wire was not the one cut back. Go back to that cable's housing and check every wire again. The pages are [How to fill the JTAG cable's housing (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/jtag-housing.html) or [How to fill the UART cable's housing (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/uart-housing.html).
+
+## Next
+
+[How to fit the cables and the card (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/fitting.html).

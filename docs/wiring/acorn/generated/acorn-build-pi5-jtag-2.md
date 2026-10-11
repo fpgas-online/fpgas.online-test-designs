@@ -41,6 +41,14 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png){.only-light}
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1-dark.png){.only-dark}
 
+## Check
+
+Each wire beeps from its contact on the plug to the terminal in its own cavity, and every other cavity stays silent for that contact (steps 3 and 4).
+
 ## If it fails
 
 A terminal is in the wrong cavity: a Dupont housing holds each terminal by a small plastic tab over its latch, in the window. Lift that tab a little with a pin and pull the wire gently: the terminal comes out, and can be pushed into the right cavity.
+
+## Next
+
+[How to prepare the UART cable's wires (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/uart-wires.html).

@@ -1665,13 +1665,22 @@ def guide(c):
         f"{pages.link(c.key, 'check-2')}.",
     ]
 
-    def body(need, lines, *after):
-        """A page: what it needs, its steps, then any headed paragraphs that close it."""
+    def body(need, lines, check, fails, after):
+        """A how-to page: What you need, Steps, Check, If it fails, Next (a how-to's five headings)."""
         lines = [line for line in lines if not line.startswith("#### ")]
         while lines and not lines[0]:
             lines.pop(0)
         head = [tables.BANNER.strip(), "", not_run, "", parts["tail"][0], "", "## What you need", "", *need]
-        return "\n".join([*head, "## Steps", "", *lines, *(line for extra in after for line in (extra, ""))])
+        tail = ["## Check", "", check, "", "## If it fails", "", fails, "", "## Next", "", after, ""]
+        return "\n".join([*head, "## Steps", "", *lines, *tail])
+
+    # The page that comes after each, in the order of work: a connector's two pages, then the next connector's,
+    # then the bench check and the fitting.
+    sequence = [f"{part}-{n}" for part, _ in GUIDE.values() for n in (1, 2)] + ["bench", "fit"]
+
+    def next_page(key):
+        following = sequence[sequence.index(key) + 1]
+        return f"{pages.link(c.key, following)}."
 
     first_part = next(iter(GUIDE.values()))[0]  # the first cable's first page: the one cut, then the reach check
     first_page = parts[next(iter(GUIDE))]
@@ -1694,7 +1703,17 @@ def guide(c):
         data = c.headers[plan.header]
         shape = f"{data.columns}×{(plan.last - plan.first + 1) // data.columns}"
         prepare, fill = cut_at(parts[connector], "Hold the empty")
-        out[guide_name(c, f"{part}-1")] = body(needs(c, connector), prepare)
+        one = numbered(prepare, wire_one_check(connector), guide_name(c, f"{part}-1"))
+        out[guide_name(c, f"{part}-1")] = body(
+            needs(c, connector),
+            prepare,
+            f"Wire 1 of the {connector} cable is the one the meter check of step {one} found. Every wire carries its "
+            "numbered flag, and each wire that goes in the housing has a terminal crimped on.",
+            f"The meter check of step {one} finds the numbering reversed, or finds both wires beeping: that step says "
+            "what to do, and when to stop.",
+            next_page(f"{part}-1"),
+        )
+        meter = numbered(fill, CHECK_EACH, guide_name(c, f"{part}-2"))
         out[guide_name(c, f"{part}-2")] = body(
             need_lists(
                 [
@@ -1708,26 +1727,34 @@ def guide(c):
                 ],
             ),
             fill,
-            "## If it fails",
+            f"Each wire beeps from its contact on the plug to the terminal in its own cavity, and every other cavity "
+            f"stays silent for that contact (steps {meter} and {meter + 1}).",
             "A terminal is in the wrong cavity: a Dupont housing holds each terminal by a small plastic tab over its "
             "latch, in the window. Lift that tab a little with a pin and pull the wire gently: the terminal comes "
             "out, and can be pushed into the right cavity.",
+            next_page(f"{part}-2"),
         )
     bench, fit_ = cut_at(parts["fit"], FIT_STEPS[0])
+    shell = numbered(bench, "The Acorn is not in its slot and the plugs are free.", guide_name(c, "bench"))
     out[guide_name(c, "bench")] = body(
         need_lists(["both finished cables", f"the {c.name}"], ["a multimeter with a continuity buzzer"]),
         bench,
-        "## If it fails",
+        f"Contact 1 of each plug beeps to the shell, and contact 6 of each plug is silent against the shell and every "
+        f"other contact (step {shell}). Each housing's marked corner is on the pin its step names.",
         "Do not fit the cables. A contact 1 that does not beep means that cable's ground wire is open or in the wrong "
         "cavity. A contact 6 that beeps anywhere means the 3.3 V wire was not the one cut back. Go back to that "
         "cable's housing and check every wire again. The pages are "
         f"{' or '.join(pages.link(c.key, f'{part}-2') for part, _ in GUIDE.values())}.",
+        next_page("bench"),
     )
     out[guide_name(c, "fit")] = body(
         need_lists([f"both cables, checked on the bench ({pages.link(c.key, 'bench')})", "the Acorn", f"the {c.name}"]),
         fit_,
-        "## Next",
-        f"Power the host on and run the check: {pages.link(c.key, 'check-1')}.",
+        "Both housings sit on the pins action 5 names, each marked corner on its pin, as action 6 looks for before "
+        "power.",
+        "A housing is off its pins, or turned round: do not power on. Take it off and fit it again as action 5 says.",
+        ("Ask the site operator, then power the Compute Blade on" if c.key == "blade" else f"Power the {c.name} on")
+        + f" and run the check: {pages.link(c.key, 'check-1')}.",
     )
     return out
 

@@ -67,3 +67,15 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 
 ![Stripping and crimping](acorn-cable-crimp.png){.only-light}
 ![Stripping and crimping](acorn-cable-crimp-dark.png){.only-dark}
+
+## Check
+
+Wire 1 of the P1 cable is the one the meter check of step 5 found. Every wire carries its numbered flag, and each wire that goes in the housing has a terminal crimped on.
+
+## If it fails
+
+The meter check of step 5 finds the numbering reversed, or finds both wires beeping: that step says what to do, and when to stop.
+
+## Next
+
+[How to fill the JTAG cable's housing (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/jtag-housing.html).

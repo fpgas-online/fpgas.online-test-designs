@@ -32,6 +32,14 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 ![Fitting the cables on a Compute Blade, actions 4 to 6](acorn-cable-blade-fit-2.png){.only-light}
 ![Fitting the cables on a Compute Blade, actions 4 to 6](acorn-cable-blade-fit-2-dark.png){.only-dark}
 
+## Check
+
+Both housings sit on the pins action 5 names, each marked corner on its pin, as action 6 looks for before power.
+
+## If it fails
+
+A housing is off its pins, or turned round: do not power on. Take it off and fit it again as action 5 says.
+
 ## Next
 
-Power the host on and run the check: [How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html).
+Ask the site operator, then power the Compute Blade on and run the check: [How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html).

@@ -32,6 +32,14 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 ![Fitting the cables on a Raspberry Pi 5, actions 4 to 6](acorn-cable-pi5-fit-2.png){.only-light}
 ![Fitting the cables on a Raspberry Pi 5, actions 4 to 6](acorn-cable-pi5-fit-2-dark.png){.only-dark}
 
+## Check
+
+Both housings sit on the pins action 5 names, each marked corner on its pin, as action 6 looks for before power.
+
+## If it fails
+
+A housing is off its pins, or turned round: do not power on. Take it off and fit it again as action 5 says.
+
 ## Next
 
-Power the host on and run the check: [How to run the Acorn check on a Raspberry Pi 5](https://docs.fpgas.online/en/latest/boards/acorn/checks/rpi-5.html).
+Power the Raspberry Pi 5 on and run the check: [How to run the Acorn check on a Raspberry Pi 5](https://docs.fpgas.online/en/latest/boards/acorn/checks/rpi-5.html).

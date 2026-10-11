@@ -766,3 +766,24 @@ def test_how_the_card_goes_in_and_comes_out_each_links_the_maker_s_page(key):
     # a cable's second-cable page says what to do with a cable that is still whole, as a step, not as a part
     uart = dict(step_blocks(steps.guide(c)[steps.guide_name(c, "uart-1")]))[1]
     assert "If the Molex cable is still whole, cut it in the middle with side cutters" in uart
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_every_building_how_to_has_the_five_headings_and_says_what_comes_next(key):
+    """Each building page but the overview is a how-to: its headings are a how-to's five, in order, its Check and
+    If it fails are not empty, and its Next names the page that follows in the order of work."""
+    c = wiring.CARRIERS[key]
+    built = steps.guide(c)
+    order = [f"{part}-{n}" for part, _ in steps.GUIDE.values() for n in (1, 2)] + ["bench", "fit"]
+    for i, page in enumerate(order):
+        text = built[steps.guide_name(c, page)]
+        prose = re.sub(r"```.*?```", "", text, flags=re.S)
+        assert re.findall(r"^#+ .*$", prose, re.M) == [
+            "## What you need", "## Steps", "## Check", "## If it fails", "## Next"
+        ], page  # fmt: skip
+        for head, following in (("## Check", "## If it fails"), ("## If it fails", "## Next")):
+            body = text[text.index(head) + len(head) : text.index(following)].strip()
+            assert len(body) > 40, (page, head)
+        nxt = text[text.index("## Next") :]
+        wanted = docs_pages.link(c.key, order[i + 1]) if i + 1 < len(order) else docs_pages.link(c.key, "check-1")
+        assert wanted in nxt, page
