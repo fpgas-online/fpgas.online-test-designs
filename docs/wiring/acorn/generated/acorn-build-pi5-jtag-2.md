@@ -18,7 +18,9 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 
 ## Steps
 
-**1.** Hold the empty 2×4 housing with the wire openings facing you and its long side upright, as in the picture. Until it is marked, either way up is the same. Mark the top left corner with a paint pen or a dot of tape: that is the pin 19 corner. For each wire, read the number on its flag and find the same number in the picture: that is the cavity its terminal goes in. Turned round, the housing puts its wires on the wrong pins. Wire 6 goes in no cavity.
+**1.** Hold the empty 2×4 housing with the wire openings facing you and its long side upright, as in the picture. Until it is marked, either way up is the same. Mark the top left corner with a paint pen or a dot of tape: that is the pin 19 corner. For each wire, read the number on its flag and find the same number in the picture: that is the cavity its terminal goes in.
+
+Turned round, the housing puts its wires on the wrong pins. Wire 6 goes in no cavity.
 
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png){.only-light}
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1-dark.png){.only-dark}
@@ -36,7 +38,9 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 ![A meter between the plug and the housing](acorn-cable-check.png){.only-light}
 ![A meter between the plug and the housing](acorn-cable-check-dark.png){.only-dark}
 
-**4.** Now check each wire against its cavity. For each wire: read the number on its flag and find it in the picture. Put one probe on that wire's contact on the plug and the other on the terminal in that cavity: it must beep. Every other cavity must stay silent for that contact. The P1 cavity picture is shown again below, to read each wire's cavity from.
+**4.** Now check each wire against its cavity. For each wire: read the number on its flag and find it in the picture. Put one probe on that wire's contact on the plug and the other on the terminal in that cavity: it must beep. Every other cavity must stay silent for that contact.
+
+The P1 cavity picture is shown again below, to read each wire's cavity from.
 
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png){.only-light}
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1-dark.png){.only-dark}

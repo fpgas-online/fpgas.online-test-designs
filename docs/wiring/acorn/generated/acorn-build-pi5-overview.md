@@ -11,7 +11,9 @@ GND, TCK, TDO, TMS, TDI, J2, K2, J5 and H5 are the names on the pictures for eac
 ![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5.png){.only-light}
 ![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5-dark.png){.only-dark}
 
-Nothing in this guide cuts a wire to length. The bought cable is cut in half, once, in step 2 of [How to prepare the JTAG cable's wires (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/jtag-wires.html). That is before the meter check, which needs the cut faces. Each half is then used at the length it has. The exception is the wires that are cut back at the plug. Step 3 of that page checks that each half reaches from the card to the Raspberry Pi 5's headers. That is before any wire is cut back or crimped.
+Nothing in this guide cuts a wire to length. The bought cable is cut in half, once, in step 2 of [How to prepare the JTAG cable's wires (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/jtag-wires.html). That is before the meter check, which needs the cut faces.
+
+Each half is then used at the length it has. The exception is the wires that are cut back at the plug. Step 3 of that page checks that each half reaches from the card to the Raspberry Pi 5's headers. That is before any wire is cut back or crimped.
 
 ## The order of work
 

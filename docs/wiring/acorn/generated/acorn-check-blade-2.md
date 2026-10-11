@@ -14,7 +14,9 @@ To move a wire, the cable goes through the same checks as a new one before any b
 6. Fit the cables: [How to fit the cables and the card (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/fitting.html).
 7. Ask the site operator, then boot the blade. The install is gone after the boot, so install the packages again, as in [How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html). Then run the check again.
 
-One test can be run on its own: `sudo fpgas-acorn-verify --no-publish --test p2-serial`, or `sudo fpgas-acorn-verify --no-publish --test jtag`. Run `--test jtag` only in a boot with the header's serial port off. Run `--test jtag` only after steps 7 and 8 of [How to make a Compute Blade boot ready for JTAG](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html) pass. Step 7 checks that GPIO14 is free, and step 8 checks that nothing on the card drives GPIO14. In a boot with the header's serial port off, the same goes for the whole check, which runs `jtag` too. The whole check: [How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html). Each prints the usual summary, then the whole report as JSON.
+One test can be run on its own: `sudo fpgas-acorn-verify --no-publish --test p2-serial`, or `sudo fpgas-acorn-verify --no-publish --test jtag`. Run `--test jtag` only in a boot with the header's serial port off. Run `--test jtag` only after steps 7 and 8 of [How to make a Compute Blade boot ready for JTAG](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html) pass. Step 7 checks that GPIO14 is free, and step 8 checks that nothing on the card drives GPIO14.
+
+In a boot with the header's serial port off, the same goes for the whole check, which runs `jtag` too. The whole check: [How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html). Each prints the usual summary, then the whole report as JSON.
 
 | The failing line | Look at |
 |---|---|

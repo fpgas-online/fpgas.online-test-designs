@@ -387,7 +387,8 @@ def test_a_repeated_cavity_picture_says_why_it_is_there_again():
             assert len(at) == 4  # filled, pushed in, checked, and fitted on the bench check
             for i in at[1:]:
                 # the step's own words say why
-                words = next(line for line in reversed(lines[:i]) if line.startswith("**"))
+                start = next(j for j in range(i, -1, -1) if re.match(r"\*\*\d+\.\*\* ", lines[j]))
+                words = " ".join(line for line in lines[start:i] if line)  # all the step's paragraphs
                 assert f"The {connector} cavity picture is shown again" in words, words
 
 
@@ -397,7 +398,11 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
     pages = steps.guide(c)
     names = ["overview", "jtag-1", "jtag-2", "uart-1", "uart-2", "bench", "fit"]
     assert list(pages) == [steps.guide_name(c, n) for n in names]
-    whole = [re.sub(r"^\*\*\d+\.\*\* ", "", line) for line in steps.procedure(c).splitlines() if line.startswith("**")]
+    whole = [
+        re.sub(r"^\*\*\d+\.\*\* ", "", line)
+        for line in steps.procedure(c).splitlines()
+        if re.match(r"\*\*\d+\.\*\* ", line)
+    ]
     paged = []
     for name, body in pages.items():
         numbered = re.findall(r"^\*\*(\d+)\.\*\* (.*)$", body, re.M)
@@ -427,7 +432,9 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
     for part in ("jtag-1", "uart-1"):
         first_step = dict(step_blocks(pages[steps.guide_name(c, part)]))[1]
         assert first_step.startswith(f"**1.** {steps.CARD_OUT_STEP}")
-        assert f"If it is fitted, the {c.name} must be off first. {c.power_off} Then take the card out." in first_step
+        assert (
+            f"If it is fitted, the {c.name} must be off first. {c.power_off}\n\nThen take the card out." in first_step
+        )
         assert steps.STATIC in first_step
     assert "cut in half, once" in overview
     # the reach check is asked for at a moment the guide has: after the one cut, before any wire is cut back
@@ -565,7 +572,8 @@ def test_no_words_stand_between_a_steps_pictures(key):
             lines = [line for line in block.splitlines() if line]
             first = next((i for i, line in enumerate(lines) if line.startswith("![")), len(lines))
             assert all(line.startswith("![") for line in lines[first:]), (name, n)
-            assert all(re.match(r"\d+\. ", line) for line in lines[1:first]), (name, n)
+            # the words before the pictures are paragraphs and list items: no heading, table or code between
+            assert not any(line.startswith(("#", "|", "`")) for line in lines[:first]), (name, n)
 
 
 def quotes(c):

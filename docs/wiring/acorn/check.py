@@ -557,7 +557,7 @@ def pages(c):
         "One test can be run on its own"
         + (
             ": `sudo fpgas-acorn-verify --no-publish --test p2-serial`, or `sudo fpgas-acorn-verify --no-publish "
-            f"--test jtag`. Run `--test jtag` only {JTAG_CONDITIONS}. In a boot with the header's serial port off, "
+            f"--test jtag`. Run `--test jtag` only {JTAG_CONDITIONS}.\n\nIn a boot with the header's serial port off, "
             "the same goes for the whole check, which runs `jtag` too. "
             f"The whole check: {BLADE_CHECK}. Each prints the usual summary, then the whole report as JSON."
             if c.key == "blade"

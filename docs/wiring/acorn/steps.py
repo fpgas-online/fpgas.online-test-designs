@@ -1229,7 +1229,7 @@ CARD_OUT_STEP = "Have the Acorn out of its slot."
 
 def card_out_step(c):
     """The step that has the card out of its slot and in the hand: the power off first, the screw, and static."""
-    return f"{CARD_OUT_STEP} {power_off_when(c, 'it is fitted')} Then take the card out. {card_out(c)} {STATIC}"
+    return f"{CARD_OUT_STEP} {power_off_when(c, 'it is fitted')}\n\nThen take the card out. {card_out(c)}\n\n{STATIC}"
 
 
 def header_words(name):
@@ -1257,12 +1257,13 @@ def through_resistor(c, connector):
         f"**Wire {n} is the exception: it has the {c.resistor_value} resistor in it. Leave wire {n} until last and "
         "read it in ohms, not by the buzzer**. A continuity buzzer usually sounds only below some tens of ohms, so "
         "through the resistor it will usually stay silent. Set the meter to ohms, on "
-        "auto-range or the 2 kΩ range, and touch the two probes together first: it must read close to 0. Then, "
-        f"between wire {n}'s contact on the plug and its terminal, it must read close to {c.resistor_value}. Close "
+        "auto-range or the 2 kΩ range, and touch the two probes together first: it must read close to 0.\n\n"
+        f"Then, between wire {n}'s contact on the plug and its terminal, it must read close to "
+        f"{c.resistor_value}. Close "
         "to 0 there means the resistor is bridged or was left out. Over-range (OL, or a lone 1 at the left of the "
         f"display) means a bad joint or the wrong wire. So does a value far from {c.resistor_value}. "
         f"Between wire {n}'s "
-        "contact and every other cavity it must show over-range. "
+        "contact and every other cavity it must show over-range.\n\n"
     )
 
 
@@ -1361,10 +1362,10 @@ def procedure_parts(c, restart=False):
     step(
         f"{REACH}, before any wire is cut back or crimped. "
         + power_off_when(c, f"the {c.name} is on")
-        + " With the card out of its slot, hold the card over the slot where it will sit. "
+        + "\n\nWith the card out of its slot, hold the card over the slot where it will sit. "
         + " ".join(pairs)
-        + " Its cut end must reach the header with some slack left to "
-        "bend into the housing. If a half does not reach, stop: this guide uses each half at the length it has. "
+        + " Its cut end must reach the header with some slack left to bend into the housing."
+        "\n\nIf a half does not reach, stop: this guide uses each half at the length it has. "
         f"Tell {c.contact}.",
         (
             f"Where each half must reach on a {c.name}: from the M.2 slot, where the card will sit, to its header",
@@ -1391,7 +1392,7 @@ def procedure_parts(c, restart=False):
             n = 0
         target.extend([f"#### The {connector} cable ({conn['what']})", ""])
         if connector != next(iter(wiring.CONNECTORS)):  # the first cable's part has it as its first step, above
-            step(f"{card_out_step(c)} {STILL_WHOLE}")
+            step(f"{card_out_step(c)}\n\n{STILL_WHOLE}")
         half = "one" if connector == next(iter(wiring.CONNECTORS)) else "the other"
         flag = [
             f"Press the plug of {half} half into socket {connector} on the underside of the Acorn. "
@@ -1440,10 +1441,10 @@ def procedure_parts(c, restart=False):
                 f"Cut wire {pins.index(sig) + 1} ({label_of(sig)}) about {lengths['resistor']} mm from its free end. "
                 f"Slide a piece of the {lengths['resistor_tube']} mm tube onto the wire, clear of the cut. "
                 f"Strip about {lengths['strip']} mm from each cut end. "
-                f"Trim the resistor's leads to about {lengths['resistor_lead']} mm each. "
+                f"Trim the resistor's leads to about {lengths['resistor_lead']} mm each.\n\n"
                 f"Solder the {c.resistor_value} resistor between the two cut ends. "
-                "Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this. "
-                + resistor_reason(c, sig),
+                "Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this."
+                "\n\n" + resistor_reason(c, sig),
                 (f"The resistor fitted into wire {pins.index(sig) + 1}", png(resistor_name(c, connector))),
             )
         step(
@@ -1459,7 +1460,7 @@ def procedure_parts(c, restart=False):
             f"Mark {'the top left corner' if data.columns > 1 else 'the top end'} with a paint pen or a dot of tape: "
             f"that is the pin {plan.first} corner. "
             "For each wire, read the number on its flag and find the same number in the picture: that is the "
-            f"cavity its terminal goes in. {warning} "
+            f"cavity its terminal goes in.\n\n{warning} "
             f"{cut_who[0].upper()}{cut_who[1:]} {'goes' if one else 'go'} in no cavity.",
             cavity[connector],
         )
@@ -1481,7 +1482,7 @@ def procedure_parts(c, restart=False):
         step(
             f"{CHECK_CAVITY} For each wire: read the number on its flag and find it in the picture. Put one probe on "
             "that wire's contact on the plug and the other on the terminal in that cavity: it must beep. Every other "
-            "cavity must stay silent for that contact. "
+            "cavity must stay silent for that contact.\n\n"
             + through_resistor(c, connector)
             + again(connector, "to read each wire's cavity from"),
             cavity[connector],
@@ -1508,9 +1509,9 @@ def procedure_parts(c, restart=False):
     for i, (connector, picture) in enumerate(cavity.items()):
         step(
             (
-                f"{BENCH_START} {power_off_when(c, f'the {c.name} is on')} "
+                f"{BENCH_START} {power_off_when(c, f'the {c.name} is on')}\n\n"
                 "The Acorn stays out of its slot; if it is fitted, take it out. "
-                f"{card_out(c)} Then fit {fits[i]}."
+                f"{card_out(c)}\n\nThen fit {fits[i]}."
                 if i == 0
                 else f"Fit {fits[i]}."
             )
@@ -1521,7 +1522,8 @@ def procedure_parts(c, restart=False):
     step(
         f"{BENCH_BEEP} Put one meter probe "
         f"on contact 1 ({label_of(first)}) of a plug. Put the other on {c.shell}: it must "
-        f"beep. Do the same for the other plug. Then contact {len(pins)} of each plug ({label_of(pins[-1])}, the wire "
+        "beep. Do the same for the other plug.\n\n"
+        f"Then contact {len(pins)} of each plug ({label_of(pins[-1])}, the wire "
         "you cut back): against the shell and against every other contact it must be silent. Contact 1's beep "
         "shows only that contact 1 and the shell are joined. " + ground_shows_way_round(c),
         (f"The bench check on a {c.name}", png(shell_check_name(c))),
@@ -1689,7 +1691,7 @@ def guide(c):
             tables.BANNER.strip(), "", not_run, "", "## What you will have", "", *will_have,
             "Nothing in this guide cuts a wire to length. The bought cable is cut in half, once, in "
             f"step {numbered(first_page, CUT_HALF)} of {pages.link(c.key, first_part + '-1')}. "
-            "That is before the meter check, which needs the cut faces. "
+            "That is before the meter check, which needs the cut faces.\n\n"
             "Each half is then used at the length it has. The exception is the wires that are cut back at the plug"
             + (" and the one wire that is cut to take the resistor" if c.resistors else "")
             + f". Step {numbered(first_page, REACH)} of that page checks that each half reaches from the card to the "

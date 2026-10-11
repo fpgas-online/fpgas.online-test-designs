@@ -11,7 +11,9 @@ GND, TCK, TDO, TMS, TDI, J2 and K2 are the names on the pictures for each wire. 
 ![The finished wiring: Acorn to Compute Blade](acorn-wiring-computeblade.png){.only-light}
 ![The finished wiring: Acorn to Compute Blade](acorn-wiring-computeblade-dark.png){.only-dark}
 
-Nothing in this guide cuts a wire to length. The bought cable is cut in half, once, in step 2 of [How to prepare the JTAG cable's wires (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/jtag-wires.html). That is before the meter check, which needs the cut faces. Each half is then used at the length it has. The exception is the wires that are cut back at the plug and the one wire that is cut to take the resistor. Step 3 of that page checks that each half reaches from the card to the Compute Blade's headers. That is before any wire is cut back or crimped.
+Nothing in this guide cuts a wire to length. The bought cable is cut in half, once, in step 2 of [How to prepare the JTAG cable's wires (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/jtag-wires.html). That is before the meter check, which needs the cut faces.
+
+Each half is then used at the length it has. The exception is the wires that are cut back at the plug and the one wire that is cut to take the resistor. Step 3 of that page checks that each half reaches from the card to the Compute Blade's headers. That is before any wire is cut back or crimped.
 
 ## The order of work
 
