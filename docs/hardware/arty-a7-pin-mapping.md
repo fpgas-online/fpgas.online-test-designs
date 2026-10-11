@@ -8,8 +8,8 @@ Pin mapping for the Digilent Arty A7-35T as connected in the fpgas.online test i
 
 | Parameter    | Value                           |
 | ------------ | ------------------------------- |
-| FPGA         | Xilinx Artix-7 XC7A35T-CPG236-1 |
-| Package      | CPG236                          |
+| FPGA         | Xilinx Artix-7 XC7A35TICSG324-1L |
+| Package      | CSG324                           |
 | System clock | 100 MHz (pin E3, LVCMOS33)      |
 | Toolchain    | openXC7 (open source) or Vivado |
 
@@ -199,12 +199,12 @@ Verified using the `pmod-pin-id` design which transmits each FPGA pin's ball nam
 | 9       | GPIO3    | K15              | K15                | yes   |
 | 10      | GPIO2    | J15              | J15                | yes   |
 
-#### HAT JC → Arty JC (pins 1↔2 swapped in cable)
+#### HAT JC → Arty JC (pins 1 and 2 read in the connector's order)
 
 | HAT Pin | RPi GPIO | Scanned FPGA Pin | Expected (Arty JC) | Match |
 | ------- | -------- | ---------------- | ------------------ | ----- |
-| 1       | GPIO16   | V12              | U12                | SWAP  |
-| 2       | GPIO14   | U12              | V12                | SWAP  |
+| 1       | GPIO16   | V12              | V12                | yes   |
+| 2       | GPIO14   | U12              | U12                | yes   |
 | 3       | GPIO15   | V10              | V10                | yes   |
 | 4       | GPIO17   | V11              | V11                | yes   |
 | 7       | GPIO4    | U14              | U14                | yes   |
