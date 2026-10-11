@@ -49,6 +49,17 @@ class PinIdentifier(Module):
             self.submodules += tx
 
 
+def design(variant="a7-100", toolchain="openxc7"):
+    """The platform with one output per serial pin, the pin list [(ball, label)] and the module: everything main()
+    builds but the toolchain's own fixes and the build. tests/test_pmod_pin_id_elaborate.py elaborates it without
+    a toolchain."""
+    platform = Platform(variant=variant, toolchain=toolchain)
+    platform.add_extension(_pin_id_io)
+    module = PinIdentifier(platform)
+    require_timing(platform, {})  # runs on the board clock, which the platform constrains
+    return platform, list(PIN_LIST), module
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Pin Identification for NeTV2")
@@ -61,25 +72,20 @@ def main():
     parser.add_argument("--build", action="store_true")
     args = parser.parse_args()
 
-    platform = Platform(variant=args.variant, toolchain=args.toolchain)
+    platform, _pin_list, module = design(args.variant, args.toolchain)
 
     if args.toolchain == "openxc7":
         fix_openxc7_device_name(platform)
         ensure_chipdb_symlink(platform)
-
-    platform.add_extension(_pin_id_io)
 
     # Print the pin mapping for reference
     print(f"Pin ID: {len(PIN_LIST)} pins")
     for fpga_pin, label in PIN_LIST:
         print(f"  {fpga_pin:6s} -> {label.strip()!r}")
 
-    module = PinIdentifier(platform)
-
     if args.toolchain == "openxc7" and hasattr(platform.toolchain, "_yosys_template"):
         platform.toolchain._yosys_template = list(YOSYS_TEMPLATE_STRIP_SCOPEINFO)
 
-    require_timing(platform, {})  # runs on the board clock, which the platform constrains
     if args.build:
         # Write to build/<board>-<variant>-<flow>/gateware/<platform>.bit
         # to match LiteX Builder's layout used by the other designs.

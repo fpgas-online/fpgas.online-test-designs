@@ -39,9 +39,14 @@ class UARTTxIdentifier(Module):
     ----------
     sending : Signal(1)
         High from the first start bit of a label to the last stop bit of that label.
+    pin, label
+        As given: what it drives and what it sends (tests/test_pmod_pin_id_elaborate.py checks that every pin
+        sends its own ball's name).
     """
     def __init__(self, pin, label, sys_clk_freq, baud=1200, run=None):
         assert len(label) > 0, "Label must be non-empty"
+        self.pin = pin
+        self.label = label
         self.sending = Signal()
 
         divisor = int(sys_clk_freq // baud)
