@@ -21,6 +21,7 @@ The OpenVizsla OV3 that may sit inline on the Fomu's USB to debug its USB stack 
 named in the report, never taken for a board or for "no board"."""
 
 import json
+import re
 import sys
 import time
 from typing import ClassVar
@@ -35,6 +36,8 @@ CRESET, CDONE = 27, 17
 HEADER_GPIOS = (8, 9, 10, 11, 17, 24, 25, 27)  # the lines fomu_header_id.py takes
 HEADER_TIMEOUT = 60
 FOBOOT_WAIT = 10.0  # s for foboot to appear on USB after the reset
+# The kernel's USB lines kept when foboot does not come back: how the reset went on the USB side.
+USB_KERNEL_RE = re.compile(r"usb|1209|5bf0", re.I)
 # The EVT's flash, U4: a Winbond W25Q128JV-IM (tomu-fpga.sch), RDID EFh 70h 18h.
 FLASH_JEDEC = "ef7018"
 FLASH_PART, FLASH_BYTES = "W25Q128JV", 16 * 1024 * 1024
@@ -109,6 +112,16 @@ def header_check(variant, facts, found):
     return ("fail", "; ".join(faults), lines) if faults else ("pass", None, lines)
 
 
+def kernel_usb_lines(runner, keep=12):
+    """The kernel's last USB lines this boot, for a foboot that did not come back. A journal that cannot be read
+    gives none: it only explains a failure, which stands without it."""
+    try:
+        rc, text = runner(["journalctl", "-k", "-b", "--no-pager", "-o", "short-monotonic"], 30)
+    except Problem:
+        return []
+    return [line.strip() for line in text.splitlines() if USB_KERNEL_RE.search(line)][-keep:] if rc == 0 else []
+
+
 def foboot_check(variant, facts, found):
     """The `foboot` test: did foboot answer on USB after the reset? The tests' DFU loads need it."""
     seconds = found.get("foboot_seconds")
@@ -116,9 +129,16 @@ def foboot_check(variant, facts, found):
         return "pass", None, [f"foboot (1209:5bf0) on USB {seconds} s after the reset"]
     if "header" not in found:
         return "error", "not looked for: the header was not read, so the Fomu was not reset", []
+    # What tells the cases apart: foboot there before the reset and gone after it is the reset's doing; not there
+    # before either means a design with no USB was running (#135), which only a power cycle ends.
+    before = ("it was on USB before the reset" if found.get("foboot_before_reset")
+              else "it was not on USB before the reset either: a design with no USB was running")  # fmt: skip
+    reading = found["header"]
+    output = [f"CDONE before {reading.get('cdone_before')}, in reset {reading.get('cdone_in_reset')}, "
+              f"after {reading.get('cdone_after')}", *found.get("usb_kernel", [])]  # fmt: skip
     return "fail", (f"foboot (1209:5bf0) did not appear on USB within {FOBOOT_WAIT:g} s of the reset, so no "
-                    "design can be loaded over DFU: look at the Fomu's USB path (an OpenVizsla, when one is "
-                    "inline, is on it)"), []  # fmt: skip
+                    f"design can be loaded over DFU ({before}): look at the Fomu's USB path (an OpenVizsla, "
+                    "when one is inline, is on it)"), output  # fmt: skip
 
 
 class Fomu(TestBoard):
@@ -167,6 +187,7 @@ class Fomu(TestBoard):
         """The flash's IDs over the header (the iCE40 reset; see the module's docstring), then foboot on USB.
         The whole reading is left in found["header"] for the `header` test and the report, and the IDs in
         found for the state."""
+        found["foboot_before_reset"] = bool(usb_matching(usb_devices(), (FOBOOT,)))
         try:
             reading = read_header(host, runner)
         except Problem as p:
@@ -183,6 +204,7 @@ class Fomu(TestBoard):
                 found["usb"] = dfu[0]["path"]
                 break
             if _clock() - start >= FOBOOT_WAIT:
+                found["usb_kernel"] = kernel_usb_lines(runner)
                 break
             _sleep(0.5)
         return facts

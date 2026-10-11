@@ -908,6 +908,34 @@ def test_foboot_not_coming_back_after_the_reset_fails_foboot_not_the_identity(tm
     assert "usb" not in report["identity"] and report["result"] == "fail"
 
 
+KERNEL_USB = (
+    "[  61.2] usb 1-1.2: USB disconnect, device number 5\n[  62.0] usb 1-1.2: device descriptor read/64, error -71\n"
+)
+
+
+def test_a_foboot_that_was_on_usb_before_the_reset_and_not_after_says_so(tmp_path, monkeypatch):
+    """What tells the root 3 cases apart (sw1 p17): foboot there before the header's reset and gone after it is
+    the reset's doing; the kernel's USB lines say how it went."""
+    seen = [[FOBOOT_USB]]  # the first look, before the reset; every later one sees nothing
+    monkeypatch.setattr(fomu, "usb_devices", lambda: seen.pop(0) if seen else [])
+    now = [0.0]
+    monkeypatch.setattr(fomu, "_clock", lambda: now[0])
+    monkeypatch.setattr(fomu, "_sleep", lambda s: now.__setitem__(0, now[0] + s))
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", (0, KERNEL_USB))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run)
+    foboot = next(t for t in report["tests"] if t["test"] == "foboot")
+    assert foboot["result"] == "fail" and "it was on USB before the reset" in foboot["reason"]
+    assert "usb 1-1.2: device descriptor read/64, error -71" in " ".join(foboot["output"])
+    assert any("CDONE before 1, in reset 0, after 1" in line for line in foboot["output"])
+
+
+def test_a_foboot_that_was_not_on_usb_before_the_reset_either_says_so(tmp_path, fomu_usb):
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", (0, ""))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run)
+    foboot = next(t for t in report["tests"] if t["test"] == "foboot")
+    assert foboot["result"] == "fail" and "not on USB before the reset either" in foboot["reason"]
+
+
 @pytest.mark.parametrize("answer, said", [
     ((2, "fomu-header-error: python3-libgpiod (the gpiod module) is not installed\n"), "python3-libgpiod"),
     ((1, "Traceback ...\nKeyError: 9\n"), "fomu_header_id.py exited 1: Traceback ... KeyError: 9"),
