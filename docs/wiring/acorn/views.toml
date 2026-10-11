@@ -28,3 +28,44 @@ thing = "hat"
 face = "top"
 crop = ["hat.header.pins.5-10"]
 highlight = ["hat.header.pins.5-10"]
+
+# The card from below, turned so that the sockets are along the top, the M.2 edge to the left and pin 1 of
+# each socket at its left end: how the reader holds it. Only part of the underside has geometry (the photo
+# covers y 0 to 47.9 mm), so the sockets view is a crop with the whole card as its inset.
+[views."acorn.bottom.sockets"]
+thing = "acorn"
+face = "bottom"
+turn = 90
+crop = ["acorn.p1", "acorn.p2", "acorn.pad"]
+
+[views."acorn.bottom.p1"]
+thing = "acorn"
+face = "bottom"
+turn = 90
+crop = ["acorn.p1"]
+highlight = ["acorn.p1"]
+
+[views."acorn.bottom.p2"]
+thing = "acorn"
+face = "bottom"
+turn = 90
+crop = ["acorn.p2"]
+highlight = ["acorn.p2"]
+
+# The photos and figures still wanted. Views that wait for one ship as line drawings, marked photo_matched =
+# false in generated/views/views.json, and this list is copied into it.
+[[photos_wanted]]
+what = "a photo of the Acorn's top face"
+blocks = "the whole-board top figure"
+
+[[photos_wanted]]
+what = "a photo of an Acorn in the HAT with its cables fitted"
+blocks = "the card in its slot (family B); the as-laid view (family D)"
+
+[[photos_wanted]]
+what = "the length of a half cable"
+blocks = "the reach in the as-laid view (family D)"
+
+[[photos_wanted]]
+what = "the outside size of the Pico-EZmate plug"
+blocks = "the plug drawn to scale (families B and C)"
