@@ -82,6 +82,10 @@ class Runner:
             return 0, DNA_LINE
         if argv[:2] == ["pinctrl", "get"]:  # every pin an input, pulled down
             return 0, "".join(f"{g}: ip    pd | lo // GPIO{g} = input\n" for g in argv[2].split(","))
+        if argv[0] == "openFPGALoader" and argv[-1].endswith(".bit"):  # a 7-series JTAG load that configured
+            return 0, LOADED
+        if "fpgas_online_verify.listen" in argv and "openFPGALoader" in argv:  # listen.py passes the load's lines on
+            return 0, LOADED + "ok"
         return 0, "ok"
 
 
@@ -94,6 +98,11 @@ def _scan(*codes):
 ARTY_SCAN = _scan(0x0362D093) + "index 0:\n\tidcode 0x362d093\n\tmanufacturer xilinx\n\tfamily artix a7 35t\n"
 DNA = "0x0054b48664b04854"
 DNA_LINE = '{"dna": "0x0054b48664b04854"}\n'  # openFPGALoader --read-dna's output
+# The last lines of openFPGALoader loading a 7-series FPGA over JTAG (src/xilinx.cpp, Xilinx::program_mem):
+# `done 1` when it configured. It exits 0 either way (#300).
+LOADED = "Load SRAM: [====] 100.00%\nShift IR 35\nir: 1 isc_done 1 isc_ena 0 init 1 done 1\n"
+NOT_LOADED = "Load SRAM: [====] 100.00%\nShift IR 11\nir: 1 isc_done 0 isc_ena 0 init 1 done 0\n" \
+             "register STAT: 0x401079fc\n"  # fmt: skip
 
 
 # -- what the boards are ---------------------------------------------------------------------------------
@@ -441,6 +450,29 @@ def test_a_failing_test_fails_the_check_and_keeps_its_output(tmp_path):
     assert ddr["output"][-1] == "RESULT: FAIL" and report["tests"][2]["result"] == "pass"
 
 
+def test_a_load_that_exits_0_but_ends_done_0_did_not_load(tmp_path):
+    """openFPGALoader exits 0 when the FPGA did not configure; its `done 0` line says so (#300)."""
+    run = Runner([("uart-test-arty", (0, NOT_LOADED))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    uart = _check(ARTY, tmp_path, ARTY_FOUND, run)["tests"][0]
+    assert uart["result"] == "fail" and "did not configure" in uart["reason"] and "done 0" in uart["reason"]
+    assert not any(c[1].endswith("test_uart.py") for c in run.calls if len(c) > 1)  # its test is not run
+
+
+def test_a_load_with_no_done_line_is_not_taken_as_loaded(tmp_path):
+    run = Runner([("uart-test-arty", (0, "Load SRAM: [====] 100.00%\n"))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    uart = _check(ARTY, tmp_path, ARTY_FOUND, run)["tests"][0]
+    assert uart["result"] == "fail" and "no 'done' line" in uart["reason"]
+
+
+def test_only_a_jtag_load_by_openfpgaloader_is_judged_by_its_done_line():
+    assert ARTY.load_failure(["openFPGALoader", "-b", "arty", "x.bit"], LOADED) is None
+    assert "done 0" in ARTY.load_failure(["openFPGALoader", "-b", "arty", "x.bit"], NOT_LOADED)
+    # the NeTV2 on a Pi 3/4 loads with OpenOCD, which prints no such line; the Fomu and TT boards load no 7-series
+    assert NETV2.load_failure(["openocd", "-c", "init; pld load 0 x.bit; exit"], "ok") is None
+    assert NETV2.load_failure(["openFPGALoader", "-c", "rp1pio", "x.bit"], NOT_LOADED) is not None
+    assert FOMU.load_failure(["openFPGALoader", "x.bin"], "ok") is None and TT.load_failure(["x"], "ok") is None
+
+
 def test_only_the_tests_asked_for_run(tmp_path):
     run = Runner(flash=b"\0" * ARTY.flash_region["a7-35"])
     report = _check(ARTY, tmp_path, ARTY_FOUND, run, tests=["ddr"])
@@ -531,6 +563,25 @@ def test_a_netv2_on_a_pi5_loads_with_rp1pio_and_muxes_its_uart(tmp_path):
     assert report["jtag"]["dna"] == DNA
     assert ["pinctrl", "set", "14", "a4"] in run.calls
     assert any(c[:3] == ["openFPGALoader", "-c", "rp1pio"] and c[-1].endswith("kosagi_netv2.bit") for c in run.calls)
+
+
+def _netv2_pi5_listen(tmp_path, answer):
+    """The NeTV2 on a Pi 5's first listening test, with listen.py answering `answer`."""
+    run = Runner([("fpgas_online_verify.listen", answer)], flash=b"\0" * NETV2.flash_region["a7-35"])
+    report = NETV2.check(_host(NETV2, PI5, None), {"variant": "a7-35"},
+                         {"images": _install(tmp_path, NETV2)}, runner=run)  # fmt: skip
+    return next(t for t in report["tests"] if NETV2.tests[t["test"]].get("listen"))
+
+
+def test_a_listened_load_that_ends_done_0_fails_as_a_load(tmp_path):
+    test = _netv2_pi5_listen(tmp_path, (0, NOT_LOADED + "PASS"))  # the test passed on stale output
+    assert test["result"] == "fail" and "did not configure" in test["reason"]
+
+
+def test_a_listened_load_that_exits_non_zero_says_so_not_that_the_done_line_is_missing(tmp_path):
+    test = _netv2_pi5_listen(tmp_path, (2, "$ openFPGALoader -c rp1pio\nunable to open /dev/pio0\n"
+                                           "loading the design failed (exit 2)\n"))  # fmt: skip
+    assert test["result"] == "fail" and test["reason"] == "loading it failed (exit 2)"
 
 
 def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_read_flash(tmp_path, monkeypatch):
