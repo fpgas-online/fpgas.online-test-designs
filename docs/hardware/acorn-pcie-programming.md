@@ -26,7 +26,7 @@ echo 1 | sudo tee /sys/bus/pci/rescan                         # afterwards, or j
 sudo python3 designs/acorn-pcie/host/pcie_match_mps.py        # after every rescan (next section)
 ```
 
-### Match Max_Payload_Size after every rescan
+### Match the Max Payload Size after every rescan
 
 The Pi 5 firmware boots Linux with `pci=pcie_bus_safe`. In that mode the
 kernel matches Max_Payload_Size (MPS) across the link once, at boot; a sysfs
@@ -193,7 +193,7 @@ litepcie_util flash_reload
 
 After reload, the PCIe link retrains. The host must rescan the PCIe bus, then
 match the endpoint's Max_Payload_Size (see
-[above](#match-max_payload_size-after-every-rescan)):
+[above](#match-the-max-payload-size-after-every-rescan)):
 
 ```bash
 echo 1 > /sys/bus/pci/rescan
