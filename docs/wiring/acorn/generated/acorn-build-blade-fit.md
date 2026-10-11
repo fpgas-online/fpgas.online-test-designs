@@ -6,12 +6,16 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 
 ## What you need
 
-**Parts and tools**
+**Parts**
 
 - both cables, checked on the bench ([How to check the cables on the bench (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/bench-check.html))
 - the Acorn
 - the Compute Blade
+
+**Tools**
+
 - a PH1 (Phillips size 1) screwdriver
+- a 5 mm hex driver, only if the standoff is missing
 
 ## Steps
 
@@ -26,7 +30,7 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 
 **2.** Fit the card, then the housings, in this order. How the card goes in (action 4) is from [the Compute Blade's assembly guide](https://github.com/uptime-lab/compute-blade/blob/main/docs/docs/blade/getting-started/assembly.mdx).
 
-4. Put the Acorn in the M.2 slot and fit its screw. The M2x2.5 standoff goes in the threaded insert for the card's size, with a 5 mm hex driver. Put the M2 nylon washer on the M2x2.5 screw, insert the card at a 30° angle and press down. Then secure the screw to the standoff with a PH1 driver.
+4. Put the Acorn in the M.2 slot and fit its screw. If the threaded insert for the card's size has no M2x2.5 standoff in it, screw the standoff in with a 5 mm hex driver. Put the M2 nylon washer on the M2x2.5 screw, insert the card at a 30° angle and press down. Then secure the screw to the standoff with a PH1 driver.
 5. Fit the P1 housing on the Extension Port, marked corner on pin 1. Fit the P2 housing on the UART, marked corner on pin 1.
 6. Before powering on, look at both housings again, as on the bench check. The P1 housing's marked corner is on pin 1 of the Extension Port, and the P2 housing's on pin 1 of the UART. Turned round, the P1 housing puts 5 V on the TCK wire and the P2 housing puts 5 V on the K2 wire. That is above the most AMD's Artix 7 data sheet allows on an FPGA pin (DS181, Table 1). The most it allows is VCCO + 0.55 V, with VCCO at most 3.6 V. Exceeding it can destroy the FPGA pin on the Acorn that wire reaches. Fitted, the housings get only this look; the meter check was the bench check's.
 

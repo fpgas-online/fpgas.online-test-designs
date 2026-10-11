@@ -40,7 +40,8 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 | ☐ | a fine probe tip for the multimeter, or a sewing pin to hold against a probe | the plug's contacts are 1.2 mm apart, and a terminal is reached through a small opening |
 | ☐ | masking tape and a fine marker pen, or a paint pen | to flag the six wires with their numbers, and to mark the pin 1 corner of each housing |
 | ☐ | a ruler marked in millimetres | the steps give lengths in millimetres: where a flag goes, how much of a wire is left, cut back or stripped |
-| ☐ | a PH1 (Phillips size 1) screwdriver | for the M2x2.5 screw that holds the card in the M.2 slot. Uptime Lab's assembly guide for the Compute Blade names a PH1 driver for that screw (and a 5 mm hex driver for its standoff, where the standoff is not fitted) |
+| ☐ | a PH1 (Phillips size 1) screwdriver | for the M2x2.5 screw that holds the card in the M.2 slot. Uptime Lab's assembly guide for the Compute Blade names a PH1 driver for that screw |
+| ☐ | a 5 mm hex driver | for the M2x2.5 standoff, only if the threaded insert for the card's size has none in it. Uptime Lab's assembly guide for the Compute Blade names a 5 mm hex driver for the standoff |
 | ☐ | a computer with ssh, on a network that reaches the blade | to log in to the blade and run the check ([How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html)) |
 
 ### Steps
@@ -242,7 +243,7 @@ Then contact 6 of each plug (VCC, the wire you cut back): against the shell and 
 
 **26.** Fit the card, then the housings, in this order. How the card goes in (action 4) is from [the Compute Blade's assembly guide](https://github.com/uptime-lab/compute-blade/blob/main/docs/docs/blade/getting-started/assembly.mdx).
 
-4. Put the Acorn in the M.2 slot and fit its screw. The M2x2.5 standoff goes in the threaded insert for the card's size, with a 5 mm hex driver. Put the M2 nylon washer on the M2x2.5 screw, insert the card at a 30° angle and press down. Then secure the screw to the standoff with a PH1 driver.
+4. Put the Acorn in the M.2 slot and fit its screw. If the threaded insert for the card's size has no M2x2.5 standoff in it, screw the standoff in with a 5 mm hex driver. Put the M2 nylon washer on the M2x2.5 screw, insert the card at a 30° angle and press down. Then secure the screw to the standoff with a PH1 driver.
 5. Fit the P1 housing on the Extension Port, marked corner on pin 1. Fit the P2 housing on the UART, marked corner on pin 1.
 6. Before powering on, look at both housings again, as on the bench check. The P1 housing's marked corner is on pin 1 of the Extension Port, and the P2 housing's on pin 1 of the UART. Turned round, the P1 housing puts 5 V on the TCK wire and the P2 housing puts 5 V on the K2 wire. That is above the most AMD's Artix 7 data sheet allows on an FPGA pin (DS181, Table 1). The most it allows is VCCO + 0.55 V, with VCCO at most 3.6 V. Exceeding it can destroy the FPGA pin on the Acorn that wire reaches. Fitted, the housings get only this look; the meter check was the bench check's.
 

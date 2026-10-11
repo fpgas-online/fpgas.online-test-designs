@@ -810,6 +810,12 @@ def test_putting_the_card_back_is_from_the_makers_pages_and_the_bench_intro_orde
     if key == "blade":
         for words in ("standoff", "5 mm hex driver", "nylon washer", "30° angle", "press down", "PH1 driver"):
             assert words in action
+        # the standoff stays in the slot when the card comes out (the bench check takes only the screw out): it is
+        # fitted with the hex driver only when it is missing (fpgas.online-docs #213's review)
+        assert (
+            "If the threaded insert for the card's size has no M2x2.5 standoff in it, screw the standoff in with a "
+            "5 mm hex driver." in action
+        )
         assert any("assembly.mdx" in s["source"] for s in wiring.SOURCES if s.get("carrier") == "blade")
     else:
         assert "SSD mounting screw" in action and "by us" not in action
@@ -964,6 +970,29 @@ def test_every_page_that_takes_the_card_s_screw_in_or_out_lists_the_screwdriver(
             assert f"- {screwdriver}\n" in head or f"| ☐ | {screwdriver} |" in head, (key, p.name)
     # the pages that do touch it are found, so the rule is not met by matching nothing
     assert {steps.guide_name(c, part) for part in ("bench", "fit")} <= set(touching), (key, touching)
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_every_driver_a_page_s_steps_use_is_on_its_list(key):
+    """A step that uses a driver (the PH1 for the card's screw, the 5 mm hex driver for the blade's standoff) is on
+    a page whose list names that driver (fpgas.online-docs #213's review: the fitting used the hex driver, but its
+    list named only the PH1). Read from generated/, as the screwdriver test is."""
+    c = wiring.CARRIERS[key]
+    drivers = [t["tool"] for t in wiring.TOOLS if t.get("carrier") == key and "driver" in t["tool"]]
+    named = {"PH1 driver": "PH1", "5 mm hex driver": "5 mm hex driver"}  # how a step names it -> in the tool's name
+    found = []
+    for p in sorted((wiring.HERE / "generated").glob(f"*{key}*.md")):
+        text = p.read_text()
+        if "## Steps" not in text:
+            continue
+        head, body = text.split("## Steps", 1)
+        for said, part in named.items():
+            if said in body:
+                (tool,) = [d for d in drivers if part in d]
+                assert f"- {tool}" in head or f"| ☐ | {tool} |" in head, (p.name, tool)
+                found.append((p.name, said))
+    if key == "blade":  # the pages that do use them are found, so the rule is not met by matching nothing
+        assert (steps.guide_name(c, "fit"), "5 mm hex driver") in found, found
 
 
 def test_the_bench_check_and_the_fitting_say_the_hat_has_its_stacking_header_and_the_housings_go_on_its_pins():

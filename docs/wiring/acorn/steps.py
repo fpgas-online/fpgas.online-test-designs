@@ -1681,6 +1681,16 @@ def card_screwdrivers(c):
     return [t["tool"] for t in wiring.TOOLS if "screwdriver" in t["tool"] and t.get("carrier") == c.key]
 
 
+def standoff_drivers(c):
+    """The carrier's driver for the standoff the card's screw goes into (wiring.toml's tools), where it has one: the
+    fitting uses it only if the standoff is missing, so its list says so."""
+    return [
+        f"{t['tool']}, only if the standoff is missing"
+        for t in wiring.TOOLS
+        if "hex driver" in t["tool"] and t.get("carrier") == c.key
+    ]
+
+
 def renumbered(lines):
     """The lines of some steps, numbered from 1 again."""
     out, n = [], 0
@@ -1821,7 +1831,7 @@ def guide(c):
     out[guide_name(c, "fit")] = body(
         need_lists(
             [f"both cables, checked on the bench ({pages.link(c.key, 'bench')})", "the Acorn", f"the {c.name}"],
-            card_screwdrivers(c),
+            [*card_screwdrivers(c), *standoff_drivers(c)],
         ),
         fit_,
         "Both housings sit on the pins action 5 names, each marked corner on its pin, as action 6 looks for before "
@@ -1957,9 +1967,9 @@ def fit_actions(c):
             f". Fit its screw, in the standoff marked {c.hat.largest_card} at the far end of the {c.hat.name}. "
             "The screw is the SSD mounting screw the HAT ships with."
             if c.hat
-            else " and fit its screw. The M2x2.5 standoff goes in the threaded insert for the card's size, with a "
-            "5 mm hex driver. Put the M2 nylon washer on the M2x2.5 screw, insert the card at a 30° angle and press "
-            "down. Then secure the screw to the standoff with a PH1 driver."
+            else " and fit its screw. If the threaded insert for the card's size has no M2x2.5 standoff in it, screw "
+            "the standoff in with a 5 mm hex driver. Put the M2 nylon washer on the M2x2.5 screw, insert the card at "
+            "a 30° angle and press down. Then secure the screw to the standoff with a PH1 driver."
         ),
         (f"{hat_header(c)} " if hat_header(c) else "") + f"Fit {on[0]}. Fit {on[1]}.",
         f"Before powering on, look at both housings again, as on the bench check. The {c1} housing's marked corner "

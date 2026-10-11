@@ -232,7 +232,12 @@ note = "the steps give lengths in millimetres: where a flag goes, how much of a 
 [[tools]]
 carrier = "blade"
 tool = "a PH1 (Phillips size 1) screwdriver"
-note = "for the M2x2.5 screw that holds the card in the M.2 slot. Uptime Lab's assembly guide for the Compute Blade names a PH1 driver for that screw (and a 5 mm hex driver for its standoff, where the standoff is not fitted)"
+note = "for the M2x2.5 screw that holds the card in the M.2 slot. Uptime Lab's assembly guide for the Compute Blade names a PH1 driver for that screw"
+
+[[tools]]
+carrier = "blade"
+tool = "a 5 mm hex driver"
+note = "for the M2x2.5 standoff, only if the threaded insert for the card's size has none in it. Uptime Lab's assembly guide for the Compute Blade names a 5 mm hex driver for the standoff"
 
 [[tools]]
 carrier = "pi5"
