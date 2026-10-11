@@ -1223,7 +1223,8 @@ def maker_link(c):
 
 
 CARD_OUT = {
-    "blade": "Take its screw out first: an M2x2.5 screw with an M2 nylon washer, which takes a PH1 driver ({maker}).",
+    "blade": "Take its screw out first: an M2x2.5 screw with an M2 nylon washer, which takes a PH1 driver ({maker}). "
+    "Leave the M2x2.5 standoff in its threaded insert.",
     "pi5": "Take the screw at its far end out first: the SSD mounting screw the HAT ships with ({maker}).",
 }
 # Said with the second fitting step, on the page: its action 4 is drawn in the fitting picture, which cannot link.

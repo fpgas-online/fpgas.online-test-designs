@@ -104,8 +104,8 @@ source = "Waveshare's dimension drawing of the HAT (https://www.waveshare.com/im
 
 [[sources]]
 carrier = "blade"
-claim = "How a card is put into the Compute Blade's M.2 slot (standoff, washer, 30 degree angle, press down, PH1 driver)"
-source = "Uptime Lab's assembly guide (https://raw.githubusercontent.com/uptime-lab/compute-blade/main/docs/docs/blade/getting-started/assembly.mdx) and its image page (docs.computeblade.com): not measured by us. How a card comes out is not given there, and is not recorded by us"
+claim = "How a card is put into the Compute Blade's M.2 slot (the standoff with a 5 mm hex driver, only if it is missing; washer, 30 degree angle, press down, PH1 driver)"
+source = "Uptime Lab's assembly guide (https://raw.githubusercontent.com/uptime-lab/compute-blade/main/docs/docs/blade/getting-started/assembly.mdx) and its image page (docs.computeblade.com): not measured by us. The guide fits the included standoff with a 5 mm hex driver every time; that it is fitted only if missing is our reading, as the card comes out with only its screw taken out and the standoff left in place. How a card comes out is not given there, and is not recorded by us"
 
 [[sources]]
 carrier = "pi5"
