@@ -1316,9 +1316,9 @@ def procedure_parts(c, restart=False):
         "",
         f"Two short cables from the Acorn's two connectors to the {c.name}"
         + (f" with the {c.hat.name}" if c.hat else "")
-        + f": the P1 cable carries JTAG, the P2 cable carries the serial port{spare}.",
+        + f". The P1 cable carries JTAG. The P2 cable carries the serial port{spare}.",
         "",
-        f"{listed(labels)} are the names on the pictures for each wire; {listed(balls)} are the FPGA's pin names.",
+        f"{listed(labels)} are the names on the pictures for each wire. {listed(balls)} are the FPGA's pin names.",
         "",
         markdown_image(*sheet),
         "",
@@ -1645,7 +1645,7 @@ def guide(c):
     for connector, (part, _) in GUIDE.items():
         order += [
             f"{pages.link(c.key, f'{part}-1')}: "
-            + ("the cable cut in half and each half checked for reach; " if connector == next(iter(GUIDE)) else "")
+            + ("the cable cut in half and each half checked for reach. Then " if connector == next(iter(GUIDE)) else "")
             + f"the {connector} cable's wires flagged, checked with a meter, cut back and crimped.",
             f"{pages.link(c.key, f'{part}-2')}: the {connector} cable's housing filled and checked.",
         ]
@@ -1669,13 +1669,13 @@ def guide(c):
     out = {
         guide_name(c, "overview"): "\n".join([
             tables.BANNER.strip(), "", not_run, "", "## What you will have", "", *will_have,
-            "Nothing in this guide cuts a wire to length. The bought cable is cut in half, once "
-            f"(step {numbered(first_page, CUT_HALF)} of {pages.link(c.key, first_part + '-1')}, before the meter "
-            "check, which needs the cut faces); each half is then used at the length it has, "
-            "apart from the wires that are cut back at the plug"
+            "Nothing in this guide cuts a wire to length. The bought cable is cut in half, once, in "
+            f"step {numbered(first_page, CUT_HALF)} of {pages.link(c.key, first_part + '-1')}. "
+            "That is before the meter check, which needs the cut faces. "
+            "Each half is then used at the length it has. The exception is the wires that are cut back at the plug"
             + (" and the one wire that is cut to take the resistor" if c.resistors else "")
             + f". Step {numbered(first_page, REACH)} of that page checks that each half reaches from the card to the "
-            f"{c.name}'s headers, before any wire is cut back or crimped.", "",
+            f"{c.name}'s headers. That is before any wire is cut back or crimped.", "",
             "## The order of work", "", *(f"{i}. {line}" for i, line in enumerate(order, 1)), "",
             *parts["tail"],
         ]),

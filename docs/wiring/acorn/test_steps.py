@@ -620,7 +620,7 @@ def test_a_quoted_step_number_is_the_step_it_means(key):
     cut, reach = steps.numbered(first, steps.CUT_HALF), steps.numbered(first, steps.REACH)
     meant["jtag-1"] += [[cut]]
     overview = steps.guide(c)[steps.guide_name(c, "overview")]
-    assert f"(step {cut} of {docs_pages.link(c.key, 'jtag-1')}" in overview
+    assert f", in step {cut} of {docs_pages.link(c.key, 'jtag-1')}." in overview
     assert f"Step {reach} of that page checks that each half reaches" in overview and reach == cut + 1
     meant["fit"] = [[f] for f in fit]
     meant["check-3"] = [list(check.jtag_steps())]  # the two checks of GPIO14, on the page about JTAG on a blade

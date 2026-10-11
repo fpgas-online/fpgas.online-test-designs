@@ -4,9 +4,9 @@ This procedure is waiting for its bench run: [issue #218](https://github.com/fpg
 
 ### What you will have
 
-Two short cables from the Acorn's two connectors to the Raspberry Pi 5 with the Waveshare PoE M.2 HAT+ (B): the P1 cable carries JTAG, the P2 cable carries the serial port and two spare GPIOs.
+Two short cables from the Acorn's two connectors to the Raspberry Pi 5 with the Waveshare PoE M.2 HAT+ (B). The P1 cable carries JTAG. The P2 cable carries the serial port and two spare GPIOs.
 
-GND, TCK, TDO, TMS, TDI, J2, K2, J5 and H5 are the names on the pictures for each wire; J2, K2, J5 and H5 are the FPGA's pin names.
+GND, TCK, TDO, TMS, TDI, J2, K2, J5 and H5 are the names on the pictures for each wire. J2, K2, J5 and H5 are the FPGA's pin names.
 
 ![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5.png){.only-light}
 ![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5-dark.png){.only-dark}
