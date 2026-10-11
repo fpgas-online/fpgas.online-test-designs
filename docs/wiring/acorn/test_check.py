@@ -278,7 +278,7 @@ def test_a_blade_page_says_when_jtag_may_run_before_the_command_that_runs_it():
     two checks of GPIO14, by their numbers on the page about JTAG."""
     page = check.pages(wiring.CARRIERS["blade"])[1]
     free, driven = check.jtag_steps()
-    asked = f"steps {free} and {driven} of {check.BLADE_JTAG} (check that GPIO14 is free"
+    asked = f"steps {free} and {driven} of {check.BLADE_JTAG}. Step {free} checks that GPIO14 is free"
     assert page.index(asked) < page.index("```bash\nsudo fpgas-acorn-verify --no-publish")
     assert "If either fails, do not run the check in that boot" in page
 
