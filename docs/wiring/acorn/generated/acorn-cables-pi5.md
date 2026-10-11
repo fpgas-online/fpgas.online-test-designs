@@ -96,12 +96,12 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png){.only-light}
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1-dark.png){.only-dark}
 
-**10.** Check each wire with a meter on continuity. Set the meter to continuity. The probes go as in the picture: one on a contact of the plug, the other on a terminal, through the opening on the pin side of the housing. The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.
+**10.** Check each wire with a meter on continuity. Set the meter to continuity. The probes go as in the picture: one on a contact of the plug, the other on a terminal. The other probe goes through the opening on the pin side of the housing. The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.
 
 ![A meter between the plug and the housing](acorn-cable-check.png){.only-light}
 ![A meter between the plug and the housing](acorn-cable-check-dark.png){.only-dark}
 
-**11.** Now check each wire against its cavity. For each wire: read the number on its flag and find it in the picture; one probe on that wire's contact on the plug, the other on the terminal in that cavity: it must beep. Every other cavity must stay silent for that contact. The P1 cavity picture is shown again below, to read each wire's cavity from.
+**11.** Now check each wire against its cavity. For each wire: read the number on its flag and find it in the picture. Put one probe on that wire's contact on the plug and the other on the terminal in that cavity: it must beep. Every other cavity must stay silent for that contact. The P1 cavity picture is shown again below, to read each wire's cavity from.
 
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png){.only-light}
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1-dark.png){.only-dark}
@@ -152,12 +152,12 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png){.only-light}
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2-dark.png){.only-dark}
 
-**19.** Check each wire with a meter on continuity. Set the meter to continuity. The probes go as in the picture: one on a contact of the plug, the other on a terminal, through the opening on the pin side of the housing. The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.
+**19.** Check each wire with a meter on continuity. Set the meter to continuity. The probes go as in the picture: one on a contact of the plug, the other on a terminal. The other probe goes through the opening on the pin side of the housing. The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.
 
 ![A meter between the plug and the housing](acorn-cable-check.png){.only-light}
 ![A meter between the plug and the housing](acorn-cable-check-dark.png){.only-dark}
 
-**20.** Now check each wire against its cavity. For each wire: read the number on its flag and find it in the picture; one probe on that wire's contact on the plug, the other on the terminal in that cavity: it must beep. Every other cavity must stay silent for that contact. The P2 cavity picture is shown again below, to read each wire's cavity from.
+**20.** Now check each wire against its cavity. For each wire: read the number on its flag and find it in the picture. Put one probe on that wire's contact on the plug and the other on the terminal in that cavity: it must beep. Every other cavity must stay silent for that contact. The P2 cavity picture is shown again below, to read each wire's cavity from.
 
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png){.only-light}
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2-dark.png){.only-dark}
@@ -174,7 +174,7 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2.png){.only-light}
 ![Which wire goes in which cavity, P2 cable](acorn-cable-pi5-p2-dark.png){.only-dark}
 
-**23.** The Acorn is not in its slot and the plugs are free. Put one meter probe on contact 1 (GND) of a plug and the other on the metal shell of a USB socket on the Raspberry Pi 5: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent. Contact 1's beep shows only that contact 1 and the shell are joined. The beep does not show which way round either housing is: turned round, its GND wire still sits on a ground pin, so look at each marked corner.
+**23.** The Acorn is not in its slot and the plugs are free. Put one meter probe on contact 1 (GND) of a plug. Put the other on the metal shell of a USB socket on the Raspberry Pi 5: it must beep. Do the same for the other plug. Then contact 6 of each plug (VCC, the wire you cut back): against the shell and against every other contact it must be silent. Contact 1's beep shows only that contact 1 and the shell are joined. The beep does not show which way round either housing is. Turned round, its GND wire still sits on a ground pin, so look at each marked corner.
 
 ![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check.png){.only-light}
 ![The bench check on a Raspberry Pi 5](acorn-cable-pi5-shell-check-dark.png){.only-dark}

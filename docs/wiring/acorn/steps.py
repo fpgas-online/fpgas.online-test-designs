@@ -148,11 +148,11 @@ def ground_shows_way_round(c):
     lands = {k: turned(c, housing(c, k))[conn["pins"][0]] for k, conn in wiring.CONNECTORS.items()}
     if set(lands.values()) == {"GND"}:
         return (
-            "The beep does not show which way round either housing is: turned round, its GND wire still sits on a "
+            "The beep does not show which way round either housing is. Turned round, its GND wire still sits on a "
             "ground pin, so look at each marked corner."
         )
     out = [
-        f"The beep does not show which way round the {connector} housing is: turned round, its GND wire still sits "
+        f"The beep does not show which way round the {connector} housing is. Turned round, its GND wire still sits "
         "on a ground pin, so look at its marked corner."
         for connector, on in lands.items()
         if on == "GND"
@@ -1253,12 +1253,13 @@ def through_resistor(c, connector):
         return ""
     return (
         f"**Wire {n} is the exception: it has the {c.resistor_value} resistor in it. Leave wire {n} until last and "
-        "read it in ohms, not by the buzzer.** A continuity buzzer usually sounds only below some tens of ohms, so "
+        "read it in ohms, not by the buzzer**. A continuity buzzer usually sounds only below some tens of ohms, so "
         "through the resistor it will usually stay silent. Set the meter to ohms, on "
         "auto-range or the 2 kΩ range, and touch the two probes together first: it must read close to 0. Then, "
         f"between wire {n}'s contact on the plug and its terminal, it must read close to {c.resistor_value}. Close "
         "to 0 there means the resistor is bridged or was left out. Over-range (OL, or a lone 1 at the left of the "
-        f"display) or a value far from {c.resistor_value} means a bad joint or the wrong wire. Between wire {n}'s "
+        f"display) means a bad joint or the wrong wire. So does a value far from {c.resistor_value}. "
+        f"Between wire {n}'s "
         "contact and every other cavity it must show over-range. "
     )
 
@@ -1471,13 +1472,13 @@ def procedure_parts(c, restart=False):
         )
         step(
             f"{CHECK_EACH} Set the meter to continuity. The probes go as in the picture: one on a contact of the "
-            "plug, the other on a terminal, through the opening on the pin side of the housing. "
+            "plug, the other on a terminal. The other probe goes through the opening on the pin side of the housing. "
             "The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.",
             ("A meter between the plug and the housing", png(check_name(c, connector))),
         )
         step(
-            f"{CHECK_CAVITY} For each wire: read the number on its flag and find it in the picture; one probe on "
-            "that wire's contact on the plug, the other on the terminal in that cavity: it must beep. Every other "
+            f"{CHECK_CAVITY} For each wire: read the number on its flag and find it in the picture. Put one probe on "
+            "that wire's contact on the plug and the other on the terminal in that cavity: it must beep. Every other "
             "cavity must stay silent for that contact. "
             + through_resistor(c, connector)
             + again(connector, "to read each wire's cavity from"),
@@ -1517,7 +1518,7 @@ def procedure_parts(c, restart=False):
         )
     step(
         f"{BENCH_BEEP} Put one meter probe "
-        f"on contact 1 ({label_of(first)}) of a plug and the other on {c.shell}: it must "
+        f"on contact 1 ({label_of(first)}) of a plug. Put the other on {c.shell}: it must "
         f"beep. Do the same for the other plug. Then contact {len(pins)} of each plug ({label_of(pins[-1])}, the wire "
         "you cut back): against the shell and against every other contact it must be silent. Contact 1's beep "
         "shows only that contact 1 and the shell are joined. " + ground_shows_way_round(c),
@@ -1716,9 +1717,9 @@ def guide(c):
         bench,
         "## If it fails",
         "Do not fit the cables. A contact 1 that does not beep means that cable's ground wire is open or in the wrong "
-        "cavity; a contact 6 that beeps anywhere means the 3.3 V wire was not the one cut back. Go back to that "
-        f"cable's housing, {' or '.join(pages.link(c.key, f'{part}-2') for part, _ in GUIDE.values())}, and check "
-        "every wire again.",
+        "cavity. A contact 6 that beeps anywhere means the 3.3 V wire was not the one cut back. Go back to that "
+        "cable's housing and check every wire again. The pages are "
+        f"{' or '.join(pages.link(c.key, f'{part}-2') for part, _ in GUIDE.values())}.",
     )
     out[guide_name(c, "fit")] = body(
         need_lists([f"both cables, checked on the bench ({pages.link(c.key, 'bench')})", "the Acorn", f"the {c.name}"]),

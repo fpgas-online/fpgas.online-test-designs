@@ -31,12 +31,12 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png){.only-light}
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1-dark.png){.only-dark}
 
-**3.** Check each wire with a meter on continuity. Set the meter to continuity. The probes go as in the picture: one on a contact of the plug, the other on a terminal, through the opening on the pin side of the housing. The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.
+**3.** Check each wire with a meter on continuity. Set the meter to continuity. The probes go as in the picture: one on a contact of the plug, the other on a terminal. The other probe goes through the opening on the pin side of the housing. The plug's contacts are 1.2 mm apart: use a fine probe or a sewing pin held to the probe.
 
 ![A meter between the plug and the housing](acorn-cable-check.png){.only-light}
 ![A meter between the plug and the housing](acorn-cable-check-dark.png){.only-dark}
 
-**4.** Now check each wire against its cavity. For each wire: read the number on its flag and find it in the picture; one probe on that wire's contact on the plug, the other on the terminal in that cavity: it must beep. Every other cavity must stay silent for that contact. The P1 cavity picture is shown again below, to read each wire's cavity from.
+**4.** Now check each wire against its cavity. For each wire: read the number on its flag and find it in the picture. Put one probe on that wire's contact on the plug and the other on the terminal in that cavity: it must beep. Every other cavity must stay silent for that contact. The P1 cavity picture is shown again below, to read each wire's cavity from.
 
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1.png){.only-light}
 ![Which wire goes in which cavity, P1 cable](acorn-cable-pi5-p1-dark.png){.only-dark}
