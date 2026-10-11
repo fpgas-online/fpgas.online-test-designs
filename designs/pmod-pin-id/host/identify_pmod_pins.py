@@ -592,9 +592,10 @@ _MODULES_TO_UNLOAD = [
 # pinctrl get: "14: a4    pn | hi // GPIO14 = TXD0": the pin, its function, and the function's name (older
 # pinctrl prints no name).
 _PINCTRL_RE = re.compile(r"^\s*(\d+):\s+(a\d)\b[^\n]*?(?://\s*GPIO\d+\s*=\s*(\S+))?[ \t]*$", re.M)
-# The alternate functions that only listen. The pin-ID design drives every pin it is scanned on, so only these
-# are safe to give back while it still runs; a UART TX, an SPI clock or MOSI, or I2C would drive against it.
-_LISTEN_ONLY = re.compile(r"^(RXD\d*|\w*_RX\d*|CTS\d*|\w*_CTS\d*|MISO\d*|\w*_MISO\d*)$")
+# The alternate functions that only listen: UART RX, CTS, RI, DSR, DCD, and an SPI master's MISO (not a slave's,
+# I2CSL_MISO, which drives). The pin-ID design drives every pin it is scanned on, so only these are safe to give
+# back while it still runs; a UART TX, an SPI clock or MOSI, or I2C would drive against it.
+_LISTEN_ONLY = re.compile(r"^(RXD\d*|\w*_RX\d*|CTS\d*|\w*_CTS\d*|RI\d*|DSR\d*|DCD\d*|SPI\d*_MISO|MISO\d*)$")
 
 
 def alt_functions(gpio_list, run=subprocess.run):

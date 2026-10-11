@@ -193,6 +193,15 @@ def test_the_scan_puts_back_only_the_functions_that_listen(capsys):
         assert f"GPIO{gpio} left an input" in out and f"pinctrl set {gpio} a0" in out
 
 
+def test_an_spi_slaves_miso_drives_and_is_not_put_back():
+    class Slave(_Run):
+        GET = "19: a3    pn | lo // GPIO19 = I2CSL_MISO\n9: a0    pn | lo // GPIO9 = SPI0_MISO\n"
+
+    run = Slave()
+    ident.restore_alt_functions(ident.alt_functions([19, 9], run=run), run=run)
+    assert run.sets == [["9", "a0"]]  # the SPI master's MISO listens; the slave's MISO drives
+
+
 def test_a_function_whose_name_cannot_be_read_is_not_put_back(capsys):
     class Unnamed(_Run):
         GET = "14: a4    pn | hi\n"  # an older pinctrl prints no "// GPIO14 = …" name
