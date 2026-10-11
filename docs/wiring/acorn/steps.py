@@ -1390,7 +1390,8 @@ def procedure_parts(c, restart=False):
     pairs = [
         f"Hold {'one plug' if i == 0 else 'the other plug'} at socket {k}, and lay its wires from there to the "
         f"{header_words(c.headers[housing(c, k).header].name)}, along the way that cable will run. "
-        "Measure that run, from the plug to the header."
+        "Put a strip of tape on the wires where they reach the header. "
+        "Straighten the wires and measure that run, from the plug to the tape."
         for i, k in enumerate(wiring.CONNECTORS)
     ]
     step(
@@ -1399,8 +1400,8 @@ def procedure_parts(c, restart=False):
         + "\n\nWith the card out of its slot, hold the card over the slot where it will sit. Leave the cable whole. "
         "First measure the cable: its wires, from where they leave one plug to where they leave the other. "
         "Half of that length is the longest run a half can have.\n\n"
-        + " ".join(pairs)
-        + " Each run must be at most half the cable's length, with some slack left to bend into the housing."
+        + "\n\n".join(pairs)
+        + "\n\nEach run must be at most half the cable's length, with some slack left to bend into the housing."
         "\n\nIf a run is longer, stop before you cut: this guide uses each half at the length it has. "
         f"Tell {c.contact} which run falls short, and by about how many millimetres.",
         (
