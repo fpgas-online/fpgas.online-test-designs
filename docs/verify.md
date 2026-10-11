@@ -7,8 +7,7 @@ board, tests the board and its wiring to the Pi, and gives one result, pass or f
 
 * What the tool must do: [verify-goals.md](verify-goals.md). Where this page and that one disagree,
   verify-goals.md says what the tool should do.
-* The code: [`verify/`](../verify/). The design notes:
-  [plans/2026-09-26-fpgas-online-verify-design.md](plans/2026-09-26-fpgas-online-verify-design.md).
+* The code: [`verify/`](../verify/).
 * `verify_hardware.py` ([verify-hardware.md](verify-hardware.md)) is a different tool: a developer's script
   that loads freshly built bitstreams from a workstation over SSH.
 
@@ -115,4 +114,4 @@ One page for each task, in this order:
 
 <a id="current-results"></a>
 
-* [Current results](verify/current-results.md#current-results): for you if you want the last collected results on the Welland Pis.
+* [Current results](verify/current-results.md#current-results): for you if you want the last collected results of the fleet's Pis.

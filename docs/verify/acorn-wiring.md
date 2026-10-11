@@ -12,7 +12,7 @@ the host, so which tests pass and what a failing one says point at the wire. Tha
 each carrier, from installing after a boot to which wire a failing line means:
 
 * [an Acorn on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html)
-  ([source](../wiring/acorn/generated/acorn-check-blade-1.md)), with what has and has not been run on a blade;
+  ([source](../wiring/acorn/generated/acorn-check-blade-1.md));
 * [an Acorn on a Raspberry Pi 5](https://docs.fpgas.online/en/latest/boards/acorn/checks/rpi-5.html)
   ([source](../wiring/acorn/generated/acorn-check-pi5-1.md)).
 

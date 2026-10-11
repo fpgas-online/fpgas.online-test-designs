@@ -27,8 +27,8 @@ sudo fpgas-acorn-debug identify            # the same as fpgas-acorn-verify --id
   only has the packages installed publishes nothing, at boot or by hand; its summary says so in one line
   (`not published: no file says ...`), and there is no error. The
   fpgas.online Pi root sets it in `/etc/fpgas-verify/fleet.ini`, so a fleet Pi tells its site how the check
-  went; there, `--no-publish` is how a run by hand stays private. The transcripts of [Reading the result](reading-the-result.md#reading-the-result) were taken on fleet
-  Pis, which is why they carry it; each shows the line that says whether it was published.
+  went; there, `--no-publish` is how a run by hand stays private. Each transcript of [Reading the result](reading-the-result.md#reading-the-result) shows the line that says
+  whether it was published.
 * `--test` runs part of the check. It is never published, never recorded, and its report goes to stdout
   unless `--report` says otherwise.
 * Only one command uses a board at a time. A second one prints

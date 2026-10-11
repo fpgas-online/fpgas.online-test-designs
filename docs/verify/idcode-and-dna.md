@@ -29,7 +29,7 @@ Every board with JTAG has its FPGA's whole 32-bit IDCODE read and decoded
 * A scan whose tool exits with an error fails, even when it printed the right IDCODE; the reason gives the
   exit code. The IDCODE it printed is still decoded in the report.
 
-| Field | Bits | Example (pi-sw2-p48's Acorn CLE-215+) |
+| Field | Bits | Example (an Acorn CLE-215+) |
 |---|---|---|
 | `idcode` | 31:0, 8 hex digits | `0x13636093` |
 | `idcode_version` | 31:28, the silicon revision | `1` |
@@ -47,7 +47,7 @@ Every board with JTAG has its FPGA's whole 32-bit IDCODE read and decoded
 | `0x03631093` | XC7A100T |
 | `0x03636093` | XC7A200T |
 
-pi-sw2-p48 (Acorn CLE-215+, Pi 5 setup), read holding the Acorn lock, 2026-10-02:
+An Acorn CLE-215+ on a Raspberry Pi 5, read holding the Acorn lock:
 
 ```text
 $ sudo openFPGALoader --cable libgpiod --pins 10:9:11:8 --detect --verbose-level 2

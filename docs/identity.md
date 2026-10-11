@@ -101,8 +101,7 @@ first four bytes are not the signature. An answer shorter than 8 bytes is not a 
 The Acorn's S25FL256S has no SFDP. Its datasheet (Infineon 002-19099 Rev. *D, S25FL128S/S25FL256S) has no
 `5Ah` in its command summary (section 13.1) and does not mention SFDP. The part describes itself only in its
 ID-CFI space, read with RDID (sections 7.3, 11.2.2 and 13.2). Read SFDP is not one of its commands, so its
-answer has no signature and `flash_sfdp` should be `none`. This comes from the datasheet; no board's answer
-has been recorded yet. The S25FS256S, the 1.8 V part of the same family, does answer Read SFDP. rpi-hwid
+answer has no signature and `flash_sfdp` should be `none`. This comes from the datasheet. The S25FS256S, the 1.8 V part of the same family, does answer Read SFDP. rpi-hwid
 uses `flash_sfdp` to tell an S25FL127S (which has SFDP) from an S25FL128S (which has not), parts that share
 their RDID bytes.
 
@@ -156,8 +155,8 @@ The identity document holds the fields of every board found:
 `source` is always `live`. A run inside `fpgas-verify --label` prints the outer run's document byte for byte,
 so it says `live` too.
 
-[`tests/data/identity-v1-acorn-p48.json`](../tests/data/identity-v1-acorn-p48.json) is an example: the
-Acorn on pi-sw2-p48. rpi-hwid keeps a byte-identical copy and tests its reader on it. It is exactly what
+[`tests/data/identity-v1-acorn-p48.json`](../tests/data/identity-v1-acorn-p48.json) is an example: an
+Acorn CLE-215+ on a Raspberry Pi 5. rpi-hwid keeps a byte-identical copy and tests its reader on it. It is exactly what
 that board printed, which did not include `flash_sfdp`.
 
 ## Versions
