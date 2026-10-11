@@ -211,6 +211,13 @@ def _carrier(key, raw):
     return c
 
 
+def listed_mm(c):
+    """The cable's length as the distributors list it, in mm: the one part of `c` with `listed_mm` (checked on
+    load). The reach step gives the longest run it allows."""
+    (mm,) = (part["listed_mm"] for part in c.parts if "listed_mm" in part)
+    return mm
+
+
 def _check(c):
     errors = []
     connector_signals = {s for conn in CONNECTORS.values() for s in conn["pins"]}
@@ -250,8 +257,11 @@ def _check(c):
             errors.append(f"{c.key}: a part needs a whole `qty` of 1 or more and a `part`: {part}")
         if set(part) - {"qty", "part", "number", "note", "listed_mm"}:
             errors.append(f"{c.key}: part {part.get('part')!r} has keys other than qty, part, number, note, listed_mm")
-        if "listed_mm" in part and (not isinstance(part["listed_mm"], int) or part["listed_mm"] < 1):
+        mm = part.get("listed_mm", 1)
+        if isinstance(mm, bool) or not isinstance(mm, int) or mm < 1:  # TOML true is an int to Python
             errors.append(f"{c.key}: part {part.get('part')!r}: listed_mm must be a whole number of millimetres")
+    if sum("listed_mm" in part for part in c.parts) != 1:  # the reach step's number comes from that one part
+        errors.append(f"{c.key}: exactly one part has listed_mm, the cable's length as it is listed")
     if not c.shell and not c.free_ground():
         errors.append(f"{c.key}: no `shell`, and no ground pin outside every housing for a probe")
     for hk, h in c.headers.items():

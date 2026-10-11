@@ -1404,8 +1404,9 @@ def procedure_parts(c, restart=False):
         + "\n\n".join(pairs)
         + f"\n\nEach run must be at least {wiring.LENGTHS['slack']} mm shorter than half the cable's length. "
         + "That is the wire that is stripped, crimped and bent into the housing. "
-        + f"For the {LISTED_MM} mm cable the listing gives, that is at most about "
-        + f"{LISTED_MM // 2 - wiring.LENGTHS['slack']} mm a run."
+        # the number itself, from the cable's listed length, so a builder can compare a measured run with it
+        + f"For the {wiring.listed_mm(c)} mm cable the listing gives, that is at most "
+        + f"{wiring.listed_mm(c) // 2 - wiring.LENGTHS['slack']} mm a run."
         "\n\nIf a run is longer, stop before you cut: this guide uses each half at the length it has. "
         f"Tell {c.contact} which run falls short, and by about how many millimetres.",
         (
@@ -1865,9 +1866,6 @@ def assumed_check(c, connector):
 # The words the meter check of a finished cable starts with, on each connector's second page: how the probes go,
 # then the check of each wire against the cavity picture, the next step.
 CHECK_EACH = "Check each wire with a meter on continuity."
-# The cable's length as the distributors list it (wiring.toml, the Molex part's listed_mm): the reach step gives the
-# longest run it allows, so a builder can compare a measured run with a number.
-LISTED_MM = next(p["listed_mm"] for p in wiring.DATA["parts"] if "listed_mm" in p)
 CHECK_CAVITY = "Then check each wire against its cavity."
 
 
