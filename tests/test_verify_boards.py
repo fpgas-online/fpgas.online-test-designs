@@ -1349,8 +1349,8 @@ def test_a_failed_by_name_fomu_load_does_not_say_the_design_runs(tmp_path, monke
 def test_a_by_name_fomu_test_whose_host_test_fails_still_says_the_design_runs(tmp_path, monkeypatch, capsys):
     args = _fomu_debug(monkeypatch, "test", test="uart", extra=[])
     args.images = _install(tmp_path, FOMU)
-    answers = [0, 1]  # the load worked; the host test failed: the design runs all the same
-    monkeypatch.setattr(debug, "_live", lambda argv: answers.pop(0))
+    # the load worked; the host test failed: the design runs all the same (services_stopped runs through _live too)
+    monkeypatch.setattr(debug, "_live", lambda argv: 1 if any(str(a).endswith("test_uart.py") for a in argv) else 0)
     assert debug.run(FOMU, args) == 1
     assert "fpgas-fomu-debug reset" in capsys.readouterr().out
 
