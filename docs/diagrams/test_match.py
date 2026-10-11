@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
+import dataclasses
+import math
 import pathlib
 import shutil
 import sys
@@ -20,7 +22,9 @@ SCENE = model.load(GEOMETRY)
 
 # What a photo must show at an item's box. The slot is there when the box's mean luminance differs from the ring 1 mm
 # round it by at least PART levels; a pin's solder pad and the plated pad are there when the box is brighter than
-# its ring (the header's own box likewise: its pads in black board). A socket's box is the silkscreen outline
+# its ring. The header's own box is not held to the photo at all (it is no feature of the board: its ring in the
+# photo is as bright as the box to within noise, 2.3 levels); the pins it is made of are, each one, and the box is
+# tested to be exactly their pitch cells. A socket's box is the silkscreen outline
 # measure_card measured, so it is held to that outline, not to its fill: the band along the box's edge must be at
 # least OUTLINE levels brighter than the board beside it, on at least one side of the line (a line is brighter
 # than the board on one side or the other; a side cut away by the card's edge does not count). All four sides must
@@ -63,7 +67,7 @@ def measure(thing, item, photos_dir=PHOTOS):
         weakest = min(best, key=best.get)
         return best[weakest], OUTLINE, f"socket {weakest} side (inside, outside) {sides[weakest]}"
     got = match.contrast_inside(image, match.item_px(thing, item), (RING_MM * sx, RING_MM * sy), clip_px=board)
-    if item.kind in ("pin", "pad", "header"):
+    if item.kind in ("pin", "pad"):
         return got, 0.0, item.kind
     if item.kind == "slot":
         return abs(got), PART, item.kind
@@ -72,13 +76,56 @@ def measure(thing, item, photos_dir=PHOTOS):
 
 @pytest.mark.parametrize(("thing", "item"), photographed())
 def test_the_items_box_lies_on_its_feature_in_the_photo(thing, item):
+    if item.kind == "header":
+        return check_header_box(thing, item)
     got, needed, kind = measure(thing, item)
     if kind.startswith("socket"):
         assert got >= needed, f"{item.id}: the outline's {kind} is only {got:.1f} above the board beside it < {needed}"
-    elif kind in ("pin", "pad", "header"):
+    elif kind in ("pin", "pad"):
         assert got > needed, f"{item.id}: the {kind} is not brighter than the board round it ({got:.1f})"
     else:
         assert got >= needed, f"{item.id}: the {kind} differs from the board round it by {got:.1f} < {needed}"
+
+
+def pitch_cells(thing, header):
+    """The union of the pitch cells of a header's pins: each pin's centre, a half pitch to each side."""
+    pins = [i for i in thing.items.values() if i.id.startswith(header.id + ".pin.")]
+    centres = [((i.box.x0 + i.box.x1) / 2, (i.box.y0 + i.box.y1) / 2) for i in pins]
+    pitch = min(math.hypot(a[0] - b[0], a[1] - b[1]) for n, a in enumerate(centres) for b in centres[n + 1 :])
+    half = pitch / 2
+    return (
+        min(c[0] for c in centres) - half,
+        min(c[1] for c in centres) - half,
+        max(c[0] for c in centres) + half,
+        max(c[1] for c in centres) + half,
+    )
+
+
+def headers_of(thing):
+    return [i for i in thing.items.values() if i.kind == "header"]
+
+
+def check_header_box(thing, header):
+    """A header's box is built (model._header) as the union of its pins' pitch cells, and a photo cannot hold it
+    to anything more: what the photo holds is the pins, each tested above against its solder pad."""
+    b = header.box
+    assert (b.x0, b.y0, b.x1, b.y1) == pytest.approx(pitch_cells(thing, header), abs=1e-6), header.id
+
+
+def test_every_headers_box_is_the_pitch_cells_of_its_pins():
+    headers = [(t, h) for t in SCENE.things.values() for h in headers_of(t)]
+    assert headers
+    for thing, header in headers:
+        check_header_box(thing, header)
+
+
+def test_a_header_moved_off_its_pins_is_not_their_pitch_cells():
+    thing = SCENE.things["hat"]
+    header = headers_of(thing)[0]
+    b = header.box
+    moved = dataclasses.replace(header, box=model.Box(b.x0 + 1.27, b.y0, b.x1 + 1.27, b.y1))
+    with pytest.raises(AssertionError):
+        check_header_box(thing, moved)
 
 
 def test_a_kind_with_no_photo_test_fails_the_run():
