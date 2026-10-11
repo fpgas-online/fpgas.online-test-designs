@@ -68,21 +68,20 @@ chosen.
 | nothing usable: rpi-hwid is not installed, could not read the board, or gave no shuttle for a chip | none | nothing is loaded and no test runs: the result is `error`, and the reason says what could not be read |
 | (an RP2 in its USB boot loader, `2e8a:0003`) | none | `fail`: `a Raspberry Pi RP2 is on USB but is not running the Tiny Tapeout firmware` |
 
-* An FPGA bitstream only ever goes to a board that said it is an FPGA board.
 * The check has one port for a demo board (`/dev/ttyACM0`). With two such RP2 boards on one Pi it cannot tell
   which board that port is, so each is an `error` (`2 Raspberry Pi RP2 boards that can be Tiny Tapeout demo
-  boards are on this Pi's USB, …`): none is asked what it is and nothing is loaded. No host has two.
+  boards are on this Pi's USB, …`): none is asked what it is and nothing is loaded.
 * Other Raspberry Pi USB products (a debug probe, say) are not Tiny Tapeout boards and are not looked at.
 * `--variant tt-fpga` does not override the board: asked for on a board that says otherwise, it is an `error`.
-* `fpgas-tt-fpga-debug program` and `test` are for use by hand: they do not ask the board, so they need
+  `fpgas-tt-fpga-debug program` and `test` are for use by hand: they do not ask the board, so they need
   `--variant tt-fpga` said out loud, and load what they are told to.
 * A board whose `main.py` is not the one the check knows is not asked at all (the check will not run a
   `main.py` it does not know), so it has no variant. The check knows the `main.py` of every SDK release from
-  1.0.0 to 3.1.1 (`tt_main_py.py`); only 3.1.0's has been compared with a board.
-* A TT04 chip cannot be read by its SDK (2.0.x reports its shuttle as `unknown`), so a TT04 board gives no
-  shuttle and is the `error` of the third row, unless the board's own `config.ini` names the shuttle
-  (`force_shuttle`). The check never writes that file.
-* rpi-hwid looks at `2e8a:0005` only, so a board showing `2e8a:000f` is found and then cannot be asked.
+  1.0.0 to 3.1.1 (`tt_main_py.py`).
+* Two boards are found but cannot say who they are. A TT04 chip cannot be read by its SDK (2.0.x reports its
+  shuttle as `unknown`), so a TT04 board is the `error` of the third row, unless the board's own `config.ini`
+  names the shuttle (`force_shuttle`); the check never writes that file. And rpi-hwid looks at `2e8a:0005`
+  only, so a board showing `2e8a:000f` cannot be asked.
 * A board that says `asic` is still a `tt-asic` when it named no demo board or microcontroller (an FPGA board
   that named neither is an `error`); a chip board that named no microcontroller then fails the `sdk` test.
 * `variant` in the report, in `fpga-board-identified` and in `fpga-verified` is the decided one; it is absent
@@ -170,8 +169,6 @@ not know the board's chip cannot select a project on it:
 * **What it does not test**: the chip itself, and the Pmod cabling between the demo board and the Pi. The
   cabling is the next test's: [`wiring`](#the-wiring-test) on a board with a Tiny Tapeout chip, `pin-id` on
   the FPGA board.
-* It has passed on the one board with a Tiny Tapeout chip powered at Welland (a TT07 chip, an RP2040, SDK
-  2.0.4: 6 October 2026), and on the three FPGA boards there.
 
 ## The wiring test
 
@@ -254,8 +251,7 @@ How it tests:
   board's own `main.py` rewrites its `boot.log` when it starts: on the good path that happens once per boot
   check, at the identification start, and not again.
 * The test stops itself after 90 s (`--time-limit`) and puts everything back (up to 130 s, every step bounded, and 75 s more for the
-  fallback); the boot check's own limit, 300 s, which kills it, is beyond all of that. A passing run on the TT07
-  board took 22.7 s (8 October 2026).
+  fallback); the boot check's own limit, 300 s, which kills it, is beyond all of that.
 * The chip's factory test is enabled with the SDK's `config.ini` turned off (`apply_configs`): applied, it would
   set `ui_in = 1` and a 10 Hz clock, and the chip would drive its counter onto `uio[1:3]`, which the HAT joins to
   `ui_in[1:3]`. The restore turns it on again, as the board had it. The board as it starts drives those three nets
@@ -288,15 +284,6 @@ the `WIRING:` line, where the boot report keeps them, and so are the `READINGS:`
 * A short between neighbouring wires is said as one, with where to look, not as which two wires.
 * "The board's files the same before and after" is every file by its hash, and `/boot.log` by its size: the
   board's own `main.py` rewrites it at every start (the identification start), so it is not hashed.
-
-[PR #15](https://github.com/fpgas-online/fpgas.online-test-designs/pull/15)'s form of it ran on every Tiny Tapeout
-host at Welland on 4 September 2026. This form passed on the board with a TT07 chip at Welland on 8 October 2026
-(RP2040, SDK 2.0.4, on a Pi 3B+), four times on its way in (the last at 06:08): about 22.5 s, the RP2040's heap
-69472 bytes free at the start and 52048 at the lowest after a collection, the board's files the same before and
-after (every file by its hash; `/boot.log`, which is not hashed because the board's own `main.py` rewrites it at
-each start, was the same size, 252 bytes); the record is in
-[PR #179](https://github.com/fpgas-online/fpgas.online-test-designs/pull/179).
-
 
 ## TT FPGA identity
 

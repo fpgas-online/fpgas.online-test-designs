@@ -22,13 +22,13 @@ sudo fpgas-acorn-debug identify            # the same as fpgas-acorn-verify --id
 
 `--identify` and `--label` are described in [Identity and labels](identity-and-labels.md#identity-and-labels).
 
-* Run them with `sudo`; [`--help`](help.md#--help), `--list` and `fpgas-<board>-debug list` do not need it.
+* Run them with `sudo`; [`--help`](help.md#the-help-of-each-tool), `--list` and `fpgas-<board>-debug list` do not need it.
 * Nothing is sent anywhere unless a file says `[verify] publish = on` (next to `fpga-board`, below). A host that
   only has the packages installed publishes nothing, at boot or by hand; its summary says so in one line
   (`not published: no file says ...`), and there is no error. The
   fpgas.online Pi root sets it in `/etc/fpgas-verify/fleet.ini`, so a fleet Pi tells its site how the check
-  went; there, `--no-publish` is how a run by hand stays private. The transcripts of [Reading the result](reading-the-result.md#reading-the-result) were taken on fleet
-  Pis, which is why they carry it; each shows the line that says whether it was published.
+  went; there, `--no-publish` is how a run by hand stays private. Each transcript of [Reading the result](reading-the-result.md#reading-the-result) shows the line that says
+  whether it was published.
 * `--test` runs part of the check. It is never published, never recorded, and its report goes to stdout
   unless `--report` says otherwise.
 * Only one command uses a board at a time. A second one prints
@@ -49,10 +49,10 @@ sudo fpgas-acorn-debug identify            # the same as fpgas-acorn-verify --id
   false, "why": "..."}` and `not published: ...`. On a fleet Pi, `not published: no file ...` in
   `journalctl -b -u fpgas-verify` means the root lost its `fleet.ini`.
 * `[verify] power-cycle-check = on` in the same files switches on the Acorn's [power-cycle
-  check](acorn-power-cycle.md#the-acorns-power-cycle-check-opt-in). It is off unless a file says so: the fpgas.online Pi root sets it
+  check](acorn-power-cycle.md#the-acorn-power-cycle-check-opt-in). It is off unless a file says so: the fpgas.online Pi root sets it
   in `/etc/fpgas-verify/`; elsewhere it stays off.
 * Options for the boot run go in `FPGAS_VERIFY_ARGS` in `/etc/default/fpgas-verify`. The package installs that
   file with every line a comment (it is what `EnvironmentFile=` in `systemctl cat fpgas-verify` names), so
   the boot run is plain `fpgas-verify` until you edit it. It is a configuration file: an upgrade keeps your
   edit.
-* From a checkout, without installing: `PYTHONPATH=verify/src python3 -m fpgas_online_verify --help` (its output: [`--help`](help.md#--help)).
+* From a checkout, without installing: `PYTHONPATH=verify/src python3 -m fpgas_online_verify --help` (its output: [`--help`](help.md#the-help-of-each-tool)).

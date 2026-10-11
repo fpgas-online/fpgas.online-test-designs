@@ -7,21 +7,20 @@ board, tests the board and its wiring to the Pi, and gives one result, pass or f
 
 * What the tool must do: [verify-goals.md](verify-goals.md). Where this page and that one disagree,
   verify-goals.md says what the tool should do.
-* The code: [`verify/`](../verify/). The design notes:
-  [plans/2026-09-26-fpgas-online-verify-design.md](plans/2026-09-26-fpgas-online-verify-design.md).
+* The code: [`verify/`](../verify/).
 * `verify_hardware.py` ([verify-hardware.md](verify-hardware.md)) is a different tool: a developer's script
   that loads freshly built bitstreams from a workstation over SSH.
 
 This page has two parts:
 
-1. [Using verify as a standalone tool](#1-using-verify-as-a-standalone-tool): installing, running, reading the
+1. [Using verify as a standalone tool](#using-verify-as-a-standalone-tool): installing, running, reading the
    result, and what each board's check tests.
-2. [How verify is used in fpgas.online](#2-how-verify-is-used-in-fpgasonline): at every boot of every
+2. [How the fleet uses verify](#how-the-fleet-uses-verify): at every boot of every
    netbooted Pi, the events it sends the site, and the [current results](verify/current-results.md#current-results).
 
 ---
 
-## 1. Using verify as a standalone tool
+## Using verify as a standalone tool
 
 One page for each task, in this order:
 
@@ -45,7 +44,7 @@ One page for each task, in this order:
 
 <a id="help"></a>
 
-* [`--help`](verify/help.md#--help): for you if you want the options and commands of each tool without installing it.
+* [`--help`](verify/help.md#the-help-of-each-tool): for you if you want the options and commands of each tool without installing it.
 
 <a id="what-each-board-s-check-tests"></a>
 
@@ -53,7 +52,7 @@ One page for each task, in this order:
 
 <a id="arty-netv2-fomu-and-tt-fpga"></a>
 
-* [What each board's check tests](verify/tests.md#what-each-boards-check-tests): for you if you have an Arty, NeTV2, Fomu or TT FPGA and want to know what each test does.
+* [What the check tests on each board](verify/tests.md#what-the-check-tests-on-each-board): for you if you have an Arty, NeTV2, Fomu or TT FPGA and want to know what each test does.
 
 <a id="which-tiny-tapeout-board-it-is"></a>
 
@@ -73,7 +72,7 @@ One page for each task, in this order:
 
 <a id="the-acorns-power-cycle-check-opt-in"></a>
 
-* [The Acorn's power-cycle check](verify/acorn-power-cycle.md#the-acorns-power-cycle-check-opt-in): for you if you have an Acorn and want to know how its opt-in power-cycle check works, and the details of its `ddr` test.
+* [The Acorn's power-cycle check](verify/acorn-power-cycle.md#the-acorn-power-cycle-check-opt-in): for you if you have an Acorn and want to know how its opt-in power-cycle check works, and the details of its `ddr` test.
 
 <a id="the-jtag-idcode"></a>
 
@@ -89,7 +88,7 @@ One page for each task, in this order:
 
 <a id="checking-an-acorns-wiring"></a>
 
-* [Checking an Acorn's wiring](verify/acorn-wiring.md#checking-an-acorns-wiring): for you if you have built an Acorn's cables and want the page that checks them.
+* [Checking an Acorn's wiring](verify/acorn-wiring.md#checking-the-wiring-of-an-acorn): for you if you have built an Acorn's cables and want the page that checks them.
 
 <a id="common-failures"></a>
 
@@ -101,7 +100,7 @@ One page for each task, in this order:
 
 ---
 
-## 2. How verify is used in fpgas.online
+## How the fleet uses verify
 
 <a id="events"></a>
 
@@ -115,4 +114,4 @@ One page for each task, in this order:
 
 <a id="current-results"></a>
 
-* [Current results](verify/current-results.md#current-results): for you if you want the last collected results on the Welland Pis.
+* [Current results](verify/current-results.md#current-results): for you if you want the last collected results of the fleet's Pis.
