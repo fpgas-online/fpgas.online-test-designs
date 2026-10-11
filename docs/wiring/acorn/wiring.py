@@ -110,7 +110,7 @@ class Carrier:
     resistor_value: str
     headers: dict  # key -> Header
     wires: dict  # signal -> (header key, pin)
-    parts: list  # [{qty, part, number?, note?}] besides what the wiring itself counts
+    parts: list  # [{qty, part, number?, note?, listed_mm?}] besides what the wiring itself counts
     host: str = ""  # the host in a word, for a pin name that needs its owner: "blade TX"
     shell: str = ""  # bare metal of the host that is its ground, for a meter probe; "" where a header pin does it
     power_off: str = ""  # how the host is made dead before the cables are fitted, as a sentence
@@ -257,9 +257,12 @@ def _check(c):
             errors.append(f"{c.key}: a part needs a whole `qty` of 1 or more and a `part`: {part}")
         if set(part) - {"qty", "part", "number", "note", "listed_mm"}:
             errors.append(f"{c.key}: part {part.get('part')!r} has keys other than qty, part, number, note, listed_mm")
-        mm = part.get("listed_mm", 1)
-        if isinstance(mm, bool) or not isinstance(mm, int) or mm < 1:  # TOML true is an int to Python
-            errors.append(f"{c.key}: part {part.get('part')!r}: listed_mm must be a whole number of millimetres")
+        if "listed_mm" in part:
+            mm = part["listed_mm"]
+            if isinstance(mm, bool) or not isinstance(mm, int) or mm < 1:  # TOML true is an int to Python
+                errors.append(f"{c.key}: part {part.get('part')!r}: listed_mm must be a whole number of millimetres")
+            elif mm // 2 - LENGTHS["slack"] < 1:  # the reach step's "at most N mm a run" would be 0 mm or less
+                errors.append(f"{c.key}: listed_mm {mm} leaves no run: half of it is not more than slack")
     if sum("listed_mm" in part for part in c.parts) != 1:  # the reach step's number comes from that one part
         errors.append(f"{c.key}: exactly one part has listed_mm, the cable's length as it is listed")
     if not c.shell and not c.free_ground():
