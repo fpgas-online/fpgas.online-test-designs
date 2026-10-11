@@ -838,6 +838,40 @@ def fomu_usb(monkeypatch):
     return usb
 
 
+@pytest.mark.parametrize("reading, answer", [
+    ({**FOMU_READING, "cdone_in_reset": 1, "flash": None}, None),  # CDONE stuck high: not a Fomu's (a NeTV2's TMS)
+    (None, (2, "fomu-header-error: python3-libgpiod (the gpiod module) is not installed\n")),  # the header unread
+])  # fmt: skip
+def test_a_board_whose_header_did_not_pass_is_not_reset_again(tmp_path, fomu_usb, reading, answer):
+    fomu_usb.append(FOBOOT_USB)
+    run = Runner([("fomu_header_id.py", answer or _says(reading))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run)
+    assert sum(1 for c in run.calls if c[-1].endswith("fomu_header_id.py")) == 1
+    assert "foboot-after" not in [t["test"] for t in report["tests"]]
+
+
+def test_a_closing_reset_that_cannot_be_done_is_an_error_not_a_crash(tmp_path, fomu_usb):
+    fomu_usb.append(FOBOOT_USB)
+    run = Runner([("fomu_header_id.py", [_says(FOMU_READING), (2, "fomu-header-error: GPIO27 is busy\n")])])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run)
+    after = report["tests"][-1]
+    assert after["test"] == "foboot-after" and after["result"] == "error" and report["result"] != "pass"
+    assert "the closing reset could not be done" in after["reason"] and "GPIO27 is busy" in after["reason"]
+
+
+def test_no_closing_reset_when_foboot_did_not_come_back_the_first_time(tmp_path, fomu_usb):
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", (0, ""))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run)
+    assert sum(1 for c in run.calls if c[-1].endswith("fomu_header_id.py")) == 1
+    assert "foboot-after" not in [t["test"] for t in report["tests"]]
+
+
+def test_tests_asked_for_by_name_are_not_followed_by_a_closing_reset(tmp_path, fomu_usb):
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run, tests=["uart"])
+    assert [t["test"] for t in report["tests"]] == ["uart"]  # the header is not known to be a Fomu's: no reset
+
+
 def test_a_fomu_is_identified_by_its_flash_over_the_header_and_foboot_is_waited_for(tmp_path, fomu_usb):
     fomu_usb.append(FOBOOT_USB)
     run = Runner([("fomu_header_id.py", _says(FOMU_READING))])

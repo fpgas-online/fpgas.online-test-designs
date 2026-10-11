@@ -220,9 +220,12 @@ class Fomu(TestBoard):
         the Fomu was power-cycled. The check ends by resetting the iCE40 through the header (fomu_header_id.py,
         the same safe reset as before the tests), which brings foboot back on USB (sw1 p17, 11 Oct 2026, about
         1 s), and fails loud if it does not come back. Only on a Fomu whose `header` test passed: the reset
-        drives CRESET and SPI0, which must be a Fomu's."""
-        header = next((t for t in report["tests"] if t["test"] == "header"), None)
-        if header is None or header["result"] != "pass":
+        drives CRESET and SPI0, which must be a Fomu's. Not when `foboot` did not pass: then no design was loaded
+        (the tests need foboot) and the reset would only repeat the first. Not either when tests are asked for by
+        name: the fact tests do not run then, so the header is not known to be a Fomu's, and the Fomu is left as
+        its last test left it (the safe default)."""
+        results = {t["test"]: t["result"] for t in report["tests"]}
+        if results.get("header") != "pass" or results.get("foboot") != "pass":
             return None
         entry = {"test": "foboot-after", "output": []}
         try:
