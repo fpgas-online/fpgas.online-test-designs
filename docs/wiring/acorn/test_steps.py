@@ -572,8 +572,11 @@ def test_no_words_stand_between_a_steps_pictures(key):
             lines = [line for line in block.splitlines() if line]
             first = next((i for i, line in enumerate(lines) if line.startswith("![")), len(lines))
             assert all(line.startswith("![") for line in lines[first:]), (name, n)
-            # the words before the pictures are paragraphs and list items: no heading, table or code between
-            assert not any(line.startswith(("#", "|", "`")) for line in lines[:first]), (name, n)
+            # the words before the pictures are the step's paragraphs and numbered list: no heading, table, code,
+            # bullet, quote or line of bold alone (a heading in all but name) between them
+            for line in lines[1:first]:
+                assert not line.startswith(("#", "|", "`", "- ", "* ", "> ")), (name, n, line)
+                assert not re.fullmatch(r"\*\*[^*]+\*\*:?", line), (name, n, line)
 
 
 def quotes(c):
