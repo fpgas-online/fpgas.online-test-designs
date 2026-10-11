@@ -260,12 +260,13 @@ def test_moving_a_wire_sends_the_cable_through_the_new_cables_checks_before_a_bo
         body = "\n".join(check.pages(c).values())
         start = body.index("To move a wire, the cable goes through the same checks as a new one before any boot:")
         block = body[start : body.index("\n\n", body.index("\n1. ", start))]
-        steps_ = re.findall(r"^(\d)\. (.*)$", block, re.M)
+        steps_ = re.findall(r"^(\d)\. (.*(?:\n   .*)*)$", block, re.M)  # a step with the items under it
         assert [int(n) for n, _ in steps_] == list(range(1, 8))
         text = [s for _, s in steps_]
         assert text[0] == c.power_off and text[1].startswith("Take the card out and pull both plugs")
         assert text[2] == "Move the wire." and "with the meter" in text[3]
-        assert docs_pages.link(c.key, "jtag-2") in text[3] and docs_pages.link(c.key, "bench") in text[4]
+        assert docs_pages.link(c.key, "jtag-2") in text[3] and docs_pages.link(c.key, "uart-2") in text[3]
+        assert docs_pages.link(c.key, "bench") in text[4]
         assert "with the card out" in text[4]
         assert docs_pages.link(c.key, "fit") in text[5]
         assert text[6].startswith("Ask the site operator, then boot the blade" if c.key == "blade" else "Boot the Pi")
