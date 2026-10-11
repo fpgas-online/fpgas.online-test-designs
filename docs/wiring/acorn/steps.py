@@ -169,7 +169,7 @@ def ground_shows_way_round(c):
 # Said after a warning that names a rail on a signal wire.
 HARM = (
     "That is above the most AMD's Artix 7 data sheet allows on an FPGA pin (DS181, Table 1). The most it allows is "
-    "VCCO + 0.55 V, with VCCO at most 3.6 V. 5 V there can destroy the FPGA pin on the Acorn that wire reaches."
+    "VCCO + 0.55 V, with VCCO at most 3.6 V. Exceeding it can destroy the FPGA pin on the Acorn that wire reaches."
 )
 
 
