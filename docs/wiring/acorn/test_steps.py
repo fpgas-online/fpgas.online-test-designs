@@ -11,6 +11,7 @@ import re
 
 import check
 import pages as docs_pages
+import palette
 import pytest
 import steps
 import tables
@@ -359,6 +360,82 @@ def test_the_flag_step_shows_whole_wires_and_the_cut_picture_comes_only_after_th
         assert text.index(prepared) > text.index(steps.png(steps.ground_check_name(connector)))
         cut_step = text[: text.index(prepared)].rsplit("\n**", 1)[1]
         assert "off about" in cut_step and "in no cavity" in cut_step
+
+
+MARKS = tuple(palette.role(r) for r in ("mark", "mark-edge", "on-mark"))  # the highlight, its edge, its tag's words
+GREY = palette.role("render-muted")  # a part the picture is not about: its outline
+
+
+def sockets_drawn(svg):
+    """{socket name: what is drawn for it on the card photo}, from the picture's `socket-<name>` groups, each up
+    to its own closing tag (the words inside are groups of glyphs)."""
+    drawn = {}
+    for m in re.finditer(r'<g id="socket-(P\d)">', svg):
+        depth, i = 1, m.end()
+        for tag in re.finditer(r"<g[\s>]|</g>", svg[i:]):
+            depth += -1 if tag.group() == "</g>" else 1
+            if depth == 0:
+                drawn[m.group(1)] = svg[i : i + tag.start()]
+                break
+    return drawn
+
+
+def one_socket_pictures(connector):
+    """Every step picture about one socket: its flag, its meter check, and per carrier its cavities and its wires
+    made ready."""
+    yield f"flag {connector}", steps.flag(connector)
+    yield f"ground check {connector}", steps.ground_check(connector)
+    for key, c in wiring.CARRIERS.items():
+        yield f"{key} cavities {connector}", picture(key, connector)
+        yield f"{key} prepare {connector}", steps.prepare(c, connector)
+
+
+@pytest.mark.parametrize("connector", list(wiring.CONNECTORS))
+def test_a_picture_about_one_socket_highlights_it_and_shows_the_other_only_grey(connector):
+    """Issue 267: the subject socket at full strength; the look-alike only as a grey outline and its name."""
+    (other,) = set(wiring.CONNECTORS) - {connector}
+    for what, svg in one_socket_pictures(connector):
+        drawn = sockets_drawn(svg)
+        assert set(drawn) == {connector, other}, what
+        assert all(m in drawn[connector] for m in MARKS) and "pin 1" in words(drawn[connector]), what
+        assert not any(m in drawn[other] for m in MARKS), f"{what}: {other} carries the highlight's colours"
+        assert GREY in drawn[other] and words(drawn[other]) == [other], what
+
+
+def test_a_picture_about_both_sockets_highlights_both():
+    both = [("card", steps.card())] + [(f"{key} fit", steps.fit(c, 1)) for key, c in wiring.CARRIERS.items()]
+    for what, svg in both:
+        drawn = sockets_drawn(svg)
+        assert set(drawn) == {"P1", "P2"}, what
+        for name, part in drawn.items():
+            assert all(m in part for m in MARKS) and "pin 1" in words(part), f"{what}: {name}"
+            assert GREY not in part, f"{what}: {name}"
+
+
+@pytest.mark.parametrize("subject", list(wiring.CONNECTORS))
+def test_the_grey_outline_is_drawn_on_the_photo_where_the_other_socket_is(subject):
+    """The grey is light (it reads on the dark board, not on the paper: about 1.5:1 there on the light theme), so
+    the outline must be the other socket's own rect, and that rect must lie on the photo."""
+    import gen
+    from sheetlib import Sheet
+
+    sh = Sheet(steps.W, 400)
+    sockets, (px, py, pw, ph) = gen.acorn_photo_down(sh, 30, 132, 360, steps.T, subject=subject)
+    (other,) = set(wiring.CONNECTORS) - {subject}
+    x0, y0, x1, y1 = sockets[other]
+    assert px <= x0 < x1 <= px + pw and py <= y0 < y1 <= py + ph
+    rect = re.search(
+        r'<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"', sockets_drawn(sh.svg())[other]
+    )
+    assert [float(v) for v in rect.groups()] == pytest.approx([x0, y0, x1 - x0, y1 - y0], abs=0.06)
+
+
+def test_a_socket_the_card_does_not_have_is_refused():
+    import gen
+    from sheetlib import Sheet
+
+    with pytest.raises(ValueError, match="no socket 'P3'"):
+        gen.acorn_photo_down(Sheet(steps.W, 400), 30, 132, 360, steps.T, subject="P3")
 
 
 @pytest.mark.parametrize("connector", list(wiring.CONNECTORS))

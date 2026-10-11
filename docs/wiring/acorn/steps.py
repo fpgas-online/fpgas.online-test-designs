@@ -466,7 +466,7 @@ def cable(c, connector):
     sh.add(f'<line x1="30" y1="70" x2="{W - 10}" y2="70" stroke="{INK}" stroke-width="1.5"/>')
 
     # The card, and under its socket the plug the same way round; beside the card, where the housing will go.
-    sockets, (px, py, pw, ph) = acorn_photo_down(sh, 30, 132, 360, T, crop=(0, 60, 134, 590))
+    sockets, (px, py, pw, ph) = acorn_photo_down(sh, 30, 132, 360, T, crop=(0, 60, 134, 590), subject=connector)
     host_bottom = HOSTS[c.key](sh, c, plan, px + pw + 20, 84, W - 10 - (px + pw + 20))
     x1 = 164
     out, body = plug(sh, x1, max(py + ph + 30, host_bottom - 30), pins)
@@ -723,7 +723,7 @@ def prepare(c, connector):
     sh = Sheet(W, 100)
     title(sh, f"{connector} cable ({conn['what']}) for a {c.name}:", "which wires are cut back, which get a terminal")
     # The card and its socket, as at the top of the cavity picture: this is how wire 1 is found.
-    sockets, (px, py, pw, ph) = acorn_photo_down(sh, 30, 132, 360, T, crop=(0, 60, 160, 590))
+    sockets, (px, py, pw, ph) = acorn_photo_down(sh, 30, 132, 360, T, crop=(0, 60, 160, 590), subject=connector)
     tx = px + pw + 20
     ty = para(sh, tx, 98, f"The plug is drawn under socket {connector} to show which wire is which.", W - 10 - tx)
     ty = para(sh, tx, ty + 2, "Card underside up, M.2 edge to your left: wire 1 is the leftmost.", W - 10 - tx, "bold")
@@ -938,7 +938,7 @@ def flag(connector):
     count = len(conn["pins"])
     sh = Sheet(W, 100)
     title(sh, f"{connector} cable ({conn['what']}): flag the {count} wires", "nothing is cut in this step")
-    sockets, (px, py, pw, ph) = acorn_photo_down(sh, 30, 132, 360, T, crop=(0, 60, 160, 590))
+    sockets, (px, py, pw, ph) = acorn_photo_down(sh, 30, 132, 360, T, crop=(0, 60, 160, 590), subject=connector)
     tx = px + pw + 20
     ty = para(sh, tx, 98, f"Press the plug into socket {connector}.", W - 10 - tx, "bold")
     ty = para(sh, tx, ty + 2, "Card underside up, M.2 edge to your left: wire 1 is the leftmost.", W - 10 - tx, "bold")
@@ -970,7 +970,7 @@ def ground_check(connector):
         f"the plug in socket {connector}, the Acorn out of any slot",
     )
     crop = (0, 0, 330, 590)
-    sockets, (px, py, pw, ph) = acorn_photo_down(sh, 30, 132, 470, T, crop=crop)
+    sockets, (px, py, pw, ph) = acorn_photo_down(sh, 30, 132, 470, T, crop=crop, subject=connector)
     k = pw / (crop[3] - crop[1])
     x0, y0, x1, y1 = ACORN_PAD  # in acorn-cw.jpg; a quarter turn clockwise takes (x, y) to (crop height - y, x)
     pad = (px + (crop[3] - y1) * k, py + (x0 - crop[0]) * k, px + (crop[3] - y0) * k, py + (x1 - crop[0]) * k)

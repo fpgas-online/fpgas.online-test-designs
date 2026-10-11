@@ -53,6 +53,10 @@ NUDGE = {"pi5": 8, "blade": 8}
 
 MARK = role("mark")  # highlight on photos: not a wire colour
 MARK_EDGE, ON_MARK = role("mark-edge"), role("on-mark")  # its dark edge, and the words on a yellow tag
+# A socket a picture is not about (issue 267): its outline in this light grey, which reads on the dark board of the
+# photo. Its name sits above the photo on the paper, where this grey would not read (about 1.5:1 on the light
+# theme), so the name is in MUTED, the grey of secondary text.
+GREY_PART = role("render-muted")
 LANE = 22
 WIRE, HALO = 4.5, 9
 CLEAR = 18  # a crossing stays this far from any corner; parallel runs stay this far apart
@@ -548,14 +552,19 @@ ACORN_CONNECTORS = {
 ACORN_CW = {"P1": (6, 336, 128, 550), "P2": (10, 94, 128, 304)}
 
 
-def acorn_photo_down(sh, x, y, w, size, crop=(0, 60, 290, 590)):
+def acorn_photo_down(sh, x, y, w, size, crop=(0, 60, 290, 590), subject=None):
     """The connector end of the card turned so that the sockets are along the top and a plug's wires leave
     downwards: acorn-cw.jpg a quarter turn clockwise, so pin 1 of each socket and the M.2 edge are on the left.
 
     For a picture whose cable hangs down from the plug (steps.py). All the words are above the photo, at
     `size`, so that a zoom cone can leave a socket downwards without crossing any. `crop` is in acorn-cw.jpg's
-    own pixels. Returns ({socket: highlight rect}, the photo's (x, y, w, h)).
+    own pixels. `subject`: the one socket the picture is about. It is highlighted, with its pin 1, and the other
+    is only a grey outline and its name, so the two are not confused (issue 267). With no subject, the picture
+    is about both and both are highlighted. Each socket is drawn in a `socket-<name>` group. Returns
+    ({socket: its rect}, the photo's (x, y, w, h)).
     """
+    if subject is not None and subject not in ACORN_CW:
+        raise ValueError(f"no socket {subject!r} on the card: the sockets are {sorted(ACORN_CW)}")
     (px, py, pw, ph), k = sh.photo("acorn-cw.jpg", x, y, w, crop=crop, turn=Image.Transpose.ROTATE_270)
     row = size * 1.45  # the height of a line of tags
     sockets = {}
@@ -563,10 +572,16 @@ def acorn_photo_down(sh, x, y, w, size, crop=(0, 60, 290, 590)):
         # a quarter turn clockwise takes (x, y) of the crop to (crop height - y, x)
         rect = (px + (crop[3] - y1) * k, py + (x0 - crop[0]) * k, px + (crop[3] - y0) * k, py + (x1 - crop[0]) * k)
         sockets[name] = rect
-        highlight(sh, rect)
-        _, b = sh.tag(rect[0], py - row / 2 - 5, "pin 1", BOX, size=size, h=row, fg=INK, stroke=INK, pad=5)
-        sh.tag(b + 6, py - row / 2 - 5, name, MARK, size=size, h=row, fg=ON_MARK, stroke=MARK_EDGE, pad=7)
-        sh.add(f'<path d="M{rect[0] + 4},{py - 5} v9" stroke="{INK}" stroke-width="2.5"/>')  # pin 1 is at this end
+        sh.add(f'<g id="socket-{name}">')  # test_steps.py reads this back
+        if subject in (None, name):
+            highlight(sh, rect)
+            _, b = sh.tag(rect[0], py - row / 2 - 5, "pin 1", BOX, size=size, h=row, fg=INK, stroke=INK, pad=5)
+            sh.tag(b + 6, py - row / 2 - 5, name, MARK, size=size, h=row, fg=ON_MARK, stroke=MARK_EDGE, pad=7)
+            sh.add(f'<path d="M{rect[0] + 4},{py - 5} v9" stroke="{INK}" stroke-width="2.5"/>')  # pin 1 is at this end
+        else:
+            sh.rect(rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1], stroke=GREY_PART, sw=2.5, rx=4)
+            sh.text(rect[0], py - row / 2 - 5 + size * 0.35, name, size, "bold", MUTED)
+        sh.add("</g>")
     ty = py - row - 14
     sh.add(f'<path d="M{px},{ty - size * 0.32} l{size * 0.7},{-size * 0.4} l0,{size * 0.8} z" fill="{MUTED}"/>')
     sh.text(px + size, ty, "M.2 edge connector", size, "bold", MUTED)
