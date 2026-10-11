@@ -4,7 +4,7 @@ You have an Arty, NeTV2, Fomu or TT FPGA board and want to know what each test o
 it passes.
 Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
 
-## What each board's check tests
+## What the check tests on each board
 
 ### Arty, NeTV2, Fomu and TT FPGA
 

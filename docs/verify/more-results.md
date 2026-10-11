@@ -45,7 +45,7 @@ The whole report, for a program to read (JSON): /run/fpgas-online/verify.json
 ******************************************************************************
 ```
 
-**fail**: a NeTV2 whose DDR test fails (pi-sw1-p12, at boot; the summary its report gives):
+**fail**: a NeTV2 whose DDR test fails (at boot; the summary its report gives):
 
 ```text
 $ journalctl -b -u fpgas-verify -o cat

@@ -1,10 +1,10 @@
-# fpgas-verify: the Acorn's power-cycle check, and the details of its tests
+# fpgas-verify: the Acorn power-cycle check and test details
 
 You have an Acorn and want to know how its opt-in power-cycle check works, or the details of its tests: the
 `ddr` test step by step, `not_run`, the driver it unbinds and the pins it puts back.
 Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
 
-## The Acorn's power-cycle check (opt-in)
+## The Acorn power-cycle check (opt-in)
 
 A board is to be tested as its flash configures it. If the FPGA kept its configuration while its Pi restarted
 (the card fed from somewhere else, a restart that does not reach the card), it still holds whatever was in it
@@ -29,11 +29,7 @@ A board that fails is left as it was found, so it fails again until the card res
 `--test scratch` on its own leaves no marker; `--test power-cycle`, when it passes, does leave it. The report says when the check was on: `"power_cycle_check": {"on": true, "configured_by":
 "/etc/fpgas-verify/…ini"}`.
 
-**What a restart of the Pi does to the card depends on the setup, so the check is opt-in.** Measured on
-5 Oct 2026 on a Pi 5 with the PCIe HAT (the Acorn with DNA `0x0054b48664b04854`): after a plain `systemctl
-reboot` the scratch register read `0x12345678` again and the check passed, and the same after a PoE power cycle.
-That is one board; whether the soft reboot reloads the FPGA from its flash or only resets the SoC was not
-established, and the Compute Module setup has not been measured. Where a restart of the Pi does not reach the
+**What a restart of the Pi does to the card depends on the setup, so the check is opt-in.** Where a restart of the Pi does not reach the
 card, every board fails after a restart, so switch the check on only for a setup that has been measured. Outside the fleet nothing says how a host is restarted, which is why it is off by default.
 
 Two limits. A reset of the SoC (a write to `ctrl_reset`) also returns the register to `0x12345678`, and the
@@ -43,7 +39,7 @@ there to catch a card that did not restart with its Pi, not a visitor who sets o
 `fpgas-verify --test power-cycle` runs it alone, when the setting is on; with the setting off it is an error
 that says how to switch it on.
 
-## The Acorn's tests in detail
+## The Acorn tests in detail
 
 * `ddr` in detail ([`bist.py`](../../verify/src/fpgas_online_verify/boards/acorn/bist.py), the same code
   [`selftest.py`](../../designs/acorn-pcie/host/selftest.py) runs):
@@ -68,5 +64,4 @@ that says how to switch it on.
 * Before the JTAG tool runs, the check asks the header's GPIO chip whether each JTAG pin can be had. A kernel
   whose pin controller is strict (the RP1's on 6.18, seen on a CM5) does not lend a pin a driver has: on a
   Compute Blade with the serial port on, that is GPIO14. The tool is then not run and `jtag` fails, naming the
-  pin and who has it ([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)). Which
-  boot configuration a Compute Blade needs for both JTAG and the P2 UART is not settled.
+  pin and who has it ([#127](https://github.com/fpgas-online/fpgas.online-test-designs/issues/127)).

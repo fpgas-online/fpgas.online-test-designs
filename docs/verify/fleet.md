@@ -74,7 +74,7 @@ They come between `fpga-verifying` and `fpga-verified`.
 5. Each Pi's `nfsroot-watchdog` reboots it in its own slot, 20 s apart (a two-switch site takes about 33 minutes).
 6. Each Pi runs the new `fpgas-verify` at boot and publishes the result; the gate follows.
 
-## Collecting every Pi's result
+## Collecting the result of every Pi
 
 [`scripts/collect_verify_status.py`](../../scripts/collect_verify_status.py) reads every Pi's report, unit state,
 installed version and (with no report) journal over SSH. It only reads, so it is safe while boards are in use.

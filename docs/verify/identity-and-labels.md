@@ -66,8 +66,8 @@ the check, publishes anything or records any state.
 * The exit status is 0 when every board's identity is whole (no field missing, no `<field>_error`), 1
   otherwise. Each missing field is printed on stderr with why. The document is printed either way; readers
   use it and ignore the exit status.
-* For an Arty or a NeTV2, `--identify` always exits 1 for now: their labels need the flash's unique ID
-  (`flash_uid`), and neither the boot check nor `--identify` reads it yet (see [Not done yet](not-done-yet.md#not-done-yet)).
+* For an Arty or a NeTV2, `--identify` exits 1: their labels need the flash's unique ID (`flash_uid`), which
+  neither the boot check nor `--identify` reads.
   Their IDCODE and device DNA, and any flash fields the boot report has for them, are still in the document.
 * For a TT board, `--identify` exits 0 only when the boot report has the fields rpi-hwid's Tiny Tapeout label
   needs (`mcu`, `chip`, `demoboard`, `demoboard_version`, `sdk`, besides `usb_serial`). So it exits 1 when
