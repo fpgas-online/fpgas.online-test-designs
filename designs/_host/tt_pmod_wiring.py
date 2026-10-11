@@ -2214,7 +2214,7 @@ def row_faults(row, cabling, held, levels=None, held_low_lines=()):
         sharer = [u for u in held if u.startswith("ui_in[") and name in
                   (signal_name("uio", j) for j in connected_uio(cabling, u))]  # fmt: skip
         if group == "uio" and sharer:
-            return [fault(f"{where} could not be tested: it shares its HAT line with {sharer[0]}, which is held "
+            return [fault(f"{where} could not be tested: {hat_pin(own)} is one Pi line, where {sharer[0]} is held "
                           f"{held[sharer[0]]}", own_missing=True)]  # fmt: skip
         if levels.get(name) == "low" or (levels.get(name) == "high" and own not in PI_FIXED_PULLUP_GPIOS):
             return [fault(f"{where} could not be tested: something holds its line {levels[name]}", own_missing=True)]

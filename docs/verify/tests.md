@@ -6,6 +6,9 @@ Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
 
 ## What the check tests on each board
 
+This page covers the Arty, NeTV2, Fomu and TT FPGA. The Acorn's tests are on
+[What an Acorn check tests](acorn.md#acorn).
+
 ### Arty, NeTV2, Fomu and TT FPGA
 
 Each test checks its bitstream's sha256 against the `-bitstreams` package's manifest (a damaged file is an

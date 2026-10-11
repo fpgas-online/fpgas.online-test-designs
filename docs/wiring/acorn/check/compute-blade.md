@@ -8,7 +8,7 @@
 
 **1.** Decide which hosts get the change, with the gateway's operator. The blade does not hold the two files this page changes: a host that boots from the network fetches them from the gateway. The gateway's TFTP root, `/srv/tftp/`, has one symbolic link for each host, and the links point at one shared directory, `/srv/nfs/rpi/trixie/boot/`. So there are two ways, and the choice is the gateway operator's:
 
-1. Change the shared directory. Every host that boots from it loses its console and login on the header's serial pins, and the firmware's boot messages there, from its next boot. To undo it, put the two files back as they were: the hosts go back at their next boot.
+1. Change the shared directory. Every host booting from it loses its console and login on the header's serial pins, and the firmware's boot messages there, from its next boot. To undo it, put the two files back as they were: the hosts go back at their next boot.
 2. Give one blade its own copy of the directory. Only that blade is changed, from its next boot. To undo it, point the blade's link back at `/srv/nfs/rpi/trixie/boot` and, after asking the site operator, boot the blade again.
 
 **2.** For the second way, find the name of the blade's link. It is the last eight characters of the blade's serial number. On the blade:
@@ -21,12 +21,12 @@ tr -d '\0' < /proc/device-tree/serial-number
 
 **4.** On the gateway, keep a copy of `config.txt` and of `cmdline.txt`. Then make the two changes, in the shared directory (the first way) or in the blade's own copy (the second way):
 
-1. In `config.txt`, in its `[all]` section, change `enable_uart=1` to `enable_uart=0`, and take out the line `uart_2ndstage=1` (the firmware's own boot messages on the header's serial pins).
+1. In `config.txt`, in its `[all]` section, change `enable_uart=1` to `enable_uart=0`. Also take out the line `uart_2ndstage=1` (the firmware's own boot messages on the header's serial pins).
 2. In `cmdline.txt`, which is one line, take out the word `console=serial0,115200`.
 
 **5.** Ask the site operator, then boot the blade again. A reboot ends a visitor's session on the blade, the same harm as a power-off.
 
-**6.** On the blade, install the packages again, as in [How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html): on a blade whose root file system is in memory, the install is gone after the boot. Steps 7 to 9 run on the blade too.
+**6.** On the blade, install the packages again, as in [How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html). On a blade whose root file system is in memory, the install is gone after the boot. Steps 7 to 9 run on the blade too.
 
 **7.** Check that GPIO14 is free. No line of the last command may show a consumer (`consumer="kernel"`) or `[used]`: that is a line the kernel will not hand out.
 
@@ -36,7 +36,7 @@ gpiodetect                  # the header's chip: `pinctrl-rp1` on a Compute Modu
 gpioinfo -c gpiochip0 | grep -E 'line +(2|3|4|14):'   # with that chip's name (gpiod 2; gpiod 1: `gpioinfo gpiochip0`)
 ```
 
-**8.** Check that nothing on the card drives GPIO14. Always run this step, on each blade you run JTAG on: a card that drives GPIO14 would drive against the blade's own pin, and a cable whose J2 wire has no 470 Ω resistor has nothing to limit the current. Note what `pinctrl get 14` prints, then:
+**8.** Check that nothing on the card drives GPIO14. Always run this step, on each blade you run JTAG on. There are two reasons. A card that drives GPIO14 would drive against the blade's own pin. A cable whose J2 wire has no 470 Ω resistor has nothing to limit the current. Note what `pinctrl get 14` prints, then:
 
 ```bash
 sudo pinctrl set 14 ip pd; pinctrl lev 14   # must print 0

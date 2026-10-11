@@ -9,8 +9,8 @@ The Fomu is a tiny FPGA board that fits inside a USB port, designed by Sean Cros
 ### What you need
 
 - a Raspberry Pi with the Fomu EVT on its GPIO header ([Fomu EVT wiring to a Raspberry Pi](https://docs.fpgas.online/en/latest/boards/fomu-evt/setup/wiring.html#connections-to-the-pi))
-- the fpgas.online apt repository added on the Pi ([fpgas-verify: installing it](../verify/installing.md#installing))
-- on bookworm: the fpgas.online-fpga-tools apt repository added too ([fpgas-verify: installing it](../verify/installing.md#installing) has it). Debian bookworm's openFPGALoader is too old for the check
+- the fpgas.online apt repository added on the Pi ([fpgas-verify: installing it, step 1](../verify/installing.md#installing))
+- on bookworm: the fpgas.online-fpga-tools apt repository added too ([fpgas-verify: installing it, step 2](../verify/installing.md#installing)). Debian bookworm's openFPGALoader is too old for the check
 
 `grep VERSION_CODENAME /etc/os-release` says which release the Pi runs.
 

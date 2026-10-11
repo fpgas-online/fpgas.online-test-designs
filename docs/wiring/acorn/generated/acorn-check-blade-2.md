@@ -2,19 +2,19 @@
 
 ## From a failing line to the wire
 
-Find the failing line in the table, then the wire in the two cavity pictures under it: the number in a cavity is the number on the wire's flag.
+Find the failing line in the table, then the wire in the two cavity pictures under it. The number in a cavity is the number on the wire's flag.
 
 To move a wire, the cable goes through the same checks as a new one before any boot:
 
 1. Ask the site operator, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in.
 2. Take the card out and pull both plugs from its sockets.
 3. Move the wire.
-4. Check that cable's plug contacts against its housing with the meter, as steps 3 and 4 of [How to fill the JTAG cable's housing (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/jtag-housing.html) or [How to fill the UART cable's housing (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/uart-housing.html) do.
+4. Check that cable's plug contacts against its housing with the meter. Do that check as steps 3 and 4 of [How to fill the JTAG cable's housing (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/jtag-housing.html) do for the JTAG cable. Do that check as steps 3 and 4 of [How to fill the UART cable's housing (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/uart-housing.html) do for the UART cable.
 5. Run the bench check, with the card out: [How to check the cables on the bench (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/bench-check.html).
 6. Fit the cables: [How to fit the cables and the card (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/fitting.html).
-7. Ask the site operator, then boot the blade. The install is gone after the boot: install the packages again, as in [How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html), and run the check again.
+7. Ask the site operator, then boot the blade. The install is gone after the boot, so install the packages again, as in [How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html). Then run the check again.
 
-One test can be run on its own: `sudo fpgas-acorn-verify --no-publish --test p2-serial`, or `sudo fpgas-acorn-verify --no-publish --test jtag`. Run `--test jtag` only in a boot with the header's serial port off, and only after steps 7 and 8 of [How to make a Compute Blade boot ready for JTAG](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html) pass (check that GPIO14 is free; check that nothing on the card drives GPIO14). In a boot with the header's serial port off, the same goes for the whole check, which runs `jtag` too ([How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html)). Each prints the usual summary, then the whole report as JSON.
+One test can be run on its own: `sudo fpgas-acorn-verify --no-publish --test p2-serial`, or `sudo fpgas-acorn-verify --no-publish --test jtag`. Run `--test jtag` only in a boot with the header's serial port off. Run `--test jtag` only after steps 7 and 8 of [How to make a Compute Blade boot ready for JTAG](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html) pass. Step 7 checks that GPIO14 is free, and step 8 checks that nothing on the card drives GPIO14. In a boot with the header's serial port off, the same goes for the whole check, which runs `jtag` too. The whole check: [How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html). Each prints the usual summary, then the whole report as JSON.
 
 | The failing line | Look at |
 |---|---|
@@ -40,4 +40,4 @@ The two cavity pictures are the ones the cables were built from, shown again to 
 A correctly wired pair reads back what was driven: `FPGA drives 01: Pi reads GPIO14=1 GPIO15=0`, `Pi drives 01:
 FPGA reads 01`, and so on for every pattern.
 
-A failing line that is not in the table above is not about a wire of the cables: [Other Acorn check messages on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/troubleshooting/compute-blade-other-messages.html) has every other message the check gives about an Acorn.
+A failing line that is not in the table above is not about a wire of the cables. [Other Acorn check messages on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/troubleshooting/compute-blade-other-messages.html) has every other message the check gives about an Acorn.

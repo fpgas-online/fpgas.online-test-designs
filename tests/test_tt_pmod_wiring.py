@@ -1658,8 +1658,8 @@ def test_a_dip_switch_on_ui_in1_to_3_says_why_its_uio_bit_is_untested(bit):
     """Review 8, finding 3: uio[k] is on ui_in[k]'s HAT line (JA2-4 and JB2-4 are the same Pi GPIOs)."""
     code, line = asic_verdict(asic_wires(), project="drives_uio", pin_id=True, held_ui_in={bit}, dip_level=1)
     assert code == 1 and line.endswith(
-        f"the uio ribbon (to HAT JB): uio[{bit}] (Pmod pin {bit + 1}) could not be tested: it shares its HAT line "
-        f"with ui_in[{bit}], which is held high"
+        f"the uio ribbon (to HAT JB): uio[{bit}] (Pmod pin {bit + 1}) could not be tested: HAT JA/JB pin {bit + 1} is "
+        f"one Pi line, where ui_in[{bit}] is held high"
     ), line
 
 

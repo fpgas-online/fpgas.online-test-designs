@@ -2,14 +2,14 @@
 
 ## From a failing line to the wire
 
-Find the failing line in the table, then the wire in the two cavity pictures under it: the number in a cavity is the number on the wire's flag.
+Find the failing line in the table, then the wire in the two cavity pictures under it. The number in a cavity is the number on the wire's flag.
 
 To move a wire, the cable goes through the same checks as a new one before any boot:
 
 1. Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE.
 2. Take the card out and pull both plugs from its sockets.
 3. Move the wire.
-4. Check that cable's plug contacts against its housing with the meter, as steps 3 and 4 of [How to fill the JTAG cable's housing (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/jtag-housing.html) or [How to fill the UART cable's housing (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/uart-housing.html) do.
+4. Check that cable's plug contacts against its housing with the meter. Do that check as steps 3 and 4 of [How to fill the JTAG cable's housing (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/jtag-housing.html) do for the JTAG cable. Do that check as steps 3 and 4 of [How to fill the UART cable's housing (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/uart-housing.html) do for the UART cable.
 5. Run the bench check, with the card out: [How to check the cables on the bench (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/bench-check.html).
 6. Fit the cables: [How to fit the cables and the card (Raspberry Pi 5)](https://docs.fpgas.online/en/latest/boards/acorn/setup/rpi-5/fitting.html).
 7. Boot the Pi and run the check again.
@@ -38,8 +38,8 @@ The two cavity pictures are the ones the cables were built from, shown again to 
 `p2-serial` and `p2-gpio` print what was driven and what was read, eight lines for two wires. The two digits are the two signals: the right-hand digit is J2 (or J5), the left-hand one K2 (or H5).
 
 **A crossed pair.** The `p2-serial` test
-drives each wire as a plain pin, first from the FPGA and then from the host. `FPGA drives 01` raises J2, which
-should arrive on GPIO14; it arrives on GPIO15:
+drives each wire as a plain pin, first from the FPGA and then from the host. The line `FPGA drives 01` raises J2, which
+should arrive on GPIO14; J2 arrives on GPIO15:
 
 ```text
     p2-serial  fail: J2 -> GPIO14: the FPGA drove 1, the Pi read 0; K2 -> GPIO15: the FPGA drove 0, the Pi read 1; J2 -> GPIO14: the FPGA drove 0, the Pi read 1; K2 -> GPIO15: the FPGA drove 1, the Pi read 0; GPIO14 -> J2: the Pi drove 1, the FPGA read 0; GPIO15 -> K2: the Pi drove 0, the FPGA read 1; GPIO14 -> J2: the Pi drove 0, the FPGA read 1; GPIO15 -> K2: the Pi drove 1, the FPGA read 0; the UARTBone does not answer on /dev/ttyAMA0 after the switch (no fpgas.online SoC answered at 1200 baud after a break)
@@ -54,9 +54,9 @@ should arrive on GPIO14; it arrives on GPIO15:
 ```
 
 **One open wire**, a J5 wire that does not reach GPIO3. GPIO3
-reads 1 whatever the FPGA drives (the Pi's own pull-up on GPIO3 wins over the test's pull-down; on GPIO4 an
-open wire would read the opposite of what was driven), and on this card the FPGA read J5 as 1 whatever the Pi
-drove; H5 and GPIO4 follow each other:
+reads 1 whatever the FPGA drives. The Pi's own pull-up on GPIO3 wins over the test's pull-down. On GPIO4 an
+open wire would read the opposite of what was driven. On this card the FPGA read J5 as 1 whatever the Pi
+drove, and H5 and GPIO4 follow each other:
 
 ```text
     p2-gpio    fail: J5 -> GPIO3: the FPGA drove 0, the Pi read 1; J5 -> GPIO3: the FPGA drove 0, the Pi read 1; GPIO3 -> J5: the Pi drove 0, the FPGA read 1; GPIO3 -> J5: the Pi drove 0, the FPGA read 1
@@ -73,4 +73,4 @@ drove; H5 and GPIO4 follow each other:
 A correctly wired pair reads back what was driven: `FPGA drives 01: Pi reads GPIO14=1 GPIO15=0`, `Pi drives 01:
 FPGA reads 01`, and so on for every pattern.
 
-A failing line that is not in the table above is not about a wire of the cables: [Other Acorn check messages on a Raspberry Pi 5](https://docs.fpgas.online/en/latest/boards/acorn/troubleshooting/rpi-5-other-messages.html) has every other message the check gives about an Acorn.
+A failing line that is not in the table above is not about a wire of the cables. [Other Acorn check messages on a Raspberry Pi 5](https://docs.fpgas.online/en/latest/boards/acorn/troubleshooting/rpi-5-other-messages.html) has every other message the check gives about an Acorn.

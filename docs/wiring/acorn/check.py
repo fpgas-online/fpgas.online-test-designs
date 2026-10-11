@@ -317,8 +317,11 @@ def jtag_steps():
 
 # When JTAG may be run on a blade. Said wherever a blade page gives a command that runs the `jtag` test.
 JTAG_CONDITIONS = (
-    "in a boot with the header's serial port off, and only after steps {} and {} of ".format(*jtag_steps())
-    + f"{BLADE_JTAG} pass (check that GPIO14 is free; check that nothing on the card drives GPIO14)"
+    "in a boot with the header's serial port off. Run `--test jtag` only after steps {} and {} of ".format(
+        *jtag_steps()
+    )
+    + f"{BLADE_JTAG} pass. Step {jtag_steps()[0]} checks that GPIO14 is free, and step {jtag_steps()[1]} checks "
+    "that nothing on the card drives GPIO14"
 )
 # Whom a blade's reader asks first, and why: a reboot is not theirs to do alone.
 ASK_FIRST = (
@@ -349,7 +352,7 @@ INSTALL = {
     ),
     "blade": (
         "Install the Acorn's packages. A Compute Blade that boots from the network has its root file system in "
-        "memory (`overlayroot=tmpfs`): what you install is gone at the next boot, and so is the check that would run "
+        "memory (`overlayroot=tmpfs`). What you install is gone at the next boot, and so is the check that would run "
         f"at boot. So install after each boot. {ASK_FIRST}"
     ),
 }
@@ -362,8 +365,9 @@ RUN = {
 }
 RESULT = (
     "There is one result, **pass** or **fail**, and only a pass exits 0. The summary on the terminal lists every "
-    "test in the order it ran, with its result. A check that did not pass ends with `RESULT:`, a `failed:` line for "
-    "each failed test, a `not run:` line for the tests that did not run and why, and `What to do:`."
+    "test in the order it ran, with its result. A check that did not pass ends with `RESULT:`. Under `RESULT:` come "
+    "a `failed:` line for each failed test, a `not run:` line for the tests that did not run and why, and "
+    "`What to do:`."
 )
 
 
@@ -388,7 +392,7 @@ def about():
         "",
         "`fpgas-verify` is the program that checks an FPGA board from the machine it is attached to. For an Acorn "
         "its check doubles as a wiring test. Each of its tests uses a known set of wires between the card and its "
-        "host, so which tests pass, and what a failing one says, point at the wire.",
+        "host. So which tests pass, and what a failing one says, point at the wire.",
         "",
         "## What the check does to the card",
         "",
@@ -398,8 +402,8 @@ def about():
         "## The two programs",
         "",
         "`fpgas-verify` checks whichever board this host is set up for, as the check at boot does. "
-        "`fpgas-acorn-verify` checks the Acorn whatever the host is set up for. On a host set up for an Acorn the "
-        "two print the same.",
+        "The program `fpgas-acorn-verify` checks the Acorn whatever the host is set up for. On a host set up for an "
+        "Acorn the two print the same.",
         "",
         "## The variants",
         "",
@@ -410,19 +414,21 @@ def about():
         "",
         "Two tests need no design of ours in the card: `pcie-link` and `jtag`. They are the wiring tests of a card "
         "that has not been converted. The tests of the P2 wires need the fpgas.online design running in the card "
-        f"([converting a card]({CONVERTING})). Which test uses which wire is a table for each host: {tests}.",
+        f"([converting a card]({CONVERTING})). Which test uses which wire is a table for each host. "
+        f"The tables: {tests}.",
         "",
         "## On a Compute Blade",
         "",
         "- Do not load a design into a card on a Compute Blade, and do not convert it. The one time a design was "
-        "loaded into a card on a blade, the card's PCIe endpoint did not come back: neither a bus rescan nor a "
+        "loaded into a card on a blade, the card's PCIe endpoint did not come back. Neither a bus rescan nor a "
         "re-probe of the PCIe controller restored it. After the reboot that followed, the blade kept restarting for "
         f"about two hours ([the record of that run]({BLADE_RECORD})).",
         "- So the check's result on a Compute Blade is `fail`, the card being on the image it was sold with. "
-        "`pcie-link` passes when the card is seated, and the tests that need the fpgas.online design are `not run`.",
+        "The test `pcie-link` passes when the card is seated, and the tests that need the fpgas.online design are "
+        "`not run`.",
         "- JTAG's TMS wire is GPIO14, which the header's serial port also uses. In a boot with that port on (kernel "
-        "6.18), `jtag` fails without running the JTAG tool. In a boot with it off, on a Compute Module 5, `jtag` reads "
-        f"the FPGA's IDCODE and device DNA: {BLADE_JTAG}.",
+        "6.18), `jtag` fails without running the JTAG tool. In a boot with that port off, on a Compute Module 5, "
+        f"`jtag` reads the FPGA's IDCODE and device DNA. How to make that boot: {BLADE_JTAG}.",
         "- The check is for a blade with a Compute Module 5. Do not run it on a blade with a Compute Module 4: "
         f"what is open there is in [the record]({BLADE_RECORD}).",
         "- The check cannot show that the two cables are right while the card is not converted. The bench check "
@@ -447,11 +453,11 @@ def pages(c):
         # before the command that runs the check: it runs `jtag`, which must not run until GPIO14 is checked
         free, driven = jtag_steps()
         todo.append(
-            "In a boot with the header's serial port off, check GPIO14 before the check runs: steps "
-            f"{free} and {driven} of {BLADE_JTAG} (check that GPIO14 is free; check that nothing on the card drives "
-            "GPIO14). If either fails, do not run the check in that boot: something holds or drives the JTAG TMS "
-            "wire. In a boot with the port on, go to the next step: `jtag` fails there without running the JTAG "
-            "tool."
+            "In a boot with the header's serial port off, check GPIO14 before the check runs. The checks are steps "
+            f"{free} and {driven} of {BLADE_JTAG}. Step {free} checks that GPIO14 is free, and step {driven} checks "
+            "that nothing on the card drives GPIO14. If either fails, do not run the check in that boot: something "
+            "holds or drives the JTAG TMS wire. In a boot with the port on, go to the next step: `jtag` fails there "
+            "without running the JTAG tool."
         )
     todo.append(f"{RUN[c.key]}\n\n{run}")
     out = [
@@ -478,9 +484,10 @@ def pages(c):
         ]
     else:
         out += [
-            f"On a Compute Blade the result is `fail`: {ABOUT} says why. A Compute Blade with a Compute Module 5 and "
-            "an Acorn CLE-101 on the image it was sold with prints this, in a boot with the header's serial port on "
-            "(`fpgas-verify` and `fpgas-acorn-verify` print the same on a host set up for an Acorn):",
+            f"On a Compute Blade the result is `fail`: {ABOUT} says why. On a host set up for an Acorn, "
+            "`fpgas-verify` and `fpgas-acorn-verify` print the same. This is what a Compute Blade with a Compute "
+            "Module 5 prints in a boot with the header's serial port on. The card is an Acorn CLE-101, on the image "
+            "it was sold with:",
             "",
             transcript(BLADE_FAIL).strip(),
             "",
@@ -488,9 +495,9 @@ def pages(c):
             "It does not change the result.",
             "",
             "A card on the vendor's XDMA sample image gets the same tests as one on SQRL's image (version "
-            "0.0.post1220 or newer): `pcie-link` and `rp1-pio` pass, `jtag` fails as above, and the rest "
-            "are `not run`. Its summary line reads `acorn -: fail`, naming no variant, and the first `What to do:` "
-            "line says the board runs Xilinx's XDMA sample design.",
+            "0.0.post1220 or newer). On the XDMA sample image, `pcie-link` and `rp1-pio` pass, `jtag` fails as "
+            "above, and the rest are `not run`. The card's summary line reads `acorn -: fail`, naming no variant, "
+            "and the first `What to do:` line says the board runs Xilinx's XDMA sample design.",
             "",
             "A pass lists every test with `pass` and ends there, with no `RESULT:` part. On a Compute Blade "
             "`p2-gpio` stays `not run`, because J5 and H5 are not wired.",
@@ -527,7 +534,7 @@ def pages(c):
         "",
         "## From a failing line to the wire",
         "",
-        "Find the failing line in the table, then the wire in the two cavity pictures under it: the number in a "
+        "Find the failing line in the table, then the wire in the two cavity pictures under it. The number in a "
         "cavity is the number on the wire's flag.",
         "",
         "To move a wire, the cable goes through the same checks as a new one before any boot:",
@@ -535,13 +542,14 @@ def pages(c):
         f"1. {c.power_off}",
         "2. Take the card out and pull both plugs from its sockets.",
         "3. Move the wire.",
-        f"4. Check that cable's plug contacts against its housing with the meter, as {steps.meter_check_steps(c)} of "
-        f"{link('jtag-2')} or {link('uart-2')} do.",
+        "4. Check that cable's plug contacts against its housing with the meter. "
+        f"Do that check as {steps.meter_check_steps(c)} of {link('jtag-2')} do for the JTAG cable. "
+        f"Do that check as {steps.meter_check_steps(c)} of {link('uart-2')} do for the UART cable.",
         f"5. Run the bench check, with the card out: {link('bench')}.",
         f"6. Fit the cables: {link('fit')}.",
         (
-            f"7. Ask the site operator, then boot the blade. The install is gone after the boot: install the packages "
-            f"again, as in {BLADE_CHECK}, and run the check again."
+            f"7. Ask the site operator, then boot the blade. The install is gone after the boot, so install the "
+            f"packages again, as in {BLADE_CHECK}. Then run the check again."
             if c.key == "blade"
             else "7. Boot the Pi and run the check again."
         ),
@@ -550,8 +558,8 @@ def pages(c):
         + (
             ": `sudo fpgas-acorn-verify --no-publish --test p2-serial`, or `sudo fpgas-acorn-verify --no-publish "
             f"--test jtag`. Run `--test jtag` only {JTAG_CONDITIONS}. In a boot with the header's serial port off, "
-            f"the same goes for the whole check, which runs `jtag` too ({BLADE_CHECK}). Each prints the usual summary, "
-            "then the whole report as JSON."
+            "the same goes for the whole check, which runs `jtag` too. "
+            f"The whole check: {BLADE_CHECK}. Each prints the usual summary, then the whole report as JSON."
             if c.key == "blade"
             else ": `sudo fpgas-acorn-verify --test jtag`, or `--test p2-serial`. Each prints the usual summary, then "
             "the whole report as JSON."
@@ -568,7 +576,7 @@ def pages(c):
     fails += [
         wire_examples.strip(),
         "",
-        "A failing line that is not in the table above is not about a wire of the cables: "
+        "A failing line that is not in the table above is not about a wire of the cables. "
         f"{link('check-2b')} has every other message the check gives about an Acorn.",
         "",
     ]
@@ -578,7 +586,7 @@ def pages(c):
         "## Every other message about an Acorn",
         "",
         f"The check's own words, from the tool's list of [common failures]({FAILURES}), which has the other "
-        "boards' too. A wire of the cables is behind the `jtag` and `p2-…` lines only; for those, "
+        "boards' too. A wire of the cables is behind the `jtag` and `p2-…` lines only. For those, "
         f"{link('check-2')} goes from the line to the wire.",
         "",
         failures(c).strip(),

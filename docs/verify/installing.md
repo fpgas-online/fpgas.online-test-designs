@@ -70,6 +70,9 @@ sudo apt install fpgas-online-arty-debug   # fpgas-arty-debug
 
 `fpgas-verify --list` lists the installed boards and the one this host is set up for.
 
+Where step 2 applies, `dpkg -l 'openfpgaloader*'` lists `openfpgaloader-fpgasonline` or
+`openfpgaloader-fpgasonline-git` (the repository's release and git builds), not Debian's `openfpgaloader`.
+
 ### If it fails
 
 - `apt` cannot find a package: the repository line of step 1 is missing, or step 3 was not run after it.

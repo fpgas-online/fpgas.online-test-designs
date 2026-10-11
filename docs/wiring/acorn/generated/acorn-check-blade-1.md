@@ -8,7 +8,7 @@
 
 ## Steps
 
-**1.** Install the Acorn's packages. A Compute Blade that boots from the network has its root file system in memory (`overlayroot=tmpfs`): what you install is gone at the next boot, and so is the check that would run at boot. So install after each boot. Ask the site operator before you reboot a blade: a reboot ends a visitor's session on it, the same harm as a power-off.
+**1.** Install the Acorn's packages. A Compute Blade that boots from the network has its root file system in memory (`overlayroot=tmpfs`). What you install is gone at the next boot, and so is the check that would run at boot. So install after each boot. Ask the site operator before you reboot a blade: a reboot ends a visitor's session on it, the same harm as a power-off.
 
 ```bash
 # 1. The two apt repositories the packages come from.
@@ -29,7 +29,7 @@ sudo apt install fpgas-online-acorn
 fpgas-verify --list
 ```
 
-**2.** In a boot with the header's serial port off, check GPIO14 before the check runs: steps 7 and 8 of [How to make a Compute Blade boot ready for JTAG](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html) (check that GPIO14 is free; check that nothing on the card drives GPIO14). If either fails, do not run the check in that boot: something holds or drives the JTAG TMS wire. In a boot with the port on, go to the next step: `jtag` fails there without running the JTAG tool.
+**2.** In a boot with the header's serial port off, check GPIO14 before the check runs. The checks are steps 7 and 8 of [How to make a Compute Blade boot ready for JTAG](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html). Step 7 checks that GPIO14 is free, and step 8 checks that nothing on the card drives GPIO14. If either fails, do not run the check in that boot: something holds or drives the JTAG TMS wire. In a boot with the port on, go to the next step: `jtag` fails there without running the JTAG tool.
 
 **3.** Run the check. Nothing is sent to the site: `--no-publish` makes sure.
 
@@ -39,9 +39,9 @@ sudo fpgas-acorn-verify --no-publish
 
 ## Check
 
-There is one result, **pass** or **fail**, and only a pass exits 0. The summary on the terminal lists every test in the order it ran, with its result. A check that did not pass ends with `RESULT:`, a `failed:` line for each failed test, a `not run:` line for the tests that did not run and why, and `What to do:`.
+There is one result, **pass** or **fail**, and only a pass exits 0. The summary on the terminal lists every test in the order it ran, with its result. A check that did not pass ends with `RESULT:`. Under `RESULT:` come a `failed:` line for each failed test, a `not run:` line for the tests that did not run and why, and `What to do:`.
 
-On a Compute Blade the result is `fail`: [The Acorn check](https://docs.fpgas.online/en/latest/boards/acorn/checks/about.html) says why. A Compute Blade with a Compute Module 5 and an Acorn CLE-101 on the image it was sold with prints this, in a boot with the header's serial port on (`fpgas-verify` and `fpgas-acorn-verify` print the same on a host set up for an Acorn):
+On a Compute Blade the result is `fail`: [The Acorn check](https://docs.fpgas.online/en/latest/boards/acorn/checks/about.html) says why. On a host set up for an Acorn, `fpgas-verify` and `fpgas-acorn-verify` print the same. This is what a Compute Blade with a Compute Module 5 prints in a boot with the header's serial port on. The card is an Acorn CLE-101, on the image it was sold with:
 
 ```text
 $ sudo fpgas-verify --no-publish
@@ -99,7 +99,7 @@ The whole report, for a program to read (JSON): /run/fpgas-online/verify.json
 
 A blade whose own name does not resolve prints `sudo: unable to resolve host …` before the output. It does not change the result.
 
-A card on the vendor's XDMA sample image gets the same tests as one on SQRL's image (version 0.0.post1220 or newer): `pcie-link` and `rp1-pio` pass, `jtag` fails as above, and the rest are `not run`. Its summary line reads `acorn -: fail`, naming no variant, and the first `What to do:` line says the board runs Xilinx's XDMA sample design.
+A card on the vendor's XDMA sample image gets the same tests as one on SQRL's image (version 0.0.post1220 or newer). On the XDMA sample image, `pcie-link` and `rp1-pio` pass, `jtag` fails as above, and the rest are `not run`. The card's summary line reads `acorn -: fail`, naming no variant, and the first `What to do:` line says the board runs Xilinx's XDMA sample design.
 
 A pass lists every test with `pass` and ends there, with no `RESULT:` part. On a Compute Blade `p2-gpio` stays `not run`, because J5 and H5 are not wired.
 

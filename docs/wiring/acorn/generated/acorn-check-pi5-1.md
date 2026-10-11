@@ -37,7 +37,7 @@ sudo fpgas-acorn-verify --no-publish
 
 ## Check
 
-There is one result, **pass** or **fail**, and only a pass exits 0. The summary on the terminal lists every test in the order it ran, with its result. A check that did not pass ends with `RESULT:`, a `failed:` line for each failed test, a `not run:` line for the tests that did not run and why, and `What to do:`.
+There is one result, **pass** or **fail**, and only a pass exits 0. The summary on the terminal lists every test in the order it ran, with its result. A check that did not pass ends with `RESULT:`. Under `RESULT:` come a `failed:` line for each failed test, a `not run:` line for the tests that did not run and why, and `What to do:`.
 
 A pass, here as `fpgas-verify` prints it (on a host set up for an Acorn the two programs print the same):
 
