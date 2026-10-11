@@ -680,7 +680,7 @@ def test_no_page_has_a_beep_show_that_ground_is_ground(key):
         assert "beep shows it" not in flat and "beep is what shows it" not in flat and "is what shows it" not in flat
         assert "reaches nothing" not in flat
     bench = " ".join(steps.guide(c)[steps.guide_name(c, "bench")].split())
-    assert "shows only that contact 1 and the shell are joined" in bench
+    assert f"shows only that contact 1 and {c.reference_short} are joined" in bench
     for connector in wiring.CONNECTORS:
         assert "shows only that wire 1 and the pad are joined" in " ".join(words(steps.ground_check(connector)))
 
@@ -868,3 +868,23 @@ def test_the_bench_check_and_the_fitting_say_the_hat_has_its_stacking_header_and
     assert steps.hat_header(wiring.CARRIERS["blade"]) == ""
     # the pictures' captions use the same name for the header
     assert "without its stacking header" in " ".join(words(steps.reach(c)))
+
+
+def test_the_pi_5_bench_check_probes_a_ground_pin_no_housing_covers_and_the_blade_keeps_its_shell():
+    pi, blade = wiring.CARRIERS["pi5"], wiring.CARRIERS["blade"]
+    key, pin = pi.free_ground()
+    header = pi.headers[key]
+    assert pin in header.grounds and pin not in {n for a, b in header.housings for n in range(a, b + 1)}
+    assert (key, pin) == ("gpio", 14) and pi.reference_short == "pin 14" and pi.shell == ""
+    bench = " ".join(steps.guide(pi)[steps.guide_name(pi, "bench")].split())
+    assert "Put the other on pin 14 of the 40-pin header, a ground pin that no housing covers: it must beep." in bench
+    prose = re.sub(r"!\[[^\]]*\]\([^)]*\)(\{[^}]*\})?", "", bench)  # a picture's file name says "shell"
+    assert "USB" not in prose and "shell" not in prose
+    picture = " ".join(words(steps.shell_check(pi)))
+    assert "Touch pin 14 of the 40-pin header" in picture and "header pin 14 (GND)" in picture and "USB" not in picture
+    assert blade.shell == "the metal shell of a USB socket on the Compute Blade" and blade.free_ground() is None
+    assert "Put the other on the metal shell of a USB socket on the Compute Blade: it must beep." in " ".join(
+        steps.guide(blade)[steps.guide_name(blade, "bench")].split()
+    )
+    assert any("Raspberry Pi's pinout" in s["source"] and s.get("carrier") == "pi5" for s in wiring.SOURCES)
+    assert all(wiring.CARRIERS["pi5"].headers["gpio"].pins[p]["name"] == "GND" for p in (6, 9, 20, 25))

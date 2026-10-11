@@ -47,6 +47,7 @@ class Header:
     numbering: str = "across"  # how the printed numbers run, seen from above: "across" rows or "down" columns
     count: int = 0  # how many pins the whole header has
     printed: bool = False  # the pin numbers are printed on the board beside the header
+    grounds: tuple = ()  # the header's ground pins, where `pins` does not list them all: a probe's reference
 
     def grid(self, first, last):
         """Pins `first` to `last` as they sit on the board seen from above: one tuple per row, left to right."""
@@ -111,7 +112,7 @@ class Carrier:
     wires: dict  # signal -> (header key, pin)
     parts: list  # [{qty, part, number?, note?}] besides what the wiring itself counts
     host: str = ""  # the host in a word, for a pin name that needs its owner: "blade TX"
-    shell: str = ""  # bare metal of the host that is its ground, for a meter probe
+    shell: str = ""  # bare metal of the host that is its ground, for a meter probe; "" where a header pin does it
     power_off: str = ""  # how the host is made dead before the cables are fitted, as a sentence
     contact: str = ""  # whom the reader tells what the guide cannot settle: "Tell {contact}."
     hat: Hat | None = None  # the HAT the pictures draw on the host, if it has one
@@ -120,6 +121,33 @@ class Carrier:
         """The host's name for the pin a signal lands on, as the sheet prints it; None for none."""
         hdr, pin = self.wires[sig]
         return self.headers[hdr].pins[pin].get("tag")
+
+    def free_ground(self):
+        """(header key, pin) of the first ground pin of a header that no housing covers, or None.
+
+        A header's `grounds` are its ground pins as the maker numbers them; a pin inside one of its housings is
+        out, because a housing on it hides it from a probe.
+        """
+        for key, h in self.headers.items():
+            for pin in h.grounds:
+                if not any(a <= pin <= b for a, b in h.housings):
+                    return key, pin
+        return None
+
+    @property
+    def reference(self):
+        """What a meter probe touches as the host's ground, as words: its bare metal, or a free header ground pin."""
+        if self.shell:
+            return self.shell
+        key, pin = self.free_ground()
+        return f"pin {pin} of the {self.headers[key].name}, a ground pin that no housing covers"
+
+    @property
+    def reference_short(self):
+        """The same, after it has been said once: "the shell", or "pin 14"."""
+        if self.shell:
+            return "the shell"
+        return f"pin {self.free_ground()[1]}"
 
     def unused(self, connector):
         """Signals of a connector that this carrier leaves cut back, VCC apart."""
@@ -170,12 +198,13 @@ def _carrier(key, raw):
             h.get("numbering", "across"),
             h.get("count", max(pins)),
             h.get("printed", False),
+            tuple(h.get("grounds", [])),
         )
     wires = {s: (w[0], int(w[1])) for s, w in raw["wires"].items()}
     parts = [*raw.get("parts", []), *DATA.get("parts", [])]  # this carrier's own, then what every carrier needs
     c = Carrier(
         key, raw["name"], raw["jtag_pins"], set(raw.get("resistors", [])), raw.get("resistor_value", ""), headers,
-        wires, parts, raw.get("host", raw["name"]), raw["shell"], raw.get("power_off", "Power off the host."),
+        wires, parts, raw.get("host", raw["name"]), raw.get("shell", ""), raw.get("power_off", "Power off the host."),
         raw.get("contact", CONTACT), _hat(key, raw.get("hat")),
     )  # fmt: skip
     _check(c)
@@ -221,6 +250,12 @@ def _check(c):
             errors.append(f"{c.key}: a part needs a whole `qty` of 1 or more and a `part`: {part}")
         if set(part) - {"qty", "part", "number", "note"}:
             errors.append(f"{c.key}: part {part.get('part')!r} has keys other than qty, part, number, note")
+    if not c.shell and not c.free_ground():
+        errors.append(f"{c.key}: no `shell`, and no ground pin outside every housing for a probe")
+    for hk, h in c.headers.items():
+        for pin in h.grounds:
+            if pin in h.pins and h.pins[pin]["name"] != "GND":
+                errors.append(f"{c.key}: {hk} pin {pin} is listed as ground but is {h.pins[pin]['name']}")
     if c.hat and not any(c.hat.name in part["part"] for part in c.parts):
         errors.append(f"{c.key}: no part names the HAT the pictures draw, {c.hat.name}")
     if c.resistors and not c.resistor_value:

@@ -45,7 +45,8 @@ VCC = { label = "VCC", what = "3.3 V from the Acorn" }
 #   printed: true where the pin numbers are printed on the board beside the header.
 # host (on the carrier): the host in a word, put before a pin name that does not say whose it is ("blade TX").
 # power_off (on the carrier): how the host is made dead before the cables are fitted, as a sentence.
-# shell (on the carrier): bare metal of the host that is its ground, for a meter probe.
+# shell (on the carrier): bare metal of the host that is its ground, for a meter probe. A carrier with none has a header
+#   with `grounds` (the ground pins of its header, by number) and the probe goes on the first of them that no housing covers.
 # wires maps each connected signal to [header, pin]. Signals not listed are cut back: VCC always.
 #
 # What fpgas-verify reads to check a host of this carrier (verify/.../boards/acorn/setup.py):
@@ -114,6 +115,11 @@ source = "the package list of Waveshare's product page (https://www.waveshare.co
 carrier = "pi5"
 claim = "That the HAT takes an M.2 2280 card, held by a screw at its far end"
 source = "Waveshare's product page (https://www.waveshare.com/poe-m.2-hat-plus-b.htm): \"Compatible With 2230 / 2242 / 2260 / 2280 Size M.2 Solid State Drive\", and its drawing, which shows a standoff for each of the four lengths. The other Waveshare PoE M.2 HAT+, without the (B), is listed for 2230 and 2242 cards only, and is not in this guide"
+
+[[sources]]
+carrier = "pi5"
+claim = "That pins 6, 9, 14, 20, 25, 30, 34 and 39 of the 40-pin header are ground, so that the bench check can probe pin 14, which neither housing covers"
+source = "Raspberry Pi's pinout of the 40-pin header, in the section \"GPIO and the 40-pin header\" of its computer hardware documentation (https://www.raspberrypi.com/documentation/computers/raspberry-pi.html#gpio). That a probe reaches pin 14 on a Pi 5 under the HAT, on the stacking header's pin: not verified by us"
 
 [[sources]]
 carrier = "pi5"
@@ -233,7 +239,6 @@ note = "to log in to the blade and run the check ([How to run the Acorn check on
 [carriers.pi5]
 name = "Raspberry Pi 5"
 host = "Pi"
-shell = "the metal shell of a USB socket on the Raspberry Pi 5"
 power_off = "Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE."
 jtag_pins = "10:9:11:8"
 jtag_cable = "libgpiod"
@@ -291,6 +296,8 @@ columns = 2
 numbering = "across"
 count = 40
 housings = [[5, 10], [19, 26]]
+# The 40-pin header's ground pins (Raspberry Pi's pinout); `pins` lists only those near the wiring.
+grounds = [6, 9, 14, 20, 25, 30, 34, 39]
 
 [carriers.pi5.headers.gpio.pins]
 1 = { name = "3.3 V" }

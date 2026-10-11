@@ -1556,11 +1556,12 @@ def procedure_parts(c, restart=False):
         )
     step(
         f"{BENCH_BEEP} Put one meter probe "
-        f"on contact 1 ({label_of(first)}) of a plug. Put the other on {c.shell}: it must "
+        f"on contact 1 ({label_of(first)}) of a plug. Put the other on {c.reference}: it must "
         "beep. Do the same for the other plug.\n\n"
         f"Then contact {len(pins)} of each plug ({label_of(pins[-1])}, the wire "
-        "you cut back): against the shell and against every other contact it must be silent. Contact 1's beep "
-        "shows only that contact 1 and the shell are joined. " + ground_shows_way_round(c),
+        f"you cut back): against {c.reference_short} and against every other contact it must be silent. "
+        "Contact 1's beep "
+        f"shows only that contact 1 and {c.reference_short} are joined. " + ground_shows_way_round(c),
         (f"The bench check on a {c.name}", png(shell_check_name(c))),
     )
     actions = fit_actions(c)
@@ -1776,7 +1777,8 @@ def guide(c):
     out[guide_name(c, "bench")] = body(
         need_lists(["both finished cables", f"the {c.name}"], ["a multimeter with a continuity buzzer"]),
         bench,
-        f"Contact 1 of each plug beeps to the shell (step {shell}). Contact 6 of each plug is silent against the shell "
+        f"Contact 1 of each plug beeps to {c.reference_short} (step {shell}). "
+        f"Contact 6 of each plug is silent against {c.reference_short} "
         "and every other contact. Each housing's marked corner is on the pin its step names.",
         "Do not fit the cables. A contact 1 that does not beep means that cable's ground wire is open or in the wrong "
         "cavity. A contact 6 that beeps anywhere means the 3.3 V wire was not the one cut back. Go back to that "
@@ -2142,13 +2144,25 @@ def shell_check(c):
         target = ((shell[0] + shell[2]) / 2, (shell[1] + shell[3]) / 2)
         y = py + ph + 40
     else:
-        ty = para(sh, 30, y + 6, f"Touch {c.shell}.", W - 40, "bold")
+        ty = para(sh, 30, y + 6, f"Touch {c.reference}.", W - 40, "bold")
         ty = para(
-            sh, 30, ty, "The USB socket is not in this photograph: it is on the Pi itself, under the HAT.", W - 40
+            sh,
+            30,
+            ty,
+            "The pin comes up through the HAT, in the yellow box. The photo shows the HAT without its stacking header.",
+            W - 40,
         )
-        a, _ = sh.tag(420, ty + 22, "USB socket's metal shell", BOX, size=T, h=24, fg=INK, stroke=INK, pad=6)
-        target = (a, ty + 22)
-        y = ty + 84
+        header_key, pin = c.free_ground()
+        rows = c.headers[header_key].grid(1, c.headers[header_key].count)
+        r = next(i for i, row in enumerate(rows) if pin in row)
+        hat = c.hat
+        (px, py, pw, ph), k = sh.photo(hat.photo, 30, ty + 6, 250)
+        cx, cy = px + hat.columns[rows[r].index(pin)] * k, py + (hat.row + hat.pitch * r) * k
+        half = hat.pitch * k / 2
+        highlight(sh, (cx - half, cy - half, cx + half, cy + half))
+        _, b = sh.tag(px + pw + 20, cy, f"header pin {pin} (GND)", BOX, size=T, h=24, fg=INK, stroke=INK, pad=6)
+        target = (b, cy)
+        y = py + ph + 30
     out, body = plug(sh, 90, y, pins)
     sh.text(body[0], body[1] - 12, "one probe on contact 1 (GND) of a plug", T)
     mx, my = 600, y - 6
@@ -2166,9 +2180,9 @@ def shell_check(c):
     sh.add(f'<circle cx="{p1[0]}" cy="{p1[1]}" r="5" fill="{RED}"/>')
     sh.add(f'<circle cx="{target[0]}" cy="{target[1]}" r="5" fill="{BLACK_WIRE}"/>')
     y = my + 150 + 60
-    y = para(sh, 30, y, "Contact 1 of each plug to the shell: the meter must beep.", W - 40, "bold")
-    y = para(sh, 30, y + 4, "Contact 6 of each plug (VCC, cut back): silent to the shell and to every other contact.",
-             W - 40, "bold")  # fmt: skip
+    y = para(sh, 30, y, f"Contact 1 of each plug to {c.reference_short}: the meter must beep.", W - 40, "bold")
+    silent = f"Contact 6 of each plug (VCC, cut back): silent to {c.reference_short} and to every other contact."
+    y = para(sh, 30, y + 4, silent, W - 40, "bold")
     y = para(sh, 30, y + 4, "The plug and the meter are sketched.", W - 40, fill=MUTED)
     sh.h = math.ceil(y - LINE + 14)
     sh.check(f"shell check {c.key}")
