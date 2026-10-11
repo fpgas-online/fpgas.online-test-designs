@@ -5,7 +5,7 @@ know what the check does to the card and the host, how the packages survive a re
 needs.
 Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
 
-## Checking an Acorn's wiring
+## Checking the wiring of an Acorn
 
 The Acorn's check doubles as a wiring test: each of its tests uses a known set of wires between the card and
 the host, so which tests pass and what a failing one says point at the wire. That is a page of its own for

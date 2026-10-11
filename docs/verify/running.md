@@ -49,7 +49,7 @@ sudo fpgas-acorn-debug identify            # the same as fpgas-acorn-verify --id
   false, "why": "..."}` and `not published: ...`. On a fleet Pi, `not published: no file ...` in
   `journalctl -b -u fpgas-verify` means the root lost its `fleet.ini`.
 * `[verify] power-cycle-check = on` in the same files switches on the Acorn's [power-cycle
-  check](acorn-power-cycle.md#the-acorns-power-cycle-check-opt-in). It is off unless a file says so: the fpgas.online Pi root sets it
+  check](acorn-power-cycle.md#the-acorn-power-cycle-check-opt-in). It is off unless a file says so: the fpgas.online Pi root sets it
   in `/etc/fpgas-verify/`; elsewhere it stays off.
 * Options for the boot run go in `FPGAS_VERIFY_ARGS` in `/etc/default/fpgas-verify`. The package installs that
   file with every line a comment (it is what `EnvironmentFile=` in `systemctl cat fpgas-verify` names), so

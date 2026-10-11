@@ -1,10 +1,10 @@
-# fpgas-verify: the Acorn's power-cycle check, and the details of its tests
+# fpgas-verify: the Acorn power-cycle check and test details
 
 You have an Acorn and want to know how its opt-in power-cycle check works, or the details of its tests: the
 `ddr` test step by step, `not_run`, the driver it unbinds and the pins it puts back.
 Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
 
-## The Acorn's power-cycle check (opt-in)
+## The Acorn power-cycle check (opt-in)
 
 A board is to be tested as its flash configures it. If the FPGA kept its configuration while its Pi restarted
 (the card fed from somewhere else, a restart that does not reach the card), it still holds whatever was in it
@@ -43,7 +43,7 @@ there to catch a card that did not restart with its Pi, not a visitor who sets o
 `fpgas-verify --test power-cycle` runs it alone, when the setting is on; with the setting off it is an error
 that says how to switch it on.
 
-## The Acorn's tests in detail
+## The Acorn tests in detail
 
 * `ddr` in detail ([`bist.py`](../../verify/src/fpgas_online_verify/boards/acorn/bist.py), the same code
   [`selftest.py`](../../designs/acorn-pcie/host/selftest.py) runs):
