@@ -20,12 +20,19 @@ There is one result: **pass** or **fail**. A fail is named for its worst cause:
 * The check goes on after a fault wherever it can, so the report lists every fault it found.
 * The summary goes to stderr; at boot, to the journal (`journalctl -b -u fpgas-verify`). It has two parts:
   * every test in the order it ran, with its result, and a failed test's last 8 output lines;
-  * for a check that did not pass, a plain conclusion, last, so it is what is left on the terminal:
-    `RESULT:` and what it means; each board with how many tests passed, failed and were not run; a `fault:`
-    line for each thing wrong that is no one test's (the board runs SQRL's image, say), a `failed:` line for
-    each failed test with its reason, and a `not run:` line for the tests that did not run and why (a test that
-    does not apply to the setup is `not run`, and is not a failure); then `What to do:`, chosen from the
-    faults found; then where the JSON report is.
+  * for a check that did not pass, a plain conclusion, last, so it is what is left on the terminal. It holds,
+    in order:
+    * `RESULT:` and what it means, with the check's reason on the next line when it has one;
+    * each board with how many tests passed, failed and were not run, and under it:
+      * a `fault:` line for each thing wrong that is no one test's (the board runs SQRL's image, say);
+      * a `failed:` line for each failed test, with its reason;
+      * a `not run:` line for the tests that did not run, and why (a test that does not apply to the setup
+        is `not run`, and is not a failure);
+      * a `warning (not why it did not pass):` line for each warning;
+    * a `changed:` line for each board or flash that differs from what was last recorded;
+    * `What to do:`, chosen from the faults found (for a `changed:` line that was meant, it says to accept the
+      change with `sudo fpgas-verify --update`);
+    * where the JSON report is.
 * A reason is always one line, however long, so it can be searched for as it is ([Common
   failures](common-failures.md#common-failures)).
 * The JSON report is in `/run/fpgas-online/verify.json`. It is replaced whole (written beside itself and

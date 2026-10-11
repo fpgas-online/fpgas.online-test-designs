@@ -36,7 +36,9 @@ gpiodetect                  # the header's chip: `pinctrl-rp1` on a Compute Modu
 gpioinfo -c gpiochip0 | grep -E 'line +(2|3|4|14):'   # with that chip's name (gpiod 2; gpiod 1: `gpioinfo gpiochip0`)
 ```
 
-**8.** Check that nothing on the card drives GPIO14. Always run this step, on each blade you run JTAG on. There are two reasons. A card that drives GPIO14 would drive against the blade's own pin. A cable whose J2 wire has no 470 Ω resistor has nothing to limit the current. Note what `pinctrl get 14` prints, then:
+**8.** Check that nothing on the card drives GPIO14. Always run this step, on each blade you run JTAG on.
+
+There are two reasons. A card that drives GPIO14 would drive against the blade's own pin. A cable whose J2 wire has no 470 Ω resistor has nothing to limit the current. Note what `pinctrl get 14` prints, then:
 
 ```bash
 sudo pinctrl set 14 ip pd; pinctrl lev 14   # must print 0

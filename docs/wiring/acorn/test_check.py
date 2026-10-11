@@ -220,10 +220,10 @@ def test_a_caption_cannot_outlive_its_transcript_and_a_swap_stays_on_one_cable()
         wiring.CARRIERS["pi5"]
     )
     pi5 = wiring.CARRIERS["pi5"]  # the link to converting is the Pi 5's only: a blade is told not to convert
-    assert "[converting a card](https://" in check.failures(pi5) and "acorn-pcie-programming.md]" not in check.failures(
+    assert docs_pages.link("pi5", "convert") in check.failures(
         pi5
-    )
-    assert "[converting a card]" not in check.failures(blade)
+    ) and "acorn-pcie-programming.md]" not in check.failures(pi5)
+    assert docs_pages.url("pi5", "convert") not in check.failures(blade)
 
 
 def test_a_blade_page_prints_the_blades_own_advice_and_never_advice_to_convert():
@@ -258,7 +258,9 @@ def test_moving_a_wire_sends_the_cable_through_the_new_cables_checks_before_a_bo
     """Moving a wire is numbered steps, in this order: power off, card out, move, meter, bench check, fit, boot."""
     for c in wiring.CARRIERS.values():
         body = "\n".join(check.pages(c).values())
-        start = body.index("To move a wire, the cable goes through the same checks as a new one before any boot:")
+        start = body.index(
+            "To move a wire, the cable goes through the same checks as when the cable was built, before any boot:"
+        )
         block = body[start : body.index("\n\n", body.index("\n1. ", start))]
         steps_ = re.findall(r"^(\d)\. (.*(?:\n   .*)*)$", block, re.M)  # a step with the items under it
         assert [int(n) for n, _ in steps_] == list(range(1, 8))

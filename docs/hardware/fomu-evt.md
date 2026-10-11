@@ -22,7 +22,7 @@ The Fomu is a tiny FPGA board that fits inside a USB port, designed by Sean Cros
 sudo apt install fpgas-online-fomu
 ```
 
-**2.** Check the board now. Nothing is sent to the site: `--no-publish` makes sure.
+**2.** Check the board. Nothing is sent to the site: `--no-publish` makes sure.
 
 ```bash
 sudo fpgas-fomu-verify --no-publish
@@ -36,14 +36,10 @@ The first line of the output starts with `fpgas-verify: pass`. The board's line 
 
 - The first line names the result, and the output ends with `RESULT:` and `What to do:`. [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result) says what each result means.
 - [fpgas-verify: common failures](../verify/common-failures.md#common-failures) lists the messages and what to do about each.
-- To run one test with its output live, install `fpgas-online-fomu-debug` and run it:
-
-```bash
-sudo fpgas-fomu-debug test spiflash
-```
 
 ### Next
 
+- To run one test with its output live: install `fpgas-online-fomu-debug`, then `sudo fpgas-fomu-debug test spiflash`.
 - [The Fomu EVT check at boot](../verify/tests.md#the-fomu-evt-check-at-boot): what the check does, test by test.
 - [Fomu EVT packages](../verify/installing.md#fomu-evt-packages): what each package installs.
 - [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result): the report, `changed` and `--update`.

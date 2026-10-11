@@ -6,7 +6,7 @@ The check's own words, from the tool's list of [common failures](https://docs.fp
 
 | It says | Meaning, and what to do |
 |---|---|
-| `fail`: `unconverted: …` | an Acorn on SQRL's factory image (or the XDMA sample). Convert it ([converting a card](https://docs.fpgas.online/en/latest/boards/acorn/pcie-programming.html)). |
+| `fail`: `unconverted: …` | an Acorn on SQRL's factory image (or the XDMA sample). Convert it ([How to install the fpgas.online images on an Acorn](https://docs.fpgas.online/en/latest/boards/acorn/setup/install-images.html)). |
 | `fail`: `… is not a design we built` | a Xilinx PCIe design the Acorn check does not know; its flash is not read |
 | `fail`: `running the golden image` | the Acorn's operational slot did not boot; it fell back to golden |
 | `fail`: `link is x2, expected x1` | the Acorn's PCIe link is not the setup's (`expected.toml`) |
@@ -21,4 +21,4 @@ The check's own words, from the tool's list of [common failures](https://docs.fp
 | `fail`: `power-cycle fail: the FPGA has not restarted since an earlier boot's check` | the Acorn kept its configuration across the Pi's restart: power-cycle the Pi (PoE). [The power-cycle check](https://docs.fpgas.online/en/latest/verify/acorn-power-cycle.html#the-acorn-power-cycle-check-opt-in) |
 | `error`: `this host (…) is not an Acorn setup in wiring.toml` | an Acorn on a host neither setup has: add the host to `wiring.toml` if it is a real setup |
 | `error`: `… does not match its manifest` / `manifest.json is missing` | `sudo apt install --reinstall fpgas-online-<board>-bitstreams` |
-| `changed` | the board or its flash differs from the recorded state. Meant it? Run the check again with `--update` to record what it finds. Run `sudo fpgas-verify --update`. |
+| `changed` | the board or its flash differs from the recorded state. Meant it? Record what the check finds. Run `sudo fpgas-verify --update`. |

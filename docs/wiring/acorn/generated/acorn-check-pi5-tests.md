@@ -2,8 +2,8 @@
 
 ## Which test uses which wire
 
-![Both cables of an Acorn on a Raspberry Pi 5: each wire, where it lands, and the test that proves it](acorn-check-pi5-wires.png){.only-light}
-![Both cables of an Acorn on a Raspberry Pi 5: each wire, where it lands, and the test that proves it](acorn-check-pi5-wires-dark.png){.only-dark}
+![Each wire of both cables, where it lands, and its test](acorn-check-pi5-wires.png){.only-light}
+![Each wire of both cables, where it lands, and its test](acorn-check-pi5-wires-dark.png){.only-dark}
 
 | Test | Wires it uses | A pass shows | Runs on a card still on SQRL's image |
 |---|---|---|---|
@@ -16,4 +16,4 @@
 | `rp1-pio` | no wire: `/dev/pio0` on a Pi 5 or CM5 | nothing about the wiring (not run on other hosts) | yes |
 | `flash`, `ddr`, `scratch` | no wire of the cable, except that `scratch` also goes over the serial pair | nothing about the wiring | no |
 
-On a card that has not been converted, `pcie-link` and `jtag` are the wiring tests. The P2 wires are tested once the card runs the fpgas.online design ([converting a card](https://docs.fpgas.online/en/latest/boards/acorn/pcie-programming.html)).
+On a card that has not been converted, `pcie-link` and `jtag` are the wiring tests. The P2 wires are tested once the card runs the fpgas.online design ([How to install the fpgas.online images on an Acorn](https://docs.fpgas.online/en/latest/boards/acorn/setup/install-images.html)).

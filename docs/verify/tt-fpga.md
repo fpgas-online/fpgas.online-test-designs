@@ -22,7 +22,7 @@ Before the first test, while it holds `/dev/ttyACM0`:
    for rpi-hwid's Tiny Tapeout label ([TT FPGA identity](#tt-fpga-identity),
    [Tiny Tapeout fields](../identity.md#tiny-tapeout-fields)).
 
-Steps 2 and 3 run only when [rpi-hwid](https://github.com/mithro/rpi-hwid) is installed (`python3-rpi-hwid`,
+Starting the SDK and asking rpi-hwid (steps 2 and 3) run only when [rpi-hwid](https://github.com/mithro/rpi-hwid) is installed (`python3-rpi-hwid`,
 which `fpgas-online-verify` suggests, from rpi-hwid's own apt repository). Without rpi-hwid the board cannot be
 asked which Tiny Tapeout board it is: the check is an `error` and nothing is loaded.
 
@@ -39,7 +39,8 @@ Then the tests of an FPGA board, in this order:
    ([what the TT FPGA is left running](#what-the-tt-fpga-is-left-running)). If that load fails the board still
    passes, with a warning in the report.
 
-Steps 2 to 5 are for an FPGA board. A board with a Tiny Tapeout chip runs `sdk` and then
+The DIP-switch, `pin-id` and `uart` tests and the design left running (steps 2 to 5) are for an FPGA
+board. A board with a Tiny Tapeout chip runs `sdk` and then
 [the wiring test](#the-wiring-test) of its three Pmod ribbons. Nothing is loaded into it.
 
 What the check does not do, and why:
@@ -159,13 +160,12 @@ not know the board's chip cannot select a project on it:
 
 * Anything else fails the test, with what the board said: `a tt06 chip needs SDK 2.0.x on an RP2040, and the
   board runs SDK 1.2.2 on an RP2040`. A shuttle with no row fails as `no SDK release is recorded as supporting
-  a tt09 chip`: the table (`SDK_SUPPORTED` in `boards/tt_fpga.py`) gains a row when a release is known to
-  support it.
+  a tt09 chip`. The table is `SDK_SUPPORTED` in `boards/tt_fpga.py`.
 * Together with the `main.py` read (the board's `main.py` is that release's own) and the SDK having started,
   a pass means: the board answers, says what it is, and what it says is a combination the SDK's releases
   support. It compares what the board said with a table; it measures nothing on the chip.
-* An FPGA board on another release line (3.0.x, or a later 3.2.x) fails `sdk` until its row is added; its
-  designs are still loaded and tested, and the board's result is `fail`.
+* An FPGA board on a release line the table does not name (3.0.x, or a later 3.2.x) fails `sdk`. Its designs are
+  still loaded and tested, and the board's result is `fail`.
 * **What it does not test**: the chip itself, and the Pmod cabling between the demo board and the Pi. The
   cabling is the next test's: [`wiring`](#the-wiring-test) on a board with a Tiny Tapeout chip, `pin-id` on
   the FPGA board.
@@ -272,15 +272,14 @@ The output's `MEM:` lines say how much of the RP2040's heap was free with the co
 walks, while each pin-id round sends, and after the test, each after a collection. `MEM:`, `PULLS:`, `RESTORE:` and `FALLBACK:` are said again just before
 the `WIRING:` line, where the boot report keeps them, and so are the `READINGS:` lines of a fail.
 
-**Not covered:**
+### What the wiring test does not cover
 
 * Four shorts are not seen: JB9 with JB10, JC9 with JC10, JB9 with JC10 and JB10 with JC9. Each joins `uio[6]` and
   `uio[7]`, or their copies, which agree with each other, as the two are driven together. (JB9 with JC9 and JB10
   with JC10 are seen: the line is then held low, not by the Pi's pull-up.)
-* `MIN_HEAP_FREE` (27000 bytes) was measured on the TT07 board, SDK 2.0.4 (the largest drop, 17424 bytes, plus
-  headroom). A board on another shuttle may need
-  more: its shuttle file is bigger (TT06's is about twice TT07's), so its SDK leaves less heap. It then fails
-  loudly (`RP2040 heap too low`) until it has been measured.
+* `MIN_HEAP_FREE` (27000 bytes) is a TT07 board's largest drop of free heap, 17424 bytes, plus headroom. A board
+  on another shuttle may need more: its shuttle file is bigger (TT06's is about twice TT07's), so its SDK leaves
+  less heap. Such a board fails loudly (`RP2040 heap too low`).
 * A short between neighbouring wires is said as one, with where to look, not as which two wires.
 * "The board's files the same before and after" is every file by its hash, and `/boot.log` by its size: the
   board's own `main.py` rewrites it at every start (the identification start), so it is not hashed.
