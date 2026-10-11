@@ -41,7 +41,7 @@ The Acorn is a bare circuit board. Before you pick it up, touch bare metal of th
 
 With the card out of its slot, hold the card over the slot where it will sit. Lay the half for P1 from socket P1 to the Extension Port, along the way that cable will run. Lay the half for P2 from socket P2 to the UART header, along the way that cable will run. Its cut end must reach the header with some slack left to bend into the housing.
 
-If a half does not reach, stop: this guide uses each half at the length it has. Tell the site operator.
+If a half does not reach, stop: this guide uses each half at the length it has. Tell the site operator which half falls short, and by about how many millimetres.
 
 ![Where each half must reach on a Compute Blade](acorn-cable-blade-reach.png){.only-light}
 ![Where each half must reach on a Compute Blade](acorn-cable-blade-reach-dark.png){.only-dark}

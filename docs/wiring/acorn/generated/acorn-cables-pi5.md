@@ -55,7 +55,7 @@ The Acorn is a bare circuit board. Before you pick it up, touch bare metal of th
 
 With the card out of its slot, hold the card over the slot where it will sit. Lay the half for P1 from socket P1 to the 40-pin header, along the way that cable will run. Lay the half for P2 from socket P2 to the 40-pin header, along the way that cable will run. Its cut end must reach the header with some slack left to bend into the housing.
 
-If a half does not reach, stop: this guide uses each half at the length it has. Tell the fpgas.online project in an issue at [fpgas-online/fpgas.online-test-designs](https://github.com/fpgas-online/fpgas.online-test-designs/issues).
+If a half does not reach, stop: this guide uses each half at the length it has. Tell the fpgas.online project in an issue at [fpgas-online/fpgas.online-test-designs](https://github.com/fpgas-online/fpgas.online-test-designs/issues) which half falls short, and by about how many millimetres.
 
 ![Where each half must reach on a Raspberry Pi 5](acorn-cable-pi5-reach.png){.only-light}
 ![Where each half must reach on a Raspberry Pi 5](acorn-cable-pi5-reach-dark.png){.only-dark}

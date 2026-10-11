@@ -1366,7 +1366,7 @@ def procedure_parts(c, restart=False):
         + " ".join(pairs)
         + " Its cut end must reach the header with some slack left to bend into the housing."
         "\n\nIf a half does not reach, stop: this guide uses each half at the length it has. "
-        f"Tell {c.contact}.",
+        f"Tell {c.contact} which half falls short, and by about how many millimetres.",
         (
             f"Where each half must reach on a {c.name}",
             png(reach_name(c)),
