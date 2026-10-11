@@ -48,6 +48,7 @@ import re
 import shutil
 import subprocess
 import sys
+import urllib.parse
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 INSTALLING = "docs/verify/installing.md"
@@ -502,11 +503,24 @@ def page_sources():
     return urls
 
 
+def page_uris(print_uris, sources):
+    """From `apt-get --print-uris` output, the (URI, package, version) of each file that comes from a repository a
+    page added. The lines are `'URI' file size hash` (apt prints MD5Sum here; the hash is apt's to check)."""
+    out = []
+    for uri, name in re.findall(r"^'(\S+)' (\S+) \d+ \S+$", print_uris, re.M):
+        if any(uri.startswith(s) for s in sources):
+            package, version, _arch = name.removesuffix(".deb").split("_")
+            out.append((uri, package, urllib.parse.unquote(version)))  # an epoch is written %3a in the file name
+    return out
+
+
 def downloads(plan, done, failures, label):
-    """Download every package the plan's installs would take from a repository a page added, and check its size
-    and SHA256 against the index: a simulation alone never fetches a .deb, so a published index naming a missing
-    or broken file would pass. `done` holds the URIs already checked on this system."""
+    """Download every package the plan's installs would take from a repository a page added, with apt, which checks
+    each file against the index's hashes: a simulation alone never fetches a .deb, so a published index naming a
+    missing or broken file would pass. `done` holds the URIs already checked on this system."""
     sources = page_sources()
+    debs = pathlib.Path("/var/lib/target/debs")
+    debs.mkdir(parents=True, exist_ok=True)
     for _n, k, command in plan:
         if k != "install":
             continue
@@ -515,15 +529,16 @@ def downloads(plan, done, failures, label):
         )
         if rc:
             continue  # the install itself failed; that is reported already
-        for uri, _name, size, digest in re.findall(r"^'(\S+)' (\S+) (\d+) SHA256:([0-9a-f]+)$", out, re.M):
-            if uri in done or not any(uri.startswith(s) for s in sources):
+        ours = page_uris(out, sources)
+        if not ours and any(p.startswith("fpgas-online-") for p in named([(0, k, command)])):
+            failures.append(f"{label}: {command}: no file from a page's repository found; the download check read none")
+        for uri, package, version in ours:
+            if uri in done:
                 continue
             done.add(uri)
-            deb = pathlib.Path("/var/lib/target/download.deb")
-            rc, out = run(f"curl -fsSL -o {deb} '{uri}'")
-            got = run(f"sha256sum {deb}")[1].split()[0] if not rc else ""
-            if rc or deb.stat().st_size != int(size) or got != digest:
-                failures.append(f"{label}: {uri} does not download as its index says (curl exit {rc}; {out.strip()})")
+            rc, out = run(f"cd {debs} && apt-get -o APT::Get::Simulate=false -qq download '{package}={version}'")
+            if rc:
+                failures.append(f"{label}: {uri} does not download as its index says: {out.strip()[-500:]}")
             else:
                 print(f"    downloaded and checked: {uri}")
 

@@ -196,6 +196,27 @@ def test_named_is_what_the_install_commands_ask_for():
     assert check.named(plan) == {"python3-rpi-hwid", "micropython-mpremote"}
 
 
+def test_page_uris_are_the_files_from_the_pages_repositories_whatever_hash_apt_prints():
+    # as apt-get --print-uris printed them in a bookworm container (MD5Sum, not SHA256)
+    out = (
+        "'https://fpgas.online/fpgas.online-fpga-tools/bookworm/./librp1jtag0_0.0.post107%2bfpgasonline.0.0.post101"
+        "%7edeb12_arm64.deb' librp1jtag0_0.0.post107+fpgasonline.0.0.post101~deb12_arm64.deb 9332 "
+        "MD5Sum:395392992c992f828912136ac257d703\n"
+        "'https://apt.fpgas.online/bookworm/./fpgas-online-arty_0.0.post1652_all.deb' "
+        "fpgas-online-arty_0.0.post1652_all.deb 1842 MD5Sum:2f4820e7b62ae4346b1057463ef837d6\n"
+        "'http://archive.raspberrypi.com/debian/pool/main/z/zlib/zlib1g_1.2.13.dfsg-1%2brpt1_arm64.deb' "
+        "zlib1g_1%3a1.2.13.dfsg-1+rpt1_arm64.deb 94290 MD5Sum:774312206118f372f3a9bf2b15f601b9\n"
+        "'https://apt.fpgas.online/bookworm/./x_1%3a2.0_all.deb' x_1%3a2.0_all.deb 10 SHA256:ab\n"
+    )
+    sources = ["https://apt.fpgas.online/bookworm/", "https://fpgas.online/fpgas.online-fpga-tools/bookworm/"]
+    got = check.page_uris(out, sources)
+    assert [(p, v) for _u, p, v in got] == [
+        ("librp1jtag0", "0.0.post107+fpgasonline.0.0.post101~deb12"),
+        ("fpgas-online-arty", "0.0.post1652"),
+        ("x", "1:2.0"),  # an epoch, written %3a in the file name
+    ]
+
+
 def test_another_board_s_package_or_tool_is_foreign():
     boards = check.boards()
     assert check.foreign("arty", ["fpgas-online-arty-tools", "fpgas-online-verify", "libc6"], boards) == []
