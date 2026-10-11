@@ -20,11 +20,11 @@ Photos: Uptime Lab (Compute Blade), RHS Research (LiteFury underside; the Acorn 
 
 - a multimeter with a continuity buzzer, and a fine probe tip for it or a sewing pin to hold against a probe
 - a ruler marked in millimetres
-- side cutters and wire strippers
-- the crimping tool
+- side cutters, wire strippers and the crimping tool
 - a hot-air tool
 - a soldering iron
 - masking tape and a fine pen
+- a PH1 (Phillips size 1) screwdriver
 
 ## Steps
 

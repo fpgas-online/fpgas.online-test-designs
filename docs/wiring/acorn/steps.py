@@ -1635,11 +1635,11 @@ def needs(c, connector):
     tools = [
         "a multimeter with a continuity buzzer, and a fine probe tip for it or a sewing pin to hold against a probe",
         "a ruler marked in millimetres",
-        "side cutters and wire strippers",
-        "the crimping tool",
+        "side cutters, wire strippers and the crimping tool",
         "a hot-air tool",
         *(["a soldering iron"] if has_resistor(c, connector) else []),
         "masking tape and a fine pen",
+        *(t["tool"] for t in wiring.TOOLS if "screwdriver" in t["tool"] and t.get("carrier") == c.key),
     ]
     return need_lists(parts, tools)
 

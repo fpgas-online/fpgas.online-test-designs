@@ -843,3 +843,13 @@ def test_the_wire_1_check_says_to_probe_the_half_round_pad_and_not_the_round_hol
         assert text.count("mounting pad at the end of the card, not on the round holes. It must beep.") == 2
     for connector in wiring.CONNECTORS:
         assert "not the round holes" in " ".join(words(steps.ground_check(connector)))
+
+
+def test_the_pi_5_tool_list_has_a_screwdriver_for_the_hats_screw_and_gives_no_size():
+    c = wiring.CARRIERS["pi5"]
+    found = [t for t in wiring.TOOLS if t.get("carrier") == "pi5" and "screwdriver" in t["tool"]]
+    assert len(found) == 1 and "does not give its size" in found[0]["note"]
+    assert not re.search(r"\b(PH|M)\d|\bmm\b", found[0]["tool"] + found[0]["note"])
+    assert found[0]["tool"] in tables.bom(c)
+    for part, _ in steps.GUIDE.values():
+        assert f"- {found[0]['tool']}" in steps.guide(c)[steps.guide_name(c, f"{part}-1")]

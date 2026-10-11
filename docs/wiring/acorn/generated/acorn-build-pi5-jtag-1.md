@@ -19,10 +19,10 @@ Photos: Waveshare (PoE M.2 HAT+ (B)), RHS Research (LiteFury underside; the Acor
 
 - a multimeter with a continuity buzzer, and a fine probe tip for it or a sewing pin to hold against a probe
 - a ruler marked in millimetres
-- side cutters and wire strippers
-- the crimping tool
+- side cutters, wire strippers and the crimping tool
 - a hot-air tool
 - masking tape and a fine pen
+- a screwdriver for the HAT's M.2 mounting screw
 
 ## Steps
 

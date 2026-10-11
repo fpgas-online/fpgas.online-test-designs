@@ -37,6 +37,7 @@ The tools to build, fit and check its two cables, once for any number of hosts:
 | ☐ | a fine probe tip for the multimeter, or a sewing pin to hold against a probe | the plug's contacts are 1.2 mm apart, and a terminal is reached through a small opening |
 | ☐ | masking tape and a fine marker pen, or a paint pen | to flag the six wires with their numbers, and to mark the pin 1 corner of each housing |
 | ☐ | a ruler marked in millimetres | the steps give lengths in millimetres: where a flag goes, how much of a wire is left, cut back or stripped |
+| ☐ | a screwdriver for the HAT's M.2 mounting screw | the screw is the one the HAT ships with; Waveshare's page does not give its size or its driver, so have a few sizes of screwdriver to hand |
 
 ### Steps
 
