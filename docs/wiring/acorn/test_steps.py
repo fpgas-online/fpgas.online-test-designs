@@ -799,6 +799,8 @@ def test_taking_the_card_out_says_only_what_the_repo_records(key):
     assert "by us" not in out and out.count("](https://") == 1  # one link, to the maker's own page
     if key == "blade":  # the PH1 screwdriver is in the parts list
         assert "PH1" in out and "uptime-lab/compute-blade" in out and "assembly guide" in out
+        # the fitting screws a standoff in only if it is missing: the card comes out with the standoff left in place
+        assert "Leave the M2x2.5 standoff in its threaded insert." in out
     else:  # no screw size or driver for the Pi 5's HAT is recorded: the bench run's issue has it
         assert "PH1" not in out and "M2" not in out and "SSD mounting screw" in out and "waveshare.com" in out
 
@@ -810,7 +812,15 @@ def test_putting_the_card_back_is_from_the_makers_pages_and_the_bench_intro_orde
     if key == "blade":
         for words in ("standoff", "5 mm hex driver", "nylon washer", "30° angle", "press down", "PH1 driver"):
             assert words in action
-        assert any("assembly.mdx" in s["source"] for s in wiring.SOURCES if s.get("carrier") == "blade")
+        # the standoff stays in the slot when the card comes out (the bench check takes only the screw out): it is
+        # fitted with the hex driver only when it is missing (fpgas.online-docs #213's review)
+        assert (
+            "If the threaded insert for the card's size has no M2x2.5 standoff in it, screw the standoff in with a "
+            "5 mm hex driver." in action
+        )
+        (fitting,) = [s for s in wiring.SOURCES if s.get("carrier") == "blade" and "put into" in s["claim"]]
+        assert "assembly.mdx" in fitting["source"] and "5 mm hex driver" in fitting["claim"]
+        assert "only if it is missing" in fitting["claim"] and "our reading" in fitting["source"]
     else:
         assert "SSD mounting screw" in action and "by us" not in action
         assert any("SSD mounting screw x1" in s["source"] for s in wiring.SOURCES if s.get("carrier") == "pi5")
@@ -964,6 +974,36 @@ def test_every_page_that_takes_the_card_s_screw_in_or_out_lists_the_screwdriver(
             assert f"- {screwdriver}\n" in head or f"| ☐ | {screwdriver} |" in head, (key, p.name)
     # the pages that do touch it are found, so the rule is not met by matching nothing
     assert {steps.guide_name(c, part) for part in ("bench", "fit")} <= set(touching), (key, touching)
+
+
+@pytest.mark.parametrize("key", list(wiring.CARRIERS))
+def test_every_driver_a_page_s_steps_use_is_on_its_list(key):
+    """A step that uses a driver (the PH1 for the card's screw, the 5 mm hex driver for the blade's standoff) is on
+    a page whose list names that driver (fpgas.online-docs #213's review: the fitting used the hex driver, but its
+    list named only the PH1). Read from generated/, as the screwdriver test is."""
+    c = wiring.CARRIERS[key]
+    drivers = [t["tool"] for t in wiring.TOOLS if t.get("carrier") == key and "driver" in t["tool"]]
+    named = {"PH1 driver": "PH1", "5 mm hex driver": "5 mm hex driver"}  # how a step names it -> in the tool's name
+    found = []
+    for p in sorted((wiring.HERE / "generated").glob(f"*{key}*.md")):
+        text = p.read_text()
+        if "## Steps" not in text:
+            continue
+        head, body = text.split("## Steps", 1)
+        # every tool driver the steps name is one this test knows, so a new one is not skipped (a "driver" on a JTAG
+        # pin, on the check pages, is not a tool)
+        tool_driver = r"\b(?:PH\d|PZ\d|T\d+|[\d.]+ mm hex|hex|Torx|Phillips|flat(?:-blade)?) driver\b"
+        for m in re.finditer(tool_driver, body):
+            assert m.group(0) in named, (p.name, m.group(0))
+        for said, part in named.items():
+            if said in body:
+                (tool,) = [d for d in drivers if part in d]
+                assert f"- {tool}" in head or f"| ☐ | {tool} |" in head, (p.name, tool)
+                found.append((p.name, said))
+    if key == "blade":  # the pages that do use them are found, so the rule is not met by matching nothing
+        assert (steps.guide_name(c, "fit"), "5 mm hex driver") in found, found
+        for part in ("fit", "bench"):
+            assert (steps.guide_name(c, part), "PH1 driver") in found, found
 
 
 def test_the_bench_check_and_the_fitting_say_the_hat_has_its_stacking_header_and_the_housings_go_on_its_pins():
