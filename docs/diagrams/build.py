@@ -87,8 +87,22 @@ def manifest_text(manifest):
     return json.dumps(manifest, indent=2, sort_keys=True) + "\n"
 
 
+def with_png_hashes(manifest, out_dir):
+    """The manifest with each view's `png_sha256` {"light", "dark"} added: the SHA-256 of the PNG files in `out_dir`,
+    rendered in the same build as the SVGs whose hashes it sits beside."""
+    out = pathlib.Path(out_dir)
+    views_ = {}
+    for view_id, entry in manifest["views"].items():
+        hashes = {t: hashlib.sha256((out / entry[t]).read_bytes()).hexdigest() for t in ("light", "dark")}
+        views_[view_id] = {**entry, "png_sha256": hashes}
+    return {**manifest, "views": views_}
+
+
 def stale(board_dir):
-    """One line for each way the committed views are not what the board's files make now. Empty if current."""
+    """One line for each way the committed views are not what the board's files make now. Empty if current.
+
+    It never renders, so it cannot say that a PNG is what its SVG would give; it says that the SVGs are what the
+    board's files make now (their hashes) and that each PNG is the file the build recorded (its hash)."""
     board = pathlib.Path(board_dir)
     out = board / OUT
     manifest = build(board)[1]
@@ -97,24 +111,32 @@ def stale(board_dir):
         problems.append(f"{OUT}/{MANIFEST} is missing")
     else:
         text = (out / MANIFEST).read_text()
-        if text != manifest_text(manifest):
-            try:
-                old = json.loads(text)
-            except json.JSONDecodeError as e:
-                old = {}
-                problems.append(f"{OUT}/{MANIFEST} is not JSON: {e}")
-            old_views = old.get("views", {})
-            for view_id, entry in manifest["views"].items():
-                if view_id not in old_views:
-                    problems.append(f"view {view_id}: not in {MANIFEST}")
-                elif old_views[view_id] != entry:
-                    problems.append(f"view {view_id}: its entry in {MANIFEST} is out of date")
-            for view_id in sorted(set(old_views) - set(manifest["views"])):
-                problems.append(f"view {view_id}: in {MANIFEST} but no longer in views.toml")
-            if old.get("photos_wanted") != manifest["photos_wanted"]:
-                problems.append(f"photos_wanted in {MANIFEST} is out of date")
-            if not problems:
-                problems.append(f"{OUT}/{MANIFEST} is not what a build writes")
+        try:
+            old = json.loads(text)
+        except json.JSONDecodeError as e:
+            old = {}
+            problems.append(f"{OUT}/{MANIFEST} is not JSON: {e}")
+        old_views = old.get("views", {})
+        for view_id, entry in manifest["views"].items():
+            if view_id not in old_views:
+                problems.append(f"view {view_id}: not in {MANIFEST}")
+                continue
+            recorded = {k: v for k, v in old_views[view_id].items() if k != "png_sha256"}
+            if recorded != entry:
+                problems.append(f"view {view_id}: its entry in {MANIFEST} is out of date")
+            for theme in ("light", "dark"):
+                want = old_views[view_id].get("png_sha256", {}).get(theme)
+                png = out / entry[theme]
+                if want is None:
+                    problems.append(f"view {view_id}: {MANIFEST} has no recorded hash for {entry[theme]}")
+                elif png.is_file() and hashlib.sha256(png.read_bytes()).hexdigest() != want:
+                    problems.append(f"{OUT}/{entry[theme]} does not match its recorded hash in {MANIFEST}")
+        for view_id in sorted(set(old_views) - set(manifest["views"])):
+            problems.append(f"view {view_id}: in {MANIFEST} but no longer in views.toml")
+        if old and old.get("photos_wanted") != manifest["photos_wanted"]:
+            problems.append(f"photos_wanted in {MANIFEST} is out of date")
+        if old and not problems and text != manifest_text(old):
+            problems.append(f"{OUT}/{MANIFEST} is not what a build writes")
     owned = {name for e in manifest["views"].values() for name in (e["light"], e["dark"])}
     for name in sorted(owned):
         if not (out / name).is_file():
@@ -153,6 +175,7 @@ def write(board_dir):
         if png.name not in owned:
             png.unlink()
             print(f"removed {png.name}: no view owns it")
+    manifest = with_png_hashes(manifest, out)
     (out / MANIFEST).write_text(manifest_text(manifest))
     return manifest
 

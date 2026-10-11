@@ -131,3 +131,45 @@ def test_each_manifest_entry_agrees_with_its_view_and_its_drawing_and_its_files(
         assert entry["photo_matched"] is False, view_id
         for theme, name in (("light", f"{view_id}.svg"), ("dark", f"{view_id}-dark.svg")):
             assert entry["svg_sha256"][theme] == hashlib.sha256(files[name].encode()).hexdigest(), (view_id, theme)
+
+
+def test_a_png_with_one_byte_changed_is_stale(board):
+    png = board / "generated" / "views" / "pi5-hat.top.png"
+    data = bytearray(png.read_bytes())
+    data[-20] ^= 1
+    png.write_bytes(bytes(data))
+    assert any("pi5-hat.top.png" in line and "does not match its recorded hash" in line for line in build.stale(board))
+
+
+def test_a_png_replaced_by_another_picture_is_stale(board):
+    out = board / "generated" / "views"
+    (out / "pi5-hat.top-dark.png").write_bytes((out / "pi5-hat.top.png").read_bytes())
+    assert any(
+        "pi5-hat.top-dark.png" in line and "does not match its recorded hash" in line for line in build.stale(board)
+    )
+
+
+def test_a_manifest_that_records_no_hash_for_a_png_is_stale(board):
+    path = board / "generated" / "views" / "views.json"
+    manifest = json.loads(path.read_text())
+    del manifest["views"]["pi5-hat.top"]["png_sha256"]["dark"]
+    path.write_text(build.manifest_text(manifest))
+    assert any("pi5-hat.top" in line and "no recorded hash" in line for line in build.stale(board))
+
+
+def test_the_committed_manifest_records_the_hash_of_every_png_beside_its_svgs():
+    manifest = json.loads((ACORN / "generated" / "views" / "views.json").read_text())
+    for view_id, entry in manifest["views"].items():
+        assert set(entry["png_sha256"]) == {"light", "dark"} == set(entry["svg_sha256"]), view_id
+        for theme in ("light", "dark"):
+            png = (ACORN / "generated" / "views" / entry[theme]).read_bytes()
+            assert entry["png_sha256"][theme] == hashlib.sha256(png).hexdigest(), (view_id, theme)
+
+
+def test_writing_records_the_hash_of_the_pngs_it_has_just_rendered(board):
+    out = board / "generated" / "views"
+    manifest = build.build(board)[1]
+    assert all("png_sha256" not in e for e in manifest["views"].values())  # a fresh build has no PNGs to hash
+    recorded = build.with_png_hashes(manifest, out)
+    committed = json.loads((out / "views.json").read_text())
+    assert recorded == committed
