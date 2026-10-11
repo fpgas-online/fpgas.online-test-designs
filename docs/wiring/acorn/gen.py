@@ -53,7 +53,10 @@ NUDGE = {"pi5": 8, "blade": 8}
 
 MARK = role("mark")  # highlight on photos: not a wire colour
 MARK_EDGE, ON_MARK = role("mark-edge"), role("on-mark")  # its dark edge, and the words on a yellow tag
-GREY_PART = role("render-muted")  # a socket a picture is not about: its outline only (issue 267)
+# A socket a picture is not about (issue 267): its outline in this light grey, which reads on the dark board of the
+# photo. Its name sits above the photo on the paper, where this grey would not read (about 1.5:1 on the light
+# theme), so the name is in MUTED, the grey of secondary text.
+GREY_PART = role("render-muted")
 LANE = 22
 WIRE, HALO = 4.5, 9
 CLEAR = 18  # a crossing stays this far from any corner; parallel runs stay this far apart

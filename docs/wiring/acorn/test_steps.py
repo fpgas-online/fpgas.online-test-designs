@@ -412,6 +412,32 @@ def test_a_picture_about_both_sockets_highlights_both():
             assert GREY not in part, f"{what}: {name}"
 
 
+@pytest.mark.parametrize("subject", list(wiring.CONNECTORS))
+def test_the_grey_outline_is_drawn_on_the_photo_where_the_other_socket_is(subject):
+    """The grey is light (it reads on the dark board, not on the paper: about 1.5:1 there on the light theme), so
+    the outline must be the other socket's own rect, and that rect must lie on the photo."""
+    import gen
+    from sheetlib import Sheet
+
+    sh = Sheet(steps.W, 400)
+    sockets, (px, py, pw, ph) = gen.acorn_photo_down(sh, 30, 132, 360, steps.T, subject=subject)
+    (other,) = set(wiring.CONNECTORS) - {subject}
+    x0, y0, x1, y1 = sockets[other]
+    assert px <= x0 < x1 <= px + pw and py <= y0 < y1 <= py + ph
+    rect = re.search(
+        r'<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"', sockets_drawn(sh.svg())[other]
+    )
+    assert [float(v) for v in rect.groups()] == pytest.approx([x0, y0, x1 - x0, y1 - y0], abs=0.06)
+
+
+def test_a_socket_the_card_does_not_have_is_refused():
+    import gen
+    from sheetlib import Sheet
+
+    with pytest.raises(ValueError, match="no socket 'P3'"):
+        gen.acorn_photo_down(Sheet(steps.W, 400), 30, 132, 360, steps.T, subject="P3")
+
+
 @pytest.mark.parametrize("connector", list(wiring.CONNECTORS))
 def test_the_flag_and_meter_pictures_draw_every_wire_whole_with_its_flag(connector):
     count = len(wiring.CONNECTORS[connector]["pins"])
