@@ -100,9 +100,14 @@ def find(boards, mode, options, usb, pci):
                 raise
             # The weak claims are still checked (and never pass); the probe's failure is said, not lost.
             return spotted, f"auto: USB/PCI IDs; probing as well failed: {p.reason}"
+        found = {b.name for b, _, _ in spotted + probed}
+        yielded = sorted({(b.name, b.yield_reason) for b, _, _ in probed if set(b.yields_to) & (found - {b.name})})
+        probed = [(b, h, f) for b, h, f in probed if b.name not in {name for name, _ in yielded}]
+        not_taken = "".join(f"; {name} not taken: {why}" for name, why in yielded)
         if probed:
             names = ", ".join(sorted({b.name for b, _, _ in probed}))
-            return spotted + probed, ("auto: USB/PCI IDs and probed (" if spotted else "auto: probed (") + names + ")"
+            how = ("auto: USB/PCI IDs and probed (" if spotted else "auto: probed (") + names + ")"
+            return spotted + probed, how + not_taken
         if spotted:
             return spotted, "auto: USB/PCI IDs, and probing found nothing more"
         how = "auto: USB/PCI IDs, then probing"
