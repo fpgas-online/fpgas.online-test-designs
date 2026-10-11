@@ -229,8 +229,8 @@ class Fomu(TestBoard):
         while True:
             if usb_matching(usb_devices(), (FOBOOT,)):
                 seconds = round(_clock() - start, 1)
-                return {**entry, "result": "pass", "output": [f"foboot (1209:5bf0) back on USB {seconds} s after "
-                                                               "the closing reset: the next user can load over DFU"]}  # fmt: skip
+                said = f"foboot (1209:5bf0) back on USB {seconds} s after the closing reset: the next user can load"
+                return {**entry, "result": "pass", "output": [said + " over DFU"]}
             if _clock() - start >= FOBOOT_WAIT:
                 return {**entry, "result": "fail", "output": kernel_usb_lines(runner),
                         "reason": (f"foboot (1209:5bf0) did not come back on USB within {FOBOOT_WAIT:g} s of the "

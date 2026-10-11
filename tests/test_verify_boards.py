@@ -995,7 +995,7 @@ def test_a_test_board_says_when_each_test_starts_and_how_it_ended(tmp_path, fomu
     _check(FOMU, tmp_path, {"variant": "evt"}, Runner([("fomu_header_id.py", _says(FOMU_READING))]),
            event=lambda stage, d: events.append((stage, d)))  # fmt: skip
     assert events[0][0] == "fpga-board-identified" and events[0][1]["flash_uid"] == FOMU_UID
-    assert events[1:] == [(stage, {"test": test, **extra}) for test in ("header", "foboot", "uart")
+    assert events[1:] == [(stage, {"test": test, **extra}) for test in ("header", "foboot", "uart", "foboot-after")
                           for stage, extra in (("fpga-test-started", {}),
                                                ("fpga-test-finished", {"result": "pass", "reason": ""}))]  # fmt: skip
 
