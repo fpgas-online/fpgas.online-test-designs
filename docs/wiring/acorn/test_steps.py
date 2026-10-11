@@ -534,11 +534,12 @@ def test_the_guides_pages_hold_every_step_of_the_procedure_once_each_numbered_fr
     for part in ("jtag-1", "uart-1"):
         body = pages[steps.guide_name(c, part)]
         assert "If both still beep, stop and cut nothing" in body and "expected to stay silent to ground" in body
-        assert f"send both readings to {c.contact}." in body
+        assert f"Send both readings to {c.contact}." in body
         assert "If neither wire beeps" in body and "beeps instead, stop" in body
     # whom to tell is the carrier's, by role: the site operator for the ps1 blades, the public wording for the Pi 5
     assert c.contact == {"blade": "the site operator", "pi5": wiring.CONTACT}[c.key]
-    assert f"Tell {c.contact}." in reach_step
+    assert "(https://github.com/fpgas-online/fpgas.online-test-designs/issues)" in wiring.CONTACT
+    assert f"Tell {c.contact} which half falls short, and by about how many millimetres." in reach_step
     # a wire with the series resistor in it is not told to beep: its page gives the reading to expect
     for part, connector in (("jtag-2", "P1"), ("uart-2", "P2")):
         body = pages[steps.guide_name(c, part)]
