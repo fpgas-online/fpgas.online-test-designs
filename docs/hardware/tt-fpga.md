@@ -18,11 +18,14 @@ The TinyTapeout (TT) FPGA Demo Board is a development platform that combines an 
 
 **1.** Add [rpi-hwid](https://github.com/mithro/rpi-hwid)'s apt repository and install rpi-hwid. Without it the check cannot ask the board which Tiny Tapeout board it is, and its result is `error`.
 
+The step is safe to run again. The `ls` line lists the key, `rpi-hwid.gpg`, about 1.2 kB (1154 bytes). If it is missing, run the `curl` line again.
+
 ```bash
 sudo install -d -m0755 /etc/apt/keyrings
-curl -fsSL https://mith.ro/rpi-hwid/rpi-hwid.gpg | sudo tee /etc/apt/keyrings/rpi-hwid.gpg > /dev/null
+sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/rpi-hwid.gpg https://mith.ro/rpi-hwid/rpi-hwid.gpg
 echo "deb [signed-by=/etc/apt/keyrings/rpi-hwid.gpg] https://mith.ro/rpi-hwid/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
   | sudo tee /etc/apt/sources.list.d/rpi-hwid.list
+ls -l /etc/apt/keyrings/rpi-hwid.gpg
 sudo apt update
 sudo apt install python3-rpi-hwid
 ```
@@ -31,12 +34,16 @@ sudo apt install python3-rpi-hwid
 Debian's archive key is not on 32-bit Raspberry Pi OS, so the source names it. Its fingerprint is
 `B8B8 0B5B 623E AB6A D877 5C45 B7C5 D7D6 3509 47F8`.
 
+The step is safe to run again. The `ls` line lists the key, `debian-archive-key-12.asc`, about 12 kB (11861 bytes).
+If it is missing, run the `curl` line again.
+
 ```bash
 sudo install -d -m0755 /etc/apt/keyrings
-curl -fsSL https://ftp-master.debian.org/keys/archive-key-12.asc \
-  | sudo tee /etc/apt/keyrings/debian-archive-key-12.asc > /dev/null
+sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/debian-archive-key-12.asc \
+  https://ftp-master.debian.org/keys/archive-key-12.asc
 echo "deb [signed-by=/etc/apt/keyrings/debian-archive-key-12.asc] http://deb.debian.org/debian bookworm-backports main" \
   | sudo tee /etc/apt/sources.list.d/bookworm-backports.list
+ls -l /etc/apt/keyrings/debian-archive-key-12.asc
 sudo apt update
 sudo apt install -t bookworm-backports micropython-mpremote
 ```

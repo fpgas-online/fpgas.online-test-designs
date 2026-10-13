@@ -13,9 +13,10 @@ packages at <https://apt.fpgas.online>. On a Pi with, say, an Arty:
 
 ```bash
 sudo install -d -m0755 /etc/apt/keyrings
-curl -fsSL https://apt.fpgas.online/apt.gpg | sudo tee /etc/apt/keyrings/apt.gpg > /dev/null
+sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/apt.gpg https://apt.fpgas.online/apt.gpg
 echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
   | sudo tee /etc/apt/sources.list.d/apt.list
+ls -l /etc/apt/keyrings/apt.gpg         # about 1.2 kB; if it is missing, run the curl line again
 sudo apt update
 sudo apt install fpgas-online-arty     # or -acorn, -netv2, -fomu, -tt-fpga; -all-boards for any of them
 sudo fpgas-verify                      # check the board now; it also runs at every boot
