@@ -154,19 +154,24 @@ def test_every_key_a_step_fetches_is_listed_before_its_apt_update():
         check.install_plan("p", other, "trixie")
 
 
-def test_a_listed_key_that_is_empty_fails(tmp_path):
-    key = tmp_path / "k.gpg"
-    key.write_bytes(b"")
-    failures = []
-    check.execute([(1, "keycheck", f"ls -l {key}")], "p", failures)
-    assert failures == [f"p step 1: ls -l {key}: empty: ['{key}']"]
-    key.write_bytes(b"x")
-    failures = []
-    check.execute([(1, "keycheck", f"ls -l {key}")], "p", failures)
-    assert failures == []
-    failures = []
-    check.execute([(1, "keycheck", f"ls -l {tmp_path / 'missing.gpg'}")], "p", failures)
-    assert len(failures) == 1 and "exit 2" in failures[0] and "No such file or directory" in failures[0]
+def test_a_listed_key_that_is_empty_fails():
+    work = REPO / "tmp" / "test-howto-install-check-keys"
+    work.mkdir(parents=True, exist_ok=True)
+    key = work / "k.gpg"
+    try:
+        key.write_bytes(b"")
+        failures = []
+        check.execute([(1, "keycheck", f"ls -l {key}")], "p", failures)
+        assert failures == [f"p step 1: ls -l {key}: empty: ['{key}']"]
+        key.write_bytes(b"x")
+        failures = []
+        check.execute([(1, "keycheck", f"ls -l {key}")], "p", failures)
+        assert failures == []
+        failures = []
+        check.execute([(1, "keycheck", f"ls -l {work / 'missing.gpg'}")], "p", failures)
+        assert len(failures) == 1 and "exit 2" in failures[0] and "No such file or directory" in failures[0]
+    finally:
+        shutil.rmtree(work)
 
 
 def test_the_acorn_check_pages_add_the_keys_as_installing_md_does():
