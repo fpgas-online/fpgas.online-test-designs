@@ -340,6 +340,10 @@ NEEDS = {
         f"on the blade: {REPOSITORIES}",
     ],
 }
+KEYS = (
+    "Part 1 is safe to run again: each line replaces the file it writes. Its last line lists the two keys, each "
+    "about 1.2 kB. If `ls` says `No such file or directory` for one, run that key's `curl` line again."
+)
 INSTALL = {
     "pi5": (
         "Install the Acorn's packages, on a Pi that does not have them. A Raspberry Pi 5 that boots the fleet's root "
@@ -444,7 +448,7 @@ def pages(c):
         wire_table = wire_table.replace("{crossed_spare}", swap(c, "J5", "H5"))
     cavity = {k: steps.png(steps.file_name(c, k)) for k in wiring.CONNECTORS}
     link = lambda page: docs_pages.link(c.key, page)  # noqa: E731
-    todo = [f"{INSTALL[c.key]}\n\n{install}"]
+    todo = [f"{INSTALL[c.key]}\n\n{install}\n\n{KEYS}"]
     if c.key == "blade":
         # before the command that runs the check: it runs `jtag`, which must not run until GPIO14 is checked
         free, driven = jtag_steps()
@@ -502,6 +506,9 @@ def pages(c):
     out += [
         "## If it fails",
         "",
+        "- `apt update` says a repository `is not signed`: its key is missing. On trixie apt first says "
+        '`Failed to parse keyring "/etc/apt/keyrings/apt.gpg"` and `No such file or directory`. Run part 1 of '
+        "step 1 again, and check its `ls` line.",
         f"- A failing `jtag` or `p2-…` line: {link('check-2')} goes from the line to the wire.",
         f"- Any other message: {link('check-2b')}.",
         "",

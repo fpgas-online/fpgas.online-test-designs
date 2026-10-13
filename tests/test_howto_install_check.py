@@ -169,6 +169,17 @@ def test_a_listed_key_that_is_empty_fails(tmp_path):
     assert len(failures) == 1 and "exit 2" in failures[0] and "No such file or directory" in failures[0]
 
 
+def test_the_acorn_check_pages_add_the_keys_as_installing_md_does():
+    # The Compute Blade and Pi 5 check pages are generated from check/after-a-boot.md, not read by the container run.
+    # Their commands must be ones this check knows, and their key lines installing.md's (the page CI runs).
+    text = (REPO / "docs/wiring/acorn/check/after-a-boot.md").read_text()
+    code = text[text.index("```bash\n") + 8 : text.index("\n# 4. ")]
+    acorn = check.install_plan("after-a-boot.md", [check.Step("after-a-boot.md", 1, "", code)], "trixie")
+    assert [k for _n, k, _c in acorn] == ["mkdir", "key", "source", "key", "source", "keycheck", "update", "install"]
+    setup = check.setup_plan("trixie")
+    assert [c for _n, k, c in acorn if k == "key"] == [c for _n, k, c in setup if k == "key"]
+
+
 def test_every_command_the_pages_have_is_known():
     # the tightened forms still take every command the pages write
     for suite in ("bookworm", "trixie"):

@@ -13,13 +13,14 @@
 ```bash
 # 1. The two apt repositories the packages come from.
 sudo install -d -m0755 /etc/apt/keyrings
-curl -fsSL https://apt.fpgas.online/apt.gpg | sudo tee /etc/apt/keyrings/apt.gpg > /dev/null
+sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/apt.gpg https://apt.fpgas.online/apt.gpg
 echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
   | sudo tee /etc/apt/sources.list.d/apt.list
-curl -fsSL https://fpgas.online/fpgas.online-fpga-tools/fpgas.online-fpga-tools.gpg \
-  | sudo tee /etc/apt/keyrings/fpgas.online-fpga-tools.gpg > /dev/null
+sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/fpgas.online-fpga-tools.gpg \
+  https://fpgas.online/fpgas.online-fpga-tools/fpgas.online-fpga-tools.gpg
 echo "deb [signed-by=/etc/apt/keyrings/fpgas.online-fpga-tools.gpg] https://fpgas.online/fpgas.online-fpga-tools/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
   | sudo tee /etc/apt/sources.list.d/fpgas.online-fpga-tools.list
+ls -l /etc/apt/keyrings/apt.gpg /etc/apt/keyrings/fpgas.online-fpga-tools.gpg
 
 # 2. The Acorn's packages.
 sudo apt update
@@ -28,6 +29,8 @@ sudo apt install fpgas-online-acorn
 # 3. What is installed, and which board this host is set up to check.
 fpgas-verify --list
 ```
+
+Part 1 is safe to run again: each line replaces the file it writes. Its last line lists the two keys, each about 1.2 kB. If `ls` says `No such file or directory` for one, run that key's `curl` line again.
 
 **2.** Run the check. Nothing is sent to the site: `--no-publish` makes sure. On a Pi that boots the fleet's root, `journalctl -b -u fpgas-verify -o cat` prints what the check at this boot said.
 
@@ -63,6 +66,7 @@ fpgas-verify: pass (mode auto, auto: USB/PCI IDs)
 
 ## If it fails
 
+- `apt update` says a repository `is not signed`: its key is missing. On trixie apt first says `Failed to parse keyring "/etc/apt/keyrings/apt.gpg"` and `No such file or directory`. Run part 1 of step 1 again, and check its `ls` line.
 - A failing `jtag` or `p2-…` line: [A failing Acorn test on a Raspberry Pi 5](https://docs.fpgas.online/en/latest/boards/acorn/troubleshooting/rpi-5-failing-test.html) goes from the line to the wire.
 - Any other message: [Other Acorn check messages on a Raspberry Pi 5](https://docs.fpgas.online/en/latest/boards/acorn/troubleshooting/rpi-5-other-messages.html).
 
