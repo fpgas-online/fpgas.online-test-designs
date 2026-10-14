@@ -9,9 +9,9 @@
 | 5 | GPIO3 | GPIO3 (I2C1_SCL) | P2:4 J5 |
 | 6 | GND | — | P2:1 GND |
 | 7 | GPIO4 | GPIO4 (GPCLK0) | P2:5 H5 |
-| 8 | GPIO14 | GPIO14 (TXD0) | P2:2 J2 |
+| 8 | GPIO14 | GPIO14 (TXD0) | P2:3 J2 |
 | 9 | GND | — | empty |
-| 10 | GPIO15 | GPIO15 (RXD0) | P2:3 K2 |
+| 10 | GPIO15 | GPIO15 (RXD0) | P2:2 K2 |
 | 19 | GPIO10 | GPIO10 (SPI0_MOSI) | P1:5 TDI |
 | 20 | GND | — | empty |
 | 21 | GPIO9 | GPIO9 (SPI0_MISO) | P1:3 TDO |

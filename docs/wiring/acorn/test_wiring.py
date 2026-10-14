@@ -5,6 +5,8 @@ Run: uv run --no-project --with pytest pytest docs/wiring/acorn
 """
 
 import copy
+import pathlib
+import re
 
 import pytest
 import tables
@@ -22,6 +24,39 @@ def rejects(mutate, match):
 
 def test_the_committed_wiring_loads():
     assert set(wiring.CARRIERS) == {"pi5", "blade"}
+
+
+# The Acorn's sockets as the NiteFury schematic draws them (RHS Research, NiteFury-and-LiteFury,
+# Hardware/uEVB.pdf, rev Z2). Page 6: P1, pins 1 to 6. Page 9: P2, pins 1 to 6, and the Bank 35 balls of
+# its four nets. Copied from the schematic, not from wiring.toml: the LiteX wiki's legend, which
+# wiring.toml followed until 14 October 2026, has J2 and K2 the other way round, and two cables built
+# from it came out with the serial pair crossed.
+SCHEMATIC_P1 = ["GND", "TCK", "TDO", "TMS", "TDI", "+3V3"]
+SCHEMATIC_P2 = ["GND", "AIO2_P", "AIO2_N", "AIO1_P", "AIO1_N", "+3V3"]
+SCHEMATIC_BALLS = {"K2": "AIO2_P", "J2": "AIO2_N", "J5": "AIO1_P", "H5": "AIO1_N"}
+
+
+def schematic_names(connector):
+    """wiring.toml's pins for a connector, in the schematic's names."""
+    names = {"GND1": "GND", "GND2": "GND", "VCC": "+3V3"}
+    out = []
+    for s in wiring.CONNECTORS[connector]["pins"]:
+        ball = wiring.DATA["signals"].get(s, {}).get("ball")
+        out.append(SCHEMATIC_BALLS[ball] if ball else names.get(s, s))
+    return out
+
+
+def test_the_sockets_pins_are_in_the_schematic_s_order():
+    assert schematic_names("P1") == SCHEMATIC_P1
+    assert schematic_names("P2") == SCHEMATIC_P2
+
+
+def test_the_fpga_s_serial_tx_is_p2_pin_2():
+    # The schematic's AIO2_P (pin 2) is ball K2, the ball our designs (and LiteX's sqrl_acorn) drive as TX
+    p2 = (pathlib.Path(__file__).resolve().parents[3] / "designs/_shared/acorn_p2.py").read_text()
+    tx = re.search(r'^SERIAL_TX = "(\w+)"', p2, re.M).group(1)
+    assert wiring.CONNECTORS["P2"]["pins"][1] == tx
+    assert wiring.DATA["signals"][tx]["drive"] == "fpga"
 
 
 def test_a_wire_on_a_5v_pin_is_refused():
@@ -53,7 +88,8 @@ def test_a_pin_the_header_does_not_have_is_refused():
 
 
 def test_blade_j2_shares_gpio14_with_tms_and_carries_the_resistor():
-    row = next(r for r in tables.cable(wiring.CARRIERS["blade"], "P2").splitlines() if r.startswith("| 2 |"))
+    j2 = wiring.CONNECTORS["P2"]["pins"].index("J2") + 1
+    row = next(r for r in tables.cable(wiring.CARRIERS["blade"], "P2").splitlines() if r.startswith(f"| {j2} |"))
     assert "GPIO14" in row and "470 Ω" in row and "TMS (Extension Port 9)" in row
 
 
