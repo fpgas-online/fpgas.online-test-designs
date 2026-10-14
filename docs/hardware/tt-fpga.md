@@ -18,7 +18,7 @@ The TinyTapeout (TT) FPGA Demo Board is a development platform that combines an 
 
 **1.** Add [rpi-hwid](https://github.com/mithro/rpi-hwid)'s apt repository and install rpi-hwid. Without it the check cannot ask the board which Tiny Tapeout board it is, and its result is `error`.
 
-The step is safe to run again. The `ls` line lists the key, `rpi-hwid.gpg`, about 1.2 kB (1154 bytes). If it is missing, run the `curl` line again.
+The step is safe to run again. The `ls` line lists the key, `rpi-hwid.gpg`, about 1.2 kB (1154 bytes). If it is missing or its size is far from that, run the `curl` line again.
 
 ```bash
 sudo install -d -m0755 /etc/apt/keyrings
@@ -35,7 +35,7 @@ Debian's archive key is not on 32-bit Raspberry Pi OS, so the source names it. I
 `B8B8 0B5B 623E AB6A D877 5C45 B7C5 D7D6 3509 47F8`.
 
 The step is safe to run again. The `ls` line lists the key, `debian-archive-key-12.asc`, about 12 kB (11861 bytes).
-If it is missing, run the `curl` line again.
+If it is missing or its size is far from that, run the `curl` line again.
 
 ```bash
 sudo install -d -m0755 /etc/apt/keyrings

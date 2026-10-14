@@ -16,9 +16,9 @@ Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
 
 **1.** Add the fpgas.online apt repository. Each line replaces the file it writes, so the step is safe to run again.
 
-The `curl` line downloads the repository's key. If the download fails, `curl` prints why and leaves no file. The
-last line lists the key: `apt.gpg` is about 1.2 kB (1164 bytes). If `ls` says `No such file or directory`, run the
-`curl` line again.
+The `curl` line downloads the repository's key. If the download fails, `curl` prints why and writes nothing. The
+last line lists the key: `apt.gpg` is about 1.2 kB (1164 bytes). If `ls` says `No such file or directory`, or the
+size is far from that, run the `curl` line again.
 
 ```bash
 # The fpgas.online apt repository (bookworm or trixie).
@@ -35,7 +35,7 @@ on any release: only its build has the `rp1pio` cable. On 32-bit Raspberry Pi OS
 `raspbian-<release>`, which is built for every Pi down to the Pi 1 and Zero.
 
 As in step 1, the step is safe to run again. Its last line lists the key: `fpgas.online-fpga-tools.gpg` is about
-1.2 kB (1174 bytes). If it is missing, run the `curl` line again.
+1.2 kB (1174 bytes). If it is missing or its size is far from that, run the `curl` line again.
 
 ```bash
 # fpgas.online's openFPGALoader; add it before installing. A NeTV2 on a Pi 5 needs it. Elsewhere Debian's own
@@ -85,12 +85,12 @@ Where step 2 applies, `dpkg -l 'openfpgaloader*'` lists `openfpgaloader-fpgasonl
 
 ### If it fails
 
-- `apt update` says the repository `is not signed`: its key is missing. On trixie apt says
-  `Failed to parse keyring "/etc/apt/keyrings/apt.gpg"` and `No such file or directory`, then
-  `The repository 'https://apt.fpgas.online/trixie ./ InRelease' is not signed.` On bookworm it says
-  `NO_PUBKEY` and the key's ID (`BEB0EC3124E538E4` for `apt.fpgas.online`). Run the step that adds that
-  repository again (step 1 for `apt.fpgas.online`, step 2 for `fpgas.online-fpga-tools`), check its `ls` line,
-  then run step 3.
+- `apt update` says the repository `is not signed`: its key is missing, empty or wrong. On trixie a missing key
+  gives `Failed to parse keyring "/etc/apt/keyrings/apt.gpg"` and `No such file or directory`. An empty or wrong
+  one gives `Missing key 878EC72910E22EA0E989EAA9BEB0EC3124E538E4, which is needed to verify signature.` Both end
+  `The repository 'https://apt.fpgas.online/trixie ./ InRelease' is not signed.` On bookworm it says `NO_PUBKEY`
+  and the key's ID (`BEB0EC3124E538E4` for `apt.fpgas.online`). Run the step that adds that repository again
+  (step 1 for `apt.fpgas.online`, step 2 for `fpgas.online-fpga-tools`), check its `ls` line, then run step 3.
 - `apt` cannot find a package: the repository line of step 1 is missing, or step 3 was not run after it.
 - On bookworm, `apt` reports an unmet dependency on `openfpgaloader (>= 0.13.0)`: step 2 was not done. Do
   steps 2 and 3, then step 4 again.

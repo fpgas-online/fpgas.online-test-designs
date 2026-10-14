@@ -342,7 +342,8 @@ NEEDS = {
 }
 KEYS = (
     "Part 1 is safe to run again: each line replaces the file it writes. Its last line lists the two keys, each "
-    "about 1.2 kB. If `ls` says `No such file or directory` for one, run that key's `curl` line again."
+    "about 1.2 kB. If `ls` says `No such file or directory` for one, or its size is far from that, run that key's "
+    "`curl` line again, then parts 2 and 3."
 )
 INSTALL = {
     "pi5": (
@@ -506,9 +507,11 @@ def pages(c):
     out += [
         "## If it fails",
         "",
-        "- `apt update` says a repository `is not signed`: its key is missing. On trixie apt first says "
-        '`Failed to parse keyring "/etc/apt/keyrings/apt.gpg"` and `No such file or directory`. Run part 1 of '
-        "step 1 again, and check its `ls` line.",
+        "- `apt update` says a repository `is not signed`: its key is missing, empty or wrong. On trixie a missing "
+        'key gives `Failed to parse keyring "/etc/apt/keyrings/apt.gpg"` and `No such file or directory`. An empty '
+        "or wrong one gives `Missing key 878EC72910E22EA0E989EAA9BEB0EC3124E538E4, which is needed to verify "
+        "signature.` On bookworm apt says `NO_PUBKEY` and the key's ID. Run part 1 of step 1 again, check its `ls` "
+        "line, then parts 2 and 3.",
         f"- A failing `jtag` or `p2-…` line: {link('check-2')} goes from the line to the wire.",
         f"- Any other message: {link('check-2b')}.",
         "",
