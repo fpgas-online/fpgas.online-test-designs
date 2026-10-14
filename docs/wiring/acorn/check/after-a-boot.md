@@ -5,13 +5,14 @@ install and run by hand:
 ```bash
 # 1. The two apt repositories the packages come from.
 sudo install -d -m0755 /etc/apt/keyrings
-curl -fsSL https://apt.fpgas.online/apt.gpg | sudo tee /etc/apt/keyrings/apt.gpg > /dev/null
+sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/apt.gpg https://apt.fpgas.online/apt.gpg
 echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
   | sudo tee /etc/apt/sources.list.d/apt.list
-curl -fsSL https://fpgas.online/fpgas.online-fpga-tools/fpgas.online-fpga-tools.gpg \
-  | sudo tee /etc/apt/keyrings/fpgas.online-fpga-tools.gpg > /dev/null
+sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/fpgas.online-fpga-tools.gpg \
+  https://fpgas.online/fpgas.online-fpga-tools/fpgas.online-fpga-tools.gpg
 echo "deb [signed-by=/etc/apt/keyrings/fpgas.online-fpga-tools.gpg] https://fpgas.online/fpgas.online-fpga-tools/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
   | sudo tee /etc/apt/sources.list.d/fpgas.online-fpga-tools.list
+ls -l /etc/apt/keyrings/apt.gpg /etc/apt/keyrings/fpgas.online-fpga-tools.gpg
 
 # 2. The Acorn's packages.
 sudo apt update

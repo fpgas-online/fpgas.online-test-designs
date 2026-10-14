@@ -14,14 +14,19 @@ Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
 
 ### Steps
 
-**1.** Add the fpgas.online apt repository.
+**1.** Add the fpgas.online apt repository. Each line replaces the file it writes, so the step is safe to run again.
+
+The `curl` line downloads the repository's key. If the download fails, `curl` prints why and writes nothing. The
+last line lists the key: `apt.gpg` is about 1.2 kB (1164 bytes). If `ls` says `No such file or directory`, or the
+size is far from that, run the `curl` line again.
 
 ```bash
 # The fpgas.online apt repository (bookworm or trixie).
 sudo install -d -m0755 /etc/apt/keyrings
-curl -fsSL https://apt.fpgas.online/apt.gpg | sudo tee /etc/apt/keyrings/apt.gpg > /dev/null
+sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/apt.gpg https://apt.fpgas.online/apt.gpg
 echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
   | sudo tee /etc/apt/sources.list.d/apt.list
+ls -l /etc/apt/keyrings/apt.gpg
 ```
 
 **2.** Add the fpgas.online-fpga-tools repository, before installing. On bookworm every board but the TT FPGA board
@@ -29,13 +34,17 @@ needs it: Debian bookworm's openFPGALoader cannot read the device DNA. A NeTV2 o
 on any release: only its build has the `rp1pio` cable. On 32-bit Raspberry Pi OS (`ID=raspbian`) the suite is
 `raspbian-<release>`, which is built for every Pi down to the Pi 1 and Zero.
 
+As in step 1, the step is safe to run again. Its last line lists the key: `fpgas.online-fpga-tools.gpg` is about
+1.2 kB (1174 bytes). If it is missing or its size is far from that, run the `curl` line again.
+
 ```bash
 # fpgas.online's openFPGALoader; add it before installing. A NeTV2 on a Pi 5 needs it. Elsewhere Debian's own
 # works from 0.13.0 on (trixie), but bookworm's (0.10.0) is too old: it cannot read the device DNA.
-curl -fsSL https://fpgas.online/fpgas.online-fpga-tools/fpgas.online-fpga-tools.gpg \
-  | sudo tee /etc/apt/keyrings/fpgas.online-fpga-tools.gpg > /dev/null
+sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/fpgas.online-fpga-tools.gpg \
+  https://fpgas.online/fpgas.online-fpga-tools/fpgas.online-fpga-tools.gpg
 echo "deb [signed-by=/etc/apt/keyrings/fpgas.online-fpga-tools.gpg] https://fpgas.online/fpgas.online-fpga-tools/$(. /etc/os-release; if [ "$ID" = raspbian ]; then echo "raspbian-$VERSION_CODENAME"; else echo "$VERSION_CODENAME"; fi)/ ./" \
   | sudo tee /etc/apt/sources.list.d/fpgas.online-fpga-tools.list
+ls -l /etc/apt/keyrings/fpgas.online-fpga-tools.gpg
 ```
 
 **3.** Read the new repositories' package lists.
@@ -76,6 +85,12 @@ Where step 2 applies, `dpkg -l 'openfpgaloader*'` lists `openfpgaloader-fpgasonl
 
 ### If it fails
 
+- `apt update` says the repository `is not signed`: its key is missing, empty or wrong. On trixie a missing key
+  gives `Failed to parse keyring "/etc/apt/keyrings/apt.gpg"` and `No such file or directory`. An empty or wrong
+  one gives `Missing key 878EC72910E22EA0E989EAA9BEB0EC3124E538E4, which is needed to verify signature.` Both end
+  `The repository 'https://apt.fpgas.online/trixie ./ InRelease' is not signed.` On bookworm it says `NO_PUBKEY`
+  and the key's ID (`BEB0EC3124E538E4` for `apt.fpgas.online`). Run the step that adds that repository again
+  (step 1 for `apt.fpgas.online`, step 2 for `fpgas.online-fpga-tools`), check its `ls` line, then run step 3.
 - `apt` cannot find a package: the repository line of step 1 is missing, or step 3 was not run after it.
 - On bookworm, `apt` reports an unmet dependency on `openfpgaloader (>= 0.13.0)`: step 2 was not done. Do
   steps 2 and 3, then step 4 again.

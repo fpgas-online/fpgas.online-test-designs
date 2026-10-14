@@ -13,13 +13,14 @@
 ```bash
 # 1. The two apt repositories the packages come from.
 sudo install -d -m0755 /etc/apt/keyrings
-curl -fsSL https://apt.fpgas.online/apt.gpg | sudo tee /etc/apt/keyrings/apt.gpg > /dev/null
+sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/apt.gpg https://apt.fpgas.online/apt.gpg
 echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
   | sudo tee /etc/apt/sources.list.d/apt.list
-curl -fsSL https://fpgas.online/fpgas.online-fpga-tools/fpgas.online-fpga-tools.gpg \
-  | sudo tee /etc/apt/keyrings/fpgas.online-fpga-tools.gpg > /dev/null
+sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/fpgas.online-fpga-tools.gpg \
+  https://fpgas.online/fpgas.online-fpga-tools/fpgas.online-fpga-tools.gpg
 echo "deb [signed-by=/etc/apt/keyrings/fpgas.online-fpga-tools.gpg] https://fpgas.online/fpgas.online-fpga-tools/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
   | sudo tee /etc/apt/sources.list.d/fpgas.online-fpga-tools.list
+ls -l /etc/apt/keyrings/apt.gpg /etc/apt/keyrings/fpgas.online-fpga-tools.gpg
 
 # 2. The Acorn's packages.
 sudo apt update
@@ -28,6 +29,8 @@ sudo apt install fpgas-online-acorn
 # 3. What is installed, and which board this host is set up to check.
 fpgas-verify --list
 ```
+
+Part 1 is safe to run again: each line replaces the file it writes. Its last line lists the two keys, each about 1.2 kB. If `ls` says `No such file or directory` for one, or its size is far from that, run that key's `curl` line again, then parts 2 and 3.
 
 **2.** In a boot with the header's serial port off, check GPIO14 before the check runs. The checks are steps 7 and 8 of [How to make a Compute Blade boot ready for JTAG](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html). Step 7 checks that GPIO14 is free, and step 8 checks that nothing on the card drives GPIO14. If either fails, do not run the check in that boot: something holds or drives the JTAG TMS wire. In a boot with the port on, go to the next step: `jtag` fails there without running the JTAG tool.
 
@@ -105,6 +108,7 @@ A pass lists every test with `pass` and ends there, with no `RESULT:` part. On a
 
 ## If it fails
 
+- `apt update` says a repository `is not signed`: its key is missing, empty or wrong. On trixie a missing key gives `Failed to parse keyring "/etc/apt/keyrings/apt.gpg"` and `No such file or directory`. An empty or wrong one gives `Missing key 878EC72910E22EA0E989EAA9BEB0EC3124E538E4, which is needed to verify signature.` On bookworm apt says `NO_PUBKEY` and the key's ID. Run part 1 of step 1 again, check its `ls` line, then parts 2 and 3.
 - A failing `jtag` or `p2-…` line: [A failing Acorn test on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/troubleshooting/compute-blade-failing-test.html) goes from the line to the wire.
 - Any other message: [Other Acorn check messages on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/troubleshooting/compute-blade-other-messages.html).
 

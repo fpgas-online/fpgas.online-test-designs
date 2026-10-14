@@ -220,7 +220,11 @@ URL = r"https?://(?:[\w.:/~+%-]|" + "|".join(SUITE) + r")+"
 # round 2 of #324's review chained an apt-get onto a board command and onto a source line, and both passed.
 KINDS = (
     ("mkdir", re.compile(r"^sudo install -d -m0755 /etc/apt/keyrings$")),
-    ("key", re.compile(r"^curl -fsSL https://[\w.:/~+%-]+ \| sudo tee /etc/apt/keyrings/[\w.-]+ > /dev/null$")),
+    # A key is fetched straight to its file: curl fails loudly and leaves no file (--remove-on-error), and nothing
+    # hides its output. `curl | sudo tee ... > /dev/null` did both: a failed download left a missing or empty key
+    # that only `apt update` reported, in sqv's words (ps1, 14 Oct 2026).
+    ("key", re.compile(r"^sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/[\w.-]+ https://[\w.:/~+%-]+$")),
+    ("keycheck", re.compile(r"^ls -l( /etc/apt/keyrings/[\w.-]+)+$")),  # the reader's check that the keys are there
     (
         "source",
         re.compile(
@@ -251,11 +255,13 @@ def only_on(lead):
 def install_plan(page, step_list, suite):
     """The commands of the install steps that apply on `suite`, in order, up to the first command that needs the
     board. Refuses, so that no step is passed over unseen: a command this check does not know (a source line with
-    no signed-by=, an apt-get, anything new); anything but a board command after a board command; and a command
-    that names a release in a step not limited to it."""
+    no signed-by=, an apt-get, anything new); anything but a board command after a board command; a command
+    that names a release in a step not limited to it; and a key the step fetches that its `ls -l` line does not
+    list before the step's next `apt update` or its end."""
     plan, board = [], None
     for step in step_list:
         release = only_on(step.lead)
+        unlisted = []
         for command in commands(step.code):
             k = kind(command)
             if k is None:
@@ -267,6 +273,12 @@ def install_plan(page, step_list, suite):
             if k == "board":
                 board = command
                 continue
+            if k == "key":
+                unlisted.append(command.split(" -o ")[1].split()[0])
+            elif k == "keycheck":
+                unlisted = [key for key in unlisted if key not in command.split()[2:]]
+            elif k == "update" and unlisted:
+                raise ValueError(f"{page} step {step.number}: {command!r} before an `ls -l` lists {unlisted}")
             named = set(re.findall(r"\b(" + "|".join(RELEASES) + r")\b", command))
             if named and named != {release}:
                 raise ValueError(
@@ -275,6 +287,8 @@ def install_plan(page, step_list, suite):
                 )
             if release is None or release == suite:
                 plan.append((step.number, k, command))
+        if unlisted and not board:
+            raise ValueError(f"{page} step {step.number}: no `ls -l` lists the key {unlisted} it fetches")
     return plan
 
 
@@ -498,6 +512,11 @@ def execute(plan, label, failures):
             got = installed(out)
             print("    " + " ".join(sorted(got)))
             packages += got
+        elif k == "keycheck" and not rc:
+            print("    " + out.strip().replace("\n", "\n    "))
+            empty = [key for key in command.split()[2:] if pathlib.Path(key).stat().st_size == 0]
+            if empty:
+                failures.append(f"{where}: empty: {empty}")
         elif rc:
             failures.append(f"{where}: exit {rc}: {out.strip()[-500:]}")
     return packages

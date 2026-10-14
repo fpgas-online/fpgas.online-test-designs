@@ -19,9 +19,18 @@ spec.loader.exec_module(check)
 def test_the_setup_is_installing_md_s_repositories_then_one_update():
     for suite in ("bookworm", "trixie"):
         plan = check.setup_plan(suite)
-        assert [k for _n, k, _c in plan] == ["mkdir", "key", "source", "key", "source", "update"]
-        assert [n for n, _k, _c in plan] == [1, 1, 1, 2, 2, 3]
-        assert "apt.fpgas.online" in plan[2][2] and "fpgas.online-fpga-tools" in plan[4][2]
+        assert [k for _n, k, _c in plan] == [
+            "mkdir",
+            "key",
+            "source",
+            "keycheck",
+            "key",
+            "source",
+            "keycheck",
+            "update",
+        ]
+        assert [n for n, _k, _c in plan] == [1, 1, 1, 1, 2, 2, 2, 3]
+        assert "apt.fpgas.online" in plan[2][2] and "fpgas.online-fpga-tools" in plan[5][2]
 
 
 def test_every_hardware_page_with_an_install_section_is_a_board():
@@ -45,8 +54,8 @@ def test_the_tt_backports_step_runs_on_bookworm_only():
     page = "docs/hardware/tt-fpga.md"
     bookworm = check.board_plan(page, "bookworm")
     trixie = check.board_plan(page, "trixie")
-    assert [n for n, _k, _c in bookworm] == [1] * 5 + [2] * 5 + [3]
-    assert [n for n, _k, _c in trixie] == [1] * 5 + [3]
+    assert [n for n, _k, _c in bookworm] == [1] * 6 + [2] * 6 + [3]
+    assert [n for n, _k, _c in trixie] == [1] * 6 + [3]
     assert bookworm[-2][2] == "sudo apt install -t bookworm-backports micropython-mpremote"
     assert all("backports" not in c for _n, _k, c in trixie)
 
@@ -103,12 +112,77 @@ def test_a_command_the_check_does_not_know_is_refused_wherever_it_is(command):
         '-y openocd; echo "x" | sudo tee /etc/apt/sources.list.d/apt.list',
         'echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(sudo apt-get install -y openocd)/ '
         './" | sudo tee /etc/apt/sources.list.d/apt.list',
-        "curl -fsSL https://apt.fpgas.online/apt.gpg;sudo apt-get install -y openocd | sudo tee "
-        "/etc/apt/keyrings/apt.gpg > /dev/null",
+        "sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/apt.gpg https://apt.fpgas.online/apt.gpg;sudo "
+        "apt-get install -y openocd",
+        "sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/apt.gpg https://apt.fpgas.online/$(id)",
+        "ls -l /etc/apt/keyrings/apt.gpg; sudo apt-get install -y openocd",
     ],
 )
 def test_a_known_command_with_another_chained_on_is_refused(command):
     assert check.kind(command) is None
+
+
+KEY = "sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/k.gpg https://example.org/k.gpg"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # the old form: a failed download left a missing or empty key, and `> /dev/null` hid tee (ps1, 14 Oct 2026)
+        "curl -fsSL https://apt.fpgas.online/apt.gpg | sudo tee /etc/apt/keyrings/apt.gpg > /dev/null",
+        # a download that can leave half a file, or that is not root's
+        "sudo curl -fsSL -o /etc/apt/keyrings/apt.gpg https://apt.fpgas.online/apt.gpg",
+        "curl -fsSL --remove-on-error -o /etc/apt/keyrings/apt.gpg https://apt.fpgas.online/apt.gpg",
+        "sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/apt.gpg http://apt.fpgas.online/apt.gpg",
+        "ls -l /etc/apt/keyrings/apt.gpg > /dev/null",
+    ],
+)
+def test_a_key_is_fetched_only_the_loud_way(command):
+    assert check.kind(command) is None
+
+
+def test_every_key_a_step_fetches_is_listed_before_its_apt_update():
+    listed = [check.Step("p", 1, "", f"{KEY}\nls -l /etc/apt/keyrings/k.gpg\nsudo apt update")]
+    assert [k for _n, k, _c in check.install_plan("p", listed, "trixie")] == ["key", "keycheck", "update"]
+    after = [check.Step("p", 1, "", f"{KEY}\nsudo apt update\nls -l /etc/apt/keyrings/k.gpg")]
+    with pytest.raises(
+        ValueError, match=r"p step 1: 'sudo apt update' before an `ls -l` lists \['/etc/apt/keyrings/k.gpg'\]"
+    ):
+        check.install_plan("p", after, "trixie")
+    other = [check.Step("p", 1, "", f"{KEY}\nls -l /etc/apt/keyrings/other.gpg")]
+    with pytest.raises(ValueError, match=r"p step 1: no `ls -l` lists the key \['/etc/apt/keyrings/k.gpg'\]"):
+        check.install_plan("p", other, "trixie")
+
+
+def test_a_listed_key_that_is_empty_fails():
+    work = REPO / "tmp" / "test-howto-install-check-keys"
+    work.mkdir(parents=True, exist_ok=True)
+    key = work / "k.gpg"
+    try:
+        key.write_bytes(b"")
+        failures = []
+        check.execute([(1, "keycheck", f"ls -l {key}")], "p", failures)
+        assert failures == [f"p step 1: ls -l {key}: empty: ['{key}']"]
+        key.write_bytes(b"x")
+        failures = []
+        check.execute([(1, "keycheck", f"ls -l {key}")], "p", failures)
+        assert failures == []
+        failures = []
+        check.execute([(1, "keycheck", f"ls -l {work / 'missing.gpg'}")], "p", failures)
+        assert len(failures) == 1 and "exit 2" in failures[0] and "No such file or directory" in failures[0]
+    finally:
+        shutil.rmtree(work)
+
+
+def test_the_acorn_check_pages_add_the_keys_as_installing_md_does():
+    # The Compute Blade and Pi 5 check pages are generated from check/after-a-boot.md, not read by the container run.
+    # Their commands must be ones this check knows, and their key lines installing.md's (the page CI runs).
+    text = (REPO / "docs/wiring/acorn/check/after-a-boot.md").read_text()
+    code = text[text.index("```bash\n") + 8 : text.index("\n# 4. ")]
+    acorn = check.install_plan("after-a-boot.md", [check.Step("after-a-boot.md", 1, "", code)], "trixie")
+    assert [k for _n, k, _c in acorn] == ["mkdir", "key", "source", "key", "source", "keycheck", "update", "install"]
+    setup = check.setup_plan("trixie")
+    assert [c for _n, k, c in acorn if k == "key"] == [c for _n, k, c in setup if k == "key"]
 
 
 def test_every_command_the_pages_have_is_known():
