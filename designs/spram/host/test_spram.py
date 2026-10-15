@@ -31,11 +31,13 @@ SIZE_KB = 128
 
 
 def ask(ser):
-    """Send one byte and read lines until the design's verdict; returns (verdict or None, lines read)."""
+    """Send one byte and read lines until the design's verdict; returns (verdict or None, lines read, seconds from
+    the last byte sent to the verdict or None)."""
     lines = []
     for _ in range(ASKS):
         ser.write(b"T")
-        deadline = time.monotonic() + ASK_EVERY_S
+        sent = time.monotonic()
+        deadline = sent + ASK_EVERY_S
         while time.monotonic() < deadline:
             raw = ser.readline()
             if not raw:
@@ -43,8 +45,8 @@ def ask(ser):
             line = raw.decode("ascii", errors="replace").strip()
             lines.append(line)
             if line.startswith(VERDICT):
-                return line[len(VERDICT) :].strip(), lines
-    return None, lines
+                return line[len(VERDICT) :].strip(), lines, time.monotonic() - sent
+    return None, lines, None
 
 
 def main() -> int:
@@ -57,12 +59,14 @@ def main() -> int:
     try:
         with serial.Serial(args.port, args.baud, timeout=0.5) as ser:
             ser.reset_input_buffer()
-            verdict, lines = ask(ser)
+            verdict, lines, seconds = ask(ser)
     except serial.SerialException as e:
         print(f"SPRAM: could not open {args.port}: {e}: nothing was tested")
         return 2
     for line in lines:
         print(f"  {line}")
+    if seconds is not None:  # what the test takes on the board, as the bridge delivers it
+        print(f"answered {seconds:.1f} s after the byte that asked")
     if verdict is None:
         print(f"SPRAM: no answer from the SPRAM test design in {ASKS * ASK_EVERY_S} s: nothing was tested")
         return 2

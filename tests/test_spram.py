@@ -277,6 +277,7 @@ def _run(monkeypatch, capsys, answers):
 def test_the_host_script_passes_on_the_designs_pass(monkeypatch, capsys):
     rc, out, port = _run(monkeypatch, capsys, [["SPRAM_TEST: PASS"]])
     assert rc == 0 and port.written == b"T"
+    assert out[-2].startswith("answered ") and out[-2].endswith(" s after the byte that asked")
     assert out[-1] == "SPRAM: all 128 KB written and read back twice, each byte lane's write mask checked"
 
 

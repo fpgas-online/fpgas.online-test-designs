@@ -28,8 +28,8 @@ the whole SPRAM:
    words reach every mask of all four SPRAMs.
 
 It answers with one line: `SPRAM_TEST: PASS`, or at the first word that differs
-`SPRAM_TEST: FAIL at 0x<address> read 0x<word> expected 0x<word>`. Then it waits for the next byte. The test
-takes about a second.
+`SPRAM_TEST: FAIL at 0x<address> read 0x<word> expected 0x<word>`. Then it waits for the next byte. The host
+script says how long the answer took, as the bridge delivers it: `answered N s after the byte that asked`.
 
 The host script sends a byte and reads the answer. It sends again if the design was still starting, at most
 three times, 5 seconds apart. Its last line starts `SPRAM:`, and its exit code gives the result:
