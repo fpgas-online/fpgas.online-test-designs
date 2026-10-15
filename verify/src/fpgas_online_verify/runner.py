@@ -333,7 +333,10 @@ def details(report):
             out[f"board{i}_tests"] = " ".join(f"{t['test']}={t['result']}" for t in b["tests"])
         if b.get("not_run"):
             out[f"board{i}_not_run"] = ", ".join(b["not_run"])
-            out.update({f"board{i}_not_run_{test}": why for test, why in b["not_run"].items()})
+            # A reason per planned test, keyed by its name. An entry that is not a planned test (the Acorn's
+            # "scratch over P2 UART": part of a test that ran) stays in board<i>_not_run and the board's reason.
+            planned = set(b.get("planned", ()))
+            out.update({f"board{i}_not_run_{test}": why for test, why in b["not_run"].items() if test in planned})
         if b.get("planned"):
             out[f"board{i}_planned"] = " ".join(b["planned"])
             out[f"board{i}_groups"] = " ".join(f"{t}={g}" for t, g in b["groups"].items())

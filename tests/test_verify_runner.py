@@ -1647,3 +1647,20 @@ def test_a_reason_a_board_gave_for_a_test_not_run_is_kept(opts):
     (b,) = runner.verify(opts, _boards(board), usb=[], pci=[], mode=("arty", "test"))["boards"]
     assert b["not_run"] == {"ddr": "it needs uart to pass first",
                             "wiring": "the check stopped before it: uart fail: no banner"}  # fmt: skip
+
+
+def test_a_not_run_entry_that_is_not_a_planned_test_gets_no_key_of_its_own(opts):
+    """The Acorn's not_run can hold "scratch over P2 UART" (part of `scratch`, which ran): a key with spaces would
+    not be a test the site has a column for. It stays in board<i>_not_run."""
+
+    class PartOf(Planned):
+        def check(self, host, found, options):
+            return {"board": self.name, "variant": "a7-35", "result": "pass",
+                    "tests": [{"test": t, "result": "pass"} for t in ("uart", "ddr", "wiring")],
+                    "not_run": {"ddr over P2 UART": "this host's setup is not known"}}  # fmt: skip
+
+    report = runner.verify(opts, _boards(PartOf("arty", seen=[{"variant": "a7-35"}])), usb=[], pci=[],
+                           mode=("arty", "test"))  # fmt: skip
+    d = runner.details(report)
+    assert d["board0_not_run"] == "ddr over P2 UART"
+    assert not [k for k in d if k.startswith("board0_not_run_")]
