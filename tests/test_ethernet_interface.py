@@ -127,7 +127,7 @@ class _Clock:
 
 
 def test_a_link_that_takes_its_time_is_waited_for(tmp_path):
-    """pi-sw2-p15, 2026-10-04: its AX88179A brought the link up about 18 s after the design loaded. The test
+    """An Arty host, 2026-10-04: its AX88179A brought the link up about 18 s after the design loaded. The test
     waited 4 s, went on without a link, and reported it as "ARP request got no response"."""
     clock = _Clock(tmp_path, "eth1", up_at=18)
     took = te.wait_for_link("eth1", 60, sysfs=tmp_path, clock=clock)
@@ -182,6 +182,16 @@ def test_no_link_is_the_reason_not_two_timeouts(monkeypatch, capsys):
 def test_every_failed_step_is_in_the_reason(monkeypatch, capsys):
     ok, said = _run(monkeypatch, capsys, arp=False, ping=False)
     assert not ok and said == ["ETHERNET: link up after 1.0 s; ARP request got no response; ICMP ping failed"]
+
+
+def test_arp_alone_failing_is_the_reason(monkeypatch, capsys):
+    ok, said = _run(monkeypatch, capsys, arp=False)
+    assert not ok and said == ["ETHERNET: link up after 1.0 s; ARP request got no response"]
+
+
+def test_ping_alone_failing_is_the_reason(monkeypatch, capsys):
+    ok, said = _run(monkeypatch, capsys, ping=False)
+    assert not ok and said == ["ETHERNET: link up after 1.0 s; ICMP ping failed"]
 
 
 def test_not_root_is_the_reason(monkeypatch, capsys):

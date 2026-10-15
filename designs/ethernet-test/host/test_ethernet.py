@@ -119,7 +119,7 @@ def wait_for_link(iface, timeout, sysfs="/sys/class/net", clock=time):
     """Seconds until `iface` has a link (its carrier reads 1), or None if it has none after `timeout` seconds.
 
     The FPGA's PHY starts negotiating only once the design is loaded, and how long the adapter then takes is
-    the adapter's own business: an RTL8153 a second or two, an AX88179A about 18 s (pi-sw2-p15, 2026-10-04).
+    the adapter's own business: an RTL8153 a second or two, an AX88179A about 18 s (an Arty host, 2026-10-04).
     A carrier that cannot be read (the interface is down, or gone) is no link.
     """
     start = clock.monotonic()
