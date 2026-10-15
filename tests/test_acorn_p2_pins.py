@@ -37,15 +37,6 @@ def test_switch_bits_are_j2_then_k2():
     assert acorn_p2.SWITCH_BITS == {"J2": 0, "K2": 1}
 
 
-def test_the_docstring_pin_table_is_wiring_toml_s_p2():
-    p2 = WIRING["connectors"]["P2"]["pins"]
-    rows = re.findall(r"^\| (\d+) +\| (\w+) +\|", acorn_p2.__doc__, re.M)
-    assert rows, "no pin table in acorn_p2's docstring"
-    for pin, ball in rows:
-        wired = p2[int(pin) - 1]
-        assert wired == ball, f"acorn_p2's docstring has {ball} at P2 pin {pin}; wiring.toml has {wired}"
-
-
 def test_no_acorn_design_takes_the_platform_unchanged_from_litex_boards():
     assert len(ACORN_DESIGNS) >= 7
     for path in ACORN_DESIGNS:

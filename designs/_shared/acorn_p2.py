@@ -1,7 +1,8 @@
 """The Acorn's P2 header as the fleet wires it, and the serial/GPIO switch on its two serial pins.
 
 P2 carries four FPGA balls to the host (docs/wiring/acorn/wiring.toml is the source of truth;
-tests/test_acorn_p2_pins.py fails if this file or any Acorn design disagrees with it):
+tests/test_acorn_p2_docstring.py fails if this table disagrees with it, tests/test_acorn_p2_pins.py if this
+file or any Acorn design does):
 
 | P2 pin | Ball | Use                    | Pi 5 HAT     | Compute Blade                           |
 |--------|------|------------------------|--------------|-----------------------------------------|
