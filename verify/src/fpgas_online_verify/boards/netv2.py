@@ -92,7 +92,7 @@ class NeTV2(TestBoard):
         "uart": "printable text sent to the UART test design echoes back over the header's UART",
         "ddr": "the LiteX BIOS calibrates the DDR3 and its memory test passes",
         "flash": "a test design reads the SPI flash's JEDEC ID",
-        "ethernet": "the design answers ARP and ping through the NeTV2's own Ethernet port",
+        "ethernet": "the design answers ARP and ping through a USB Ethernet adapter on the Pi cabled to its RJ45",
         "pmod": "the 1-bit loopback through the header's UART pins reads back",
         "pmod-pin-id": "the Pmod pin-ID scan (-debug only: the NeTV2 has no Pmod HAT cabling)",
     }

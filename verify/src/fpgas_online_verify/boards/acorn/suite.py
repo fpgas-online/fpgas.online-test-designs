@@ -54,7 +54,9 @@ TESTS = ("pcie-link", "pcie-bar0", "rp1-pio", "jtag", "flash", "ddr", "p2-uart",
 ABOUT = {
     "pcie-link": "the PCIe link's speed and width are the setup's",
     "pcie-bar0": "over PCIe BAR0: the build running, the flash's identity, the device DNA, the XADC readings",
-    "power-cycle": "the FPGA restarted since the last check",
+    "power-cycle": (
+        "the FPGA restarted since the last boot's check (scratch holds its reset value or this boot's marker)"
+    ),
     "rp1-pio": "the Pi 5's RP1 PIO, which JTAG uses, is there and can be opened",
     "jtag": "over the P1 cable, the JTAG IDCODE and device DNA read, and the DNA is BAR0's",
     "flash": "both flash slots are read whole and match the release's images",

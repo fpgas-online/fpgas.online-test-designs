@@ -47,8 +47,10 @@ class Arty(TestBoard):
         "ddr": "the LiteX BIOS calibrates the DDR3 and its memory test passes",
         "flash": "a test design reads the SPI flash's JEDEC ID",
         "ethernet": "the design answers ARP and ping through the Pi's USB Ethernet adapter cabled to its RJ45",
-        "wiring": "each Pmod HAT wire carries the FPGA pin the cabling map puts there (the pin-ID scan)",
-        "pmod": "the Pmod loopback wiring reads back",
+        "wiring": (
+            "each Pmod HAT wire but the six on the shared JA/JB pins carries the FPGA pin the cabling map puts there"
+        ),
+        "pmod": "the Pmod loopback wiring reads back (-debug only)",
     }
 
     def idcode_argv(self, host):
