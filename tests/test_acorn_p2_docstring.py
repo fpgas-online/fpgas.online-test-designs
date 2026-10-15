@@ -97,7 +97,7 @@ def _broken(old, new):
 
 
 def test_the_checks_catch_a_deleted_row_and_wrong_cells():
-    """The two cases #330's re-review found the old ball-only check let through, and a wrong host pin."""
+    """A ball-only check passed a deleted row and a wrong Use (issue #332); a wrong host pin must fail too."""
     row3 = next(line for line in DOC.splitlines() if line.startswith("| 3 "))
     deleted = _table(_broken(row3 + "\n", ""))
     assert list(deleted) != BALLS
