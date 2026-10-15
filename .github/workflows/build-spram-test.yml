@@ -1,0 +1,64 @@
+# .github/workflows/build-spram-test.yml
+name: "Build: SPRAM Test"
+
+on:
+  push:
+    branches: [main]
+  # A pull request builds this design only when something it is built from changes: its own directory, the
+  # shared gateware (its firmware is designs/_shared/ice40_firmware.py), the UART test's TT SoC (which it
+  # reuses), the Python environment, or this file. main always builds.
+  pull_request:
+    paths:
+      - "designs/spram/**"
+      - "designs/_shared/**"
+      - "designs/uart/gateware/uart_soc_tt.py"
+      - "tests/test_spram.py"
+      - "tests/test_up5k_spram.py"
+      # designs/_shared/build_helpers.py checks it exists at import
+      - "scripts/fix_yosys_edif_libref.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/build-spram-test.yml"
+  workflow_dispatch:
+
+# A new push to a pull request cancels that pull request's older, now stale, run.
+# Anything else (main, workflow_dispatch) is grouped by commit, so it never waits
+# behind or cancels another run: every merge builds.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  build-tt:
+    # The name begins "TT FPGA": collect-bitstreams.yml waits for the jobs whose names match its check-regexp.
+    name: "TT FPGA Demo Board (SPRAM)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install iCE40 toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys nextpnr-ice40 fpga-icestorm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      # The firmware on an RV32I model, with a good SPRAM and with each fault it must find; the host script; and
+      # the SPRAM slave (designs/_shared/up5k_spram.py) simulated at the SoC's address with a model of the primitive.
+      - name: Test the firmware, the host script and the SPRAM slave
+        run: uv run --extra build --with pytest pytest -v -rs tests/test_spram.py tests/test_up5k_spram.py
+
+      - name: Build the TT FPGA SPRAM test bitstream
+        run: uv run python designs/spram/gateware/spram_soc_tt.py --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: spram-test-tt-fpga
+          path: |
+            designs/spram/build/tt-fpga-yosys-nextpnr/gateware/*.bin
+          if-no-files-found: error

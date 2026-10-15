@@ -61,6 +61,7 @@ For tests that do not use UART as the primary interface (e.g., PCIe enumeration)
 | [PCIe Enumeration](pcie-enumeration.md) | — | Yes | — | — | Yes |
 | [DDR Memory](ddr-memory.md) | Yes | Yes | — | — | Yes |
 | [SPI Flash ID](spi-flash-id.md) | Yes | Yes | Yes | — | Yes |
+| [SPRAM](../verify/tt-fpga.md#the-spram-test) | — | — | — | Yes | — |
 
 ¹ A design is built, but the Fomu EVT's PMOD pins reach no pin of the Pi's header it sits on ([#202](https://github.com/fpgas-online/fpgas.online-test-designs/issues/202)).
 
@@ -103,6 +104,14 @@ See: [ddr-memory.md](ddr-memory.md)
 Verifies the FPGA can communicate with its SPI configuration flash by reading the JEDEC manufacturer/device ID and comparing against expected values. The most universal test — applicable to all boards with SPI flash.
 
 See: [spi-flash-id.md](spi-flash-id.md)
+
+### SPRAM
+
+Verifies the iCE40UP5K's 128 KB of SPRAM on the TT FPGA breakout, which has no flash and no DRAM: firmware that
+keeps every value in registers writes and reads back every word twice (a pattern holding each word's address,
+then its inverse) and checks each byte lane's write mask.
+
+See: [The `spram` test](../verify/tt-fpga.md#the-spram-test)
 
 ## References
 
