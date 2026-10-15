@@ -6,9 +6,10 @@ The first N arguments after PORT are the test script's argv, the rest the progra
 once it has PORT open (Linux: /proc/<pid>/fd) and a moment more for the flush pyserial does on open, the design
 is loaded, and the exit status is the test's (or the programmer's, if loading failed).
 
-A design that prints its result once, the moment it starts (the SPI flash test's JEDEC ID), is otherwise lost on
-a UART the kernel only receives on while it is open: the NeTV2's, on the Pi's own ttyAMA0. An FTDI UART (the
-Arty's) keeps what arrives in the chip until the port is opened, so it does not need this.
+A design that prints what its test needs once, the moment it starts (the SPI flash test's JEDEC ID; the DDR
+test's BIOS "Switching SDRAM to software control."), is otherwise lost on a UART the kernel only receives on
+while it is open: the NeTV2's, on the Pi's own ttyAMA0. An FTDI UART (the Arty's) keeps what arrives in the
+chip until the port is opened, so it does not need this.
 """
 
 import os

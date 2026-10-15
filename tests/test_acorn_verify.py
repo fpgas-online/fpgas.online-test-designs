@@ -15,7 +15,7 @@ import json
 import pathlib
 
 import pytest
-from fpgas_online_verify import core, identity
+from fpgas_online_verify import conclusion, core, identity, runner
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
 from fpgas_online_verify.boards.acorn import check as av
 from fpgas_online_verify.boards.acorn import suite
@@ -185,6 +185,73 @@ def test_a_board_on_sqrl_factory_image_still_has_its_link_and_jtag_checked(tmp_p
     assert "unconverted" in report["not_run"]["flash"]
 
 
+CLE101_IDCODE = 0x03631093  # XC7A100T, silicon version 0
+
+
+def test_an_acorn_host_checks_the_link_and_jtag_of_a_card_on_the_vendor_xdma_sample(tmp_path, images):
+    """#155: on a host set up for an Acorn, a card on the vendor XDMA sample (10ee:7011) is taken to be an
+    unconverted Acorn, as a factory-image card is: its link and its P1 JTAG are tested, nothing on BAR0. The
+    variant is not in its PCI IDs, so the jtag test takes either Acorn FPGA and names the variant it found."""
+    rig = Rig(tmp_path, images, ids=fk.VENDOR_XDMA)
+    rig.pi.idcode = CLE101_IDCODE
+    report = suite.check_board(rig.found(), rig.options(open_bar=fk.refuse, configured=True))
+    assert _results(report) == {"pcie-link": "pass", "rp1-pio": "pass", "jtag": "pass"}
+    assert set(report["not_run"]) == {"pcie-bar0", "flash", "ddr", "p2-uart", "p2-serial", "scratch", "p2-gpio"}
+    assert report["result"] == "fail"
+    assert report["reason"].startswith("unconverted: runs the vendor XDMA sample image, not the fpgas.online design")
+    (jtag,) = [t for t in report["tests"] if t["test"] == "jtag"]
+    assert jtag["variant"] == "cle-101"
+    assert report["identity"]["variant"] == "cle-101"
+    assert not rig.uart.opened_at
+
+
+def test_a_card_on_the_vendor_xdma_sample_is_not_tested_when_the_host_is_not_set_up_for_an_acorn(tmp_path, images):
+    """With fpga-board = auto, 10ee:7011 may be a NeTV2 (the Xilinx sample runs on one too): its pins are not the
+    Acorn's to drive, so nothing is tested, as before #155."""
+    rig = Rig(tmp_path, images, ids=fk.VENDOR_XDMA)
+    report = suite.check_board(rig.found(), rig.options(open_bar=fk.refuse))
+    assert report["tests"] == [] and report["result"] == "fail"
+    assert rig.pi.calls == []  # no pin read or driven, no openFPGALoader
+
+
+def test_jtag_with_no_known_variant_names_none_for_an_xc7a200t(tmp_path, images):
+    """The XC7A200T is in the CLE-215 and the CLE-215+: it passes as an Acorn's FPGA, and no variant is named."""
+    rig = Rig(tmp_path, images, ids=fk.VENDOR_XDMA)  # the fake's IDCODE is an XC7A200T
+    report = suite.check_board(rig.found(), rig.options(open_bar=fk.refuse, configured=True))
+    (jtag,) = [t for t in report["tests"] if t["test"] == "jtag"]
+    assert jtag["result"] == "pass" and "variant" not in jtag
+    assert report["variant"] is None and "variant" not in report["identity"]
+
+
+@pytest.mark.parametrize(
+    ("kind", "configured", "acorn"),
+    [("fpgas-online", False, True), ("sqrl-factory", False, True), ("vendor-xdma", False, False),
+     ("vendor-xdma", True, True), ("litex-other", True, False), ("xilinx-xdma", True, False),
+     ("pcileech", True, False), ("unknown", True, False)],
+)  # fmt: skip
+def test_which_cards_are_taken_to_be_acorns(kind, configured, acorn):
+    assert av.is_acorn({"kind": kind}, configured) is acorn
+
+
+def test_identify_on_an_acorn_host_reads_the_jtag_of_a_card_on_the_vendor_xdma_sample(tmp_path, images):
+    """--identify (and so the label) reads what the check reads: the IDCODE, and the variant it names."""
+    from fpgas_online_verify.boards.acorn import BOARD
+
+    rig = Rig(tmp_path, images, ids=fk.VENDOR_XDMA)
+    rig.pi.idcode = CLE101_IDCODE
+    ident = BOARD.identify({}, rig.found(), rig.options(open_bar=fk.refuse, configured=True))
+    assert ident["variant"] == "cle-101" and ident["idcode_device"] == "XC7A100T"
+
+
+def test_jtag_with_no_known_variant_fails_on_an_fpga_that_is_no_acorns(tmp_path, images):
+    rig = Rig(tmp_path, images, ids=fk.VENDOR_XDMA)
+    rig.pi.idcode = 0x0362D093  # XC7A35T: no Acorn has one
+    report = suite.check_board(rig.found(), rig.options(open_bar=fk.refuse, configured=True))
+    (jtag,) = [t for t in report["tests"] if t["test"] == "jtag"]
+    assert jtag["result"] == "fail" and "variant" not in jtag
+    assert "expected one XC7A100T (cle-101) or XC7A200T (cle-215/cle-215+)" in jtag["reason"]
+
+
 @pytest.mark.parametrize(
     ("ids", "cls", "bars", "title"),
     [
@@ -202,9 +269,24 @@ def test_xilinx_boards_that_are_not_acorns_are_named_and_fail_with_no_bar_traffi
     report = suite.check_board(dev, {"images": images, "open_bar": fk.refuse, "run": fk.FakePi(), "model": fk.PI5,
                                      "event": lambda s, d: events.append(s)})  # fmt: skip
     assert report["result"] == "fail"
-    assert report["reason"] == f"{title}: fpgas.online has no test design for this board yet"
+    # the reason names the issue that tracks a test design for such a card, and promises nothing ("yet")
+    assert report["reason"] == f"{title}: no test design for this board (fpgas.online-test-designs issue 238)"
+    assert "yet" not in report["reason"]
     assert report["tests"] == [] and "unconverted" not in report["reason"]
     assert events == ["fpga-board-identified"]
+    # told to people, and to the registry, as a Xilinx PCIe card, not as an Acorn; no Acorn debug tool offered
+    whole = {"result": "fail", "mode": "auto", "boards": [report]}
+    assert runner.details(whole)["board0"] == "xilinx-pcie - fail"
+    told = runner.summary(whole)
+    assert f"  xilinx-pcie {title}: fail" in told and "  acorn" not in told
+    assert f"  xilinx-pcie {title}: fail (no test ran)" in conclusion.lines(whole)
+    assert "fpgas-acorn" not in told and "fpgas-xilinx" not in told
+    # an Acorn tool named for the BAR0 error such a card can still have is not offered for it either
+    bar0 = {**report, "reason": "BAR0 could not be mapped: PermissionError"}
+    assert not [a for a in conclusion.advice({"result": "error", "boards": [bar0]}) if "fpgas-" in a]
+    plain = {"board": "acorn", "variant": "cle-215+", "found": {"kind": "fpgas-online"}, "result": "fail"}
+    assert conclusion.shown(plain) == ("acorn", "cle-215+") and conclusion.shown({"board": "tt"}) == ("tt", None)
+    assert report["board"] == "acorn"  # the key the state file and the identity use is unchanged
 
 
 def test_a_design_we_did_not_build_fails_as_such(tmp_path, images):
@@ -658,7 +740,8 @@ def test_a_test_the_acorn_does_not_have_is_an_error(tmp_path, images):
 
 
 def test_the_board_module_lists_the_tests():
-    assert ACORN.tests == suite.TESTS
+    assert ACORN.tests == suite.SELECTABLE and set(ACORN.tests) - set(suite.TESTS) == {"power-cycle"}
+    assert ACORN.opt_in == (("power-cycle", "power-cycle-check = on"),)
 
 
 # -- BAR0 ---------------------------------------------------------------------------------------------
@@ -889,3 +972,127 @@ def test_a_run_in_which_nothing_asked_for_ran_fails(tmp_path, images):
     report = rig.check(tests=["p2-gpio"])
     assert report["tests"] == [] and report["result"] == "fail"
     assert report["reason"] == "none of the tests asked for ran (p2-gpio)"
+
+
+# -- the power-cycle check (opt-in): was the FPGA configured since the last check? ----------------------------
+
+BOOT_A, BOOT_B = "11111111-2222-3333-4444-555555555555", "99999999-8888-7777-6666-555555555555"
+
+
+def _power(rig, boot_id, **extra):
+    return rig.check(power_cycle_check=True, boot_id=boot_id, **extra)
+
+
+def test_the_power_cycle_check_is_off_unless_asked_for(tmp_path, images):
+    """Outside the fpgas.online fleet nothing says how a host is restarted, so the check is opt-in: by default
+    it is not in the report and the scratch register is left as it was found."""
+    rig = Rig(tmp_path, images)
+    report = rig.check()
+    assert report["result"] == "pass" and "power-cycle" not in _results(report)
+    assert "power-cycle" not in report.get("not_run", {})
+    assert rig.soc.scratch == av.SCRATCH_RESET
+
+
+def test_an_fpga_configured_since_the_last_check_passes_and_is_marked(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    report = _power(rig, BOOT_A)
+    assert report["result"] == "pass" and _results(report)["power-cycle"] == "pass"
+    # the scratch test ran after it and put the register back; the marker is what is left at the end
+    assert rig.soc.scratch == av.boot_marker(BOOT_A) != av.SCRATCH_RESET
+
+
+def test_a_second_check_in_the_same_boot_passes(tmp_path, images):
+    """An operator running fpgas-verify again must not fail the board: the marker is this boot's own."""
+    rig = Rig(tmp_path, images)
+    _power(rig, BOOT_A)
+    report = _power(rig, BOOT_A)
+    assert report["result"] == "pass"
+    (entry,) = [t for t in report["tests"] if t["test"] == "power-cycle"]
+    assert "already checked in this boot" in " ".join(entry["output"])
+
+
+def test_a_card_that_kept_its_configuration_across_the_pis_restart_fails(tmp_path, images):
+    """The Pi restarted (a new boot id) and the FPGA did not: power from another source, a restart that does
+    not reach the card, or a power-off too short to drop it. Whatever a visitor left in it is still there."""
+    rig = Rig(tmp_path, images)
+    _power(rig, BOOT_A)
+    report = _power(rig, BOOT_B)
+    assert report["result"] == "fail" and _results(report)["power-cycle"] == "fail"
+    assert "the FPGA has not restarted since an earlier boot's check" in report["reason"]
+    assert "did not restart with the Pi" in report["reason"]
+    assert rig.soc.scratch == av.boot_marker(BOOT_A)  # left as found: the next check fails too, until a power cycle
+
+
+def test_a_power_cycle_makes_it_pass_again(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    _power(rig, BOOT_A)
+    rig.soc.scratch = av.SCRATCH_RESET  # the FPGA reconfigured from its flash
+    report = _power(rig, BOOT_B)
+    assert report["result"] == "pass" and rig.soc.scratch == av.boot_marker(BOOT_B)
+
+
+def test_a_scratch_value_nobody_of_ours_wrote_fails(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    rig.soc.scratch = 0xDEADBEEF
+    report = _power(rig, BOOT_A)
+    assert _results(report)["power-cycle"] == "fail" and "0xdeadbeef" in report["reason"]
+    assert rig.soc.scratch == 0xDEADBEEF
+
+
+def test_no_bar0_means_the_power_cycle_check_is_not_run_and_says_why(tmp_path, images):
+    rig = Rig(tmp_path, images, identifier="fpgas-online Acorn PCIe SoC cle-215+ 2026-10-01 09:00:00")
+    report = _power(rig, BOOT_A)  # a build that is not in the release: nothing past the identifier is read
+    assert report["result"] != "pass" and "power-cycle" in report["not_run"]
+    assert rig.soc.scratch == av.SCRATCH_RESET
+
+
+def test_only_a_run_of_the_power_cycle_test_leaves_the_marker(tmp_path, images):
+    """`--test scratch` alone is a debugging run: it must not make the next boot's check think it was checked."""
+    rig = Rig(tmp_path, images)
+    rig.check(power_cycle_check=True, boot_id=BOOT_A, tests=["scratch"])
+    assert rig.soc.scratch == av.SCRATCH_RESET
+
+
+def test_the_marker_is_never_the_reset_value_or_a_test_pattern():
+    assert av.boot_marker(BOOT_A) != av.boot_marker(BOOT_B)
+    taken = {av.SCRATCH_RESET, *av.SCRATCH_PATTERNS}
+
+    class Digest:  # a boot id whose hash lands on each taken value
+        def __init__(self, value):
+            self.value = value
+
+        def digest(self):
+            return self.value.to_bytes(4, "big") + bytes(28)
+
+    for value in taken:
+        assert av.boot_marker("x", sha256=lambda data, v=value: Digest(v)) not in taken
+
+
+def test_power_cycle_can_be_asked_for_by_name_when_it_is_on_and_says_so_when_it_is_off(tmp_path, images):
+    assert "power-cycle" in ACORN.tests  # so `--test power-cycle` is not filtered out with fpga-board = auto
+    rig = Rig(tmp_path, images)
+    report = rig.check(power_cycle_check=True, boot_id=BOOT_A, tests=["power-cycle"])
+    assert _results(report) == {"power-cycle": "pass"} and rig.soc.scratch == av.boot_marker(BOOT_A)
+    with pytest.raises(core.Problem, match="opt-in: set `power-cycle-check = on`"):
+        Rig(tmp_path / "off", images).check(tests=["power-cycle"])
+    with pytest.raises(core.Problem, match="the Acorn has no test bogus"):  # a wrong name is named first
+        Rig(tmp_path / "bogus", images).check(tests=["power-cycle", "bogus"])
+
+
+def test_identify_never_runs_or_marks_the_power_cycle_check(tmp_path, images):
+    rig = Rig(tmp_path, images)
+    ACORN.identify({}, rig.found(), rig.options(power_cycle_check=True, boot_id=BOOT_A))
+    assert rig.soc.scratch == av.SCRATCH_RESET
+
+
+def test_on_a_blade_whose_uart_holds_tms_the_jtag_test_fails_saying_so_and_the_rest_still_runs(tmp_path, images):
+    """What ps1's Compute Blade showed (#127): the kernel does not lend GPIO14 while the serial port has it."""
+    rig = Rig(tmp_path, images, model=fk.CM5)
+    rig.pi.pins.update({2: ["no", "pu", None], 3: ["no", "pu", None], 4: ["no", "pu", None]})
+    held = {14: "1f00030000.serial (uart0)"}
+    report = rig.check(gpiochip=lambda c: "/dev/gpiochip0", held_pins=lambda chip, gpios: held)
+    results = _results(report)
+    assert results["jtag"] == "fail" and results["pcie-bar0"] == results["flash"] == results["p2-uart"] == "pass"
+    assert "GPIO14 (TMS) is held by 1f00030000.serial (uart0)" in report["reason"]
+    assert not rig.pi.ran("openFPGALoader")
+    assert report["identity"]["dna"]  # still known, from BAR0

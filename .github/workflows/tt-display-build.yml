@@ -1,0 +1,61 @@
+# .github/workflows/tt-display-build.yml
+name: "Build: TT Display Pattern"
+
+on:
+  push:
+    branches: [main]
+  # A pull request builds this design only when something it is built from changes: its own directory, the
+  # shared gateware, the Python environment, or this file. main always builds.
+  pull_request:
+    paths:
+      - "designs/tt-display/**"
+      - "designs/_shared/**"
+      - "tests/test_tt_display.py"
+      # designs/_shared/build_helpers.py checks it exists at import
+      - "scripts/fix_yosys_edif_libref.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/tt-display-build.yml"
+  workflow_dispatch:
+
+# A new push to a pull request cancels that pull request's older, now stale, run.
+# Anything else (main, workflow_dispatch) is grouped by commit, so it never waits
+# behind or cancels another run: every merge builds, exactly as before.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  build-tt:
+    # The name begins "TT FPGA": collect-bitstreams.yml waits for the jobs whose names match its check-regexp.
+    name: "TT FPGA Demo Board (display)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install iCE40 toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yosys nextpnr-ice40 fpga-icestorm
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Python dependencies
+        run: uv sync --extra build
+
+      - name: Simulate the pattern
+        run: uv run --extra build --with pytest pytest -v -rs tests/test_tt_display.py
+
+      - name: Build the TT FPGA display pattern
+        run: |
+          uv run python designs/tt-display/gateware/tt_display.py \
+            --build
+
+      - name: Upload bitstream
+        uses: actions/upload-artifact@v4
+        with:
+          name: tt-display-tt-fpga
+          path: |
+            designs/tt-display/build/tt-fpga-yosys-nextpnr/gateware/*.bin
+          if-no-files-found: error

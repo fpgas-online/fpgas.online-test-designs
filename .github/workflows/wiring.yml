@@ -33,13 +33,21 @@ jobs:
 
       - name: Lint
         run: |
-          uv run --no-project --with ruff ruff check docs/wiring/acorn
-          uv run --no-project --with ruff ruff format --check docs/wiring/acorn
+          uv run --no-project --with ruff ruff check docs/diagrams docs/wiring/acorn
+          uv run --no-project --with ruff ruff format --check docs/diagrams docs/wiring/acorn
 
       - name: Tests
-        run: uv run --no-project --python 3.12 --with pytest pytest docs/wiring/acorn
+        # Pillow and fontTools at gen.py's pins: test_steps.py draws a step picture.
+        run: >-
+          uv run --no-project --python 3.12 --with pytest --with pillow==12.3.0 --with fonttools==4.65.0
+          pytest docs/diagrams docs/wiring/acorn
 
       - name: generated/ matches wiring.toml
         # Pillow and fontTools are pinned in gen.py's script metadata and the fonts are in the repository,
         # so the SVGs and tables come out byte for byte the same here as on the machine that committed them.
         run: uv run --python 3.12 docs/wiring/acorn/gen.py --check
+
+      - name: generated/views/ matches views.toml and geometry.toml
+        # Builds the SVGs in memory and compares their hashes with views.json; it starts no browser, so it
+        # does not render the PNGs again; it holds each PNG to the hash the last build recorded.
+        run: uv run --python 3.12 docs/diagrams/build.py docs/wiring/acorn --check

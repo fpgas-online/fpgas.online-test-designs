@@ -1,0 +1,176 @@
+# fpgas-verify: installing it
+
+You have a Raspberry Pi with an FPGA board attached and want to install `fpgas-verify` for that board.
+Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
+
+## Installing
+
+### What you need
+
+- a Raspberry Pi, or another host running Debian or Raspberry Pi OS bookworm or trixie, with the board attached
+- `sudo` and `curl` on it, and a network that reaches `apt.fpgas.online` and `fpgas.online`
+
+`grep VERSION_CODENAME /etc/os-release` says which release the host runs.
+
+### Steps
+
+**1.** Add the fpgas.online apt repository. Each line replaces the file it writes, so the step is safe to run again.
+
+The `curl` line downloads the repository's key. If the download fails, `curl` prints why and writes nothing. The
+last line lists the key: `apt.gpg` is about 1.2 kB (1164 bytes). If `ls` says `No such file or directory`, or the
+size is far from that, run the `curl` line again.
+
+```bash
+# The fpgas.online apt repository (bookworm or trixie).
+sudo install -d -m0755 /etc/apt/keyrings
+sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/apt.gpg https://apt.fpgas.online/apt.gpg
+echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
+  | sudo tee /etc/apt/sources.list.d/apt.list
+ls -l /etc/apt/keyrings/apt.gpg
+```
+
+**2.** Add the fpgas.online-fpga-tools repository, before installing. On bookworm every board but the TT FPGA board
+needs it: Debian bookworm's openFPGALoader cannot read the device DNA. A NeTV2 on a Raspberry Pi 5 needs it
+on any release: only its build has the `rp1pio` cable. On 32-bit Raspberry Pi OS (`ID=raspbian`) the suite is
+`raspbian-<release>`, which is built for every Pi down to the Pi 1 and Zero.
+
+As in step 1, the step is safe to run again. Its last line lists the key: `fpgas.online-fpga-tools.gpg` is about
+1.2 kB (1174 bytes). If it is missing or its size is far from that, run the `curl` line again.
+
+```bash
+# fpgas.online's openFPGALoader; add it before installing. A NeTV2 on a Pi 5 needs it. Elsewhere Debian's own
+# works from 0.13.0 on (trixie), but bookworm's (0.10.0) is too old: it cannot read the device DNA.
+sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/fpgas.online-fpga-tools.gpg \
+  https://fpgas.online/fpgas.online-fpga-tools/fpgas.online-fpga-tools.gpg
+echo "deb [signed-by=/etc/apt/keyrings/fpgas.online-fpga-tools.gpg] https://fpgas.online/fpgas.online-fpga-tools/$(. /etc/os-release; if [ "$ID" = raspbian ]; then echo "raspbian-$VERSION_CODENAME"; else echo "$VERSION_CODENAME"; fi)/ ./" \
+  | sudo tee /etc/apt/sources.list.d/fpgas.online-fpga-tools.list
+ls -l /etc/apt/keyrings/fpgas.online-fpga-tools.gpg
+```
+
+**3.** Read the new repositories' package lists.
+
+```bash
+sudo apt update
+```
+
+**4.** Install the package for your board, **one** of the table below. They conflict, so a host is never set up
+for two boards by accident.
+
+```bash
+sudo apt install fpgas-online-arty         # the package for your board
+```
+
+| Package | Installs |
+|---|---|
+| `fpgas-online-acorn` | everything to check a Sqrl Acorn CLE-215+ / CLE-101 (and LiteFury), and turns the boot check on for it |
+| `fpgas-online-arty` | everything to check a Digilent Arty A7-35T, and turns the boot check on for it |
+| `fpgas-online-netv2` | everything to check a Kosagi NeTV2 (XC7A35T or XC7A100T), and turns the boot check on for it |
+| `fpgas-online-fomu` | everything to check a Fomu EVT, and turns the boot check on for it |
+| `fpgas-online-tt-fpga` | everything to check a TT FPGA Demo Board, and turns the boot check on for it |
+| `fpgas-online-all-boards` | everything to check any of the boards, and turns the boot check on for whichever is found |
+| `fpgas-online-multi-board` | turns the boot check on for whichever board is found, of those whose `fpgas-online-<board>-tools` you also install |
+
+**5.** If you want the debug tool for when the check fails, install the board's `-debug` package too.
+
+```bash
+sudo apt install fpgas-online-arty-debug   # fpgas-arty-debug
+```
+
+### Check
+
+`fpgas-verify --list` lists the installed boards and the one this host is set up for.
+
+Where step 2 applies, `dpkg -l 'openfpgaloader*'` lists `openfpgaloader-fpgasonline` or
+`openfpgaloader-fpgasonline-git` (the repository's release and git builds), not Debian's `openfpgaloader`.
+
+### If it fails
+
+- `apt update` says the repository `is not signed`: its key is missing, empty or wrong. On trixie a missing key
+  gives `Failed to parse keyring "/etc/apt/keyrings/apt.gpg"` and `No such file or directory`. An empty or wrong
+  one gives `Missing key 878EC72910E22EA0E989EAA9BEB0EC3124E538E4, which is needed to verify signature.` Both end
+  `The repository 'https://apt.fpgas.online/trixie ./ InRelease' is not signed.` On bookworm it says `NO_PUBKEY`
+  and the key's ID (`BEB0EC3124E538E4` for `apt.fpgas.online`). Run the step that adds that repository again
+  (step 1 for `apt.fpgas.online`, step 2 for `fpgas.online-fpga-tools`), check its `ls` line, then run step 3.
+- `apt` cannot find a package: the repository line of step 1 is missing, or step 3 was not run after it.
+- On bookworm, `apt` reports an unmet dependency on `openfpgaloader (>= 0.13.0)`: step 2 was not done. Do
+  steps 2 and 3, then step 4 again.
+- On trixie, Debian's own openFPGALoader was installed because step 2 came after step 4; it does not have the
+  `rp1pio` cable a NeTV2 on a Raspberry Pi 5 needs. Run step 3, then
+  `sudo apt install openfpgaloader-fpgasonline` to switch to the repository's build.
+
+### Next
+
+- [Running it](running.md#running-it): run the check now, without waiting for a boot.
+- The packages of each board, below.
+
+## Notes
+
+* `fpgas-online-<board>-debug` adds `fpgas-<board>-debug` and the tools for the tests the boot check skips.
+* Installing does not run the check. It runs at the next boot, or when you run it.
+* The packages are `Architecture: all`. On bookworm, every board's packages but the TT FPGA board's need
+  openFPGALoader from the fpga-tools repository. It is built for arm64 and armhf only, so on bookworm those
+  packages do not install on x86. The NeTV2
+  and the Acorn need a Pi's GPIO header, and so does the Fomu EVT, which sits on it; the Arty and TT FPGA board
+  need only USB.
+* Versions are `0.0.postN` from `git describe`. Each package depends on the others'
+  exact version, so `sudo apt upgrade` moves them together.
+* What each board's packages pull in is listed [below](#what-the-packages-of-each-board-install).
+
+## What the packages of each board install
+
+### Acorn packages
+
+| Package | Version scheme | Installs |
+|---|---|---|
+| `fpgas-online-acorn` | `X.Y.postN` from `git describe` (e.g. `0.0.post576`) | installs everything below to check an Acorn, and turns the boot check (`fpgas-verify.service`) on for it |
+| `fpgas-online-acorn-tools` | `X.Y.postN` | the Acorn's module of `fpgas_online_verify` (`suite.py`, `check.py`, `bist.py`, `links.py`, `setup.py`, `spi_flash.py`, `uartbone_link.py`, and `data/wiring.toml` and `data/expected.toml`), `/usr/bin/fpgas-acorn-verify` and `/usr/bin/fpgas-acorn-flash`; with openFPGALoader for the P1 JTAG check (recommending `raspi-utils-core`, whose `pinctrl` puts the JTAG pins back after it and drives the Pi's side of J5/H5; Raspberry Pi OS only), and `python3-serial` for the P2 UART check |
+| `fpgas-online-acorn-bitstreams` | pinned release date + commit (e.g. `20260923+ge48a750c8303`) | `/usr/share/fpgas-online/acorn-pcie/images/`: `manifest.json`, and for each of `cle-215p` / `cle-101` the golden (`0x000000`) and operational (`0x400000`) flash images, the operational `.bit`, and the CSR maps |
+| `fpgas-online-verify` | `X.Y.postN` | `fpgas-verify` and its unit |
+
+The tools package depends on one exact bitstreams version. Which release that is comes from [`packaging/acorn-pcie/release.toml`](../../packaging/acorn-pcie/release.toml), and a new release reaches hosts only when a reviewed PR moves that pin. Every package is built, and its install rules are checked in clean Debian bookworm and trixie, by [`collect-bitstreams.yml`](../../.github/workflows/collect-bitstreams.yml).
+
+`fpgas-online-acorn-debug` adds `fpgas-acorn-debug`. It brings openFPGALoader for loading the `.bit` over GPIO JTAG, which is how a card still on the image it was sold with is converted, and `python3-serial` for `fpgas-acorn-flash --uart`.
+
+The [fpgas.online-fpga-tools repository](https://github.com/fpgas-online/fpgas.online-fpga-tools#debian-packages-bookworm-trixie-sid-arm64-armhf) has the fpgas.online openFPGALoader build, with the RP1 PIO JTAG cable and SPI flash info. Add it **before** installing. Otherwise apt installs Debian's own package (bookworm 0.10.0, trixie 0.13.1). Adding the repository afterwards does not replace it: run `sudo apt install openfpgaloader-fpgasonline` to switch.
+
+### Arty A7 packages
+
+| Package | Installs |
+|---------|----------|
+| `fpgas-online-arty` | installs everything below to check an Arty, and turns the boot check (`fpgas-verify.service`) on for it |
+| `fpgas-online-arty-tools` | the Arty's module of `fpgas_online_verify`, and `fpgas-arty-verify`; with `python3-serial`, openFPGALoader, `python3-libgpiod` (the PMOD HAT scan) and `iproute2`/`ping`/`arping` (the Ethernet test, which runs as root), and recommending `raspi-utils-core` (`pinctrl`, which puts back the Pi's SPI/UART/I2C pin functions after the scan; Raspberry Pi OS only) |
+| `fpgas-online-arty-bitstreams` | the Arty A7-35T test bitstreams built by the same commit's CI, in `/usr/share/fpgas-online/arty/bitstreams/` |
+| `fpgas-online-verify` | `fpgas-verify`, the unit, and the host test scripts |
+
+Without the [fpgas.online-fpga-tools repository](https://github.com/fpgas-online/fpgas.online-fpga-tools#debian-packages-bookworm-trixie-sid-arm64-armhf) apt installs Debian's `openfpgaloader`. That works for the Arty from 0.13.0 on (trixie's), because the check reads the device DNA with `--read-dna`. Bookworm's (0.10.0) is too old, so on bookworm `fpgas-online-arty` installs only with the repository added.
+
+### NeTV2 packages
+
+| Package | Installs |
+|---------|----------|
+| `fpgas-online-netv2` | installs everything below to check a NeTV2, and turns the boot check (`fpgas-verify.service`) on for it |
+| `fpgas-online-netv2-tools` | the NeTV2's module of `fpgas_online_verify`, and `fpgas-netv2-verify`; with `python3-serial`, openFPGALoader and openocd |
+| `fpgas-online-netv2-bitstreams` | the XC7A35T and XC7A100T test bitstreams built by the same commit's CI, in `/usr/share/fpgas-online/netv2/bitstreams/` |
+| `fpgas-online-verify` | `fpgas-verify`, the unit, and the host test scripts |
+
+On a Raspberry Pi 5 the [fpgas.online-fpga-tools repository](https://github.com/fpgas-online/fpgas.online-fpga-tools#debian-packages-bookworm-trixie-sid-arm64-armhf) is needed: only its openFPGALoader builds have the `rp1pio` cable. They also have the SPI-over-JTAG bridge for the XC7A35T-FGG484, which Debian bookworm's `openfpgaloader` lacks, so on bookworm the flash readback of an XC7A35T board fails without them.
+
+### Fomu EVT packages
+
+| Package | Installs |
+|---------|----------|
+| `fpgas-online-fomu` | installs everything below to check a Fomu, and turns the boot check (`fpgas-verify.service`) on for it |
+| `fpgas-online-fomu-tools` | the Fomu's module of `fpgas_online_verify`, and `fpgas-fomu-verify`; with `python3-serial` and openFPGALoader |
+| `fpgas-online-fomu-bitstreams` | the test bitstreams built by the same commit's CI, in `/usr/share/fpgas-online/fomu/bitstreams/` |
+| `fpgas-online-verify` | `fpgas-verify`, the unit, and the host test scripts |
+
+### TT FPGA packages
+
+| Package | Installs |
+|---------|----------|
+| `fpgas-online-tt-fpga` | installs everything below to check a TT FPGA Demo Board, and turns the boot check (`fpgas-verify.service`) on for it |
+| `fpgas-online-tt-fpga-tools` | the board's module of `fpgas_online_verify`, and `fpgas-tt-fpga-verify`; with `python3-serial` and `python3-libgpiod` (the PMOD HAT scan), and recommending `micropython-mpremote` and `raspi-utils-core` (`pinctrl`, which puts back the Pi's SPI/UART/I2C pin functions after the scan; Raspberry Pi OS only) |
+| `fpgas-online-tt-fpga-bitstreams` | the test bitstreams built by the same commit's CI, in `/usr/share/fpgas-online/tt-fpga/bitstreams/` |
+| `fpgas-online-verify` | `fpgas-verify`, the unit, and the host test scripts |
+
+`fpgas-online-tt` is a different package: the TT site's own.

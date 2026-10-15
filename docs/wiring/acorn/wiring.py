@@ -15,6 +15,24 @@ DATA = tomllib.loads((HERE / "wiring.toml").read_text())
 
 CONNECTORS = DATA["connectors"]
 SIGNALS = DATA["signals"]
+# [{tool, note?, when?, carrier?}]: what building and fitting the cables takes. `when = "resistor"`: only where a
+# wire has one. `carrier`: on that carrier's list only.
+TOOLS = DATA.get("tools", [])
+for _tool in TOOLS:
+    if (
+        not _tool.get("tool")
+        or set(_tool) - {"tool", "note", "note_resistor", "when", "carrier"}
+        or _tool.get("when", "resistor") != "resistor"
+    ):
+        raise ValueError(
+            f'wiring.toml: a tool needs a `tool`, and may have `note`, `when = "resistor"` and `carrier`: {_tool}'
+        )
+SOURCES = DATA["sources"]  # [{claim, source, carrier (optional)}]: where a fact on the pages comes from
+LENGTHS = DATA["lengths"]  # {cut_back, resistor, strip, tube, resistor_tube, flag_back, resistor_lead, slack} in mm
+if LENGTHS["flag_back"] <= LENGTHS["resistor"]:
+    raise ValueError("wiring.toml: [lengths] flag_back must be greater than resistor, or the flag is cut off")
+if not any(f"heat-shrink tube, about {LENGTHS['tube']} mm" in p["part"] for p in DATA.get("parts", [])):
+    raise ValueError("wiring.toml: [lengths] tube is not the size of the heat-shrink tube in [[parts]]")
 DIRECTION = {"pi": "Pi → FPGA", "fpga": "FPGA → Pi", "both": "either"}
 
 
@@ -26,6 +44,61 @@ class Header:
     columns: int
     pins: dict  # pin number -> {name, gpio, func, tag, rpi}
     housings: list  # [(first pin, last pin)]
+    numbering: str = "across"  # how the printed numbers run, seen from above: "across" rows or "down" columns
+    count: int = 0  # how many pins the whole header has
+    printed: bool = False  # the pin numbers are printed on the board beside the header
+    grounds: tuple = ()  # the header's ground pins, where `pins` does not list them all: a probe's reference
+
+    def grid(self, first, last):
+        """Pins `first` to `last` as they sit on the board seen from above: one tuple per row, left to right."""
+        rows, rest = divmod(last - first + 1, self.columns)
+        if rest:
+            raise WiringError(f"{self.key}: pins {first} to {last} do not fill {self.columns} columns")
+        if self.numbering == "down":
+            return [tuple(first + c * rows + r for c in range(self.columns)) for r in range(rows)]
+        return [tuple(first + r * self.columns + c for c in range(self.columns)) for r in range(rows)]
+
+
+@dataclass
+class Hat:
+    """The HAT a carrier's pictures draw the host with (wiring.toml [carriers.<key>.hat]): its facts, and where
+    things are in its photo, in photo pixels, as measure_hat.py measures them."""
+
+    name: str  # as the pages print it
+    product: str  # the product string of its HAT EEPROM
+    page: str  # the maker's product page
+    drawing: str  # the dimension drawing `photo` is cut from
+    largest_card: str  # the longest M.2 card it takes: "2280"
+    credit: str  # the photo credit
+    photo: str  # in photos/: header on the right edge, pin 1 at the top
+    columns: tuple  # the centres of the header's two columns, pin 1's first
+    row: float  # the centre of the header's first row
+    pitch: float  # from one row to the next
+    pin1_box: tuple  # pins 1 to 26, boxed on the wiring sheet
+    crop: tuple  # the part of the photo a cable picture shows
+    m2_slot: tuple  # the M.2 socket
+
+
+HAT_FIELDS = tuple(Hat.__dataclass_fields__)
+
+
+def _hat(key, raw):
+    """The carrier's HAT, or None. Refuses a table that lacks a field or has one more."""
+    if raw is None:
+        return None
+    if set(raw) != set(HAT_FIELDS):
+        missing, extra = sorted(set(HAT_FIELDS) - set(raw)), sorted(set(raw) - set(HAT_FIELDS))
+        raise WiringError(f"wiring.toml: {key}: the hat table lacks {missing} or has {extra} besides")
+    boxes = ("pin1_box", "crop", "m2_slot")
+    for f in boxes:
+        x0, y0, x1, y1 = raw[f]
+        if not (x0 < x1 and y0 < y1):
+            raise WiringError(f"wiring.toml: {key}: hat {f} {raw[f]} is not a box (x0, y0, x1, y1)")
+    if not (raw["columns"][0] < raw["columns"][1] and raw["pitch"] > 0):
+        raise WiringError(f"wiring.toml: {key}: hat columns must run left to right, and pitch be more than 0")
+    if not (HERE / "photos" / raw["photo"]).is_file():
+        raise WiringError(f"wiring.toml: {key}: hat photo photos/{raw['photo']} is not there")
+    return Hat(**{f: tuple(raw[f]) if isinstance(raw[f], list) else raw[f] for f in HAT_FIELDS})
 
 
 @dataclass
@@ -37,11 +110,45 @@ class Carrier:
     resistor_value: str
     headers: dict  # key -> Header
     wires: dict  # signal -> (header key, pin)
+    parts: list  # [{qty, part, number?, note?, listed_mm?, fit?}] besides what the wiring itself counts; fit: on the
+    # fitting's list too
+    host: str = ""  # the host in a word, for a pin name that needs its owner: "blade TX"
+    shell: str = ""  # bare metal of the host that is its ground, for a meter probe; "" where a header pin does it
+    power_off: str = ""  # how the host is made dead before the cables are fitted, as a sentence
+    contact: str = ""  # whom the reader tells what the guide cannot settle: "Tell {contact}."
+    hat: Hat | None = None  # the HAT the pictures draw on the host, if it has one
 
     def tag(self, sig):
         """The host's name for the pin a signal lands on, as the sheet prints it; None for none."""
         hdr, pin = self.wires[sig]
         return self.headers[hdr].pins[pin].get("tag")
+
+    def free_ground(self):
+        """(header key, pin) of the first ground pin of a header that no housing covers, or None.
+
+        A header's `grounds` are its ground pins as the maker numbers them; a pin inside one of its housings is
+        out, because a housing on it hides it from a probe.
+        """
+        for key, h in self.headers.items():
+            for pin in h.grounds:
+                if not any(a <= pin <= b for a, b in h.housings):
+                    return key, pin
+        return None
+
+    @property
+    def reference(self):
+        """What a meter probe touches as the host's ground, as words: its bare metal, or a free header ground pin."""
+        if self.shell:
+            return self.shell
+        key, pin = self.free_ground()
+        return f"pin {pin} of the {self.headers[key].name}, a ground pin that no housing covers"
+
+    @property
+    def reference_short(self):
+        """The same, after it has been said once: "the shell", or "pin 14"."""
+        if self.shell:
+            return "the shell"
+        return f"pin {self.free_ground()[1]}"
 
     def unused(self, connector):
         """Signals of a connector that this carrier leaves cut back, VCC apart."""
@@ -67,19 +174,49 @@ class WiringError(Exception):
     pass
 
 
+# Whom a reader tells what the guide cannot settle, unless a carrier names someone: the public guide's readers,
+# in an issue on this repository, which writes the guide (the docs site's Compute Module bootloader page sends its
+# readers to an issue in the same form).
+CONTACT = (
+    "the fpgas.online project in an issue at "
+    "[fpgas-online/fpgas.online-test-designs](https://github.com/fpgas-online/fpgas.online-test-designs/issues)"
+)
+
+
 def _carrier(key, raw):
     headers = {}
     for hk, h in raw["headers"].items():
         pins = {int(n): p for n, p in h["pins"].items()}
+        if h["columns"] > 1 and h.get("numbering") not in ("across", "down"):
+            raise WiringError(f'wiring.toml: {key}: header {hk} needs numbering = "across" or "down"')
         headers[hk] = Header(
-            hk, h["name"], h.get("short", h["name"]), h["columns"], pins, [tuple(r) for r in h.get("housings", [])]
+            hk,
+            h["name"],
+            h.get("short", h["name"]),
+            h["columns"],
+            pins,
+            [tuple(r) for r in h.get("housings", [])],
+            h.get("numbering", "across"),
+            h.get("count", max(pins)),
+            h.get("printed", False),
+            tuple(h.get("grounds", [])),
         )
     wires = {s: (w[0], int(w[1])) for s, w in raw["wires"].items()}
+    parts = [*raw.get("parts", []), *DATA.get("parts", [])]  # this carrier's own, then what every carrier needs
     c = Carrier(
-        key, raw["name"], raw["jtag_pins"], set(raw.get("resistors", [])), raw.get("resistor_value", ""), headers, wires
-    )
+        key, raw["name"], raw["jtag_pins"], set(raw.get("resistors", [])), raw.get("resistor_value", ""), headers,
+        wires, parts, raw.get("host", raw["name"]), raw.get("shell", ""), raw.get("power_off", "Power off the host."),
+        raw.get("contact", CONTACT), _hat(key, raw.get("hat")),
+    )  # fmt: skip
     _check(c)
     return c
+
+
+def listed_mm(c):
+    """The cable's length as the distributors list it, in mm: the one part of `c` with `listed_mm` (checked on
+    load). The reach step gives the longest run it allows."""
+    (mm,) = (part["listed_mm"] for part in c.parts if "listed_mm" in part)
+    return mm
 
 
 def _check(c):
@@ -116,6 +253,30 @@ def _check(c):
             errors.append(f"{c.key}: jtag_pins is {c.jtag_pins}, but TDI:TDO:TCK:TMS land on {derived}")
     except KeyError as e:
         errors.append(f"{c.key}: a JTAG wire is missing, or lands on a pin with no gpio ({e})")
+    for part in c.parts:
+        if not isinstance(part.get("qty"), int) or part["qty"] < 1 or not part.get("part"):
+            errors.append(f"{c.key}: a part needs a whole `qty` of 1 or more and a `part`: {part}")
+        keys = ("qty", "part", "number", "note", "listed_mm", "fit")
+        if set(part) - set(keys):
+            errors.append(f"{c.key}: part {part.get('part')!r} has keys other than {', '.join(keys)}")
+        if not isinstance(part.get("fit", False), bool):
+            errors.append(f"{c.key}: part {part.get('part')!r}: fit must be true or false")
+        if "listed_mm" in part:
+            mm = part["listed_mm"]
+            if isinstance(mm, bool) or not isinstance(mm, int) or mm < 1:  # TOML true is an int to Python
+                errors.append(f"{c.key}: part {part.get('part')!r}: listed_mm must be a whole number of millimetres")
+            elif (run := mm // 2 - LENGTHS["slack"]) < 1:  # the reach step's "at most {run} mm a run"
+                errors.append(f"{c.key}: listed_mm {mm} leaves no run: {mm} // 2 - slack is {run} mm")
+    if sum("listed_mm" in part for part in c.parts) != 1:  # the reach step's number comes from that one part
+        errors.append(f"{c.key}: exactly one part has listed_mm, the cable's length as it is listed")
+    if not c.shell and not c.free_ground():
+        errors.append(f"{c.key}: no `shell`, and no ground pin outside every housing for a probe")
+    for hk, h in c.headers.items():
+        for pin in h.grounds:
+            if pin in h.pins and h.pins[pin]["name"] != "GND":
+                errors.append(f"{c.key}: {hk} pin {pin} is listed as ground but is {h.pins[pin]['name']}")
+    if c.hat and not any(c.hat.name in part["part"] for part in c.parts):
+        errors.append(f"{c.key}: no part names the HAT the pictures draw, {c.hat.name}")
     if c.resistors and not c.resistor_value:
         errors.append(f"{c.key}: resistors listed but no resistor_value")
     for r in c.resistors:
@@ -126,3 +287,6 @@ def _check(c):
 
 
 CARRIERS = {k: _carrier(k, v) for k, v in DATA["carriers"].items()}
+for _tool in TOOLS:
+    if _tool.get("carrier", next(iter(CARRIERS))) not in CARRIERS:
+        raise WiringError(f"wiring.toml: a tool names a carrier there is none of: {_tool}")

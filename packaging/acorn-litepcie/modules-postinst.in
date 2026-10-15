@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+# @PACKAGE@: let modprobe find litepcie.ko and liteuart.ko for this package's kernel.
+
+if [ "$1" = configure ]; then
+    depmod -a @KVER@
+fi

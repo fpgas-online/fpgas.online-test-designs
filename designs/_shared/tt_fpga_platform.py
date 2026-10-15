@@ -1,7 +1,7 @@
 """LiteX platform definition for the TinyTapeout FPGA Demo Board.
 
 The TT FPGA board consists of:
-  - FPGA Breakout Board: iCE40UP5K + SPI flash
+  - FPGA Breakout Board: iCE40UP5K (no SPI flash: the RP2040/RP2350 loads it over its configuration SPI)
   - TinyTapeout Demo PCB: RP2040 controller, PMOD headers, 7-seg display
 
 Pin mappings follow the fabricfoxv2 PCF (current default for TT ETR
@@ -11,7 +11,7 @@ The RP2040 provides a clock signal to the FPGA and can act as a
 USB-to-UART bridge for serial communication.
 
 UART default: RX = ui_in[3] (pin 21), TX = uo_out[4] (pin 45).
-SPI flash: dedicated iCE40 pins 14/15/16/17.
+The iCE40's configuration SPI (pins 14/15/16/17) goes only to the demo board's microcontroller.
 """
 
 from litex.build.generic_platform import *
@@ -48,20 +48,6 @@ _io = [
 
     # TinyTapeout bidirectional I/O
     ("uio", 0, Pins("2 4 3 6 9 10 11 12"), IOStandard("LVCMOS33")),
-
-    # SPI Flash (dedicated iCE40UP5K SPI pins, on FPGA breakout board)
-    ("spiflash", 0,
-        Subsignal("cs_n", Pins("16"), IOStandard("LVCMOS33")),
-        Subsignal("clk",  Pins("15"), IOStandard("LVCMOS33")),
-        Subsignal("miso", Pins("17"), IOStandard("LVCMOS33")),
-        Subsignal("mosi", Pins("14"), IOStandard("LVCMOS33")),
-    ),
-
-    ("spiflash4x", 0,
-        Subsignal("cs_n", Pins("16"), IOStandard("LVCMOS33")),
-        Subsignal("clk",  Pins("15"), IOStandard("LVCMOS33")),
-        Subsignal("dq",   Pins("14 17"), IOStandard("LVCMOS33")),
-    ),
 ]
 
 # Connectors ---------------------------------------------------------------------------------------

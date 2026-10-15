@@ -49,7 +49,8 @@ def _pins(sw):
     }
 
 
-def test_bits_follow_p2_pin_order():
+def test_bits_are_j2_then_k2():
+    # the released images' layout (docs/hardware/acorn.md), not P2's pin order: K2 is pin 2, J2 pin 3
     assert (J2, K2) == (0, 1)
 
 

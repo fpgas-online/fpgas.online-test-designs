@@ -6,35 +6,75 @@ The TinyTapeout (TT) FPGA Demo Board is a development platform that combines an 
 
 ## Installing the TT FPGA Packages
 
-Add the fpgas.online APT repository first ([verify.md: Installing](../verify.md#installing)), then on the demo board's Pi:
+### What you need
+
+- a Raspberry Pi with the Tiny Tapeout demo board on one of its USB ports
+- the fpgas.online apt repository added on the Pi ([fpgas-verify: installing it, step 1](../verify/installing.md#installing))
+- a network that reaches `mith.ro`, where rpi-hwid's apt repository is, and on bookworm `deb.debian.org`
+
+`grep VERSION_CODENAME /etc/os-release` says which release the Pi runs.
+
+### Steps
+
+**1.** Add [rpi-hwid](https://github.com/mithro/rpi-hwid)'s apt repository and install rpi-hwid. Without it the check cannot ask the board which Tiny Tapeout board it is, and its result is `error`.
+
+The step is safe to run again. The `ls` line lists the key, `rpi-hwid.gpg`, about 1.2 kB (1154 bytes). If it is missing or its size is far from that, run the `curl` line again.
+
+```bash
+sudo install -d -m0755 /etc/apt/keyrings
+sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/rpi-hwid.gpg https://mith.ro/rpi-hwid/rpi-hwid.gpg
+echo "deb [signed-by=/etc/apt/keyrings/rpi-hwid.gpg] https://mith.ro/rpi-hwid/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
+  | sudo tee /etc/apt/sources.list.d/rpi-hwid.list
+ls -l /etc/apt/keyrings/rpi-hwid.gpg
+sudo apt update
+sudo apt install python3-rpi-hwid
+```
+
+**2.** On bookworm only, add bookworm-backports and install `mpremote` from it. On trixie the next step installs it.
+Debian's archive key is not on 32-bit Raspberry Pi OS, so the source names it. Its fingerprint is
+`B8B8 0B5B 623E AB6A D877 5C45 B7C5 D7D6 3509 47F8`.
+
+The step is safe to run again. The `ls` line lists the key, `debian-archive-key-12.asc`, about 12 kB (11861 bytes).
+If it is missing or its size is far from that, run the `curl` line again.
+
+```bash
+sudo install -d -m0755 /etc/apt/keyrings
+sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/debian-archive-key-12.asc \
+  https://ftp-master.debian.org/keys/archive-key-12.asc
+echo "deb [signed-by=/etc/apt/keyrings/debian-archive-key-12.asc] http://deb.debian.org/debian bookworm-backports main" \
+  | sudo tee /etc/apt/sources.list.d/bookworm-backports.list
+ls -l /etc/apt/keyrings/debian-archive-key-12.asc
+sudo apt update
+sudo apt install -t bookworm-backports micropython-mpremote
+```
+
+**3.** Install the TT FPGA's packages. This also turns the check at boot on (`fpgas-verify.service`). `fpgas-online-tt` is a different package: the TT site's own.
 
 ```bash
 sudo apt install fpgas-online-tt-fpga
 ```
 
-| Package | Installs |
-|---------|----------|
-| `fpgas-online-tt-fpga` | installs everything below to check a TT FPGA Demo Board, and turns the boot check (`fpgas-verify.service`) on for it |
-| `fpgas-online-tt-fpga-tools` | the board's module of `fpgas_online_verify`, and `fpgas-tt-fpga-verify`; with `python3-serial` and `python3-libgpiod` (the PMOD HAT scan), and recommending `micropython-mpremote` and `raspi-utils-core` (`pinctrl`, which puts back the Pi's SPI/UART/I2C pin functions after the scan; Raspberry Pi OS only) |
-| `fpgas-online-tt-fpga-bitstreams` | the test bitstreams built by the same commit's CI, in `/usr/share/fpgas-online/tt-fpga/bitstreams/` |
-| `fpgas-online-verify` | `fpgas-verify`, the unit, and the host test scripts |
-
-`fpgas-online-tt` is a different package: the TT site's own.
-
-The check finds the board by its Raspberry Pi microcontroller on USB (vendor `2e8a`). It first loads the PMOD pin identification design and checks the PMOD HAT cabling against the expected map (uo_out on HAT JA, uio on JB, ui_in on JC, [tt-fpga-pin-mapping.md](tt-fpga-pin-mapping.md)); a miswired HAT fails the board. It then loads the UART and SPI flash test designs through that microcontroller (`tt_fpga_program.py`, over `mpremote`), and runs each design's host test through its UART bridge on `/dev/ttyACM0`. Every load writes the bitstream to the microcontroller's filesystem, so its flash is not part of what `changed` compares; its USB serial number is. `mpremote` is `micropython-mpremote` in trixie, but only in bookworm-backports for bookworm: without it the check reports an `error`. Only the PMOD loopback test is left to `fpgas-tt-fpga-debug`.
-
-Before the first test, while it holds `/dev/ttyACM0`, the check runs `rpi-hwid tinytapeout --json --no-stop-service` when [rpi-hwid](https://github.com/mithro/rpi-hwid) is installed (`python3-rpi-hwid`, which `fpgas-online-verify` suggests). rpi-hwid asks the Tiny Tapeout SDK on the RP2350 which microcontroller, chip, demo board and SDK release this is. The answer goes into the board's identity, for rpi-hwid's Tiny Tapeout label ([TT FPGA identity](../verify.md#tt-fpga-identity), [Tiny Tapeout fields](../identity.md#tiny-tapeout-fields)). Without rpi-hwid those fields are not read, and the board does not fail for it.
-
-It runs at every boot of the Welland TT FPGA boards: [current results](../verify.md#current-results).
-
-**Check the board now**, or run one test with its output live (`fpgas-tt-fpga-debug` is in `fpgas-online-tt-fpga-debug`):
+**4.** Check the board. Nothing is sent to the site: `--no-publish` makes sure.
 
 ```bash
-sudo fpgas-tt-fpga-verify --no-publish --report -  # this board only, the JSON report on stdout
-sudo fpgas-tt-fpga-debug test spiflash             # load one test's design and run its test
+sudo fpgas-tt-fpga-verify --no-publish
 ```
 
-What the results mean, the report, `changed` and `--update`, the debug tool and common failures: [verify.md](../verify.md#reading-the-result).
+### Check
+
+The first line of the output starts with `fpgas-verify: pass`. The board's line (two spaces in, the board's name first) ends in `pass`. So does the line of each test that ran (four spaces in, the test's name first). The `flash none: …` line is a note, not a test.
+
+### If it fails
+
+- The first line names the result, and the output ends with `RESULT:` and `What to do:`. [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result) says what each result means.
+- [fpgas-verify: common failures](../verify/common-failures.md#common-failures) lists the messages and what to do about each.
+
+### Next
+
+- To run one test with its output live: install `fpgas-online-tt-fpga-debug`, then `sudo fpgas-tt-fpga-debug test uart`.
+- [The TT FPGA check at boot](../verify/tt-fpga.md#the-tt-fpga-check-at-boot): what the check does, test by test.
+- [TT FPGA packages](../verify/installing.md#tt-fpga-packages): what each package installs.
+- [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result): the report, `changed` and `--update`.
 
 ## Key Specifications
 
@@ -60,12 +100,12 @@ The TT FPGA Demo Board consists of two PCBs:
 
 1. **TinyTapeout Demo PCB** (bottom): Contains the RP2040 microcontroller, USB-C connector, 7-segment display, DIP switches, and PMOD headers. This PCB is designed to interface with TinyTapeout ASICs but also accepts the FPGA breakout board.
 
-2. **FPGA Breakout Board** (top): Contains the iCE40UP5K FPGA and SPI flash. It plugs into the demo PCB's chip socket, presenting the same interface as a TinyTapeout ASIC.
+2. **FPGA Breakout Board** (top): Contains the iCE40UP5K FPGA; it has no SPI flash. It plugs into the demo PCB's chip socket, presenting the same interface as a TinyTapeout ASIC.
 
 ```
 ┌──────────────────────────────┐
 │    FPGA Breakout Board       │
-│    (iCE40UP5K + SPI Flash)   │
+│    (iCE40UP5K)               │
 │                              │
 │    ┌────────────────────┐    │
 │    │  Pin headers down  │    │
@@ -167,17 +207,22 @@ python3 designs/_host/tt_fpga_program.py /dev/ttyACM0 bitstream.bin
 
 **Programming workflow:**
 
-1. Upload `.bin` to `/bitstreams/custom.bin` on the RP2040 via `mpremote`
-2. Enter raw REPL and execute a MicroPython script that:
+1. `mpremote mount` shows a temporary directory on the Pi, holding a copy of the bitstream and nothing else, to
+   the RP2350 as `/remote`, served over the serial link. **Nothing is written to the demo board's filesystem**: no file is copied to it and no directory
+   is made on it.
+2. A MicroPython script, run in the raw REPL, reads the bitstream from `/remote` and:
    - Asserts `CRESET` (GPIO1) to reset the FPGA
    - Transfers the bitstream over SPI (SCK=GPIO6, MOSI=GPIO3, SS=GPIO5)
-   - Releases `CRESET` and waits for FPGA `CDONE`
+   - Releases `CRESET` (`CDONE` is not read: the tests that follow are what show the design is running)
    - Starts the 50 MHz clock on GPIO16
 3. For PMOD tests: release all GPIO pins to high-Z (`--gpio-release`)
 
-**SPI Flash:** The breakout board also has SPI flash (CS_N=pin 16, CLK=pin 15,
-MOSI=pin 14, MISO=pin 17) for persistent bitstream storage, used by
-the SPI Flash ID test.
+**No SPI flash:** the breakout has no flash. In its published design
+([TinyTapeout/breakout-pcb, `ASIC-simulator/ttdbv3-fpga-ICE40UP5k`](https://github.com/TinyTapeout/breakout-pcb/tree/6e3725f7fc5707d0cbe7632c39b867da740d10d7/ASIC-simulator/ttdbv3-fpga-ICE40UP5k),
+checked 2026-10-04) the iCE40's configuration SPI (SPI_SS=pin 16, SPI_SCK=pin 15,
+SPI_SO=pin 14, SPI_SI=pin 17) goes only to the demo board's microcontroller, which
+loads the bitstream at every power-up. So there is no SPI Flash ID test for
+this board ([#52](https://github.com/fpgas-online/fpgas.online-test-designs/issues/52)).
 
 ## LiteX Integration
 
@@ -190,23 +235,7 @@ The TT FPGA board does not have a dedicated LiteX platform file in litex-boards.
 
 ## Deployment
 
-Eight TT FPGA Demo Boards across two sites. Four are deployed at
-Welland on S3300 ports 33–36 (Tim's rule for that switch: port N carries
-Tiny Tapeout board N; the FPGA emulation boards take the 33–36 block), four
-are pending deployment at PS1. The Welland four are the public
-**fpga-1 … fpga-4** boards on [tinytapeout.fpgas.online](https://tinytapeout.fpgas.online).
-Probed live 2026-09-03.
-
-| Site    | Host       | Board page | RPi (rev)                | IP         | Switch Port | RPi MAC           | RP2350 Serial      | `verify_hardware.py` |
-|---------|------------|------------|--------------------------|------------|-------------|-------------------|--------------------|----------------------|
-| Welland | pi-sw2-p33 | [fpga-1](https://tinytapeout.fpgas.online/board/fpga-1/) | RPi 4 2 GB Rev 1.5 (b03115) | 10.21.2.33 | S3300 33 | e4:5f:01:97:0e:77 | `4df39a7a6856f86f` | welland-pi27 |
-| Welland | pi-sw2-p34 | [fpga-2](https://tinytapeout.fpgas.online/board/fpga-2/) | RPi 4 2 GB Rev 1.5 (b03115) | 10.21.2.34 | S3300 34 | e4:5f:01:97:27:f2 | `fd1a167bd863a198` | welland-pi29 |
-| Welland | pi-sw2-p35 | [fpga-3](https://tinytapeout.fpgas.online/board/fpga-3/) | RPi 4 2 GB Rev 1.5 (b03115) | 10.21.2.35 | S3300 35 | e4:5f:01:97:0c:e3 | `8c46329b33590ecb` | welland-pi31 |
-| Welland | pi-sw2-p36 | [fpga-4](https://tinytapeout.fpgas.online/board/fpga-4/) | RPi 4 8 GB Rev 1.5 (d03115) | 10.21.2.36 | S3300 36 | e4:5f:01:8e:02:27 | `a2961e5cac65b25f` | welland-pi33 |
-| PS1     | TBD        | —          | TBD                      | TBD        | TBD         | TBD               | TBD                | —                    |
-| PS1     | TBD        | —          | TBD                      | TBD        | TBD         | TBD               | TBD                | —                    |
-| PS1     | TBD        | —          | TBD                      | TBD        | TBD         | TBD               | TBD                | —                    |
-| PS1     | TBD        | —          | TBD                      | TBD        | TBD         | TBD               | TBD                | —                    |
+Which hosts carry a TT FPGA demo board is in the site records [site-welland.md](site-welland.md) and [site-ps1.md](site-ps1.md); each site lists its live boards at [welland.fpgas.online/fpgas](https://welland.fpgas.online/fpgas/) and [ps1.fpgas.online/fpgas](https://ps1.fpgas.online/fpgas/). The public boards are on [tinytapeout.fpgas.online](https://tinytapeout.fpgas.online).
 
 Each RPi connects to a TT FPGA board via USB-C, has a Digilent Pmod HAT for
 GPIO-level control of the TT I/O pins, and an ov5647 camera publishing a live
@@ -252,7 +281,7 @@ bridging. Three host-side wrapper scripts handle the RP2040 interaction:
 
 | Script                                                              | Purpose                                          |
 |---------------------------------------------------------------------|--------------------------------------------------|
-| [`tt_fpga_program.py`](../../designs/_host/tt_fpga_program.py)      | Upload and program bitstream via mpremote         |
+| [`tt_fpga_program.py`](../../designs/_host/tt_fpga_program.py)      | Program the iCE40 from the Pi via mpremote        |
 | [`tt_test_wrapper.py`](../../designs/_host/tt_test_wrapper.py)      | Program + UART bridge (PTY) + run test            |
 | [`tt_pmod_wrapper.py`](../../designs/_host/tt_pmod_wrapper.py)      | Program + release GPIOs + hand off to RPi GPIO test |
 
@@ -261,7 +290,6 @@ bridging. Three host-side wrapper scripts handle the RP2040 interaction:
 | Test           | Bitstream                                                                            | Wrapper                                                            | What it verifies                     |
 |----------------|--------------------------------------------------------------------------------------|--------------------------------------------------------------------|--------------------------------------|
 | UART echo      | [`uart/.../tt_fpga_platform.bin`](../../designs/uart/build/tt-fpga-yosys-nextpnr/gateware/)              | [`tt_test_wrapper.py`](../../designs/_host/tt_test_wrapper.py)     | Serial TX/RX via RP2040 bridge       |
-| SPI Flash ID   | [`spi-flash-id/.../tt_fpga_platform.bin`](../../designs/spi-flash-id/build/tt-fpga-yosys-nextpnr/gateware/) | [`tt_test_wrapper.py`](../../designs/_host/tt_test_wrapper.py) | JEDEC ID readback from on-board flash |
 | PMOD loopback  | [`pmod-loopback/.../tt_fpga_platform.bin`](../../designs/pmod-loopback/build/tt-fpga-yosys-nextpnr/gateware/) | [`tt_pmod_wrapper.py`](../../designs/_host/tt_pmod_wrapper.py)     | GPIO inversion across wired pin pairs |
 | PMOD pin ID    | [`pmod-pin-id/.../tt_fpga_platform.bin`](../../designs/pmod-pin-id/build/tt-fpga-yosys-nextpnr/gateware/) | [`tt_pmod_wrapper.py`](../../designs/_host/tt_pmod_wrapper.py)     | UART TX on each GPIO pin             |
 
@@ -271,13 +299,11 @@ Tests are orchestrated by [`verify_hardware.py`](../../verify_hardware.py), whic
 scripts and bitstreams to the RPi, then runs the appropriate test:
 
 ```bash
-uv run python verify_hardware.py --board tt --host welland-pi33
+uv run python verify_hardware.py --board tt --host <host>   # a name in verify_hardware.py's HOSTS table
 ```
 
-`verify_hardware.py`'s `HOSTS` table names these boards `welland-pi27` …
-`welland-pi33`, with flat `10.21.0.1xx` addresses that Welland does not use
-([#17](https://github.com/fpgas-online/fpgas.online-test-designs/issues/17));
-the boards are `pi-sw2-p33` … `pi-sw2-p36` at `10.21.2.33` … `10.21.2.36`. The
+`verify_hardware.py`'s `HOSTS` table names these boards by old host names and addresses that the site does not
+use ([#17](https://github.com/fpgas-online/fpgas.online-test-designs/issues/17)). The
 `fpgas-tt` daemon must be stopped before the wrapper can open the serial port
 (see [Deployment](#deployment)).
 
@@ -291,21 +317,52 @@ different GPIO assignments, so `pin_indices()` returns wrong pin numbers.
 MOSI=3, SS=5, CRESET=1; UART: TX=GPIO20, RX=GPIO37). SDK 3.1.0's map has not
 been checked; the hardcoded pins are correct either way.
 
-### DemoBoard() hang on boot
+### The SDK's main.py
 
-The stock RP2040 `main.py` calls `DemoBoard()` which probes I2C and can
-hang permanently, making the board unrecoverable without a physical reset.
-The stock `ttdbv3` firmware does exactly this; SDK 3.1.0 boots cleanly (all
-four report `board present`, checked 2026-09-03).
+The board's `main.py` is the Tiny Tapeout SDK's. It builds the `tt` object when the board starts
+(`DemoboardDetect.probe()`, `DemoBoard.get()`), and that start-up state is what everything else relies on:
+`rpi-hwid tinytapeout` reads it to say what the board is (it reads only what the SDK built; it does not start
+the SDK), and the public site and the `fpgas-tt` daemon expect the SDK to be there.
 
-**Do not install a no-op `main.py` on the deployed boards.**
-`tt_test_wrapper.py` does this after each run as a workaround, but the
-public site (and the `fpgas-tt` daemon's design list) depends on the SDK
-booting into `DemoBoard()`, so a no-op `main.py` takes the board off
-tinytapeout.fpgas.online until the SDK files are restored. If a board does hang,
-a PoE cycle of its switch port (the S3300 write community is in gdoc2netcfg)
-resets it; the RP2's mass-storage bootloader path stalls on Pi 3B+ hosts, so
-reflashing from a Pi 3B+ needs the PICOBOOT path rather than MSC.
+**Nothing replaces `main.py`.** Until 2026-10, `tt_test_wrapper.py` overwrote it with a no-op ("TT FPGA board
+ready") after every load, as a workaround for the stock `ttdbv3` firmware hanging in `DemoBoard()`.
+SDK 3.1.0 boots cleanly, and with the no-op the SDK never started, so the boot check could not identify the
+board ([#117](https://github.com/fpgas-online/fpgas.online-test-designs/issues/117)). The wrapper no longer
+touches it.
+
+The boot check starts the SDK before it asks who the board is: `tt_sdk_start.py` soft-resets the board from the
+friendly REPL, which runs `main.py`, and waits for the SDK's last boot line (`tt.sdk_version=...`; a 1.x
+release, which a TT03p5 board runs, has no such line and is recognised by its `TT SDK v1...` line once it is
+back at the prompt). This is
+needed even with the right `main.py`: a soft reset from the raw REPL, which is what `mpremote` does, does not
+run `main.py`, so after any load the `tt` object is gone until the next start. A board whose `main.py` does not
+start the SDK fails the check with that reason.
+
+**A visitor can change the board; the check says so.** The Commander on tinytapeout.fpgas.online gives every
+visitor the board's Python prompt, and with it the board's files (Tim, 2026-10-05: the prompt stays). So the
+boot check first reads the SHA-256 of the board's `main.py` (`tt_main_py.py`) and compares it with the one
+recorded for the SDK release the board runs: a `main.py` that was replaced or edited is an `error` with that
+reason, not a pass. Every release from 1.0.0 to 3.1.1 is recorded (the releases demo boards with a Tiny
+Tapeout chip run are among them: 1.2.x and 2.0.x); a board on a release with no recorded `main.py` fails the
+same way until the release is added to `tt_main_py.py`.
+
+**No code of ours writes to a demo board.** The boot check and the debug tools change no file on it: not
+`main.py`, and no bitstream (see [Programming](#programming)); `tests/test_tt_host_scripts.py` holds every
+string the host scripts send to a board, or give to `mpremote`, to that. The one file that does change is not
+ours: the SDK's own `main.py` rewrites its `boot.log` every time it starts, at power-on and at the check's
+soft reset alike. A board whose `main.py` was overwritten before this change keeps failing its check, with the reason, until
+the SDK's own `main.py` (`src/main.py` of the SDK release the board runs) has been put back on it by hand. That
+is a deliberate one-off per board, not something the tooling does.
+
+Boards the old loader ran on still hold a `/bitstreams/custom.bin`: the last test bitstream it copied there.
+Nothing reads it, nothing removes it, and it is not the design that is loaded.
+
+After a check the board is at the raw-REPL's state again (the loads soft-reset it from the raw REPL), so the
+`tt` object is gone until the next friendly-REPL soft reset: the Commander makes one when it connects.
+
+If a board does hang in `DemoBoard()` (the stock `ttdbv3` build does), a power cycle of its Pi resets it; the
+RP2's mass-storage bootloader path stalls on Pi 3B+ hosts, so reflashing from a Pi 3B+ needs the PICOBOOT path
+rather than MSC.
 
 ### RP2040 PWM first-call bug
 

@@ -20,6 +20,8 @@ programmer and its tests; `tests` maps a test to:
   runner        "tt-bridge": the script runs through the TT board's RP2350, which also loads the design
   listen        True if the script must have the UART open before the design starts (listen.py)
   program_args  extra arguments to the programmer
+  says          a prefix: when the script fails, its last line starting with it is the reason (else "the test
+                exited N"), and an exit of 2 under it is an error (it could not read), not a fail
 """
 
 import contextlib
@@ -42,6 +44,12 @@ DNA_SKIPPED = "not read: --read-dna runs only once the JTAG scan has found the o
 JEDEC_RE = re.compile(r"JEDEC ID: 0x([0-9A-Fa-f]{2}) 0x([0-9A-Fa-f]{2}) 0x([0-9A-Fa-f]{2})")
 
 
+# openFPGALoader's last line after loading a 7-series FPGA over JTAG: "ir: 1 isc_done 1 isc_ena 0 init 1 done 1".
+DONE_RE = re.compile(r"^ir: [0-9a-f]+ isc_done [01] isc_ena [01] init [01] done ([01])\s*$", re.M)
+# listen.py's line when the programmer exited non-zero.
+LISTEN_LOAD_FAILED = re.compile(r"^loading the design failed \(exit (\d+)\)$", re.M)
+
+
 class TestBoard(Board):
     usb = ()  # (vendor, product) pairs that mean this board, product None for any
     variants: ClassVar[dict] = {}  # variant -> artifact suffix
@@ -49,10 +57,27 @@ class TestBoard(Board):
     tests: ClassVar[dict] = {}
     doc = ""
 
+    # A 7-series FPGA loaded over JTAG by openFPGALoader: it exits 0 even when the FPGA did not configure (#300),
+    # so the load is judged by the `done` bit it prints last (load_failure).
+    jtag_loads_7_series = False
+
     # -- what varies by board ------------------------------------------------------------------------------
 
     def program_argv(self, bitstream, host, test):
         raise NotImplementedError
+
+    def load_failure(self, argv, text):
+        """Why a load that exited 0 did not configure the FPGA, or None. Only an openFPGALoader load of a 7-series
+        FPGA over JTAG is judged: its last lines end with `ir: … done 1` when it configured (src/xilinx.cpp,
+        Xilinx::program_mem), and it exits 0 either way."""
+        if not (self.jtag_loads_7_series and argv and argv[0] == "openFPGALoader"):
+            return None
+        done = DONE_RE.findall(text)
+        if not done:
+            return "openFPGALoader printed no 'done' line, so whether the FPGA configured is not known"
+        if done[-1] != "1":
+            return "the FPGA did not configure: openFPGALoader's last line says done 0 (it exits 0 all the same)"
+        return None
 
     def flash_dump_argv(self, host, variant, size, out):
         """openFPGALoader (or similar) reading `size` bytes of flash from 0 into `out`; None if not possible."""
@@ -85,8 +110,12 @@ class TestBoard(Board):
     services: ClassVar[tuple] = ()
 
     @contextlib.contextmanager
-    def services_stopped(self, runner=run):
+    def services_stopped(self, runner=run, later=None):
         """Stop whichever of `services` are running; start them again on the way out, whatever happened.
+
+        With `later` (a list), the units stopped are added to it instead of being started: the caller starts
+        them once it has written its report (runner.run), so a service that reads the report when it starts
+        never reads the one before.
 
         Yields {"stopped": [...], "failed": [...]}: a unit that would not stop, or whose start could not be
         queued, is in "failed" (the check makes that an error: the service may be left down). The start is
@@ -109,7 +138,9 @@ class TestBoard(Board):
         try:
             yield held
         finally:
-            for unit in held["stopped"]:
+            if later is not None:
+                later.extend(unit for unit in held["stopped"] if unit not in later)
+            for unit in held["stopped"] if later is None else ():
                 try:
                     rc, text = runner(["systemctl", "start", "--no-block", unit], 60)
                 except Problem as p:
@@ -166,6 +197,24 @@ class TestBoard(Board):
         entry = bitstreams.entry_for(manifest, self.artifact(test, variant), self.bitstreams_package)
         return bitstreams.checked(images, entry)[0]
 
+    @staticmethod
+    def judged(t, rc, text):
+        """A host script's result from its exit and output: {result, output, reason?, flash_jedec?}. With `says`,
+        its last line starting with that prefix is the reason, and an exit of 2 is an error."""
+        found = {"result": "pass" if rc == 0 else "fail", "output": tail(text)}
+        if rc != 0:
+            found["reason"] = f"the test exited {rc}"
+            prefix = t.get("says")
+            said = [line[len(prefix) :].strip() for line in text.splitlines() if prefix and line.startswith(prefix)]
+            if said and said[-1]:  # the script's own last word on why
+                found["reason"] = said[-1]
+                if rc == 2:  # it could not make its reading at all
+                    found["result"] = "error"
+        m = JEDEC_RE.search(text)
+        if m:
+            found["flash_jedec"] = "0x" + "".join(m.groups()).lower()
+        return found
+
     def run_test(self, test, variant, host, images, manifest, runner=run):
         t = self.tests[test]
         out = {"test": test, "bitstream": self.artifact(test, variant)}
@@ -176,25 +225,54 @@ class TestBoard(Board):
                     runner(step, 30)
             if t.get("listen"):  # the test must be listening before the design starts: listen.py
                 test_argv = self.test_argv(test, host, bitstream)
+                program = self.program_argv(bitstream, host, test)
                 argv = [sys.executable, "-m", "fpgas_online_verify.listen", host["port"], str(len(test_argv)),
-                        *test_argv, *self.program_argv(bitstream, host, test)]  # fmt: skip
+                        *test_argv, *program]  # fmt: skip
                 rc, text = runner(argv, PROGRAM_TIMEOUT + TEST_TIMEOUT + 60)  # more than listen.py allows itself
+                # listen.py says a programmer that exited non-zero in its own words; otherwise the load is judged
+                # by its output, which listen.py passes on (the test may pass on stale output: the load says first)
+                failed = LISTEN_LOAD_FAILED.search(text)
+                if failed:
+                    return {**out, "result": "fail", "reason": f"loading it failed (exit {failed[1]})",
+                            "output": tail(text)}  # fmt: skip
+                why = self.load_failure(program, text)
+                if why:
+                    return {**out, "result": "fail", "reason": f"loading it failed: {why}", "output": tail(text)}
             else:
                 if t.get("runner") != "tt-bridge":  # the bridge loads the design itself
-                    rc, text = runner(self.program_argv(bitstream, host, test), PROGRAM_TIMEOUT)
+                    program = self.program_argv(bitstream, host, test)
+                    rc, text = runner(program, PROGRAM_TIMEOUT)
                     if rc != 0:
                         return {**out, "result": "fail", "reason": f"loading it failed (exit {rc})",
                                 "output": tail(text)}  # fmt: skip
+                    why = self.load_failure(program, text)
+                    if why:
+                        return {**out, "result": "fail", "reason": f"loading it failed: {why}", "output": tail(text)}
                 rc, text = runner(self.test_argv(test, host, bitstream), TEST_TIMEOUT)
         except Problem as p:
             return {**out, "result": p.result, "reason": p.reason}
-        found = {"result": "pass" if rc == 0 else "fail", "output": tail(text)}
-        if rc != 0:
-            found["reason"] = f"the test exited {rc}"
-        m = JEDEC_RE.search(text)
-        if m:
-            found["flash_jedec"] = "0x" + "".join(m.groups()).lower()
-        return {**out, **found}
+        return {**out, **self.judged(t, rc, text)}
+
+    def script_tests_for(self, variant):
+        return [name for name, t in self.script_tests.items() if variant in t["variants"]]
+
+    def run_script_test(self, test, host, runner=run):
+        """A script test (script_tests): its `pre` steps, then its script on the board's port; nothing is loaded.
+        A script the check had to kill at its limit could not finish, and could not put back what it changed: an
+        error, not a fail."""
+        t = self.script_tests[test]
+        argv = [sys.executable, host_tests.path(t["script"]), *(a.format(port=host["port"]) for a in t["args"])]
+        try:
+            for step in t.get("pre", []):
+                with contextlib.suppress(Problem):
+                    runner(step, 30)
+            rc, text = runner(argv, t.get("timeout", TEST_TIMEOUT))
+        except Problem as p:
+            reason = p.reason
+            if "did not finish within" in reason:  # core.run names the interpreter: say which test it was
+                reason = f"the {test} test did not finish within {t.get('timeout', TEST_TIMEOUT)} s"
+            return {"test": test, "result": "error", "reason": reason}
+        return {"test": test, **self.judged(t, rc, text)}
 
     # -- JTAG ------------------------------------------------------------------------------------------------
 
@@ -306,6 +384,78 @@ class TestBoard(Board):
         <field>_error, which makes the check an error."""
         return {}
 
+    # A board whose variant finding it does not give (the Tiny Tapeout demo board: an RP2 on USB is the same
+    # whatever chip it carries): `found` has no variant, and settle() decides it from what the board itself
+    # said (port_facts), before any design is chosen. Other boards leave this False and nothing changes for
+    # them.
+    variant_from_board = False
+    # Tests judged from what the board itself said (port_facts), which load nothing: test -> {"variants": the
+    # variants it is for, "check": f(variant, facts, found) giving (result, the reason or None, lines for the
+    # report)}. `found` is how the board was found, with what port_facts left in it (the Fomu's header reading,
+    # which is not an identity field).
+    # They run first, in the whole boot check only (not when single tests were asked for), and are the whole
+    # check of a variant that no bitstream here is for (a demo board with a Tiny Tapeout chip).
+    fact_tests: ClassVar[dict] = {}
+    # Tests that run a host script against the board's port and load nothing (the Pmod wiring test of a demo
+    # board with a Tiny Tapeout chip): test -> {"variants": the variants it is for, "script", "args" ({port} is
+    # the board's port), "pre" (commands run first, each may fail), "says" and "timeout" as a test's, and
+    # "needs": fact tests that must have passed for it to mean anything (when one did not, it is not run, and
+    # the report's not_run says why)}. They run after the fact tests, in the whole boot check only, with the
+    # board's `services` stopped.
+    script_tests: ClassVar[dict] = {}
+    # variant -> {test: why}: a test that variant must have and the boot check does not run yet. It goes in the
+    # report's `not_run`, and the board FAILS with that reason: a board is not passed on a check that leaves
+    # out a test it needs (Tim, 2026-10-05: "Fail until wiring is tested"). Its other tests still run and are
+    # reported, so the report shows what is known of the board.
+    pending: ClassVar[dict] = {}
+
+    # variant -> a design the check loads last and leaves running, which is no test: nothing reads it (the TT
+    # FPGA's moving display, #139): {"design": its name, "artifact": as a test's, "program_args": as a test's}.
+    # It is in the board's bitstreams package beside the tests' designs. A load that fails is a warning in the
+    # report, never the board's result: the board was tested before it, and is left as its last test left it.
+    left_running: ClassVar[dict] = {}
+
+    def artifacts(self):
+        """[(test or design name, variant, artifact path)]: every bitstream the bitstreams package holds."""
+        out = [(test, variant, self.artifact(test, variant)) for test in self.tests for variant in self.variants]
+        return out + [(spec["design"], variant, spec["artifact"]) for variant, spec in self.left_running.items()]
+
+    def leave_running(self, variant, host, images, manifest, runner=run):
+        """Load the variant's left_running design: (what the report says was left running, None), or
+        (None, why it could not be loaded). Never raises."""
+        spec = self.left_running[variant]
+        try:
+            entry = bitstreams.entry_for(manifest, spec["artifact"], self.bitstreams_package)
+            bitstream = bitstreams.checked(images, entry)[0]
+            argv = [*self.program_argv(bitstream, host, None), *spec.get("program_args", [])]
+            rc, text = runner(argv, PROGRAM_TIMEOUT)
+        except Problem as p:
+            return None, p.reason
+        if rc != 0:
+            return None, f"loading it failed (exit {rc}): {' '.join(tail(text, 2))}"
+        why = self.load_failure(argv, text)
+        if why:
+            return None, f"loading it failed: {why}"
+        return {"design": spec["design"], "bitstream": spec["artifact"]}, None
+
+    def settle(self, asked, found, facts):
+        """The variant of a board with variant_from_board, from `facts`; `asked` is --variant, or None. It is one
+        of `variants` or one a fact test is for, or a Problem saying why the board is not checked: then no test
+        runs and nothing is loaded."""
+        raise NotImplementedError
+
+    def fact_tests_for(self, variant):
+        return [name for name, t in self.fact_tests.items() if variant in t["variants"]]
+
+    def finish(self, variant, host, found, report, runner=run):
+        """A last step after every test, judged like one: a test entry, or None for nothing to do. The Fomu
+        resets its iCE40 so foboot is on USB for the next user (#135)."""
+        return None
+
+    def run_fact_test(self, test, variant, facts, found=None):
+        result, reason, output = self.fact_tests[test]["check"](variant, facts, found or {})
+        return {"test": test, "result": result, **({"reason": reason} if reason else {}), "output": list(output)}
+
     def identified(self, report, found, options, facts=None):
         """Who the board is (identity.py), from how it was found, its JTAG IDCODE and DNA, and `facts`
         (port_facts): put in the report and sent as fpga-board-identified, before any test runs."""
@@ -334,35 +484,96 @@ class TestBoard(Board):
         return out
 
     def check(self, host, found, options, runner=run):
+        late = self.variant_from_board  # the variant is settled from the board's own word, once its port is ours
         variant = options.get("variant") or found["variant"]
-        report = {"board": self.name, "variant": variant, "found": found, "tests": []}
+        report = {"board": self.name, "variant": None if late else variant, "found": found, "tests": []}
         images = bitstreams.images_dir(self.slug, options.get("images"))
         tests = self.verify_tests if options.get("tests") is None else options["tests"]
+        manifest, refused = None, None
         try:
             unknown = [t for t in tests if t not in self.tests]
             if unknown:
                 raise Problem(
                     "error", f"{self.title} has no test {', '.join(unknown)} (it has {', '.join(self.tests)})"
                 )
-            if variant not in self.variants:
-                raise Problem("error", f"{found} is no {self.title} variant this package has bitstreams for "
-                                       f"({', '.join(self.variants)})")  # fmt: skip
-            manifest = bitstreams.load_manifest(images, self.bitstreams_package)
+            if not late:
+                if variant not in self.variants:
+                    raise Problem("error", f"{found} is no {self.title} variant this package has bitstreams for "
+                                           f"({', '.join(self.variants)})")  # fmt: skip
+                manifest = bitstreams.load_manifest(images, self.bitstreams_package)
         except Problem as p:
             self.identified(report, found, options)
             return {**report, "result": p.result, "reason": p.reason}
-        report["bitstreams"] = manifest.get("version")
-        if self.idcodes:
+        if manifest is not None:
+            report["bitstreams"] = manifest.get("version")
+        if self.idcodes and not late:  # a JTAG part is a variant's: none is known yet for a late one
             report["jtag"] = self.jtag(host, found, variant, runner)
         event = options.get("event") or (lambda stage, details: None)
-        with self.services_stopped(runner) as held:
+        with self.services_stopped(runner, options.get("restart_later")) as held:
             facts = self.port_facts(host, found, runner)
+            if late:
+                try:
+                    variant = report["variant"] = self.settle(options.get("variant"), found, facts)
+                    if variant in self.variants:
+                        manifest = bitstreams.load_manifest(images, self.bitstreams_package)
+                        report["bitstreams"] = manifest.get("version")
+                    elif not options.get("tests"):  # no design is for it: its fact tests are its check
+                        tests = []
+                    else:
+                        raise Problem("error", f"the board is a {variant}: {', '.join(tests)} "
+                                               f"{'is' if len(tests) == 1 else 'are'} for a "
+                                               f"{' or '.join(self.variants)}, so nothing was loaded")  # fmt: skip
+                except Problem as p:  # not settled, or no bitstreams: no test runs and nothing is loaded
+                    refused, tests = p, []
             self.identified(report, found, options, facts)
+            # No test named (None, or an empty list, which names none): the board's own word is judged.
+            for test in self.fact_tests_for(variant) if not options.get("tests") and not refused else ():
+                event("fpga-test-started", {"test": test})
+                report["tests"].append(self.run_fact_test(test, variant, facts, found))
+                done = report["tests"][-1]
+                event("fpga-test-finished", {"test": test, "result": done["result"], "reason": done.get("reason", "")})
+            not_run = dict(self.pending.get(variant, {})) if not refused else {}
+            for test in self.script_tests_for(variant) if not options.get("tests") and not refused else ():
+                failed = [
+                    t["test"]
+                    for t in report["tests"]
+                    if t["test"] in self.script_tests[test].get("needs", ()) and t["result"] != "pass"
+                ]
+                if failed:
+                    not_run[test] = f"it needs {' and '.join(failed)} to pass first"
+                    continue
+                event("fpga-test-started", {"test": test})
+                report["tests"].append(self.run_script_test(test, host, runner))
+                done = report["tests"][-1]
+                event("fpga-test-finished", {"test": test, "result": done["result"], "reason": done.get("reason", "")})
             for test in tests:
+                # a test that needs a fact test (the Fomu's DFU loads need foboot) is not run when that did not pass
+                failed = [t["test"] for t in report["tests"] if t["test"] in self.tests[test].get("needs", ())
+                          and t["result"] != "pass"]  # fmt: skip
+                if failed:
+                    not_run[test] = f"it needs {' and '.join(failed)} to pass first"
+                    continue
                 event("fpga-test-started", {"test": test})
                 report["tests"].append(self.run_test(test, variant, host, images, manifest, runner))
                 done = report["tests"][-1]
                 event("fpga-test-finished", {"test": test, "result": done["result"], "reason": done.get("reason", "")})
+            if not_run:
+                report["not_run"] = not_run
+            if not refused and manifest is not None and variant in self.left_running:  # last: nothing follows it
+                left, why_not = self.leave_running(variant, host, images, manifest, runner)
+                if left:
+                    report["left_running"] = left
+                else:
+                    name = self.left_running[variant]["design"]
+                    report.setdefault("warnings", []).append(
+                        f"the {name} design, which the check leaves running, could not be loaded ({why_not}): the "
+                        "board is left as its last test left it")  # fmt: skip
+            closing = None if refused else self.finish(variant, host, found, report, runner)
+            if closing:  # what the board is left as, judged like a test (the Fomu: foboot back on USB, #135)
+                event("fpga-test-started", {"test": closing["test"]})
+                report["tests"].append(closing)
+                event("fpga-test-finished", {"test": closing["test"], "result": closing["result"],
+                                             "reason": closing.get("reason", "")})  # fmt: skip
         if held["stopped"]:
             report["services_stopped"] = held["stopped"]
         jtag = report.get("jtag", {})
@@ -387,10 +598,18 @@ class TestBoard(Board):
         if held["failed"]:
             report["services_failed"] = held["failed"]
             results.append("error")
+        if refused:
+            results.append(refused.result)
         report["state"] = state
+        untested = [f"{test} not run: {why}" for test, why in report.get("not_run", {}).items()]
+        if untested:
+            results.append("fail")
         report["result"] = worst(results)
         bad = [t for t in report["tests"] if t["result"] != "pass"]
-        reasons = [f"{t['test']} {t['result']}: {t.get('reason', '')}" for t in bad] + facts_failed + held["failed"]
+        reasons = [f"{t['test']} {t['result']}: {t.get('reason', '')}" for t in bad] + untested + facts_failed
+        reasons += held["failed"]
+        if refused:
+            reasons.insert(0, refused.reason)
         if jtag and jtag["result"] != "pass":
             reasons.insert(0, f"jtag {jtag['result']}: {jtag['reason']}")
         if reasons:

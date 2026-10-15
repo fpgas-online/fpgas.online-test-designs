@@ -1,0 +1,403 @@
+"""The last lines of a check that did not pass (fpgas_online_verify.conclusion), on canned reports.
+
+They are for a person who has not seen fpgas-verify before (issue #125): the verdict in words, each fault and
+each failed test with one line of reason, what was not run and why, and what to do next. The first report here
+is a real one: a Compute Blade with a CM5 and an Acorn CLE-101 still on SQRL's factory image, as its owner met
+it after following docs/verify.md.
+"""
+
+import json
+import pathlib
+import re
+import subprocess
+
+from fpgas_online_verify import conclusion, runner
+from fpgas_online_verify.boards import tt_fpga
+from fpgas_online_verify.boards.acorn import check, links, setup, suite
+
+DATA = pathlib.Path(__file__).parent / "data"
+KEPT_IN = "/run/fpgas-online/verify.json"
+BLADE = setup.detect("Raspberry Pi Compute Module 5 Rev 1.0")
+UNCONVERTED = "unconverted: runs SQRL's factory image, not the fpgas.online design"
+GPIOD = ("P1 JTAG: openFPGALoader --detect failed (exit -6) before scanning the JTAG chain: openFPGALoader: "
+         "line-request.c:199: gpiod_line_request_set_values_subset: Assertion `request' failed.")  # fmt: skip
+
+
+def _blade():
+    return json.loads((DATA / "compute-blade-cle-101-factory.json").read_text())
+
+
+def _report(result, boards=(), **more):
+    return {"schema_version": 2, "result": result, "checked_at": "2026-10-05T00:00:00+00:00", "mode": "acorn",
+            "chosen_by": "configured: acorn", "boards": list(boards), "state": {}, **more}  # fmt: skip
+
+
+def _acorn(result, tests, **more):
+    return {"board": "acorn", "variant": "cle-215+", "result": result,
+            "tests": [{"test": name, "result": r, **({"reason": why} if why else {})} for name, r, why in tests],
+            **more}  # fmt: skip
+
+
+def test_the_unconverted_compute_blade_ends_with_what_failed_what_was_not_run_and_what_to_do():
+    lines = runner.summary(_blade(), KEPT_IN).splitlines()
+    start = lines.index("RESULT: FAIL: a board did not pass.")
+    assert lines[start - 1] == ""
+    assert lines[start + 1 : start + 7] == [
+        "  acorn cle-101: fail (2 tests passed, 1 failed, 7 not run)",
+        f"    fault: {UNCONVERTED}",
+        f"    failed: jtag: {GPIOD}",
+        f"    not run: pcie-bar0, flash, ddr, p2-serial, scratch: {UNCONVERTED}",
+        "    not run: p2-uart: the board does not run a known build",
+        "    not run: p2-gpio: J5 and H5 are not wired on the Compute Blade setup",
+    ]
+    assert lines[start + 7] == "What to do:"
+    todo = " ".join(line.strip() for line in lines[start + 8 :])
+    # on a Compute Blade the card is not to be converted: the only load on a blade lost its PCIe endpoint
+    assert "It has to be converted" not in todo and conclusion.ACORN_PROGRAMMING not in todo
+    assert "On a Compute Blade, do not load a design into the card or convert it" in todo
+    assert conclusion.BLADE_JTAG_PAGE in todo
+    assert "the serial port holds GPIO14" in todo and f"{conclusion.ISSUES}/127" in todo
+    assert "sudo fpgas-acorn-debug --help" in todo and "fpgas-online-acorn-debug" in todo
+    assert f"{conclusion.DOCS}/common-failures.html#common-failures" in todo
+    # the verdict and where the report is are the last things on the terminal
+    assert lines[-2:] == [f"The whole report, for a program to read (JSON): {KEPT_IN}", "*" * 78]
+
+
+def test_the_boards_line_no_longer_joins_every_fault():
+    """Each fault is on a line of its own: the board's, then each test's beside the test."""
+    lines = runner.summary(_blade()).splitlines()
+    at = lines.index("  acorn cle-101: fail")
+    assert lines[at + 1] == f"    {UNCONVERTED}"
+    assert lines[at + 4] == f"    jtag       fail: {GPIOD}"
+
+
+def test_a_pass_has_no_closing_lines():
+    text = runner.summary(_report("pass", [_acorn("pass", [("pcie-link", "pass", None)])]), KEPT_IN)
+    assert "RESULT" not in text and "What to do" not in text and "***" not in text
+
+
+def test_the_golden_image_says_to_write_the_operational_image_again():
+    golden = "running the golden image: the operational slot did not boot"
+    board = _acorn("fail", [("pcie-link", "pass", None), ("pcie-bar0", "fail", golden), ("flash", "pass", None)],
+                   reason=f"pcie-bar0 fail: {golden}", not_run={"ddr": "the golden image has no DRAM"})  # fmt: skip
+    lines = conclusion.lines(_report("fail", [board]), KEPT_IN)
+    assert "  acorn cle-215+: fail (2 tests passed, 1 failed, 1 not run)" in lines
+    assert f"    failed: pcie-bar0: {golden}" in lines
+    assert "    not run: ddr: the golden image has no DRAM" in lines
+    assert not [line for line in lines if line.startswith("    fault:")]  # the only reason is the test's own
+    assert "Write the operational image again with fpgas-acorn-flash" in " ".join(line.strip() for line in lines)
+
+
+def test_a_host_that_is_no_acorn_setup_is_told_which_tests_that_stopped():
+    why = ("this host (Raspberry Pi 4 Model B Rev 1.4) is not an Acorn setup in wiring.toml: Raspberry Pi 5 Model B "
+           "(Raspberry Pi 5), Raspberry Pi Compute Module 4 (Compute Blade)")  # fmt: skip
+    unknown = "this host's setup is not known"
+    board = _acorn("error", [("pcie-bar0", "pass", None)], reason=why, not_run={"jtag": unknown, "p2-uart": unknown})
+    lines = conclusion.lines(_report("error", [board]))
+    assert lines[1] == "RESULT: ERROR: the check could not do all of its work; the lines below say what went wrong."
+    assert f"    fault: {why}" in lines
+    assert "    not run: jtag, p2-uart: this host's setup is not known" in lines
+    assert "The tests over PCIe were." in " ".join(line.strip() for line in lines)
+
+
+def test_a_missing_board_names_the_boards_own_debug_command():
+    why = "no Digilent Arty A7 found: this host is set up for one, and nothing else is looked for"
+    lines = conclusion.lines({**_report("missing", reason=why), "mode": "arty"}, KEPT_IN)
+    assert lines[1:3] == ["RESULT: MISSING: no board was found.", f"  {why}"]
+    assert "`sudo fpgas-arty-debug detect`" in " ".join(lines)
+
+
+def test_with_auto_the_reader_is_told_what_board_stands_for():
+    why = "none of the installed boards (arty, tt) was found (auto: USB/PCI IDs)"
+    text = " ".join(line.strip() for line in conclusion.lines({**_report("missing", reason=why), "mode": "auto"}))
+    assert "`sudo fpgas-<board>-debug detect`" in text and "(<board> is acorn, arty, fomu, netv2 or tt-fpga)" in text
+
+
+def test_advice_about_one_boards_fault_names_that_board_even_with_auto():
+    board = {"board": "tt", "result": "error", "reason": "x.bit does not match its manifest", "tests": []}
+    text = " ".join(line.strip() for line in conclusion.lines({**_report("error", [board]), "mode": "auto"}))
+    assert "sudo apt install --reinstall fpgas-online-tt-fpga-bitstreams" in text and "<board>" not in text
+
+
+def test_a_check_that_passed_but_could_not_start_a_service_again_is_not_said_to_show_nothing():
+    """runner.run() makes the result an error when a service it stopped does not start: the board still passed."""
+    why = "fpgas-tt.service was not started again: Job failed"
+    board = {"board": "tt", "result": "pass", "tests": [{"test": "uart", "result": "pass"}]}
+    lines = conclusion.lines(_report("error", [board], reason=why))
+    assert lines[1:4] == ["RESULT: ERROR: the check could not do all of its work; the lines below say what went wrong.",
+                          f"  {why}", "  tt: pass (1 test passed, 0 failed)"]  # fmt: skip
+    assert not [line for line in lines if "debug" in line]
+
+
+def test_a_board_whose_check_stopped_before_any_test_says_no_test_ran():
+    board = {"board": "acorn", "result": "error", "reason": "the check crashed: KeyError: 'x'"}
+    lines = conclusion.lines(_report("error", [board]))
+    assert lines[2:4] == ["  acorn: error (no test ran)", "    fault: the check crashed: KeyError: 'x'"]
+
+
+def test_a_reason_that_holds_a_semicolon_stays_one_line():
+    """testbench.py's JTAG entry is not one of the tests, and its reason joins the scan's faults with "; "."""
+    jtag = "jtag fail: no device on the JTAG chain; openFPGALoader exited 1 reading the IDCODE"
+    board = {"board": "arty", "variant": "a7-35", "result": "fail", "reason": f"{jtag}; ddr fail: the test exited 1",
+             "tests": [{"test": "ddr", "result": "fail", "reason": "the test exited 1"}]}  # fmt: skip
+    assert conclusion.own_reasons(board) == [jtag]
+    between = {**board, "reason": "before; ddr fail: the test exited 1; after; more"}
+    assert conclusion.own_reasons(between) == ["before", "after; more"]
+
+
+def test_the_tt_boards_commands_are_named_tt_fpga():
+    board = {"board": "tt", "variant": None, "result": "fail", "reason": "uart fail: the test exited 1",
+             "tests": [{"test": "uart", "result": "fail", "reason": "the test exited 1"}]}  # fmt: skip
+    lines = conclusion.lines(_report("fail", [board]))
+    assert "  tt: fail (0 tests passed, 1 failed)" in lines
+    assert "sudo fpgas-tt-fpga-debug --help" in " ".join(lines)
+
+
+def test_a_change_says_how_to_accept_it():
+    report = _report("changed", [_acorn("pass", [("flash", "pass", None)])])
+    report["state"] = {"changes": ["acorn.flash.slots: was 'aaaa', now 'bbbb'"], "file": "/var/lib/x.json"}
+    lines = runner.summary(report, KEPT_IN).splitlines()
+    assert "RESULT: CHANGED: the board, or what is in its flash, is not what was recorded last time." in lines
+    assert "  changed: acorn.flash.slots: was 'aaaa', now 'bbbb'" in lines
+    assert "sudo fpgas-verify --update" in "\n".join(lines)
+    assert not [line for line in lines if "debug" in line]  # the board itself passed
+
+
+def test_tests_asked_for_that_a_board_does_not_have_are_listed_as_not_run():
+    board = {**_acorn("fail", [("jtag", "fail", "no device on the P1 JTAG chain")]), "tests_skipped": ["uart"]}
+    lines = conclusion.lines(_report("fail", [board]))
+    assert "    not run: uart: this board has no such test" in lines
+    assert "check that the JTAG and UART cables are seated" in " ".join(line.strip() for line in lines)
+
+
+def test_a_reason_is_one_line_and_the_advice_is_wrapped_without_breaking_a_url():
+    lines = conclusion.lines(_blade(), KEPT_IN)
+    start = lines.index("What to do:")
+    advice = lines[start + 1 : -1]
+    assert all(len(line) <= conclusion.WIDTH or "https://" in line for line in advice)
+    assert f"    {conclusion.BLADE_JTAG_PAGE}" in advice  # whole, on a line of its own
+    assert f"    failed: jtag: {GPIOD}" in lines  # not wrapped: a reason can be searched for as it is
+
+
+def test_a_report_on_stdout_is_not_given_as_a_file():
+    assert not [line for line in conclusion.lines(_blade(), "stdout") if "whole report" in line]
+    assert not [line for line in conclusion.lines(_blade()) if "whole report" in line]
+
+
+def test_a_boards_own_reasons_are_its_reason_without_its_tests_parts():
+    board = _blade()["boards"][0]
+    assert conclusion.own_reasons(board) == [UNCONVERTED]
+    assert conclusion.own_reasons({"tests": [], "reason": "one; two"}) == ["one; two"]
+    assert conclusion.own_reasons({"tests": []}) == []
+
+
+def test_every_advice_pattern_matches_a_reason_the_code_gives():
+    """Each entry is found by a reason as the check words it. Where the code has the wording as a value it is
+    taken from there, so rewording it there without the entry fails here; the rest are copies."""
+    reasons = [
+        *(check.not_ours({"kind": kind, "ids": "", "subsystem": ""}) for kind in ("sqrl-factory", "vendor-xdma")),
+        suite.GOLDEN,
+        "this host (x) is not an Acorn setup in wiring.toml: y",
+        "the FPGA has not restarted since an earlier boot's check",
+        GPIOD,
+        links.pins_held(BLADE, {14: "1f00030000.serial (uart0)"}),
+        links.pins_held(BLADE, {2: '"spi0 CS0"'}),
+        "no device on the P1 JTAG chain",
+        f"{tt_fpga.NOT_SAID}: {tt_fpga.NOT_INSTALLED}",
+        f"{tt_fpga.NOT_TT_FIRMWARE}: it is in its USB boot loader (2e8a:0003)",
+        tt_fpga.sdk_check("tt-asic", {"chip": "asic", "shuttle": "tt06", "mcu": "RP2040", "sdk": "1.2.2"})[1],
+        tt_fpga.sdk_check("tt-asic", {"chip": "asic", "shuttle": "tt09", "mcu": "RP2040", "sdk": "2.0.4"})[1],
+        "wiring fail: the ui_in ribbon (to HAT JA): ui_in[2] (Pmod pin 3) did not reach HAT JA/JB pin 3",
+        "wiring fail: the ui_in and uio ribbons are on each other's HAT ports (JB and JA): swap them",
+        "wiring fail: these ribbons are plugged in turned round and one position over (ui_in on HAT JC ...)",
+        "wiring fail: the readings fit no single open wire, swapped or turned ribbon: a short between neighbouring ...",
+        "wiring fail: the ui_in ribbon (to HAT JA): ui_in[4] (Pmod pin 7) is held high on the demo board (a DIP ...",
+        "wiring fail: the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) is held low on the demo board (some ...",
+        "wiring fail: the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) is held against the pulls on the demo board",
+        "wiring fail: the uo_out ribbon (to HAT JC): uo_out[6] … (that line is held low: a short to ground?)",
+        "wiring fail: the uio ribbon (to HAT JB): uio[6] … could not be tested: something holds its line low",
+        "wiring error: … only 1 uio bit floats, so the loopback cannot be confirmed (the others' lines are held: …)",
+        "openocd is not installed",
+        "x does not match its manifest",
+        "manifest.json is missing",
+        "no UARTBone reply on /dev/ttyAMA0 (P2 K2/J2)",
+        "no FPGA board is configured",
+        "conflicting fpga-board settings: a and b",
+        "none of the installed boards (arty, tt) was found (auto: USB/PCI IDs)",
+        "no Sqrl Acorn found: this host is set up for one, and nothing else is looked for",
+    ]
+    for pattern, _ in conclusion.ADVICE:
+        assert any(conclusion.re.search(pattern, r) for r in reasons), pattern
+    for alternative in [a for pattern, _ in conclusion.ADVICE for a in pattern.split("|")]:
+        assert any(conclusion.re.search(alternative, r) for r in reasons), alternative
+
+
+def test_the_docs_show_what_the_code_prints_for_the_real_report():
+    """docs/verify/reading-the-result.md's first failing example is this report's summary, line for line, as a
+    run with --no-publish gives it (the report is from before fpgas-verify said whether it published)."""
+    docs = (pathlib.Path(__file__).parents[1] / "docs" / "verify" / "reading-the-result.md").read_text()
+    report = {**_blade(), "publish": {"on": False, "why": "--no-publish"}}
+    assert runner.summary(report, KEPT_IN).strip("\n") in docs
+
+
+def test_a_jtag_pin_the_serial_port_has_gets_the_blades_advice_and_any_other_holder_the_general_one():
+    def todo(holders):
+        why = f"P1 JTAG could not be probed: {links.pins_held(BLADE, holders)}"
+        board = _acorn("fail", [("jtag", "fail", why)], reason=f"jtag fail: {why}")
+        return " ".join(line.strip() for line in conclusion.lines(_report("fail", [board])))
+
+    uart = todo({14: "1f00030000.serial (uart0)"})
+    assert "while the serial port is on, JTAG cannot be tested there" in uart and f"{conclusion.ISSUES}/127" in uart
+    assert (
+        "the gateway owner's choice" in uart and "change one blade's own copy" not in uart
+    )  # both ways, as the page about JTAG on a blade
+    assert "Stop what has the pin" not in uart  # one line of advice for it, not two that disagree
+    for holders in ({2: '"spi0 CS0"'}, {14: '"serial-test"'}):  # a program that asked for the line, whatever its name
+        other = todo(holders)
+        assert "serial port" not in other and "Stop what has the pin" in other
+
+
+def _headings(page):
+    """The anchors of a page's headings, as the docs make them (lower case, punctuation dropped, spaces to -)."""
+    out, fenced = set(), False
+    for line in page.read_text().splitlines():
+        if line.startswith("```"):
+            fenced = not fenced
+        elif not fenced and re.match(r"#{1,6} ", line):
+            out.add(re.sub(r"\s", "-", re.sub(r"[^\w\s-]", "", line.lstrip("#").strip().lower())))
+    return out
+
+
+def test_every_docs_link_the_tool_prints_names_a_page_of_docs_verify_and_a_heading_on_it():
+    """The site publishes docs/verify/<page>.md as <DOCS>/<page>.html: each link the check prints (its advice and
+    its last line), and the one in /etc/default/fpgas-verify, must name such a page and a heading on it."""
+    repo = pathlib.Path(__file__).parents[1]
+    texts = [text for _, text in conclusion.ADVICE]
+    texts += conclusion.lines(_report("fail", [_acorn("fail", [("ddr", "fail", "the test exited 1")])]))
+    texts.append((repo / "packaging" / "debs" / "fpgas-verify.default").read_text())
+    links = re.findall(re.escape(conclusion.DOCS) + r"/([^\s#]*)#(\S*?)\)?\.?(?=\s|$)", "\n".join(texts))
+    assert {page for page, _ in links} >= {"common-failures.html", "tt-fpga.html", "running.html"}, links
+    for page, anchor in links:
+        assert page.endswith(".html"), page
+        source = repo / "docs" / "verify" / page.replace(".html", ".md")
+        assert source.is_file(), f"{conclusion.DOCS}/{page}: no {source}"
+        assert anchor in _headings(source), f"{conclusion.DOCS}/{page}#{anchor}: no such heading in {source}"
+
+
+def test_the_conversion_advice_follows_the_setup_the_report_names():
+    """A Pi 5 is told to convert the card; a Compute Blade is told not to, and why; a report that names no setup
+    gets both, as its host may be a blade."""
+    assert conclusion.BLADE == setup.detect("Raspberry Pi Compute Module 4 Rev 1.1").name == BLADE.name
+
+    def todo(board_setup, reason):
+        board = _acorn("fail", [("pcie-link", "pass", "")], reason=reason)
+        if board_setup:
+            board["setup"] = board_setup
+        return " ".join(line.strip() for line in conclusion.lines(_report("fail", [board])))
+
+    pi5 = setup.detect("Raspberry Pi 5 Model B Rev 1.0").name
+    for reason in (
+        UNCONVERTED,
+        "unconverted: runs the vendor XDMA sample image, not the fpgas.online design",
+        "pcie-bar0 fail: running the golden image: the operational slot did not boot",
+    ):
+        on_pi5, on_blade, unknown = todo(pi5, reason), todo(conclusion.BLADE, reason), todo(None, reason)
+        assert conclusion.ACORN_PROGRAMMING in on_pi5 and "On a Compute Blade" not in on_pi5
+        assert conclusion.ACORN_PROGRAMMING not in on_blade and "On a Compute Blade, do not load" in on_blade
+        assert conclusion.ACORN_PROGRAMMING in unknown and "On a Compute Blade, do not load" in unknown
+
+
+def test_a_held_line_gets_the_advice_for_it_and_not_the_ribbon_s():
+    held = "wiring fail: the ui_in ribbon (to HAT JA): ui_in[4] (Pmod pin 7) is held high on the demo board (a DIP"
+    wrong = "wiring fail: the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) did not reach HAT JA pin 8"
+    advice = {pattern: text for pattern, text in conclusion.ADVICE}
+    held_says = [text for pattern, text in advice.items() if conclusion.re.search(pattern, held)]
+    wrong_says = [text for pattern, text in advice.items() if conclusion.re.search(pattern, wrong)]
+    assert len(held_says) == 1 and "DIP switches off" in held_says[0]
+    assert len(wrong_says) == 1 and "not where it should be" in wrong_says[0]
+
+
+def test_a_held_line_is_not_told_to_reseat_a_ribbon():
+    held_low = ("wiring fail: the uo_out ribbon (to HAT JC): uo_out[6] (Pmod pin 9) did not reach HAT JC pin 9 (that "
+                "line is held low: a short to ground?)")  # fmt: skip
+    says = [text for pattern, text in conclusion.ADVICE if conclusion.re.search(pattern, held_low)]
+    assert len(says) == 1 and "for a short" in says[0]
+
+
+def advice_for(reason):
+    return [text for pattern, text in conclusion.ADVICE if conclusion.re.search(pattern, reason)]
+
+
+def test_a_line_something_holds_is_not_told_to_reseat_a_ribbon():
+    """Review 8, finding 1: "holds its line" is a held line too."""
+    says = advice_for("wiring fail: the uio ribbon (to HAT JB): uio[0] (Pmod pin 1) could not be tested: something "
+                      "holds its line low")  # fmt: skip
+    assert len(says) == 1 and "for a short" in says[0]
+
+
+def test_a_ribbon_gets_the_ribbon_advice_for_any_fault_that_is_not_a_held_line():
+    """Review 8, finding 4: a held line named first does not hide an open wire after it on the same ribbon."""
+    says = advice_for("wiring fail: the uio ribbon (to HAT JB): uio[0] (Pmod pin 1) could not be tested: something "
+                      "holds its line low; uio[4] (Pmod pin 7) did not reach HAT JB pin 7")  # fmt: skip
+    assert any("Seat it" in s for s in says) and any("for a short" in s for s in says)
+    held_then_untested_list = (
+        "wiring fail: the ui_in ribbon (to HAT JA): ui_in[0] (Pmod pin 1) is held low on the demo board (something "
+        "drives it low: a short to ground, or a chip output a wrong ribbon joins to it); uio[6] (Pmod pin 9), "
+        "uio[7] (Pmod pin 10) and uo_out were not tested: the chip's factory test could not be used (ui_in[0] is held)"
+    )
+    assert not any("Seat it" in s for s in advice_for(held_then_untested_list))
+
+
+def test_a_uio_bit_sharing_a_held_ui_in_line_gets_only_the_dip_switch_advice():
+    """Review 8, finding 3."""
+    reason = (
+        "wiring fail: the ui_in ribbon (to HAT JA): ui_in[1] (Pmod pin 2) is held high on the demo board (a DIP "
+        "switch that is on? set all DIP switches off); the uio ribbon (to HAT JB): uio[1] (Pmod pin 2) could not be "
+        "tested: HAT JA/JB pin 2 is one Pi line, where ui_in[1] is held high"
+    )
+    says = advice_for(reason)
+    assert len(says) == 1 and "DIP switches off" in says[0]
+
+
+THIS = pathlib.Path(__file__).name
+
+
+def test_the_blade_advice_links_the_page_about_jtag_on_a_blade_at_its_published_address():
+    """docs.fpgas.online moved the Acorn pages and keeps no redirect: the address the tool prints is the page's."""
+    page = "https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html"
+    assert page == conclusion.BLADE_JTAG_PAGE and conclusion.NOT_ON_A_BLADE.endswith(page)
+
+
+def test_no_advice_the_tool_prints_holds_a_record_of_a_run_or_a_promise():
+    """Which host, at which site, on which day, is the record's (an issue the advice names), not the tool's words;
+    and the tool does not say what is not done yet."""
+    texts = [text for _, text in conclusion.ADVICE] + [conclusion.NOT_ON_A_BLADE, *conclusion.ON_A_BLADE.values()]
+    record = re.compile(r"\bpi\d\d\b|\bps1\b|\bwelland\b|\b20\d\d\b|\b(?:the )?only attempt\b|\byet\b|not in the guide")
+    for text in texts:
+        assert not record.search(text), record.search(text)[0]
+        # an address is followed by a space, never by a bracket or a full stop a terminal would take into the link
+        assert not re.search(r"https://\S*[).,;:]( |$)", text), text
+    blade = conclusion.NOT_ON_A_BLADE
+    assert blade.startswith("On a Compute Blade, do not load a design into the card or convert it. ")
+    # the reason stays, and the record it rests on is named by what it is and linked
+    assert (
+        "The one time a design was loaded into a card on a blade, the card's PCIe endpoint did not come back" in blade
+    )
+    assert f"(fpgas.online-test-designs issue 241, {conclusion.ISSUE_241}): {conclusion.ISSUES}/241 To test" in blade
+    assert re.search(r"https://\S*[).,;:]( |$)", "the record (https://example.org/issues/1). To")  # and finds one
+    for found in ("pi20 at ps1", "7 October 2026", "welland", "not in the guide yet", "no JTAG there yet"):
+        assert record.search(found), found  # the pattern finds what it is for
+
+
+def test_no_address_of_a_moved_acorn_docs_page_is_left_in_the_tool_or_the_pages():
+    """The Acorn pages that were under boards/acorn/building/ and boards/acorn/wiring/rpi-5-host are now under
+    setup/, checks/ and troubleshooting/, with no redirect: an old address anywhere here is a dead link."""
+    root = pathlib.Path(__file__).resolve().parents[1]
+    listed = subprocess.run(["git", "ls-files", "-z"], cwd=root, capture_output=True, text=True, check=True).stdout
+    # every tracked file but the plans (dated records) and this test, which names the old addresses to find them
+    names = [n for n in listed.split("\0") if n and not n.startswith("docs/plans/") and n != "tests/" + THIS]
+    names = [n for n in names if (root / n).is_file()]  # a submodule is listed as its directory
+    assert len(names) > 500 and "docs/wiring/acorn/wiring.toml" in names and "docs/verify/acorn-wiring.md" in names
+    old = re.compile(rb"boards/acorn/(?:building/|wiring/rpi-5-host)")
+    left = [(n, m.group(0).decode()) for n in names for m in old.finditer((root / n).read_bytes())]
+    assert left == []

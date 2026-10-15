@@ -13,12 +13,13 @@ packages at <https://apt.fpgas.online>. On a Pi with, say, an Arty:
 
 ```bash
 sudo install -d -m0755 /etc/apt/keyrings
-curl -fsSL https://apt.fpgas.online/apt.gpg | sudo tee /etc/apt/keyrings/apt.gpg > /dev/null
+sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/apt.gpg https://apt.fpgas.online/apt.gpg
 echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(. /etc/os-release; echo $VERSION_CODENAME)/ ./" \
   | sudo tee /etc/apt/sources.list.d/apt.list
+ls -l /etc/apt/keyrings/apt.gpg         # about 1.2 kB; if it is missing, run the curl line again
 sudo apt update
 sudo apt install fpgas-online-arty     # or -acorn, -netv2, -fomu, -tt-fpga; -all-boards for any of them
-sudo fpgas-verify --no-publish         # check the board now; it also runs at every boot
+sudo fpgas-verify                      # check the board now; it also runs at every boot
 ```
 
 **[docs/verify.md](docs/verify.md)**: installing, running and reading `fpgas-verify`, how fpgas.online uses it,
@@ -70,13 +71,15 @@ and the current results on the Welland Pis.
 
 | Test | Arty A7 | NeTV2 | Fomu EVT | TT FPGA | Acorn / LiteFury | ULX3S | ButterStick |
 |------|---------|-------|----------|---------|------------------|-------|-------------|
-| [GPIO Loopback](docs/tests/pmod-loopback.md) | Yes | Yes | Yes | Yes | Yes | — | — |
-| [PMOD Pin ID](docs/tests/pmod-loopback.md) | Yes | Yes | Yes | Yes | Yes | — | — |
+| [GPIO Loopback](docs/tests/pmod-loopback.md) | Yes | Yes | No¹ | Yes | Yes | — | — |
+| [PMOD Pin ID](docs/tests/pmod-loopback.md) | Yes | Yes | No¹ | Yes | Yes | — | — |
 | [UART](docs/tests/uart.md) | Yes | Yes | Yes | Yes | Yes | — | — |
 | [Ethernet](docs/tests/ethernet.md) | Yes | Yes | — | — | — | — | — |
 | [PCIe Enumeration](docs/tests/pcie-enumeration.md) | — | Yes | — | — | Yes | — | — |
 | [DDR Memory](docs/tests/ddr-memory.md) | Yes | Yes | — | — | Yes | — | — |
-| [SPI Flash ID](docs/tests/spi-flash-id.md) | Yes | Yes | Yes | Yes | Yes | — | — |
+| [SPI Flash ID](docs/tests/spi-flash-id.md) | Yes | Yes | Yes | — | Yes | — | — |
+
+¹ A design is built, but the Fomu EVT's PMOD pins reach no pin of the Pi's header it sits on, so the test cannot pass there ([#202](https://github.com/fpgas-online/fpgas.online-test-designs/issues/202)).
 
 See [docs/tests/](docs/tests/) for detailed test specifications.
 

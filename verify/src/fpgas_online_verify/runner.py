@@ -17,12 +17,15 @@ found or no board, a board identified, each test started and finished, and the f
 import contextlib
 import datetime
 import json
+import os
 import pathlib
 import sys
+import tempfile
 
-from . import config, identity, state
+from . import conclusion, config, identity, state
 from .board import installed
-from .core import Problem, flatten, hold_lock, pci_devices, publish, usb_devices, worst
+from .core import Problem, flatten, hold_lock, pci_devices, publish, tail, usb_devices, worst
+from .core import run as run_command
 
 SCHEMA_VERSION = 2
 REPORT = pathlib.Path("/run/fpgas-online/verify.json")
@@ -97,13 +100,30 @@ def find(boards, mode, options, usb, pci):
                 raise
             # The weak claims are still checked (and never pass); the probe's failure is said, not lost.
             return spotted, f"auto: USB/PCI IDs; probing as well failed: {p.reason}"
+        found = {b.name for b, _, _ in spotted + probed}
+        yielded = sorted({(b.name, b.yield_reason) for b, _, _ in probed if set(b.yields_to) & (found - {b.name})})
+        probed = [(b, h, f) for b, h, f in probed if b.name not in {name for name, _ in yielded}]
+        not_taken = "".join(f"; {name} not taken: {why}" for name, why in yielded)
         if probed:
             names = ", ".join(sorted({b.name for b, _, _ in probed}))
-            return spotted + probed, ("auto: USB/PCI IDs and probed (" if spotted else "auto: probed (") + names + ")"
+            how = ("auto: USB/PCI IDs and probed (" if spotted else "auto: probed (") + names + ")"
+            return spotted + probed, how + not_taken
         if spotted:
-            return spotted, "auto: USB/PCI IDs, and probing found nothing more"
+            return spotted, "auto: USB/PCI IDs, and probing found nothing more" + not_taken
         how = "auto: USB/PCI IDs, then probing"
     raise Problem("missing", f"none of the installed boards ({', '.join(boards)}) was found ({how})")
+
+
+def debug_tools(boards, usb):
+    """A sentence for each USB debug tool (Board.debug_usb) of an installed board that is on USB now."""
+    names = {ids: name for b in boards.values() for ids, name in b.debug_usb.items()}
+    out = []
+    for d in usb:
+        name = names.get((d["vendor"], d["product"]))
+        if name:
+            out.append(f"{name}{' ' + d['serial'] if d.get('serial') else ''} on USB ({d['vendor']}:{d['product']} "
+                       f"at {d['path']}), a debug tool, not a board")  # fmt: skip
+    return out
 
 
 def _keys(targets):
@@ -180,13 +200,23 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
             mode_value, path = config.configured(options.get("mode_dir", config.MODE_DIR),
                                                  options.get("admin_dir", config.ADMIN_DIR))  # fmt: skip
             report["mode"], report["configured_by"] = mode_value, str(path)
+        if "power_cycle_check" not in options:  # opt-in, whichever way the board was chosen (config.py)
+            on, path = config.power_cycle_check(options.get("mode_dir", config.MODE_DIR),
+                                                options.get("admin_dir", config.ADMIN_DIR))  # fmt: skip
+            if on:
+                options = {**options, "power_cycle_check": True}
+                report["power_cycle_check"] = {"on": True, "configured_by": str(path)}
         usb = usb_devices() if usb is None else usb
         pci = pci_devices() if pci is None else pci
+        tools = debug_tools(boards, usb)
+        if tools:
+            report["usb_debug_tools"] = tools
         targets, report["chosen_by"] = find(boards, report["mode"], options, usb, pci)
     except Problem as p:
         report.update(result=p.result, reason=p.reason)
-        if p.result == "missing":  # say what was recorded, if anything: nothing is recorded now
-            event("fpga-no-board", {"reason": p.reason})
+        if p.result == "missing":  # a debug tool on USB is named, so it is not read as the board; nothing is recorded
+            report["reason"] = "; ".join([p.reason, *report.get("usb_debug_tools", [])])
+            event("fpga-no-board", {"reason": report["reason"]})
             report["state"] = compare_state(report, [], [], False, options.get("state", state.STATE))
         return report
     reports, not_checked = [], []
@@ -208,7 +238,10 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
                 # still found, so still identified (once), from what finding it showed
                 board_event("fpga-board-identified", identity.details(identity.base(key, board.name, found)))
                 continue
-            board_options = {**board_options, "event": board_event, "board_key": key, identity.KEEP: kept.append}
+            # configured: the host is set up for this board (or its own command was run), not found by `auto`;
+            # the Acorn tests a card it cannot name by its IDs only then (#155)
+            board_options = {**board_options, "event": board_event, "board_key": key, identity.KEEP: kept.append,
+                             "configured": report["mode"] != config.AUTO}  # fmt: skip
             with hold_lock(board.lock, board.title):
                 reports.append(board.check(host, found, board_options))
         except Problem as p:
@@ -274,11 +307,19 @@ def details(report):
     if "reason" in report:
         out["reason"] = report["reason"]
     for i, b in enumerate(report["boards"]):
-        out[f"board{i}"] = f"{b['board']} {b.get('variant') or '-'} {b['result']}"
+        # three words (the site reads them so); another board's title is in the reason
+        name, variant = conclusion.shown(b)
+        out[f"board{i}"] = f"{name} {'-' if name == conclusion.OTHER_PCIE else variant or '-'} {b['result']}"
         if "reason" in b:
             out[f"board{i}_reason"] = b["reason"]
         if b.get("tests"):
             out[f"board{i}_tests"] = " ".join(f"{t['test']}={t['result']}" for t in b["tests"])
+        if b.get("not_run"):
+            out[f"board{i}_not_run"] = ", ".join(b["not_run"])
+        if b.get("left_running"):
+            out[f"board{i}_left_running"] = b["left_running"]["design"]
+        if b.get("warnings"):
+            out[f"board{i}_warnings"] = "; ".join(b["warnings"])
         if b.get("bitstreams"):
             out[f"board{i}_bitstreams"] = str(b["bitstreams"])
         flatten(f"board{i}_state", b.get("state", {}), out)
@@ -295,7 +336,9 @@ def details(report):
     return out
 
 
-def summary(report):
+def summary(report, kept_in=None):
+    """What a person reads: every test as it ran, and for a check that did not pass, the plain conclusion last
+    (conclusion.py). `kept_in` is where the JSON report was written."""
     lines = []
     bad = report["result"] != "pass"
     if bad:
@@ -307,18 +350,26 @@ def summary(report):
     lines.append(f"fpgas-verify: {report['result']} (mode {report.get('mode', '-')}, {report.get('chosen_by', '-')})")
     if "reason" in report:
         lines.append(f"  {report['reason']}")
+    if "publish" in report:
+        pub = report["publish"]
+        by = f"`{config.PUBLISH} = {'on' if pub['on'] else 'off'}` in {pub.get('configured_by')}"
+        lines.append(f"  published to the fleet: {by}" if pub["on"] else f"  not published: {pub.get('why') or by}")
     if report.get("not_checked"):
         lines.append(f"  not checked (none of the tests asked for): {', '.join(report['not_checked'])}")
     for b in report["boards"]:
-        lines.append(
-            f"  {b['board']} {b.get('variant') or '-'}: {b['result']}" + (f": {b['reason']}" if "reason" in b else "")
-        )
+        name, variant = conclusion.shown(b)
+        lines.append(f"  {name} {variant or '-'}: {b['result']}")
+        lines += [f"    {reason}" for reason in conclusion.own_reasons(b)]  # a test's reason is on its own line
         for t in b.get("tests", []):
             lines.append(f"    {t['test']:<10} {t['result']}" + (f": {t['reason']}" if "reason" in t else ""))
             if t["result"] != "pass":
                 lines += [f"        {line}" for line in t.get("output", [])[-8:]]
         for test, why in (b.get("not_run") or {}).items():
             lines.append(f"    {test:<10} not run: {why}")
+        left = b.get("left_running")
+        if left:
+            lines.append(f"    left running: the {left['design']} design ({left['bitstream']})")
+        lines += [f"    WARNING: {w}" for w in b.get("warnings", [])]
         for s in b.get("flash", {}).get("slots", []) if isinstance(b.get("flash"), dict) else []:
             lines.append(
                 f"    flash {s['slot']} {s['result']}"
@@ -329,13 +380,10 @@ def summary(report):
     st = report.get("state", {})
     for change in st.get("changes", []):
         lines.append(f"  CHANGED {change}")
-    if st.get("changes"):
-        lines.append("  if this change was meant (a board flashed or swapped on purpose): sudo fpgas-verify --update")
-    elif st.get("recorded"):
+    if st.get("recorded") and not st.get("changes"):
         lines.append(f"  state recorded ({st['recorded']}) in {st['file']}")
     if bad:
-        lines.append("  more: fpgas-<board>-debug (fpgas-online-<board>-debug)")
-        lines += ["*" * 78, ""]
+        lines += [*conclusion.lines(report, kept_in), "*" * 78, ""]
     return "\n".join(lines)
 
 
@@ -359,8 +407,44 @@ def write(report, where):
         return "stdout"
     out = pathlib.Path(where)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(text)
+    if out.is_symlink() or (out.exists() and not out.is_file()):
+        # A symlink, a device or a pipe (--report /dev/stdout, /dev/null): written through, as it always was.
+        # Renaming a file over it would replace the link or, as root, the device node itself.
+        out.write_text(text)
+        return str(out)
+    # Written beside the report and renamed over it: whoever reads the report (the site's bridge, a person)
+    # sees the old one or the new one, never half of either.
+    fd, tmp = tempfile.mkstemp(dir=out.parent, prefix=out.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(text)
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, out)
+    except BaseException:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(tmp)
+        raise
     return str(out)
+
+
+def start_services(units):
+    """Start the units the boards' checks stopped (testbench.services_stopped); what could not be queued.
+
+    --no-block, as there: from inside fpgas-verify.service a blocking start of a unit ordered after it would
+    wait on the verify's own start job."""
+    failed = []
+    for unit in units:
+        try:
+            rc, text = run_command(["systemctl", "start", "--no-block", unit], 60)
+        except Problem as p:
+            rc, text = 1, p.reason
+        if rc != 0:
+            failed.append(f"{unit} was not started again: {' '.join(tail(text, 2))}")
+    return failed
+
+
+# Which directories were read is the caller's business (config.publish); the fleet's file is named as the example.
+NO_FILE = f"no file says `{config.PUBLISH} = on` (the fpgas.online Pi root has {config.ADMIN_DIR}/fleet.ini)"
 
 
 def run(options, prog="fpgas-verify"):
@@ -369,17 +453,53 @@ def run(options, prog="fpgas-verify"):
         # on a partial pass), and never written over the boot's report unless --report says where.
         options = {**options, "no_publish": True, "report": options.get("report") or "-"}
     kept_in = options.get("report") or str(REPORT)
-    if not options.get("no_publish"):
+    # Nothing is sent unless a file says `publish = on` (config.py: the fleet's Pi root does); --no-publish and
+    # --test send nothing even then. A setting that cannot be read is the run's result, and is not published.
+    # Every report and summary says which, and why: a fleet root that lost its file shows in one look at a board.
+    publishing, unreadable = False, None
+    if options.get("tests"):
+        published = {"on": False, "why": "--test runs part of the check"}
+    elif options.get("no_publish"):
+        published = {"on": False, "why": "--no-publish"}
+    else:
+        try:
+            publishing, said_by = config.publish(options.get("mode_dir", config.MODE_DIR),
+                                                 options.get("admin_dir", config.ADMIN_DIR))  # fmt: skip
+            published = {"on": publishing, "configured_by": str(said_by)} if said_by else {"on": False, "why": NO_FILE}
+        except Problem as p:
+            unreadable, published = p, {"on": False, "why": "the setting could not be read"}
+    if publishing:
         # The site hears the check has started, and says the board is being verified until the result follows.
         working = publish("fpga-verifying", {"started_at": _now()}, prog=prog, timeout=EVENT_TIMEOUT)
         options = {**options, "event": _Progress(prog, working)}
+    # The services the checks stop are started here, after the report is written: one that reads the report
+    # when it starts (the TT site's bridge) must find this run's, not the one before.
+    stopped = []
+    options = {**options, "restart_later": stopped}
+    to_stdout = kept_in == "-"
     try:
-        report = verify(options)
-    except Exception as e:  # whatever went wrong, the site still hears a result, and the report says why
-        report = {"schema_version": SCHEMA_VERSION, "result": "error", "checked_at": _now(), "boards": [],
-                  "reason": f"fpgas-verify crashed: {type(e).__name__}: {e}"}  # fmt: skip
-    kept_in = write(report, kept_in)
-    print(summary(report), file=sys.stderr)
-    if not options.get("no_publish"):
+        try:
+            if unreadable:
+                report = {"schema_version": SCHEMA_VERSION, "result": unreadable.result, "checked_at": _now(),
+                          "boards": [], "reason": unreadable.reason}  # fmt: skip
+            else:
+                report = verify(options)
+        except Exception as e:  # whatever went wrong, the site still hears a result, and the report says why
+            report = {"schema_version": SCHEMA_VERSION, "result": "error", "checked_at": _now(), "boards": [],
+                      "reason": f"fpgas-verify crashed: {type(e).__name__}: {e}"}  # fmt: skip
+        report["publish"] = published
+        if not to_stdout:
+            kept_in = write(report, kept_in)
+    finally:
+        # However the check or the write ended (an interrupt, a full disk), a stopped service is not left down.
+        not_started = start_services(stopped)
+    if not_started:  # the service may be left down: the result says so, and a report file is written again
+        report["services_failed"] = not_started
+        report["result"] = worst([report["result"], "error"])
+        report["reason"] = "; ".join([*([report["reason"]] if report.get("reason") else []), *not_started])
+    if to_stdout or not_started:  # stdout gets one document, after the starts: nothing reads it as a file
+        kept_in = write(report, kept_in)
+    print(summary(report, kept_in), file=sys.stderr)
+    if publishing:
         publish("fpga-verified", details(report), kept_in, prog)
     return 0 if report["result"] == "pass" else 1

@@ -154,6 +154,7 @@ def board_locks(inside):
     return sorted(b.lock for b in BOARDS.values() if b.lock.startswith(f"{RUN_DIR}/") == inside)
 
 
+DEFAULTS = "/etc/default/fpgas-verify"  # the boot run's options; a conffile
 TMPFILES_POSTINST = {"postinstall": str(HERE / "tmpfiles.postinst")}
 
 
@@ -179,6 +180,8 @@ def verify_nfpm(version, staging):
             *scripts,
             wrapper(staging, "fpgas-verify", ("from fpgas_online_verify.cli import verify_main", "verify_main")),
             {"src": str(HERE / "fpgas-verify.service"), "dst": "/usr/lib/systemd/system/fpgas-verify.service", **DATA},
+            # The file the unit's EnvironmentFile= names: only comments, so it is there to be read and edited.
+            {"src": str(HERE / "fpgas-verify.default"), "dst": DEFAULTS, "type": "config|noreplace", **DATA},
             {"dst": MODE_DIR, "type": "dir", "file_info": {"mode": 0o755}},
             tmpfiles(staging, "fpgas-online-verify", [f"d {RUN_DIR} 0755 root root -",
                                                       *(f"f {lock} 0644 root root -" for lock in board_locks(True))]),
@@ -291,17 +294,15 @@ def stage_test_bitstreams(board, bundle, root, version, commit):
     """Copy a test board's bitstreams out of the CI bundle under `root`, with a manifest; returns the dir."""
     images = pathlib.Path(root) / "usr/share/fpgas-online" / board.slug / "bitstreams"
     files = []
-    for test in board.tests:
-        for variant in board.variants:
-            path = board.artifact(test, variant)
-            src = pathlib.Path(bundle) / path
-            if not src.is_file():
-                raise BuildError(f"{path} is not in {bundle}: the {test} build for {board.name} {variant} is missing")
-            data = src.read_bytes()
-            (images / path).parent.mkdir(parents=True, exist_ok=True)
-            (images / path).write_bytes(data)
-            files.append({"path": path, "test": test, "variant": variant, "size": len(data),
-                          "sha256": hashlib.sha256(data).hexdigest()})  # fmt: skip
+    for test, variant, path in board.artifacts():  # the tests' designs, and one the check leaves running
+        src = pathlib.Path(bundle) / path
+        if not src.is_file():
+            raise BuildError(f"{path} is not in {bundle}: the {test} build for {board.name} {variant} is missing")
+        data = src.read_bytes()
+        (images / path).parent.mkdir(parents=True, exist_ok=True)
+        (images / path).write_bytes(data)
+        files.append({"path": path, "test": test, "variant": variant, "size": len(data),
+                      "sha256": hashlib.sha256(data).hexdigest()})  # fmt: skip
     manifest = {"board": board.name, "version": version, "commit": commit, "files": files}
     (images / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     for path in [images, *images.rglob("*")]:  # nfpm keeps the modes files have on disk

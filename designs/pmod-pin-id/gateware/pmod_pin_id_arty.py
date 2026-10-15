@@ -67,6 +67,17 @@ class PMODPinIdentifier(Module):
             self.submodules += tx
 
 
+def design(variant="a7-35", toolchain="openxc7"):
+    """The platform with one output per Pmod pin, the pin list and the module: everything main() builds but the
+    toolchain's own fixes and the build. tests/test_pmod_pin_id_elaborate.py elaborates it without a toolchain."""
+    platform = Platform(variant=variant, toolchain=toolchain)
+    pin_list = build_pin_list(platform)
+    platform.add_extension(build_io_extensions(pin_list))
+    module = PMODPinIdentifier(platform, pin_list)
+    require_timing(platform, {})  # runs on the board clock, which the platform constrains
+    return platform, pin_list, module
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="PMOD Pin Identification for Arty A7")
@@ -79,23 +90,17 @@ def main():
     parser.add_argument("--build", action="store_true")
     args = parser.parse_args()
 
-    platform = Platform(variant=args.variant, toolchain=args.toolchain)
-
-    pin_list = build_pin_list(platform)
-    platform.add_extension(build_io_extensions(pin_list))
+    platform, pin_list, module = design(args.variant, args.toolchain)
 
     # Print the pin list for reference during build.
     print(f"PMOD Pin ID: {len(pin_list)} pins")
     for resource_pin, label in pin_list:
         print(f"  {resource_pin:10s} -> {label.strip()!r}")
 
-    module = PMODPinIdentifier(platform, pin_list)
-
     # Apply yosys workaround for openxc7
     if args.toolchain == "openxc7" and hasattr(platform.toolchain, "_yosys_template"):
         platform.toolchain._yosys_template = list(YOSYS_TEMPLATE_STRIP_SCOPEINFO)
 
-    require_timing(platform, {})  # runs on the board clock, which the platform constrains
     if args.build:
         # Write to build/<board>-<variant>-<flow>/gateware/<platform>.bit
         # to match LiteX Builder's layout used by the other designs.

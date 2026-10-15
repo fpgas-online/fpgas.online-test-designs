@@ -54,11 +54,17 @@ class NeTV2(TestBoard):
         "a7-35": 0x220000,
         "a7-100": 0x3B0000,
     }  # a .bit for each part: 2,192,122 / 3,825,899 bytes
+    jtag_loads_7_series = True  # openFPGALoader's `done` line says whether it loaded (#300)
     tests: ClassVar[dict] = {
         "uart": {"artifact": "uart-test-netv2-{v}/kosagi_netv2.bit", "script": "test_uart.py",
                  "args": ["--port", "{port}", "--board", "netv2", "--skip-banner"], "verify": True},
+        # The BIOS prints "Switching SDRAM to software control." once, at start, before the memtest, and
+        # test_ddr.py needs that line and "Memtest OK": opened after the load, the Pi's own UART had already
+        # dropped it (every Welland NeTV2's boot check, found 2026-10-08). So it listens from before the load,
+        # and its timeout covers the load, as spiflash's does.
         "ddr": {"artifact": "ddr-test-netv2-{v}/kosagi_netv2.bit", "script": "test_ddr.py",
-                "args": ["--port", "{port}", "--board", "netv2"], "verify": True},
+                "args": ["--port", "{port}", "--board", "netv2", "--timeout", "180"], "verify": True,
+                "listen": True},
         # It prints its JEDEC ID once, at start, onto the Pi's own UART, so it listens from before the load
         # (listen.py), and its timeout covers the load too (openocd on a Pi 3 takes a minute or more).
         "spiflash": {"artifact": "spiflash-test-netv2-{v}/kosagi_netv2.bit", "script": "test_spiflash.py",

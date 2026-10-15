@@ -5,8 +5,8 @@ tests/test_acorn_p2_pins.py fails if this file or any Acorn design disagrees wit
 
 | P2 pin | Ball | Use                    | Pi 5 HAT     | Compute Blade                           |
 |--------|------|------------------------|--------------|-----------------------------------------|
-| 2      | J2   | serial RX, FPGA input  | GPIO14 (TXD) | GPIO14 (TXD), also JTAG TMS via 470 ohm |
-| 3      | K2   | serial TX, FPGA output | GPIO15 (RXD) | GPIO15 (RXD)                            |
+| 2      | K2   | serial TX, FPGA output | GPIO15 (RXD) | GPIO15 (RXD)                            |
+| 3      | J2   | serial RX, FPGA input  | GPIO14 (TXD) | GPIO14 (TXD), also JTAG TMS via 470 ohm |
 | 4      | J5   | spare GPIO             | GPIO3        | cut (GPIO3 is JTAG TDO there)           |
 | 5      | H5   | spare GPIO             | GPIO4        | cut (GPIO4 is JTAG TCK there)           |
 
@@ -27,7 +27,9 @@ SERIAL_TX = "K2"  # FPGA output -> host GPIO15 (RXD)
 SERIAL_RX = "J2"  # FPGA input  <- host GPIO14 (TXD)
 SPARE_GPIO = ("J5", "H5")  # bit 0, bit 1 of p2_gpio
 
-# J2 and K2 as bits of P2SerialSwitch's oe/out/in registers, in P2 pin order like p2_gpio.
+# J2 and K2 as bits of P2SerialSwitch's oe/out/in registers: J2 is bit 0, K2 bit 1. That is not P2's pin order
+# (K2 is pin 2, J2 pin 3): the layout is fixed by the released acorn-pcie images, docs/hardware/acorn.md
+# ("Bit 0 is J2, bit 1 is K2") and tests/test_acorn_p2_switch.py, so it stays as it is.
 SWITCH_BITS = {SERIAL_RX: 0, SERIAL_TX: 1}
 
 # How long the pins stay GPIOs after the last write to `mode`, unless the host sets another value.

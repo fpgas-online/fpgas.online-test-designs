@@ -155,7 +155,7 @@ def _main(monkeypatch, argv, decoded):
     monkeypatch.setattr(ident, "release_kernel_gpio_drivers", lambda: None)
     monkeypatch.setattr(ident, "detect_gpio_chip", lambda: "/dev/gpiochip0")
     monkeypatch.setattr(ident, "alt_functions", lambda gpios: {})
-    monkeypatch.setattr(ident, "scan_gpios", lambda gpios, chip: scanned.extend(gpios) or dict(decoded))
+    monkeypatch.setattr(ident, "scan_gpios", lambda gpios, chip, shared=(): scanned.extend(gpios) or dict(decoded))
     try:
         ident.main()
         code = 0
@@ -179,12 +179,37 @@ class _Run:
         return type("R", (), {"stdout": self.GET if argv[1] == "get" else "", "returncode": 0})()
 
 
-def test_the_scan_puts_back_the_uart_and_i2c_functions_it_takes_away():
+def test_the_scan_puts_back_only_the_functions_that_listen(capsys):
+    """The pin-ID design still drives every scanned pin, so TXD0 and SDA1 would drive against it (#308): they stay
+    inputs, and the reader is told how to give them back after the FPGA is reset. RXD0 only listens."""
     run = _Run()
     functions = ident.alt_functions([14, 15, 8, 2], run=run)
-    assert functions == {14: "a0", 15: "a0", 2: "a0"}  # GPIO8 was a plain input: nothing to put back
+    # GPIO8 was a plain input: nothing to put back
+    assert functions == {14: ("a0", "TXD0"), 15: ("a0", "RXD0"), 2: ("a0", "SDA1")}
     ident.restore_alt_functions(functions, run=run)
-    assert run.sets == [["2", "a0"], ["14", "a0"], ["15", "a0"]]
+    assert run.sets == [["15", "a0"]]
+    out = capsys.readouterr().out
+    for gpio in (2, 14):
+        assert f"GPIO{gpio} left an input" in out and f"pinctrl set {gpio} a0" in out
+
+
+def test_an_spi_slaves_miso_drives_and_is_not_put_back():
+    class Slave(_Run):
+        GET = "19: a3    pn | lo // GPIO19 = I2CSL_MISO\n9: a0    pn | lo // GPIO9 = SPI0_MISO\n"
+
+    run = Slave()
+    ident.restore_alt_functions(ident.alt_functions([19, 9], run=run), run=run)
+    assert run.sets == [["9", "a0"]]  # the SPI master's MISO listens; the slave's MISO drives
+
+
+def test_a_function_whose_name_cannot_be_read_is_not_put_back(capsys):
+    class Unnamed(_Run):
+        GET = "14: a4    pn | hi\n"  # an older pinctrl prints no "// GPIO14 = …" name
+
+    run = Unnamed()
+    ident.restore_alt_functions(ident.alt_functions([14], run=run), run=run)
+    assert run.sets == []  # it might drive the pin: not knowing is not safe
+    assert "pinctrl set 14 a4" in capsys.readouterr().out
 
 
 def test_no_pinctrl_means_nothing_to_restore():
@@ -196,7 +221,8 @@ def test_no_pinctrl_means_nothing_to_restore():
 
 def test_board_mode_fails_a_miswired_board(monkeypatch):
     code, scanned = _main(monkeypatch, ["--board", "tt"], {8: "13"})
-    assert code == 1 and scanned == [gpio for gpio, _b, _l in ident.BOARDS["tt"]["pins"]]
+    listed = [gpio for gpio, _b, _l in ident.BOARDS["tt"]["pins"]]
+    assert code == 1 and scanned == list(dict.fromkeys(listed)) and len(scanned) == 21  # each GPIO scanned once
 
 
 def test_an_explicit_hat_port_after_board_is_a_discovery_scan(monkeypatch):
@@ -216,16 +242,119 @@ def test_ice40_package_pin_numbers_are_valid_labels():
     assert not ident.is_valid_label("0") and not ident.is_valid_label("100")
 
 
-def test_the_shared_hat_gpios_are_not_part_of_a_wiring_check():
-    """GPIO10/9/11 are HAT JA pins 2-4 and JB pins 2-4 at once: two cables drive them."""
-    for board in ("arty", "tt"):
-        gpios = [gpio for gpio, _ball, _label in ident.BOARDS[board]["pins"]]
-        assert not {9, 10, 11} & set(gpios), board
-        assert len(gpios) == len(set(gpios)) == 18, board
+def test_the_arty_check_leaves_out_the_shared_hat_gpios_and_says_so():
+    """GPIO10/9/11 are HAT JA pins 2-4 and JB pins 2-4 at once, and the Arty design sends on both."""
+    gpios = [gpio for gpio, _ball, _label in ident.BOARDS["arty"]["pins"]]
+    assert not {9, 10, 11} & set(gpios) and len(gpios) == len(set(gpios)) == 18
+    said = ident.coverage("arty")
+    assert said.startswith("18 of the 24 signal wires of this cabling are tested; 6 are NOT tested: HAT JA.2-4 and")
+
+
+def test_the_tt_check_covers_all_24_wires_with_two_wires_on_each_shared_gpio():
+    """#142: ui_in[1..3] (JA.2-4) and uio[1..3] (JB.2-4) end on GPIO10, 9 and 11; each wire has its own row."""
+    pins = ident.BOARDS["tt"]["pins"]
+    assert len(pins) == 24 == ident.BOARDS["tt"]["wires"]
+    assert len({ball for _gpio, ball, _label in pins}) == 24  # 24 different FPGA pins
+    by_gpio = {}
+    for gpio, ball, label in pins:
+        by_gpio.setdefault(gpio, []).append((ball, label))
+    assert {g: [ball for ball, _ in v] for g, v in by_gpio.items() if len(v) > 1} == {
+        10: ["19", "4"], 9: ["18", "3"], 11: ["21", "6"]}  # fmt: skip
+    assert [label for _ball, label in by_gpio[10]] == ["HAT JA.2 <- ui_in[1]", "HAT JB.2 <- uio[1]"]
+    assert ident.coverage("tt") == "All 24 signal wires of this cabling are tested."
+    assert ident.coverage("acorn") == "All 4 signal wires of this cabling are tested."
+
+
+TT_SHARED = {10: ("19", "4"), 9: ("18", "3"), 11: ("21", "6")}  # what a good board gives on the shared GPIOs
+
+
+def _tt_good():
+    alone = {gpio: ball for gpio, ball, _label in ident.BOARDS["tt"]["pins"] if gpio not in TT_SHARED}
+    return {**alone, **TT_SHARED}
+
+
+def test_a_wire_on_a_shared_gpio_passes_only_when_its_own_label_is_heard_there():
+    all_ok, rows = ident.evaluate_board("tt", _tt_good())
+    assert all_ok and len(rows) == 24 and all(r["ok"] for r in rows)
+    assert [r["got"] for r in rows if r["gpio"] == 10] == ["19+4", "19+4"]
+    # the JB ribbon's wire 2 is open: only ui_in[1] is heard on GPIO10, and only uio[1]'s row fails
+    all_ok, rows = ident.evaluate_board("tt", {**_tt_good(), 10: ("19",)})
+    assert not all_ok and [r["label"] for r in rows if not r["ok"]] == ["HAT JB.2 <- uio[1]"]
+    # JA wires 2 and 3 crossed: ui_in[2]'s label arrives on GPIO10 and ui_in[1]'s on GPIO9
+    crossed = {**_tt_good(), 10: ("18", "4"), 9: ("19", "3")}
+    all_ok, rows = ident.evaluate_board("tt", crossed)
+    assert [r["label"] for r in rows if not r["ok"]] == ["HAT JA.2 <- ui_in[1]", "HAT JA.3 <- ui_in[2]"]
+    # silent, or garbled (two senders at once, as the design before #142 gave): both rows fail
+    for bad in (None, "?\x93\x12"):
+        all_ok, rows = ident.evaluate_board("tt", {**_tt_good(), 11: bad})
+        assert [r["gpio"] for r in rows if not r["ok"]] == [11, 11]
+
+
+def test_the_ja_and_jb_ribbons_swapped_as_a_whole_are_caught_by_their_unshared_wires():
+    """On the shared GPIOs the Pi hears the same two numbers whichever ribbon is on which port (the HAT joins
+    them: the one miswiring this test cannot tell is JA.n and JB.n swapped, n = 2 to 4). The other five wires
+    of each ribbon tell the ribbons apart."""
+    good = _tt_good()
+    ja, jb = [8, 19, 21, 20, 18], [7, 26, 13, 3, 2]  # HAT JA and JB pins 1, 7, 8, 9, 10
+    swapped = {**good, **{a: good[b] for a, b in zip(ja, jb)}, **{b: good[a] for a, b in zip(ja, jb)}}
+    all_ok, rows = ident.evaluate_board("tt", swapped)
+    assert not all_ok and sorted(r["gpio"] for r in rows if not r["ok"]) == sorted(ja + jb)
+    assert all(r["ok"] for r in rows if r["gpio"] in TT_SHARED)  # the limit, stated
+
+
+def test_a_capture_may_start_and_end_anywhere_in_the_cycle():
+    turn_a = _edges_for("19\r\n" * 10)
+    turn_b = _edges_for("4\r\n" * 12, start_ns=turn_a[-1][1] + 100_000_000)
+    cycle = turn_a + turn_b
+    for drop in range(0, 40, 3):
+        frames = ident.decode_edges(cycle[drop : len(cycle) - drop // 2], max_start_candidates=24)
+        assert ident.labels_from_frames(frames) == ("19", "4"), drop
+
+
+def test_both_labels_are_heard_when_two_pins_take_turns_and_a_stray_one_is_not():
+    """One cycle as pmod_pin_id_tt.py sends it: a dozen "19", silence, a dozen "4", silence."""
+    turn_a = _edges_for("19\r\n" * 10)
+    turn_b = _edges_for("4\r\n" * 12, start_ns=turn_a[-1][1] + 100_000_000)
+    frames = ident.decode_edges(turn_a + turn_b, max_start_candidates=24)
+    assert ident.labels_from_frames(frames) == ("19", "4")
+    # a capture that starts inside a turn and ends inside the next one
+    frames = ident.decode_edges((turn_a + turn_b)[7:-9], max_start_candidates=24)
+    assert ident.labels_from_frames(frames) == ("19", "4")
+    # a label heard only twice is not a wire: noise, or a capture's ragged ends
+    stray = [(b, True) for b in b"19\r\n" * 6 + b"7\r\n" * 2]
+    assert ident.labels_from_frames(stray) == ("19",)
+    # nothing heard often enough: said as garbled or silent, never as a label
+    assert ident.labels_from_frames([(b, True) for b in b"19\r\n" * 2]) == "?19"
+    assert ident.labels_from_frames([]) is None
+
+
+def test_board_mode_listens_longer_on_the_shared_gpios_and_prints_the_coverage(monkeypatch, capsys):
+    seen = {}
+
+    def scan(gpios, chip, shared=()):
+        seen["gpios"], seen["shared"] = list(gpios), set(shared)
+        return _tt_good()
+
+    monkeypatch.setattr(ident.sys, "argv", ["identify_pmod_pins.py", "--board", "tt"])
+    monkeypatch.setattr(ident, "release_kernel_gpio_drivers", lambda: None)
+    monkeypatch.setattr(ident, "detect_gpio_chip", lambda: "/dev/gpiochip0")
+    monkeypatch.setattr(ident, "alt_functions", lambda gpios: {})
+    monkeypatch.setattr(ident, "scan_gpios", scan)
+    try:
+        ident.main()
+        code = 0
+    except SystemExit as e:
+        code = e.code
+    out = capsys.readouterr().out
+    assert code == 0 and seen["shared"] == {9, 10, 11} and len(seen["gpios"]) == 21
+    assert "24/24 pins match expected wiring." in out
+    assert "All 24 signal wires of this cabling are tested." in out and out.rstrip().endswith("RESULT: PASS")
+    assert ident.SHARED_CAPTURE_SECONDS >= 1.0 + 0.25  # a whole cycle of turns and then some
 
 
 def _decoded(board):
-    return {gpio: ball for gpio, ball, _label in ident.BOARDS[board]["pins"]}
+    """What a good board gives on the GPIOs one wire ends on."""
+    return {gpio: ball for gpio, ball, _label in ident.BOARDS[board]["pins"] if gpio not in TT_SHARED}
 
 
 def test_a_straight_through_arty_passes_and_welland_p12_as_cabled_fails():
@@ -238,11 +367,80 @@ def test_a_straight_through_arty_passes_and_welland_p12_as_cabled_fails():
     assert not any(r["ok"] for r in rows)
 
 
-def test_a_tt_cabled_as_documented_passes_and_welland_as_cabled_fails():
-    assert ident.evaluate_board("tt", _decoded("tt"))[0]
-    # pi-sw2-p33/p35/p36, 2026-09-29: ui_in on HAT JA and uo_out on HAT JC (the doc has them the other way).
+def test_a_tt_cabled_as_the_fleet_passes_and_ja_jc_swapped_fails():
+    # pi-sw2-p33/p35/p36, 2026-09-29 and 2026-10-04: ui_in on HAT JA, uio on JB, uo_out on JC.
     welland = {8: "13", 19: "23", 21: "25", 20: "26", 18: "27", 7: "2", 26: "9", 13: "10", 3: "11", 2: "12",
                16: "38", 14: "42", 15: "43", 17: "44", 4: "45", 12: "46", 5: "47", 6: "48"}  # fmt: skip
-    all_ok, rows = ident.evaluate_board("tt", welland)
+    assert welland == _decoded("tt")
+    assert ident.evaluate_board("tt", {**welland, **TT_SHARED})[0]
+    # The JA and JC ribbons swapped (uo_out on JA, ui_in on JC): only uio on JB still matches.
+    swapped = {8: "38", 19: "45", 21: "46", 20: "47", 18: "48", 7: "2", 26: "9", 13: "10", 3: "11", 2: "12",
+               16: "13", 14: "19", 15: "18", 17: "21", 4: "23", 12: "25", 5: "26", 6: "27"}  # fmt: skip
+    # On the shared GPIOs uo_out[1..3] then send all the time, over uio[1..3]'s turns: only uo_out's numbers
+    # are heard whole there, and neither ui_in's nor uio's rows match.
+    swapped.update({10: ("42",), 9: ("43",), 11: ("44",)})
+    all_ok, rows = ident.evaluate_board("tt", swapped)
     assert not all_ok
-    assert [r["gpio"] for r in rows if r["ok"]] == [7, 26, 13, 3, 2]  # uio on JB matches
+    assert [r["label"].split(" <- ")[1] for r in rows if r["ok"]] == [f"uio[{i}]" for i in (0, 4, 5, 6, 7)]
+
+
+# -- the routing line (the boot check's reason when pin-id fails) ----------------------------------------------
+
+# The Welland Artys as the boot check read them on 2026-10-04 (data of fpgas.online-test-designs issue #58).
+WELLAND_P12 = {8: "V12", 19: "U14", 21: "V14", 20: "T13", 18: "U13", 7: "D4", 26: "E2", 13: "D2", 3: "H2", 2: "G2",
+               16: "E15", 14: "E16", 15: "D15", 17: "C15", 4: "J17", 12: "J18", 5: "K15", 6: "J15"}  # fmt: skip
+WELLAND_8415 = {8: "V12", 19: "U14", 21: "V14", 20: "T13", 18: None, 7: "E15", 26: "J17", 13: "J18", 3: "K15",
+                2: "J15", 16: "D4", 14: "D3", 15: "F4", 17: "F3", 4: "E2", 12: "D2", 5: "H2", 6: "G2"}  # fmt: skip
+
+
+def test_the_routing_line_names_the_arty_connector_each_hat_connector_reads():
+    _ok, rows = ident.evaluate_board("arty", _decoded("arty"))
+    assert ident.routing("arty", rows) == "HAT JA reads Arty JA, HAT JB reads Arty JB, HAT JC reads Arty JC"
+    _ok, rows = ident.evaluate_board("arty", WELLAND_P12)
+    assert ident.routing("arty", rows) == "HAT JA reads Arty JC, HAT JB reads Arty JD, HAT JC reads Arty JB"
+    _ok, rows = ident.evaluate_board("arty", WELLAND_8415)
+    assert ident.routing("arty", rows) == (
+        "HAT JA reads Arty JC, HAT JB reads Arty JB, HAT JC reads Arty JD (no signal on HAT JA.10)")
+
+
+def test_the_routing_line_names_mixed_unknown_garbled_and_silent_wires():
+    mixed = {**_decoded("arty"), 8: "E15", 19: "W12", 21: "?\x93", 20: None, 18: None}
+    _ok, rows = ident.evaluate_board("arty", mixed)
+    assert ident.routing("arty", rows) == (
+        "HAT JA reads Arty JB and W12 and garbled, HAT JB reads Arty JB, HAT JC reads Arty JC "
+        "(no signal on HAT JA.9, HAT JA.10)")
+    _ok, rows = ident.evaluate_board("arty", {})
+    nothing = "HAT JA reads nothing, HAT JB reads nothing, HAT JC reads nothing (no signal on"
+    assert ident.routing("arty", rows).startswith(nothing)
+
+
+def test_the_routing_line_for_the_tt_counts_a_shared_gpio_as_each_wire_heard_alone():
+    _ok, rows = ident.evaluate_board("tt", _tt_good())
+    assert ident.routing("tt", rows) == "HAT JA reads ui_in, HAT JB reads uio, HAT JC reads uo_out"
+    # the JA and JC ribbons swapped, as the Welland TTs were before 2026-10-04
+    swapped = {8: "38", 19: "45", 21: "46", 20: "47", 18: "48", 7: "2", 26: "9", 13: "10", 3: "11", 2: "12",
+               16: "13", 14: "19", 15: "18", 17: "21", 4: "23", 12: "25", 5: "26", 6: "27",
+               10: ("42",), 9: ("43",), 11: ("44",)}  # fmt: skip
+    _ok, rows = ident.evaluate_board("tt", swapped)
+    assert ident.routing("tt", rows) == "HAT JA reads uo_out, HAT JB reads uio and uo_out, HAT JC reads ui_in"
+
+
+def test_the_acorn_map_has_no_routing_line():
+    _ok, rows = ident.evaluate_board("acorn", CANONICAL)
+    assert ident.routing("acorn", rows) is None
+
+
+def test_board_mode_prints_the_routing_line_for_the_boot_check(monkeypatch, capsys):
+    monkeypatch.setattr(ident.sys, "argv", ["identify_pmod_pins.py", "--board", "arty"])
+    monkeypatch.setattr(ident, "release_kernel_gpio_drivers", lambda: None)
+    monkeypatch.setattr(ident, "detect_gpio_chip", lambda: "/dev/gpiochip0")
+    monkeypatch.setattr(ident, "alt_functions", lambda gpios: {})
+    monkeypatch.setattr(ident, "scan_gpios", lambda gpios, chip, shared=(): dict(WELLAND_P12))
+    try:
+        ident.main()
+        code = 0
+    except SystemExit as e:
+        code = e.code
+    lines = capsys.readouterr().out.splitlines()
+    assert code == 1 and lines[-1] == "RESULT: FAIL"
+    assert lines[-2] == ("PIN-ID: 0/18 pins match: HAT JA reads Arty JC, HAT JB reads Arty JD, HAT JC reads Arty JB")

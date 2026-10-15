@@ -9,11 +9,16 @@
 """
 
 import json
+import os
+import pathlib
+import stat
 import subprocess
 
 import pytest
 from fpgas_online_verify import config, core, identity, runner, state
 from fpgas_online_verify.board import Board, installed
+from fpgas_online_verify.boards.acorn import BOARD as ACORN
+from fpgas_online_verify.boards.acorn import suite as acorn_suite
 from fpgas_online_verify.core import Problem
 
 
@@ -120,6 +125,41 @@ def test_auto_probes_only_when_nothing_is_seen(opts):
     netv2 = Fake("netv2", probes=True, probed=[{"variant": "a7-35", "idcode": "0x0362d093"}])
     report = runner.verify(opts, _boards(Fake("arty"), netv2), usb=[], pci=[], mode=("auto", "test"))
     assert [b["board"] for b in report["boards"]] == ["netv2"] and report["chosen_by"] == "auto: probed (netv2)"
+
+
+def test_a_fomu_claimed_by_cdone_alone_yields_to_a_netv2_found_on_the_same_lines(opts):
+    """Root 3 on the welland NeTV2 hosts: GPIO17 is the NeTV2's TMS, which idles high, so the Fomu's passive CDONE
+    probe claimed a Fomu there, and its check then drove CRESET (GPIO27, the NeTV2's TDI) and SPI0. A NeTV2
+    found by its JTAG IDCODE explains the high line: the Fomu is not taken, never checked, and the report says why."""
+    netv2 = Fake("netv2", probes=True, probed=[{"variant": "a7-35", "idcode": "0x0362d093"}])
+    fomu = Fake("fomu", probes=True, probed=[{"variant": "evt", "cdone": "hi"}])
+    fomu.yields_to, fomu.yield_reason = ("netv2",), "GPIO17 high is the NeTV2's TMS, not a Fomu's CDONE"
+    report = runner.verify(opts, _boards(netv2, fomu), usb=[], pci=[], mode=("auto", "test"))
+    assert [b["board"] for b in report["boards"]] == ["netv2"] and fomu.checked == []
+    assert "fomu not taken: GPIO17 high is the NeTV2's TMS, not a Fomu's CDONE" in report["chosen_by"]
+
+
+def test_a_claim_that_yields_to_a_spotted_board_is_said_even_when_only_the_spotted_claim_is_left(opts):
+    acorn = Fake("acorn", seen=[{"kind": "vendor-xdma"}], weak=True, result="fail")  # weak: probing goes on
+    fomu = Fake("fomu", probes=True, probed=[{"variant": "evt", "cdone": "hi"}])
+    fomu.yields_to, fomu.yield_reason = ("acorn",), "a reason"
+    report = runner.verify(opts, _boards(acorn, fomu), usb=[], pci=[], mode=("auto", "test"))
+    assert [b["board"] for b in report["boards"]] == ["acorn"] and "fomu not taken: a reason" in report["chosen_by"]
+
+
+def test_the_fomu_yields_its_cdone_claim_to_a_netv2():
+    from fpgas_online_verify.boards import fomu
+
+    assert fomu.BOARD.yields_to == ("netv2",)
+    assert fomu.BOARD.yield_reason == "GPIO17 high is the NeTV2's TMS, not a Fomu's CDONE"
+
+
+def test_a_fomu_claimed_by_cdone_with_no_other_board_found_is_still_checked(opts):
+    netv2 = Fake("netv2", probes=True, probed=[])  # no NeTV2 answers on JTAG: nothing explains GPIO17 high
+    fomu = Fake("fomu", probes=True, probed=[{"variant": "evt", "cdone": "hi"}])
+    fomu.yields_to, fomu.yield_reason = ("netv2",), "GPIO17 high is the NeTV2's TMS, not a Fomu's CDONE"
+    report = runner.verify(opts, _boards(netv2, fomu), usb=[], pci=[], mode=("auto", "test"))
+    assert [b["board"] for b in report["boards"]] == ["fomu"]
 
 
 def test_auto_still_probes_when_every_claim_is_weak_and_keeps_the_claim(opts):
@@ -347,6 +387,16 @@ def test_configured_for_one_board_the_check_sees_every_test_asked_for(opts):
     assert arty.options["tests"] == ["uart", "nope"]  # TestBoard.check makes "nope" an error
 
 
+def test_a_check_is_told_whether_the_host_is_set_up_for_its_board(opts):
+    """#155: the Acorn tests a card it cannot name (the vendor XDMA sample) only on a host set up for an Acorn."""
+    acorn = WithTests("acorn", ["jtag"], seen=[{"kind": "vendor-xdma"}])
+    runner.verify({**opts, "board": "acorn"}, _boards(acorn), usb=[], pci=[])
+    assert acorn.options["configured"] is True
+    acorn = WithTests("acorn", ["jtag"], seen=[{"kind": "fpgas-online"}])
+    runner.verify(opts, _boards(acorn), usb=[], pci=[], mode=("auto", "test"))
+    assert acorn.options["configured"] is False
+
+
 def test_the_same_board_and_flash_again_passes(opts):
     arty = Fake("arty", seen=[{"variant": "a7-35", "serial": "A"}])
     runner.verify({**opts, "board": "arty"}, _boards(arty), usb=[], pci=[])
@@ -391,6 +441,43 @@ def test_a_failed_test_is_not_a_state_change(opts):
     arty.result = "fail"
     report = runner.verify({**opts, "board": "arty"}, _boards(arty), usb=[], pci=[])
     assert report["result"] == "fail" and "changes" not in report["state"]
+
+
+OV3 = {"vendor": "1d50", "product": "607c", "serial": "OV100662", "path": "1-1.3"}
+OV3_SAID = "OpenVizsla OV3 OV100662 on USB (1d50:607c at 1-1.3), a debug tool, not a board"
+
+
+def test_an_openvizsla_on_the_fomus_usb_is_named_as_a_debug_tool_not_no_board(opts):
+    """#200: on 8 Oct the Fomu host's USB had an OpenVizsla OV3 and no foboot, and the check said only that no
+    board was found. The OV3 is named, in the report and in the reason, and is never taken for a board."""
+    from fpgas_online_verify.boards.fomu import BOARD as FOMU
+
+    events = []
+    report = runner.verify({**opts, "event": lambda stage, d: events.append((stage, d))}, _boards(FOMU, Fake("arty")),
+                           usb=[OV3], pci=[], mode=("auto", "test"))  # fmt: skip
+    assert report["result"] == "missing" and report["boards"] == []
+    assert report["usb_debug_tools"] == [OV3_SAID]
+    assert report["reason"].startswith("none of the installed boards (fomu, arty) was found")
+    assert report["reason"].endswith("; " + OV3_SAID)
+    assert events == [("fpga-no-board", {"reason": report["reason"]})]
+    # configured for the Fomu alone, the same
+    alone = runner.verify({**opts, "board": "fomu"}, _boards(FOMU), usb=[OV3], pci=[])
+    assert alone["result"] == "missing" and alone["reason"].endswith("; " + OV3_SAID)
+
+
+def test_a_debug_tool_is_named_beside_the_boards_found_and_only_for_an_installed_board(opts):
+    from fpgas_online_verify.boards.fomu import BOARD as FOMU
+
+    arty = Fake("arty", seen=[{"variant": "a7-35", "serial": "A"}])
+    report = runner.verify(opts, _boards(FOMU, arty), usb=[OV3], pci=[], mode=("auto", "test"))
+    assert report["result"] == "pass" and report["usb_debug_tools"] == [OV3_SAID]
+    # no board module that names it is installed: it is any USB device, and not mentioned
+    report = runner.verify(opts, _boards(arty), usb=[OV3], pci=[], mode=("auto", "test"))
+    assert "usb_debug_tools" not in report
+    # one without a serial number
+    bare = {**OV3, "serial": None}
+    said = runner.debug_tools(_boards(FOMU), [bare])
+    assert said == ["OpenVizsla OV3 on USB (1d50:607c at 1-1.3), a debug tool, not a board"]
 
 
 def test_a_missing_board_on_the_first_run_records_nothing(opts):
@@ -442,6 +529,109 @@ def test_two_mode_files_that_disagree_are_an_error(tmp_path):
         config.configured(tmp_path, tmp_path / "none")
 
 
+# -- the power-cycle check: opt-in, by the same files ------------------------------------------------------
+
+
+def _dirs(tmp_path):
+    mode, admin = tmp_path / "mode.d", tmp_path / "etc"
+    mode.mkdir()
+    admin.mkdir()
+    (mode / "fpgas-online-multi-board.ini").write_text("[verify]\nfpga-board = auto\n")
+    return mode, admin
+
+
+def test_the_power_cycle_check_is_off_unless_a_file_turns_it_on(tmp_path):
+    mode, admin = _dirs(tmp_path)
+    assert config.power_cycle_check(mode, admin) == (False, None)
+    assert config.power_cycle_check(tmp_path / "none", tmp_path / "nor-this") == (False, None)
+
+
+@pytest.mark.parametrize(("text", "on"), [("on", True), ("yes", True), ("true", True), ("1", True), ("On", True),
+                                          ("off", False), ("no", False), ("false", False), ("0", False)])  # fmt: skip
+def test_the_fleets_root_turns_the_power_cycle_check_on_in_etc(tmp_path, text, on):
+    mode, admin = _dirs(tmp_path)
+    (admin / "fleet.ini").write_text(f"[verify]\npower-cycle-check = {text}\n")
+    assert config.power_cycle_check(mode, admin) == (on, admin / "fleet.ini")
+    assert config.configured(mode, admin)[0] == "auto"  # a file that says only this leaves the board setting alone
+
+
+def test_the_admin_can_turn_off_what_a_package_turned_on(tmp_path):
+    mode, admin = _dirs(tmp_path)
+    (mode / "fpgas-online-multi-board.ini").write_text("[verify]\nfpga-board = auto\npower-cycle-check = on\n")
+    (admin / "local.ini").write_text("[verify]\npower-cycle-check = off\n")
+    assert config.power_cycle_check(mode, admin) == (False, admin / "local.ini")
+
+
+def test_a_power_cycle_setting_that_is_neither_on_nor_off_is_an_error(tmp_path):
+    mode, admin = _dirs(tmp_path)
+    (admin / "fleet.ini").write_text("[verify]\npower-cycle-check = maybe\n")
+    with pytest.raises(Problem, match=r"power-cycle-check.*maybe"):
+        config.power_cycle_check(mode, admin)
+    (admin / "fleet.ini").write_text("[verify]\npower-cycle-check = on\n")
+    (admin / "other.ini").write_text("[verify]\npower-cycle-check = off\n")
+    with pytest.raises(Problem, match="conflicting"):
+        config.power_cycle_check(mode, admin)
+
+
+class _Asked(Fake):
+    """Records the options its check was given."""
+
+    def check(self, host, found, options):
+        self.options = options
+        return super().check(host, found, options)
+
+
+def test_the_setting_reaches_the_boards_check_and_the_report_says_it_was_on(opts, tmp_path):
+    mode, admin = _dirs(tmp_path)
+    board = _Asked("arty", seen=[{"variant": "a7-35", "serial": "1"}])
+    report = runner.verify({**opts, "mode_dir": mode, "admin_dir": admin}, _boards(board), usb=[], pci=[])
+    assert not board.options.get("power_cycle_check") and "power_cycle_check" not in report
+    (admin / "fleet.ini").write_text("[verify]\npower-cycle-check = on\n")
+    report = runner.verify({**opts, "mode_dir": mode, "admin_dir": admin}, _boards(board), usb=[], pci=[])
+    assert board.options["power_cycle_check"] is True
+    assert report["power_cycle_check"] == {"on": True, "configured_by": str(admin / "fleet.ini")}
+
+
+def test_a_board_named_on_the_command_line_still_gets_the_setting(opts, tmp_path):
+    mode, admin = _dirs(tmp_path)
+    (admin / "fleet.ini").write_text("[verify]\npower-cycle-check = on\n")
+    board = _Asked("arty", seen=[{"variant": "a7-35", "serial": "1"}])
+    runner.verify({**opts, "board": "arty", "mode_dir": mode, "admin_dir": admin}, _boards(board), usb=[], pci=[])
+    assert board.options["power_cycle_check"] is True
+
+
+class _OptIn(WithTests):
+    """Like the Acorn: lists its opt-in test with the others, and its check refuses it while the setting is off."""
+
+    def check(self, host, found, options):
+        if "power-cycle" in (options.get("tests") or ()) and not options.get("power_cycle_check"):
+            raise Problem("error", acorn_suite.OPT_IN)
+        return super().check(host, found, options)
+
+
+@pytest.mark.parametrize("named", [{}, {"board": "acorn"}])  # found by `fpga-board = auto`, or named
+def test_the_opt_in_test_can_be_asked_for_by_name_and_is_an_error_while_the_setting_is_off(opts, tmp_path, named):
+    mode, admin = _dirs(tmp_path)
+    assert "power-cycle" in ACORN.tests
+    board = _OptIn("acorn", ACORN.tests, seen=[{"variant": "cle-215+", "serial": "1"}])
+    asked = {**opts, **named, "tests": ["power-cycle"], "mode_dir": mode, "admin_dir": admin}
+    report = runner.verify(asked, _boards(board), usb=[], pci=[])
+    assert report["result"] == "error" and core.exit_code(report["result"]) == 1
+    assert "opt-in: set `power-cycle-check = on`" in json.dumps(report) and board.options is None
+    (admin / "fleet.ini").write_text("[verify]\npower-cycle-check = on\n")
+    report = runner.verify(asked, _boards(board), usb=[], pci=[])
+    assert report["result"] == "pass" and board.options["tests"] == ["power-cycle"]
+    assert board.options["power_cycle_check"] is True
+
+
+def test_a_bad_power_cycle_setting_makes_fpgas_verify_fail_loudly(opts, tmp_path):
+    mode, admin = _dirs(tmp_path)
+    (admin / "fleet.ini").write_text("[verify]\npower-cycle-check = maybe\n")
+    board = _Asked("arty", seen=[{"variant": "a7-35", "serial": "1"}])
+    report = runner.verify({**opts, "mode_dir": mode, "admin_dir": admin}, _boards(board), usb=[], pci=[])
+    assert report["result"] == "error" and "power-cycle-check" in report["reason"]
+
+
 def test_no_configuration_makes_fpgas_verify_fail_loudly(opts, tmp_path):
     report = runner.verify({**opts, "mode_dir": tmp_path / "x", "admin_dir": tmp_path / "y"}, _boards(Fake("arty")))
     assert report["result"] == "error" and "no FPGA board is configured" in report["reason"]
@@ -481,15 +671,120 @@ def test_the_start_is_published_before_the_result(opts, tmp_path, monkeypatch):
     sent = []
     monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append((stage, details)))
     out = tmp_path / "r.json"
-    assert runner.run({**opts, "board": "arty", "report": str(out), "no_publish": False}) == 0
+    assert runner.run({**opts, "board": "arty", "report": str(out), **_fleet(tmp_path)}) == 0
     assert [s for s, _ in sent] == ["fpga-verifying", "fpga-verified"]
     assert sent[0][1]["started_at"] and sent[1][1]["result"] == "pass"
+    assert json.loads(out.read_text())["publish"] == {"on": True, "configured_by": str(tmp_path / "etc" / "fleet.ini")}
     sent.clear()
-    runner.run({**opts, "board": "arty", "report": str(out), "no_publish": True})
-    assert sent == []
+    runner.run({**opts, "board": "arty", "report": str(out), **_fleet(tmp_path), "no_publish": True})
+    assert sent == []  # --no-publish wins over the fleet's file
 
 
-def test_a_test_run_is_never_published_nor_written_over_the_boot_report(opts, monkeypatch, capsys):
+def _fleet(tmp_path):
+    """What the fpgas.online Pi root adds to a host: /etc/fpgas-verify/fleet.ini with `publish = on`."""
+    admin = tmp_path / "etc"
+    admin.mkdir(exist_ok=True)
+    (admin / "fleet.ini").write_text("[verify]\npublish = on\n")
+    return {"no_publish": False, "admin_dir": admin, "mode_dir": tmp_path / "no-mode.d"}
+
+
+def _run_arty(opts, tmp_path, monkeypatch, admin_text=None, mode_text=None):
+    """One whole run on a host with an Arty; returns (exit status, the report, the stages published)."""
+    monkeypatch.setattr(runner, "installed", lambda: _boards(Fake("arty", seen=[{"variant": "a7-35"}])))
+    monkeypatch.setattr(runner, "usb_devices", lambda: [])
+    monkeypatch.setattr(runner, "pci_devices", lambda: [])
+    sent = []
+    monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append(stage) or True)
+    mode, admin = tmp_path / "mode.d", tmp_path / "etc"
+    mode.mkdir()
+    admin.mkdir()
+    (mode / "fpgas-online-arty.ini").write_text("[verify]\nfpga-board = arty\n" + (mode_text or ""))
+    if admin_text:
+        (admin / "fleet.ini").write_text("[verify]\n" + admin_text)
+    out = tmp_path / "r.json"
+    rc = runner.run({"state": opts["state"], "report": str(out), "mode_dir": mode, "admin_dir": admin})
+    return rc, json.loads(out.read_text()), sent
+
+
+def test_a_host_that_only_has_the_packages_publishes_nothing(opts, tmp_path, monkeypatch, capsys):
+    """No file says `publish = on`: nothing is sent, at boot or by hand, and nothing is said about it."""
+    rc, report, sent = _run_arty(opts, tmp_path, monkeypatch)
+    assert rc == 0 and report["result"] == "pass" and sent == []
+    assert report["publish"] == {"on": False, "why": runner.NO_FILE}
+    err = capsys.readouterr().err
+    assert (
+        "  not published: no file says `publish = on` (the fpgas.online Pi root has /etc/" in err
+        and "could not" not in err
+    )
+
+
+def test_the_fleets_root_turns_publishing_on(opts, tmp_path, monkeypatch):
+    rc, report, sent = _run_arty(opts, tmp_path, monkeypatch, admin_text="publish = on\n")
+    assert rc == 0 and sent[0] == "fpga-verifying" and sent[-1] == "fpga-verified"
+    assert report["publish"] == {"on": True, "configured_by": str(tmp_path / "etc" / "fleet.ini")}
+
+
+def test_etc_can_turn_publishing_off_again(opts, tmp_path, monkeypatch):
+    rc, report, sent = _run_arty(opts, tmp_path, monkeypatch, admin_text="publish = off\n", mode_text="publish = on\n")
+    assert rc == 0 and sent == []
+    assert report["publish"] == {"on": False, "configured_by": str(tmp_path / "etc" / "fleet.ini")}
+
+
+def test_a_publish_setting_that_is_neither_on_nor_off_fails_loudly_and_sends_nothing(opts, tmp_path, monkeypatch):
+    rc, report, sent = _run_arty(opts, tmp_path, monkeypatch, admin_text="publish = maybe\n")
+    assert rc == 1 and report["result"] == "error" and sent == []
+    assert "publish is 'maybe'; it is `on` or `off`" in report["reason"]
+    assert report["publish"] == {"on": False, "why": "the setting could not be read"}
+
+
+def test_no_publish_does_not_read_the_setting_so_a_bad_one_does_not_stop_a_private_run(opts, tmp_path, monkeypatch):
+    monkeypatch.setattr(runner, "installed", lambda: _boards(Fake("arty", seen=[{"variant": "a7-35"}])))
+    monkeypatch.setattr(runner, "usb_devices", lambda: [])
+    monkeypatch.setattr(runner, "pci_devices", lambda: [])
+    sent = []
+    monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append(stage) or True)
+    admin = tmp_path / "etc"
+    admin.mkdir()
+    (admin / "fleet.ini").write_text("[verify]\npublish = maybe\n")
+    out = tmp_path / "r.json"
+    asked = {**opts, "board": "arty", "report": str(out), "admin_dir": admin, "mode_dir": tmp_path / "none"}
+    assert runner.run(asked) == 0 and sent == []
+    assert json.loads(out.read_text())["publish"] == {"on": False, "why": "--no-publish"}
+
+
+INFRA_FLEET_INI = pathlib.Path(__file__).parent / "data" / "infra-fleet.ini"
+
+
+def test_the_file_the_fleets_root_carries_turns_publishing_on(opts, tmp_path, monkeypatch, capsys):
+    """tests/data/infra-fleet.ini is a copy of what fpgas.online-infra writes to /etc/fpgas-verify/fleet.ini in
+    the Pi root: ansible/roles/onpi/files/etc/fpgas-verify/fleet.ini, copied by roles/onpi/tasks/fpga_verify.yml
+    (infra PR #225). The section, the key and its value are an agreement between the two repositories: rename
+    one here and this fails, instead of every board on the fleet going quiet. Change both together."""
+    text = INFRA_FLEET_INI.read_text()
+    assert "[verify]" in text and "publish = on" in text.splitlines()
+    admin = tmp_path / "root-etc"
+    admin.mkdir()
+    (admin / "fleet.ini").write_text(text)
+    assert config.publish(tmp_path / "no-mode.d", admin) == (True, admin / "fleet.ini")
+    assert config.PUBLISH == "publish" and "on" in config.ON
+    rc, report, sent = _run_arty(opts, tmp_path, monkeypatch, admin_text=text.split("[verify]\n", 1)[1])
+    assert rc == 0 and sent[0] == "fpga-verifying" and sent[-1] == "fpga-verified" and report["publish"]["on"]
+    assert "  published to the fleet: `publish = on` in " in capsys.readouterr().err
+
+
+def test_the_publish_setting_reads_like_the_others(tmp_path):
+    mode, admin = _dirs(tmp_path)
+    assert config.publish(mode, admin) == (False, None)
+    assert config.publish(tmp_path / "none", tmp_path / "nor-this") == (False, None)
+    (mode / "fpgas-online-multi-board.ini").write_text("[verify]\nfpga-board = auto\npublish = yes\n")
+    assert config.publish(mode, admin) == (True, mode / "fpgas-online-multi-board.ini")
+    (admin / "a.ini").write_text("[verify]\npublish = on\n")
+    (admin / "b.ini").write_text("[verify]\npublish = off\n")
+    with pytest.raises(Problem, match="conflicting publish settings"):
+        config.publish(mode, admin)
+
+
+def test_a_test_run_is_never_published_nor_written_over_the_boot_report(opts, tmp_path, monkeypatch, capsys):
     arty = WithTests("arty", ["uart"], seen=[{"variant": "a7-35"}])
     monkeypatch.setattr(runner, "installed", lambda: _boards(arty))
     monkeypatch.setattr(runner, "usb_devices", lambda: [])
@@ -497,7 +792,7 @@ def test_a_test_run_is_never_published_nor_written_over_the_boot_report(opts, mo
     sent, written = [], []
     monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append(stage))
     monkeypatch.setattr(runner, "write", lambda report, where: written.append(where) or where)
-    assert runner.run({**opts, "board": "arty", "tests": ["uart"], "no_publish": False}) == 0
+    assert runner.run({**opts, "board": "arty", "tests": ["uart"], **_fleet(tmp_path)}) == 0
     assert sent == [] and written == ["-"]
     written.clear()
     runner.run({**opts, "board": "arty", "tests": ["uart"], "report": "elsewhere.json"})
@@ -749,7 +1044,7 @@ def test_the_events_go_out_in_order_and_a_dead_broker_stops_the_progress_ones(op
     sent = []
     monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append((stage, details)) or True)
     out = tmp_path / "r.json"
-    runner.run({**opts, "board": "arty", "report": str(out), "no_publish": False})
+    runner.run({**opts, "board": "arty", "report": str(out), **_fleet(tmp_path)})
     assert [s for s, _ in sent] == ["fpga-verifying", "fpga-board-found", "fpga-board-identified",
                                     "fpga-test-started", "fpga-test-finished", "fpga-test-started",
                                     "fpga-test-finished", "fpga-verified"]  # fmt: skip
@@ -757,7 +1052,7 @@ def test_the_events_go_out_in_order_and_a_dead_broker_stops_the_progress_ones(op
     assert sent[1][1] == {"board": "arty", "variant": "a7-35", "where": "-"}
     sent.clear()
     monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append(stage) and False)
-    runner.run({**opts, "board": "arty", "report": str(out), "no_publish": False})
+    runner.run({**opts, "board": "arty", "report": str(out), **_fleet(tmp_path)})
     assert sent == ["fpga-verifying", "fpga-verified"]  # one timeout, not one per test; the result is still tried
 
 
@@ -789,7 +1084,7 @@ def test_even_a_crash_outside_any_board_gives_a_report_and_fpga_verified(opts, t
     sent = []
     monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append((stage, details)) or True)
     out = tmp_path / "r.json"
-    assert runner.run({**opts, "report": str(out), "no_publish": False}) == 1
+    assert runner.run({**opts, "report": str(out), **_fleet(tmp_path)}) == 1
     report = json.loads(out.read_text())
     assert report["result"] == "error" and "KeyError" in report["reason"]
     assert sent[-1][0] == "fpga-verified" and sent[-1][1]["result"] == "error"
@@ -1107,3 +1402,176 @@ def test_hold_lock_flock_works_on_the_read_only_descriptor(tmp_path):
     lock = tmp_path / "board.lock"
     with core.hold_lock(lock, "board"), open(lock) as other, pytest.raises(BlockingIOError):
         fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+# -- the report file -----------------------------------------------------------------------------------------
+
+
+def test_the_report_replaces_the_old_one_whole_and_stays_readable_by_everyone(tmp_path):
+    out = tmp_path / "run" / "verify.json"
+    assert runner.write({"result": "pass"}, str(out)) == str(out)
+    assert json.loads(out.read_text()) == {"result": "pass"}
+    runner.write({"result": "fail"}, str(out))
+    assert json.loads(out.read_text()) == {"result": "fail"}
+    assert out.stat().st_mode & 0o777 == 0o644  # fpgas-tt and the pi user read it
+    assert [p.name for p in out.parent.iterdir()] == ["verify.json"]  # nothing left beside it
+
+
+def test_a_report_that_cannot_be_finished_leaves_the_old_one_untouched(tmp_path, monkeypatch):
+    out = tmp_path / "verify.json"
+    runner.write({"result": "pass"}, str(out))
+
+    def refuse(src, dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(runner.os, "replace", refuse)
+    with pytest.raises(OSError):
+        runner.write({"result": "fail"}, str(out))
+    assert json.loads(out.read_text()) == {"result": "pass"}  # a reader never sees half a report
+    assert [p.name for p in tmp_path.iterdir()] == ["verify.json"]
+
+
+# -- the services a check stops -------------------------------------------------------------------------------
+
+
+class Stops(Fake):
+    """A board whose check stops a service, as the TT FPGA's does, and leaves the start to the runner."""
+
+    def check(self, host, found, options):
+        options["restart_later"].append("fpgas-tt.service")
+        return super().check(host, found, options)
+
+
+def _stopping_run(monkeypatch, start=(0, ""), on_start=None):
+    monkeypatch.setattr(runner, "installed", lambda: _boards(Stops("tt", seen=[{"variant": "tt-fpga"}])))
+    monkeypatch.setattr(runner, "usb_devices", lambda: [])
+    monkeypatch.setattr(runner, "pci_devices", lambda: [])
+    order = []
+    real_write = runner.write
+
+    def write(report, where):
+        order.append(("write", report["result"]))
+        return real_write(report, where)
+
+    def command(argv, timeout):
+        order.append(("run", argv))
+        if on_start:
+            on_start()
+        return start
+
+    monkeypatch.setattr(runner, "write", write)
+    monkeypatch.setattr(runner, "run_command", command)
+    return order
+
+
+def test_a_stopped_service_is_started_only_after_the_report_is_written(opts, tmp_path, monkeypatch):
+    order = _stopping_run(monkeypatch)
+    out = tmp_path / "verify.json"
+    assert runner.run({**opts, "board": "tt", "report": str(out)}) == 0
+    assert order == [("write", "pass"), ("run", ["systemctl", "start", "--no-block", "fpgas-tt.service"])]
+    assert "services_failed" not in json.loads(out.read_text())
+
+
+def test_a_service_that_cannot_be_started_again_is_an_error_in_the_report(opts, tmp_path, monkeypatch):
+    order = _stopping_run(monkeypatch, start=(5, "Unit fpgas-tt.service not found."))
+    out = tmp_path / "verify.json"
+    assert runner.run({**opts, "board": "tt", "report": str(out)}) == 1
+    assert [o[0] for o in order] == ["write", "run", "write"] and order[-1] == ("write", "error")
+    report = json.loads(out.read_text())
+    assert report["result"] == "error"
+    assert report["services_failed"] == ["fpgas-tt.service was not started again: Unit fpgas-tt.service not found."]
+    assert "fpgas-tt.service was not started again" in report["reason"]
+
+
+def test_a_report_on_stdout_is_one_document_printed_after_the_start(opts, monkeypatch, capsys):
+    order = _stopping_run(monkeypatch, start=(5, "Unit fpgas-tt.service not found."))
+    assert runner.run({**opts, "board": "tt", "report": "-"}) == 1
+    assert [o[0] for o in order] == ["run", "write"]
+    assert json.loads(capsys.readouterr().out)["result"] == "error"  # one JSON document, not two
+
+
+def test_a_board_that_stops_nothing_starts_nothing(opts, tmp_path, monkeypatch):
+    order = _stopping_run(monkeypatch)
+    monkeypatch.setattr(runner, "installed", lambda: _boards(Fake("arty", seen=[{"variant": "a7-35"}])))
+    assert runner.run({**opts, "board": "arty", "report": str(tmp_path / "r.json")}) == 0
+    assert order == [("write", "pass")]
+
+
+def test_the_report_on_disk_is_whole_when_the_service_is_started(opts, tmp_path, monkeypatch):
+    out = tmp_path / "verify.json"
+    seen = []
+    _stopping_run(monkeypatch, on_start=lambda: seen.append(json.loads(out.read_text())["result"]))
+    assert runner.run({**opts, "board": "tt", "report": str(out)}) == 0
+    assert seen == ["pass"]  # what a service reading the report as it starts finds
+
+
+def test_a_report_that_cannot_be_written_still_starts_the_service_and_is_loud(opts, tmp_path, monkeypatch):
+    order = _stopping_run(monkeypatch)
+
+    def full(report, where):
+        raise OSError("No space left on device")
+
+    monkeypatch.setattr(runner, "write", full)
+    with pytest.raises(OSError):
+        runner.run({**opts, "board": "tt", "report": str(tmp_path / "verify.json")})
+    assert order == [("run", ["systemctl", "start", "--no-block", "fpgas-tt.service"])]
+
+
+def test_an_interrupted_check_still_starts_the_service(opts, tmp_path, monkeypatch):
+    order = _stopping_run(monkeypatch)
+
+    def interrupted(options, *a, **k):
+        options["restart_later"].append("fpgas-tt.service")
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(runner, "verify", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        runner.run({**opts, "board": "tt", "report": str(tmp_path / "verify.json")})
+    assert order == [("run", ["systemctl", "start", "--no-block", "fpgas-tt.service"])]
+
+
+def test_a_report_path_that_is_not_a_plain_file_is_written_through_not_replaced(tmp_path):
+    """As root, renaming a file over /dev/null or /dev/stdout would replace the device for everyone."""
+    real = tmp_path / "real.json"
+    real.write_text("old")
+    link = tmp_path / "link.json"
+    link.symlink_to(real)
+    assert runner.write({"result": "pass"}, str(link)) == str(link)
+    assert link.is_symlink() and json.loads(real.read_text()) == {"result": "pass"}
+    fifo = tmp_path / "pipe"
+    os.mkfifo(fifo)
+    reader = os.open(fifo, os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        runner.write({"result": "fail"}, str(fifo))
+        assert json.loads(os.read(reader, 4096)) == {"result": "fail"}
+    finally:
+        os.close(reader)
+    assert stat.S_ISFIFO(fifo.stat().st_mode)  # still the pipe, not a file renamed over it
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["link.json", "pipe", "real.json"]
+
+
+def test_a_temporary_file_is_not_left_when_the_report_cannot_be_made_readable(tmp_path, monkeypatch):
+    def refuse(path, mode):
+        raise PermissionError("chmod")
+
+    monkeypatch.setattr(runner.os, "chmod", refuse)
+    with pytest.raises(PermissionError):
+        runner.write({"result": "pass"}, str(tmp_path / "verify.json"))
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_failed_check_says_whether_it_was_published_before_its_conclusion(opts, tmp_path, monkeypatch, capsys):
+    """The publish line is with the run's own lines; the plain conclusion (conclusion.py) still comes last and
+    names the report that was written."""
+    monkeypatch.setattr(runner, "installed", lambda: _boards(Fake("arty", seen=[{"variant": "a7-35"}], result="fail")))
+    monkeypatch.setattr(runner, "usb_devices", lambda: [])
+    monkeypatch.setattr(runner, "pci_devices", lambda: [])
+    sent = []
+    monkeypatch.setattr(runner, "publish", lambda stage, details, *a, **k: sent.append(stage) or True)
+    fleet = _fleet(tmp_path)
+    out = tmp_path / "r.json"
+    assert runner.run({"state": opts["state"], "board": "arty", "report": str(out), **fleet}) == 1
+    err = capsys.readouterr().err
+    assert err.index("  published to the fleet: ") < err.index("RESULT: FAIL: a board did not pass.")
+    assert f"(JSON): {out}" in err.split("RESULT:")[1]
+    assert sent[0] == "fpga-verifying" and sent[-1] == "fpga-verified"

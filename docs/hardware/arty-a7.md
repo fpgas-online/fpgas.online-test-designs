@@ -6,33 +6,43 @@ The Digilent Arty A7 is a Xilinx Artix-7 development board used in the fpgas.onl
 
 ## Installing the Arty Packages
 
-Add the fpgas.online APT repository first ([verify.md: Installing](../verify.md#installing)), then on the Arty's Pi:
+### What you need
+
+- a Raspberry Pi with the Arty on one of its USB ports
+- the fpgas.online apt repository added on the Pi ([fpgas-verify: installing it, step 1](../verify/installing.md#installing))
+- on bookworm: the fpgas.online-fpga-tools apt repository added too ([fpgas-verify: installing it, step 2](../verify/installing.md#installing)). Debian bookworm's openFPGALoader is too old for the check
+
+`grep VERSION_CODENAME /etc/os-release` says which release the Pi runs.
+
+### Steps
+
+**1.** Install the Arty's packages. This also turns the check at boot on (`fpgas-verify.service`).
 
 ```bash
 sudo apt install fpgas-online-arty
 ```
 
-| Package | Installs |
-|---------|----------|
-| `fpgas-online-arty` | installs everything below to check an Arty, and turns the boot check (`fpgas-verify.service`) on for it |
-| `fpgas-online-arty-tools` | the Arty's module of `fpgas_online_verify`, and `fpgas-arty-verify`; with `python3-serial`, openFPGALoader, `python3-libgpiod` (the PMOD HAT scan) and `iproute2`/`ping`/`arping` (the Ethernet test, which runs as root), and recommending `raspi-utils-core` (`pinctrl`, which puts back the Pi's SPI/UART/I2C pin functions after the scan; Raspberry Pi OS only) |
-| `fpgas-online-arty-bitstreams` | the Arty A7-35T test bitstreams built by the same commit's CI, in `/usr/share/fpgas-online/arty/bitstreams/` |
-| `fpgas-online-verify` | `fpgas-verify`, the unit, and the host test scripts |
-
-At boot the check finds the Arty by its FT2232H on USB (`0403:6010`). It reads the FPGA's whole JTAG IDCODE over that FT2232H, which must be an XC7A35T in any silicon version; the report's `jtag` has it decoded (`idcode_version`, `idcode_device` and the others, [verify.md: the IDCODE](../verify.md#the-jtag-idcode)), then its device DNA with `openFPGALoader -b arty --read-dna` over the same FT2232H, which loads nothing; a DNA that cannot be read, or is all zeros or all ones, fails the board ([verify.md: the device DNA](../verify.md#the-device-dna)). It then loads the UART, DDR, SPI flash, Ethernet and PMOD pin identification test designs into SRAM with openFPGALoader, one at a time, and runs each one's host test. The Ethernet test pings the design through the Pi's USB Ethernet adapter cabled to the Arty's RJ45; it never touches an interface the Pi uses itself. The pin identification scan checks the PMOD HAT cabling against the expected map (HAT JA/JB/JC → Arty JA/JB/JC, [PMOD Cable Routing](arty-a7-pin-mapping.md#pmod-cable-routing-hat--arty)). A failure in either fails the board, like any other test. Last, it reads back the flash's boot image region (the first 2.1 MiB) through openFPGALoader's SPI-over-JTAG bridge. The FTDI serial number, the IDCODE, the device DNA, the flash's JEDEC ID and that region's sha256 are what `changed` compares. The Arty is left running the SPI-over-JTAG bridge, and comes back to its flash image at the next power cycle. Only the PMOD loopback test is left to `fpgas-arty-debug`.
-
-For the fpgas.online openFPGALoader build, add the [fpgas.online-fpga-tools repository](https://github.com/fpgas-online/fpgas.online-fpga-tools#debian-packages-bookworm-trixie-sid-arm64-armhf) **before** installing; otherwise apt installs Debian's `openfpgaloader`. That works for the Arty from 0.13.0 on (trixie's), because the check reads the device DNA with `--read-dna`. Bookworm's (0.10.0) is too old, so on bookworm `fpgas-online-arty` installs only with the repository added.
-
-It runs at every boot of the Welland Arties: [current results](../verify.md#current-results).
-
-**Check the board now**, or run one test with its output live (`fpgas-arty-debug` is in `fpgas-online-arty-debug`):
+**2.** Check the board. Nothing is sent to the site: `--no-publish` makes sure.
 
 ```bash
-sudo fpgas-arty-verify --no-publish --report -  # this board only, the JSON report on stdout
-sudo fpgas-arty-debug test ddr                  # load one test's design and run its test
+sudo fpgas-arty-verify --no-publish
 ```
 
-What the results mean, the report, `changed` and `--update`, the debug tool and common failures: [verify.md](../verify.md#reading-the-result).
+### Check
+
+The first line of the output starts with `fpgas-verify: pass`. The board's line (two spaces in, the board's name first) ends in `pass`. So does the line of each test that ran (four spaces in, the test's name first).
+
+### If it fails
+
+- The first line names the result, and the output ends with `RESULT:` and `What to do:`. [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result) says what each result means.
+- [fpgas-verify: common failures](../verify/common-failures.md#common-failures) lists the messages and what to do about each.
+
+### Next
+
+- To run one test with its output live: install `fpgas-online-arty-debug`, then `sudo fpgas-arty-debug test ddr`.
+- [The Arty A7 check at boot](../verify/tests.md#the-arty-a7-check-at-boot): what the check does, test by test.
+- [Arty A7 packages](../verify/installing.md#arty-a7-packages): what each package installs.
+- [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result): the report, `changed` and `--update`.
 
 ## Key Specifications
 
@@ -215,15 +225,14 @@ the Micron part in or out and no more. Telling the two Spansion parts apart
 takes the package marking or the sticker, read by eye, or an SFDP probe
 (5Ah), which only the S25FL127S answers. openFPGALoader needs the bridge
 bitstream at `/usr/share/openFPGALoader/spiOverJtag_xc7a35tcsg324.bit.gz`
-(and the `xc7a100t` one for a -100); the rp1-jtag build of openFPGALoader
-on the welland pool image does not ship them, so fetch them from
+(and the `xc7a100t` one for a -100); a build of openFPGALoader that does not
+ship them needs them fetched from
 [upstream](https://github.com/trabucayre/openFPGALoader/tree/master/spiOverJtag)
 by hand.
 
-**What the welland pool has.** Read through each board's own FT2232: every
-Welland Arty is an XC7A35T (`--detect` prints `idcode 0x362d093`, the IDCODE without its version) with a Spansion part at JEDEC
-`0x012018`, so none has the Micron flash. The other three signals worth reading at the same time, since
-neither the serial nor the model badge gives them:
+**What to read from a board.** Read through the board's own FT2232: `--detect` names the FPGA (an XC7A35T prints
+`idcode 0x362d093`, the IDCODE without its version), and the flash read above names its part. The other three
+signals worth reading at the same time, since neither the serial nor the model badge gives them:
 
 ```bash
 sudo openFPGALoader -c digilent --detect        # idcode -> 35T or 100T

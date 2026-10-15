@@ -8,8 +8,11 @@
 
 # ---------------------------------------------------------------------------------------------------
 # The Acorn's two 6-pin Molex Pico-EZmate connectors, pins in physical order: position 1 is the end
-# nearest the M.2 edge connector. Sources: the "Pico-EZmate connectors pinout on Acorn, Nite/LiteFury"
-# legend on the LiteX Acorn CLE-215 wiki, and the silkscreen of RHS Research's JTAG adapter.
+# nearest the M.2 edge connector. Sources: the NiteFury schematic (RHS Research, uEVB.pdf rev Z2: P1 on
+# page 6, P2 and the FPGA balls behind it on page 9), and for which end is pin 1 the "Pico-EZmate
+# connectors pinout on Acorn, Nite/LiteFury" legend on the LiteX Acorn CLE-215 wiki. That legend puts J2
+# at position 2 and K2 at 3: wrong. Its own UART TX/RX labels, and the schematic, have K2 (the FPGA's
+# TX) at 2. test_wiring.py holds both connectors to the schematic.
 # ---------------------------------------------------------------------------------------------------
 [connectors.P1]
 what = "JTAG"
@@ -17,7 +20,7 @@ pins = ["GND1", "TCK", "TDO", "TMS", "TDI", "VCC"]
 
 [connectors.P2]
 what = "I/O"
-pins = ["GND2", "J2", "K2", "J5", "H5", "VCC"]
+pins = ["GND2", "K2", "J2", "J5", "H5", "VCC"]
 
 # label: what the sheet and the tables print. ball: the FPGA package pin (P2 only; P1 is the
 # dedicated JTAG port). drive: which end drives it (pi, fpga, both), for the arrows.
@@ -39,6 +42,14 @@ VCC = { label = "VCC", what = "3.3 V from the Acorn" }
 #   name: the silkscreen or pinout name; gpio + func: the SoC line and its function, if it has one;
 #   tag: the host's name for the pin as the sheet prints it beside the wire; rpi: the same pin on a
 #   Raspberry Pi 40-pin header, where the numbers differ.
+#   numbering: how the printed numbers run over a header of more than one column, seen from above:
+#   "across" each row in turn (1 2 / 3 4 / ...), or "down" each column in turn (1 to 5, then 6 to 10).
+#   count: how many pins the whole header has, where `pins` lists only those near the wiring.
+#   printed: true where the pin numbers are printed on the board beside the header.
+# host (on the carrier): the host in a word, put before a pin name that does not say whose it is ("blade TX").
+# power_off (on the carrier): how the host is made dead before the cables are fitted, as a sentence.
+# shell (on the carrier): bare metal of the host that is its ground, for a meter probe. A carrier with none has a header
+#   with `grounds` (the ground pins of its header, by number) and the probe goes on the first of them that no housing covers.
 # wires maps each connected signal to [header, pin]. Signals not listed are cut back: VCC always.
 #
 # What fpgas-verify reads to check a host of this carrier (verify/.../boards/acorn/setup.py):
@@ -48,12 +59,253 @@ VCC = { label = "VCC", what = "3.3 V from the Acorn" }
 #     (/proc/device-tree/model); gpiochip is the device-tree compatible of the GPIO chip that carries
 #     the pins above on that host.
 # ---------------------------------------------------------------------------------------------------
+# parts: what to have on the bench for one host of this carrier, besides what the wiring itself says (the
+#   housings, crimp terminals and resistors, which tables.py counts from the headers and wires). Each is
+#   { qty, part, number (a maker's part number, if we know one), note }.
+# ---------------------------------------------------------------------------------------------------
+# Needed whatever the carrier.
+[[parts]]
+qty = 1
+part = "SQRL Acorn CLE-215+, CLE-215 or CLE-101 (the same card is sold as LiteFury and NiteFury)"
+note = "M.2 M-key, 2280"
+
+[[parts]]
+qty = 1
+part = "Molex Pico-EZmate cable assembly, 6 circuits, a plug at each end"
+number = "Molex 0369200601"
+listed_mm = 100  # its length as DigiKey and RS Components list it (not measured by us); the reach step's number
+note = "100 mm, as listed by DigiKey and RS Components. Cut in half: one half is the P1 cable, the other the P2 cable. All six wires are black"
+
+[[parts]]
+qty = 1
+part = "heat-shrink tube, about 2 mm, a few centimetres"
+note = "over each cut-back wire end"
+
+# lengths: where the cables are cut, in millimetres. Our choice, not measured on a built cable.
+#   cut_back: how much of a wire that goes in no cavity is left at the plug.
+#   resistor: how far from its free end a wire is cut to take a series resistor.
+#   strip: how much insulation comes off for a crimp terminal.
+# sources: where a statement of fact on the generated pages comes from, said once here and printed on each
+#   carrier's overview page (`carrier`: on that carrier's only). A statement nobody has checked says so.
+[[sources]]
+claim = "The order of the pins in the Acorn's two sockets (P1: GND, TCK, TDO, TMS, TDI, VCC; P2: GND, K2, J2, J5, H5, VCC), and that pin 1 is the end nearest the M.2 edge"
+source = "the order: the NiteFury schematic in RHS Research's NiteFury-and-LiteFury repository (Hardware/uEVB.pdf, rev Z2). On page 6, P1's pins 1 to 6 are GND, TCK, TDO, TMS, TDI and +3V3. On page 9, P2's are GND, AIO2_P, AIO2_N, AIO1_P, AIO1_N and +3V3, and AIO2_P, AIO2_N, AIO1_P and AIO1_N are balls K2, J2, J5 and H5. Pin 1 nearest the M.2 edge: the \"Pico-EZmate connectors pinout on Acorn, Nite/LiteFury\" legend on the LiteX Acorn CLE-215 wiki. That legend gives J2 at position 2 and K2 at 3, which is wrong, and these pages followed it until 14 October 2026: a P2 cable built from them before then has J2 and K2 in each other's cavity (`p2-serial` shows J2 arriving on GPIO15 and K2 on GPIO14). Which end of a plug is wire 1 is checked with a meter in the guide before anything is cut"
+
+[[sources]]
+claim = "That pin 6 (VCC) carries 3.3 V from the Acorn"
+source = "not verified by us: taken from the same legend's name for the pin. The guide cuts that wire back whatever it carries"
+
+[[sources]]
+carrier = "pi5"
+claim = "The wiring on a Raspberry Pi 5 (which wire to which header pin)"
+source = "Raspberry Pi's 40-pin header numbering; every wire of it carried in the check that passed on the Acorn and Raspberry Pi 5 seen at welland's sw2 p47 on 2 October 2026 (on 6 October 2026 that port had acorn-holly, device DNA `0x00200c8664b04854`, on the Pi 5 2 GB `285df3f84af242d0`): jtag, p2-uart, p2-serial and p2-gpio pass"
+
+[[sources]]
+carrier = "pi5"
+claim = "The HAT in the pictures, the Waveshare PoE M.2 HAT+ (B), and where its header, pin 1 and M.2 slot are"
+source = "Waveshare's dimension drawing of the HAT (https://www.waveshare.com/img/devkit/accBoard/PoE-M.2-HAT-Plus-B/PoE-M.2-HAT-Plus-B-details-size.jpg), measured by a script against the 58.00 × 49.00 mm of its mounting holes. That the welland Acorns' Raspberry Pi 5s carry this HAT: every one whose HAT EEPROM has been read by us gives the product \"Waveshare PoE M.2 HAT+ (B)\" (read on 6 and 7 October 2026)"
+
+[[sources]]
+carrier = "blade"
+claim = "How a card is put into the Compute Blade's M.2 slot (the standoff with a 5 mm hex driver, only if it is missing; washer, 30 degree angle, press down, PH1 driver)"
+source = "Uptime Lab's assembly guide (https://raw.githubusercontent.com/uptime-lab/compute-blade/main/docs/docs/blade/getting-started/assembly.mdx) and its image page (docs.computeblade.com): not measured by us. The guide fits the included standoff with a 5 mm hex driver every time. That it is fitted only if missing is our reading, from how our bench check takes the card out (its screw only, the standoff left in place); the guide does not say how a card comes out"
+
+[[sources]]
+carrier = "blade"
+claim = "That the Compute Blade's box holds the M2x2.5 screw, the M2x2.5 standoff and the M2 nylon washer"
+source = "Uptime Lab's assembly guide (https://raw.githubusercontent.com/uptime-lab/compute-blade/main/docs/docs/blade/getting-started/assembly.mdx), read on 12 October 2026: \"When you get your Compute Blade, the box will include:\", and its list of seven items includes \"M2x2.5 Screw\", \"M2x2.5 Standoff\" and \"M2 Nylon Washer\". Not checked by us against a box"
+
+[[sources]]
+carrier = "pi5"
+claim = "That the HAT ships one SSD mounting screw"
+source = "the package list of Waveshare's product page (https://www.waveshare.com/poe-m.2-hat-plus-b.htm): \"SSD mounting screw x1\"; the page's text gives no size, no driver and no steps to put a card in or take it out, and none is recorded by us"
+
+[[sources]]
+carrier = "pi5"
+claim = "That the HAT takes an M.2 2280 card, held by a screw at its far end"
+source = "Waveshare's product page (https://www.waveshare.com/poe-m.2-hat-plus-b.htm): \"Compatible With 2230 / 2242 / 2260 / 2280 Size M.2 Solid State Drive\", and its drawing, which shows a standoff for each of the four lengths. The other Waveshare PoE M.2 HAT+, without the (B), is listed for 2230 and 2242 cards only, and is not in this guide"
+
+[[sources]]
+carrier = "pi5"
+claim = "That pins 6, 9, 14, 20, 25, 30, 34 and 39 of the 40-pin header are ground, so that the bench check can probe pin 14, which neither housing covers"
+source = "Raspberry Pi's pinout of the 40-pin header, in the section \"GPIO and the 40-pin header\" of its computer hardware documentation (https://www.raspberrypi.com/documentation/computers/raspberry-pi.html#gpio). That a probe reaches pin 14 on a Pi 5 under the HAT, on the stacking header's pin: not verified by us"
+
+[[sources]]
+carrier = "pi5"
+claim = "How high the HAT stands over the Pi, and that a Dupont housing on the header clears the parts beside it on the HAT (the inductors)"
+source = "not verified by us: Waveshare's page and drawing do not say"
+
+[[sources]]
+carrier = "blade"
+claim = "The Compute Blade's Extension Port and UART header (which pin is which)"
+source = "read off Uptime Lab's board photo and their GPIO table; no Compute Blade has been wired this way by us yet"
+
+[[sources]]
+claim = "The Molex cable (part 0369200601: six circuits, a plug at each end, all six wires black, contacts 1.2 mm apart)"
+source = "not verified by us for this guide: from the part's description and the cables in use at welland"
+
+[[sources]]
+claim = "The Molex cable's length, 100 mm (part 0369200601)"
+source = "DigiKey's page for the part (https://www.digikey.fi/en/products/detail/molex/0369200601/10233018), opened by us on 11 October 2026: \"Length: 0.328' (100.00mm, 3.94\")\". RS Components' page for the part, 36920-0601 (https://uk.rs-online.com/web/p/wire-to-board-cables/1907923): its search listing gives it as a 6 way to 6 way Pico-EZmate cable, 100mm; its page refused our request (HTTP 403, 11 October 2026), so we have not read its length line ourselves. Not measured by us on a cable in the hand: the guide has the reader measure the cable before cutting it"
+
+[[sources]]
+claim = "That an Acorn CLE-215+, CLE-215 and CLE-101 are the same card, also sold as NiteFury and LiteFury, so that a LiteFury photo can stand for an Acorn"
+source = "the LiteX Acorn CLE-215 wiki (\"The Acorn CLE215+ is in fact the NiteFury board with more memory\"), and RHS Research's NiteFury-and-LiteFury repository, which gives the two boards' FPGAs (NiteFury-II XC7A200T, LiteFury XC7A100T) and their size, 22 × 80 mm, but does not name the Acorn. That the CLE-101 is the LiteFury's card: its FPGA answers as an XC7A100T (pi20 at ps1, 7 October 2026). That the CLE-215 is the same card as the CLE-215+: not verified by us. Not verified by us card against card"
+
+[[sources]]
+claim = "The card's form, M.2 2280 with an M key"
+source = "22 × 80 mm from RHS Research's repository (above); the M key: the Acorns at ps1 sit in the Compute Blades' M.2 M-key slots (Uptime Lab's M.2 guide) and their PCIe links come up (read on pi14, pi16 and pi20 at ps1, 7 October 2026)"
+
+[[sources]]
+carrier = "blade"
+claim = "The 2.54 mm pitch of the housings"
+source = "Uptime Lab's GPIO guide says the Extension Port carries pins 1 to 10 of the Raspberry Pi GPIO pinout, a header of 2.54 mm (0.1 inch) pitch; not measured by us on a blade"
+
+[[sources]]
+carrier = "blade"
+claim = "The resistor's 470 Ω and 1/8 W"
+source = "our choice, not measured: 3.3 V across 470 Ω is at most 7 mA and 23 mW, well under 1/8 W (125 mW)"
+
+[[sources]]
+carrier = "blade"
+claim = "That a Compute Module 4 takes the same wiring as a Compute Module 5"
+source = "Uptime Lab's assembly guide names both as modules for the Compute Blade, and its GPIO guide gives the blade's pins by GPIO number and names no difference between the two; the wiring's JTAG has been run by us on a CM5 only (pi20 at ps1, 7 October 2026). On a CM4: not run by us"
+
+[[sources]]
+claim = "The lengths (how far a wire is cut back, stripped, flagged, and the slack a run must leave)"
+source = "our choice, not measured"
+
+
+[[sources]]
+claim = "That a 2.54 mm Dupont crimp terminal crimps onto the Molex cable's wire and holds"
+source = "not verified by us: the wire's gauge has not been measured or read from Molex's drawing by us, and no cable has been crimped this way by us yet"
+
+[[sources]]
+carrier = "blade"
+claim = "That the 2×5 housing on the Extension Port and the 1×4 housing on the UART header fit side by side"
+source = "not verified by us: Uptime Lab's board photo shows the two headers next to each other; no housings have been fitted there by us"
+
+[lengths]
+cut_back = 10
+resistor = 15
+strip = 3
+# The heat-shrink tube's sizes, as the steps name them: `tube` for a cut-back end (the part above says the
+# same), `resistor_tube` over a series resistor and its joints.
+tube = 2
+resistor_tube = 3
+# flag_back: how far from its free end a wire's numbered flag goes: further than `resistor`, so the flag
+#   survives that cut. resistor_lead: how long each lead of a series resistor is left.
+flag_back = 25
+# slack: how much shorter than half the cable each run must be, for the wire that is stripped, crimped and bent
+#   into the housing beyond the point where the wires reach the header.
+slack = 15
+resistor_lead = 5
+
+# tools: what building the two cables takes, whatever the carrier. `when = "resistor"` is needed only on a
+# carrier whose wiring has a series resistor; `note_resistor` is added to the note on such a carrier.
+[[tools]]
+tool = "multimeter with a continuity buzzer"
+note = "all six wires of the cable are black: each is checked from the plug to its cavity before the cable is fitted"
+
+[[tools]]
+tool = "wire strippers for fine wire, and side cutters"
+note = "to cut the cable in half, strip about 3 mm from each wire, and cut back the wires that are not connected"
+
+[[tools]]
+tool = "crimping tool for 2.54 mm Dupont terminals"
+note = "one crimp for each connected wire"
+
+[[tools]]
+tool = "soldering iron and solder"
+when = "resistor"
+note = "to join the series resistor into its wire"
+
+[[tools]]
+tool = "hot-air tool for the heat-shrink tube"
+note = "to shrink the tube over each cut-back end (VCC always)"
+note_resistor = ", and over the series resistor"
+
+[[tools]]
+tool = "a fine probe tip for the multimeter, or a sewing pin to hold against a probe"
+note = "the plug's contacts are 1.2 mm apart, and a terminal is reached through a small opening"
+
+[[tools]]
+tool = "masking tape and a fine marker pen, or a paint pen"
+note = "to flag the six wires with their numbers, and to mark the pin 1 corner of each housing"
+
+[[tools]]
+tool = "a ruler marked in millimetres"
+note = "the steps give lengths in millimetres: where a flag goes, how much of a wire is left, cut back or stripped"
+
+[[tools]]
+carrier = "blade"
+tool = "a PH1 (Phillips size 1) screwdriver"
+note = "for the M2x2.5 screw that holds the card in the M.2 slot. Uptime Lab's assembly guide for the Compute Blade names a PH1 driver for that screw"
+
+[[tools]]
+carrier = "blade"
+tool = "a 5 mm hex driver"
+note = "for the M2x2.5 standoff, only if the threaded insert for the card's size has none in it. Uptime Lab's assembly guide for the Compute Blade names a 5 mm hex driver for the standoff"
+
+[[tools]]
+carrier = "pi5"
+tool = "a screwdriver for the HAT's M.2 mounting screw"
+note = "the screw is the one the HAT ships with; Waveshare's page does not give its size or its driver, so have a few sizes of screwdriver to hand"
+
+[[tools]]
+carrier = "blade"
+tool = "a computer with ssh, on a network that reaches the blade"
+note = "to log in to the blade and run the check ([How to run the Acorn check on a Compute Blade](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade.html))"
+
 [carriers.pi5]
 name = "Raspberry Pi 5"
+host = "Pi"
+power_off = "Power off the Raspberry Pi 5: unplug its power, and its network cable if it is powered over PoE."
 jtag_pins = "10:9:11:8"
 jtag_cable = "libgpiod"
 uart = "/dev/ttyAMA0"
 resistors = []
+
+[[carriers.pi5.parts]]
+qty = 1
+part = "Raspberry Pi 5"
+note = "the host"
+
+[[carriers.pi5.parts]]
+qty = 1
+part = "Waveshare PoE M.2 HAT+ (B)"
+note = "the M.2 M-key PCIe HAT the pictures show: it takes cards up to 2280 and leaves the 40-pin header free"
+
+# The HAT the pictures draw, and the facts about it they rest on. Only this HAT is drawn (the project lead's decision, 7 October 2026).
+#   name: as the pages print it. product: the product string its HAT EEPROM gives, as rpi-hwid reads it.
+#   page, drawing: Waveshare's product page and the dimension drawing on it that photo is cut from.
+#   largest_card: the longest M.2 card Waveshare's page lists for it ("Compatible With 2230 / 2242 / 2260 /
+#     2280 Size M.2 Solid State Drive"). credit: the photo credit, as the pictures' footers print it.
+#   photo: the drawing as prep_photos.py cuts and turns it into photos/: header on the right edge, pin 1 at the top.
+# Every coordinate below is in that photo's pixels and is what measure_hat.py measures in it (`uv run
+# measure_hat.py --check`, and test_wiring.py, fail if they differ). From its run on 10 October 2026: 8.177 px/mm
+# down the photo and 8.173 across, from the four mounting holes (58.00 x 49.00 mm on the drawing); holes 3.39
+# and 23.60 mm from the board's ends
+# (the drawing: 3.50 and 23.50), board 84.99 mm long (85.00); 16 and 18 of the 20 pads of each column found, the
+# worst 1.15 px off the fitted rows; the M.2 socket 22.39 x 9.17 mm.
+#   columns: the centres of the header's two columns, pin 1's (odd) first; row: the centre of the first row (pins 1
+#     and 2); pitch: from one row to the next (2.54 mm at the holes' scale is 20.77 px).
+#   pin1_box: pins 1 to 26, boxed on the wiring sheet. crop: the part of the photo a cable picture shows.
+#   m2_slot: the M.2 socket.
+[carriers.pi5.hat]
+name = "Waveshare PoE M.2 HAT+ (B)"
+product = "Waveshare PoE M.2 HAT+ (B)"
+page = "https://www.waveshare.com/poe-m.2-hat-plus-b.htm"
+drawing = "https://www.waveshare.com/img/devkit/accBoard/PoE-M.2-HAT-Plus-B/PoE-M.2-HAT-Plus-B-details-size.jpg"
+largest_card = "2280"
+credit = "Waveshare (PoE M.2 HAT+ (B))"
+photo = "hat-plus-b-ccw.jpg"
+columns = [427.2, 448.1]
+row = 82.1
+pitch = 20.85
+pin1_box = [415, 63, 464, 343]
+crop = [246, 40, 480, 501]
+m2_slot = [66, 22, 249, 97]
 
 [carriers.pi5.hosts]
 "Raspberry Pi 5 Model B" = { gpiochip = "raspberrypi,rp1-gpio" }
@@ -62,7 +314,11 @@ resistors = []
 name = "40-pin header"
 short = "header"
 columns = 2
+numbering = "across"
+count = 40
 housings = [[5, 10], [19, 26]]
+# The 40-pin header's ground pins (Raspberry Pi's pinout); `pins` lists only those near the wiring.
+grounds = [6, 9, 14, 20, 25, 30, 34, 39]
 
 [carriers.pi5.headers.gpio.pins]
 1 = { name = "3.3 V" }
@@ -100,6 +356,12 @@ GND1 = ["gpio", 25]
 
 [carriers.blade]
 name = "Compute Blade"
+host = "blade"
+shell = "the metal shell of a USB socket on the Compute Blade"
+power_off = "Ask the site operator, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in."
+# The only Compute Blades this guide is written for are at ps1: what the guide cannot settle goes to that site's
+# operator. The Raspberry Pi 5 guide is public and keeps the general wording.
+contact = "the site operator"
 jtag_pins = "2:3:4:14"
 # A CM4 has no RP1, so no rp1pio cable: libgpiod drives the BCM2711's own GPIO chip there.
 jtag_cable = "libgpiod"
@@ -108,6 +370,34 @@ uart = "/dev/ttyAMA0"
 # resistor lets JTAG win if a design drives J2.
 resistors = ["J2"]
 resistor_value = "470 Ω"
+
+[[carriers.blade.parts]]
+qty = 1
+part = "Compute Blade (Uptime Lab)"
+note = "its M.2 slot takes the card"
+
+[[carriers.blade.parts]]
+qty = 1
+part = "M2x2.5 screw, from the Compute Blade's box"
+note = "it holds the card in the M.2 slot (the fitting, action 4)"
+fit = true
+
+[[carriers.blade.parts]]
+qty = 1
+part = "M2x2.5 standoff, from the Compute Blade's box"
+note = "the screw goes into it; it is fitted only if its threaded insert has none (the fitting, action 4)"
+fit = true
+
+[[carriers.blade.parts]]
+qty = 1
+part = "M2 nylon washer, from the Compute Blade's box"
+note = "it goes on the screw (the fitting, action 4)"
+fit = true
+
+[[carriers.blade.parts]]
+qty = 1
+part = "Raspberry Pi Compute Module 4 or 5"
+note = "the host: it sits on the Compute Blade"
 
 [carriers.blade.hosts]
 "Raspberry Pi Compute Module 4" = { gpiochip = "brcm,bcm2711-gpio" }
@@ -118,6 +408,8 @@ resistor_value = "470 Ω"
 [carriers.blade.headers.ext]
 name = "Extension Port"
 columns = 2
+numbering = "down"
+printed = true
 housings = [[1, 10]]
 
 [carriers.blade.headers.ext.pins]
@@ -136,6 +428,7 @@ housings = [[1, 10]]
 # calls it "UART Back" and lists GPIO14 and GPIO15 there as well as on the Extension Port.
 [carriers.blade.headers.uart]
 name = "UART"
+printed = true
 columns = 1
 housings = [[1, 4]]
 

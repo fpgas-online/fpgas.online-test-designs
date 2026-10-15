@@ -22,6 +22,7 @@ class Arty(TestBoard):
     label_fields = ("idcode", "dna", "flash_jedec", "flash_uid")
     port = "/dev/ttyUSB1"
     flash_region: ClassVar[dict] = {"a7-35": 0x220000}  # an XC7A35T .bit is 2,192,123 bytes
+    jtag_loads_7_series = True  # openFPGALoader's `done` line says whether it loaded (#300)
     tests: ClassVar[dict] = {
         "uart": {"artifact": "uart-test-arty/digilent_arty.bit", "script": "test_uart.py",
                  "args": ["--port", "{port}", "--board", "arty"], "verify": True},
@@ -36,7 +37,7 @@ class Arty(TestBoard):
                  "args": ["--board", "arty"], "pre": PMOD_PRE},
         # The Pmod HAT cabling, against identify_pmod_pins.BOARDS["arty"] (HAT JA/JB/JC -> Arty JA/JB/JC).
         "pin-id": {"artifact": "pmod-pin-id-arty-{v}/digilent_arty.bit", "script": "identify_pmod_pins.py",
-                   "args": ["--board", "arty"], "pre": PMOD_PRE, "verify": True},
+                   "args": ["--board", "arty"], "pre": PMOD_PRE, "verify": True, "says": "PIN-ID:"},
     }  # fmt: skip
 
     def idcode_argv(self, host):

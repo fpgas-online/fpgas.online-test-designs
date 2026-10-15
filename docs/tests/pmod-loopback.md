@@ -12,7 +12,7 @@ No CPU, no UART, no firmware required on the FPGA.
 |-------|-----------|-----------|--------|
 | [Digilent Arty A7](../hardware/arty-a7.md) | PMOD A (input) / PMOD B (output) | 4-bit (of 8) | Active |
 | [Kosagi NeTV2](../hardware/netv2.md) | Serial pins E13 (input) / E14 (output) | 1-bit | Active |
-| [Fomu EVT](../hardware/fomu-evt.md) | Half-PMOD A (input) / Half-PMOD B (output) | 4-bit | Active |
+| [Fomu EVT](../hardware/fomu-evt.md) | Half-PMOD A (input) / Half-PMOD B (output) | 4-bit | Cannot pass on the EVT ([#202](https://github.com/fpgas-online/fpgas.online-test-designs/issues/202)) |
 | [TT FPGA Demo Board](../hardware/tt-fpga.md) | ui_in (input) / uo_out (output) | 8-bit | Active |
 | [Sqrl Acorn CLE-215+](../hardware/acorn.md) | Serial pins K2 (output) / J2 (input) | 1-bit | Active |
 
@@ -152,7 +152,7 @@ by the current cable setup.
 | pmoda_n | 28, 27, 26, 23 | Input (RPi drives) |
 | pmodb_n | 48, 47, 46, 45 | Output (RPi reads) |
 
-RPi GPIO pin mapping depends on physical wiring (TBD).
+On the Fomu EVT, which sits on the Pi's header, these tests cannot pass as they are: their designs use `pmoda_n` and `pmodb_n` (iCE40 pins 23, 26-28 and 45-48), which reach no header pin, and their Pi side is the PMOD HAT's. The iCE40 user pins that reach the Pi are the six `dbg` pins (GPIO 2, 3, 4, 18, 22, 7), the UART (GPIO 14, 15), and the SPI pins it shares with its flash (GPIO 8-11, 24, 25; usable only once the iCE40 has loaded a design, and not while the Pi reads the flash) ([the EVT's header](../hardware/fomu-pin-mapping.md#the-pis-header); [#202](https://github.com/fpgas-online/fpgas.online-test-designs/issues/202)).
 
 ### Standard PMOD Pinout (12-pin)
 

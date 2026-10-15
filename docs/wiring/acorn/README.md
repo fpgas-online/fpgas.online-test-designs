@@ -7,18 +7,24 @@ host, kept as one table and turned into everything that shows it.
 |---|---|
 | `wiring.toml` | **The wiring.** The Acorn's P1 and P2 pinouts, each carrier's headers as printed on the board, which wire goes to which pin, the series resistor, and the Dupont housings. |
 | `wiring.py` | Loads `wiring.toml` and refuses it if a wire lands on a 5 V or 3.3 V pin, two wires share a pin, VCC is wired, a ground meets a signal, or a wire is outside every housing. |
-| `gen.py` | Writes `generated/` from the table: the two wiring sheets (`sheetlib.py`) and the pin tables (`tables.py`). |
-| `render.py` | Renders the sheets to PNG with headless Chromium, for pages and PDFs that cannot take the SVG. |
+| `gen.py` | Writes `generated/` from the table: the two wiring sheets (`sheetlib.py`), the pin tables and the parts lists (`tables.py`), and, by calling `steps.py`, the cable pictures and procedures; every drawing as a light SVG and a dark one (`<name>-dark.svg`). |
+| `palette.py` | Every colour of the drawings, light and dark, in one place (see "Light and dark" below). The palette is `docs/diagrams/palette.py`; this file re-exports it for the generator. |
+| `steps.py` | The pictures and the text for building the two cables, on the sheets' canvas and photos, all in `generated/`. `acorn-cable-<carrier>-<connector>.svg`: which wire goes in which cavity of the housing. `acorn-cable-<connector>-flag.svg`: the plug in its socket, every wire whole, a numbered flag on each. `acorn-cable-<connector>-ground-check.svg`: checking which wire is wire 1 with a meter, before any wire is cut back. `acorn-cable-<carrier>-<connector>-prepare.svg`: which wires are cut back and which get a terminal. `acorn-cable-<carrier>-<connector>-resistor.svg`: fitting the series resistor, where a cable has one. `acorn-card-underside.svg`: the card's connector end, labelled, for the device-info page. `acorn-cable-cut.svg`, `acorn-cable-crimp.svg`, `acorn-cable-push.svg`, `acorn-cable-check.svg`: the steps every cable shares, sketched. `acorn-cable-<carrier>-shell-check.svg`: the bench check before power. `acorn-cable-<carrier>-fit.svg` and `acorn-fit-<carrier>.md`: fitting the cables, as a numbered list with its picture, used as the procedure's last step and by the wiring page. `acorn-cables-<carrier>.md`: the whole procedure for a carrier, each step with its picture, complete in itself (headings from level 3, to be included under a page section). Narrower than a sheet and with larger text, to be read at a page's text width. Every cavity picture carries one note, which sends the reader to the meter check of wire 1 (`WIRE_ONE_NOTE`). What the pictures assume of the cable in the hand is an item of each carrier's bench-run issue (`BENCH_RUN`), not words on a picture or a page: `test_pages.py` fails if a building page or one of its pictures says that something is unproven, or names a person. `guide()` writes the same procedure as pages, `acorn-build-<carrier>-<part>.md` (overview, jtag-1, jtag-2, uart-1, uart-2, bench, fit), each numbered from 1 and within five printed A4 sheets. Each building page opens with one line naming the issue of its carrier's bench run (`BENCH_RUN`). `wiring.toml`'s `[sources]` is the record of where each fact comes from, for a review; no page prints it. |
+| `check.py` | The check's pages, one type of page each. `acorn-check-<carrier>-1.md`: the how-to (install, run, read the result), with a how-to's five headings. `acorn-check-about.md`: what the check is, one explanation for both carriers. `acorn-check-<carrier>-tests.md`: which test uses which wire, a reference, with its picture (`acorn-check-<carrier>-wires.svg`). `acorn-check-<carrier>-2.md`: from a failing line to the wire; `-2b.md`: every other Acorn message. `acorn-check-blade-3.md`: the how-to that makes a Compute Blade boot ready for JTAG, whose two checks of GPIO14 the other pages quote by step number (`jtag_steps`). The words the carriers share are in `check/*.md`, where a line starting `<!-- pi5 -->` or `<!-- blade -->` is for that carrier only and `<!-- pi5:begin -->` to `<!-- pi5:end -->` a block; the transcripts and the Acorn rows of 'Common failures' are read from `docs/verify/reading-the-result.md` and `docs/verify/common-failures.md`, so each exists once; the cavity pictures are `steps.py`'s, shown again. No page holds a record of where and when something was run: that is issue 241. A page is included under a page's title (headings from level 2). |
+| `pages.py` | The Acorn pages on docs.fpgas.online that the generated text sends the reader to: one table of each page's title and published address, for each carrier. Every reference to another page in `generated/*.md` is a Markdown link made from it (`pages.link`), so a page that is renamed is renamed here and nowhere else; `test_pages.py` fails if a fragment names a page any other way. A picture cannot link, so it names the task. |
+| `render.py` | Renders every SVG in `generated/` (light and dark) to PNG, each at its own size, with headless Chrome (or Chromium where Chrome is not installed), for pages and PDFs that cannot take the SVG. |
 | `generated/` | The output, committed. [fpgas.online-docs](https://github.com/fpgas-online/fpgas.online-docs) copies it onto [docs.fpgas.online](https://docs.fpgas.online/en/latest/boards/acorn/wiring.html); do not edit it by hand. |
 | `GOALS.md` | What the sheets have to show, and what must not be on them. |
 | `photos/`, `prep_photos.py` | The board photos the sheets use, and the script that cut them from the vendors' originals. |
-| `fonts/` | Liberation Sans and Mono (SIL Open Font License, `fonts/COPYRIGHT`), drawn as outlines in the sheets. |
+| `measure_hat.py` | Measures where the HAT's header, pin 1 and M.2 slot are in its photo; `--check` compares with `wiring.toml`. |
+| `measure_card.py` | Measures the Acorn's underside photo: the scale across it from the card's 22.00 mm width and the scale down it from the sockets' 1.20 mm contact pitch (refused if they are more than 5 % apart), and where P1, P2, their pin 1 and the plated pad are, in millimetres; `--check` compares with `geometry.toml`. |
+| `docs/diagrams/fonts/` | Liberation Sans and Mono (SIL Open Font License, `COPYRIGHT` in that directory), drawn as outlines in the sheets. |
 
 ## Changing the wiring
 
 ```console
 $ uv run docs/wiring/acorn/gen.py          # about a minute: sheets and tables into generated/
-$ uv run --no-project python docs/wiring/acorn/render.py  # the PNGs (needs chromium)
+$ uv run docs/wiring/acorn/render.py       # the PNGs (needs google-chrome-stable or chromium)
 $ git add docs/wiring/acorn
 ```
 
@@ -28,7 +34,7 @@ not what `wiring.toml` produces, or if a PNG was rendered from an older SVG.
 
 The sheet generator fails the build if any label leaves its box or the canvas,
 overlaps another label, sits on a wire, or a pad leaves its header. Pillow and
-fontTools are pinned in `gen.py` and the fonts are here, so the output is the
+fontTools are pinned in `gen.py` and the fonts are in `docs/diagrams/fonts/`, so the output is the
 same byte for byte on every machine. `gen.py --search` tries every header
 placement again (a few minutes) and reports the one with the fewest wire
 crossings; the placements in use are `NUDGE` in `gen.py`.
@@ -40,10 +46,57 @@ so the SVGs have no `data:` URIs or other references. They therefore render
 from their `raw.githubusercontent.com` URLs, which are served with
 `Content-Security-Policy: default-src 'none'`. That costs about 2 MB a sheet.
 
+## Light and dark
+
+Every drawing is written twice: `<name>.svg` on light paper and
+`<name>-dark.svg` beside it for the dark theme of docs.fpgas.online (its paper
+is the theme's background, `#131416`), each with its PNG. The two differ only
+in their colours, and in a few words for the dark sheet only (`Sheet.dark_only()`:
+a caption that calls the wires black says there that black is drawn light). `palette.py` holds every colour the drawings use, named by
+what it is and what it stands on, with its light and its dark value; the
+drawing code writes those names as tokens and `palette.resolve()` turns them
+into the two SVGs. A colour written anywhere else (an attribute, a hex value, a
+style) stops the build, and so does any text short of 7:1 contrast straight on
+the dark paper or 4.5:1 on a tag or box (`sheetlib.py`). Text of the light
+sheets under 4.5:1 is printed by `gen.py` as a report, not a failure. Photographs keep their own colours on both; only the
+background `prep_photos.py` painted round a board, joined to the photo's edge,
+is left out, so the sheet shows through it.
+
+In the generated Markdown each picture is the pair
+`![alt](x.png){.only-light}` and `![alt](x-dark.png){.only-dark}`: the docs
+theme's classes, which show one or the other (MyST's `attrs_inline` sets
+them; the docs enable it). The printed booklet keeps the light one.
+
 ## Photos
 
 `prep_photos.py` made `photos/` from the vendors' originals, which are not in
-this repository: the Compute Blade top view is Uptime Lab's
-(docs.computeblade.com), the HAT is Waveshare's dimension drawing of the PoE
-M.2 HAT+, and the card underside is RHS Research's LiteFury photo (the Acorn is
-the same PCB). Each sheet credits them.
+this repository (put them in `ref/` to run it again): the Compute Blade top view
+is Uptime Lab's (docs.computeblade.com), the HAT is Waveshare's dimension
+drawing of the PoE M.2 HAT+ (B), and the card underside is RHS Research's
+LiteFury photo (the Acorn is the same PCB). Each sheet credits them.
+
+The HAT is the one table `[carriers.pi5.hat]` in `wiring.toml`: its name, the
+product string of its HAT EEPROM, Waveshare's page and drawing, the largest card
+it takes, and where its header, pin 1 and M.2 slot are in the photo.
+`measure_hat.py` measures those places in the photo, scaled by the drawing's
+mounting holes; `measure_hat.py --check` (and the tests) fail if `wiring.toml`
+says otherwise. Only the (B) is drawn: the PoE M.2 HAT+ without the (B) takes
+2230 and 2242 cards only, and an Acorn is a 2280.
+
+## Views
+
+A view is one picture of the HAT or the card: a crop, a highlight, a turn, light and dark.
+
+`geometry.toml` holds the two boards in millimetres, each table with its source.
+`views.toml` names the views and lists the photos still wanted.
+`generated/views/` holds a PNG pair for each view and `views.json`, the manifest pages look views up in.
+
+Build them with `uv run docs/diagrams/build.py docs/wiring/acorn`. This needs Chrome or Chromium.
+Check them with `uv run docs/diagrams/build.py docs/wiring/acorn --check`; it needs no browser.
+A build records the SHA-256 of each view's SVGs and of the PNGs rendered from them, in the same run.
+The check builds the SVGs in memory and compares their hashes with the manifest, so it catches a changed
+`geometry.toml`, `views.toml` or drawing. It also checks each committed PNG's bytes against the hash recorded for
+it, so it catches a PNG replaced or edited by hand, a PNG that is missing and a PNG that no view owns.
+It does not render the PNGs again, so it cannot prove that a PNG shows what its SVG draws: only that it is the
+file the last build wrote. After any change, build and commit the PNGs with the manifest.
+Views with no photo of their state are line drawings, marked `"photo_matched": false` in the manifest.

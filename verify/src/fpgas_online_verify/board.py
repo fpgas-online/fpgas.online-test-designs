@@ -7,6 +7,7 @@ modules that are installed. A board module is the only place that knows its boar
 
 import importlib
 import pkgutil
+from typing import ClassVar
 
 from . import identity
 from .core import host_facts
@@ -25,6 +26,18 @@ class Board:
     # check holds), which --identify takes from the boot report instead.
     label_fields = ()
     report_fields = ()
+    # True for a board that sits on the Pi's own header (the Fomu EVT): there is at most one per host, and changing
+    # it means powering the Pi off, which runs the boot check again. So --identify takes the boot report's fields
+    # from the one board of its kind there, when the live read has no board-unique key to match on.
+    one_per_host = False
+    # A board whose probe only reads a header line (the Fomu: CDONE on GPIO17) names here the boards that use the
+    # same lines (the NeTV2: GPIO17 is its TMS). In auto mode, when one of them is found as well, its probe claim
+    # is dropped: that board explains the line, and this one is never checked, so its header is never driven.
+    yields_to = ()
+    yield_reason = ""  # why, as the report says it
+    # USB devices that sit beside this board as debug tools, never boards: {(vendor, product): name} (the Fomu's
+    # OpenVizsla, inline on its USB). The report names each one seen, and a board not found is not blamed on it.
+    debug_usb: ClassVar[dict] = {}
 
     def facts(self, port=None):
         """What the check needs to know about this host."""

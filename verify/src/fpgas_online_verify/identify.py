@@ -118,9 +118,15 @@ def from_report(board, live, previous):
     if not board.report_fields:
         return live, None
     key = next((k for k in MATCH_KEYS if live.get(k)), None)
-    if key is None:
+    if key is not None:
+        match = next((p for p in previous if p.get("kind") == live.get("kind") and p.get(key) == live[key]), None)
+    elif board.one_per_host:  # the one of its kind on this Pi's header (Board.one_per_host)
+        same = [p for p in previous if p.get("kind") == live.get("kind")]
+        if len(same) > 1:
+            return live, NO_MATCH
+        match = same[0] if same else None
+    else:
         return live, NO_MATCH
-    match = next((p for p in previous if p.get("kind") == live.get("kind") and p.get(key) == live[key]), None)
     if not match:
         return live, NOT_IN_REPORT
     taken = {k: v for k, v in match.items() if k not in live and k.startswith(board.report_fields)}
@@ -255,7 +261,9 @@ def read(options, boards=None, usb=None, pci=None):
                 gaps.append(f"{p.result}: {p.reason}")
         for (board, host, found), key in zip(targets, runner._keys(targets)):
             why = {}
-            board_options = {**{k: v for k, v in options.items() if k != "event"}, "board_key": key}
+            # configured as in runner.verify: the Acorn reads a card it cannot name by its IDs only then (#155)
+            board_options = {**{k: v for k, v in options.items() if k != "event"}, "board_key": key,
+                             "configured": mode != config.AUTO}  # fmt: skip
             try:
                 with hold_lock(board.lock, board.title, timeout=locks.wait):  # the only lock held meanwhile
                     ident = board.identify(host, found, board_options)

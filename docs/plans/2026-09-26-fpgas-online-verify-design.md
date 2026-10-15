@@ -64,7 +64,8 @@ running its golden image), `changed` (identity or flash differs from the recorde
 load failed, or the board runs a design that is not ours: an Acorn on SQRL's factory image is `fail` with a
 reason starting `unconverted:`), `missing` (the configured board, or with `auto` any board, was not found),
 `error` (the check itself could not run).
-Worst wins; the exit status is 0 only for `pass`. Reports go to `/run/fpgas-online/verify.json` and are
+Worst wins; the exit status is 0 only for `pass`. Reports go to `/run/fpgas-online/verify.json`, and
+where a file says `[verify] publish = on` (the fpgas.online Pi root; off elsewhere, since 2026-10-05) are
 published as the fleet-event stage `fpga-verified`.
 
 ## What each board checks, and what "state" means for it

@@ -5,6 +5,8 @@ Run: uv run --no-project --with pytest pytest docs/wiring/acorn
 """
 
 import copy
+import pathlib
+import re
 
 import pytest
 import tables
@@ -22,6 +24,39 @@ def rejects(mutate, match):
 
 def test_the_committed_wiring_loads():
     assert set(wiring.CARRIERS) == {"pi5", "blade"}
+
+
+# The Acorn's sockets as the NiteFury schematic draws them (RHS Research, NiteFury-and-LiteFury,
+# Hardware/uEVB.pdf, rev Z2). Page 6: P1, pins 1 to 6. Page 9: P2, pins 1 to 6, and the Bank 35 balls of
+# its four nets. Copied from the schematic, not from wiring.toml: the LiteX wiki's legend, which
+# wiring.toml followed until 14 October 2026, has J2 and K2 the other way round, and two cables built
+# from it came out with the serial pair crossed.
+SCHEMATIC_P1 = ["GND", "TCK", "TDO", "TMS", "TDI", "+3V3"]
+SCHEMATIC_P2 = ["GND", "AIO2_P", "AIO2_N", "AIO1_P", "AIO1_N", "+3V3"]
+SCHEMATIC_BALLS = {"K2": "AIO2_P", "J2": "AIO2_N", "J5": "AIO1_P", "H5": "AIO1_N"}
+
+
+def schematic_names(connector):
+    """wiring.toml's pins for a connector, in the schematic's names."""
+    names = {"GND1": "GND", "GND2": "GND", "VCC": "+3V3"}
+    out = []
+    for s in wiring.CONNECTORS[connector]["pins"]:
+        ball = wiring.DATA["signals"].get(s, {}).get("ball")
+        out.append(SCHEMATIC_BALLS[ball] if ball else names.get(s, s))
+    return out
+
+
+def test_the_sockets_pins_are_in_the_schematic_s_order():
+    assert schematic_names("P1") == SCHEMATIC_P1
+    assert schematic_names("P2") == SCHEMATIC_P2
+
+
+def test_the_fpga_s_serial_tx_is_p2_pin_2():
+    # The schematic's AIO2_P (pin 2) is ball K2, the ball our designs (and LiteX's sqrl_acorn) drive as TX
+    p2 = (pathlib.Path(__file__).resolve().parents[3] / "designs/_shared/acorn_p2.py").read_text()
+    tx = re.search(r'^SERIAL_TX = "(\w+)"', p2, re.M).group(1)
+    assert wiring.CONNECTORS["P2"]["pins"][1] == tx
+    assert wiring.DATA["signals"][tx]["drive"] == "fpga"
 
 
 def test_a_wire_on_a_5v_pin_is_refused():
@@ -53,7 +88,8 @@ def test_a_pin_the_header_does_not_have_is_refused():
 
 
 def test_blade_j2_shares_gpio14_with_tms_and_carries_the_resistor():
-    row = next(r for r in tables.cable(wiring.CARRIERS["blade"], "P2").splitlines() if r.startswith("| 2 |"))
+    j2 = wiring.CONNECTORS["P2"]["pins"].index("J2") + 1
+    row = next(r for r in tables.cable(wiring.CARRIERS["blade"], "P2").splitlines() if r.startswith(f"| {j2} |"))
     assert "GPIO14" in row and "470 Ω" in row and "TMS (Extension Port 9)" in row
 
 
@@ -75,3 +111,207 @@ def test_jtag_pins_must_match_where_the_jtag_wires_land():
         d["wires"]["TDI"], d["wires"]["TDO"] = d["wires"]["TDO"], d["wires"]["TDI"]
 
     rejects(swap, "jtag_pins is 2:3:4:14, but TDI:TDO:TCK:TMS land on 3:2:4:14")
+
+
+def _tables(key):
+    """The parts table and the tools table of a carrier's list, each as its rows' cells."""
+    text = tables.bom(wiring.CARRIERS[key])
+    blocks = [[line for line in block.splitlines() if line.startswith("|")] for block in text.split("\n\n")]
+    parts, tools = [block for block in blocks if block]
+    return [[cell.strip() for cell in row.strip("|").split(" | ")] for row in parts], [
+        [cell.strip() for cell in row.strip("|").split(" | ")] for row in tools
+    ]
+
+
+def _bom(key):
+    return {r[2]: (int(r[1]), r[4]) for r in _tables(key)[0][2:]}
+
+
+def test_the_parts_list_counts_housings_terminals_and_resistors_from_the_wiring():
+    """The housings are the headers' own, a terminal for each connected wire, a resistor for each wire that
+    has one: counted, so the list cannot say something the wiring does not."""
+    blade, pi5 = _bom("blade"), _bom("pi5")
+    assert blade["Dupont housing, 2×5, 2.54 mm pitch"] == (
+        1,
+        "over Extension Port pins 1 to 10; 5 of its 10 cavities stay empty",
+    )
+    assert blade["Dupont housing, 1×4, 2.54 mm pitch"] == (1, "over UART pins 1 to 4; 1 of its 4 cavities stays empty")
+    assert blade["Dupont female crimp terminal, 2.54 mm"][0] == len(wiring.CARRIERS["blade"].wires) == 8
+    assert blade["resistor, 470 Ω, 1/8 W axial"] == (1, "in series with J2")
+    assert pi5["Dupont housing, 2×3, 2.54 mm pitch"][0] == pi5["Dupont housing, 2×4, 2.54 mm pitch"][0] == 1
+    assert pi5["Dupont female crimp terminal, 2.54 mm"][0] == len(wiring.CARRIERS["pi5"].wires) == 10
+    assert not [part for part in pi5 if part.startswith("resistor")]
+
+
+def test_every_line_of_a_parts_list_can_be_ticked_and_names_the_cable_by_its_part_number():
+    for key in wiring.CARRIERS:
+        parts, tools = _tables(key)
+        assert parts[0] == ["Have it", "Qty", "Part", "Part number", "What it is for"]
+        assert tools[0] == ["Have it", "Tool", "What it is for"]
+        assert all(row[0] == tables.TICK for row in [*parts[2:], *tools[2:]])
+        assert any(row[3] == "Molex 0369200601" for row in parts[2:])
+
+
+def test_a_list_says_it_is_for_one_host_and_names_the_tools_the_cables_take():
+    blade, pi5 = tables.bom(wiring.CARRIERS["blade"]), tables.bom(wiring.CARRIERS["pi5"])
+    assert blade.startswith("The parts for **one** Compute Blade host; for several hosts, that many of each.\n\n|")
+    assert "The tools to build, fit and check its two cables, once for any number of hosts:" in blade
+    tools = {row[1] for row in _tables("blade")[1][2:]}
+    assert {"multimeter with a continuity buzzer", "crimping tool for 2.54 mm Dupont terminals"} <= tools
+    # the iron is for the series resistor, which only the Compute Blade's wiring has
+    assert "soldering iron and solder" in tools
+    assert "soldering iron and solder" not in {row[1] for row in _tables("pi5")[1][2:]}
+    assert pi5.startswith("The parts for **one** Raspberry Pi 5 host;")
+
+
+def test_a_part_without_a_quantity_is_refused():
+    rejects(lambda d: d["parts"].append({"part": "a thing"}), "a part needs a whole `qty`")
+    rejects(lambda d: d["parts"].append({"qty": 1, "part": "a thing", "price": 3}), "keys other than")
+
+
+HAT_NAME = "Waveshare PoE M.2 HAT+ (B)"
+
+
+def test_the_pictures_draw_the_poe_m2_hat_plus_b_and_it_takes_the_acorn():
+    # The project lead, 7 October 2026: only the (B) is drawn. The PoE M.2 HAT+ without the (B) takes 2230 and 2242
+    # cards only.
+    hat = wiring.CARRIERS["pi5"].hat
+    assert hat.name == hat.product == HAT_NAME
+    assert hat.page == "https://www.waveshare.com/poe-m.2-hat-plus-b.htm"
+    assert "PoE-M.2-HAT-Plus-B" in hat.drawing and hat.photo == "hat-plus-b-ccw.jpg"
+    assert hat.largest_card == "2280" and "2280" in next(
+        p["note"] for p in wiring.DATA["parts"] if "Acorn" in p["part"]
+    )
+    assert wiring.CARRIERS["blade"].hat is None
+
+
+def test_every_pi5_page_and_picture_names_the_hat_and_none_names_another():
+    import re
+
+    import gen
+
+    pi5 = {n: t for n, t in gen.build().items() if "pi5" in n}
+    for name in ("acorn-pi5-bom.md", "acorn-build-pi5-overview.md", "acorn-cables-pi5.md"):
+        assert HAT_NAME in pi5[name], name
+    for name in (
+        "acorn-wiring-pi5.svg",
+        "acorn-cable-pi5-p1.svg",
+        "acorn-cable-pi5-p2.svg",
+        "acorn-cable-pi5-fit-2.svg",
+    ):
+        said = re.findall(r'aria-label="([^"]*)"', pi5[name])  # the words drawn, each line of text once
+        assert any("HAT+ (B)" in line for line in said), name
+    # "HAT+" alone is the other HAT, named only to say it is not this guide's
+    for name, text in pi5.items():
+        for m in re.finditer(r"HAT\+(?! \(B\))", text):
+            assert "without the (B)" in text[m.start() : m.end() + 40], (name, text[m.start() - 60 : m.end() + 40])
+
+
+@pytest.mark.parametrize("field", wiring.HAT_FIELDS)
+def test_a_hat_that_lacks_a_field_is_refused(field):
+    raw = copy.deepcopy(wiring.DATA["carriers"]["pi5"])
+    del raw["hat"][field]
+    with pytest.raises(wiring.WiringError, match=f"the hat table lacks \\['{field}'\\]"):
+        wiring._carrier("pi5", raw)
+
+
+def test_no_part_naming_the_hat_is_refused():
+    raw = copy.deepcopy(wiring.DATA["carriers"]["pi5"])
+    raw["parts"] = [p for p in raw["parts"] if HAT_NAME not in p["part"]]
+    with pytest.raises(wiring.WiringError, match="no part names the HAT"):
+        wiring._carrier("pi5", raw)
+
+
+def test_where_things_are_in_the_hat_photo_is_what_measure_hat_measures():
+    import measure_hat
+
+    hat = wiring.DATA["carriers"]["pi5"]["hat"]
+    got = measure_hat.measure(wiring.HERE / "photos" / hat["photo"])
+    assert {k: hat[k] for k in measure_hat.STORED} == {k: got[k] for k in measure_hat.STORED}
+
+
+def test_the_hat_in_geometry_toml_is_what_measure_hat_measures():
+    import measure_hat
+    import tomllib
+
+    hat = tomllib.loads((wiring.HERE / "geometry.toml").read_text())["things"]["hat"]
+    photo = wiring.DATA["carriers"]["pi5"]["hat"]["photo"]
+    got = measure_hat.measure_mm(wiring.HERE / "photos" / photo)
+    assert hat["size"] == got["size"]
+    assert (
+        len(got["px_per_mm"]) == 2
+        and got["px_per_mm"] == measure_hat.measure(wiring.HERE / "photos" / photo)["scale_px_per_mm"]
+    )
+    assert hat["photos"]["top"]["px_per_mm"] == got["px_per_mm"] and hat["photos"]["top"]["origin"] == got["origin"]
+    assert hat["headers"]["header"]["pin1"] == got["pin1"]
+    assert hat["items"]["m2-slot"]["box"] == got["m2_slot"]
+
+
+def test_the_hat_measures_as_long_as_its_drawing_says():
+    import measure_hat
+
+    photo = wiring.DATA["carriers"]["pi5"]["hat"]["photo"]
+    length = measure_hat.measure_mm(wiring.HERE / "photos" / photo)["size"][1]
+    assert abs(length - measure_hat.BOARD_LONG) < 0.1
+    assert measure_hat.measure(wiring.HERE / "photos" / photo)["board_mm"] == length
+
+
+def test_measure_hat_prints_the_millimetres_and_checks_when_asked_for_both(capsys):
+    import measure_hat
+
+    measure_hat.main(["--mm", "--check"])
+    out = capsys.readouterr().out
+    assert "size = " in out and "wiring.toml matches the photo" in out
+
+
+def test_the_hat_header_in_geometry_toml_is_the_header_measure_hat_measures():
+    import measure_hat
+    import tomllib
+
+    hat = tomllib.loads((wiring.HERE / "geometry.toml").read_text())["things"]["hat"]
+    photo = wiring.DATA["carriers"]["pi5"]["hat"]["photo"]
+    assert hat["photos"]["top"]["file"] == photo
+    header = hat["headers"]["header"]
+    assert (header["pitch"], header["rows"], header["columns"]) == (measure_hat.PIN_PITCH, measure_hat.ROWS, 2)
+    px = measure_hat.measure(wiring.HERE / "photos" / photo)
+    assert len(px["columns"]) == header["columns"]
+    assert px["pitch"] / px["scale_px_per_mm"][1] == pytest.approx(header["pitch"], rel=0.02)  # rows run down
+
+
+def test_the_cable_s_listed_length_is_a_whole_number_of_millimetres_and_true_is_not_one():
+    rejects(lambda d: d["parts"].append({"qty": 1, "part": "x", "listed_mm": True}), "listed_mm must be a whole")
+    rejects(lambda d: d["parts"].append({"qty": 1, "part": "x", "listed_mm": 99.5}), "listed_mm must be a whole")
+
+
+def test_exactly_one_part_gives_the_listed_length_the_reach_step_works_from(monkeypatch):
+    # a second part with a length would leave the reach step to pick one by order
+    rejects(lambda d: d["parts"].append({"qty": 1, "part": "x", "listed_mm": 200}), "exactly one part has listed_mm")
+    shared = [{k: v for k, v in p.items() if k != "listed_mm"} for p in wiring.DATA["parts"]]
+    monkeypatch.setitem(wiring.DATA, "parts", shared)
+    rejects(lambda d: None, "exactly one part has listed_mm")
+
+
+def test_the_listed_length_is_the_molex_cable_s():
+    for c in wiring.CARRIERS.values():
+        assert wiring.listed_mm(c) == 100
+        (part,) = (p for p in c.parts if "listed_mm" in p)
+        assert "Pico-EZmate cable assembly" in part["part"]
+
+
+@pytest.mark.parametrize("mm", [30, 31, 20])
+def test_a_listed_length_that_leaves_no_run_after_the_slack_is_refused(monkeypatch, mm):
+    # the reach step says "at most {mm // 2 - slack} mm a run": 0 or less would be no cable at all
+    shared = [p | {"listed_mm": mm} if "listed_mm" in p else p for p in wiring.DATA["parts"]]
+    monkeypatch.setitem(wiring.DATA, "parts", shared)
+    rejects(lambda d: None, f"listed_mm {mm} leaves no run")
+
+
+def test_the_shortest_listed_length_with_a_run_left_loads(monkeypatch):
+    mm = 2 * wiring.LENGTHS["slack"] + 2  # 1 mm a run
+    shared = [p | {"listed_mm": mm} if "listed_mm" in p else p for p in wiring.DATA["parts"]]
+    monkeypatch.setitem(wiring.DATA, "parts", shared)
+    wiring._carrier("blade", copy.deepcopy(BLADE))
+
+
+def test_a_part_s_fit_flag_is_true_or_false():
+    rejects(lambda d: d["parts"].append({"qty": 1, "part": "x", "fit": "yes"}), "fit must be true or false")

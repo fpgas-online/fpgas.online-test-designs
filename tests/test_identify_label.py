@@ -554,13 +554,39 @@ TT_USB = [{"vendor": "2e8a", "product": "0005", "serial": "E661", "path": "1-2"}
 TT_BOOT = {"board": "tt", "kind": "tt", "variant": "tt-fpga", "serial": "E661", "usb": "1-2", "usb_serial": "E661",
            "mcu": "RP2350", "shuttle": None, "chip": "fpga", "repo": None, "commit": None,
            "demoboard": "TTDBv3 [3.2]", "demoboard_version": None, "sdk": "v3.1.0"}  # fmt: skip
-TT_REPORT_FIELDS = ["chip", "commit", "demoboard", "demoboard_version", "mcu", "repo", "sdk", "shuttle"]
+TT_REPORT_FIELDS = ["chip", "commit", "demoboard", "demoboard_version", "mcu", "repo", "sdk", "shuttle", "variant"]
 
 
 def _read_tt(tmp_path, usb=TT_USB):
     from fpgas_online_verify.boards.tt_fpga import BOARD as TT
 
     return identify.read({"board": "tt", "boot_report": tmp_path / "verify.json"}, {"tt": TT}, usb=usb, pci=[])
+
+
+def test_a_fomu_on_the_header_takes_its_flash_ids_from_the_boot_report_of_the_one_fomu_there(tmp_path, locks):
+    """#200: a Fomu has no USB serial, DNA or PCI slot, and reading its flash resets it, so --identify takes its
+    label (flash_uid) from the boot report: one per host, since it sits on the Pi's header."""
+    from fpgas_online_verify.boards.fomu import BOARD as FOMU
+
+    fomu_boot = {"board": "fomu", "kind": "fomu", "variant": "evt", "flash_jedec": "0xef7018",
+                 "flash_uid": "e467286593241321", "flash_source": "header"}  # fmt: skip
+    _boot_report(tmp_path, ARTY_BOOT, fomu_boot)
+    fomu = Identified("fomu", seen=[{"variant": "evt", "cdone": "hi"}], label_fields=FOMU.label_fields,
+                      report_fields=FOMU.report_fields)  # fmt: skip
+    fomu.one_per_host = FOMU.one_per_host
+    doc, gaps = _read({"fomu": fomu}, tmp_path)
+    (board,) = doc["boards"]
+    assert board["flash_uid"] == "e467286593241321" and gaps == []
+    assert board["from_report"] == ["flash_jedec", "flash_source", "flash_uid"]
+    # no Fomu in the report, or two (which no Pi has): nothing is taken
+    _boot_report(tmp_path, ARTY_BOOT)
+    assert _read({"fomu": fomu}, tmp_path)[1] == ["fomu: flash_uid: this board is not in the boot report"]
+    _boot_report(tmp_path, fomu_boot, {**fomu_boot, "flash_uid": "00"})
+    assert _read({"fomu": fomu}, tmp_path)[1] == ["fomu: flash_uid: no board-unique match in the boot report"]
+    # a board that is not one per host still needs a board-unique key
+    fomu.one_per_host = False
+    _boot_report(tmp_path, fomu_boot)
+    assert _read({"fomu": fomu}, tmp_path)[1] == ["fomu: flash_uid: no board-unique match in the boot report"]
 
 
 def test_the_tt_boards_rpi_hwid_fields_come_from_the_boot_report_by_its_usb_serial(tmp_path, locks):
@@ -1105,3 +1131,18 @@ def test_no_module_imports_rpi_hwid():
             assert not any(n.split(".")[0] == "rpi_hwid" for n in names), path
             if isinstance(node, ast.Call) and getattr(node.func, "attr", "") == "import_module":
                 assert "rpi_hwid" not in ast.unparse(node), path
+
+
+def test_identify_tells_each_board_whether_the_host_is_set_up_for_it(tmp_path, locks):
+    """#155: as runner.verify does, so --identify reads a card the Acorn cannot name by its IDs (the vendor XDMA
+    sample) only on a host set up for an Acorn, and the label matches what the check read."""
+    seen = []
+
+    class Told(Identified):
+        def identify(self, host, found, options):
+            seen.append(options["configured"])
+            return super().identify(host, found, options)
+
+    _read({"acorn": Told("acorn", seen=[{"kind": "vendor-xdma", "bdf": "0000:01:00.0"}])}, tmp_path)
+    _read_auto({"acorn": Told("acorn", seen=[{"kind": "fpgas-online", "bdf": "0000:01:00.0"}])}, tmp_path)
+    assert seen == [True, False]
