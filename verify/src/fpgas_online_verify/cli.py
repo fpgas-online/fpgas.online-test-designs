@@ -177,8 +177,8 @@ def debug_main(argv, prog, board):
     if tests:
         first = next(iter(tests))
         examples += [f"  {prog} list", f"  sudo {prog} test {first}"]
-        if "pin-id" in tests:  # after --: added to the test script's own arguments
-            examples.append(f"  sudo {prog} test pin-id -- --hat-port JA")
+        if "wiring" in tests:  # after --: added to the test script's own arguments
+            examples.append(f"  sudo {prog} test wiring -- --hat-port JA")
     if board.name == "acorn":
         examples.append(f"  sudo {prog} identify")
     epilog = ["commands:\n" + "\n".join(listing), tests and _tests_epilog(board), "examples:\n" + "\n".join(examples)]

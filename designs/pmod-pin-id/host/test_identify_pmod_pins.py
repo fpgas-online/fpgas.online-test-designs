@@ -226,7 +226,7 @@ def test_board_mode_fails_a_miswired_board(monkeypatch):
 
 
 def test_an_explicit_hat_port_after_board_is_a_discovery_scan(monkeypatch):
-    """fpgas-<board>-debug test pin-id -- --hat-port JA appends to the boot check's --board arguments."""
+    """fpgas-<board>-debug test wiring -- --hat-port JA appends to the boot check's --board arguments."""
     code, scanned = _main(monkeypatch, ["--board", "arty", "--hat-port", "JA"], {8: "G13"})
     assert scanned == ident.PMOD_HAT_PORTS["JA"] and code in (0, None)
 
@@ -384,7 +384,7 @@ def test_a_tt_cabled_as_the_fleet_passes_and_ja_jc_swapped_fails():
     assert [r["label"].split(" <- ")[1] for r in rows if r["ok"]] == [f"uio[{i}]" for i in (0, 4, 5, 6, 7)]
 
 
-# -- the routing line (the boot check's reason when pin-id fails) ----------------------------------------------
+# -- the routing line (the boot check's reason when wiring fails) ----------------------------------------------
 
 # The Welland Artys as the boot check read them on 2026-10-04 (data of fpgas.online-test-designs issue #58).
 WELLAND_P12 = {8: "V12", 19: "U14", 21: "V14", 20: "T13", 18: "U13", 7: "D4", 26: "E2", 13: "D2", 3: "H2", 2: "G2",

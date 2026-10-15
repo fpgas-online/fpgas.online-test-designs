@@ -47,6 +47,8 @@ The whole report, for a program to read (JSON): /run/fpgas-online/verify.json
 
 **fail**: a NeTV2 whose DDR test fails (at boot; the summary its report gives):
 
+This output was recorded before 15 Oct 2026 ([#340](https://github.com/fpgas-online/fpgas.online-test-designs/issues/340)): the test now called `flash` was `spiflash`, and a NeTV2 also reports `jtag` as its first test.
+
 ```text
 $ journalctl -b -u fpgas-verify -o cat
 ******************************************************************************
