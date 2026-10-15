@@ -27,7 +27,6 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
-from litex.soc.cores.ram import Up5kSPRAM
 from litex.soc.integration.builder import Builder
 from litex.soc.integration.soc import SoCRegion
 from litex.soc.integration.soc_core import SoCCore
@@ -37,6 +36,7 @@ from migen import *
 import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
 from designs._shared.build_helpers import board_dir, default_build_dir, flow_suffix
 from designs._shared.fomu_crg import FomuCRG
+from designs._shared.up5k_spram import Up5kSPRAM, check_aligned
 
 kB = 1024
 
@@ -62,8 +62,11 @@ class BaseSoC(SoCCore):
         SoCCore.__init__(self, platform, sys_clk_freq, **kwargs)
 
         # 128 KB SPRAM (64 KB SRAM + 64 KB main RAM) ------------------------------------------
+        # Ours, not LiteX's Up5kSPRAM, whose bank select has one address bit too many: on the TT FPGA's SoC it chose
+        # no bank, so nothing was written (#343). This firmware uses no RAM; any that does would have read zeros (#355).
         self.spram = Up5kSPRAM(size=128*kB)
         self.bus.add_slave("psram", self.spram.bus, SoCRegion(size=128*kB))
+        check_aligned(self.bus.regions["psram"].origin, 128*kB)
         self.bus.add_region("sram", SoCRegion(
             origin = self.bus.regions["psram"].origin + 0*kB,
             size   = 64*kB,
