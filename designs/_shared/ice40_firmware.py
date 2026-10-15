@@ -42,7 +42,7 @@ T3   = 28  # x28 — temporary (hex table base)
 A2   = 12  # x12 — argument (SPRAM pattern inversion mask)
 S6   = 22  # x22 — callee-saved (SPRAM: the word read back)
 S7   = 23  # x23 — callee-saved (SPRAM: byte lane)
-S8   = 24  # x24 — callee-saved (SPRAM: block start)
+S8   = 24  # x24 — callee-saved (SPRAM: bank start)
 
 
 # ---------------------------------------------------------------------------
@@ -627,7 +627,10 @@ def generate_spiflash_firmware(uart_base, spiflash_base, ident):
 # SPRAM test firmware (TT FPGA, fpgas.online-test-designs#343)
 # ---------------------------------------------------------------------------
 
-SPRAM_BLOCK = 32 * 1024  # one SB_SPRAM256KA: 16K x 16 bits; the UP5K has four
+# The UP5K's four SB_SPRAM256KA are 16K x 16 bits each. LiteX's Up5kSPRAM (32 bits wide) puts two side by side for
+# each 32-bit word, bytes 0-1 in one and 2-3 in the other (each byte has its write mask, MASKWREN), and the word
+# address's bit 14 (the byte address's bit 16) chooses one of the two such pairs: two banks of 64 KB.
+SPRAM_BANK = 64 * 1024
 
 
 def spram_pattern(offset, inverted=False):
@@ -648,8 +651,9 @@ def generate_spram_firmware(uart_base, spram_base, spram_size, ident):
 
       1. writes spram_pattern() to every word of the SPRAM, then reads every word back;
       2. the same with the inverse pattern;
-      3. at the start of each 32 KB block, for each byte lane: writes 0xFFFFFFFF, stores one 0x00 byte in the
-         lane (SB), and reads the word back: only that lane may have changed (the SPRAM's write masks);
+      3. at the start of each 64 KB bank, for each byte lane: writes 0xFFFFFFFF, stores one 0x00 byte in the
+         lane (SB), and reads the word back: only that lane may have changed. A byte lane is half of one SPRAM's
+         write mask, and the mask is the chip's, not a word's: this reaches each mask of all four SPRAMs;
       4. prints "SPRAM_TEST: PASS" or, at the first word that differs,
          "SPRAM_TEST: FAIL at 0xAAAAAAAA read 0xRRRRRRRR expected 0xEEEEEEEE", then waits for the next byte.
 
@@ -660,7 +664,7 @@ def generate_spram_firmware(uart_base, spram_base, spram_size, ident):
     spram_base : int
         The SPRAM's bus address.
     spram_size : int
-        Its size in bytes: a whole number of 32 KB blocks.
+        Its size in bytes: a whole number of 64 KB banks (SPRAM_BANK).
     ident : str
         SoC identification string.
 
@@ -669,7 +673,7 @@ def generate_spram_firmware(uart_base, spram_base, spram_size, ident):
     list[int]
         32-bit words for ``integrated_rom_init``.
     """
-    assert spram_size > 0 and spram_size % SPRAM_BLOCK == 0, spram_size
+    assert spram_size > 0 and spram_size % SPRAM_BANK == 0, spram_size
     words = []
     labels = {}
     patches = []  # (word index, kind, label): filled in once every label is known
@@ -738,10 +742,10 @@ def generate_spram_firmware(uart_base, spram_base, spram_size, ident):
     words.append(_addi(A2, ZERO, -1))
     later("jump", "pass")
 
-    # The byte lanes, at the start of each block.
+    # The byte lanes, at the start of each bank.
     label("lanes")
     words.append(_addi(S8, S1, 0))
-    label("block")
+    label("bank")
     words.append(_addi(S3, S8, 0))
     words.append(_addi(S7, ZERO, 0))
     label("lane")
@@ -758,9 +762,9 @@ def generate_spram_firmware(uart_base, spram_base, spram_size, ident):
     words.append(_addi(S7, S7, 1))
     words.append(_addi(T0, ZERO, 4))
     later(("bne", S7, T0), "lane")
-    load(T0, SPRAM_BLOCK)
+    load(T0, SPRAM_BANK)
     words.append(_add(S8, S8, T0))
-    later(("bne", S8, S2), "block")
+    later(("bne", S8, S2), "bank")
 
     puts("pass_text")
     later("jump", "wait")

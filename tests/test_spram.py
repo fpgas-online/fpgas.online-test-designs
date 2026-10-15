@@ -1,7 +1,8 @@
 """The TT FPGA's SPRAM test (#343). Its firmware (designs/_shared/ice40_firmware.py, generate_spram_firmware) is
 run on a small RV32I interpreter against a model of the SoC's UART and SPRAM: a good SPRAM passes, and each kind of
-fault it is there to find (a stuck data bit, two addresses that reach one word, a byte lane whose write mask does
-not work) fails it, at the right word. Its host script (designs/spram/host/test_spram.py) is run against a fake
+fault it is there to find fails it, at the right word: a data bit stuck at 1 or at 0, the two 64 KB banks on one
+address (LiteX's bank select, byte address bit 16), a byte store that writes the whole word, and each byte lane's
+write mask stuck off or on. Its host script (designs/spram/host/test_spram.py) is run against a fake
 serial port that answers as the firmware does."""
 
 import importlib.util
@@ -10,7 +11,7 @@ import sys
 
 import pytest
 
-from designs._shared.ice40_firmware import SPRAM_BLOCK, generate_spram_firmware, spram_pattern
+from designs._shared.ice40_firmware import SPRAM_BANK, generate_spram_firmware, spram_pattern
 
 UART = 0xF000_1800
 SPRAM = 0x1000_0000
@@ -21,7 +22,7 @@ STEPS = 4_000_000
 class Machine:
     """An RV32I hart with the firmware in ROM at 0, the UART's CSRs at UART and `size` bytes of SPRAM at SPRAM."""
 
-    def __init__(self, size, rx=b"T", stuck=None, alias_bit=None, no_byte_mask=False):
+    def __init__(self, size, rx=b"T", stuck=None, alias_bit=None, no_byte_mask=False, lane_mask=None):
         self.size = size
         self.rom = b"".join(w.to_bytes(4, "little") for w in generate_spram_firmware(UART, SPRAM, size, IDENT))
         self.ram = bytearray(size)
@@ -29,9 +30,12 @@ class Machine:
         self.out = bytearray()
         self.x = [0] * 32
         self.pc = 0
-        self.stuck = stuck  # (byte offset of the word, bit): reads as 1
+        self.stuck = stuck  # (byte offset of the word, bit, value): that bit reads as value
         self.alias_bit = alias_bit  # this address bit does not reach the SPRAM: two addresses, one word
         self.no_byte_mask = no_byte_mask  # a byte store writes the whole word (its other bytes as 0)
+        # (lane, "off" or "on"): that byte lane's write mask is stuck. Off: a byte store to it writes nothing. On:
+        # a byte store to any lane writes that lane too (with the stored byte, which the CPU puts on every lane)
+        self.lane_mask = lane_mask
 
     def _cell(self, addr):
         off = addr - SPRAM
@@ -46,7 +50,8 @@ class Machine:
             off = self._cell(addr)
             word = int.from_bytes(self.ram[off & ~3 : (off & ~3) + 4], "little")
             if self.stuck and self.stuck[0] == off & ~3:
-                word |= 1 << self.stuck[1]
+                _, bit, value = self.stuck
+                word = word | (1 << bit) if value else word & ~(1 << bit)
             return (word >> (8 * (off & 3))) & ((1 << (8 * n)) - 1)
         if addr == UART + 0:  # RXTX
             return self.rx[0] if self.rx else 0
@@ -61,6 +66,12 @@ class Machine:
             off = self._cell(addr)
             if n == 1 and self.no_byte_mask:
                 self.ram[off & ~3 : (off & ~3) + 4] = (value << (8 * (off & 3))).to_bytes(4, "little")
+            elif n == 1 and self.lane_mask:
+                lane, how = self.lane_mask
+                if not (how == "off" and off & 3 == lane):
+                    self.ram[off] = value & 0xFF
+                if how == "on":
+                    self.ram[(off & ~3) + lane] = value & 0xFF
             else:
                 self.ram[off : off + n] = (value & ((1 << (8 * n)) - 1)).to_bytes(n, "little")
         elif addr == UART + 0:
@@ -153,53 +164,71 @@ def test_a_good_spram_passes_and_the_firmware_waits_to_be_asked():
     m.rx = list(b"T")
     assert _verdict(m.run_until("SPRAM_TEST:")) == ["SPRAM_TEST: PASS"]
     # the whole SPRAM was written: the last pass left the inverse pattern but for the byte-lane words
-    lanes = {SPRAM_BLOCK * k for k in range(4)}
+    lanes = {SPRAM_BANK * k for k in range(2)}
     for off in range(0, 128 * 1024, 4096):
         if off not in lanes:
             assert int.from_bytes(m.ram[off : off + 4], "little") == spram_pattern(off, inverted=True)
 
 
 def test_each_byte_asks_for_another_whole_test():
-    m = Machine(SPRAM_BLOCK, rx=b"T")
+    m = Machine(SPRAM_BANK, rx=b"T")
     m.run_until("SPRAM_TEST: PASS")
     m.out.clear()
     m.rx = list(b"x")
     assert _verdict(m.run_until("SPRAM_TEST:")) == ["SPRAM_TEST: PASS"]
 
 
-def test_a_stuck_data_bit_fails_at_its_word():
-    off = 2 * SPRAM_BLOCK + 0x124
-    m = Machine(4 * SPRAM_BLOCK, stuck=(off, 9))
+@pytest.mark.parametrize("value", [1, 0])
+def test_a_stuck_data_bit_fails_at_its_word(value):
+    off = SPRAM_BANK + 0x124  # in the second bank
+    bit = next(b for b in range(32) if (spram_pattern(off) >> b & 1) != value)  # the first pattern finds it
+    m = Machine(2 * SPRAM_BANK, stuck=(off, bit, value))
     want = spram_pattern(off)
-    assert not want & (1 << 9)  # the first pass finds it
+    read = want | 1 << bit if value else want & ~(1 << bit)
     assert _verdict(m.run_until("SPRAM_TEST:")) == [
-        f"SPRAM_TEST: FAIL at 0x{SPRAM + off:08X} read 0x{want | 1 << 9:08X} expected 0x{want:08X}"]  # fmt: skip
+        f"SPRAM_TEST: FAIL at 0x{SPRAM + off:08X} read 0x{read:08X} expected 0x{want:08X}"]  # fmt: skip
 
 
 def test_a_stuck_bit_the_first_pattern_already_sets_is_found_by_the_inverse():
     off = 0x40
     bit = next(b for b in range(32) if spram_pattern(off) >> b & 1)
-    m = Machine(SPRAM_BLOCK, stuck=(off, bit))
+    m = Machine(SPRAM_BANK, stuck=(off, bit, 1))
     want = spram_pattern(off, inverted=True)
     assert _verdict(m.run_until("SPRAM_TEST:")) == [
         f"SPRAM_TEST: FAIL at 0x{SPRAM + off:08X} read 0x{want | 1 << bit:08X} expected 0x{want:08X}"]  # fmt: skip
 
 
-def test_two_blocks_answering_one_address_fail_at_the_first_word():
-    m = Machine(2 * SPRAM_BLOCK, alias_bit=15)  # the second block's writes land in the first
-    said = _verdict(m.run_until("SPRAM_TEST:"))
-    assert said == [f"SPRAM_TEST: FAIL at 0x{SPRAM:08X} read 0x{spram_pattern(SPRAM_BLOCK):08X} "
-                    f"expected 0x{spram_pattern(0):08X}"]  # fmt: skip
+def test_the_two_banks_answering_one_address_fail_at_the_first_word():
+    m = Machine(2 * SPRAM_BANK, alias_bit=16)  # LiteX's bank select lost: the second bank's writes land in the first
+    assert _verdict(m.run_until("SPRAM_TEST:")) == [
+        f"SPRAM_TEST: FAIL at 0x{SPRAM:08X} read 0x{spram_pattern(SPRAM_BANK):08X} "
+        f"expected 0x{spram_pattern(0):08X}"]  # fmt: skip
 
 
 def test_a_byte_store_that_writes_the_whole_word_fails_on_the_byte_lanes():
-    m = Machine(SPRAM_BLOCK, no_byte_mask=True)
+    m = Machine(SPRAM_BANK, no_byte_mask=True)
     assert _verdict(m.run_until("SPRAM_TEST:")) == [
         f"SPRAM_TEST: FAIL at 0x{SPRAM:08X} read 0x00000000 expected 0xFFFFFF00"]  # fmt: skip
 
 
-@pytest.mark.parametrize("size", [0, SPRAM_BLOCK + 4])
-def test_a_size_that_is_not_whole_blocks_is_refused(size):
+@pytest.mark.parametrize("lane", range(4))
+@pytest.mark.parametrize("how", ["off", "on"])
+def test_each_lanes_write_mask_stuck_off_or_on_fails(lane, how):
+    """The masks are the chip's: a stuck one is found at the first word the lane check writes."""
+    m = Machine(SPRAM_BANK, lane_mask=(lane, how))
+    full = 0xFFFFFFFF
+    if how == "off":  # the store to that lane does not land
+        tried, read = lane, full
+    else:  # a store to another lane lands in that one too
+        tried = 0 if lane else 1
+        read = full & ~(0xFF << 8 * tried) & ~(0xFF << 8 * lane)
+    want = full & ~(0xFF << 8 * tried)
+    assert _verdict(m.run_until("SPRAM_TEST:")) == [
+        f"SPRAM_TEST: FAIL at 0x{SPRAM:08X} read 0x{read:08X} expected 0x{want:08X}"]  # fmt: skip
+
+
+@pytest.mark.parametrize("size", [0, SPRAM_BANK // 2, SPRAM_BANK + 4])
+def test_a_size_that_is_not_whole_banks_is_refused(size):
     with pytest.raises(AssertionError):
         generate_spram_firmware(UART, SPRAM, size, IDENT)
 
@@ -248,7 +277,7 @@ def _run(monkeypatch, capsys, answers):
 def test_the_host_script_passes_on_the_designs_pass(monkeypatch, capsys):
     rc, out, port = _run(monkeypatch, capsys, [["SPRAM_TEST: PASS"]])
     assert rc == 0 and port.written == b"T"
-    assert out[-1] == "SPRAM: all 128 KB (four 32 KB blocks) written and read back twice, byte lanes checked"
+    assert out[-1] == "SPRAM: all 128 KB written and read back twice, each byte lane's write mask checked"
 
 
 def test_the_host_script_fails_with_the_designs_words(monkeypatch, capsys):
@@ -263,3 +292,13 @@ def test_the_host_script_asks_again_while_the_design_starts_and_says_when_it_nev
     rc, out, port = _run(monkeypatch, capsys, [])
     assert rc == 2 and port.written == b"T" * host.ASKS
     assert out[-1].startswith("SPRAM: no answer from the SPRAM test design in") and "nothing was tested" in out[-1]
+
+
+def test_a_port_that_cannot_be_opened_is_nothing_tested_not_a_fail(monkeypatch, capsys):
+    def refuse(*a, **kw):
+        raise host.serial.SerialException("[Errno 2] could not open port /dev/pts/3")
+
+    monkeypatch.setattr(host.serial, "Serial", refuse)
+    monkeypatch.setattr(sys, "argv", ["test_spram.py", "--port", "/dev/pts/3"])
+    assert host.main() == 2
+    assert capsys.readouterr().out.splitlines()[-1].startswith("SPRAM: could not open /dev/pts/3: ")

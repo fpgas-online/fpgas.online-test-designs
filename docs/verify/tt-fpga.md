@@ -148,22 +148,22 @@ reads it.
 
 ## The `spram` test
 
-The FPGA breakout has no flash and no DRAM. Its memory is the iCE40UP5K's own SPRAM: four blocks of 32 KB.
+The FPGA breakout has no flash and no DRAM. Its memory is the iCE40UP5K's own 128 KB of SPRAM: four `SB_SPRAM256KA` of 16K × 16 bits. As the SoC uses them (LiteX's `Up5kSPRAM`, 32 bits wide), each 32-bit word is two of them side by side, bytes 0 and 1 in one and 2 and 3 in the other, and the byte address's bit 16 chooses one of two such pairs: two banks of 64 KB.
 - The test design is the UART test's SoC with other firmware in its ROM. That firmware keeps every value in
   registers, so nothing but the test touches the SPRAM.
 - Its host script, `test_spram.py`, runs through the UART bridge as `uart`'s does. It sends a byte. On that
   byte the firmware:
   1. writes to every word a pattern holding the word's own address, and reads every word back;
   2. does the same with the inverse of the pattern, so that every bit of every word has held a 0 and a 1;
-  3. at the start of each block, stores one byte into each of a word's four bytes, and checks that only that
-     byte changed (the SPRAM's write masks).
+  3. at the start of each bank, stores one byte into each of a word's four bytes, and checks that only that
+     byte changed (each SPRAM's write masks).
 - It answers with one line, which the script turns into the test's result:
 
 | The script's last line | Result |
 |---|---|
-| `SPRAM: all 128 KB (four 32 KB blocks) written and read back twice, byte lanes checked` | `pass` |
+| `SPRAM: all 128 KB written and read back twice, each byte lane's write mask checked` | `pass` |
 | `SPRAM: FAIL at 0x<address> read 0x<word> expected 0x<word>`: the first word that did not read back | `fail`, with that line as the reason |
-| `SPRAM: no answer from the SPRAM test design in 15 s: nothing was tested` | `error` |
+| `SPRAM: no answer from the SPRAM test design in 15 s: nothing was tested`, or `SPRAM: could not open <port>: …` | `error` |
 
 The design's page has the details: `designs/spram/README.md`
 ([fpgas.online-test-designs #343](https://github.com/fpgas-online/fpgas.online-test-designs/issues/343)).

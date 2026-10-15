@@ -8,8 +8,8 @@ receives a byte, and answers with one line: "SPRAM_TEST: PASS", or
 On the boot check it runs through tt_test_wrapper.py, which loads the design and bridges the FPGA's UART to a
 PTY given here as --port.
 
-Its last line starts "SPRAM:" and says the result. Exit 0: pass; 1: the SPRAM failed; 2: no answer from the
-design (nothing was tested).
+Its last line starts "SPRAM:" and says the result. Exit 0: pass; 1: the SPRAM failed; 2: nothing was tested (the
+port could not be opened, or the design did not answer).
 
 Usage:
     python3 designs/spram/host/test_spram.py --port /dev/pts/3
@@ -54,16 +54,20 @@ def main() -> int:
     args = parser.parse_args()
 
     print(f"Opening {args.port} at {args.baud} baud...")
-    with serial.Serial(args.port, args.baud, timeout=0.5) as ser:
-        ser.reset_input_buffer()
-        verdict, lines = ask(ser)
+    try:
+        with serial.Serial(args.port, args.baud, timeout=0.5) as ser:
+            ser.reset_input_buffer()
+            verdict, lines = ask(ser)
+    except serial.SerialException as e:
+        print(f"SPRAM: could not open {args.port}: {e}: nothing was tested")
+        return 2
     for line in lines:
         print(f"  {line}")
     if verdict is None:
         print(f"SPRAM: no answer from the SPRAM test design in {ASKS * ASK_EVERY_S} s: nothing was tested")
         return 2
     if verdict == "PASS":
-        print(f"SPRAM: all {SIZE_KB} KB (four 32 KB blocks) written and read back twice, byte lanes checked")
+        print(f"SPRAM: all {SIZE_KB} KB written and read back twice, each byte lane's write mask checked")
         return 0
     print(f"SPRAM: {verdict}")
     return 1
