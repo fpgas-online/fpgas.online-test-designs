@@ -1967,8 +1967,7 @@ def test_every_board_type_answers_for_every_common_check(board, variant):
     """Tim, 15 Oct 2026: "*Anything* which has an FPGA should be getting jtag, anything which has wires should be
     getting wiring, etc." Each common check is planned, or not applicable with a reason; never both, never neither."""
     planned, cannot = board.planned(variant, {}), board.not_applicable(variant)
-    if not (board is TT and variant is None):  # an unsettled TT board plans only its sdk test
-        assert set(checks.COMMON) - set(planned) == set(cannot), (board.name, variant)
+    assert set(checks.COMMON) - set(planned) == set(cannot), (board.name, variant)
     assert not set(planned) & set(cannot)
     assert all(why and len(why) < 300 for why in cannot.values())  # the site cuts a value at 300
     assert set(cannot) <= set(checks.COMMON)
@@ -1995,7 +1994,7 @@ def test_the_plans_in_running_order():
     assert NETV2.planned("a7-100") == ["jtag", "uart", "ddr", "flash", "ethernet"]
     assert FOMU.planned("evt") == ["header", "foboot", "uart", "flash", "foboot-after"]
     assert TT.planned("tt-fpga") == ["sdk", "dip-switches", "wiring", "uart", "spram"]
-    assert TT.planned("tt-asic") == ["sdk", "wiring"] and TT.planned(None) == ["sdk"]
+    assert TT.planned("tt-asic") == ["sdk", "wiring"] and TT.planned(None) == ["sdk", "wiring"]
 
 
 def test_an_arty_reports_its_jtag_read_as_its_first_test_and_its_reason_once(tmp_path):
@@ -2023,3 +2022,20 @@ def test_a_fomu_whose_header_failed_says_why_its_closing_reset_was_not_run(tmp_p
     run = Runner([("fomu_header_id.py", _says({**FOMU_READING, "cdone_in_reset": 1, "flash": None}))])
     report = _check(FOMU, tmp_path, {"variant": "evt"}, run)
     assert report["not_run"]["foboot-after"] == "it needs header and foboot to pass first"
+
+
+def test_a_card_the_acorn_module_names_as_another_board_has_no_acorn_plan():
+    """A PCIe Screamer or a PicoEVB is found by the Acorn module and named (check.OTHER_BOARDS): it gets none of the
+    Acorn's tests or reasons (the site then says what it does for a board with no plan)."""
+    other = {"variant": "cle-215+", "title": "PCIe Screamer (PCILeech image)"}
+    assert ACORN.planned(None, {}, other) == [] and ACORN.not_applicable(None, other) == {}
+    assert ACORN.planned(None, {}, {"variant": "cle-215+"})[0] == "pcie-link"
+
+
+def test_a_long_stopped_reason_is_cut_to_what_the_site_keeps_and_says_so(tmp_path):
+    long = "x" * 400
+    assert (
+        checks.stopped(long).startswith("the check stopped before it: xxx")
+        and len(checks.fit(checks.stopped(long))) == 300
+    )
+    assert checks.fit(checks.stopped(long)).endswith(checks.CUT) and checks.fit("short") == "short"

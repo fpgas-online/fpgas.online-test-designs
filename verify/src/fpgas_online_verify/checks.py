@@ -58,11 +58,25 @@ NO_TEST_YET = "no boot-check test yet: fpgas.online-test-designs #{issue}"
 # The planned tests' reason when the check stopped before them, with the reason the board's check gave.
 STOPPED = "the check stopped before it: {reason}"
 STOPPED_NO_REASON = "the check stopped before it"
+# The site keeps 300 characters of an event value. A per-test reason longer than that is cut here, saying so; the
+# whole of it is in the board's reason (board<i>_reason) and the report.
+FIT = 300
+CUT = " … (the whole reason is the board's)"
 
 
 def untested_reasons(untested):
     """{test: why} for Board.untested's {test: issue number}."""
     return {test: NO_TEST_YET.format(issue=issue) for test, issue in untested.items()}
+
+
+def stopped(reason):
+    """A planned test's not_run reason when the check stopped before it."""
+    return STOPPED.format(reason=reason) if reason else STOPPED_NO_REASON
+
+
+def fit(text):
+    """`text` as an event value the site keeps whole: at most FIT characters, a cut said with CUT."""
+    return text if len(text) <= FIT else text[: FIT - len(CUT)] + CUT
 
 
 def groups(planned):

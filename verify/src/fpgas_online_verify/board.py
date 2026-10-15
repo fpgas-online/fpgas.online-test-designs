@@ -80,9 +80,10 @@ class Board:
 
     # -- what the check should run (checks.py) ----------------------------------------------------------------
 
-    def planned(self, variant, options=None):
+    def planned(self, variant, options=None, found=None):
         """Every test the board's whole check runs for `variant` (None: not known), in running order, with the
-        ones not written yet (untested). The report carries it however far the check got."""
+        ones not written yet (untested). The report carries it however far the check got. `found` is how the
+        board was found (the Acorn module plans nothing for a card it names as another board)."""
         return []
 
     def untested(self, variant):
@@ -90,7 +91,7 @@ class Board:
         not run yet. They are planned, and not run with checks.NO_TEST_YET."""
         return {}
 
-    def not_applicable(self, variant):
+    def not_applicable(self, variant, found=None):
         """{common check (checks.COMMON): why this board cannot have it}, for each one it does not plan."""
         return {}
 

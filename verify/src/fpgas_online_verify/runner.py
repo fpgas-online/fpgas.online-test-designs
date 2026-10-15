@@ -262,7 +262,13 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
         if skipped:
             reports[-1]["tests_skipped"] = skipped
         if not options.get("tests"):  # the whole check: what it should have run, however far it got
-            plan(board, reports[-1], found, options)
+            try:
+                plan(board, reports[-1], found, options)
+            except Exception as e:  # a bug in the plan: that board is an error, its tests' results stand
+                bad = reports[-1]
+                bad["result"] = worst([bad.get("result", "error"), "error"])
+                why = f"what its check plans could not be said: {type(e).__name__}: {e}"
+                bad["reason"] = "; ".join([bad["reason"], why] if bad.get("reason") else [why])
     report["boards"] = reports
     if not_checked:
         report["not_checked"] = not_checked
@@ -288,13 +294,14 @@ def plan(board, report, found, options):
     not_applicable, and in not_run each planned test that did not run and has no reason there yet, with the
     reason the check stopped (a refusal, a Problem, a crash)."""
     variant = report.get("variant") or found.get("variant")
-    report["planned"] = board.planned(variant, options)
-    report["groups"] = checks.groups(report["planned"])
-    report["not_applicable"] = board.not_applicable(variant)
+    planned = board.planned(variant, options, found)
+    groups = checks.groups(planned)  # before anything is put in the report: an unknown name is a KeyError
+    report["planned"], report["groups"] = planned, groups
+    report["not_applicable"] = board.not_applicable(variant, found)
     ran = {t["test"] for t in report.get("tests", [])}
     missing = [t for t in report["planned"] if t not in ran and t not in report.get("not_run", {})]
     if missing:
-        why = checks.STOPPED.format(reason=report["reason"]) if report.get("reason") else checks.STOPPED_NO_REASON
+        why = checks.stopped(report.get("reason"))
         report["not_run"] = {**report.get("not_run", {}), **dict.fromkeys(missing, why)}
 
 
@@ -336,11 +343,13 @@ def details(report):
             # A reason per planned test, keyed by its name. An entry that is not a planned test (the Acorn's
             # "scratch over P2 UART": part of a test that ran) stays in board<i>_not_run and the board's reason.
             planned = set(b.get("planned", ()))
-            out.update({f"board{i}_not_run_{test}": why for test, why in b["not_run"].items() if test in planned})
+            out.update({f"board{i}_not_run_{test}": checks.fit(why) for test, why in b["not_run"].items()
+                        if test in planned})  # fmt: skip
         if b.get("planned"):
             out[f"board{i}_planned"] = " ".join(b["planned"])
             out[f"board{i}_groups"] = " ".join(f"{t}={g}" for t, g in b["groups"].items())
-        out.update({f"board{i}_not_applicable_{check}": why for check, why in b.get("not_applicable", {}).items()})
+        out.update({f"board{i}_not_applicable_{check}": checks.fit(why)
+                    for check, why in b.get("not_applicable", {}).items()})  # fmt: skip
         if b.get("left_running"):
             out[f"board{i}_left_running"] = b["left_running"]["design"]
         if b.get("warnings"):

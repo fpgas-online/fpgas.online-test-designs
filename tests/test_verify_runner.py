@@ -1583,10 +1583,10 @@ def test_a_failed_check_says_whether_it_was_published_before_its_conclusion(opts
 class Planned(Fake):
     """A Fake whose whole check plans uart, ddr and wiring, and cannot have jtag."""
 
-    def planned(self, variant, options=None):
+    def planned(self, variant, options=None, found=None):
         return ["uart", "ddr", "wiring"]
 
-    def not_applicable(self, variant):
+    def not_applicable(self, variant, found=None):
         return {"jtag": "it has no JTAG port"}
 
 
@@ -1664,3 +1664,27 @@ def test_a_not_run_entry_that_is_not_a_planned_test_gets_no_key_of_its_own(opts)
     d = runner.details(report)
     assert d["board0_not_run"] == "ddr over P2 UART"
     assert not [k for k in d if k.startswith("board0_not_run_")]
+
+
+def test_a_board_whose_plan_cannot_be_made_is_an_error_and_its_results_stand(opts):
+    class BadPlan(Planned):
+        def planned(self, variant, options=None, found=None):
+            return ["uart", "no-such-test"]
+
+    report = runner.verify(opts, _boards(BadPlan("arty", seen=[{"variant": "a7-35"}])), usb=[], pci=[],
+                           mode=("arty", "test"))  # fmt: skip
+    (b,) = report["boards"]
+    assert report["result"] == b["result"] == "error" and "planned" not in b
+    assert b["reason"] == "what its check plans could not be said: KeyError: 'no-such-test'"
+
+
+def test_every_per_test_reason_in_the_event_fits_what_the_site_keeps(opts):
+    class LongStop(Planned):
+        def check(self, host, found, options):
+            raise Problem("error", "y" * 500)
+
+    d = runner.details(runner.verify(opts, _boards(LongStop("arty", seen=[{"variant": "a7-35"}])), usb=[], pci=[],
+                                     mode=("arty", "test")))  # fmt: skip
+    per_test = {k: v for k, v in d.items() if k.startswith(("board0_not_run_", "board0_not_applicable_"))}
+    assert per_test and all(len(v) <= 300 for v in per_test.values())
+    assert d["board0_not_run_ddr"].endswith(" … (the whole reason is the board's)") and len(d["board0_reason"]) == 500

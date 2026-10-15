@@ -692,7 +692,7 @@ def main():
         "--board", choices=sorted(BOARDS),
         help="Validate wiring for a known board against its expected GPIO->ball "
              "map (prints RESULT: PASS/FAIL). An explicit --gpios/--hat-port "
-             "scans those pins instead (fpgas-<board>-debug test pin-id -- "
+             "scans those pins instead (fpgas-<board>-debug test wiring -- "
              "--hat-port JA, where the boot check's arguments carry --board).",
     )
     parser.add_argument(

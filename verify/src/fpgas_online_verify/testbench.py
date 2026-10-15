@@ -429,10 +429,10 @@ class TestBoard(Board):
     def untested(self, variant):
         return dict(self.not_yet.get(variant, {}))
 
-    def not_applicable(self, variant):
+    def not_applicable(self, variant, found=None):
         return dict(self.cannot.get(variant, {}))
 
-    def planned(self, variant, options=None):
+    def planned(self, variant, options=None, found=None):
         if variant is None and self.variant_from_board:
             return list(self.planned_unsettled)
         out = ["jtag"] if variant in self.idcodes else []

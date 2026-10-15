@@ -302,17 +302,19 @@ class TTFPGA(TestBoard):
                     "flash": "the FPGA breakout has no configuration flash: the RP2350 streams each design from "
                              "the Pi"},
         "tt-asic": {"jtag": "a Tiny Tapeout chip is an ASIC, not an FPGA: nothing on it is configured over JTAG",
-                    "flash": "a Tiny Tapeout chip is an ASIC: it has no configuration flash (the RP2040's own flash "
-                             "holds only its firmware)",
-                    "uart": "the chip has no UART to the Pi: the Pi reaches the demo board's RP2040 over USB",
+                    "flash": "a Tiny Tapeout chip is an ASIC: it has no configuration flash to test",
+                    "uart": "a Tiny Tapeout chip's projects are fixed in silicon: no UART design can be loaded; the "
+                            "wiring test checks its lines to the Pi",
                     **NO_PART},
         None: {"jtag": "neither a TT FPGA breakout (an iCE40UP5K, loaded through the RP2350) nor a Tiny Tapeout "
                        "chip has a JTAG port",
                "flash": "neither a TT FPGA breakout nor a Tiny Tapeout chip has a configuration flash",
+               "uart": "only an FPGA board has a UART test, and the board did not say whether it carries an FPGA",
                **NO_PART},
     }  # fmt: skip
-    # The variant is settled from the board's own word: one not settled would still have had its `sdk` test.
-    planned_unsettled = ("sdk",)
+    # The variant is settled from the board's own word: one not settled would still have had its `sdk` test, and a
+    # wiring test whichever board it is.
+    planned_unsettled = ("sdk", "wiring")
 
     # #139: the check ends by streaming a design that moves the seven-segment display, so the board looks
     # alive on its camera until a visitor loads a design (designs/tt-display: clocked by the iCE40's own
