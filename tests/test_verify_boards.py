@@ -1926,3 +1926,14 @@ def test_a_pin_id_failure_keeps_the_routing_it_read_as_its_reason(tmp_path):
     assert (pin_id["result"], pin_id["reason"]) == ("fail", said.removeprefix("PIN-ID: "))
     assert report["reason"] == f"pin-id fail: {said.removeprefix('PIN-ID: ')}"
     assert TT.tests["pin-id"]["says"] == ARTY.tests["pin-id"]["says"] == "PIN-ID:"
+
+
+def test_an_ethernet_failure_keeps_the_step_that_failed_as_its_reason(tmp_path):
+    """The reason "the test exited 1" did not say whether the link, ARP or ping failed (test-designs issue #333)."""
+    said = "ETHERNET: no link on eth1 after 60 s, so ARP and ping were not tried"
+    run = Runner([("test_ethernet.py", (1, f"  Link: FAIL (no carrier on eth1 after 60s)\n{said}\n"))],
+                 flash=b"\x5a" * ARTY.flash_region["a7-35"])  # fmt: skip
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    ethernet = next(t for t in report["tests"] if t["test"] == "ethernet")
+    assert (ethernet["result"], ethernet["reason"]) == ("fail", said.removeprefix("ETHERNET: "))
+    assert ARTY.tests["ethernet"]["says"] == NETV2.tests["ethernet"]["says"] == "ETHERNET:"
