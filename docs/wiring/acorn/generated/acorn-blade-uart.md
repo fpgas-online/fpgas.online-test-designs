@@ -4,5 +4,5 @@
 |---|---|---|---|---|
 | 1 | 5V | — | — | **empty, 5 V** |
 | 2 | GND | — | — | P2:1 GND |
-| 3 | TX | GPIO14 (TXD0) | Extension Port 9 | P2:2 J2 |
-| 4 | RX | GPIO15 (RXD0) | Extension Port 10 | P2:3 K2 |
+| 3 | TX | GPIO14 (TXD0) | Extension Port 9 | P2:3 J2 |
+| 4 | RX | GPIO15 (RXD0) | Extension Port 10 | P2:2 K2 |

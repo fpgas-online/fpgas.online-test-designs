@@ -8,8 +8,11 @@
 
 # ---------------------------------------------------------------------------------------------------
 # The Acorn's two 6-pin Molex Pico-EZmate connectors, pins in physical order: position 1 is the end
-# nearest the M.2 edge connector. Sources: the "Pico-EZmate connectors pinout on Acorn, Nite/LiteFury"
-# legend on the LiteX Acorn CLE-215 wiki, and the silkscreen of RHS Research's JTAG adapter.
+# nearest the M.2 edge connector. Sources: the NiteFury schematic (RHS Research, uEVB.pdf rev Z2: P1 on
+# page 6, P2 and the FPGA balls behind it on page 9), and for which end is pin 1 the "Pico-EZmate
+# connectors pinout on Acorn, Nite/LiteFury" legend on the LiteX Acorn CLE-215 wiki. That legend puts J2
+# at position 2 and K2 at 3: wrong. Its own UART TX/RX labels, and the schematic, have K2 (the FPGA's
+# TX) at 2. test_wiring.py holds both connectors to the schematic.
 # ---------------------------------------------------------------------------------------------------
 [connectors.P1]
 what = "JTAG"
@@ -17,7 +20,7 @@ pins = ["GND1", "TCK", "TDO", "TMS", "TDI", "VCC"]
 
 [connectors.P2]
 what = "I/O"
-pins = ["GND2", "J2", "K2", "J5", "H5", "VCC"]
+pins = ["GND2", "K2", "J2", "J5", "H5", "VCC"]
 
 # label: what the sheet and the tables print. ball: the FPGA package pin (P2 only; P1 is the
 # dedicated JTAG port). drive: which end drives it (pi, fpga, both), for the arrows.
@@ -85,8 +88,8 @@ note = "over each cut-back wire end"
 # sources: where a statement of fact on the generated pages comes from, said once here and printed on each
 #   carrier's overview page (`carrier`: on that carrier's only). A statement nobody has checked says so.
 [[sources]]
-claim = "The order of the pins in the Acorn's two sockets (P1: GND, TCK, TDO, TMS, TDI, VCC; P2: GND, J2, K2, J5, H5, VCC), and that pin 1 is the end nearest the M.2 edge"
-source = "the \"Pico-EZmate connectors pinout on Acorn, Nite/LiteFury\" legend on the LiteX Acorn CLE-215 wiki, and the silkscreen of RHS Research's JTAG adapter. Which end of a plug is wire 1 is checked with a meter in the guide before anything is cut"
+claim = "The order of the pins in the Acorn's two sockets (P1: GND, TCK, TDO, TMS, TDI, VCC; P2: GND, K2, J2, J5, H5, VCC), and that pin 1 is the end nearest the M.2 edge"
+source = "the order: the NiteFury schematic in RHS Research's NiteFury-and-LiteFury repository (Hardware/uEVB.pdf, rev Z2). On page 6, P1's pins 1 to 6 are GND, TCK, TDO, TMS, TDI and +3V3. On page 9, P2's are GND, AIO2_P, AIO2_N, AIO1_P, AIO1_N and +3V3, and AIO2_P, AIO2_N, AIO1_P and AIO1_N are balls K2, J2, J5 and H5. Pin 1 nearest the M.2 edge: the \"Pico-EZmate connectors pinout on Acorn, Nite/LiteFury\" legend on the LiteX Acorn CLE-215 wiki. That legend gives J2 at position 2 and K2 at 3, which is wrong, and these pages followed it until 14 October 2026: a P2 cable built from them before then has J2 and K2 in each other's cavity (`p2-serial` shows J2 arriving on GPIO15 and K2 on GPIO14). Which end of a plug is wire 1 is checked with a meter in the guide before anything is cut"
 
 [[sources]]
 claim = "That pin 6 (VCC) carries 3.3 V from the Acorn"

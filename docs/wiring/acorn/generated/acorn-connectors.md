@@ -3,8 +3,8 @@
 | Pin | P2 (I/O) | P1 (JTAG) |
 |---|---|---|
 | 1 | GND | GND |
-| 2 | J2 (LVCMOS33): serial RX, FPGA input | TCK: JTAG clock |
-| 3 | K2 (LVCMOS33): serial TX, FPGA output | TDO: JTAG data out |
+| 2 | K2 (LVCMOS33): serial TX, FPGA output | TCK: JTAG clock |
+| 3 | J2 (LVCMOS33): serial RX, FPGA input | TDO: JTAG data out |
 | 4 | J5 (LVCMOS33): spare GPIO | TMS: JTAG mode select |
 | 5 | H5 (LVCMOS33): spare GPIO | TDI: JTAG data in |
 | 6 | VCC: 3.3 V from the Acorn, **cut, never connected** | VCC: 3.3 V from the Acorn, **cut, never connected** |

@@ -40,9 +40,9 @@ Turned round, the housing puts 5 V on the K2 wire. That is above the most AMD's 
 
 **4.** Then check each wire against its cavity. For each wire: read the number on its flag and find it in the picture. Put one probe on that wire's contact on the plug and the other on the terminal in that cavity: it must beep. Every other cavity must stay silent for that contact.
 
-**Wire 2 is the exception: it has the 470 Ω resistor in it. Leave wire 2 until last and read it in ohms, not by the buzzer**. A continuity buzzer usually sounds only below some tens of ohms, so through the resistor it will usually stay silent. Set the meter to ohms, on auto-range or the 2 kΩ range, and touch the two probes together first: it must read close to 0.
+**Wire 3 is the exception: it has the 470 Ω resistor in it. Leave wire 3 until last and read it in ohms, not by the buzzer**. A continuity buzzer usually sounds only below some tens of ohms, so through the resistor it will usually stay silent. Set the meter to ohms, on auto-range or the 2 kΩ range, and touch the two probes together first: it must read close to 0.
 
-Then, between wire 2's contact on the plug and its terminal, it must read close to 470 Ω. Close to 0 there means the resistor is bridged or was left out. Over-range (OL, or a lone 1 at the left of the display) means a bad joint or the wrong wire. So does a value far from 470 Ω. Between wire 2's contact and every other cavity it must show over-range.
+Then, between wire 3's contact on the plug and its terminal, it must read close to 470 Ω. Close to 0 there means the resistor is bridged or was left out. Over-range (OL, or a lone 1 at the left of the display) means a bad joint or the wrong wire. So does a value far from 470 Ω. Between wire 3's contact and every other cavity it must show over-range.
 
 The P2 cavity picture is shown again below, to read each wire's cavity from.
 

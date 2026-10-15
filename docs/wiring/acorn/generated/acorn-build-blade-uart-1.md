@@ -60,14 +60,14 @@ If the Molex cable is still whole, do the reach check first: step 2 of [How to p
 ![The P2 cable: its wires prepared](acorn-cable-blade-p2-prepare.png){.only-light}
 ![The P2 cable: its wires prepared](acorn-cable-blade-p2-prepare-dark.png){.only-dark}
 
-**5.** Cut wire 2 (J2) about 15 mm from its free end. Slide a piece of the 3 mm tube onto the wire, clear of the cut. Strip about 3 mm from each cut end. Trim the resistor's leads to about 5 mm each.
+**5.** Cut wire 3 (J2) about 15 mm from its free end. Slide a piece of the 3 mm tube onto the wire, clear of the cut. Strip about 3 mm from each cut end. Trim the resistor's leads to about 5 mm each.
 
 Solder the 470 Ω resistor between the two cut ends. Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this.
 
 The resistor is there because J2 lands on GPIO14, which is also JTAG TMS. The 470 Ω in the wire is meant to let JTAG through if the FPGA drives J2.
 
-![The resistor fitted into wire 2](acorn-cable-blade-p2-resistor.png){.only-light}
-![The resistor fitted into wire 2](acorn-cable-blade-p2-resistor-dark.png){.only-dark}
+![The resistor fitted into wire 3](acorn-cable-blade-p2-resistor.png){.only-light}
+![The resistor fitted into wire 3](acorn-cable-blade-p2-resistor-dark.png){.only-dark}
 
 **6.** Strip about 3 mm from wires 1, 2 and 3. Crimp a Dupont terminal on each.
 

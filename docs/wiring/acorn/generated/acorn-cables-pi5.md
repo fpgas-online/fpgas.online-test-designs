@@ -6,7 +6,7 @@ This procedure is waiting for its bench run: [issue #218](https://github.com/fpg
 
 Two short cables from the Acorn's two connectors to the Raspberry Pi 5 with the Waveshare PoE M.2 HAT+ (B). The P1 cable carries JTAG. The P2 cable carries the serial port and two spare GPIOs.
 
-GND, TCK, TDO, TMS, TDI, J2, K2, J5 and H5 are the names on the pictures for each wire. J2, K2, J5 and H5 are the FPGA's pin names.
+GND, TCK, TDO, TMS, TDI, K2, J2, J5 and H5 are the names on the pictures for each wire. K2, J2, J5 and H5 are the FPGA's pin names.
 
 ![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5.png){.only-light}
 ![The finished wiring: Acorn to Raspberry Pi 5](acorn-wiring-pi5-dark.png){.only-dark}
@@ -24,7 +24,7 @@ The parts for **one** Raspberry Pi 5 host; for several hosts, that many of each.
 | ☐ | 1 | heat-shrink tube, about 2 mm, a few centimetres | — | over each cut-back wire end |
 | ☐ | 1 | Dupont housing, 2×3, 2.54 mm pitch | — | over 40-pin header pins 5 to 10; 1 of its 6 cavities stays empty |
 | ☐ | 1 | Dupont housing, 2×4, 2.54 mm pitch | — | over 40-pin header pins 19 to 26; 3 of its 8 cavities stay empty |
-| ☐ | 10 | Dupont female crimp terminal, 2.54 mm | — | one for each connected wire: GND, TCK, TDO, TMS, TDI, GND, J2, K2, J5, H5; buy a few more than this, as spares |
+| ☐ | 10 | Dupont female crimp terminal, 2.54 mm | — | one for each connected wire: GND, TCK, TDO, TMS, TDI, GND, K2, J2, J5, H5; buy a few more than this, as spares |
 
 The tools to build, fit and check its two cables, once for any number of hosts:
 

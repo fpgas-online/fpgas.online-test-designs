@@ -6,7 +6,7 @@ This procedure is waiting for its bench run: [issue #219](https://github.com/fpg
 
 Two short cables from the Acorn's two connectors to the Compute Blade. The P1 cable carries JTAG. The P2 cable carries the serial port.
 
-GND, TCK, TDO, TMS, TDI, J2 and K2 are the names on the pictures for each wire. J2 and K2 are the FPGA's pin names.
+GND, TCK, TDO, TMS, TDI, K2 and J2 are the names on the pictures for each wire. K2 and J2 are the FPGA's pin names.
 
 ![The finished wiring: Acorn to Compute Blade](acorn-wiring-computeblade.png){.only-light}
 ![The finished wiring: Acorn to Compute Blade](acorn-wiring-computeblade-dark.png){.only-dark}

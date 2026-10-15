@@ -6,7 +6,7 @@ This procedure is waiting for its bench run: [issue #219](https://github.com/fpg
 
 Two short cables from the Acorn's two connectors to the Compute Blade. The P1 cable carries JTAG. The P2 cable carries the serial port.
 
-GND, TCK, TDO, TMS, TDI, J2 and K2 are the names on the pictures for each wire. J2 and K2 are the FPGA's pin names.
+GND, TCK, TDO, TMS, TDI, K2 and J2 are the names on the pictures for each wire. K2 and J2 are the FPGA's pin names.
 
 ![The finished wiring: Acorn to Compute Blade](acorn-wiring-computeblade.png){.only-light}
 ![The finished wiring: Acorn to Compute Blade](acorn-wiring-computeblade-dark.png){.only-dark}
@@ -27,7 +27,7 @@ The parts for **one** Compute Blade host; for several hosts, that many of each.
 | ☐ | 1 | heat-shrink tube, about 2 mm, a few centimetres | — | over each cut-back wire end |
 | ☐ | 1 | Dupont housing, 2×5, 2.54 mm pitch | — | over Extension Port pins 1 to 10; 5 of its 10 cavities stay empty |
 | ☐ | 1 | Dupont housing, 1×4, 2.54 mm pitch | — | over UART pins 1 to 4; 1 of its 4 cavities stays empty |
-| ☐ | 8 | Dupont female crimp terminal, 2.54 mm | — | one for each connected wire: GND, TCK, TDO, TMS, TDI, GND, J2, K2; buy a few more than this, as spares |
+| ☐ | 8 | Dupont female crimp terminal, 2.54 mm | — | one for each connected wire: GND, TCK, TDO, TMS, TDI, GND, K2, J2; buy a few more than this, as spares |
 | ☐ | 1 | resistor, 470 Ω, 1/8 W axial | — | in series with J2 |
 | ☐ | 1 | heat-shrink tube, about 3 mm, a few centimetres | — | over the resistor and both joints |
 
@@ -167,14 +167,14 @@ If the Molex cable is still whole, do the reach check first: step 2 of [How to p
 ![The P2 cable: its wires prepared](acorn-cable-blade-p2-prepare.png){.only-light}
 ![The P2 cable: its wires prepared](acorn-cable-blade-p2-prepare-dark.png){.only-dark}
 
-**16.** Cut wire 2 (J2) about 15 mm from its free end. Slide a piece of the 3 mm tube onto the wire, clear of the cut. Strip about 3 mm from each cut end. Trim the resistor's leads to about 5 mm each.
+**16.** Cut wire 3 (J2) about 15 mm from its free end. Slide a piece of the 3 mm tube onto the wire, clear of the cut. Strip about 3 mm from each cut end. Trim the resistor's leads to about 5 mm each.
 
 Solder the 470 Ω resistor between the two cut ends. Slide the tube over the resistor and both joints and shrink it. Crimp the terminal only after this.
 
 The resistor is there because J2 lands on GPIO14, which is also JTAG TMS. The 470 Ω in the wire is meant to let JTAG through if the FPGA drives J2.
 
-![The resistor fitted into wire 2](acorn-cable-blade-p2-resistor.png){.only-light}
-![The resistor fitted into wire 2](acorn-cable-blade-p2-resistor-dark.png){.only-dark}
+![The resistor fitted into wire 3](acorn-cable-blade-p2-resistor.png){.only-light}
+![The resistor fitted into wire 3](acorn-cable-blade-p2-resistor-dark.png){.only-dark}
 
 **17.** Strip about 3 mm from wires 1, 2 and 3. Crimp a Dupont terminal on each.
 
@@ -203,9 +203,9 @@ Turned round, the housing puts 5 V on the K2 wire. That is above the most AMD's 
 
 **21.** Then check each wire against its cavity. For each wire: read the number on its flag and find it in the picture. Put one probe on that wire's contact on the plug and the other on the terminal in that cavity: it must beep. Every other cavity must stay silent for that contact.
 
-**Wire 2 is the exception: it has the 470 Ω resistor in it. Leave wire 2 until last and read it in ohms, not by the buzzer**. A continuity buzzer usually sounds only below some tens of ohms, so through the resistor it will usually stay silent. Set the meter to ohms, on auto-range or the 2 kΩ range, and touch the two probes together first: it must read close to 0.
+**Wire 3 is the exception: it has the 470 Ω resistor in it. Leave wire 3 until last and read it in ohms, not by the buzzer**. A continuity buzzer usually sounds only below some tens of ohms, so through the resistor it will usually stay silent. Set the meter to ohms, on auto-range or the 2 kΩ range, and touch the two probes together first: it must read close to 0.
 
-Then, between wire 2's contact on the plug and its terminal, it must read close to 470 Ω. Close to 0 there means the resistor is bridged or was left out. Over-range (OL, or a lone 1 at the left of the display) means a bad joint or the wrong wire. So does a value far from 470 Ω. Between wire 2's contact and every other cavity it must show over-range.
+Then, between wire 3's contact on the plug and its terminal, it must read close to 470 Ω. Close to 0 there means the resistor is bridged or was left out. Over-range (OL, or a lone 1 at the left of the display) means a bad joint or the wrong wire. So does a value far from 470 Ω. Between wire 3's contact and every other cavity it must show over-range.
 
 The P2 cavity picture is shown again below, to read each wire's cavity from.
 

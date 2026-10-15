@@ -176,12 +176,13 @@ def test_the_prepare_picture_cuts_exactly_the_cut_wires_and_puts_a_terminal_on_t
     assert {int(n) for n in re.findall(r'<g id="resistor-wire-(\d+)">', svg)} == resistors
 
 
-def test_the_series_resistor_is_prepared_on_wire_2_of_the_blade_p2_cable_only():
+def test_the_series_resistor_is_prepared_on_the_j2_wire_of_the_blade_p2_cable_only():
     found = {
         (key, connector): re.findall(r'<g id="resistor-wire-(\d+)">', steps.prepare(wiring.CARRIERS[key], connector))
         for key, connector in CABLES
     }
-    assert found == {("blade", "P2"): ["2"], ("blade", "P1"): [], ("pi5", "P1"): [], ("pi5", "P2"): []}
+    j2 = str(wiring.CONNECTORS["P2"]["pins"].index("J2") + 1)
+    assert found == {("blade", "P2"): [j2], ("blade", "P1"): [], ("pi5", "P1"): [], ("pi5", "P2"): []}
 
 
 @pytest.mark.parametrize("key", list(wiring.CARRIERS))
