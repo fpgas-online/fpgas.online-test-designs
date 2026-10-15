@@ -12,6 +12,7 @@ import sys
 
 import pytest
 from fpgas_online_verify import (
+    checks,
     cli,
     conclusion,
     core,
@@ -25,6 +26,7 @@ from fpgas_online_verify import (
 )
 from fpgas_online_verify.boards import arty, fomu, netv2, tt_fpga
 from fpgas_online_verify.boards.acorn import BOARD as ACORN
+from fpgas_online_verify.checks import NO_TEST_YET
 
 PI3 = "Raspberry Pi 3 Model B Plus Rev 1.3"
 PI5 = "Raspberry Pi 5 Model B Rev 1.0"
@@ -121,7 +123,7 @@ def test_artifact_paths_match_the_collect_bitstreams_bundle():
     assert ARTY.artifact("ethernet", "a7-35") == "ethernet-test-arty-a7-35t/digilent_arty.bit"
     assert NETV2.artifact("ddr", "a7-100") == "ddr-test-netv2-a7-100t/kosagi_netv2.bit"
     assert FOMU.artifact("pmod", "evt") == "gpio-loopback-fomu-evt/kosagi_fomu_evt.bin"
-    assert TT.artifact("pin-id", "tt-fpga") == "pmod-pin-id-tt-fpga/tt_fpga_platform.bin"
+    assert TT.artifact("wiring", "tt-fpga") == "pmod-pin-id-tt-fpga/tt_fpga_platform.bin"
 
 
 def test_the_fomu_boot_check_runs_one_test_since_a_load_uses_up_the_bootloader():
@@ -302,7 +304,7 @@ def test_an_arty_that_passes_loads_each_test_runs_it_and_records_its_flash(tmp_p
     run = Runner([("test_spiflash.py", (0, "JEDEC ID: 0x20 0xBA 0x18\nRESULT: PASS"))], flash=flash)
     report = _check(ARTY, tmp_path, ARTY_FOUND, run)
     assert report["result"] == "pass", report
-    assert [t["test"] for t in report["tests"]] == ["uart", "ddr", "spiflash", "ethernet", "pin-id"]
+    assert [t["test"] for t in report["tests"]] == ["jtag", "uart", "ddr", "flash", "ethernet", "wiring"]
     images = tmp_path / "images"
     assert run.calls[0] == ["openFPGALoader", "-b", "arty", "--detect", "--verbose-level", "2"]
     assert run.calls[1] == ["openFPGALoader", "-b", "arty", "--read-dna"]  # same cable, before anything loads
@@ -446,21 +448,21 @@ def test_a_failing_test_fails_the_check_and_keeps_its_output(tmp_path):
     run = Runner([("test_ddr.py", (1, "Memtest KO\nRESULT: FAIL"))], flash=b"\0" * ARTY.flash_region["a7-35"])
     report = _check(ARTY, tmp_path, ARTY_FOUND, run)
     assert report["result"] == "fail" and "ddr fail" in report["reason"]
-    ddr = report["tests"][1]
-    assert ddr["output"][-1] == "RESULT: FAIL" and report["tests"][2]["result"] == "pass"
+    ddr = report["tests"][2]  # after jtag and uart
+    assert ddr["output"][-1] == "RESULT: FAIL" and report["tests"][3]["result"] == "pass"
 
 
 def test_a_load_that_exits_0_but_ends_done_0_did_not_load(tmp_path):
     """openFPGALoader exits 0 when the FPGA did not configure; its `done 0` line says so (#300)."""
     run = Runner([("uart-test-arty", (0, NOT_LOADED))], flash=b"\0" * ARTY.flash_region["a7-35"])
-    uart = _check(ARTY, tmp_path, ARTY_FOUND, run)["tests"][0]
+    uart = _check(ARTY, tmp_path, ARTY_FOUND, run)["tests"][1]  # after jtag
     assert uart["result"] == "fail" and "did not configure" in uart["reason"] and "done 0" in uart["reason"]
     assert not any(c[1].endswith("test_uart.py") for c in run.calls if len(c) > 1)  # its test is not run
 
 
 def test_a_load_with_no_done_line_is_not_taken_as_loaded(tmp_path):
     run = Runner([("uart-test-arty", (0, "Load SRAM: [====] 100.00%\n"))], flash=b"\0" * ARTY.flash_region["a7-35"])
-    uart = _check(ARTY, tmp_path, ARTY_FOUND, run)["tests"][0]
+    uart = _check(ARTY, tmp_path, ARTY_FOUND, run)["tests"][1]  # after jtag
     assert uart["result"] == "fail" and "no 'done' line" in uart["reason"]
 
 
@@ -476,7 +478,7 @@ def test_only_a_jtag_load_by_openfpgaloader_is_judged_by_its_done_line():
 def test_only_the_tests_asked_for_run(tmp_path):
     run = Runner(flash=b"\0" * ARTY.flash_region["a7-35"])
     report = _check(ARTY, tmp_path, ARTY_FOUND, run, tests=["ddr"])
-    assert [t["test"] for t in report["tests"]] == ["ddr"]
+    assert [t["test"] for t in report["tests"]] == ["jtag", "ddr"]  # the IDCODE and DNA are read on every check
 
 
 def test_a_test_the_board_does_not_have_is_an_error_not_a_crash(tmp_path):
@@ -488,7 +490,7 @@ def test_a_test_the_board_does_not_have_is_an_error_not_a_crash(tmp_path):
 
 def test_a_load_that_fails_skips_that_test(tmp_path):
     run = Runner([("uart-test-arty", (1, "JTAG init failed"))], flash=b"\0" * ARTY.flash_region["a7-35"])
-    uart = _check(ARTY, tmp_path, ARTY_FOUND, run)["tests"][0]
+    uart = _check(ARTY, tmp_path, ARTY_FOUND, run)["tests"][1]  # after jtag
     assert uart["result"] == "fail" and "loading it failed" in uart["reason"]
     assert not any(c[1].endswith("test_uart.py") for c in run.calls if len(c) > 1)
 
@@ -496,7 +498,7 @@ def test_a_load_that_fails_skips_that_test(tmp_path):
 def test_a_damaged_bitstream_is_never_loaded(tmp_path):
     run = Runner(flash=b"\0" * ARTY.flash_region["a7-35"])
     report = _check(ARTY, tmp_path, ARTY_FOUND, run, corrupt="ddr-test-arty/digilent_arty.bit")
-    assert report["tests"][1]["result"] == "error" and "does not match its manifest" in report["tests"][1]["reason"]
+    assert report["tests"][2]["result"] == "error" and "does not match its manifest" in report["tests"][2]["reason"]
     assert not any("ddr-test-arty" in " ".join(c) for c in run.calls)
 
 
@@ -570,7 +572,7 @@ def _netv2_pi5_listen(tmp_path, answer):
     run = Runner([("fpgas_online_verify.listen", answer)], flash=b"\0" * NETV2.flash_region["a7-35"])
     report = NETV2.check(_host(NETV2, PI5, None), {"variant": "a7-35"},
                          {"images": _install(tmp_path, NETV2)}, runner=run)  # fmt: skip
-    return next(t for t in report["tests"] if NETV2.tests[t["test"]].get("listen"))
+    return next(t for t in report["tests"] if NETV2.tests.get(t["test"], {}).get("listen"))
 
 
 def test_a_listened_load_that_ends_done_0_fails_as_a_load(tmp_path):
@@ -599,8 +601,9 @@ def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_rea
     # the pin-ID scan loads its design itself and runs first; the bridge loads the UART design,
     # so the last design left on the board is one with a single TX pin, not one driving every Pmod line
     # first of all the board's own word is judged (sdk), which loads nothing
-    assert [t["test"] for t in report["tests"]] == ["sdk", "dip-switches", "pin-id", "uart"]
-    assert "bitstream" not in report["tests"][0] and "not_run" not in report
+    assert [t["test"] for t in report["tests"]] == ["sdk", "dip-switches", "wiring", "uart"]
+    # its SPRAM has no test yet (#343): planned, not run, and the board not failed for it
+    assert "bitstream" not in report["tests"][0] and report["not_run"] == {"spram": NO_TEST_YET.format(issue=343)}
     _dip, load, _display = [c for c in run.calls if "tt_fpga_program.py" in " ".join(c)]
     assert load[3].endswith("pmod-pin-id-tt-fpga/tt_fpga_platform.bin") and load[4:] == ["--gpio-release"]
     bridged = [c for c in run.calls if "tt_test_wrapper.py" in " ".join(c)]
@@ -1129,14 +1132,17 @@ def test_an_arty_says_who_it_is_before_its_tests_with_its_whole_idcode(tmp_path)
     events, kept = [], []
     report = _check(ARTY, tmp_path, ARTY_FOUND, Runner(), board_key="arty",
                     event=lambda stage, d: events.append((stage, d)), **{identity.KEEP: kept.append})  # fmt: skip
-    assert events[0][0] == "fpga-board-identified" and events[1][0] == "fpga-test-started"
+    # the JTAG read (a test since #340) says who it is: identified follows it, before every other test
+    assert [stage for stage, _ in events[:4]] == ["fpga-test-started", "fpga-test-finished", "fpga-board-identified",
+                                                 "fpga-test-started"]  # fmt: skip
+    assert events[0][1] == {"test": "jtag"} and events[3][1]["test"] == "uart"
     assert kept == [report["identity"]]  # handed to the runner, so a crash after this keeps it
     assert report["identity"] == {
         "board": "arty", "kind": "arty", "variant": "a7-35", "serial": "210319B", "usb": "1-1",
         "idcode": "0x0362d093", "idcode_version": 0, "idcode_part_number": "0x362d", "idcode_manufacturer_id": "0x049",
         "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A35T", "dna": DNA,
     }  # fmt: skip
-    assert events[0][1] == identity.details(report["identity"])
+    assert events[2][1] == identity.details(report["identity"])
 
 
 def test_a_jtag_chain_with_nothing_on_it_is_an_idcode_error(tmp_path):
@@ -1155,8 +1161,8 @@ def test_an_arty_with_a_good_dna_has_it_in_its_identity_event_and_state(tmp_path
     report = _check(ARTY, tmp_path, ARTY_FOUND, run, event=lambda stage, d: events.append((stage, d)))
     assert report["result"] == "pass" and report["jtag"]["result"] == "pass"
     assert report["jtag"]["dna"] == report["identity"]["dna"] == report["state"]["dna"] == DNA  # 16 digits
-    assert events[0] == ("fpga-board-identified", identity.details(report["identity"]))
-    assert events[0][1]["dna"] == DNA and "dna_error" not in report["identity"]
+    assert events[2] == ("fpga-board-identified", identity.details(report["identity"]))
+    assert events[2][1]["dna"] == DNA and "dna_error" not in report["identity"]
     assert [c for c in run.calls if "--read-dna" in c] == [["openFPGALoader", "-b", "arty", "--read-dna"]]
 
 
@@ -1338,7 +1344,7 @@ def test_debug_list_shows_every_test_and_whether_the_boot_check_runs_it(tmp_path
     args = cli.argparse.Namespace(command="list", images=_install(tmp_path, ARTY), variant=None, port=None)
     assert debug.run(ARTY, args) == 0
     out = capsys.readouterr().out
-    assert "ddr        a7-35    boot check" in out and "pin-id     a7-35    boot check" in out
+    assert "ddr        a7-35    boot check" in out and "wiring     a7-35    boot check" in out
     assert "pmod       a7-35    debug only" in out
     assert "(not installed)" not in out
 
@@ -1356,7 +1362,7 @@ def test_debug_test_loads_then_runs_with_extra_arguments(tmp_path, monkeypatch):
     ran = []
     monkeypatch.setattr(debug, "_live", lambda argv: ran.append([str(a) for a in argv]) or 0)
     images = _install(tmp_path, ARTY)
-    args = cli.argparse.Namespace(command="test", test="pin-id", extra=["--hat-port", "JA"], images=images,
+    args = cli.argparse.Namespace(command="test", test="wiring", extra=["--hat-port", "JA"], images=images,
                                   variant=None, port=None)  # fmt: skip
     assert debug.run(ARTY, args) == 0
     assert ran[0] == ["rmmod", "spidev", "spi_bcm2835"]
@@ -1578,11 +1584,12 @@ def test_a_chip_board_with_another_fault_says_both_and_an_fpga_board_has_no_wiri
                                "on an RP2040; wiring not run: it needs sdk to pass first"  # fmt: skip
     assert report["not_run"] == {"wiring": "it needs sdk to pass first"} and not any(WIRING in " ".join(c)
                                                                                       for c in run.calls)  # fmt: skip
-    # the FPGA board's wiring test is pin-id, which loads its design: the chip board's script is not run there
+    # the FPGA board's wiring test loads its design (the pin-ID scan): the chip board's script is not run there
     fpga_run = Runner([_rpi_hwid(TT_BOARD)])
     fpga = _check(TT, tmp_path / "fpga", TT_FOUND, fpga_run)
-    assert fpga["result"] == "pass" and "not_run" not in fpga and not any(WIRING in " ".join(c) for c in fpga_run.calls)
-    assert [t["test"] for t in fpga["tests"]] == ["sdk", "dip-switches", "pin-id", "uart"]
+    assert fpga["result"] == "pass" and list(fpga["not_run"]) == ["spram"]  # #343: no test yet
+    assert not any(WIRING in " ".join(c) for c in fpga_run.calls)
+    assert [t["test"] for t in fpga["tests"]] == ["sdk", "dip-switches", "wiring", "uart"]
 
 
 def test_the_report_of_a_chip_board_whose_ribbon_is_wrong_reads_plainly(tmp_path, monkeypatch):
@@ -1653,7 +1660,7 @@ def test_an_fpga_board_whose_sdk_test_fails_still_has_its_designs_loaded_and_tes
     _installed(monkeypatch)
     report = _check(TT, tmp_path, TT_FOUND, Runner([_rpi_hwid({**TT_BOARD, "sdk": "3.0.8"})]))
     assert [(t["test"], t["result"]) for t in report["tests"]] == [("sdk", "fail"), ("dip-switches", "pass"),
-                                                                    ("pin-id", "pass"),
+                                                                    ("wiring", "pass"),
                                                                     ("uart", "pass")]  # fmt: skip
     assert report["result"] == "fail" and report["reason"].startswith("sdk fail: the FPGA breakout needs SDK 3.1.x")
 
@@ -1732,7 +1739,7 @@ def test_the_check_of_an_fpga_board_ends_by_leaving_the_display_design_running(t
     assert last[1].endswith("tt_fpga_program.py") and last[2] == "/dev/ttyACM0" and last[3].endswith(DISPLAY)
     assert last[4:] == ["--gpio-release"] and _restarted_last(run)
     # it is no test: not in the tests, and nothing is run to read it
-    assert [t["test"] for t in report["tests"]] == ["sdk", "dip-switches", "pin-id", "uart"]
+    assert [t["test"] for t in report["tests"]] == ["sdk", "dip-switches", "wiring", "uart"]
     assert "display" not in TT.tests
     shown = runner.summary({"result": "pass", "mode": "tt", "boards": [report]})
     assert f"    left running: the display design ({DISPLAY})" in shown and "WARNING" not in shown
@@ -1767,7 +1774,7 @@ def test_a_display_design_that_cannot_be_loaded_is_a_warning_and_the_board_still
 def test_the_display_design_is_left_after_single_tests_and_after_a_failed_test_too(tmp_path, monkeypatch):
     _installed(monkeypatch)
     run = Runner([_rpi_hwid(TT_BOARD)])
-    report = _check(TT, tmp_path, TT_FOUND, run, tests=["pin-id"])
+    report = _check(TT, tmp_path, TT_FOUND, run, tests=["wiring"])
     assert _loads(run) == ["pmod-pin-id-tt-fpga", "tt-display-tt-fpga"]
     assert report["left_running"]["design"] == "display"
     run = Runner([("tt_test_wrapper.py", (1, "could not enter raw repl")), _rpi_hwid(TT_BOARD)])
@@ -1837,7 +1844,8 @@ def test_no_other_board_settles_its_variant_late():
     # a variant no bitstream is for is checked by its fact and script tests, which load nothing; none is pending
     assert TT.fact_tests_for("tt-asic") == ["sdk"] and "tt-asic" not in TT.variants
     assert TT.script_tests_for("tt-asic") == ["wiring"] and TT.script_tests_for("tt-fpga") == []
-    assert TT.pending == {} and "wiring" not in TT.tests
+    # the FPGA board's wiring test loads a design (TT.tests); the chip board's is a script test, run only there
+    assert TT.pending == {} and TT.tests["wiring"]["artifact"].startswith("pmod-pin-id-")
 
 
 def test_a_chip_board_whose_demo_board_was_not_detected_is_still_a_tt_asic(tmp_path, monkeypatch):
@@ -1929,10 +1937,10 @@ def test_a_pin_id_failure_keeps_the_routing_it_read_as_its_reason(tmp_path):
     run = Runner([("identify_pmod_pins.py", (1, f"| GPIO8 | ... |\n{said}\nRESULT: FAIL\n"))],
                  flash=b"\x5a" * ARTY.flash_region["a7-35"])  # fmt: skip
     report = _check(ARTY, tmp_path, ARTY_FOUND, run)
-    pin_id = next(t for t in report["tests"] if t["test"] == "pin-id")
+    pin_id = next(t for t in report["tests"] if t["test"] == "wiring")
     assert (pin_id["result"], pin_id["reason"]) == ("fail", said.removeprefix("PIN-ID: "))
-    assert report["reason"] == f"pin-id fail: {said.removeprefix('PIN-ID: ')}"
-    assert TT.tests["pin-id"]["says"] == ARTY.tests["pin-id"]["says"] == "PIN-ID:"
+    assert report["reason"] == f"wiring fail: {said.removeprefix('PIN-ID: ')}"
+    assert TT.tests["wiring"]["says"] == ARTY.tests["wiring"]["says"] == "PIN-ID:"
 
 
 def test_an_ethernet_failure_keeps_the_step_that_failed_as_its_reason(tmp_path):
@@ -2005,3 +2013,170 @@ def test_usb_devices_reads_each_devices_number(tmp_path):
         (dev / name).write_text(value + "\n")
     assert core.usb_devices(tmp_path) == [{"vendor": "1209", "product": "5bf0", "serial": None, "path": "1-1.2",
                                            "devnum": "7"}]  # fmt: skip
+
+
+# -- what each board's check should run (checks.py, #340) ------------------------------------------------------
+
+EVERY_VARIANT = [(b, v) for b in (ARTY, NETV2, FOMU) for v in b.variants]
+EVERY_VARIANT += [(TT, "tt-fpga"), (TT, "tt-asic"), (TT, None), (ACORN, "cle-215+")]
+
+
+@pytest.mark.parametrize("board, variant", EVERY_VARIANT)
+def test_every_board_type_answers_for_every_common_check(board, variant):
+    """Tim, 15 Oct 2026: "*Anything* which has an FPGA should be getting jtag, anything which has wires should be
+    getting wiring, etc." Each common check is planned, or not applicable with a reason; never both, never neither."""
+    planned, cannot = board.planned(variant, {}), board.not_applicable(variant)
+    assert set(checks.COMMON) - set(planned) == set(cannot), (board.name, variant)
+    assert not set(planned) & set(cannot)
+    assert all(why and len(why) < 300 for why in cannot.values())  # the site cuts a value at 300
+    assert set(cannot) <= set(checks.COMMON)
+    assert all(t in checks.GROUP_OF for t in planned)  # a KeyError in the report otherwise
+
+
+def test_every_test_a_board_can_report_has_a_group():
+    names = {t for b in (ARTY, NETV2, FOMU, TT) for t in [*b.tests, *b.fact_tests, *b.script_tests]}
+    names |= {"jtag", FOMU.closing_test, *ACORN.planned(None, {"power_cycle_check": True})}
+    assert names - set(checks.GROUP_OF) == set()
+    assert set(checks.GROUP_OF.values()) == set(checks.GROUPS)
+
+
+def test_jtag_is_planned_on_every_board_with_jtag_and_wiring_on_every_board_with_cabling():
+    assert [b.planned(v)[0] for b, v in ((ARTY, "a7-35"), (NETV2, "a7-35"), (NETV2, "a7-100"))] == ["jtag"] * 3
+    assert "jtag" in ACORN.planned(None, {})
+    assert "wiring" in ARTY.planned("a7-35") and "wiring" in TT.planned("tt-fpga") and "wiring" in TT.planned("tt-asic")
+    assert "no JTAG port" in FOMU.not_applicable("evt")["jtag"] and "foboot" in FOMU.not_applicable("evt")["jtag"]
+    assert "RP2350" in TT.not_applicable("tt-fpga")["jtag"]
+
+
+def test_the_plans_in_running_order():
+    assert ARTY.planned("a7-35") == ["jtag", "uart", "ddr", "flash", "ethernet", "wiring"]
+    assert NETV2.planned("a7-100") == ["jtag", "uart", "ddr", "flash", "ethernet", "wiring"]
+    assert FOMU.planned("evt") == ["header", "foboot", "uart", "flash", "wiring", "foboot-after"]
+    assert ACORN.planned(None, {}, {"variant": "cle-215+"})[-1] == "wiring"
+    assert TT.planned("tt-fpga") == ["sdk", "dip-switches", "wiring", "uart", "spram"]
+    assert TT.planned("tt-asic") == ["sdk", "wiring"] and TT.planned(None) == ["sdk", "wiring"]
+
+
+def test_an_arty_reports_its_jtag_read_as_its_first_test_and_its_reason_once(tmp_path):
+    run = Runner([("--detect", (0, _scan(0x13631093)))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    jtag = report["tests"][0]
+    assert jtag["test"] == "jtag" and jtag["result"] == "fail" and jtag["reason"] == report["jtag"]["reason"]
+    assert report["reason"].count("jtag fail:") == 1
+
+
+def test_a_test_not_written_yet_is_not_run_with_its_issue_and_does_not_fail_the_board(tmp_path, monkeypatch):
+    run = Runner(flash=b"\0" * NETV2.flash_region["a7-35"])
+    report = _check(NETV2, tmp_path, _netv2_found("0x0362d093"), run)
+    assert report["result"] == "pass", report
+    assert report["not_run"] == {"ethernet": "no boot-check test yet: fpgas.online-test-designs #341"}
+    assert [t["test"] for t in report["tests"]] == ["jtag", "uart", "ddr", "flash"]
+    # coord-64: the one switch that makes such a test fail the board, as a pending test does
+    monkeypatch.setattr(checks, "UNTESTED_FAILS", True)
+    report = _check(NETV2, tmp_path, _netv2_found("0x0362d093"), run)
+    assert report["result"] == "fail" and "ethernet not run: no boot-check test yet" in report["reason"]
+
+
+def test_a_fomu_whose_header_failed_says_why_its_closing_reset_was_not_run(tmp_path, fomu_usb):
+    fomu_usb.append(FOBOOT_USB)
+    run = Runner([("fomu_header_id.py", _says({**FOMU_READING, "cdone_in_reset": 1, "flash": None}))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run)
+    assert report["not_run"]["foboot-after"] == "it needs header and foboot to pass first"
+
+
+def test_a_card_the_acorn_module_names_as_another_board_has_no_acorn_plan():
+    """A PCIe Screamer or a PicoEVB is found by the Acorn module and named (check.OTHER_BOARDS): it gets none of the
+    Acorn's tests or reasons (the site then says what it does for a board with no plan)."""
+    other = {"variant": "cle-215+", "title": "PCIe Screamer (PCILeech image)"}
+    assert ACORN.planned(None, {}, other) == [] and ACORN.not_applicable(None, other) == {}
+    assert ACORN.planned(None, {}, {"variant": "cle-215+"})[0] == "pcie-link"
+
+
+def test_a_long_stopped_reason_is_cut_to_what_the_site_keeps_and_says_so(tmp_path):
+    long = "x" * 400
+    assert (
+        checks.stopped(long).startswith("the check stopped before it: xxx")
+        and len(checks.fit(checks.stopped(long))) == 300
+    )
+    assert checks.fit(checks.stopped(long)).endswith(checks.CUT) and checks.fit("short") == "short"
+
+
+# -- wiring derived from the tests that cover each wire (checks.derive) -----------------------------------------
+
+
+def test_every_board_with_wires_plans_wiring():
+    """Tim, 15 Oct 2026: "anything which has wires should be getting wiring": a pin-by-pin test (Arty, TT FPGA, TT
+    chip), or derived from the tests that cover each wire (NeTV2, Fomu, Acorn)."""
+    for board, variant in [(ARTY, "a7-35"), (NETV2, "a7-35"), (NETV2, "a7-100"), (FOMU, "evt"), (TT, "tt-fpga"),
+                           (TT, "tt-asic"), (ACORN, "cle-215+")]:  # fmt: skip
+        assert "wiring" in board.planned(variant, {}, {"variant": variant}), board.name
+        assert "wiring" not in board.not_applicable(variant, {"variant": variant})
+    assert set(NETV2.derived("a7-35")["wiring"][0]) == {"jtag", "uart"}
+    assert set(FOMU.derived("evt")["wiring"][0]) == {"header", "uart"}
+    assert set(ACORN.derived(None, {})["wiring"][0]) == {"jtag", "p2-uart", "p2-serial", "p2-gpio"}
+    assert ARTY.derived("a7-35") == {} and TT.derived("tt-fpga") == {}  # a pin-by-pin test of their own
+
+
+def _derived(tests, not_run=None):
+    report = {"tests": [{"test": t, "result": r} for t, r in tests], **({"not_run": not_run} if not_run else {})}
+    checks.derive(report, {"wiring": (("jtag", "p2-uart", "p2-serial"), "its two cables")})
+    return report
+
+
+def test_derived_wiring_passes_when_every_source_passed():
+    wiring = _derived([("jtag", "pass"), ("p2-uart", "pass"), ("p2-serial", "pass")])["tests"][-1]
+    assert wiring == {"test": "wiring", "from": ["jtag", "p2-uart", "p2-serial"], "about": "its two cables",
+                      "result": "pass"}  # fmt: skip
+
+
+def test_derived_wiring_takes_the_first_source_that_did_not_pass():
+    wiring = _derived([("jtag", "pass"), ("p2-uart", "fail"), ("p2-serial", "error")])["tests"][-1]
+    assert (wiring["result"], wiring["reason"]) == ("fail", "p2-uart fail")
+    wiring = _derived([("jtag", "error"), ("p2-uart", "pass")])["tests"][-1]  # p2-serial not run, but jtag erred
+    assert (wiring["result"], wiring["reason"]) == ("error", "jtag error")
+
+
+def test_derived_wiring_is_not_run_when_a_source_did_not_run():
+    report = _derived([("jtag", "pass"), ("p2-uart", "pass")], not_run={"p2-serial": "golden image"})
+    assert "wiring" not in [t["test"] for t in report["tests"]]
+    assert report["not_run"]["wiring"] == "it is derived from jtag, p2-uart, p2-serial: p2-serial did not run"
+
+
+def test_a_netv2_check_reports_its_wiring_from_jtag_and_uart(tmp_path):
+    run = Runner(flash=b"\0" * NETV2.flash_region["a7-35"])
+    found = _netv2_found("0x0362d093")
+    report = _check(NETV2, tmp_path, found, run)
+    runner.plan(NETV2, report, found, {})
+    wiring = report["tests"][-1]
+    assert wiring["test"] == "wiring" and wiring["result"] == "pass" and wiring["from"] == ["jtag", "uart"]
+    flat = runner.details({"result": report["result"], "boards": [report]})
+    assert "wiring=pass" in flat["board0_tests"]
+    assert flat["board0_wiring_from"] == "its wires to the Pi are the header's JTAG lines (jtag) and UART lines (uart)"
+
+
+def test_a_fomu_whose_foboot_failed_has_its_wiring_not_run_and_its_result_unchanged(tmp_path, fomu_usb):
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("openFPGALoader", (1, "no device found"))])
+    found = {"variant": "evt"}
+    report = _check(FOMU, tmp_path, found, run)
+    before = report["result"]
+    runner.plan(FOMU, report, found, {})
+    assert report["result"] == before
+    assert report["not_run"]["wiring"] == "it is derived from header, uart: uart did not run"
+
+
+def test_an_acorn_setup_without_p2_gpio_wires_derives_its_wiring_from_the_wires_it_has():
+    report = {"tests": [{"test": t, "result": "pass"} for t in ("jtag", "p2-uart", "p2-serial")],
+              "not_run": {"p2-gpio": "J5 and H5 are not wired on the blade setup"}, "unwired": ["p2-gpio"]}  # fmt: skip
+    checks.derive(report, ACORN.derived(None, {}))
+    wiring = report["tests"][-1]
+    assert wiring["test"] == "wiring" and wiring["result"] == "pass" and "wiring" not in report["not_run"]
+
+
+def test_a_failed_derived_wiring_does_not_change_the_board_result():
+    report = {"result": "fail", "tests": [{"test": "jtag", "result": "pass"}, {"test": "uart", "result": "fail"}]}
+    checks.derive(report, NETV2.derived("a7-35"))
+    assert report["result"] == "fail" and report["tests"][-1]["reason"] == "uart fail"
+
+
+def test_a_card_named_as_another_board_derives_nothing():
+    assert ACORN.derived(None, {"variant": "cle-215+", "title": "PicoEVB"}) == {}

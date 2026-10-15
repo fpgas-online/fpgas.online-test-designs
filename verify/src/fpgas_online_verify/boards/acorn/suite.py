@@ -430,12 +430,16 @@ class _Suite:
             no_serial = self._needs_setup() or (
                 None if self.setup.p2_serial else f"J2 and K2 are not wired on the {self.setup.name} setup"
             )
+            if not self._needs_setup() and not self.setup.p2_serial:  # no wires to test: not part of `wiring`
+                self.report.setdefault("unwired", []).append("p2-serial")
             self.test("p2-serial", no_serial or no_bar0 or (golden and golden.format("P2 serial switch")),
                       self.p2_serial)  # fmt: skip
             self.test("scratch", None if self.bus is not None or not no_uart else no_bar0, self.scratch)
             no_gpio = self._needs_setup() or (
                 None if self.setup.p2_gpio else f"J5 and H5 are not wired on the {self.setup.name} setup"
             )
+            if not self._needs_setup() and not self.setup.p2_gpio:
+                self.report.setdefault("unwired", []).append("p2-gpio")
             self.test("p2-gpio", no_gpio or no_bar0 or (golden and golden.format("P2 spare GPIO")), self.p2_gpio)
             self._mark()
         self._flush()

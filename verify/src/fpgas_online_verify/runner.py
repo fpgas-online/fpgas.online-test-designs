@@ -22,7 +22,7 @@ import pathlib
 import sys
 import tempfile
 
-from . import conclusion, config, identity, state
+from . import checks, conclusion, config, identity, state
 from .board import installed
 from .core import Problem, flatten, hold_lock, pci_devices, publish, tail, usb_devices, worst
 from .core import run as run_command
@@ -261,6 +261,14 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
             board_event("fpga-board-identified", identity.details(reports[-1]["identity"]))
         if skipped:
             reports[-1]["tests_skipped"] = skipped
+        if not options.get("tests"):  # the whole check: what it should have run, however far it got
+            try:
+                plan(board, reports[-1], found, options)
+            except Exception as e:  # a bug in the plan: that board is an error, its tests' results stand
+                bad = reports[-1]
+                bad["result"] = worst([bad.get("result", "error"), "error"])
+                why = f"what its check plans could not be said: {type(e).__name__}: {e}"
+                bad["reason"] = "; ".join([bad["reason"], why] if bad.get("reason") else [why])
     report["boards"] = reports
     if not_checked:
         report["not_checked"] = not_checked
@@ -279,6 +287,27 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
     if report["state"].get("changes"):
         report["result"] = worst([report["result"], "changed"])
     return report
+
+
+def plan(board, report, found, options):
+    """Put in a board's report what its whole check should run (checks.py, #340, #339): planned, groups and
+    not_applicable, and in not_run each planned test that did not run and has no reason there yet, with the
+    reason the check stopped (a refusal, a Problem, a crash)."""
+    variant = report.get("variant") or found.get("variant")
+    planned = board.planned(variant, options, found)
+    groups = checks.groups(planned)  # before anything is put in the report: an unknown name is a KeyError
+    report["planned"], report["groups"] = planned, groups
+    report["not_applicable"] = board.not_applicable(variant, found)
+    derived = board.derived(variant, found)
+    if derived:
+        report["derived_from"] = {test: about for test, (_, about) in derived.items()}
+        report.setdefault("tests", [])
+        checks.derive(report, derived)
+    ran = {t["test"] for t in report.get("tests", [])}
+    missing = [t for t in report["planned"] if t not in ran and t not in report.get("not_run", {})]
+    if missing:
+        why = checks.stopped(report.get("reason"))
+        report["not_run"] = {**report.get("not_run", {}), **dict.fromkeys(missing, why)}
 
 
 def _sendable_identity(report, base):
@@ -316,6 +345,18 @@ def details(report):
             out[f"board{i}_tests"] = " ".join(f"{t['test']}={t['result']}" for t in b["tests"])
         if b.get("not_run"):
             out[f"board{i}_not_run"] = ", ".join(b["not_run"])
+            # A reason per planned test, keyed by its name. An entry that is not a planned test (the Acorn's
+            # "scratch over P2 UART": part of a test that ran) stays in board<i>_not_run and the board's reason.
+            planned = set(b.get("planned", ()))
+            out.update({f"board{i}_not_run_{test}": checks.fit(why) for test, why in b["not_run"].items()
+                        if test in planned})  # fmt: skip
+        # a derived test (checks.derive): which tests its result comes from, whether it ran or not
+        out.update({f"board{i}_{test}_from": checks.fit(about) for test, about in b.get("derived_from", {}).items()})
+        if b.get("planned"):
+            out[f"board{i}_planned"] = " ".join(b["planned"])
+            out[f"board{i}_groups"] = " ".join(f"{t}={g}" for t, g in b["groups"].items())
+        out.update({f"board{i}_not_applicable_{check}": checks.fit(why)
+                    for check, why in b.get("not_applicable", {}).items()})  # fmt: skip
         if b.get("left_running"):
             out[f"board{i}_left_running"] = b["left_running"]["design"]
         if b.get("warnings"):

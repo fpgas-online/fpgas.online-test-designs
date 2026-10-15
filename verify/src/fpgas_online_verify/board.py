@@ -78,6 +78,28 @@ class Board:
         facts that must not change between runs (see state.py)."""
         raise NotImplementedError
 
+    # -- what the check should run (checks.py) ----------------------------------------------------------------
+
+    def planned(self, variant, options=None, found=None):
+        """Every test the board's whole check runs for `variant` (None: not known), in running order, with the
+        ones not written yet (untested). The report carries it however far the check got. `found` is how the
+        board was found (the Acorn module plans nothing for a card it names as another board)."""
+        return []
+
+    def untested(self, variant):
+        """{test: the test-designs issue that adds it}: tests the board's hardware calls for that its check does
+        not run yet. They are planned, and not run with checks.NO_TEST_YET."""
+        return {}
+
+    def derived(self, variant, found=None):
+        """{test: (its source tests, what they cover)} for a test whose result is derived from others (checks.derive):
+        the `wiring` of a board whose wires to the Pi are each checked by a test of their own."""
+        return {}
+
+    def not_applicable(self, variant, found=None):
+        """{common check (checks.COMMON): why this board cannot have it}, for each one it does not plan."""
+        return {}
+
 
 def installed():
     """{name: Board} for every board module installed."""

@@ -61,20 +61,30 @@ class NeTV2(TestBoard):
         # The BIOS prints "Switching SDRAM to software control." once, at start, before the memtest, and
         # test_ddr.py needs that line and "Memtest OK": opened after the load, the Pi's own UART had already
         # dropped it (every Welland NeTV2's boot check, found 2026-10-08). So it listens from before the load,
-        # and its timeout covers the load, as spiflash's does.
+        # and its timeout covers the load, as flash's does.
         "ddr": {"artifact": "ddr-test-netv2-{v}/kosagi_netv2.bit", "script": "test_ddr.py",
                 "args": ["--port", "{port}", "--board", "netv2", "--timeout", "180"], "verify": True,
                 "listen": True},
         # It prints its JEDEC ID once, at start, onto the Pi's own UART, so it listens from before the load
         # (listen.py), and its timeout covers the load too (openocd on a Pi 3 takes a minute or more).
-        "spiflash": {"artifact": "spiflash-test-netv2-{v}/kosagi_netv2.bit", "script": "test_spiflash.py",
+        "flash": {"artifact": "spiflash-test-netv2-{v}/kosagi_netv2.bit", "script": "test_spiflash.py",
                      "args": ["--port", "{port}", "--board", "netv2", "--timeout", "180"], "verify": True,
                      "listen": True},
         "ethernet": {"artifact": "ethernet-test-netv2-{v}/kosagi_netv2.bit", "script": "test_ethernet.py",
                      "args": ["--board", "netv2", "--uart-port", "{port}"], "says": "ETHERNET:"},
         "pmod": {"artifact": "gpio-loopback-netv2-{v}/kosagi_netv2.bit", "script": "test_pmod_loopback.py",
                  "args": ["--board", "netv2"]},
-        "pin-id": {"artifact": "pmod-pin-id-netv2-{v}/kosagi_netv2.bit", "script": "identify_pmod_pins.py", "args": []},
+        # The Pmod pin-ID scan, -debug only: the NeTV2 has no Pmod HAT cabling. Its `wiring` is derived (derives).
+        "pmod-pin-id": {"artifact": "pmod-pin-id-netv2-{v}/kosagi_netv2.bit", "script": "identify_pmod_pins.py",
+                        "args": []},
+    }  # fmt: skip
+    # #340: the ethernet test is not in the boot check yet (#341). Its only wires to the Pi are the header's JTAG
+    # and UART lines, which jtag and uart test: its wiring is theirs (checks.derive).
+    not_yet: ClassVar[dict] = {variant: {"ethernet": 341} for variant in variants}
+    derives: ClassVar[dict] = {
+        variant: {"wiring": (("jtag", "uart"), "its wires to the Pi are the header's JTAG lines (jtag) and UART "
+                                               "lines (uart)")}
+        for variant in variants
     }  # fmt: skip
 
     def facts(self, port=None):

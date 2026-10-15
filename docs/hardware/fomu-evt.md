@@ -39,7 +39,7 @@ The first line of the output starts with `fpgas-verify: pass`. The board's line 
 
 ### Next
 
-- To run one test with its output live: install `fpgas-online-fomu-debug`, then `sudo fpgas-fomu-debug test spiflash`. Then `sudo fpgas-fomu-debug reset`, which puts foboot back on USB.
+- To run one test with its output live: install `fpgas-online-fomu-debug`, then `sudo fpgas-fomu-debug test flash`. Then `sudo fpgas-fomu-debug reset`, which puts foboot back on USB.
 - [The Fomu EVT check at boot](../verify/tests.md#the-fomu-evt-check-at-boot): what the check does, test by test.
 - [Fomu EVT packages](../verify/installing.md#fomu-evt-packages): what each package installs.
 - [fpgas-verify: reading the result](../verify/reading-the-result.md#reading-the-result): the report, `changed` and `--update`.

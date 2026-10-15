@@ -5,6 +5,8 @@ Every fpgas-verify page is listed in [fpgas-verify](../verify.md).
 
 ## Current results
 
+The test names below are those of the run on 2 Oct 2026. On 15 Oct 2026 ([#340](https://github.com/fpgas-online/fpgas.online-test-designs/issues/340)) `spiflash` was renamed `flash` and `pin-id` was renamed `wiring`, and the Arty and NeTV2 also report `jtag` as their first test.
+
 Collected 2026-10-02T03:50:20Z from the 24 Welland Pis that answered, all running `fpgas-online-verify`
 `0.0.post771`, by:
 

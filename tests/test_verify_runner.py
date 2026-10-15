@@ -331,7 +331,7 @@ class WithTests(Fake):
 
 def test_with_auto_a_board_skips_the_tests_it_does_not_have(opts):
     arty = WithTests("arty", ["uart", "ethernet"], seen=[{"variant": "a7-35", "serial": "A"}])
-    tt = WithTests("tt", ["uart", "pin-id"], seen=[{"variant": "tt-fpga", "serial": "T"}])
+    tt = WithTests("tt", ["uart", "wiring"], seen=[{"variant": "tt-fpga", "serial": "T"}])
     report = runner.verify({**opts, "tests": ["uart", "ethernet"]}, _boards(arty, tt), usb=[], pci=[],
                            mode=("auto", "test"))  # fmt: skip
     assert arty.options["tests"] == ["uart", "ethernet"] and tt.options["tests"] == ["uart"]
@@ -1575,3 +1575,128 @@ def test_a_failed_check_says_whether_it_was_published_before_its_conclusion(opts
     assert err.index("  published to the fleet: ") < err.index("RESULT: FAIL: a board did not pass.")
     assert f"(JSON): {out}" in err.split("RESULT:")[1]
     assert sent[0] == "fpga-verifying" and sent[-1] == "fpga-verified"
+
+
+# -- what each board's check should run (checks.py, #340, #339) -----------------------------------------------
+
+
+class Planned(Fake):
+    """A Fake whose whole check plans uart, ddr and wiring, and cannot have jtag."""
+
+    def planned(self, variant, options=None, found=None):
+        return ["uart", "ddr", "wiring"]
+
+    def not_applicable(self, variant, found=None):
+        return {"jtag": "it has no JTAG port"}
+
+
+class PlanStops(Planned):
+    def check(self, host, found, options):
+        raise Problem("error", "no bitstreams installed")
+
+
+class PlanCrashes(Planned):
+    def check(self, host, found, options):
+        raise KeyError("x")
+
+
+def test_a_board_report_says_what_its_whole_check_plans_and_what_cannot_apply(opts):
+    board = Planned("arty", seen=[{"variant": "a7-35", "serial": "A"}])
+    (b,) = runner.verify(opts, _boards(board), usb=[], pci=[], mode=("arty", "test"))["boards"]
+    assert b["planned"] == ["uart", "ddr", "wiring"]
+    assert b["groups"] == {"uart": "peripherals", "ddr": "memory", "wiring": "basic"}
+    assert b["not_applicable"] == {"jtag": "it has no JTAG port"}
+    # the stand-in's check ran none of them and gave no reason: each planned test says it did not run
+    assert b["not_run"] == dict.fromkeys(["uart", "ddr", "wiring"], "the check stopped before it")
+
+
+@pytest.mark.parametrize(
+    "board, why", [(PlanStops, "no bitstreams installed"), (PlanCrashes, "the check crashed: KeyError: 'x'")]
+)
+def test_a_check_that_stops_early_still_lists_its_planned_tests_as_not_run_with_why(opts, board, why):
+    """#339: a refusal, a Problem or a crash before the first test used to leave the event with no tests at all."""
+    stopped = board("arty", seen=[{"variant": "a7-35", "serial": "A"}])
+    report = runner.verify(opts, _boards(stopped), usb=[], pci=[], mode=("arty", "test"))
+    (b,) = report["boards"]
+    assert b["planned"] == ["uart", "ddr", "wiring"] and b["reason"] == why
+    assert b["not_run"] == dict.fromkeys(b["planned"], f"the check stopped before it: {why}")
+    d = runner.details(report)
+    assert d["board0_planned"] == "uart ddr wiring" and d["board0_groups"] == "uart=peripherals ddr=memory wiring=basic"
+    assert d["board0_not_run"] == "uart, ddr, wiring"
+    assert d["board0_not_run_ddr"] == f"the check stopped before it: {why}"
+    assert d["board0_not_applicable_jtag"] == "it has no JTAG port"
+    assert all(isinstance(v, str) and len(v) < 300 for v in d.values())  # the site cuts a value at 300
+
+
+def test_a_run_of_named_tests_reports_no_plan(opts):
+    """--test runs part of the check: what the whole check plans is not said, and nothing is published."""
+    board = Planned("arty", seen=[{"variant": "a7-35", "serial": "A"}])
+    board.tests = {"uart": {}}
+    (b,) = runner.verify({**opts, "tests": ["uart"]}, _boards(board), usb=[], pci=[], mode=("arty", "test"))["boards"]
+    assert not {"planned", "groups", "not_applicable", "not_run"} & set(b)
+
+
+def test_a_reason_a_board_gave_for_a_test_not_run_is_kept(opts):
+    class OwnReason(Planned):
+        def check(self, host, found, options):
+            return {"board": self.name, "variant": "a7-35", "result": "fail", "reason": "uart fail: no banner",
+                    "tests": [{"test": "uart", "result": "fail"}],
+                    "not_run": {"ddr": "it needs uart to pass first"}}  # fmt: skip
+
+    board = OwnReason("arty", seen=[{"variant": "a7-35", "serial": "A"}])
+    (b,) = runner.verify(opts, _boards(board), usb=[], pci=[], mode=("arty", "test"))["boards"]
+    assert b["not_run"] == {"ddr": "it needs uart to pass first",
+                            "wiring": "the check stopped before it: uart fail: no banner"}  # fmt: skip
+
+
+def test_a_not_run_entry_that_is_not_a_planned_test_gets_no_key_of_its_own(opts):
+    """The Acorn's not_run can hold "scratch over P2 UART" (part of `scratch`, which ran): a key with spaces would
+    not be a test the site has a column for. It stays in board<i>_not_run."""
+
+    class PartOf(Planned):
+        def check(self, host, found, options):
+            return {"board": self.name, "variant": "a7-35", "result": "pass",
+                    "tests": [{"test": t, "result": "pass"} for t in ("uart", "ddr", "wiring")],
+                    "not_run": {"ddr over P2 UART": "this host's setup is not known"}}  # fmt: skip
+
+    report = runner.verify(opts, _boards(PartOf("arty", seen=[{"variant": "a7-35"}])), usb=[], pci=[],
+                           mode=("arty", "test"))  # fmt: skip
+    d = runner.details(report)
+    assert d["board0_not_run"] == "ddr over P2 UART"
+    assert not [k for k in d if k.startswith("board0_not_run_")]
+
+
+def test_a_board_whose_plan_cannot_be_made_is_an_error_and_its_results_stand(opts):
+    class BadPlan(Planned):
+        def planned(self, variant, options=None, found=None):
+            return ["uart", "no-such-test"]
+
+    report = runner.verify(opts, _boards(BadPlan("arty", seen=[{"variant": "a7-35"}])), usb=[], pci=[],
+                           mode=("arty", "test"))  # fmt: skip
+    (b,) = report["boards"]
+    assert report["result"] == b["result"] == "error" and "planned" not in b
+    assert b["reason"] == "what its check plans could not be said: KeyError: 'no-such-test'"
+
+
+def test_every_per_test_reason_in_the_event_fits_what_the_site_keeps(opts):
+    class LongStop(Planned):
+        def check(self, host, found, options):
+            raise Problem("error", "y" * 500)
+
+    d = runner.details(runner.verify(opts, _boards(LongStop("arty", seen=[{"variant": "a7-35"}])), usb=[], pci=[],
+                                     mode=("arty", "test")))  # fmt: skip
+    per_test = {k: v for k, v in d.items() if k.startswith(("board0_not_run_", "board0_not_applicable_"))}
+    assert per_test and all(len(v) <= 300 for v in per_test.values())
+    assert d["board0_not_run_ddr"].endswith(" … (the whole reason is the board's)") and len(d["board0_reason"]) == 500
+
+
+def test_a_crashed_check_has_its_derived_wiring_not_run_and_says_where_it_comes_from(opts):
+    class DerivesThenCrashes(PlanCrashes):
+        def derived(self, variant, found=None):
+            return {"wiring": (("uart", "ddr"), "its UART and DDR lines")}
+
+    report = runner.verify(opts, _boards(DerivesThenCrashes("arty", seen=[{"variant": "a7-35"}])), usb=[], pci=[],
+                           mode=("arty", "test"))  # fmt: skip
+    (b,) = report["boards"]
+    assert b["result"] == "error" and b["not_run"]["wiring"] == "it is derived from uart, ddr: uart, ddr did not run"
+    assert runner.details(report)["board0_wiring_from"] == "its UART and DDR lines"
