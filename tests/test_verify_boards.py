@@ -1937,3 +1937,12 @@ def test_an_ethernet_failure_keeps_the_step_that_failed_as_its_reason(tmp_path):
     ethernet = next(t for t in report["tests"] if t["test"] == "ethernet")
     assert (ethernet["result"], ethernet["reason"]) == ("fail", said.removeprefix("ETHERNET: "))
     assert ARTY.tests["ethernet"]["says"] == NETV2.tests["ethernet"]["says"] == "ETHERNET:"
+
+
+def test_an_ethernet_test_that_could_not_run_is_an_error_with_its_reason(tmp_path):
+    """The script exits 2 when an `ip` command or the UART fails before it can test anything (issue #334)."""
+    said = "ETHERNET: could not read the BIOS on /dev/ttyUSB1: [Errno 2] could not open port /dev/ttyUSB1"
+    run = Runner([("test_ethernet.py", (2, f"{said}\n"))], flash=b"\x5a" * ARTY.flash_region["a7-35"])
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    ethernet = next(t for t in report["tests"] if t["test"] == "ethernet")
+    assert (ethernet["result"], ethernet["reason"]) == ("error", said.removeprefix("ETHERNET: "))

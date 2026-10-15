@@ -33,7 +33,7 @@ env:
     tests/test_spi_flash.py tests/test_uartbone_link.py tests/test_acorn_pcie_publish_release.py tests/test_pcie_match_mps.py
     tests/test_acorn_bist.py tests/test_acorn_selftest.py tests/test_jtag_idcode.py tests/test_identity.py
     tests/test_identify_label.py tests/test_release.py tests/test_tt_host_scripts.py tests/test_tt_pmod_wiring.py
-    tests/test_fomu_header_id.py
+    tests/test_fomu_header_id.py tests/test_ethernet_interface.py
   VERIFY_PY: >-
     verify/src packaging/debs/build_debs.py packaging/acorn-pcie/build_debs.py tests/conftest.py
     tests/test_verify_runner.py tests/test_verify_conclusion.py tests/test_verify_boards.py tests/test_debs_packaging.py
@@ -47,6 +47,7 @@ env:
     designs/_host/tt_pmod_wrapper.py tests/test_tt_host_scripts.py
     designs/_host/fomu_header_id.py tests/test_fomu_header_id.py
     packaging/release.py tests/test_release.py
+    designs/ethernet-test/host/test_ethernet.py tests/test_ethernet_interface.py
 
 jobs:
   collect:
@@ -240,11 +241,12 @@ jobs:
           uv run --no-project --with ruff ruff format --check $VERIFY_PY
 
       - name: Tests (Python 3.11, as on bookworm, and 3.12)
+        # pyserial: the host scripts that talk to a UART import it (the root has python3-serial).
         run: |
           # shellcheck disable=SC2086 # the lists are meant to split into paths
-          uv run --no-project --python 3.11 --with pytest pytest $VERIFY_TESTS
+          uv run --no-project --python 3.11 --with pytest --with pyserial pytest $VERIFY_TESTS
           # shellcheck disable=SC2086
-          uv run --no-project --python 3.12 --with pytest pytest $VERIFY_TESTS
+          uv run --no-project --python 3.12 --with pytest --with pyserial pytest $VERIFY_TESTS
 
       # The runs above have no rpi-hwid, as fpgas-verify never needs it (a soft dependency), so the tests
       # that check rpi-hwid accepts fpgas-verify's identity (tests/data/identity-v1-acorn-p48.json) skip
