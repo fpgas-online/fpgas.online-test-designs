@@ -609,17 +609,19 @@ def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_rea
     ]
     assert run.calls[-1] == ["systemctl", "start", "--no-block", "fpgas-tt.service"]
     assert report["services_stopped"] == ["fpgas-tt.service"]
-    # the pin-ID scan loads its design itself and runs first; the bridge loads the UART design,
-    # so the last design left on the board is one with a single TX pin, not one driving every Pmod line
+    # the pin-ID scan loads its design itself and runs first; the bridge loads the UART design, then the SPRAM
+    # design, so the last test designs on the board have a single TX pin, not one driving every Pmod line
     # first of all the board's own word is judged (sdk), which loads nothing
-    assert [t["test"] for t in report["tests"]] == ["sdk", "dip-switches", "wiring", "uart"]
-    # its SPRAM has no test yet (#343): planned, not run, and the board not failed for it
-    assert "bitstream" not in report["tests"][0] and report["not_run"] == {"spram": NO_TEST_YET.format(issue=343)}
+    assert [t["test"] for t in report["tests"]] == ["sdk", "dip-switches", "wiring", "uart", "spram"]
+    assert report["result"] == "pass" and "not_run" not in report and "bitstream" not in report["tests"][0]
     _dip, load, _display = [c for c in run.calls if "tt_fpga_program.py" in " ".join(c)]
     assert load[3].endswith("pmod-pin-id-tt-fpga/tt_fpga_platform.bin") and load[4:] == ["--gpio-release"]
     bridged = [c for c in run.calls if "tt_test_wrapper.py" in " ".join(c)]
-    assert [c[3].rsplit("/", 2)[-2] for c in bridged] == ["uart-test-tt-fpga"]
+    assert [c[3].rsplit("/", 2)[-2] for c in bridged] == ["uart-test-tt-fpga", "spram-test-tt-fpga"]
     assert bridged[0][2] == "/dev/ttyACM0" and bridged[0][5].endswith("test_uart.py")
+    # the SPRAM test (#343) runs through the bridge too, on the PTY the wrapper puts in place of the port
+    assert bridged[1][2] == "/dev/ttyACM0" and bridged[1][5].endswith("test_spram.py")
+    assert bridged[1][6:] == ["--port", "/dev/ttyACM0"]
     assert run.calls.index(load) < run.calls.index(bridged[0])
     assert report["state"] == {"variant": "tt-fpga", "serial": "E6"}
     assert report["flash_note"].startswith("none: nothing on the demo board is read back")
@@ -1601,9 +1603,9 @@ def test_a_chip_board_with_another_fault_says_both_and_an_fpga_board_has_no_wiri
     # the FPGA board's wiring test loads its design (the pin-ID scan): the chip board's script is not run there
     fpga_run = Runner([_rpi_hwid(TT_BOARD)])
     fpga = _check(TT, tmp_path / "fpga", TT_FOUND, fpga_run)
-    assert _passed_what_it_has(fpga) and list(fpga["not_run"]) == ["spram"]  # #343: no test yet
+    assert fpga["result"] == "pass" and "not_run" not in fpga
     assert not any(WIRING in " ".join(c) for c in fpga_run.calls)
-    assert [t["test"] for t in fpga["tests"]] == ["sdk", "dip-switches", "wiring", "uart"]
+    assert [t["test"] for t in fpga["tests"]] == ["sdk", "dip-switches", "wiring", "uart", "spram"]
 
 
 def test_the_report_of_a_chip_board_whose_ribbon_is_wrong_reads_plainly(tmp_path, monkeypatch):
@@ -1674,8 +1676,8 @@ def test_an_fpga_board_whose_sdk_test_fails_still_has_its_designs_loaded_and_tes
     _installed(monkeypatch)
     report = _check(TT, tmp_path, TT_FOUND, Runner([_rpi_hwid({**TT_BOARD, "sdk": "3.0.8"})]))
     assert [(t["test"], t["result"]) for t in report["tests"]] == [("sdk", "fail"), ("dip-switches", "pass"),
-                                                                    ("wiring", "pass"),
-                                                                    ("uart", "pass")]  # fmt: skip
+                                                                    ("wiring", "pass"), ("uart", "pass"),
+                                                                    ("spram", "pass")]  # fmt: skip
     assert report["result"] == "fail" and report["reason"].startswith("sdk fail: the FPGA breakout needs SDK 3.1.x")
 
 
@@ -1748,12 +1750,13 @@ def test_the_check_of_an_fpga_board_ends_by_leaving_the_display_design_running(t
     assert _passed_what_it_has(report) and "warnings" not in report
     assert report["left_running"] == {"design": "display", "bitstream": DISPLAY}
     # it is the last thing sent to the board: after every test, and nothing follows it but the bridge's start
-    assert _loads(run) == ["tt-display-tt-fpga", "pmod-pin-id-tt-fpga", "uart-test-tt-fpga", "tt-display-tt-fpga"]
+    assert _loads(run) == ["tt-display-tt-fpga", "pmod-pin-id-tt-fpga", "uart-test-tt-fpga", "spram-test-tt-fpga",
+                           "tt-display-tt-fpga"]  # fmt: skip
     last = run.calls[-2]
     assert last[1].endswith("tt_fpga_program.py") and last[2] == "/dev/ttyACM0" and last[3].endswith(DISPLAY)
     assert last[4:] == ["--gpio-release"] and _restarted_last(run)
     # it is no test: not in the tests, and nothing is run to read it
-    assert [t["test"] for t in report["tests"]] == ["sdk", "dip-switches", "wiring", "uart"]
+    assert [t["test"] for t in report["tests"]] == ["sdk", "dip-switches", "wiring", "uart", "spram"]
     assert "display" not in TT.tests
     shown = runner.summary({"result": "pass", "mode": "tt", "boards": [report]})
     assert f"    left running: the display design ({DISPLAY})" in shown and "WARNING" not in shown
@@ -1766,11 +1769,11 @@ def test_a_display_design_that_cannot_be_loaded_is_a_warning_not_the_boards_resu
     _installed(monkeypatch)
     run = Runner([(DISPLAY, [(0, "ok"), (1, "mpremote: no device found\nPROGRAM_FAILED")]), _rpi_hwid(TT_BOARD)])
     report = _check(TT, tmp_path, TT_FOUND, run)
-    assert _passed_what_it_has(report) and "display" not in report.get("reason", "") and "left_running" not in report
+    assert report["result"] == "pass" and "reason" not in report and "left_running" not in report
     assert report["warnings"] == [
         "the display design, which the check leaves running, could not be loaded (loading it failed (exit 1): "
         "mpremote: no device found PROGRAM_FAILED): the board is left as its last test left it"]  # fmt: skip
-    assert [t["result"] for t in report["tests"]] == ["pass", "pass", "pass", "pass"] and _restarted_last(run)
+    assert [t["result"] for t in report["tests"]] == ["pass", "pass", "pass", "pass", "pass"] and _restarted_last(run)
     whole = {"result": "pass", "mode": "tt", "boards": [report]}
     assert "    WARNING: the display design, which the check leaves running, could not" in runner.summary(whole)
     assert runner.details(whole)["board0_warnings"] == report["warnings"][0]
@@ -1782,7 +1785,23 @@ def test_a_display_design_that_cannot_be_loaded_is_a_warning_not_the_boards_resu
     assert report["result"] == "error" and "does not match its manifest" in report["warnings"][0]
     dip = report["tests"][1]
     assert dip["test"] == "dip-switches" and dip["result"] == "error" and "does not match its manifest" in dip["reason"]
-    assert _loads(run) == ["pmod-pin-id-tt-fpga", "uart-test-tt-fpga"]
+    assert _loads(run) == ["pmod-pin-id-tt-fpga", "uart-test-tt-fpga", "spram-test-tt-fpga"]
+
+
+def test_an_spram_that_fails_fails_the_board_in_the_designs_words_and_no_answer_is_an_error(tmp_path, monkeypatch):
+    """#343: test_spram.py's last "SPRAM:" line is the reason; its exit 2 (the design never answered) is an error."""
+    _installed(monkeypatch)
+    said = "SPRAM: FAIL at 0x10008000 read 0x00000000 expected 0x00004000"
+    run = Runner([("test_spram.py", (1, f"Opening /dev/pts/3 at 115200 baud...\n{said}\n")), _rpi_hwid(TT_BOARD)])
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    spram = report["tests"][-1]
+    assert (spram["test"], spram["result"]) == ("spram", "fail") and spram["reason"] == said[len("SPRAM: ") :]
+    assert report["result"] == "fail" and report["reason"] == f"spram fail: {said[len('SPRAM: ') :]}"
+    silent = "SPRAM: no answer from the SPRAM test design in 15 s: nothing was tested"
+    run = Runner([("test_spram.py", (2, silent)), _rpi_hwid(TT_BOARD)])
+    report = _check(TT, tmp_path / "silent", TT_FOUND, run)
+    assert report["tests"][-1]["result"] == "error" and report["result"] == "error"
+    assert report["reason"] == "spram error: no answer from the SPRAM test design in 15 s: nothing was tested"
 
 
 def test_the_display_design_is_left_after_single_tests_and_after_a_failed_test_too(tmp_path, monkeypatch):

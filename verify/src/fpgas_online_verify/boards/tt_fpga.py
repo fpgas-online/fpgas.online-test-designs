@@ -274,8 +274,8 @@ class TTFPGA(TestBoard):
                   "RP2350 loads each bitstream from the Pi")  # fmt: skip
     # Run in this order: the DIP switches first (#166), read under the display design, which drives only uo_out
     # and leaves ui_in and uio undriven without the iCE40's pull-up (tt_dip_switches.py says why); then the
-    # pin-ID scan, so the UART-bridge design (one TX pin) is the last test design, not one driving every Pmod
-    # line. What the board is left running is `left_running`, below.
+    # pin-ID scan, so the UART-bridge designs (uart, then spram: one TX pin each) are the last test designs, not
+    # one driving every Pmod line. What the board is left running is `left_running`, below.
     tests: ClassVar[dict] = {
         # Each of the demo board's DIP switches on ui_in is off: one that is on fails the board, named.
         "dip-switches": {"artifact": "tt-display-{v}/tt_fpga_platform.bin", "script": "tt_dip_switches.py",
@@ -290,13 +290,15 @@ class TTFPGA(TestBoard):
         "uart": {"artifact": "uart-test-tt-fpga/tt_fpga_platform.bin", "script": "test_uart.py",
                  "args": ["--port", "{port}", "--board", "tt", "--skip-banner"], "verify": True,
                  "runner": "tt-bridge"},
+        # The iCE40's 128 KB of SPRAM, written and read back by the design's own firmware on the script's word
+        # (designs/spram, #343): through the same bridge as uart, so it too drives only the UART's TX pin.
+        "spram": {"artifact": "spram-test-tt-fpga/tt_fpga_platform.bin", "script": "test_spram.py",
+                  "args": ["--port", "{port}"], "verify": True, "runner": "tt-bridge", "says": "SPRAM:"},
         "pmod": {"artifact": "gpio-loopback-{v}/tt_fpga_platform.bin", "script": "test_pmod_loopback.py",
                  "args": ["--board", "tt"], "pre": PMOD_PRE, "program_args": ["--gpio-release"]},
     }  # fmt: skip
 
-    # What the whole check is asked about (#340). The FPGA's memory is the iCE40's own SPRAM, which no test reads
-    # yet (#343).
-    not_yet: ClassVar[dict] = {"tt-fpga": {"spram": 343}}
+    # What the whole check is asked about (#340).
     cannot: ClassVar[dict] = {
         "tt-fpga": {**NO_PART, "jtag": "the iCE40UP5K has no JTAG port: it is loaded through the demo board's RP2350",
                     "flash": "the FPGA breakout has no configuration flash: the RP2350 streams each design from "
@@ -316,7 +318,8 @@ class TTFPGA(TestBoard):
         "sdk": "the board's chip, shuttle, microcontroller and SDK release are a combination the SDK supports",
         "dip-switches": "every DIP switch on ui_in is off",
         "uart": "printable text through the RP2350's bridge to the UART test design echoes back",
-        "spram": "the iCE40's 128 KB of SPRAM is written and read back",
+        "spram": "the iCE40's 128 KB of SPRAM reads back each word's address and its inverse, and each byte lane "
+        "writes alone",
         "pmod": "the Pmod loopback wiring reads back (-debug only)",
     }
     abouts_by_variant: ClassVar[dict] = {

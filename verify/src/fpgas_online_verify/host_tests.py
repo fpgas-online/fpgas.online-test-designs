@@ -10,6 +10,7 @@ SCRIPTS = {
     "test_ddr.py": "designs/ddr-memory/host/test_ddr.py",
     "test_spiflash.py": "designs/spi-flash-id/host/test_spiflash.py",
     "test_ethernet.py": "designs/ethernet-test/host/test_ethernet.py",
+    "test_spram.py": "designs/spram/host/test_spram.py",
     "test_pmod_loopback.py": "designs/pmod-loopback/host/test_pmod_loopback.py",
     "identify_pmod_pins.py": "designs/pmod-pin-id/host/identify_pmod_pins.py",
     "tt_fpga_program.py": "designs/_host/tt_fpga_program.py",
