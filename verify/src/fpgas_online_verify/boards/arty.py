@@ -41,6 +41,18 @@ class Arty(TestBoard):
                    "args": ["--board", "arty"], "pre": PMOD_PRE, "verify": True, "says": "PIN-ID:"},
     }  # fmt: skip
 
+    abouts: ClassVar[dict] = {
+        "jtag": "over its FT2232H, the JTAG IDCODE is an XC7A35T's and the device DNA reads",
+        "uart": "the UART test design's BIOS banner arrives and printable text echoes back",
+        "ddr": "the LiteX BIOS calibrates the DDR3 and its memory test passes",
+        "flash": "a test design reads the SPI flash's JEDEC ID",
+        "ethernet": "the design answers ARP and ping through the Pi's USB Ethernet adapter cabled to its RJ45",
+        "wiring": (
+            "each Pmod HAT wire but the six on the shared JA/JB pins carries the FPGA pin the cabling map puts there"
+        ),
+        "pmod": "the Pmod loopback wiring reads back (-debug only)",
+    }
+
     def idcode_argv(self, host):
         return ["openFPGALoader", "-b", "arty", "--detect", *idcode.OPENFPGALOADER_RAW_ARGS]
 

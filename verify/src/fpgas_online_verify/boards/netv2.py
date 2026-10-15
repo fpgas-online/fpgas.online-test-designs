@@ -87,6 +87,16 @@ class NeTV2(TestBoard):
         for variant in variants
     }  # fmt: skip
 
+    abouts: ClassVar[dict] = {
+        "jtag": "over the Pi's header, the JTAG IDCODE is the variant's part and the device DNA reads",
+        "uart": "printable text sent to the UART test design echoes back over the header's UART",
+        "ddr": "the LiteX BIOS calibrates the DDR3 and its memory test passes",
+        "flash": "a test design reads the SPI flash's JEDEC ID",
+        "ethernet": "the design answers ARP and ping through a Pi USB Ethernet adapter cabled to the NeTV2's RJ45",
+        "pmod": "the 1-bit loopback through the header's UART pins reads back",
+        "pmod-pin-id": "the Pmod pin-ID scan (-debug only: the NeTV2 has no Pmod HAT cabling)",
+    }
+
     def facts(self, port=None):
         host = {**host_facts(), "port": port or self.port, "base": None}
         if is_pi(host["model"]) and not is_pi5(host["model"]):

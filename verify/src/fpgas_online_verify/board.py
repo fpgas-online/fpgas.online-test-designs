@@ -91,6 +91,11 @@ class Board:
         not run yet. They are planned, and not run with checks.NO_TEST_YET."""
         return {}
 
+    def about(self, variant, found=None):
+        """{test: what it checks, in one line under checks.ABOUT_MAX characters} for every test the board plans
+        (#346): the site's check headers and should-have-run titles say it, so it is never guessed there."""
+        return {}
+
     def derived(self, variant, found=None):
         """{test: (its source tests, what they cover)} for a test whose result is derived from others (checks.derive):
         the `wiring` of a board whose wires to the Pi are each checked by a test of their own."""

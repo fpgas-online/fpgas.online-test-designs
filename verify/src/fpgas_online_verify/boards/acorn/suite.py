@@ -50,6 +50,22 @@ from . import bist, check, links
 from . import setup as setups
 
 TESTS = ("pcie-link", "pcie-bar0", "rp1-pio", "jtag", "flash", "ddr", "p2-uart", "p2-serial", "scratch", "p2-gpio")
+# What each test checks, one line (Board.about, #346), from the docstring above.
+ABOUT = {
+    "pcie-link": "the PCIe link's speed and width are the setup's",
+    "pcie-bar0": "over PCIe BAR0: the build running, the flash's identity, the device DNA, the XADC readings",
+    "power-cycle": (
+        "the FPGA restarted since the last boot's check (scratch holds its reset value or this boot's marker)"
+    ),
+    "rp1-pio": "the Pi 5's RP1 PIO, which JTAG uses, is there and can be opened",
+    "jtag": "over the P1 cable, the JTAG IDCODE and device DNA read, and the DNA is BAR0's",
+    "flash": "both flash slots are read whole and match the release's images",
+    "ddr": "the DRAM self-test over the whole DRAM: no errors, bandwidth at least the variant's minimum",
+    "p2-uart": "the UARTBone bridge on the P2 cable answers at both baud rates",
+    "p2-serial": "J2 and K2 on the P2 cable work in both directions through the P2 serial switch",
+    "scratch": "the scratch register reads back what was written, over BAR0 and over the P2 UART",
+    "p2-gpio": "J5 and H5 on the P2 cable work in both directions",
+}
 # Opt-in (options["power_cycle_check"], the `power-cycle-check` setting): not in the check unless switched on.
 POWER_CYCLE = "power-cycle"
 SELECTABLE = (*TESTS[:2], POWER_CYCLE, *TESTS[2:])  # what --test can name (the board's `tests`), in running order

@@ -312,6 +312,20 @@ class TTFPGA(TestBoard):
                "uart": "only an FPGA board has a UART test, and the board did not say whether it carries an FPGA",
                **NO_PART},
     }  # fmt: skip
+    abouts: ClassVar[dict] = {
+        "sdk": "the board's chip, shuttle, microcontroller and SDK release are a combination the SDK supports",
+        "dip-switches": "every DIP switch on ui_in is off",
+        "uart": "printable text through the RP2350's bridge to the UART test design echoes back",
+        "spram": "the iCE40's 128 KB of SPRAM is written and read back",
+        "pmod": "the Pmod loopback wiring reads back (-debug only)",
+    }
+    abouts_by_variant: ClassVar[dict] = {
+        "tt-fpga": {"wiring": "each Pmod HAT wire carries the FPGA pin the cabling map puts there (the pin-ID scan)"},
+        "tt-asic": {
+            "wiring": "the RP2040 drives each ui_in and uio line and the Pi reads it on its HAT pin, bit by bit"
+        },
+        None: {"wiring": "the three Pmod ribbons to the Pi's HAT, pin by pin (how depends on the board, not yet said)"},
+    }
     # The variant is settled from the board's own word: one not settled would still have had its `sdk` test, and a
     # wiring test whichever board it is.
     planned_unsettled = ("sdk", "wiring")

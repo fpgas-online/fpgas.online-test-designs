@@ -217,6 +217,15 @@ class Fomu(TestBoard):
         "evt": {"wiring": (("header", "uart"), "it sits on the Pi's header: its reset, CDONE and SPI flash lines "
                                                "(header) and its UART lines (uart)")}
     }  # fmt: skip
+    abouts: ClassVar[dict] = {
+        "header": "over the Pi's header: CDONE, the iCE40 held in reset, the SPI flash's JEDEC and unique IDs",
+        "foboot": "foboot, its USB DFU bootloader, enumerates again after the reset",
+        "uart": "a design loaded over DFU echoes printable text back over the header's UART",
+        "flash": "a test design reads the SPI flash's JEDEC ID",
+        "foboot-after": "the closing reset brings foboot back on USB, so the next user can load a design",
+        "pmod": "the Pmod loopback wiring reads back (-debug only)",
+        "pmod-pin-id": "the Pmod pin-ID scan (-debug only: it cannot pass on the EVT, #202)",
+    }
     cannot: ClassVar[dict] = {
         "evt": {
             "jtag": "the iCE40UP5K has no JTAG port: the Fomu is loaded over USB DFU, by foboot",

@@ -2216,3 +2216,30 @@ def test_a_foboot_whose_device_number_cannot_be_read_is_an_error_said_not_a_time
     assert not any("fomu_header_id.py" in " ".join(c) for c in run.calls)  # nothing was reset
     after = FOMU.reset_to_foboot(_host(FOMU), run)
     assert after["result"] == "error" and "devnum" in after["reason"]
+
+
+# -- what each planned test checks, one line (Board.about, #346) -----------------------------------------------
+
+ABOUT_VARIANTS = [(b, v) for b in (ARTY, NETV2, FOMU) for v in b.variants]
+ABOUT_VARIANTS += [(TT, "tt-fpga"), (TT, "tt-asic"), (TT, None), (ACORN, "cle-215+")]
+
+
+@pytest.mark.parametrize("board, variant", ABOUT_VARIANTS)
+def test_every_planned_test_says_what_it_checks_in_one_short_line(board, variant):
+    found = {"variant": variant}
+    about = board.about(variant, found)
+    for test in board.planned(variant, {"power_cycle_check": True}, found):
+        text = about[test]  # a planned test without one is a bug (runner.plan's KeyError)
+        assert text and len(text) <= checks.ABOUT_MAX and "\n" not in text, (board.name, test, text)
+
+
+def test_every_selectable_test_says_what_it_checks():
+    for board in (ARTY, NETV2, FOMU, TT):
+        about = {**board.about(None), **{t: x for v in board.variants for t, x in board.about(v).items()}}
+        assert set(board.tests) <= set(about), board.name
+
+
+def test_a_derived_tests_description_is_where_it_comes_from():
+    assert NETV2.about("a7-35")["wiring"] == NETV2.derived("a7-35")["wiring"][1]
+    assert TT.about("tt-asic")["wiring"] != TT.about("tt-fpga")["wiring"]  # the same name, another test
+    assert ACORN.about(None, {"variant": "cle-215+", "title": "PicoEVB"}) == {}

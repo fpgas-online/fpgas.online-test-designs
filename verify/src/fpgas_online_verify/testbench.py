@@ -426,6 +426,10 @@ class TestBoard(Board):
     # variant -> {test: (source tests, what they cover)}: a test derived from others (checks.derive), planned before
     # closing_test (the wiring of a board whose header lines each have a test of their own).
     derives: ClassVar[dict] = {}
+    # What each test checks, one line (Board.about, #346): {test: text}, and variant -> {test: text} where a test
+    # means another thing on another variant (the TT board's `wiring`). A derived test's is its derives text.
+    abouts: ClassVar[dict] = {}
+    abouts_by_variant: ClassVar[dict] = {}
     # A board with variant_from_board whose variant was not settled: what its check would still have run.
     planned_unsettled = ()
 
@@ -437,6 +441,10 @@ class TestBoard(Board):
 
     def derived(self, variant, found=None):
         return dict(self.derives.get(variant, {}))
+
+    def about(self, variant, found=None):
+        derived = {test: text for test, (_, text) in self.derived(variant, found).items()}
+        return {**self.abouts, **self.abouts_by_variant.get(variant, {}), **derived}
 
     def planned(self, variant, options=None, found=None):
         if variant is None and self.variant_from_board:
