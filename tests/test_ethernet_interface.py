@@ -145,3 +145,47 @@ def test_a_carrier_that_cannot_be_read_is_no_link(tmp_path):
     clock = _Clock(tmp_path, "eth1", up_at=None)
     clock.carrier.unlink()
     assert te.wait_for_link("eth1", 5, sysfs=tmp_path, clock=clock) is None
+
+
+# -- the reason the boot check reports ------------------------------------------------------------------------
+# fpgas-verify takes the last "ETHERNET:" line of a failed run as its reason (the test's `says`); without one the
+# reason is only "the test exited 1" (#333).
+
+
+def _run(monkeypatch, capsys, *, iface="eth1", why=None, link=1.0, arp=True, ping=True):
+    monkeypatch.setattr(te, "find_usb_ethernet_interface", lambda: (iface, why))
+    monkeypatch.setattr(te, "not_root_reason", lambda i: None)
+    monkeypatch.setattr(te, "configure_interface", lambda *a: None)
+    monkeypatch.setattr(te, "read_mac_from_bios", lambda *a: ("10:e2:d5:00:00:00", []))
+    monkeypatch.setattr(te, "wait_for_link", lambda i, t: link)
+    monkeypatch.setattr(te, "test_arp", lambda ip, i: (arp, "10:e2:d5:00:00:00" if arp else None))
+    monkeypatch.setattr(te, "test_ping", lambda ip, i: (ping, "rtt" if ping else ""))
+    ok = te.run_test("arty", "/dev/ttyUSB1", 115200)
+    said = [line for line in capsys.readouterr().out.splitlines() if line.startswith("ETHERNET:")]
+    return ok, said
+
+
+def test_a_pass_says_nothing(monkeypatch, capsys):
+    assert _run(monkeypatch, capsys) == (True, [])
+
+
+def test_no_adapter_is_the_reason(monkeypatch, capsys):
+    ok, said = _run(monkeypatch, capsys, iface=None, why="no USB Ethernet adapter free for the test")
+    assert not ok and said == ["ETHERNET: no USB Ethernet adapter free for the test"]
+
+
+def test_no_link_is_the_reason_not_two_timeouts(monkeypatch, capsys):
+    ok, said = _run(monkeypatch, capsys, link=None)
+    assert not ok and said == [f"ETHERNET: no link on eth1 after {te.LINK_TIMEOUT} s, so ARP and ping were not tried"]
+
+
+def test_every_failed_step_is_in_the_reason(monkeypatch, capsys):
+    ok, said = _run(monkeypatch, capsys, arp=False, ping=False)
+    assert not ok and said == ["ETHERNET: link up after 1.0 s; ARP request got no response; ICMP ping failed"]
+
+
+def test_not_root_is_the_reason(monkeypatch, capsys):
+    monkeypatch.setattr(te, "find_usb_ethernet_interface", lambda: ("eth1", None))
+    monkeypatch.setattr(te, "not_root_reason", lambda i: "FAIL - not running as root")
+    assert te.run_test("arty", "/dev/ttyUSB1", 115200) is False
+    assert "ETHERNET: not running as root" in capsys.readouterr().out.splitlines()
