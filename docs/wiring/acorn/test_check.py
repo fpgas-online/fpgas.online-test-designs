@@ -63,7 +63,7 @@ def test_a_crossed_pair_is_told_by_the_wire_numbers_of_the_cable(key):
     pins = wiring.CONNECTORS["P2"]["pins"]
     a, b = pins.index("J2") + 1, pins.index("K2") + 1
     words = check.swap(c, "J2", "K2")
-    assert f"wires {a} and {b} of the P2 cable are in each other's cavity" in words
+    assert f"wires {min(a, b)} and {max(a, b)} of the P2 cable are in each other's cavity" in words
     assert (f"The {c.resistor_value} resistor stays in wire {a} (J2)" in words) == ("J2" in c.resistors)
 
 

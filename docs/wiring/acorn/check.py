@@ -220,8 +220,9 @@ def swap(c, a, b):
     (connector, na), (other, nb) = wire_of(a), wire_of(b)
     if connector != other:
         raise wiring.WiringError(f"{a} and {b} are on different cables: they cannot be in each other's cavity")
+    lo, hi = sorted((na, nb))
     words = (
-        f"wires {na} and {nb} of the {connector} cable are in each other's cavity. Take both terminals out of the "
+        f"wires {lo} and {hi} of the {connector} cable are in each other's cavity. Take both terminals out of the "
         f"housing and put each in the other's cavity (the {connector} cavity picture below)"
     )
     for sig in (a, b):
