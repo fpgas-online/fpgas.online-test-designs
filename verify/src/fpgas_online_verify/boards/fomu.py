@@ -320,8 +320,8 @@ class Fomu(TestBoard):
         reset = self.reset_to_foboot(host, runner)
         if reset["result"] == "pass":
             return None
-        return {**entry, "result": reset["result"], "reason": f"the reset back into foboot before it: {reset['reason']}",
-                "output": reset["output"]}  # fmt: skip
+        return {**entry, "result": reset["result"], "output": reset["output"],
+                "reason": f"the reset back into foboot before it: {reset['reason']}"}  # fmt: skip
 
     def reset_to_foboot(self, host, runner=None):
         """Reset the iCE40 through the header with fomu_header_id.py (the same safe reset as before the tests, every
