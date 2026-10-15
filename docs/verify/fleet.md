@@ -30,7 +30,7 @@ The check tells the site what it is doing as it goes. `fleet-event` (from
 | `fpga-board-identified` | exactly once for each board found: an Acorn once PCIe and JTAG have said who it is, any other board before its tests; a board whose check stops first, or that is not checked (`--test` naming none of its tests), from what finding it showed | `schema` (`fpga-identity/1`) and the board's [identity](../identity.md) |
 | `fpga-test-started` | each test starts | `board`, `test` |
 | `fpga-test-finished` | each test ends | `board`, `test`, `result`, `reason` |
-| `fpga-verified` | the check is done | the report, flattened: `result`, `mode`, `reason`; per board `board0` (`netv2 a7-35 fail`), `board0_reason`, `board0_tests` (`uart=pass ddr=fail spiflash=pass`), `board0_not_run` (the names in `not_run`, when there are any), `board0_left_running` (the design's name) or `board0_warnings`, `board0_bitstreams`, `board0_state_*`, `board0_identity_*` |
+| `fpga-verified` | the check is done | the report, flattened: `result`, `mode`, `reason`; per board `board0` (`netv2 a7-35 fail`), `board0_reason`, `board0_tests` (`jtag=pass uart=pass ddr=fail flash=pass`), `board0_not_run` (the names in `not_run`, when there are any), `board0_not_run_<test>` (why that test did not run), `board0_planned`, `board0_groups`, `board0_not_applicable_<check>` ([the planned-tests fields](#the-planned-tests-fields)), `board0_left_running` (the design's name) or `board0_warnings`, `board0_bitstreams`, `board0_state_*`, `board0_identity_*` |
 
 * `board` is the board's name, or `name@where` when there are two of a kind.
 * In `board0`, a Xilinx PCIe card that the Acorn's check found but whose IDs name another board (a PCIe Screamer, a
@@ -60,6 +60,22 @@ fpga-board-identified {"board": "acorn", "kind": "acorn", "variant": "cle-215+",
 ```
 
 They come between `fpga-verifying` and `fpga-verified`.
+
+## The planned-tests fields
+
+`fpga-verified` says what each board's whole check should run, not only what ran, so a board whose check
+stopped early still shows every test it did not get to. For board `i`, all values are flat strings:
+
+| Field | Value |
+|---|---|
+| `board<i>_planned` | every test the check should run, in running order, space-separated. Also set when the check stopped early |
+| `board<i>_groups` | each planned test and its group (`basic`, `memory`, `peripherals` or `board-specific`), as `test=group`, space-separated |
+| `board<i>_not_run` | the names of the tests that did not run, joined with `, ` |
+| `board<i>_not_run_<test>` | why that test did not run: the check stopped before it (with the reason), or `no boot-check test yet: fpgas.online-test-designs #N` for a test not written yet |
+| `board<i>_not_applicable_<check>` | why the board cannot have that common check (`jtag`, `wiring`, `flash`, `ddr`, `uart` or `ethernet`) |
+
+A test with no boot-check test yet does not fail the board. What each board type plans, and why a check does not
+apply, is in [what each board type's check plans](tests.md#what-each-board-types-check-plans).
 
 ## How a deploy picks up new packages
 
