@@ -43,5 +43,15 @@ class Acorn(Board):
     def check(self, host, found, options):
         return suite.check_board(found, options)
 
+    def planned(self, variant, options=None):
+        return list(suite.SELECTABLE if (options or {}).get("power_cycle_check") else suite.TESTS)
+
+    def not_applicable(self, variant):
+        return {
+            "wiring": "its two cables are each tested by name: jtag (P1), and p2-uart, p2-serial and p2-gpio (P2)",
+            "uart": "its UART is on the P2 cable: p2-uart tests it",
+            "ethernet": "an Acorn is an M.2 PCIe card with no Ethernet",
+        }
+
 
 BOARD = Acorn()

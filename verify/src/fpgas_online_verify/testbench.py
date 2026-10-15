@@ -31,7 +31,7 @@ import sys
 import tempfile
 from typing import ClassVar
 
-from . import bitstreams, dna, host_tests, idcode, identity
+from . import bitstreams, checks, dna, host_tests, idcode, identity
 from .board import Board
 from .core import Problem, host_facts, run, tail, usb_matching, worst
 
@@ -415,6 +415,32 @@ class TestBoard(Board):
     # report, never the board's result: the board was tested before it, and is left as its last test left it.
     left_running: ClassVar[dict] = {}
 
+    # What the whole check is asked about (checks.py, #340): variant -> {test: the test-designs issue that adds it}
+    # for a test the board's hardware calls for and the check does not run yet (planned, and not run with
+    # checks.NO_TEST_YET; it fails the board only with checks.UNTESTED_FAILS), and variant -> {common check: why
+    # the board cannot have it}.
+    not_yet: ClassVar[dict] = {}
+    cannot: ClassVar[dict] = {}
+    # The test entry finish() adds, when it adds one (the Fomu's foboot-after): planned last.
+    closing_test = None
+    # A board with variant_from_board whose variant was not settled: what its check would still have run.
+    planned_unsettled = ()
+
+    def untested(self, variant):
+        return dict(self.not_yet.get(variant, {}))
+
+    def not_applicable(self, variant):
+        return dict(self.cannot.get(variant, {}))
+
+    def planned(self, variant, options=None):
+        if variant is None and self.variant_from_board:
+            return list(self.planned_unsettled)
+        out = ["jtag"] if variant in self.idcodes else []
+        out += self.fact_tests_for(variant) + self.script_tests_for(variant)
+        out += self.verify_tests if variant in self.variants else []
+        out += [t for t in self.untested(variant) if t not in out]
+        return out + ([self.closing_test] if self.closing_test else [])
+
     def artifacts(self):
         """[(test or design name, variant, artifact path)]: every bitstream the bitstreams package holds."""
         out = [(test, variant, self.artifact(test, variant)) for test in self.tests for variant in self.variants]
@@ -506,9 +532,16 @@ class TestBoard(Board):
             return {**report, "result": p.result, "reason": p.reason}
         if manifest is not None:
             report["bitstreams"] = manifest.get("version")
-        if self.idcodes and not late:  # a JTAG part is a variant's: none is known yet for a late one
-            report["jtag"] = self.jtag(host, found, variant, runner)
         event = options.get("event") or (lambda stage, details: None)
+        if self.idcodes and not late:  # a JTAG part is a variant's: none is known yet for a late one
+            # Reported as the board's first test too (#340), and kept whole under "jtag" for the identity.
+            event("fpga-test-started", {"test": "jtag"})
+            jtag = report["jtag"] = self.jtag(host, found, variant, runner)
+            report["tests"].append({"test": "jtag", "result": jtag["result"],
+                                    **({"reason": jtag["reason"]} if "reason" in jtag else {}),
+                                    "output": list(jtag.get("output", []))})  # fmt: skip
+            event("fpga-test-finished", {"test": "jtag", "result": jtag["result"], "reason": jtag.get("reason", "")})
+        not_yet = {}  # the planned tests not written yet (checks.NO_TEST_YET)
         with self.services_stopped(runner, options.get("restart_later")) as held:
             facts = self.port_facts(host, found, runner)
             if late:
@@ -533,6 +566,9 @@ class TestBoard(Board):
                 done = report["tests"][-1]
                 event("fpga-test-finished", {"test": test, "result": done["result"], "reason": done.get("reason", "")})
             not_run = dict(self.pending.get(variant, {})) if not refused else {}
+            if not refused and not options.get("tests"):
+                not_yet = checks.untested_reasons(self.untested(variant))
+                not_run.update({t: why for t, why in not_yet.items() if t not in not_run})
             for test in self.script_tests_for(variant) if not options.get("tests") and not refused else ():
                 failed = [
                     t["test"]
@@ -582,7 +618,7 @@ class TestBoard(Board):
         jedec = next((t["flash_jedec"] for t in report["tests"] if "flash_jedec" in t), None)
         if jedec:
             state["flash_jedec"] = jedec
-        results = [t["result"] for t in report["tests"]] + ([jtag["result"]] if jtag else [])
+        results = [t["result"] for t in report["tests"]]
         facts_failed = [f"{k}: {v}" for k, v in facts.items() if k.endswith(identity.ERROR_SUFFIX)]
         if facts_failed:
             results.append("error")
@@ -601,7 +637,8 @@ class TestBoard(Board):
         if refused:
             results.append(refused.result)
         report["state"] = state
-        untested = [f"{test} not run: {why}" for test, why in report.get("not_run", {}).items()]
+        untested = [f"{test} not run: {why}" for test, why in report.get("not_run", {}).items()
+                    if checks.UNTESTED_FAILS or test not in not_yet]  # fmt: skip
         if untested:
             results.append("fail")
         report["result"] = worst(results)
@@ -610,8 +647,6 @@ class TestBoard(Board):
         reasons += held["failed"]
         if refused:
             reasons.insert(0, refused.reason)
-        if jtag and jtag["result"] != "pass":
-            reasons.insert(0, f"jtag {jtag['result']}: {jtag['reason']}")
         if reasons:
             report["reason"] = "; ".join(reasons)
         elif "flash_error" in report:

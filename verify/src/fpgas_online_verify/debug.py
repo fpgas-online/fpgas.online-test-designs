@@ -9,7 +9,7 @@ identification (a PMOD HAT) and Ethernet (a USB Ethernet adapter).
     sudo fpgas-arty-debug check                   # the installed bitstreams against their manifest
     sudo fpgas-arty-debug program uart            # load a test's design and leave it running
     sudo fpgas-arty-debug test ddr                # load it and run its test, output as it comes
-    sudo fpgas-arty-debug test pin-id -- --hat-port JA    # after --: arguments for the test script
+    sudo fpgas-arty-debug test wiring -- --hat-port JA    # after --: arguments for the test script
     sudo fpgas-acorn-debug identify               # who the Acorn is: fpgas-acorn-verify --identify
 """
 

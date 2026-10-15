@@ -170,13 +170,24 @@ class Fomu(TestBoard):
         "uart": {"artifact": "uart-test-fomu/kosagi_fomu_evt.bin", "script": "test_uart.py",
                  "args": ["--port", "{port}", "--board", "fomu", "--skip-banner"], "verify": True,
                  "needs": ("foboot",)},
-        "spiflash": {"artifact": "spiflash-test-fomu/kosagi_fomu_evt.bin", "script": "test_spiflash.py",
+        "flash": {"artifact": "spiflash-test-fomu/kosagi_fomu_evt.bin", "script": "test_spiflash.py",
                      "args": ["--port", "{port}", "--board", "fomu"], "needs": ("foboot",)},
         "pmod": {"artifact": "gpio-loopback-fomu-{v}/kosagi_fomu_evt.bin", "script": "test_pmod_loopback.py",
                  "args": ["--board", "fomu"], "pre": PMOD_PRE, "needs": ("foboot",)},
-        "pin-id": {"artifact": "pmod-pin-id-fomu-{v}/kosagi_fomu_evt.bin", "script": "identify_pmod_pins.py",
+        "wiring": {"artifact": "pmod-pin-id-fomu-{v}/kosagi_fomu_evt.bin", "script": "identify_pmod_pins.py",
                    "args": [], "pre": PMOD_PRE, "needs": ("foboot",)},
     }  # fmt: skip
+    closing_test = "foboot-after"
+    # #340: its flash test is not in the boot check yet (#342: a DFU load replaces foboot until a reset).
+    not_yet: ClassVar[dict] = {"evt": {"flash": 342}}
+    cannot: ClassVar[dict] = {
+        "evt": {
+            "jtag": "the iCE40UP5K has no JTAG port: the Fomu is loaded over USB DFU, by foboot",
+            "wiring": "it sits on the Pi's header, whose reset, CDONE and SPI lines the header test checks",
+            "ddr": "the Fomu EVT has no DRAM",
+            "ethernet": "the Fomu EVT has no Ethernet",
+        }
+    }
 
     def probe(self, host, runner=run):
         """A Fomu on the header: CDONE (GPIO17) high, read with pinctrl, which drives nothing. GPIO17 is also the
@@ -235,6 +246,7 @@ class Fomu(TestBoard):
                 report.setdefault("warnings", []).append(self.by_name_note)
             return None
         if results["header"] != "pass" or results.get("foboot") != "pass":
+            report.setdefault("not_run", {})[self.closing_test] = "it needs header and foboot to pass first"
             return None
         return self.reset_to_foboot(host, runner)
 

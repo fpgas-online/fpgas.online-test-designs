@@ -22,7 +22,7 @@ import pathlib
 import sys
 import tempfile
 
-from . import conclusion, config, identity, state
+from . import checks, conclusion, config, identity, state
 from .board import installed
 from .core import Problem, flatten, hold_lock, pci_devices, publish, tail, usb_devices, worst
 from .core import run as run_command
@@ -261,6 +261,8 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
             board_event("fpga-board-identified", identity.details(reports[-1]["identity"]))
         if skipped:
             reports[-1]["tests_skipped"] = skipped
+        if not options.get("tests"):  # the whole check: what it should have run, however far it got
+            plan(board, reports[-1], found, options)
     report["boards"] = reports
     if not_checked:
         report["not_checked"] = not_checked
@@ -279,6 +281,21 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
     if report["state"].get("changes"):
         report["result"] = worst([report["result"], "changed"])
     return report
+
+
+def plan(board, report, found, options):
+    """Put in a board's report what its whole check should run (checks.py, #340, #339): planned, groups and
+    not_applicable, and in not_run each planned test that did not run and has no reason there yet, with the
+    reason the check stopped (a refusal, a Problem, a crash)."""
+    variant = report.get("variant") or found.get("variant")
+    report["planned"] = board.planned(variant, options)
+    report["groups"] = checks.groups(report["planned"])
+    report["not_applicable"] = board.not_applicable(variant)
+    ran = {t["test"] for t in report.get("tests", [])}
+    missing = [t for t in report["planned"] if t not in ran and t not in report.get("not_run", {})]
+    if missing:
+        why = checks.STOPPED.format(reason=report["reason"]) if report.get("reason") else checks.STOPPED_NO_REASON
+        report["not_run"] = {**report.get("not_run", {}), **dict.fromkeys(missing, why)}
 
 
 def _sendable_identity(report, base):
@@ -316,6 +333,11 @@ def details(report):
             out[f"board{i}_tests"] = " ".join(f"{t['test']}={t['result']}" for t in b["tests"])
         if b.get("not_run"):
             out[f"board{i}_not_run"] = ", ".join(b["not_run"])
+            out.update({f"board{i}_not_run_{test}": why for test, why in b["not_run"].items()})
+        if b.get("planned"):
+            out[f"board{i}_planned"] = " ".join(b["planned"])
+            out[f"board{i}_groups"] = " ".join(f"{t}={g}" for t, g in b["groups"].items())
+        out.update({f"board{i}_not_applicable_{check}": why for check, why in b.get("not_applicable", {}).items()})
         if b.get("left_running"):
             out[f"board{i}_left_running"] = b["left_running"]["design"]
         if b.get("warnings"):

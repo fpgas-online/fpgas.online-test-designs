@@ -26,7 +26,7 @@ from a command server run in RAM over its raw REPL, the Pi reads every HAT line,
 tt_um_factory_test (uo_out = uio_in) carries the uio walk out on uo_out. A fault is named by its ribbon and
 pin. The script then puts the board back from RAM as its SDK had it (tt_sdk_start.py only if that fails). Until this
 test was here such a board failed as untested (Tim, 2026-10-05: "Fail until wiring is tested and prioritize
-landing the setup which properly tests the wiring"). The FPGA board's wiring test is `pin-id`.
+landing the setup which properly tests the wiring"). The FPGA board's wiring test (also `wiring`) loads a design.
 
 Nothing is written to the demo board: for every load the RP2350 reads the bitstream from the Pi over the serial
 link (tt_fpga_program.py, `mpremote mount`). The board has no flash of its own to compare, so the state is the
@@ -221,6 +221,12 @@ def sdk_check(variant, facts, found=None):
 
 
 PMOD_PRE = [["rmmod", "spidev", "spi_bcm2835"]]
+# The common checks (checks.py) for parts no Tiny Tapeout demo board has, FPGA breakout or chip.
+NO_PART = {
+    "flash": "the demo board and the FPGA breakout have no SPI flash: the RP2 loads each design from the Pi",
+    "ddr": "the demo board has no DRAM",
+    "ethernet": "the demo board has no Ethernet",
+}
 VENDOR = "2e8a"  # Raspberry Pi
 # The products a Tiny Tapeout demo board's microcontroller shows: MicroPython's USB serial (the two ids the
 # fpgas-tt udev rule matches; an FPGA board's RP2350 has been read as 0005), and the RP2's boot loader, which is
@@ -276,8 +282,10 @@ class TTFPGA(TestBoard):
         "dip-switches": {"artifact": "tt-display-{v}/tt_fpga_platform.bin", "script": "tt_dip_switches.py",
                          "args": ["{port}"], "program_args": ["--gpio-release"], "says": "DIP_SWITCHES:",
                          "verify": True},
-        # The Pmod HAT cabling, against identify_pmod_pins.BOARDS["tt"] (ui_in on HAT JA, uio JB, uo_out JC).
-        "pin-id": {"artifact": "pmod-pin-id-{v}/tt_fpga_platform.bin", "script": "identify_pmod_pins.py",
+        # The Pmod HAT cabling, against identify_pmod_pins.BOARDS["tt"] (ui_in on HAT JA, uio JB, uo_out JC). It
+        # was `pin-id` until 15 Oct 2026 (#340): `wiring` is the cabling test's name on every board, as on a board
+        # with a Tiny Tapeout chip (script_tests), which never runs this one.
+        "wiring": {"artifact": "pmod-pin-id-{v}/tt_fpga_platform.bin", "script": "identify_pmod_pins.py",
                    "args": ["--board", "tt"], "pre": PMOD_PRE, "program_args": ["--gpio-release"],
                    "verify": True, "says": "PIN-ID:"},
         "uart": {"artifact": "uart-test-tt-fpga/tt_fpga_platform.bin", "script": "test_uart.py",
@@ -286,6 +294,22 @@ class TTFPGA(TestBoard):
         "pmod": {"artifact": "gpio-loopback-{v}/tt_fpga_platform.bin", "script": "test_pmod_loopback.py",
                  "args": ["--board", "tt"], "pre": PMOD_PRE, "program_args": ["--gpio-release"]},
     }  # fmt: skip
+
+    # What the whole check is asked about (#340). The FPGA's memory is the iCE40's own SPRAM, which no test reads
+    # yet (#343).
+    not_yet: ClassVar[dict] = {"tt-fpga": {"spram": 343}}
+    cannot: ClassVar[dict] = {
+        "tt-fpga": {"jtag": "the iCE40UP5K has no JTAG port: it is loaded through the demo board's RP2350",
+                    **NO_PART},
+        "tt-asic": {"jtag": "a Tiny Tapeout chip is an ASIC, not an FPGA: nothing on it is configured over JTAG",
+                    "uart": "the chip has no UART to the Pi: the Pi reaches the demo board's RP2040 over USB",
+                    **NO_PART},
+        None: {"jtag": "neither a TT FPGA breakout (an iCE40UP5K, loaded through the RP2350) nor a Tiny Tapeout "
+                       "chip has a JTAG port",
+               **NO_PART},
+    }  # fmt: skip
+    # The variant is settled from the board's own word: one not settled would still have had its `sdk` test.
+    planned_unsettled = ("sdk",)
 
     # #139: the check ends by streaming a design that moves the seven-segment display, so the board looks
     # alive on its camera until a visitor loads a design (designs/tt-display: clocked by the iCE40's own

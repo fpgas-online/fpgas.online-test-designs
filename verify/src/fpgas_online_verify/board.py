@@ -78,6 +78,22 @@ class Board:
         facts that must not change between runs (see state.py)."""
         raise NotImplementedError
 
+    # -- what the check should run (checks.py) ----------------------------------------------------------------
+
+    def planned(self, variant, options=None):
+        """Every test the board's whole check runs for `variant` (None: not known), in running order, with the
+        ones not written yet (untested). The report carries it however far the check got."""
+        return []
+
+    def untested(self, variant):
+        """{test: the test-designs issue that adds it}: tests the board's hardware calls for that its check does
+        not run yet. They are planned, and not run with checks.NO_TEST_YET."""
+        return {}
+
+    def not_applicable(self, variant):
+        """{common check (checks.COMMON): why this board cannot have it}, for each one it does not plan."""
+        return {}
+
 
 def installed():
     """{name: Board} for every board module installed."""
