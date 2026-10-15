@@ -11,7 +11,7 @@ import pathlib
 import re
 import subprocess
 
-from fpgas_online_verify import conclusion, runner
+from fpgas_online_verify import checks, conclusion, runner
 from fpgas_online_verify.boards import tt_fpga
 from fpgas_online_verify.boards.acorn import check, links, setup, suite
 
@@ -225,6 +225,7 @@ def test_every_advice_pattern_matches_a_reason_the_code_gives():
         "conflicting fpga-board settings: a and b",
         "none of the installed boards (arty, tt) was found (auto: USB/PCI IDs)",
         "no Sqrl Acorn found: this host is set up for one, and nothing else is looked for",
+        checks.NO_TEST_YET.format(issue=341),
     ]
     for pattern, _ in conclusion.ADVICE:
         assert any(conclusion.re.search(pattern, r) for r in reasons), pattern
@@ -401,3 +402,24 @@ def test_no_address_of_a_moved_acorn_docs_page_is_left_in_the_tool_or_the_pages(
     old = re.compile(rb"boards/acorn/(?:building/|wiring/rpi-5-host)")
     left = [(n, m.group(0).decode()) for n in names for m in old.finditer((root / n).read_bytes())]
     assert left == []
+
+
+def test_a_board_that_fails_only_for_a_test_not_written_yet_is_told_so_and_not_sent_to_its_debug_tool():
+    """Tim, coord-64 (16 Oct 2026): "Fail until tested". Nothing was found wrong with such a board, so the advice
+    says what keeps it from passing and where its test is being written, and no debug tool is suggested."""
+    why = checks.NO_TEST_YET.format(issue=341)
+    tests = [{"test": t, "result": "pass"} for t in ("jtag", "uart", "ddr", "flash", "wiring")]
+    board = {"board": "netv2", "variant": "a7-35", "result": "fail", "tests": tests, "not_run": {"ethernet": why},
+             "reason": f"ethernet not run: {why}"}  # fmt: skip
+    shown = "\n".join(conclusion.lines(_report("fail", [board])))
+    assert "    not run: ethernet: no boot-check test yet: fpgas.online-test-designs #341" in shown
+    assert "Nothing was found wrong with the board for this" in shown and "fails until each of its tests" in shown
+    assert "fpgas-netv2-debug" not in shown and conclusion.only_untested(board)
+    # a board with a real fault besides is still sent to its debug tool
+    failing = {**board, "tests": [*tests[:-1], {"test": "wiring", "result": "fail", "reason": "uart fail"}],
+               "reason": f"wiring fail: uart fail; ethernet not run: {why}"}  # fmt: skip
+    assert "fpgas-netv2-debug" in "\n".join(conclusion.lines(_report("fail", [failing])))
+    assert not conclusion.only_untested(failing)
+    # and so is one whose check stopped before a test for another reason
+    stopped = {**board, "not_run": {"ethernet": why, "ddr": checks.stopped("the JTAG scan failed")}}
+    assert not conclusion.only_untested(stopped)

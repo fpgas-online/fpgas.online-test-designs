@@ -951,6 +951,7 @@ def test_a_fomu_is_identified_by_its_flash_over_the_header_and_foboot_is_waited_
     report = _check(FOMU, tmp_path, {"variant": "evt", "cdone": "hi"}, run)
     assert _passed_what_it_has(report), report
     assert [t["test"] for t in report["tests"]] == ["header", "foboot", "uart", "foboot-after"]
+    assert report["not_run"] == {"flash": NO_TEST_YET.format(issue=342)}  # #342; it fails the board (coord-64)
     assert report["identity"] == {
         "board": "fomu", "kind": "fomu", "variant": "evt", "usb": "1-1.2", "flash": "W25Q128JV",
         "flash_jedec": "0xef7018", "flash_size_bytes": 16777216, "flash_status": "0x00", "flash_uid": FOMU_UID,
