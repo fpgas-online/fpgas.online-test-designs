@@ -115,7 +115,9 @@ def _read(path):
 
 
 def usb_devices(root=SYSFS_USB):
-    """Every USB device: {"vendor", "product", "serial", "path"}, IDs as lower-case hex strings."""
+    """Every USB device: {"vendor", "product", "serial", "path", "devnum"}, IDs as lower-case hex strings. devnum is
+    the device's number on its bus, which the kernel gives anew at every enumeration: the same path with another
+    devnum is the device having left USB and come back."""
     found = []
     root = pathlib.Path(root)
     if not root.is_dir():
@@ -124,7 +126,7 @@ def usb_devices(root=SYSFS_USB):
         vendor, product = _read(dev / "idVendor"), _read(dev / "idProduct")
         if vendor and product:  # interfaces have no IDs
             found.append({"vendor": vendor.lower(), "product": product.lower(), "serial": _read(dev / "serial"),
-                          "path": dev.name})  # fmt: skip
+                          "path": dev.name, "devnum": _read(dev / "devnum")})  # fmt: skip
     return found
 
 
