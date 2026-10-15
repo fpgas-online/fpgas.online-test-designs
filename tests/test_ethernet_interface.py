@@ -242,3 +242,44 @@ def test_a_uart_that_will_not_open_is_the_reason_and_an_error(monkeypatch, capsy
     assert rc == 2
     assert said == ["ETHERNET: could not read the BIOS on /dev/ttyUSB1: [Errno 2] could not open port /dev/ttyUSB1: "
                     "[Errno 2] No such file or directory"]  # fmt: skip
+
+
+def _main(monkeypatch, capsys):
+    """main()'s exit, and its ETHERNET: lines."""
+    monkeypatch.setattr(te.sys, "argv", ["test_ethernet.py", "--board", "arty", "--uart-port", "/dev/ttyUSB1"])
+    try:
+        te.main()
+    except SystemExit as e:
+        rc = e.code
+    return rc, [line for line in capsys.readouterr().out.splitlines() if line.startswith("ETHERNET:")]
+
+
+def test_an_ip_command_that_fails_while_looking_for_the_adapter_is_the_reason(monkeypatch, capsys):
+    _stub(monkeypatch)
+
+    def no_route(*a):
+        raise te.subprocess.CalledProcessError(1, ["ip", "-o", "route", "show", "default"])
+
+    monkeypatch.setattr(te, "find_usb_ethernet_interface", no_route)
+    rc, said = _main(monkeypatch, capsys)
+    assert rc == 2
+    assert said == ["ETHERNET: could not run: Command '['ip', '-o', 'route', 'show', 'default']' returned "
+                    "non-zero exit status 1."]  # fmt: skip
+
+
+def test_a_missing_tool_is_the_reason(monkeypatch, capsys):
+    _stub(monkeypatch)
+
+    def no_ping(ip, iface):
+        raise FileNotFoundError(2, "No such file or directory", "ping")
+
+    monkeypatch.setattr(te, "test_ping", no_ping)
+    rc, said = _main(monkeypatch, capsys)
+    assert rc == 2 and said == ["ETHERNET: could not run: [Errno 2] No such file or directory: 'ping'"]
+
+
+def test_main_exits_with_run_test_s_exit(monkeypatch, capsys):
+    _stub(monkeypatch, ping=False)
+    assert _main(monkeypatch, capsys) == (1, ["ETHERNET: link up after 1.0 s; ICMP ping failed"])
+    _stub(monkeypatch)
+    assert _main(monkeypatch, capsys) == (0, [])

@@ -28,6 +28,7 @@ import re
 import subprocess
 import sys
 import time
+import traceback
 
 import serial
 
@@ -262,7 +263,8 @@ PASSED, FAILED, COULD_NOT_RUN = 0, 1, 2
 
 
 def run_test(board, uart_port, baud, eth_interface=None):
-    """Run the Ethernet test sequence and return its exit. A run that does not pass ends with one ETHERNET: line."""
+    """Run the Ethernet test sequence and return its exit. A run that does not pass ends with one ETHERNET: line;
+    main() says it for an exception that gets this far."""
     total_tests = 0
     failures = []
 
@@ -380,7 +382,14 @@ def main():
     if args.uart_port is None:
         args.uart_port = "/dev/ttyUSB1" if args.board == "arty" else "/dev/ttyAMA0"
 
-    sys.exit(run_test(args.board, args.uart_port, args.baud, args.interface))
+    try:
+        rc = run_test(args.board, args.uart_port, args.baud, args.interface)
+    except (OSError, subprocess.CalledProcessError) as e:  # a tool missing or failing, a port that broke
+        traceback.print_exc()
+        print()  # the step may have printed half a line ("Detecting USB Ethernet adapter... ")
+        say(f"could not run: {e}")
+        rc = COULD_NOT_RUN
+    sys.exit(rc)
 
 
 if __name__ == "__main__":
