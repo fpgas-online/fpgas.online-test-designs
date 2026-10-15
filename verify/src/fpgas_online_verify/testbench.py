@@ -253,6 +253,12 @@ class TestBoard(Board):
             return {**out, "result": p.result, "reason": p.reason}
         return {**out, **self.judged(t, rc, text)}
 
+    def before_test(self, test, variant, host, report, runner=run):
+        """What the board needs before `test` loads its design: None when it may go ahead, else the test's entry
+        saying why it was not loaded. Nothing, except on a board whose test designs undo what the next load needs
+        (the Fomu: Fomu.before_test)."""
+        return None
+
     def script_tests_for(self, variant):
         return [name for name, t in self.script_tests.items() if variant in t["variants"]]
 
@@ -417,8 +423,8 @@ class TestBoard(Board):
 
     # What the whole check is asked about (checks.py, #340): variant -> {test: the test-designs issue that adds it}
     # for a test the board's hardware calls for and the check does not run yet (planned, and not run with
-    # checks.NO_TEST_YET; it fails the board only with checks.UNTESTED_FAILS), and variant -> {common check: why
-    # the board cannot have it}.
+    # checks.NO_TEST_YET; it fails the board while checks.UNTESTED_FAILS, Tim's coord-64), and variant -> {common
+    # check: why the board cannot have it}.
     not_yet: ClassVar[dict] = {}
     cannot: ClassVar[dict] = {}
     # The test entry finish() adds, when it adds one (the Fomu's foboot-after): planned last.
@@ -605,7 +611,8 @@ class TestBoard(Board):
                     not_run[test] = f"it needs {' and '.join(failed)} to pass first"
                     continue
                 event("fpga-test-started", {"test": test})
-                report["tests"].append(self.run_test(test, variant, host, images, manifest, runner))
+                blocked = self.before_test(test, variant, host, report, runner)
+                report["tests"].append(blocked or self.run_test(test, variant, host, images, manifest, runner))
                 done = report["tests"][-1]
                 event("fpga-test-finished", {"test": test, "result": done["result"], "reason": done.get("reason", "")})
             if not_run:

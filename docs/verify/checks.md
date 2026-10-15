@@ -53,7 +53,7 @@ Not for:
 |---|---|---|---|
 | Sqrl Acorn | every | both flash slots are read whole and match the release's images | the Acorn suite ([what an Acorn check tests](acorn.md#acorn)) |
 | Digilent Arty A7 | `a7-35` | a test design reads the SPI flash's JEDEC ID | loads its test design, then runs [`test_spiflash.py`](../../designs/spi-flash-id/host/test_spiflash.py) |
-| Fomu EVT | `evt` | a test design reads the SPI flash's JEDEC ID | not run yet: [#342](https://github.com/fpgas-online/fpgas.online-test-designs/issues/342) |
+| Fomu EVT | `evt` | a test design loaded over DFU reads the SPI flash's JEDEC ID: the EVT's W25Q128JV (ef7018) | loads its test design, then runs [`test_spiflash.py`](../../designs/spi-flash-id/host/test_spiflash.py) |
 | Kosagi NeTV2 | `a7-35`, `a7-100` | a test design reads the SPI flash's JEDEC ID | loads its test design, then runs [`test_spiflash.py`](../../designs/spi-flash-id/host/test_spiflash.py) |
 
 Not for:
@@ -180,4 +180,4 @@ Not for:
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| TT FPGA Demo Board | `tt-fpga` | the iCE40's 128 KB of SPRAM is written and read back | not run yet: [#343](https://github.com/fpgas-online/fpgas.online-test-designs/issues/343) |
+| TT FPGA Demo Board | `tt-fpga` | the iCE40's 128 KB of SPRAM reads back each word's address and its inverse, and each byte lane writes alone | loads its test design, then runs [`test_spram.py`](../../designs/spram/host/test_spram.py) |

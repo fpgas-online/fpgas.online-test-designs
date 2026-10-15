@@ -36,7 +36,9 @@ BOOT_TIMEOUT_S = 30
 EXPECTED_JEDEC_IDS = {
     "arty": None,  # TBD — varies by board revision
     "netv2": None,  # TBD — to be determined
-    "fomu": (0x1F, 0x86, 0x01),  # AT25SF161: Adesto/Renesas, 16 Mbit
+    # W25Q128JV: Winbond, 128 Mbit, the Fomu EVT's (fpgas_online_verify/boards/fomu.py FLASH_JEDEC; its `header`
+    # test reads ef7018 over the Pi's header). It was the AT25SF161's 1F 86 01 here, which the EVT never answers (#342).
+    "fomu": (0xEF, 0x70, 0x18),
 }
 
 # Common manufacturer names for reporting.

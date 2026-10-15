@@ -28,9 +28,9 @@ Each test checks its bitstream's sha256 against the `-bitstreams` package's mani
 | Board | Found by | Loaded with | UART | Boot-check tests, in order | Only in `-debug` | Recorded state |
 |---|---|---|---|---|---|---|
 | Arty A7 | USB `0403:6010` | `openFPGALoader -b arty` | `/dev/ttyUSB1` | `jtag`, `uart`, `ddr`, `flash`, `ethernet`, `wiring` | `pmod` | FTDI serial, IDCODE, device DNA, flash JEDEC ID, sha256 of the flash's first 2.1 MiB |
-| NeTV2 | JTAG IDCODE over GPIO 4/17/27/22 | openocd (Pi 3/4), openFPGALoader `rp1pio` (Pi 5) | `/dev/ttyAMA0` | `jtag`, `uart`, `ddr`, `flash` (`ethernet` is planned but not run yet: [#341](https://github.com/fpgas-online/fpgas.online-test-designs/issues/341)), and `wiring` derived from `jtag` and `uart` | `ethernet`, `pmod`, `pmod-pin-id` (the Pmod pin-ID scan; there is no Pmod HAT cabling on the NeTV2) | IDCODE, device DNA, flash JEDEC ID, sha256 of the flash's boot image |
-| Fomu EVT | CDONE high on the Pi's header (GPIO17), or USB `1209:5bf0` (foboot) | openFPGALoader over DFU | `/dev/serial0` | `header`, `foboot` (both load nothing), `uart`, and `wiring` derived from `header` and `uart` | `flash` (planned but not run in the boot check yet: [#342](https://github.com/fpgas-online/fpgas.online-test-designs/issues/342)); `pmod` and `pmod-pin-id`, which cannot pass on the EVT ([#202](https://github.com/fpgas-online/fpgas.online-test-designs/issues/202)) | the flash's JEDEC ID and unique ID, read over the header |
-| TT FPGA | USB `2e8a:0005`, `2e8a:000f` (and `2e8a:0003`, the RP2's boot loader, which fails) | `tt_fpga_program.py` over `mpremote` | `/dev/ttyACM0` | `sdk` (loads nothing), `dip-switches`, `wiring`, `uart`; a board with a Tiny Tapeout chip: `sdk`, then `wiring` (nothing is loaded) | `pmod` | USB serial |
+| NeTV2 | JTAG IDCODE over GPIO 4/17/27/22 | openocd (Pi 3/4), openFPGALoader `rp1pio` (Pi 5) | `/dev/ttyAMA0` | `jtag`, `uart`, `ddr`, `flash` (`ethernet` is planned but not run yet, which fails the board: [#341](https://github.com/fpgas-online/fpgas.online-test-designs/issues/341)), and `wiring` derived from `jtag` and `uart` | `ethernet`, `pmod`, `pmod-pin-id` (the Pmod pin-ID scan; there is no Pmod HAT cabling on the NeTV2) | IDCODE, device DNA, flash JEDEC ID, sha256 of the flash's boot image |
+| Fomu EVT | CDONE high on the Pi's header (GPIO17), or USB `1209:5bf0` (foboot) | openFPGALoader over DFU | `/dev/serial0` | `header`, `foboot` (both load nothing), `uart`, `flash` (after a reset back into foboot through the header), and `wiring` derived from `header` and `uart` | `pmod` and `pmod-pin-id`, which cannot pass on the EVT ([#202](https://github.com/fpgas-online/fpgas.online-test-designs/issues/202)) | the flash's JEDEC ID and unique ID, read over the header |
+| TT FPGA | USB `2e8a:0005`, `2e8a:000f` (and `2e8a:0003`, the RP2's boot loader, which fails) | `tt_fpga_program.py` over `mpremote` | `/dev/ttyACM0` | `sdk` (loads nothing), `dip-switches`, `wiring`, `uart`, `spram`; a board with a Tiny Tapeout chip: `sdk`, then `wiring` (nothing is loaded) | `pmod` | USB serial |
 
 * The Arty and NeTV2 are left running openFPGALoader's SPI-over-JTAG bridge (used to read the flash back), the
   Fomu its test design, and the TT FPGA a design that moves its display
@@ -50,7 +50,11 @@ Each test checks its bitstream's sha256 against the `-bitstreams` package's mani
   reading: CDONE must be high before the reset (or nothing is driven), fall in reset and rise after it, and the flash must be the EVT's W25Q128JV (`ef7018`)
   with a unique ID that is not all `00` or all `ff`. `foboot` passes when foboot enumerates on USB again within 10 s of the
   reset: the DFU loads need it.
-* The Fomu runs only `uart` at boot: a DFU load replaces the bootloader until the next reset.
+* A DFU load replaces the Fomu's bootloader with a design that has no USB, until the next reset. So after `uart` the
+  check resets the iCE40 back into foboot through the header, as `header` did, and loads `flash`'s design only once
+  foboot is back on USB ([#342](https://github.com/fpgas-online/fpgas.online-test-designs/issues/342)); that is why
+  `flash` needs `header` to have passed. A reset that does not bring foboot back is `flash`'s result, with the
+  reason. The check ends with the same reset (`foboot-after`).
 * The TT FPGA's `fpgas-tt.service` is stopped for the tests and started again once the report is written, so
   it never starts against the report of the run before. If it cannot be started again the result is `error`
   and the report says so, in `services_failed` at the top of the report: the board's own entry keeps the
@@ -64,15 +68,15 @@ Each test checks its bitstream's sha256 against the `-bitstreams` package's mani
 
 The check lists every test it should run for your board before it runs the first one, so the report
 says what was not run, and why, even when the check stopped early. A check your board cannot have is listed
-with the reason. A test that is planned but has no boot-check test yet is in `not_run` with its issue; it does
-not fail the board. The report fields are in [the fleet events](fleet.md#the-planned-tests-fields).
+with the reason. A test that is planned but has no boot-check test yet is in `not_run` with its issue, and it
+fails the board: the board is not offered until its test exists. The report fields are in [the fleet events](fleet.md#the-planned-tests-fields).
 
-| Board type | Planned tests, in order | Not applicable | Not written yet |
+| Board type | Planned tests, in order | Not applicable | Not written yet (fails the board) |
 |---|---|---|---|
 | Arty A7 | `jtag`, `uart`, `ddr`, `flash`, `ethernet`, `wiring` | none: every common check applies | none |
 | NeTV2 | `jtag`, `uart`, `ddr`, `flash`, `ethernet`, `wiring` (from `jtag` and `uart`: its wires to the Pi are the header's JTAG and UART lines) | none | `ethernet`: [#341](https://github.com/fpgas-online/fpgas.online-test-designs/issues/341) |
-| Fomu EVT | `header`, `foboot`, `uart`, `flash`, `wiring` (from `header` and `uart`: it sits on the Pi's header, whose reset, CDONE and SPI flash lines `header` checks and whose UART lines `uart` checks), `foboot-after` | `jtag`: the iCE40UP5K has no JTAG port: the Fomu is loaded over USB DFU, by foboot. `ddr`: the Fomu EVT has no DRAM. `ethernet`: the Fomu EVT has no Ethernet | `flash`: [#342](https://github.com/fpgas-online/fpgas.online-test-designs/issues/342) |
-| TT FPGA | `sdk`, `dip-switches`, `wiring`, `uart`, `spram` | `jtag`: the iCE40UP5K has no JTAG port: it is loaded through the demo board's RP2350. `flash`: the FPGA breakout has no configuration flash: the RP2350 streams each design from the Pi. `ddr`: the demo board has no DRAM. `ethernet`: the demo board has no Ethernet | `spram`: [#343](https://github.com/fpgas-online/fpgas.online-test-designs/issues/343) |
+| Fomu EVT | `header`, `foboot`, `uart`, `flash`, `wiring` (from `header` and `uart`: it sits on the Pi's header, whose reset, CDONE and SPI flash lines `header` checks and whose UART lines `uart` checks), `foboot-after` | `jtag`: the iCE40UP5K has no JTAG port: the Fomu is loaded over USB DFU, by foboot. `ddr`: the Fomu EVT has no DRAM. `ethernet`: the Fomu EVT has no Ethernet | none |
+| TT FPGA | `sdk`, `dip-switches`, `wiring`, `uart`, `spram` | `jtag`: the iCE40UP5K has no JTAG port: it is loaded through the demo board's RP2350. `flash`: the FPGA breakout has no configuration flash: the RP2350 streams each design from the Pi. `ddr`: the demo board has no DRAM. `ethernet`: the demo board has no Ethernet | none |
 | TT board with a Tiny Tapeout chip | `sdk`, `wiring` | `jtag`: a Tiny Tapeout chip is an ASIC, not an FPGA: nothing on it is configured over JTAG. `uart`: a Tiny Tapeout chip's projects are fixed in silicon: no UART design can be loaded; the wiring test checks its lines to the Pi. `flash`: a Tiny Tapeout chip is an ASIC: it has no configuration flash to test. `ddr`: the demo board has no DRAM. `ethernet`: the demo board has no Ethernet | none |
 | TT board that did not say which it is | `sdk`, `wiring` (not run: the check stopped when the board did not say) | `jtag`: neither a TT FPGA breakout (an iCE40UP5K, loaded through the RP2350) nor a Tiny Tapeout chip has a JTAG port. `uart`: only an FPGA board has a UART test, and the board did not say whether it carries an FPGA. `flash`: neither a TT FPGA breakout nor a Tiny Tapeout chip has a configuration flash. `ddr`: the demo board has no DRAM. `ethernet`: the demo board has no Ethernet | none |
 | Acorn | `pcie-link`, `pcie-bar0`, `rp1-pio`, `jtag`, `flash`, `ddr`, `p2-uart`, `p2-serial`, `scratch`, `p2-gpio`, `wiring` (from `jtag`, `p2-uart`, `p2-serial` and `p2-gpio`: its two cables, P1 and P2) (`power-cycle` too when switched on); none for a card the Acorn module names as another board (a PCIe Screamer, a PicoEVB) | `uart`: its UART is on the P2 cable: p2-uart tests it. `ethernet`: an Acorn is an M.2 PCIe card with no Ethernet | none |
