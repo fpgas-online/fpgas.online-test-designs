@@ -1,6 +1,6 @@
 # SPRAM test
 
-A test of the 128 KB of SPRAM in the TinyTapeout FPGA Demo Board's iCE40UP5K: four `SB_SPRAM256KA` of 16K × 16 bits. As the SoC uses them (LiteX's `Up5kSPRAM`, 32 bits wide), each 32-bit word is two of them side by side, bytes 0 and 1 in one and 2 and 3 in the other, and the byte address's bit 16 chooses one of two such pairs: two banks of 64 KB. The breakout has no
+A test of the 128 KB of SPRAM in the TinyTapeout FPGA Demo Board's iCE40UP5K: four `SB_SPRAM256KA` of 16K × 16 bits. As the SoC uses them (`designs/_shared/up5k_spram.py`, 32 bits wide: LiteX's `Up5kSPRAM` layout, with its bank select fixed), each 32-bit word is two of them side by side, bytes 0 and 1 in one and 2 and 3 in the other, and the byte address's bit 16 chooses one of two such pairs: two banks of 64 KB. The breakout has no
 flash and no DRAM, so this is its memory test, `spram` in the boot check
 ([#343](https://github.com/fpgas-online/fpgas.online-test-designs/issues/343)).
 

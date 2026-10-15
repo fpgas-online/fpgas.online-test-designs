@@ -148,7 +148,7 @@ reads it.
 
 ## The `spram` test
 
-The FPGA breakout has no flash and no DRAM. Its memory is the iCE40UP5K's own 128 KB of SPRAM: four `SB_SPRAM256KA` of 16K × 16 bits. As the SoC uses them (LiteX's `Up5kSPRAM`, 32 bits wide), each 32-bit word is two of them side by side, bytes 0 and 1 in one and 2 and 3 in the other, and the byte address's bit 16 chooses one of two such pairs: two banks of 64 KB.
+The FPGA breakout has no flash and no DRAM. Its memory is the iCE40UP5K's own 128 KB of SPRAM: four `SB_SPRAM256KA` of 16K × 16 bits. As the SoC uses them (`designs/_shared/up5k_spram.py`, 32 bits wide: LiteX's `Up5kSPRAM` layout, with its bank select fixed), each 32-bit word is two of them side by side, bytes 0 and 1 in one and 2 and 3 in the other, and the byte address's bit 16 chooses one of two such pairs: two banks of 64 KB.
 - The test design is the UART test's SoC with other firmware in its ROM. That firmware keeps every value in
   registers, so nothing but the test touches the SPRAM.
 - Its host script, `test_spram.py`, runs through the UART bridge as `uart`'s does. It sends a byte. On that

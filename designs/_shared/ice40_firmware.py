@@ -627,9 +627,10 @@ def generate_spiflash_firmware(uart_base, spiflash_base, ident):
 # SPRAM test firmware (TT FPGA, fpgas.online-test-designs#343)
 # ---------------------------------------------------------------------------
 
-# The UP5K's four SB_SPRAM256KA are 16K x 16 bits each. LiteX's Up5kSPRAM (32 bits wide) puts two side by side for
-# each 32-bit word, bytes 0-1 in one and 2-3 in the other (each byte has its write mask, MASKWREN), and the word
-# address's bit 14 (the byte address's bit 16) chooses one of the two such pairs: two banks of 64 KB.
+# The UP5K's four SB_SPRAM256KA are 16K x 16 bits each. The 32-bit SPRAM slave (designs/_shared/up5k_spram.py,
+# LiteX's Up5kSPRAM layout) puts two side by side for each 32-bit word, bytes 0-1 in one and 2-3 in the other (each
+# byte has its write mask, MASKWREN), and the word address's bit 14 (the byte address's bit 16) chooses one of the
+# two such pairs: two banks of 64 KB.
 SPRAM_BANK = 64 * 1024
 
 
@@ -900,7 +901,7 @@ def install_spram_firmware(soc, ident):
     """Finalize *soc*, generate the SPRAM test firmware, and install it into ROM.
 
     Same contract as :func:`install_uart_firmware`. The SoC must have a ``uart`` CSR group and the SPRAM as
-    its ``psram`` bus region (Up5kSPRAM).
+    its ``psram`` bus region (designs/_shared/up5k_spram.py).
     """
     soc.finalize()
     csr_origin = soc.bus.regions["csr"].origin
