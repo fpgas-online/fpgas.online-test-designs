@@ -253,6 +253,12 @@ class TestBoard(Board):
             return {**out, "result": p.result, "reason": p.reason}
         return {**out, **self.judged(t, rc, text)}
 
+    def before_test(self, test, variant, host, report, runner=run):
+        """What the board needs before `test` loads its design: None when it may go ahead, else the test's entry
+        saying why it was not loaded. Nothing, except on a board whose test designs undo what the next load needs
+        (the Fomu: Fomu.before_test)."""
+        return None
+
     def script_tests_for(self, variant):
         return [name for name, t in self.script_tests.items() if variant in t["variants"]]
 
@@ -605,7 +611,8 @@ class TestBoard(Board):
                     not_run[test] = f"it needs {' and '.join(failed)} to pass first"
                     continue
                 event("fpga-test-started", {"test": test})
-                report["tests"].append(self.run_test(test, variant, host, images, manifest, runner))
+                blocked = self.before_test(test, variant, host, report, runner)
+                report["tests"].append(blocked or self.run_test(test, variant, host, images, manifest, runner))
                 done = report["tests"][-1]
                 event("fpga-test-finished", {"test": test, "result": done["result"], "reason": done.get("reason", "")})
             if not_run:

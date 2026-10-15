@@ -6,7 +6,7 @@ Builds a SoC with CPU + BIOS + UART + SPI Flash access. The BIOS prints
 the SPI flash identification on boot. Additionally, custom firmware can
 be loaded to explicitly read the JEDEC ID via command 0x9F.
 
-Fomu EVT SPI Flash: AT25SF161 (16 Mbit), Quad SPI.
+Fomu EVT SPI Flash: W25Q128JV (128 Mbit, JEDEC ID ef7018), Quad SPI; other Fomu revisions carry an AT25SF161.
   CS_N=pin 16, CLK=pin 15, MOSI=pin 14, MISO=pin 17, WP=pin 18, HOLD=pin 19.
 Clock: 48 MHz external (pin 44), 12 MHz system clock via PLL.
 UART: Serial RX=pin 21, TX=pin 13 (LVCMOS33).
