@@ -106,13 +106,22 @@ def not_root_reason(iface, euid=None):
 
 
 def configure_interface(iface, ip, netmask):
-    """Configure network interface with static IP."""
+    """Give the interface a static IP. Returns None, or why it could not: the `ip` command that failed."""
     prefix_len = ipaddress.IPv4Network(f"0.0.0.0/{netmask}").prefixlen
     print(f"Configuring {iface} with {ip}/{prefix_len}...")
-    subprocess.run(["ip", "addr", "flush", "dev", iface], check=True)
-    subprocess.run(["ip", "addr", "add", f"{ip}/{prefix_len}", "dev", iface], check=True)
-    subprocess.run(["ip", "link", "set", iface, "up"], check=True)
+    for argv in (
+        ["ip", "addr", "flush", "dev", iface],
+        ["ip", "addr", "add", f"{ip}/{prefix_len}", "dev", iface],
+        ["ip", "link", "set", iface, "up"],
+    ):
+        try:
+            subprocess.run(argv, capture_output=True, text=True, check=True)
+        except subprocess.CalledProcessError as e:
+            print(e.stderr, end="", file=sys.stderr)
+            said = e.stderr.strip().splitlines()
+            return f"{' '.join(argv)} exited {e.returncode}" + (f": {said[-1]}" if said else "")
     print(f"  {iface} configured: {ip}/{prefix_len}")
+    return None
 
 
 def wait_for_link(iface, timeout, sysfs="/sys/class/net", clock=time):
@@ -248,8 +257,12 @@ def say(why):
     print(f"ETHERNET: {why}")
 
 
+# The exit of a run. Under `says`, fpgas-verify counts an exit of 2 as an error: the test could not run.
+PASSED, FAILED, COULD_NOT_RUN = 0, 1, 2
+
+
 def run_test(board, uart_port, baud, eth_interface=None):
-    """Run the full Ethernet test sequence. A failed run ends with one ETHERNET: line saying why."""
+    """Run the Ethernet test sequence and return its exit. A run that does not pass ends with one ETHERNET: line."""
     total_tests = 0
     failures = []
 
@@ -268,7 +281,7 @@ def run_test(board, uart_port, baud, eth_interface=None):
         if not iface:
             print(f"FAIL - {why}")
             say(why)
-            return False
+            return FAILED
         print(f"found: {iface}")
 
     # Step 2: Configure interface (from here on, root: `ip addr` and arping)
@@ -276,12 +289,19 @@ def run_test(board, uart_port, baud, eth_interface=None):
     if why:
         print(why, file=sys.stderr)
         say(why.removeprefix("FAIL - "))
-        return False
-    configure_interface(iface, HOST_IP, NETMASK)
+        return FAILED
+    why = configure_interface(iface, HOST_IP, NETMASK)
+    if why:
+        say(f"could not configure {iface}: {why}")
+        return COULD_NOT_RUN
 
     # Step 3: Read MAC from BIOS UART
     print()
-    mac_address, _ = read_mac_from_bios(uart_port, baud)
+    try:
+        mac_address, _ = read_mac_from_bios(uart_port, baud)
+    except serial.SerialException as e:
+        say(f"could not read the BIOS on {uart_port}: {e}")
+        return COULD_NOT_RUN
     total_tests += 1
     if mac_address:
         # Validate MAC is in LiteX default range (10:e2:d5:xx:xx:xx)
@@ -341,10 +361,10 @@ def run_test(board, uart_port, baud, eth_interface=None):
             say(f"no link on {iface} after {LINK_TIMEOUT} s, so ARP and ping were not tried")
         else:
             say("; ".join([f"link up after {took:.1f} s", *failures]))
-        return False
+        return FAILED
     else:
         print("PASS")
-        return True
+        return PASSED
 
 
 def main():
@@ -360,8 +380,7 @@ def main():
     if args.uart_port is None:
         args.uart_port = "/dev/ttyUSB1" if args.board == "arty" else "/dev/ttyAMA0"
 
-    success = run_test(args.board, args.uart_port, args.baud, args.interface)
-    sys.exit(0 if success else 1)
+    sys.exit(run_test(args.board, args.uart_port, args.baud, args.interface))
 
 
 if __name__ == "__main__":
