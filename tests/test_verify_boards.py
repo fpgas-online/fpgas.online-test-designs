@@ -884,9 +884,17 @@ def _says(reading):
 
 @pytest.fixture
 def fomu_usb(monkeypatch):
-    """The Fomu module's view of USB: a list the test fills (foboot appears on it), and a clock the waits move."""
-    usb, now = [], [0.0]
-    monkeypatch.setattr(fomu, "usb_devices", lambda: list(usb))
+    """The Fomu module's view of USB: a list the test fills (foboot appears on it), and a clock the waits move. Each
+    look gives the entries a new device number (devnum), as a device that enumerated again would have, unless the
+    test gave an entry its own: so a foboot put in the list counts as back after each reset (#347)."""
+    usb, now, looks = [], [0.0], [0]
+
+    def devices():
+        # each look is a new enumeration (a new device number), unless the test gave the entry its own devnum
+        looks[0] += 1
+        return [{**d, "devnum": d.get("devnum", str(looks[0]))} for d in usb]
+
+    monkeypatch.setattr(fomu, "usb_devices", devices)
     monkeypatch.setattr(fomu, "_clock", lambda: now[0])
     monkeypatch.setattr(fomu, "_sleep", lambda s: now.__setitem__(0, now[0] + s))
     return usb
@@ -953,7 +961,8 @@ def test_a_fomu_is_identified_by_its_flash_over_the_header_and_foboot_is_waited_
 
 def test_foboot_not_back_after_the_closing_reset_fails_the_board_loud(tmp_path, monkeypatch):
     """#135: a Fomu left without foboot cannot be loaded by the next user; the check says so, not passes."""
-    looks = [[FOBOOT_USB], [FOBOOT_USB]]  # before the first reset, and its wait; nothing after the closing reset
+    # before the first reset, and its wait (a new enumeration); nothing after the closing reset
+    looks = [[{**FOBOOT_USB, "devnum": "1"}], [{**FOBOOT_USB, "devnum": "2"}]]
     monkeypatch.setattr(fomu, "usb_devices", lambda: looks.pop(0) if looks else [])
     now = [0.0]
     monkeypatch.setattr(fomu, "_clock", lambda: now[0])
@@ -1025,7 +1034,7 @@ KERNEL_USB = (  # journalctl -k -o short-monotonic, as it prints them
 def test_a_foboot_that_was_on_usb_before_the_reset_and_not_after_says_so(tmp_path, monkeypatch):
     """What tells the root 3 cases apart (sw1 p17): foboot there before the header's reset and gone after it is
     the reset's doing; the kernel's USB lines say how it went."""
-    seen = [[FOBOOT_USB]]  # the first look, before the reset; every later one sees nothing
+    seen = [[{**FOBOOT_USB, "devnum": "5"}]]  # the first look, before the reset; every later one sees nothing
     monkeypatch.setattr(fomu, "usb_devices", lambda: seen.pop(0) if seen else [])
     now = [0.0]
     monkeypatch.setattr(fomu, "_clock", lambda: now[0])
@@ -1956,6 +1965,58 @@ def test_an_ethernet_test_that_could_not_run_is_an_error_with_its_reason(tmp_pat
     assert (ethernet["result"], ethernet["reason"]) == ("error", said.removeprefix("ETHERNET: "))
 
 
+# -- #347: the foboot from before the reset is not the one after it -----------------------------------------
+
+
+def test_the_foboot_from_before_the_reset_still_listed_is_waited_out(monkeypatch):
+    """15 Oct 2026, the welland Fomu: right after the header reset the old foboot was still listed (foboot_seconds
+    0.0), the wait ended, and the DFU load found no device. Now the wait ends only on a new enumeration."""
+    now, looks = [0.0], [0]
+
+    def devices():  # the old one (devnum 5) for two looks, then gone for one, then back as devnum 6
+        looks[0] += 1
+        if looks[0] <= 3:  # the look before the reset, and two after it
+            return [{**FOBOOT_USB, "devnum": "5"}]
+        return [] if looks[0] == 4 else [{**FOBOOT_USB, "devnum": "6"}]
+
+    monkeypatch.setattr(fomu, "usb_devices", devices)
+    monkeypatch.setattr(fomu, "_clock", lambda: now[0])
+    monkeypatch.setattr(fomu, "_sleep", lambda s: now.__setitem__(0, now[0] + s))
+    found = {"variant": "evt"}
+    FOMU.port_facts(_host(FOMU), found, Runner([("fomu_header_id.py", _says(FOMU_READING))]))
+    assert found["foboot_before_reset"] is True and found["foboot_seconds"] == 1.5 and found["usb"] == "1-1.2"
+
+
+def test_a_foboot_that_never_leaves_usb_fails_foboot_and_says_so(tmp_path, monkeypatch):
+    now = [0.0]
+    monkeypatch.setattr(fomu, "usb_devices", lambda: [{**FOBOOT_USB, "devnum": "5"}])  # never re-enumerates
+    monkeypatch.setattr(fomu, "_clock", lambda: now[0])
+    monkeypatch.setattr(fomu, "_sleep", lambda s: now.__setitem__(0, now[0] + s))
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run)
+    foboot = next(t for t in report["tests"] if t["test"] == "foboot")
+    assert foboot["result"] == "fail" and fomu.STALE in foboot["reason"]
+    assert not any("kosagi_fomu_evt" in " ".join(c) for c in run.calls)  # nothing was loaded over DFU
+
+
+def test_the_closing_reset_waits_for_a_new_foboot_too(monkeypatch):
+    now = [0.0]
+    monkeypatch.setattr(fomu, "usb_devices", lambda: [{**FOBOOT_USB, "devnum": "5"}])
+    monkeypatch.setattr(fomu, "_clock", lambda: now[0])
+    monkeypatch.setattr(fomu, "_sleep", lambda s: now.__setitem__(0, now[0] + s))
+    after = FOMU.reset_to_foboot(_host(FOMU), Runner([("fomu_header_id.py", _says(FOMU_READING))]))
+    assert after["result"] == "fail" and fomu.STALE in after["reason"]
+
+
+def test_usb_devices_reads_each_devices_number(tmp_path):
+    dev = tmp_path / "1-1.2"
+    dev.mkdir()
+    for name, value in (("idVendor", "1209"), ("idProduct", "5bf0"), ("devnum", "7")):
+        (dev / name).write_text(value + "\n")
+    assert core.usb_devices(tmp_path) == [{"vendor": "1209", "product": "5bf0", "serial": None, "path": "1-1.2",
+                                           "devnum": "7"}]  # fmt: skip
+
+
 # -- what each board's check should run (checks.py, #340) ------------------------------------------------------
 
 EVERY_VARIANT = [(b, v) for b in (ARTY, NETV2, FOMU) for v in b.variants]
@@ -2121,3 +2182,37 @@ def test_a_failed_derived_wiring_does_not_change_the_board_result():
 
 def test_a_card_named_as_another_board_derives_nothing():
     assert ACORN.derived(None, {"variant": "cle-215+", "title": "PicoEVB"}) == {}
+
+
+def _fomu_usb_looks(monkeypatch, looks):
+    """usb_devices() gives each list in `looks` in turn, then the last one for ever; the clock moves with the waits."""
+    now = [0.0]
+    monkeypatch.setattr(fomu, "usb_devices", lambda: looks.pop(0) if len(looks) > 1 else looks[0])
+    monkeypatch.setattr(fomu, "_clock", lambda: now[0])
+    monkeypatch.setattr(fomu, "_sleep", lambda s: now.__setitem__(0, now[0] + s))
+
+
+def test_a_closing_reset_with_foboot_listed_before_it_passes_on_the_new_one(monkeypatch):
+    """fpgas-fomu-debug reset on a Fomu already in foboot: the old one is listed before, a new one after."""
+    _fomu_usb_looks(monkeypatch, [[{**FOBOOT_USB, "devnum": "5"}], [{**FOBOOT_USB, "devnum": "5"}],
+                                  [{**FOBOOT_USB, "devnum": "6"}]])  # fmt: skip
+    after = FOMU.reset_to_foboot(_host(FOMU), Runner([("fomu_header_id.py", _says(FOMU_READING))]))
+    assert after["result"] == "pass" and "back on USB 0.5 s" in after["output"][0]
+
+
+def test_a_foboot_that_does_not_come_back_is_not_called_stale(monkeypatch):
+    _fomu_usb_looks(monkeypatch, [[]])  # nothing before (a test design ran), nothing after
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", (0, ""))])
+    after = FOMU.reset_to_foboot(_host(FOMU), run)
+    assert after["result"] == "fail" and "did not come back" in after["reason"] and fomu.STALE not in after["reason"]
+
+
+def test_a_foboot_whose_device_number_cannot_be_read_is_an_error_said_not_a_timeout(tmp_path, monkeypatch):
+    _fomu_usb_looks(monkeypatch, [[{**FOBOOT_USB, "devnum": None}]])
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run)
+    tests = {t["test"]: t for t in report["tests"]}
+    assert tests["header"]["result"] == "error" and "devnum" in tests["header"]["reason"]
+    assert not any("fomu_header_id.py" in " ".join(c) for c in run.calls)  # nothing was reset
+    after = FOMU.reset_to_foboot(_host(FOMU), run)
+    assert after["result"] == "error" and "devnum" in after["reason"]

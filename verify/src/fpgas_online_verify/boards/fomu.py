@@ -117,6 +117,34 @@ def header_check(variant, facts, found):
     return ("fail", "; ".join(faults), lines) if faults else ("pass", None, lines)
 
 
+def foboots():
+    """{(USB path, device number)} of every foboot on USB now. The device number is new at each enumeration; one
+    that cannot be read (sysfs devnum) would make every look the same, so it is an error, said, not a timeout."""
+    found = usb_matching(usb_devices(), (FOBOOT,))
+    unread = [d["path"] for d in found if not d.get("devnum")]
+    if unread:
+        raise Problem("error", f"the USB device number (sysfs devnum) of the foboot at {', '.join(unread)} could not "
+                               "be read, so whether it enumerated again after the reset cannot be told")  # fmt: skip
+    return {(d["path"], d["devnum"]) for d in found}
+
+
+def new_foboot(before):
+    """Wait up to FOBOOT_WAIT for a foboot that was not on USB before the reset (`before`, from foboots()):
+    (seconds, its USB path), or None. #347: right after the reset the foboot from before can still be listed, with
+    its old device number, until the hub notices it left; a DFU load sent to it then finds no device."""
+    start = _clock()
+    while True:
+        new = sorted(foboots() - before)
+        if new:
+            return round(_clock() - start, 1), new[0][0]
+        if _clock() - start >= FOBOOT_WAIT:
+            return None
+        _sleep(0.5)
+
+
+STALE = "only the foboot from before the reset is still listed (the same USB device number): no new one enumerated"
+
+
 def kernel_usb_lines(runner, keep=6):
     """The kernel's last USB lines this boot, for a foboot that did not come back. A journal that cannot be read
     gives none: it only explains a failure, which stands without it."""
@@ -130,6 +158,8 @@ def kernel_usb_lines(runner, keep=6):
 def foboot_check(variant, facts, found):
     """The `foboot` test: did foboot answer on USB after the reset? The tests' DFU loads need it."""
     seconds = found.get("foboot_seconds")
+    if "foboot_error" in found:
+        return "error", found["foboot_error"], []
     if seconds is not None:
         return "pass", None, [f"foboot (1209:5bf0) on USB {seconds} s after the reset"]
     if "header" not in found:
@@ -142,8 +172,9 @@ def foboot_check(variant, facts, found):
     # the kernel's lines first and CDONE last: the console shows a failed test's last 8 lines (runner.summary)
     output = [*found.get("usb_kernel", []), f"CDONE before {reading.get('cdone_before')}, in reset "
               f"{reading.get('cdone_in_reset')}, after {reading.get('cdone_after')}"]  # fmt: skip
+    stale = f"; {STALE}" if found.get("foboot_stale") else ""
     return "fail", (f"foboot (1209:5bf0) did not appear on USB within {FOBOOT_WAIT:g} s of the reset, so no "
-                    f"design can be loaded over DFU ({before}): look at the Fomu's USB path (an OpenVizsla, "
+                    f"design can be loaded over DFU ({before}{stale}): look at the Fomu's USB path (an OpenVizsla, "
                     "when one is inline, is on it)"), output  # fmt: skip
 
 
@@ -209,7 +240,12 @@ class Fomu(TestBoard):
         """The flash's IDs over the header (the iCE40 reset; see the module's docstring), then foboot on USB.
         The whole reading is left in found["header"] for the `header` test and the report, and the IDs in
         found for the state."""
-        found["foboot_before_reset"] = bool(usb_matching(usb_devices(), (FOBOOT,)))
+        try:
+            before = foboots()
+        except Problem as p:  # nothing is reset: the header and foboot tests say why
+            found["header_error"] = p.reason
+            return {"flash_error": f"not read over the header: {p.reason}"}
+        found["foboot_before_reset"] = bool(before)
         try:
             reading = read_header(host, runner)
         except Problem as p:
@@ -218,17 +254,17 @@ class Fomu(TestBoard):
         found["header"] = reading
         facts = flash_identity(reading)
         found.update({k: facts[k] for k in ("flash_jedec", "flash_uid") if k in facts})
-        start = _clock()
-        while True:
-            dfu = usb_matching(usb_devices(), (FOBOOT,))
-            if dfu:
-                found["foboot_seconds"] = round(_clock() - start, 1)
-                found["usb"] = dfu[0]["path"]
-                break
-            if _clock() - start >= FOBOOT_WAIT:
-                found["usb_kernel"] = kernel_usb_lines(runner)
-                break
-            _sleep(0.5)
+        try:
+            came = new_foboot(before)
+            stale = not came and bool(before & foboots())
+        except Problem as p:
+            found["foboot_error"] = p.reason
+            return facts
+        if came:
+            found["foboot_seconds"], found["usb"] = came
+        else:
+            found["usb_kernel"] = kernel_usb_lines(runner)
+            found["foboot_stale"] = stale
         return facts
 
     # What a run of tests by name leaves (#135): said by fpgas-fomu-debug after `program` and `test`, and by the
@@ -263,26 +299,31 @@ class Fomu(TestBoard):
         runner = runner or run
         entry = {"test": "foboot-after", "output": []}
         try:
+            before = foboots()  # a test design has no USB, so normally none
+        except Problem as p:
+            return {**entry, "result": p.result, "reason": f"the closing reset was not done: {p.reason}"}
+        try:
             read_header(host, runner)
         except Problem as p:
             return {**entry, "result": p.result, "reason": f"the closing reset could not be done: {p.reason}"}
-        start = _clock()
-        while True:
-            if usb_matching(usb_devices(), (FOBOOT,)):
-                seconds = round(_clock() - start, 1)
-                said = f"foboot (1209:5bf0) back on USB {seconds} s after the closing reset: the next user can load"
-                return {**entry, "result": "pass", "output": [said + " over DFU"]}
-            if _clock() - start >= FOBOOT_WAIT:
-                return {
-                    **entry,
-                    "result": "fail",
-                    "output": kernel_usb_lines(runner),
-                    "reason": (
-                        f"foboot (1209:5bf0) did not come back on USB within {FOBOOT_WAIT:g} s of the closing reset: "
-                        "no design can be loaded over DFU until the Fomu is power-cycled (#135)"
-                    ),
-                }
-            _sleep(0.5)
+        try:
+            came = new_foboot(before)
+            stale_now = not came and before & foboots()
+        except Problem as p:
+            return {**entry, "result": p.result, "reason": f"after the closing reset: {p.reason}"}
+        if came:
+            said = f"foboot (1209:5bf0) back on USB {came[0]} s after the closing reset: the next user can load"
+            return {**entry, "result": "pass", "output": [said + " over DFU"]}
+        stale = f"; {STALE}" if stale_now else ""
+        return {
+            **entry,
+            "result": "fail",
+            "output": kernel_usb_lines(runner),
+            "reason": (
+                f"foboot (1209:5bf0) did not come back on USB within {FOBOOT_WAIT:g} s of the closing reset{stale}: "
+                "no design can be loaded over DFU until the Fomu is power-cycled (#135)"
+            ),
+        }
 
     def identity(self, found):
         """The state: the variant and the flash's IDs read over the header (foboot has no USB serial)."""
