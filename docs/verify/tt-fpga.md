@@ -35,11 +35,13 @@ Then the tests of an FPGA board, in this order:
    [Tiny Tapeout FPGA demo board pin mapping](https://docs.fpgas.online/en/latest/boards/tt-fpga/overview/pin-mapping.html)). A miswired HAT fails the board.
 4. The `uart` test: the check loads the UART test design through the microcontroller (`tt_fpga_program.py`, over
    `mpremote`), and runs its host test through the UART bridge on `/dev/ttyACM0`.
-5. When the tests are done it streams one more design, which moves the seven-segment display and is left running
+5. [The `spram` test](#the-spram-test): the same way, the SPRAM test design, which writes and reads back the
+   iCE40's 128 KB of SPRAM. A word that does not read back fails the board.
+6. When the tests are done it streams one more design, which moves the seven-segment display and is left running
    ([what the TT FPGA is left running](#what-the-tt-fpga-is-left-running)). If that load fails the board still
    passes, with a warning in the report.
 
-The DIP-switch, `wiring` and `uart` tests and the design left running (steps 2 to 5) are for an FPGA
+The DIP-switch, `wiring`, `uart` and `spram` tests and the design left running (steps 2 to 6) are for an FPGA
 board. A board with a Tiny Tapeout chip runs `sdk` and then
 [the wiring test](#the-wiring-test) of its three Pmod ribbons. Nothing is loaded into it.
 
@@ -64,7 +66,7 @@ chosen.
 
 | The board says (rpi-hwid's `chip`) | Variant | What the check does |
 |---|---|---|
-| `fpga` | `tt-fpga` | runs [`sdk`](#the-sdk-test), then loads and runs [`dip-switches`](#the-dip-switches), `wiring` and `uart` |
+| `fpga` | `tt-fpga` | runs [`sdk`](#the-sdk-test), then loads and runs [`dip-switches`](#the-dip-switches), `wiring`, `uart` and [`spram`](#the-spram-test) |
 | `asic`, and a shuttle | `tt-asic` | runs [`sdk`](#the-sdk-test), then [`wiring`](#the-wiring-test) (its three Pmod ribbons); nothing is loaded, and the board is put back as its SDK had it |
 | nothing usable: rpi-hwid is not installed, could not read the board, or gave no shuttle for a chip | none | nothing is loaded and no test runs: the result is `error`, and the reason says what could not be read |
 | (an RP2 in its USB boot loader, `2e8a:0003`) | none | `fail`: `a Raspberry Pi RP2 is on USB but is not running the Tiny Tapeout firmware` |
@@ -143,6 +145,28 @@ reads it.
 * A board with a Tiny Tapeout chip is not given it: the design is an FPGA bitstream, and goes only to a board
   that said it carries the FPGA. Such a board is left as its SDK had it, put back from memory after
   [the wiring test](#the-wiring-test).
+
+## The `spram` test
+
+The FPGA breakout has no flash and no DRAM. Its memory is the iCE40UP5K's own SPRAM: four blocks of 32 KB.
+- The test design is the UART test's SoC with other firmware in its ROM. That firmware keeps every value in
+  registers, so nothing but the test touches the SPRAM.
+- Its host script, `test_spram.py`, runs through the UART bridge as `uart`'s does. It sends a byte. On that
+  byte the firmware:
+  1. writes to every word a pattern holding the word's own address, and reads every word back;
+  2. does the same with the inverse of the pattern, so that every bit of every word has held a 0 and a 1;
+  3. at the start of each block, stores one byte into each of a word's four bytes, and checks that only that
+     byte changed (the SPRAM's write masks).
+- It answers with one line, which the script turns into the test's result:
+
+| The script's last line | Result |
+|---|---|
+| `SPRAM: all 128 KB (four 32 KB blocks) written and read back twice, byte lanes checked` | `pass` |
+| `SPRAM: FAIL at 0x<address> read 0x<word> expected 0x<word>`: the first word that did not read back | `fail`, with that line as the reason |
+| `SPRAM: no answer from the SPRAM test design in 15 s: nothing was tested` | `error` |
+
+The design's page has the details: `designs/spram/README.md`
+([fpgas.online-test-designs #343](https://github.com/fpgas-online/fpgas.online-test-designs/issues/343)).
 
 ## The `sdk` test
 
