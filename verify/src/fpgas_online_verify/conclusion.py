@@ -12,6 +12,8 @@ its entry here.
 import re
 import textwrap
 
+from .checks import NO_TEST_YET
+
 DOCS = "https://docs.fpgas.online/en/latest/verify"  # the pages of docs/verify/, as the site publishes them
 REPO_DOCS = "https://github.com/fpgas-online/fpgas.online-test-designs/blob/main/docs"
 ACORN_PROGRAMMING = f"{REPO_DOCS}/hardware/acorn-pcie-programming.md"
@@ -36,9 +38,16 @@ BOARDS = "acorn, arty, fomu, netv2 or tt-fpga"  # what <board> stands for, when 
 OTHER_PCIE = "xilinx-pcie"
 WIDTH = 78  # of the advice, which is sentences; a reason is one line however long, so it can be searched for
 
+# What a planned test with no boot-check test yet says (checks.NO_TEST_YET), up to its issue's number.
+UNTESTED = re.escape(NO_TEST_YET.split("{", 1)[0])
+
 # (what a reason says, what to do about it). Every entry whose pattern is found in any reason of the report is
 # listed once, in this order.
 ADVICE = (
+    (UNTESTED,
+     "Nothing was found wrong with the board for this: the check plans a test it does not have, and a board "
+     "fails until each of its tests exists, so it is not offered. The reason names the issue that adds the test; "
+     f"once that test is in the boot check, the board's next check runs it: {ISSUES}"),
     (r"unconverted: runs SQRL's factory image",
      "The Acorn still runs the image it was sold with, not the fpgas.online one, so only its PCIe link and its "
      "JTAG could be tested. It has to be converted once (the fpgas.online image loaded over JTAG, then written "
@@ -189,6 +198,13 @@ def own_reasons(board):
     return [part for part in (p.strip().removeprefix(";").removesuffix(";").strip() for p in parts) if part]
 
 
+def only_untested(board):
+    """Whether all that kept the board from passing is planned tests with no boot-check test yet."""
+    not_run = (board.get("not_run") or {}).values()
+    untested = [why for why in not_run if re.match(UNTESTED, why)]
+    return bool(untested) and len(untested) == len(not_run) and not _failed(board) and not own_reasons(board)
+
+
 def _plural(n, word):
     return f"{n} {word}" if n == 1 else f"{n} {word}s"
 
@@ -268,7 +284,8 @@ def lines(report, kept_in=None):
         todo.append("If the change was meant (a board flashed or swapped on purpose), accept it: "
                     "sudo fpgas-verify --update")  # fmt: skip
     for b in report["boards"]:
-        if b["result"] != "pass" and shown(b)[0] != OTHER_PCIE:  # no debug tool is ours for another board
+        if b["result"] != "pass" and shown(b)[0] != OTHER_PCIE and not only_untested(b):
+            # no debug tool is ours for another board, and none finds a test that is not written yet
             todo.append(f"To look at the {b['board']} board yourself: sudo fpgas-{slug(b['board'])}-debug --help "
                         f"(sudo apt install fpgas-online-{slug(b['board'])}-debug)")  # fmt: skip
     todo.append(f"What each message means: {DOCS}/common-failures.html#common-failures")

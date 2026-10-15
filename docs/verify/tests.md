@@ -28,9 +28,9 @@ Each test checks its bitstream's sha256 against the `-bitstreams` package's mani
 | Board | Found by | Loaded with | UART | Boot-check tests, in order | Only in `-debug` | Recorded state |
 |---|---|---|---|---|---|---|
 | Arty A7 | USB `0403:6010` | `openFPGALoader -b arty` | `/dev/ttyUSB1` | `jtag`, `uart`, `ddr`, `flash`, `ethernet`, `wiring` | `pmod` | FTDI serial, IDCODE, device DNA, flash JEDEC ID, sha256 of the flash's first 2.1 MiB |
-| NeTV2 | JTAG IDCODE over GPIO 4/17/27/22 | openocd (Pi 3/4), openFPGALoader `rp1pio` (Pi 5) | `/dev/ttyAMA0` | `jtag`, `uart`, `ddr`, `flash` (`ethernet` is planned but not run yet: [#341](https://github.com/fpgas-online/fpgas.online-test-designs/issues/341)), and `wiring` derived from `jtag` and `uart` | `ethernet`, `pmod`, `pmod-pin-id` (the Pmod pin-ID scan; there is no Pmod HAT cabling on the NeTV2) | IDCODE, device DNA, flash JEDEC ID, sha256 of the flash's boot image |
-| Fomu EVT | CDONE high on the Pi's header (GPIO17), or USB `1209:5bf0` (foboot) | openFPGALoader over DFU | `/dev/serial0` | `header`, `foboot` (both load nothing), `uart`, and `wiring` derived from `header` and `uart` | `flash` (planned but not run in the boot check yet: [#342](https://github.com/fpgas-online/fpgas.online-test-designs/issues/342)); `pmod` and `pmod-pin-id`, which cannot pass on the EVT ([#202](https://github.com/fpgas-online/fpgas.online-test-designs/issues/202)) | the flash's JEDEC ID and unique ID, read over the header |
-| TT FPGA | USB `2e8a:0005`, `2e8a:000f` (and `2e8a:0003`, the RP2's boot loader, which fails) | `tt_fpga_program.py` over `mpremote` | `/dev/ttyACM0` | `sdk` (loads nothing), `dip-switches`, `wiring`, `uart`; a board with a Tiny Tapeout chip: `sdk`, then `wiring` (nothing is loaded) | `pmod` | USB serial |
+| NeTV2 | JTAG IDCODE over GPIO 4/17/27/22 | openocd (Pi 3/4), openFPGALoader `rp1pio` (Pi 5) | `/dev/ttyAMA0` | `jtag`, `uart`, `ddr`, `flash` (`ethernet` is planned but not run yet, which fails the board: [#341](https://github.com/fpgas-online/fpgas.online-test-designs/issues/341)), and `wiring` derived from `jtag` and `uart` | `ethernet`, `pmod`, `pmod-pin-id` (the Pmod pin-ID scan; there is no Pmod HAT cabling on the NeTV2) | IDCODE, device DNA, flash JEDEC ID, sha256 of the flash's boot image |
+| Fomu EVT | CDONE high on the Pi's header (GPIO17), or USB `1209:5bf0` (foboot) | openFPGALoader over DFU | `/dev/serial0` | `header`, `foboot` (both load nothing), `uart`, and `wiring` derived from `header` and `uart` | `flash` (planned but not run in the boot check yet, which fails the board: [#342](https://github.com/fpgas-online/fpgas.online-test-designs/issues/342)); `pmod` and `pmod-pin-id`, which cannot pass on the EVT ([#202](https://github.com/fpgas-online/fpgas.online-test-designs/issues/202)) | the flash's JEDEC ID and unique ID, read over the header |
+| TT FPGA | USB `2e8a:0005`, `2e8a:000f` (and `2e8a:0003`, the RP2's boot loader, which fails) | `tt_fpga_program.py` over `mpremote` | `/dev/ttyACM0` | `sdk` (loads nothing), `dip-switches`, `wiring`, `uart` (`spram` is planned but not run yet, which fails the board: [#343](https://github.com/fpgas-online/fpgas.online-test-designs/issues/343)); a board with a Tiny Tapeout chip: `sdk`, then `wiring` (nothing is loaded) | `pmod` | USB serial |
 
 * The Arty and NeTV2 are left running openFPGALoader's SPI-over-JTAG bridge (used to read the flash back), the
   Fomu its test design, and the TT FPGA a design that moves its display
@@ -64,10 +64,10 @@ Each test checks its bitstream's sha256 against the `-bitstreams` package's mani
 
 The check lists every test it should run for your board before it runs the first one, so the report
 says what was not run, and why, even when the check stopped early. A check your board cannot have is listed
-with the reason. A test that is planned but has no boot-check test yet is in `not_run` with its issue; it does
-not fail the board. The report fields are in [the fleet events](fleet.md#the-planned-tests-fields).
+with the reason. A test that is planned but has no boot-check test yet is in `not_run` with its issue, and it
+fails the board: the board is not offered until its test exists. The report fields are in [the fleet events](fleet.md#the-planned-tests-fields).
 
-| Board type | Planned tests, in order | Not applicable | Not written yet |
+| Board type | Planned tests, in order | Not applicable | Not written yet (fails the board) |
 |---|---|---|---|
 | Arty A7 | `jtag`, `uart`, `ddr`, `flash`, `ethernet`, `wiring` | none: every common check applies | none |
 | NeTV2 | `jtag`, `uart`, `ddr`, `flash`, `ethernet`, `wiring` (from `jtag` and `uart`: its wires to the Pi are the header's JTAG and UART lines) | none | `ethernet`: [#341](https://github.com/fpgas-online/fpgas.online-test-designs/issues/341) |

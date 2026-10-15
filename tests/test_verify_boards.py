@@ -290,6 +290,17 @@ def _check(board, tmp_path, found, run, **options):
                                              **options}, runner=run)  # fmt: skip
 
 
+def _passed_what_it_has(report):
+    """The board passed every test its check runs. With checks.UNTESTED_FAILS (Tim, coord-64, 16 Oct 2026: "Fail
+    until tested") a board with a planned test that has no boot-check test yet fails for that alone, saying so."""
+    untested = {t: why for t, why in report.get("not_run", {}).items() if why.startswith(NO_TEST_YET.split("{")[0])}
+    if not untested:
+        return report["result"] == "pass"
+    return report["result"] == "fail" and report["reason"] == "; ".join(
+        f"{t} not run: {why}" for t, why in untested.items()
+    )
+
+
 ARTY_FOUND = {"variant": "a7-35", "usb": "1-1", "serial": "210319B"}
 
 
@@ -402,7 +413,7 @@ def test_a_netv2_whose_finding_scan_exits_non_zero_fails_even_with_the_right_idc
         assert not any(needle in " ".join(c) for c in run.calls)  # the check does not scan again
         assert report["jtag"]["idcode_device"] == "XC7A100T"
         if rc == 0:
-            assert report["result"] == "pass" and report["jtag"]["result"] == "pass", report
+            assert _passed_what_it_has(report) and report["jtag"]["result"] == "pass", report
         else:
             assert report["result"] == "fail" and report["jtag"]["result"] == "fail"
             assert report["jtag"]["reason"] == f"{tool} exited 2 reading the IDCODE"
@@ -432,7 +443,7 @@ def test_a_netv2_on_a_jtag_chain_of_two_devices_fails_as_the_other_boards_do(tmp
     (found,) = NETV2.probe(host, runner=Runner([(needle, (0, chain(0x13631093)))]))
     run = Runner(flash=b"\0" * NETV2.flash_region["a7-100"])
     report = NETV2.check(host, found, {"images": _install(tmp_path, NETV2)}, runner=run)
-    assert report["result"] == "pass" and report["jtag"]["result"] == "pass", report
+    assert _passed_what_it_has(report) and report["jtag"]["result"] == "pass", report
     assert (report["jtag"]["idcode"], found["idcode_scan"]["tool"]) == ("0x13631093", tool)
 
 
@@ -512,7 +523,7 @@ def test_a_flash_that_cannot_be_read_back_is_an_error(tmp_path):
 def test_a_netv2_on_a_pi3_loads_with_openocd_and_frees_its_uart(tmp_path):
     run = Runner(flash=b"\0" * NETV2.flash_region["a7-100"])
     report = _check(NETV2, tmp_path, _netv2_found("0x13631093"), run)
-    assert report["result"] == "pass", report
+    assert _passed_what_it_has(report), report
     loads = [c for c in run.calls if c[0] == "openocd"]
     assert f"pld load 0 {tmp_path}/images/uart-test-netv2-a7-100t/kosagi_netv2.bit" in loads[0][-1]
     assert ["systemctl", "stop", "serial-getty@ttyAMA0.service"] in run.calls
@@ -559,7 +570,7 @@ def test_a_netv2_on_a_pi5_loads_with_rp1pio_and_muxes_its_uart(tmp_path):
     run = Runner(flash=b"\0" * NETV2.flash_region["a7-35"])
     report = NETV2.check(_host(NETV2, PI5, None), {"variant": "a7-35"},
                          {"images": _install(tmp_path, NETV2)}, runner=run)  # fmt: skip
-    assert report["result"] == "pass"
+    assert _passed_what_it_has(report)
     assert run.calls[0][-3:] == ["--detect", "--verbose-level", "2"] and report["jtag"]["idcode_device"] == "XC7A35T"
     assert run.calls[2] == ["openFPGALoader", "-c", "rp1pio", "--pins", "27:22:4:17", "--read-dna"]
     assert report["jtag"]["dna"] == DNA
@@ -590,7 +601,7 @@ def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_rea
     _installed(monkeypatch)
     run = Runner([E6_SAYS_FPGA])
     report = _check(TT, tmp_path, TT_E6, run)
-    assert report["result"] == "pass"
+    assert _passed_what_it_has(report)
     # the TT site's bridge holds /dev/ttyACM0 (pi-sw2-p33, 2026-09-27): stopped for the tests, started after
     assert run.calls[:2] == [
         ["systemctl", "is-active", "--quiet", "fpgas-tt.service"],
@@ -697,7 +708,7 @@ def test_rpi_hwid_reads_the_tt_board_while_the_check_holds_its_port_and_before_a
     run = Runner([_rpi_hwid({**TT_BOARD, "usb_serial": "OTHER", "mcu": "RP2040"}, TT_BOARD,
                             stderr="warning: something\n")])  # fmt: skip
     report = _check(TT, tmp_path, TT_FOUND, run, event=lambda stage, d: events.append((stage, d)))
-    assert report["result"] == "pass"
+    assert _passed_what_it_has(report)
     # after fpgas-tt.service is stopped, the board's main.py is checked, its SDK is started, and then rpi-hwid
     # asks it who it is, all before the first design is loaded; the service is started again at the end
     assert run.calls[2][1].endswith(MAIN_PY) and run.calls[2][2] == "/dev/ttyACM0"
@@ -938,8 +949,9 @@ def test_a_fomu_is_identified_by_its_flash_over_the_header_and_foboot_is_waited_
     fomu_usb.append(FOBOOT_USB)
     run = Runner([("fomu_header_id.py", _says(FOMU_READING))])
     report = _check(FOMU, tmp_path, {"variant": "evt", "cdone": "hi"}, run)
-    assert report["result"] == "pass", report
+    assert _passed_what_it_has(report), report
     assert [t["test"] for t in report["tests"]] == ["header", "foboot", "uart", "foboot-after"]
+    assert report["not_run"] == {"flash": NO_TEST_YET.format(issue=342)}  # #342; it fails the board (coord-64)
     assert report["identity"] == {
         "board": "fomu", "kind": "fomu", "variant": "evt", "usb": "1-1.2", "flash": "W25Q128JV",
         "flash_jedec": "0xef7018", "flash_size_bytes": 16777216, "flash_status": "0x00", "flash_uid": FOMU_UID,
@@ -1219,7 +1231,7 @@ def test_the_dna_is_not_read_unless_the_scan_found_the_one_fpga_expected(tmp_pat
 def test_the_netv2_reads_its_dna_on_its_scans_pins_and_puts_them_back(tmp_path):
     run = Runner([("pinctrl get", (0, NETV2_PINS))], flash=b"\0" * NETV2.flash_region["a7-100"])
     report = _check(NETV2, tmp_path, _netv2_found("0x13631093"), run)
-    assert report["result"] == "pass" and report["identity"]["dna"] == report["state"]["dna"] == DNA
+    assert _passed_what_it_has(report) and report["identity"]["dna"] == report["state"]["dna"] == DNA
     read = run.calls.index(["openFPGALoader", "--cable", "libgpiod", "--pins", "27:22:4:17", "--read-dna"])
     assert run.calls[read - 1] == ["pinctrl", "get", "4,17,27,22"]
     assert run.calls[read + 1 : read + 5] == [["pinctrl", "set", *g.split()] for g in
@@ -1466,7 +1478,7 @@ def test_a_board_that_says_it_is_an_fpga_board_is_a_tt_fpga_and_only_then_is_a_d
     _installed(monkeypatch)
     run = Runner([_rpi_hwid(TT_BOARD)])
     report = _check(TT, tmp_path, TT_FOUND, run)
-    assert report["result"] == "pass" and report["variant"] == report["identity"]["variant"] == "tt-fpga"
+    assert _passed_what_it_has(report) and report["variant"] == report["identity"]["variant"] == "tt-fpga"
     asked = run.calls.index(RPI_HWID_TT)
     loaders = ("tt_fpga_program.py", "tt_test_wrapper.py")
     loads = [i for i, c in enumerate(run.calls) if any(name in " ".join(c) for name in loaders)]
@@ -1589,7 +1601,7 @@ def test_a_chip_board_with_another_fault_says_both_and_an_fpga_board_has_no_wiri
     # the FPGA board's wiring test loads its design (the pin-ID scan): the chip board's script is not run there
     fpga_run = Runner([_rpi_hwid(TT_BOARD)])
     fpga = _check(TT, tmp_path / "fpga", TT_FOUND, fpga_run)
-    assert fpga["result"] == "pass" and list(fpga["not_run"]) == ["spram"]  # #343: no test yet
+    assert _passed_what_it_has(fpga) and list(fpga["not_run"]) == ["spram"]  # #343: no test yet
     assert not any(WIRING in " ".join(c) for c in fpga_run.calls)
     assert [t["test"] for t in fpga["tests"]] == ["sdk", "dip-switches", "wiring", "uart"]
 
@@ -1704,7 +1716,7 @@ def test_a_variant_asked_for_that_the_board_does_not_say_it_is_loads_nothing(tmp
     assert report["result"] == "error" and _nothing_loaded(report, run)
     assert "--variant tt-fpga was asked for, but the board says it is a tt-asic" in report["reason"]
     agreed = Runner([_rpi_hwid(TT_BOARD)])
-    assert _check(TT, tmp_path / "again", TT_FOUND, agreed, variant="tt-fpga")["result"] == "pass"
+    assert _passed_what_it_has(_check(TT, tmp_path / "again", TT_FOUND, agreed, variant="tt-fpga"))
 
 
 def test_only_an_rp2_that_can_be_a_demo_board_is_a_tiny_tapeout_board(tmp_path):
@@ -1733,7 +1745,7 @@ def test_the_check_of_an_fpga_board_ends_by_leaving_the_display_design_running(t
     _installed(monkeypatch)
     run = Runner([_rpi_hwid(TT_BOARD)])
     report = _check(TT, tmp_path, TT_FOUND, run)
-    assert report["result"] == "pass" and "warnings" not in report
+    assert _passed_what_it_has(report) and "warnings" not in report
     assert report["left_running"] == {"design": "display", "bitstream": DISPLAY}
     # it is the last thing sent to the board: after every test, and nothing follows it but the bridge's start
     assert _loads(run) == ["tt-display-tt-fpga", "pmod-pin-id-tt-fpga", "uart-test-tt-fpga", "tt-display-tt-fpga"]
@@ -1749,12 +1761,12 @@ def test_the_check_of_an_fpga_board_ends_by_leaving_the_display_design_running(t
     assert sent["board0_left_running"] == "display" and "board0_warnings" not in sent
 
 
-def test_a_display_design_that_cannot_be_loaded_is_a_warning_and_the_board_still_passes(tmp_path, monkeypatch):
+def test_a_display_design_that_cannot_be_loaded_is_a_warning_not_the_boards_result(tmp_path, monkeypatch):
     """The board was tested before it; the design is for the camera. But it is said, in the report and the event."""
     _installed(monkeypatch)
     run = Runner([(DISPLAY, [(0, "ok"), (1, "mpremote: no device found\nPROGRAM_FAILED")]), _rpi_hwid(TT_BOARD)])
     report = _check(TT, tmp_path, TT_FOUND, run)
-    assert report["result"] == "pass" and "reason" not in report and "left_running" not in report
+    assert _passed_what_it_has(report) and "display" not in report.get("reason", "") and "left_running" not in report
     assert report["warnings"] == [
         "the display design, which the check leaves running, could not be loaded (loading it failed (exit 1): "
         "mpremote: no device found PROGRAM_FAILED): the board is left as its last test left it"]  # fmt: skip
@@ -2067,16 +2079,19 @@ def test_an_arty_reports_its_jtag_read_as_its_first_test_and_its_reason_once(tmp
     assert report["reason"].count("jtag fail:") == 1
 
 
-def test_a_test_not_written_yet_is_not_run_with_its_issue_and_does_not_fail_the_board(tmp_path, monkeypatch):
+def test_a_test_not_written_yet_is_not_run_with_its_issue_and_fails_the_board(tmp_path, monkeypatch):
+    """Tim, coord-64 (16 Oct 2026): "Fail until tested"."""
     run = Runner(flash=b"\0" * NETV2.flash_region["a7-35"])
     report = _check(NETV2, tmp_path, _netv2_found("0x0362d093"), run)
-    assert report["result"] == "pass", report
+    assert report["result"] == "fail", report
+    assert report["reason"] == "ethernet not run: no boot-check test yet: fpgas.online-test-designs #341"
     assert report["not_run"] == {"ethernet": "no boot-check test yet: fpgas.online-test-designs #341"}
     assert [t["test"] for t in report["tests"]] == ["jtag", "uart", "ddr", "flash"]
-    # coord-64: the one switch that makes such a test fail the board, as a pending test does
-    monkeypatch.setattr(checks, "UNTESTED_FAILS", True)
+    assert all(t["result"] == "pass" for t in report["tests"])  # the tests it has still run and are reported
+    # the switch off: the board keeps its result
+    monkeypatch.setattr(checks, "UNTESTED_FAILS", False)
     report = _check(NETV2, tmp_path, _netv2_found("0x0362d093"), run)
-    assert report["result"] == "fail" and "ethernet not run: no boot-check test yet" in report["reason"]
+    assert report["result"] == "pass", report
 
 
 def test_a_fomu_whose_header_failed_says_why_its_closing_reset_was_not_run(tmp_path, fomu_usb):

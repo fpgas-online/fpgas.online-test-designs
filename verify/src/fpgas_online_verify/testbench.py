@@ -417,8 +417,8 @@ class TestBoard(Board):
 
     # What the whole check is asked about (checks.py, #340): variant -> {test: the test-designs issue that adds it}
     # for a test the board's hardware calls for and the check does not run yet (planned, and not run with
-    # checks.NO_TEST_YET; it fails the board only with checks.UNTESTED_FAILS), and variant -> {common check: why
-    # the board cannot have it}.
+    # checks.NO_TEST_YET; it fails the board while checks.UNTESTED_FAILS, Tim's coord-64), and variant -> {common
+    # check: why the board cannot have it}.
     not_yet: ClassVar[dict] = {}
     cannot: ClassVar[dict] = {}
     # The test entry finish() adds, when it adds one (the Fomu's foboot-after): planned last.
