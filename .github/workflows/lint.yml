@@ -28,4 +28,9 @@ jobs:
         run: |
           uv run --extra dev ruff check \
             designs/ \
+            tests/ \
             verify_hardware.py
+
+      # Every test file, not only those the verify and Acorn jobs list (#338).
+      - name: Format check of the tests
+        run: uv run --extra dev ruff format --check tests/
