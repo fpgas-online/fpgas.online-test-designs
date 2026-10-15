@@ -54,9 +54,9 @@ ABOUT_MAX = 120
 COMMON = ("jtag", "wiring", "flash", "ddr", "uart", "ethernet")
 
 # A test a board's hardware calls for that its boot check does not run yet (Board.untested): it is planned, and
-# not run with this reason. Whether that fails the board is Tim's call (coord-64, 15 Oct 2026); until he says,
-# it does not: the board keeps its result and the site shows the test as should-have-run.
-UNTESTED_FAILS = False
+# not run with this reason, and the board FAILS with it, so it is not offered until the test exists. Tim, coord-64,
+# 16 Oct 2026: "Fail until tested".
+UNTESTED_FAILS = True
 NO_TEST_YET = "no boot-check test yet: fpgas.online-test-designs #{issue}"
 
 # The planned tests' reason when the check stopped before them, with the reason the board's check gave.

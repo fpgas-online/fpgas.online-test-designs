@@ -64,10 +64,10 @@ Each test checks its bitstream's sha256 against the `-bitstreams` package's mani
 
 The check lists every test it should run for your board before it runs the first one, so the report
 says what was not run, and why, even when the check stopped early. A check your board cannot have is listed
-with the reason. A test that is planned but has no boot-check test yet is in `not_run` with its issue; it does
-not fail the board. The report fields are in [the fleet events](fleet.md#the-planned-tests-fields).
+with the reason. A test that is planned but has no boot-check test yet is in `not_run` with its issue, and it
+fails the board: the board is not offered until its test exists. The report fields are in [the fleet events](fleet.md#the-planned-tests-fields).
 
-| Board type | Planned tests, in order | Not applicable | Not written yet |
+| Board type | Planned tests, in order | Not applicable | Not written yet (fails the board) |
 |---|---|---|---|
 | Arty A7 | `jtag`, `uart`, `ddr`, `flash`, `ethernet`, `wiring` | none: every common check applies | none |
 | NeTV2 | `jtag`, `uart`, `ddr`, `flash`, `ethernet`, `wiring` (from `jtag` and `uart`: its wires to the Pi are the header's JTAG and UART lines) | none | `ethernet`: [#341](https://github.com/fpgas-online/fpgas.online-test-designs/issues/341) |
