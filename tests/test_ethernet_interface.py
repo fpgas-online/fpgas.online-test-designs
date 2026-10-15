@@ -283,3 +283,26 @@ def test_main_exits_with_run_test_s_exit(monkeypatch, capsys):
     assert _main(monkeypatch, capsys) == (1, ["ETHERNET: link up after 1.0 s; ICMP ping failed"])
     _stub(monkeypatch)
     assert _main(monkeypatch, capsys) == (0, [])
+
+
+def test_a_termios_error_from_the_uart_is_the_reason(monkeypatch, capsys):
+    """pyserial wraps termios errors on open, but reset_input_buffer passes termios.error (not an OSError) on."""
+
+    class Port:
+        def __init__(self, *a, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def reset_input_buffer(self):
+            raise te.termios.error(5, "Input/output error")
+
+    _stub(monkeypatch)
+    monkeypatch.setattr(te, "read_mac_from_bios", READ_MAC)
+    monkeypatch.setattr(te.serial, "Serial", Port)
+    rc, said = _main(monkeypatch, capsys)
+    assert rc == 2 and said == ["ETHERNET: could not run: (5, 'Input/output error')"]

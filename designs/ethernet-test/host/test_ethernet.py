@@ -27,6 +27,7 @@ import os
 import re
 import subprocess
 import sys
+import termios
 import time
 import traceback
 
@@ -382,9 +383,11 @@ def main():
     if args.uart_port is None:
         args.uart_port = "/dev/ttyUSB1" if args.board == "arty" else "/dev/ttyAMA0"
 
+    # A tool missing or failing, a port that broke (pyserial passes termios.error, not an OSError, out of
+    # reset_input_buffer).
     try:
         rc = run_test(args.board, args.uart_port, args.baud, args.interface)
-    except (OSError, subprocess.CalledProcessError) as e:  # a tool missing or failing, a port that broke
+    except (OSError, subprocess.CalledProcessError, termios.error) as e:
         traceback.print_exc()
         print()  # the step may have printed half a line ("Detecting USB Ethernet adapter... ")
         say(f"could not run: {e}")
