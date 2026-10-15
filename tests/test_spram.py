@@ -1,7 +1,12 @@
-"""The TT FPGA's SPRAM test firmware (designs/_shared/ice40_firmware.py, generate_spram_firmware, #343), run on a
-small RV32I interpreter against a model of the SoC's UART and SPRAM: a good SPRAM passes, and each kind of fault
-it is there to find (a stuck data bit, two addresses that reach one word, a byte lane whose write mask does not
-work) fails it, at the right word."""
+"""The TT FPGA's SPRAM test (#343). Its firmware (designs/_shared/ice40_firmware.py, generate_spram_firmware) is
+run on a small RV32I interpreter against a model of the SoC's UART and SPRAM: a good SPRAM passes, and each kind of
+fault it is there to find (a stuck data bit, two addresses that reach one word, a byte lane whose write mask does
+not work) fails it, at the right word. Its host script (designs/spram/host/test_spram.py) is run against a fake
+serial port that answers as the firmware does."""
+
+import importlib.util
+import pathlib
+import sys
 
 import pytest
 
@@ -78,12 +83,19 @@ class Machine:
         elif op == 0b0010111:  # auipc
             val = self.pc + (ins & 0xFFFFF000)
         elif op == 0b1101111:  # jal
-            imm = ((ins >> 31) << 20) | (((ins >> 12) & 0xFF) << 12) | (((ins >> 20) & 1) << 11) | (((ins >> 21) & 0x3FF) << 1)
+            imm = (
+                ((ins >> 31) << 20)
+                | (((ins >> 12) & 0xFF) << 12)
+                | (((ins >> 20) & 1) << 11)
+                | (((ins >> 21) & 0x3FF) << 1)
+            )
             val, nxt = nxt, self.pc + imm - (1 << 21 if imm >> 20 else 0)
         elif op == 0b1100111:  # jalr
             val, nxt = nxt, (rs1 + imm_i) & ~1
         elif op == 0b1100011:  # beq, bne
-            imm = ((ins >> 31) << 12) | (((ins >> 7) & 1) << 11) | (((ins >> 25) & 0x3F) << 5) | (((ins >> 8) & 0xF) << 1)
+            imm = (
+                ((ins >> 31) << 12) | (((ins >> 7) & 1) << 11) | (((ins >> 25) & 0x3F) << 5) | (((ins >> 8) & 0xF) << 1)
+            )
             imm -= 1 << 13 if imm >> 12 else 0
             assert f3 in (0, 1), f"branch funct3 {f3}"
             if (rs1 == rs2) == (f3 == 0):
@@ -190,3 +202,64 @@ def test_a_byte_store_that_writes_the_whole_word_fails_on_the_byte_lanes():
 def test_a_size_that_is_not_whole_blocks_is_refused(size):
     with pytest.raises(AssertionError):
         generate_spram_firmware(UART, SPRAM, size, IDENT)
+
+
+# -- the host script -------------------------------------------------------------------------------------------
+
+_SCRIPT = pathlib.Path(__file__).resolve().parent.parent / "designs" / "spram" / "host" / "test_spram.py"
+_spec = importlib.util.spec_from_file_location("test_spram_host", _SCRIPT)
+host = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(host)
+
+
+class FakePort:
+    """A serial port to the design: each byte written is answered with the lines in `answers`, in turn."""
+
+    def __init__(self, answers):
+        self.answers, self.pending, self.written = list(answers), [], b""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def reset_input_buffer(self):
+        self.pending = []
+
+    def write(self, data):
+        self.written += data
+        if self.answers:
+            self.pending += [line.encode() + b"\r\n" for line in self.answers.pop(0)]
+
+    def readline(self):
+        return self.pending.pop(0) if self.pending else b""
+
+
+def _run(monkeypatch, capsys, answers):
+    port = FakePort(answers)
+    monkeypatch.setattr(host.serial, "Serial", lambda *a, **kw: port)
+    monkeypatch.setattr(host, "ASK_EVERY_S", 0.05)
+    monkeypatch.setattr(sys, "argv", ["test_spram.py", "--port", "/dev/pts/3"])
+    rc = host.main()
+    return rc, capsys.readouterr().out.splitlines(), port
+
+
+def test_the_host_script_passes_on_the_designs_pass(monkeypatch, capsys):
+    rc, out, port = _run(monkeypatch, capsys, [["SPRAM_TEST: PASS"]])
+    assert rc == 0 and port.written == b"T"
+    assert out[-1] == "SPRAM: all 128 KB (four 32 KB blocks) written and read back twice, byte lanes checked"
+
+
+def test_the_host_script_fails_with_the_designs_words(monkeypatch, capsys):
+    fail = "FAIL at 0x10008000 read 0x00000000 expected 0x00004000"
+    rc, out, _ = _run(monkeypatch, capsys, [["LiteX custom firmware", f"SPRAM_TEST: {fail}"]])
+    assert rc == 1 and out[-1] == f"SPRAM: {fail}"
+
+
+def test_the_host_script_asks_again_while_the_design_starts_and_says_when_it_never_answers(monkeypatch, capsys):
+    rc, out, port = _run(monkeypatch, capsys, [[], ["SPRAM_READY"], ["SPRAM_TEST: PASS"]])
+    assert rc == 0 and port.written == b"TTT"
+    rc, out, port = _run(monkeypatch, capsys, [])
+    assert rc == 2 and port.written == b"T" * host.ASKS
+    assert out[-1].startswith("SPRAM: no answer from the SPRAM test design in") and "nothing was tested" in out[-1]
