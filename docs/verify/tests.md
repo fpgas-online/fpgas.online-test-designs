@@ -47,7 +47,7 @@ Each test checks its bitstream's sha256 against the `-bitstreams` package's mani
   only, sets every line back to an input, and lets the iCE40 boot from its flash, into foboot, as at power-up.
   That stops whatever design was running, so only the check does it, never `--identify`. `header` judges the
   reading: CDONE must be high before the reset (or nothing is driven), fall in reset and rise after it, and the flash must be the EVT's W25Q128JV (`ef7018`)
-  with a unique ID that is not all `00` or all `ff`. `foboot` passes when foboot is on USB within 10 s of the
+  with a unique ID that is not all `00` or all `ff`. `foboot` passes when foboot enumerates on USB again within 10 s of the
   reset: the DFU loads need it.
 * The Fomu runs only `uart` at boot: a DFU load replaces the bootloader until the next reset.
 * The TT FPGA's `fpgas-tt.service` is stopped for the tests and started again once the report is written, so
@@ -125,7 +125,7 @@ How the check works with it:
 - **Finding it.** The check reads the iCE40's CDONE (GPIO17), which drives nothing: high means the board is there and running a design. foboot's DFU bootloader on USB (`1209:5bf0`) finds it too, but is not needed. A Fomu whose USB is being analysed, or that runs a design with no USB, is still found.
 - **Identifying it**, before any test. The check holds the iCE40 in reset and reads the flash's JEDEC ID and 64-bit unique ID over the header with read commands only. It then sets every line back to an input and lets the iCE40 boot from its flash, into foboot, as at power-up. That stops whatever design was running, so only the check does it. The `header` test judges the reading.
 - **The board's label** is the flash's unique ID (`flash_uid`): foboot has no USB serial number.
-- **The `foboot` test** passes when foboot appears on USB within 10 s of the reset.
+- **The `foboot` test** passes when foboot enumerates on USB within 10 s of the reset: a new enumeration (a new USB device number), not the foboot from before the reset, which can still be listed for a moment after it ([#347](https://github.com/fpgas-online/fpgas.online-test-designs/issues/347)).
 - **The UART test.** The check loads the UART test design with openFPGALoader over DFU and runs its host test on `/dev/serial0`. That is the only test that loads a design at boot. A DFU load replaces the bootloader until the next reset, and it writes the design into the flash's user image. So the flash's contents are not part of what `changed` compares; its IDs are.
-- **The `foboot-after` step.** When the `header` and `foboot` tests passed, the check ends by resetting the iCE40 through the header again, so foboot is back on USB for the next user. It fails when foboot does not come back within 10 s.
+- **The `foboot-after` step.** When the `header` and `foboot` tests passed, the check ends by resetting the iCE40 through the header again, so foboot is back on USB for the next user. It fails when foboot does not enumerate again within 10 s.
 - `fpgas-fomu-debug` runs the SPI flash, PMOD loopback and pin identification tests, one at a time. After each, the Fomu runs a design with no USB. `sudo fpgas-fomu-debug reset` puts foboot back, or the site operator power-cycles the Pi. The PMOD tests assume a PMOD HAT ([Fomu EVT wiring to a Raspberry Pi: not a loopback on the EVT](https://docs.fpgas.online/en/latest/boards/fomu-evt/setup/wiring.html#not-a-loopback-on-the-evt)).
