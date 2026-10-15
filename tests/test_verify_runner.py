@@ -1589,6 +1589,9 @@ class Planned(Fake):
     def not_applicable(self, variant, found=None):
         return {"jtag": "it has no JTAG port"}
 
+    def about(self, variant, found=None):
+        return {"uart": "text echoes back", "ddr": "the memory test passes", "wiring": "each wire"}
+
 
 class PlanStops(Planned):
     def check(self, host, found, options):
@@ -1700,3 +1703,26 @@ def test_a_crashed_check_has_its_derived_wiring_not_run_and_says_where_it_comes_
     (b,) = report["boards"]
     assert b["result"] == "error" and b["not_run"]["wiring"] == "it is derived from uart, ddr: uart, ddr did not run"
     assert runner.details(report)["board0_wiring_from"] == "its UART and DDR lines"
+
+
+def test_the_event_says_what_each_planned_test_checks(opts):
+    class Described(Planned):
+        def about(self, variant, found=None):
+            return {"uart": "text echoes back", "ddr": "the memory test passes", "wiring": "each wire", "x": "unused"}
+
+    report = runner.verify(opts, _boards(Described("arty", seen=[{"variant": "a7-35"}])), usb=[], pci=[],
+                           mode=("arty", "test"))  # fmt: skip
+    d = runner.details(report)
+    assert {k: v for k, v in d.items() if k.startswith("board0_about_")} == {
+        "board0_about_uart": "text echoes back", "board0_about_ddr": "the memory test passes",
+        "board0_about_wiring": "each wire"}  # fmt: skip
+
+
+def test_a_planned_test_with_no_description_is_a_board_error_not_a_silent_gap(opts):
+    class Undescribed(Planned):
+        def about(self, variant, found=None):
+            return {"uart": "text echoes back"}
+
+    (b,) = runner.verify(opts, _boards(Undescribed("arty", seen=[{"variant": "a7-35"}])), usb=[], pci=[],
+                         mode=("arty", "test"))["boards"]  # fmt: skip
+    assert b["result"] == "error" and b["reason"] == "what its check plans could not be said: KeyError: 'ddr'"

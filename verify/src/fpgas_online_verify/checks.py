@@ -47,6 +47,9 @@ GROUP_OF = {
     "pmod-pin-id": "board-specific",
 }
 
+# The longest one-line description of a test (Board.about) the event carries (#346).
+ABOUT_MAX = 120
+
 # The checks every board type answers for: planned, or not applicable with the reason.
 COMMON = ("jtag", "wiring", "flash", "ddr", "uart", "ethernet")
 

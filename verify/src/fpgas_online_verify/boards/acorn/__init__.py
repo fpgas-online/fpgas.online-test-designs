@@ -55,6 +55,12 @@ class Acorn(Board):
         return {"wiring": (("jtag", "p2-uart", "p2-serial", "p2-gpio"),
                            "its two cables: P1 (jtag), and P2 (p2-uart, p2-serial and p2-gpio)")}  # fmt: skip
 
+    def about(self, variant, found=None):
+        if (found or {}).get("title"):
+            return {}
+        derived = {test: text for test, (_, text) in self.derived(variant, found).items()}
+        return {**suite.ABOUT, **derived}
+
     def not_applicable(self, variant, found=None):
         if (found or {}).get("title"):
             return {}
