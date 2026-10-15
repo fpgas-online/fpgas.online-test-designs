@@ -126,8 +126,10 @@ def test_artifact_paths_match_the_collect_bitstreams_bundle():
     assert TT.artifact("wiring", "tt-fpga") == "pmod-pin-id-tt-fpga/tt_fpga_platform.bin"
 
 
-def test_the_fomu_boot_check_runs_one_test_since_a_load_uses_up_the_bootloader():
-    assert FOMU.verify_tests == ["uart"]
+def test_the_fomu_boot_check_runs_uart_then_flash_with_a_reset_to_foboot_between():
+    """A load replaces foboot until the iCE40 is reset (#342): flash, after uart, needs the header to reset it."""
+    assert FOMU.verify_tests == ["uart", "flash"]
+    assert FOMU.tests["flash"]["needs"] == ("header", "foboot") and FOMU.tests["uart"]["needs"] == ("foboot",)
 
 
 # -- detection -------------------------------------------------------------------------------------------
@@ -951,9 +953,8 @@ def test_a_fomu_is_identified_by_its_flash_over_the_header_and_foboot_is_waited_
     fomu_usb.append(FOBOOT_USB)
     run = Runner([("fomu_header_id.py", _says(FOMU_READING))])
     report = _check(FOMU, tmp_path, {"variant": "evt", "cdone": "hi"}, run)
-    assert _passed_what_it_has(report), report
-    assert [t["test"] for t in report["tests"]] == ["header", "foboot", "uart", "foboot-after"]
-    assert report["not_run"] == {"flash": NO_TEST_YET.format(issue=342)}  # #342; it fails the board (coord-64)
+    assert report["result"] == "pass" and "not_run" not in report, report
+    assert [t["test"] for t in report["tests"]] == ["header", "foboot", "uart", "flash", "foboot-after"]
     assert report["identity"] == {
         "board": "fomu", "kind": "fomu", "variant": "evt", "usb": "1-1.2", "flash": "W25Q128JV",
         "flash_jedec": "0xef7018", "flash_size_bytes": 16777216, "flash_status": "0x00", "flash_uid": FOMU_UID,
@@ -964,13 +965,56 @@ def test_a_fomu_is_identified_by_its_flash_over_the_header_and_foboot_is_waited_
     # the header is read before anything is loaded, and its lines are then checked to be inputs
     header = next(i for i, c in enumerate(run.calls) if c[-1].endswith("fomu_header_id.py"))
     assert run.calls[header + 1] == ["pinctrl", "get", "8,9,10,11,17,24,25,27"]
-    load = next(i for i, c in enumerate(run.calls) if c[0] == "openFPGALoader")
-    assert header < load
-    # #135: the check ends by resetting the Fomu through the header again, so foboot is on USB for the next user
-    closing = [i for i, c in enumerate(run.calls) if c[-1].endswith("fomu_header_id.py")]
-    assert len(closing) == 2 and closing[1] > load
+    loads = [i for i, c in enumerate(run.calls) if "openFPGALoader" in c]
+    assert len(loads) == 2 and header < loads[0]
+    # #342: the uart design has no USB, so the iCE40 is reset back into foboot through the header before flash's
+    # DFU load; and (#135) the check ends with that reset again, so foboot is on USB for the next user
+    resets = [i for i, c in enumerate(run.calls) if c[-1].endswith("fomu_header_id.py")]
+    assert len(resets) == 3 and loads[0] < resets[1] < loads[1] < resets[2]
+    # flash listens from before its load: its firmware prints the JEDEC ID once, as it starts
+    flash = run.calls[loads[1]]
+    assert "fpgas_online_verify.listen" in flash and flash[flash.index("--board") + 1] == "fomu"
     after = report["tests"][-1]
     assert after["result"] == "pass" and "foboot (1209:5bf0) back on USB" in after["output"][0]
+
+
+def test_a_reset_before_flash_that_does_not_bring_foboot_back_is_flashs_result_and_loads_nothing(tmp_path, monkeypatch):
+    """#342: after the uart design (no USB) the reset back into foboot must work, or flash's DFU load has no device:
+    flash then fails with the reset's reason, nothing is loaded for it, and the check still ends with its own reset."""
+    # before the first reset and its wait; before and after the reset before flash: nothing came back
+    looks = [[{**FOBOOT_USB, "devnum": "1"}], [{**FOBOOT_USB, "devnum": "2"}]]
+    monkeypatch.setattr(fomu, "usb_devices", lambda: looks.pop(0) if looks else [])
+    now = [0.0]
+    monkeypatch.setattr(fomu, "_clock", lambda: now[0])
+    monkeypatch.setattr(fomu, "_sleep", lambda s: now.__setitem__(0, now[0] + s))
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("journalctl", (0, ""))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run)
+    flash = next(t for t in report["tests"] if t["test"] == "flash")
+    assert flash["result"] == "fail" and flash["bitstream"] == "spiflash-test-fomu/kosagi_fomu_evt.bin"
+    assert flash["reason"].startswith("the reset back into foboot before it: foboot (1209:5bf0) did not come back")
+    assert sum(1 for c in run.calls if "openFPGALoader" in c) == 1  # uart's load only
+    assert report["result"] == "fail" and report["tests"][-1]["test"] == "foboot-after"
+
+
+def test_a_second_test_asked_for_by_name_is_not_loaded_without_the_header_and_foboot(tmp_path, fomu_usb):
+    """By name the fact tests do not run, so the header is not known to be a Fomu's and nothing resets it: the
+    second design cannot be loaded over DFU, and that is said, not tried."""
+    fomu_usb.append(FOBOOT_USB)
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING))])
+    report = _check(FOMU, tmp_path, {"variant": "evt"}, run, tests=["uart", "flash"])
+    assert [(t["test"], t["result"]) for t in report["tests"]] == [("uart", "pass"), ("flash", "error")]
+    assert "the reset back into foboot is done only once header and foboot have passed" in report["tests"][1]["reason"]
+    # the header is read once, to find the Fomu, and never again to reset it
+    assert sum(1 for c in run.calls if c[-1].endswith("fomu_header_id.py")) == 1
+    assert sum(1 for c in run.calls if "openFPGALoader" in c) == 1
+
+
+def test_the_fomu_flash_test_expects_the_evts_w25q128jv():
+    """#342: the EVT's flash is a W25Q128JV (ef7018), as its header test reads; not an AT25SF161."""
+    spec = importlib.util.spec_from_file_location("test_spiflash", host_tests.path("test_spiflash.py"))
+    script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script)
+    assert "".join(f"{b:02x}" for b in script.EXPECTED_JEDEC_IDS["fomu"]) == fomu.FLASH_JEDEC == "ef7018"
 
 
 def test_foboot_not_back_after_the_closing_reset_fails_the_board_loud(tmp_path, monkeypatch):
@@ -1024,6 +1068,8 @@ def test_a_header_reading_that_is_not_an_evt_fails_the_header_test(tmp_path, fom
     header = report["tests"][0]
     assert header["test"] == "header" and header["result"] == "fail" and reason in header["reason"], header
     assert report["result"] == "fail"
+    # flash's load would need the reset through a header that is not known to be a Fomu's: it is not run (#342)
+    assert report["not_run"]["flash"] == "it needs header to pass first"
 
 
 def test_foboot_not_coming_back_after_the_reset_fails_foboot_not_the_identity(tmp_path, fomu_usb):
@@ -1139,7 +1185,8 @@ def test_a_test_board_says_when_each_test_starts_and_how_it_ended(tmp_path, fomu
     _check(FOMU, tmp_path, {"variant": "evt"}, Runner([("fomu_header_id.py", _says(FOMU_READING))]),
            event=lambda stage, d: events.append((stage, d)))  # fmt: skip
     assert events[0][0] == "fpga-board-identified" and events[0][1]["flash_uid"] == FOMU_UID
-    assert events[1:] == [(stage, {"test": test, **extra}) for test in ("header", "foboot", "uart", "foboot-after")
+    assert events[1:] == [(stage, {"test": test, **extra}) for test in ("header", "foboot", "uart", "flash",
+                                                                                "foboot-after")
                           for stage, extra in (("fpga-test-started", {}),
                                                ("fpga-test-finished", {"result": "pass", "reason": ""}))]  # fmt: skip
 

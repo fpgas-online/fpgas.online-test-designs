@@ -201,8 +201,12 @@ class Fomu(TestBoard):
         "uart": {"artifact": "uart-test-fomu/kosagi_fomu_evt.bin", "script": "test_uart.py",
                  "args": ["--port", "{port}", "--board", "fomu", "--skip-banner"], "verify": True,
                  "needs": ("foboot",)},
+        # Its firmware prints the JEDEC ID once, as it starts: the script listens from before the load (listen.py).
+        # It runs after uart's design, which has no USB: before_test resets the iCE40 back into foboot first (#342),
+        # through the header, so it needs `header` to have passed too.
         "flash": {"artifact": "spiflash-test-fomu/kosagi_fomu_evt.bin", "script": "test_spiflash.py",
-                     "args": ["--port", "{port}", "--board", "fomu"], "needs": ("foboot",)},
+                  "args": ["--port", "{port}", "--board", "fomu", "--timeout", "120"], "verify": True,
+                  "listen": True, "says": "FAIL:", "needs": ("header", "foboot")},
         "pmod": {"artifact": "gpio-loopback-fomu-{v}/kosagi_fomu_evt.bin", "script": "test_pmod_loopback.py",
                  "args": ["--board", "fomu"], "pre": PMOD_PRE, "needs": ("foboot",)},
         # The Pmod pin-ID scan, -debug only (#202: it cannot pass on the EVT). Its `wiring` is derived (derives).
@@ -210,8 +214,6 @@ class Fomu(TestBoard):
                    "args": [], "pre": PMOD_PRE, "needs": ("foboot",)},
     }  # fmt: skip
     closing_test = "foboot-after"
-    # #340: its flash test is not in the boot check yet (#342: a DFU load replaces foboot until a reset).
-    not_yet: ClassVar[dict] = {"evt": {"flash": 342}}
     # It sits on the Pi's header: its wiring is the header and uart tests' (checks.derive).
     derives: ClassVar[dict] = {
         "evt": {"wiring": (("header", "uart"), "it sits on the Pi's header: its reset, CDONE and SPI flash lines "
@@ -221,7 +223,7 @@ class Fomu(TestBoard):
         "header": "over the Pi's header: CDONE, the iCE40 held in reset, the SPI flash's JEDEC and unique IDs",
         "foboot": "foboot, its USB DFU bootloader, enumerates again after the reset",
         "uart": "a design loaded over DFU echoes printable text back over the header's UART",
-        "flash": "a test design reads the SPI flash's JEDEC ID",
+        "flash": "a test design loaded over DFU reads the SPI flash's JEDEC ID: the EVT's W25Q128JV (ef7018)",
         "foboot-after": "the closing reset brings foboot back on USB, so the next user can load a design",
         "pmod": "the Pmod loopback wiring reads back (-debug only)",
         "pmod-pin-id": "the Pmod pin-ID scan (-debug only: it cannot pass on the EVT, #202)",
@@ -299,6 +301,27 @@ class Fomu(TestBoard):
             report.setdefault("not_run", {})[self.closing_test] = "it needs header and foboot to pass first"
             return None
         return self.reset_to_foboot(host, runner)
+
+    def before_test(self, test, variant, host, report, runner=run):
+        """#342: each test design replaces foboot with a design that has no USB, so the next DFU load would find no
+        device. Before each test after the first that loaded a design, the iCE40 is reset back into foboot through
+        the header (reset_to_foboot, as at the end of the check), only when `header` and `foboot` passed in this
+        check: the reset drives CRESET and SPI0, which must be a Fomu's. A reset that does not bring foboot back is
+        that test's result, with the reason."""
+        if not any(t["test"] in self.tests for t in report["tests"]):
+            return None
+        entry = {"test": test, "bitstream": self.artifact(test, variant)}
+        results = {t["test"]: t["result"] for t in report["tests"]}
+        if results.get("header") != "pass" or results.get("foboot") != "pass":
+            return {**entry, "result": "error",
+                    "reason": "not loaded: the design loaded before it has no USB, and the reset back into foboot is "
+                              "done only once header and foboot have passed in this check (tests asked for by name "
+                              "run without them)"}  # fmt: skip
+        reset = self.reset_to_foboot(host, runner)
+        if reset["result"] == "pass":
+            return None
+        return {**entry, "result": reset["result"], "output": reset["output"],
+                "reason": f"the reset back into foboot before it: {reset['reason']}"}  # fmt: skip
 
     def reset_to_foboot(self, host, runner=None):
         """Reset the iCE40 through the header with fomu_header_id.py (the same safe reset as before the tests, every
