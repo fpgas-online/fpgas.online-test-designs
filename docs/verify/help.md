@@ -69,7 +69,7 @@ options:
   --no-publish       send nothing to the fleet, even with publish = on
 
 tests in the boot check:
-  uart ddr spiflash ethernet pin-id
+  uart ddr flash ethernet wiring
 tests only fpgas-arty-debug runs:
   pmod
 
@@ -107,7 +107,7 @@ commands:
   test TEST     load TEST's design and run its test
 
 tests in the boot check:
-  uart ddr spiflash ethernet pin-id
+  uart ddr flash ethernet wiring
 tests only fpgas-arty-debug runs:
   pmod
 
@@ -115,7 +115,7 @@ examples:
   sudo fpgas-arty-debug detect
   fpgas-arty-debug list
   sudo fpgas-arty-debug test uart
-  sudo fpgas-arty-debug test pin-id -- --hat-port JA
+  sudo fpgas-arty-debug test wiring -- --hat-port JA
 ```
 
 ```text

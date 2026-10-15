@@ -30,7 +30,7 @@ Then the tests of an FPGA board, in this order:
 
 1. [The `sdk` test](#the-sdk-test) judges what the board said, on every board. It loads nothing.
 2. [The `dip-switches` test](#the-dip-switches): a switch that is on fails the board.
-3. The `pin-id` test: the check loads the PMOD pin identification design and checks the PMOD HAT cabling against
+3. The `wiring` test: the check loads the PMOD pin identification design and checks the PMOD HAT cabling against
    the expected map (ui_in on HAT JA, uio on JB, uo_out on JC:
    [Tiny Tapeout FPGA demo board pin mapping](https://docs.fpgas.online/en/latest/boards/tt-fpga/overview/pin-mapping.html)). A miswired HAT fails the board.
 4. The `uart` test: the check loads the UART test design through the microcontroller (`tt_fpga_program.py`, over
@@ -39,7 +39,7 @@ Then the tests of an FPGA board, in this order:
    ([what the TT FPGA is left running](#what-the-tt-fpga-is-left-running)). If that load fails the board still
    passes, with a warning in the report.
 
-The DIP-switch, `pin-id` and `uart` tests and the design left running (steps 2 to 5) are for an FPGA
+The DIP-switch, `wiring` and `uart` tests and the design left running (steps 2 to 5) are for an FPGA
 board. A board with a Tiny Tapeout chip runs `sdk` and then
 [the wiring test](#the-wiring-test) of its three Pmod ribbons. Nothing is loaded into it.
 
@@ -64,7 +64,7 @@ chosen.
 
 | The board says (rpi-hwid's `chip`) | Variant | What the check does |
 |---|---|---|
-| `fpga` | `tt-fpga` | runs [`sdk`](#the-sdk-test), then loads and runs [`dip-switches`](#the-dip-switches), `pin-id` and `uart` |
+| `fpga` | `tt-fpga` | runs [`sdk`](#the-sdk-test), then loads and runs [`dip-switches`](#the-dip-switches), `wiring` and `uart` |
 | `asic`, and a shuttle | `tt-asic` | runs [`sdk`](#the-sdk-test), then [`wiring`](#the-wiring-test) (its three Pmod ribbons); nothing is loaded, and the board is put back as its SDK had it |
 | nothing usable: rpi-hwid is not installed, could not read the board, or gave no shuttle for a chip | none | nothing is loaded and no test runs: the result is `error`, and the reason says what could not be read |
 | (an RP2 in its USB boot loader, `2e8a:0003`) | none | `fail`: `a Raspberry Pi RP2 is on USB but is not running the Tiny Tapeout firmware` |
@@ -167,7 +167,7 @@ not know the board's chip cannot select a project on it:
 * An FPGA board on a release line the table does not name (3.0.x, or a later 3.2.x) fails `sdk`. Its designs are
   still loaded and tested, and the board's result is `fail`.
 * **What it does not test**: the chip itself, and the Pmod cabling between the demo board and the Pi. The
-  cabling is the next test's: [`wiring`](#the-wiring-test) on a board with a Tiny Tapeout chip, `pin-id` on
+  cabling is the next test's: [`wiring`](#the-wiring-test) on a board with a Tiny Tapeout chip, `wiring` on
   the FPGA board.
 
 ## The wiring test
@@ -177,7 +177,7 @@ board's Pmod connectors and the Pi's Pmod HAT, wire by wire. It loads nothing: t
 the chip's own factory-test project make the signals
 ([#132](https://github.com/fpgas-online/fpgas.online-test-designs/issues/132), first written as
 [PR #15](https://github.com/fpgas-online/fpgas.online-test-designs/pull/15)). The cabling it expects is the one the
-FPGA board's `pin-id` expects too:
+FPGA board's `wiring` expects too:
 
 * the demo board's `ui_in` Pmod to HAT **JA**, its `uio` Pmod to HAT **JB**, its `uo_out` Pmod to HAT **JC**;
 * pin for pin: Pmod pin 1 to HAT pin 1, and so on (Pmod pins 1 to 4 and 7 to 10 carry bits 0 to 7).
@@ -217,7 +217,7 @@ How it tests:
   RP2040 then drives each `ui_in` and `uio` signal in turn while the Pi reads all 21 HAT lines, so a swapped,
   open or shorted wire each show as that. The `uio` walk reaches `uo_out` through the chip, which tests the
   `uo_out` ribbon. The RP2040 also sends each signal's name at 1200 baud, and the Pi decodes it on every line, as
-  `pin-id` does on the FPGA board.
+  `wiring` does on the FPGA board.
 * **Only one party drives a net.** A `ui_in` line that something holds (a DIP switch that is on, or a chip output
   a wrong ribbon joins to it) is never driven: it fails the board, named. A factory test that does not confirm
   stops the test before the walks. HAT pins JA2 to JA4 and JB2 to JB4 are the same three Pi GPIOs (10, 9, 11), so
