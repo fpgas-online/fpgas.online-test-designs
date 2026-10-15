@@ -29,7 +29,6 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 
-from litex.soc.cores.ram import Up5kSPRAM
 from litex.soc.integration.builder import Builder
 from litex.soc.integration.soc import SoCRegion
 from litex.soc.integration.soc_core import SoCCore
@@ -39,6 +38,7 @@ import designs._shared.migen_compat  # noqa: F401  -- patches migen tracer
 from designs._shared.build_helpers import board_dir, default_build_dir, flow_suffix
 from designs._shared.tt_fpga_crg import TtFpgaCRG
 from designs._shared.tt_fpga_platform import Platform
+from designs._shared.up5k_spram import Up5kSPRAM, check_aligned
 
 kB = 1024
 
@@ -64,8 +64,11 @@ class BaseSoC(SoCCore):
         SoCCore.__init__(self, platform, sys_clk_freq, **kwargs)
 
         # 128 KB SPRAM (64 KB SRAM + 64 KB main RAM) ------------------------------------------
+        # Ours, not LiteX's Up5kSPRAM: LiteX's chooses its bank with one address bit too many, and at this SoC's
+        # address (0x00020000) it chose none: nothing was written and every word read 0 (#343, on the board).
         self.spram = Up5kSPRAM(size=128*kB)
         self.bus.add_slave("psram", self.spram.bus, SoCRegion(size=128*kB))
+        check_aligned(self.bus.regions["psram"].origin, 128*kB)
         self.bus.add_region("sram", SoCRegion(
             origin = self.bus.regions["psram"].origin + 0*kB,
             size   = 64*kB,

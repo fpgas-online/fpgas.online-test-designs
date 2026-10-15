@@ -13,6 +13,7 @@ on:
       - "designs/_shared/**"
       - "designs/uart/gateware/uart_soc_tt.py"
       - "tests/test_spram.py"
+      - "tests/test_up5k_spram.py"
       # designs/_shared/build_helpers.py checks it exists at import
       - "scripts/fix_yosys_edif_libref.py"
       - "pyproject.toml"
@@ -46,9 +47,10 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --extra build
 
-      # The firmware on an RV32I model, with a good SPRAM and with each fault it must find; the host script.
-      - name: Test the firmware and the host script
-        run: uv run --extra build --with pytest pytest -v -rs tests/test_spram.py
+      # The firmware on an RV32I model, with a good SPRAM and with each fault it must find; the host script; and
+      # the SPRAM slave (designs/_shared/up5k_spram.py) simulated at the SoC's address with a model of the primitive.
+      - name: Test the firmware, the host script and the SPRAM slave
+        run: uv run --extra build --with pytest pytest -v -rs tests/test_spram.py tests/test_up5k_spram.py
 
       - name: Build the TT FPGA SPRAM test bitstream
         run: uv run python designs/spram/gateware/spram_soc_tt.py --build
