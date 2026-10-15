@@ -180,10 +180,14 @@ class Fomu(TestBoard):
     closing_test = "foboot-after"
     # #340: its flash test is not in the boot check yet (#342: a DFU load replaces foboot until a reset).
     not_yet: ClassVar[dict] = {"evt": {"flash": 342}}
+    # It sits on the Pi's header: its wiring is the header and uart tests' (checks.derive).
+    derives: ClassVar[dict] = {
+        "evt": {"wiring": (("header", "uart"), "it sits on the Pi's header: its reset, CDONE and SPI flash lines "
+                                               "(header) and its UART lines (uart)")}
+    }  # fmt: skip
     cannot: ClassVar[dict] = {
         "evt": {
             "jtag": "the iCE40UP5K has no JTAG port: the Fomu is loaded over USB DFU, by foboot",
-            "wiring": "it sits on the Pi's header, whose reset, CDONE and SPI lines the header test checks",
             "ddr": "the Fomu EVT has no DRAM",
             "ethernet": "the Fomu EVT has no Ethernet",
         }

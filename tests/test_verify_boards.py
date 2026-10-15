@@ -1991,8 +1991,9 @@ def test_jtag_is_planned_on_every_board_with_jtag_and_wiring_on_every_board_with
 
 def test_the_plans_in_running_order():
     assert ARTY.planned("a7-35") == ["jtag", "uart", "ddr", "flash", "ethernet", "wiring"]
-    assert NETV2.planned("a7-100") == ["jtag", "uart", "ddr", "flash", "ethernet"]
-    assert FOMU.planned("evt") == ["header", "foboot", "uart", "flash", "foboot-after"]
+    assert NETV2.planned("a7-100") == ["jtag", "uart", "ddr", "flash", "ethernet", "wiring"]
+    assert FOMU.planned("evt") == ["header", "foboot", "uart", "flash", "wiring", "foboot-after"]
+    assert ACORN.planned(None, {}, {"variant": "cle-215+"})[-1] == "wiring"
     assert TT.planned("tt-fpga") == ["sdk", "dip-switches", "wiring", "uart", "spram"]
     assert TT.planned("tt-asic") == ["sdk", "wiring"] and TT.planned(None) == ["sdk", "wiring"]
 
@@ -2039,3 +2040,56 @@ def test_a_long_stopped_reason_is_cut_to_what_the_site_keeps_and_says_so(tmp_pat
         and len(checks.fit(checks.stopped(long))) == 300
     )
     assert checks.fit(checks.stopped(long)).endswith(checks.CUT) and checks.fit("short") == "short"
+
+
+# -- wiring derived from the tests that cover each wire (checks.derive) -----------------------------------------
+
+
+def test_every_board_with_wires_plans_wiring():
+    """Tim, 15 Oct 2026: "anything which has wires should be getting wiring": a pin-by-pin test (Arty, TT FPGA, TT
+    chip), or derived from the tests that cover each wire (NeTV2, Fomu, Acorn)."""
+    for board, variant in [(ARTY, "a7-35"), (NETV2, "a7-35"), (NETV2, "a7-100"), (FOMU, "evt"), (TT, "tt-fpga"),
+                           (TT, "tt-asic"), (ACORN, "cle-215+")]:  # fmt: skip
+        assert "wiring" in board.planned(variant, {}, {"variant": variant}), board.name
+        assert "wiring" not in board.not_applicable(variant, {"variant": variant})
+    assert set(NETV2.derived("a7-35")["wiring"][0]) == {"jtag", "uart"}
+    assert set(FOMU.derived("evt")["wiring"][0]) == {"header", "uart"}
+    assert set(ACORN.derived(None, {})["wiring"][0]) == {"jtag", "p2-uart", "p2-serial", "p2-gpio"}
+    assert ARTY.derived("a7-35") == {} and TT.derived("tt-fpga") == {}  # a pin-by-pin test of their own
+
+
+def _derived(tests, not_run=None):
+    report = {"tests": [{"test": t, "result": r} for t, r in tests], **({"not_run": not_run} if not_run else {})}
+    checks.derive(report, {"wiring": (("jtag", "p2-uart", "p2-serial"), "its two cables")})
+    return report
+
+
+def test_derived_wiring_passes_when_every_source_passed():
+    wiring = _derived([("jtag", "pass"), ("p2-uart", "pass"), ("p2-serial", "pass")])["tests"][-1]
+    assert wiring == {"test": "wiring", "from": ["jtag", "p2-uart", "p2-serial"], "about": "its two cables",
+                      "result": "pass"}  # fmt: skip
+
+
+def test_derived_wiring_takes_the_first_source_that_did_not_pass():
+    wiring = _derived([("jtag", "pass"), ("p2-uart", "fail"), ("p2-serial", "error")])["tests"][-1]
+    assert (wiring["result"], wiring["reason"]) == ("fail", "p2-uart fail")
+    wiring = _derived([("jtag", "error"), ("p2-uart", "pass")])["tests"][-1]  # p2-serial not run, but jtag erred
+    assert (wiring["result"], wiring["reason"]) == ("error", "jtag error")
+
+
+def test_derived_wiring_is_not_run_when_a_source_did_not_run():
+    report = _derived([("jtag", "pass"), ("p2-uart", "pass")], not_run={"p2-serial": "golden image"})
+    assert "wiring" not in [t["test"] for t in report["tests"]]
+    assert report["not_run"]["wiring"] == "it is derived from jtag, p2-uart, p2-serial: p2-serial did not run"
+
+
+def test_a_netv2_check_reports_its_wiring_from_jtag_and_uart(tmp_path):
+    run = Runner(flash=b"\0" * NETV2.flash_region["a7-35"])
+    found = _netv2_found("0x0362d093")
+    report = _check(NETV2, tmp_path, found, run)
+    runner.plan(NETV2, report, found, {})
+    wiring = report["tests"][-1]
+    assert wiring["test"] == "wiring" and wiring["result"] == "pass" and wiring["from"] == ["jtag", "uart"]
+    flat = runner.details({"result": report["result"], "boards": [report]})
+    assert "wiring=pass" in flat["board0_tests"]
+    assert flat["board0_wiring_from"] == "its wires to the Pi are the header's JTAG lines (jtag) and UART lines (uart)"

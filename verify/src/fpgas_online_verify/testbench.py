@@ -423,6 +423,9 @@ class TestBoard(Board):
     cannot: ClassVar[dict] = {}
     # The test entry finish() adds, when it adds one (the Fomu's foboot-after): planned last.
     closing_test = None
+    # variant -> {test: (source tests, what they cover)}: a test derived from others (checks.derive), planned before
+    # closing_test (the wiring of a board whose header lines each have a test of their own).
+    derives: ClassVar[dict] = {}
     # A board with variant_from_board whose variant was not settled: what its check would still have run.
     planned_unsettled = ()
 
@@ -432,6 +435,9 @@ class TestBoard(Board):
     def not_applicable(self, variant, found=None):
         return dict(self.cannot.get(variant, {}))
 
+    def derived(self, variant, found=None):
+        return dict(self.derives.get(variant, {}))
+
     def planned(self, variant, options=None, found=None):
         if variant is None and self.variant_from_board:
             return list(self.planned_unsettled)
@@ -439,6 +445,7 @@ class TestBoard(Board):
         out += self.fact_tests_for(variant) + self.script_tests_for(variant)
         out += self.verify_tests if variant in self.variants else []
         out += [t for t in self.untested(variant) if t not in out]
+        out += [t for t in self.derived(variant) if t not in out]
         return out + ([self.closing_test] if self.closing_test else [])
 
     def artifacts(self):

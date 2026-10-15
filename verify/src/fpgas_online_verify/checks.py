@@ -69,6 +69,28 @@ def untested_reasons(untested):
     return {test: NO_TEST_YET.format(issue=issue) for test, issue in untested.items()}
 
 
+def derive(report, derived):
+    """Add to a board's report the result of each test derived from others (Board.derived): pass when every source
+    passed; the first source that did not pass gives its result ("p2-uart fail"); a source that did not run makes
+    it not run, saying which. Tim, 15 Oct 2026: "anything which has wires should be getting wiring": a board whose
+    wires to the Pi are each checked by a test of their own gets its wiring from those tests. The entry says where
+    it came from: "from" (the source tests) and "about" (what they cover)."""
+    for test, (sources, about) in derived.items():
+        ran = {t["test"]: t for t in report.get("tests", [])}
+        if test in ran or test in report.get("not_run", {}):
+            continue
+        bad = next((ran[s] for s in sources if s in ran and ran[s]["result"] != "pass"), None)
+        missing = [s for s in sources if s not in ran]
+        entry = {"test": test, "from": list(sources), "about": about}
+        if bad is not None:
+            report["tests"].append({**entry, "result": bad["result"], "reason": f"{bad['test']} {bad['result']}"})
+        elif missing:
+            why = f"it is derived from {', '.join(sources)}: {', '.join(missing)} did not run"
+            report["not_run"] = {**report.get("not_run", {}), test: why}
+        else:
+            report["tests"].append({**entry, "result": "pass"})
+
+
 def stopped(reason):
     """A planned test's not_run reason when the check stopped before it."""
     return STOPPED.format(reason=reason) if reason else STOPPED_NO_REASON

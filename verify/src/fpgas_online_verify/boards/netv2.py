@@ -77,12 +77,13 @@ class NeTV2(TestBoard):
         "wiring": {"artifact": "pmod-pin-id-netv2-{v}/kosagi_netv2.bit", "script": "identify_pmod_pins.py", "args": []},
     }  # fmt: skip
     # #340: the ethernet test is not in the boot check yet (#341). Its only wires to the Pi are the header's JTAG
-    # and UART lines, which jtag and uart test.
+    # and UART lines, which jtag and uart test: its wiring is theirs (checks.derive).
     not_yet: ClassVar[dict] = {variant: {"ethernet": 341} for variant in variants}
-    cannot: ClassVar[dict] = {
-        variant: {"wiring": "its only wires to the Pi are the header's JTAG and UART lines: jtag and uart test them"}
+    derives: ClassVar[dict] = {
+        variant: {"wiring": (("jtag", "uart"), "its wires to the Pi are the header's JTAG lines (jtag) and UART "
+                                               "lines (uart)")}
         for variant in variants
-    }
+    }  # fmt: skip
 
     def facts(self, port=None):
         host = {**host_facts(), "port": port or self.port, "base": None}

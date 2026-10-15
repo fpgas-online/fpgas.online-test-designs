@@ -298,6 +298,11 @@ def plan(board, report, found, options):
     groups = checks.groups(planned)  # before anything is put in the report: an unknown name is a KeyError
     report["planned"], report["groups"] = planned, groups
     report["not_applicable"] = board.not_applicable(variant, found)
+    derived = board.derived(variant, found)
+    if derived:
+        report["derived_from"] = {test: about for test, (_, about) in derived.items()}
+        report.setdefault("tests", [])
+        checks.derive(report, derived)
     ran = {t["test"] for t in report.get("tests", [])}
     missing = [t for t in report["planned"] if t not in ran and t not in report.get("not_run", {})]
     if missing:
@@ -345,6 +350,8 @@ def details(report):
             planned = set(b.get("planned", ()))
             out.update({f"board{i}_not_run_{test}": checks.fit(why) for test, why in b["not_run"].items()
                         if test in planned})  # fmt: skip
+        # a derived test (checks.derive): which tests its result comes from, whether it ran or not
+        out.update({f"board{i}_{test}_from": checks.fit(about) for test, about in b.get("derived_from", {}).items()})
         if b.get("planned"):
             out[f"board{i}_planned"] = " ".join(b["planned"])
             out[f"board{i}_groups"] = " ".join(f"{t}={g}" for t, g in b["groups"].items())

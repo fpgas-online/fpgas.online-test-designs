@@ -73,6 +73,7 @@ stopped early still shows every test it did not get to. For board `i`, all value
 | `board<i>_not_run` | the names of the tests that did not run, joined with `, ` |
 | `board<i>_not_run_<test>` | for each planned test that did not run, why: the check stopped before it (with the reason), or `no boot-check test yet: fpgas.online-test-designs #N` for a test not written yet. An entry of `not_run` that is not a planned test (the Acorn's `scratch over P2 UART`, part of `scratch`) has no key of its own: it is in `board<i>_not_run`. A reason longer than 300 characters (what the site keeps) is cut, ending ` … (the whole reason is the board's)` |
 | `board<i>_not_applicable_<check>` | why the board cannot have that common check (`jtag`, `wiring`, `flash`, `ddr`, `uart` or `ethernet`) |
+| `board<i>_wiring_from` | for a `wiring` derived from other tests (NeTV2, Fomu, Acorn), which tests cover which wires, as `its two cables: P1 (jtag), and P2 (p2-uart, p2-serial and p2-gpio)`; sent whether or not it ran |
 
 A test with no boot-check test yet does not fail the board. What each board type plans, and why a check does not
 apply, is in [what each board type's check plans](tests.md#what-each-board-types-check-plans).
