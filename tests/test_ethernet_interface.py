@@ -149,10 +149,14 @@ def test_a_carrier_that_cannot_be_read_is_no_link(tmp_path):
 
 # -- the reason the boot check reports ------------------------------------------------------------------------
 # fpgas-verify takes the last "ETHERNET:" line of a failed run as its reason (the test's `says`); without one the
-# reason is only "the test exited 1" (#333).
+# reason is only "the test exited 1" (#333). run_test returns the exit: 0 pass, 1 fail, 2 the test could not run.
 
 
-def _run(monkeypatch, capsys, *, iface="eth1", why=None, link=1.0, arp=True, ping=True):
+CONFIGURE, READ_MAC = te.configure_interface, te.read_mac_from_bios  # the real ones, before _run stubs them
+
+
+def _stub(monkeypatch, *, iface="eth1", why=None, link=1.0, arp=True, ping=True):
+    """Every step of run_test replaced by one that gives the result asked for."""
     monkeypatch.setattr(te, "find_usb_ethernet_interface", lambda: (iface, why))
     monkeypatch.setattr(te, "not_root_reason", lambda i: None)
     monkeypatch.setattr(te, "configure_interface", lambda *a: None)
@@ -160,42 +164,145 @@ def _run(monkeypatch, capsys, *, iface="eth1", why=None, link=1.0, arp=True, pin
     monkeypatch.setattr(te, "wait_for_link", lambda i, t: link)
     monkeypatch.setattr(te, "test_arp", lambda ip, i: (arp, "10:e2:d5:00:00:00" if arp else None))
     monkeypatch.setattr(te, "test_ping", lambda ip, i: (ping, "rtt" if ping else ""))
-    ok = te.run_test("arty", "/dev/ttyUSB1", 115200)
-    said = [line for line in capsys.readouterr().out.splitlines() if line.startswith("ETHERNET:")]
-    return ok, said
+
+
+def _said(capsys):
+    """The run's exit and its ETHERNET: lines."""
+    rc = te.run_test("arty", "/dev/ttyUSB1", 115200)
+    return rc, [line for line in capsys.readouterr().out.splitlines() if line.startswith("ETHERNET:")]
+
+
+def _run(monkeypatch, capsys, **steps):
+    _stub(monkeypatch, **steps)
+    return _said(capsys)
 
 
 def test_a_pass_says_nothing(monkeypatch, capsys):
-    assert _run(monkeypatch, capsys) == (True, [])
+    assert _run(monkeypatch, capsys) == (0, [])
 
 
 def test_no_adapter_is_the_reason(monkeypatch, capsys):
-    ok, said = _run(monkeypatch, capsys, iface=None, why="no USB Ethernet adapter free for the test")
-    assert not ok and said == ["ETHERNET: no USB Ethernet adapter free for the test"]
+    rc, said = _run(monkeypatch, capsys, iface=None, why="no USB Ethernet adapter free for the test")
+    assert rc == 1 and said == ["ETHERNET: no USB Ethernet adapter free for the test"]
 
 
 def test_no_link_is_the_reason_not_two_timeouts(monkeypatch, capsys):
-    ok, said = _run(monkeypatch, capsys, link=None)
-    assert not ok and said == [f"ETHERNET: no link on eth1 after {te.LINK_TIMEOUT} s, so ARP and ping were not tried"]
+    rc, said = _run(monkeypatch, capsys, link=None)
+    assert rc == 1 and said == [f"ETHERNET: no link on eth1 after {te.LINK_TIMEOUT} s, so ARP and ping were not tried"]
 
 
 def test_every_failed_step_is_in_the_reason(monkeypatch, capsys):
-    ok, said = _run(monkeypatch, capsys, arp=False, ping=False)
-    assert not ok and said == ["ETHERNET: link up after 1.0 s; ARP request got no response; ICMP ping failed"]
+    rc, said = _run(monkeypatch, capsys, arp=False, ping=False)
+    assert rc == 1 and said == ["ETHERNET: link up after 1.0 s; ARP request got no response; ICMP ping failed"]
 
 
 def test_arp_alone_failing_is_the_reason(monkeypatch, capsys):
-    ok, said = _run(monkeypatch, capsys, arp=False)
-    assert not ok and said == ["ETHERNET: link up after 1.0 s; ARP request got no response"]
+    rc, said = _run(monkeypatch, capsys, arp=False)
+    assert rc == 1 and said == ["ETHERNET: link up after 1.0 s; ARP request got no response"]
 
 
 def test_ping_alone_failing_is_the_reason(monkeypatch, capsys):
-    ok, said = _run(monkeypatch, capsys, ping=False)
-    assert not ok and said == ["ETHERNET: link up after 1.0 s; ICMP ping failed"]
+    rc, said = _run(monkeypatch, capsys, ping=False)
+    assert rc == 1 and said == ["ETHERNET: link up after 1.0 s; ICMP ping failed"]
 
 
 def test_not_root_is_the_reason(monkeypatch, capsys):
     monkeypatch.setattr(te, "find_usb_ethernet_interface", lambda: ("eth1", None))
     monkeypatch.setattr(te, "not_root_reason", lambda i: "FAIL - not running as root")
-    assert te.run_test("arty", "/dev/ttyUSB1", 115200) is False
+    assert te.run_test("arty", "/dev/ttyUSB1", 115200) == 1
     assert "ETHERNET: not running as root" in capsys.readouterr().out.splitlines()
+
+
+def test_a_failed_ip_command_is_the_reason_and_an_error(monkeypatch, capsys):
+    """The adapter can leave between being found and being configured; `ip` then fails, and the test cannot run."""
+    _stub(monkeypatch)
+
+    def ip(argv, **kw):
+        if argv[:3] == ["ip", "addr", "add"]:
+            raise te.subprocess.CalledProcessError(2, argv, output="", stderr='Cannot find device "eth1"\n')
+        return te.subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(te, "configure_interface", CONFIGURE)  # the real one, with a failing `ip`
+    monkeypatch.setattr(te.subprocess, "run", ip)
+    rc, said = _said(capsys)
+    assert rc == 2
+    assert said == ['ETHERNET: could not configure eth1: ip addr add 192.168.1.100/24 dev eth1 exited 2: '
+                    'Cannot find device "eth1"']  # fmt: skip
+
+
+def test_a_uart_that_will_not_open_is_the_reason_and_an_error(monkeypatch, capsys):
+    _stub(monkeypatch)
+
+    def no_port(port, *a, **kw):
+        raise te.serial.SerialException(2, f"could not open port {port}: [Errno 2] No such file or directory")
+
+    monkeypatch.setattr(te, "read_mac_from_bios", READ_MAC)
+    monkeypatch.setattr(te.serial, "Serial", no_port)
+    rc, said = _said(capsys)
+    assert rc == 2
+    assert said == ["ETHERNET: could not read the BIOS on /dev/ttyUSB1: [Errno 2] could not open port /dev/ttyUSB1: "
+                    "[Errno 2] No such file or directory"]  # fmt: skip
+
+
+def _main(monkeypatch, capsys):
+    """main()'s exit, and its ETHERNET: lines."""
+    monkeypatch.setattr(te.sys, "argv", ["test_ethernet.py", "--board", "arty", "--uart-port", "/dev/ttyUSB1"])
+    try:
+        te.main()
+    except SystemExit as e:
+        rc = e.code
+    return rc, [line for line in capsys.readouterr().out.splitlines() if line.startswith("ETHERNET:")]
+
+
+def test_an_ip_command_that_fails_while_looking_for_the_adapter_is_the_reason(monkeypatch, capsys):
+    _stub(monkeypatch)
+
+    def no_route(*a):
+        raise te.subprocess.CalledProcessError(1, ["ip", "-o", "route", "show", "default"])
+
+    monkeypatch.setattr(te, "find_usb_ethernet_interface", no_route)
+    rc, said = _main(monkeypatch, capsys)
+    assert rc == 2
+    assert said == ["ETHERNET: could not run: Command '['ip', '-o', 'route', 'show', 'default']' returned "
+                    "non-zero exit status 1."]  # fmt: skip
+
+
+def test_a_missing_tool_is_the_reason(monkeypatch, capsys):
+    _stub(monkeypatch)
+
+    def no_ping(ip, iface):
+        raise FileNotFoundError(2, "No such file or directory", "ping")
+
+    monkeypatch.setattr(te, "test_ping", no_ping)
+    rc, said = _main(monkeypatch, capsys)
+    assert rc == 2 and said == ["ETHERNET: could not run: [Errno 2] No such file or directory: 'ping'"]
+
+
+def test_main_exits_with_run_test_s_exit(monkeypatch, capsys):
+    _stub(monkeypatch, ping=False)
+    assert _main(monkeypatch, capsys) == (1, ["ETHERNET: link up after 1.0 s; ICMP ping failed"])
+    _stub(monkeypatch)
+    assert _main(monkeypatch, capsys) == (0, [])
+
+
+def test_a_termios_error_from_the_uart_is_the_reason(monkeypatch, capsys):
+    """pyserial wraps termios errors on open, but reset_input_buffer passes termios.error (not an OSError) on."""
+
+    class Port:
+        def __init__(self, *a, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def reset_input_buffer(self):
+            raise te.termios.error(5, "Input/output error")
+
+    _stub(monkeypatch)
+    monkeypatch.setattr(te, "read_mac_from_bios", READ_MAC)
+    monkeypatch.setattr(te.serial, "Serial", Port)
+    rc, said = _main(monkeypatch, capsys)
+    assert rc == 2 and said == ["ETHERNET: could not run: (5, 'Input/output error')"]
