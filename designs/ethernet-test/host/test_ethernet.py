@@ -243,8 +243,13 @@ def test_ping(fpga_ip, interface, count=10, timeout=2):
 # -- Main test runner -----------------------------------------------------------
 
 
+def say(why):
+    """The one line fpgas-verify reports as the reason a run failed (the test's `says` prefix)."""
+    print(f"ETHERNET: {why}")
+
+
 def run_test(board, uart_port, baud, eth_interface=None):
-    """Run the full Ethernet test sequence."""
+    """Run the full Ethernet test sequence. A failed run ends with one ETHERNET: line saying why."""
     total_tests = 0
     failures = []
 
@@ -262,6 +267,7 @@ def run_test(board, uart_port, baud, eth_interface=None):
         iface, why = find_usb_ethernet_interface()
         if not iface:
             print(f"FAIL - {why}")
+            say(why)
             return False
         print(f"found: {iface}")
 
@@ -269,6 +275,7 @@ def run_test(board, uart_port, baud, eth_interface=None):
     why = not_root_reason(iface)
     if why:
         print(why, file=sys.stderr)
+        say(why.removeprefix("FAIL - "))
         return False
     configure_interface(iface, HOST_IP, NETMASK)
 
@@ -330,6 +337,10 @@ def run_test(board, uart_port, baud, eth_interface=None):
         print("Failures:")
         for f in failures:
             print(f"  - {f}")
+        if took is None:
+            say(f"no link on {iface} after {LINK_TIMEOUT} s, so ARP and ping were not tried")
+        else:
+            say("; ".join([f"link up after {took:.1f} s", *failures]))
         return False
     else:
         print("PASS")
