@@ -118,8 +118,14 @@ def header_check(variant, facts, found):
 
 
 def foboots():
-    """{(USB path, device number)} of every foboot on USB now. The device number is new at each enumeration."""
-    return {(d["path"], d.get("devnum")) for d in usb_matching(usb_devices(), (FOBOOT,))}
+    """{(USB path, device number)} of every foboot on USB now. The device number is new at each enumeration; one
+    that cannot be read (sysfs devnum) would make every look the same, so it is an error, said, not a timeout."""
+    found = usb_matching(usb_devices(), (FOBOOT,))
+    unread = [d["path"] for d in found if not d.get("devnum")]
+    if unread:
+        raise Problem("error", f"the USB device number (sysfs devnum) of the foboot at {', '.join(unread)} could not "
+                               "be read, so whether it enumerated again after the reset cannot be told")  # fmt: skip
+    return {(d["path"], d["devnum"]) for d in found}
 
 
 def new_foboot(before):
@@ -152,6 +158,8 @@ def kernel_usb_lines(runner, keep=6):
 def foboot_check(variant, facts, found):
     """The `foboot` test: did foboot answer on USB after the reset? The tests' DFU loads need it."""
     seconds = found.get("foboot_seconds")
+    if "foboot_error" in found:
+        return "error", found["foboot_error"], []
     if seconds is not None:
         return "pass", None, [f"foboot (1209:5bf0) on USB {seconds} s after the reset"]
     if "header" not in found:
@@ -232,7 +240,11 @@ class Fomu(TestBoard):
         """The flash's IDs over the header (the iCE40 reset; see the module's docstring), then foboot on USB.
         The whole reading is left in found["header"] for the `header` test and the report, and the IDs in
         found for the state."""
-        before = foboots()
+        try:
+            before = foboots()
+        except Problem as p:  # nothing is reset: the header and foboot tests say why
+            found["header_error"] = p.reason
+            return {"flash_error": f"not read over the header: {p.reason}"}
         found["foboot_before_reset"] = bool(before)
         try:
             reading = read_header(host, runner)
@@ -242,12 +254,17 @@ class Fomu(TestBoard):
         found["header"] = reading
         facts = flash_identity(reading)
         found.update({k: facts[k] for k in ("flash_jedec", "flash_uid") if k in facts})
-        came = new_foboot(before)
+        try:
+            came = new_foboot(before)
+            stale = not came and bool(before & foboots())
+        except Problem as p:
+            found["foboot_error"] = p.reason
+            return facts
         if came:
             found["foboot_seconds"], found["usb"] = came
         else:
             found["usb_kernel"] = kernel_usb_lines(runner)
-            found["foboot_stale"] = bool(before & foboots())
+            found["foboot_stale"] = stale
         return facts
 
     # What a run of tests by name leaves (#135): said by fpgas-fomu-debug after `program` and `test`, and by the
@@ -281,16 +298,23 @@ class Fomu(TestBoard):
         done. fpgas-fomu-debug reset runs it by name."""
         runner = runner or run
         entry = {"test": "foboot-after", "output": []}
-        before = foboots()  # a test design has no USB, so normally none; one a test left running is not foboot
+        try:
+            before = foboots()  # a test design has no USB, so normally none
+        except Problem as p:
+            return {**entry, "result": p.result, "reason": f"the closing reset was not done: {p.reason}"}
         try:
             read_header(host, runner)
         except Problem as p:
             return {**entry, "result": p.result, "reason": f"the closing reset could not be done: {p.reason}"}
-        came = new_foboot(before)
+        try:
+            came = new_foboot(before)
+            stale_now = not came and before & foboots()
+        except Problem as p:
+            return {**entry, "result": p.result, "reason": f"after the closing reset: {p.reason}"}
         if came:
             said = f"foboot (1209:5bf0) back on USB {came[0]} s after the closing reset: the next user can load"
             return {**entry, "result": "pass", "output": [said + " over DFU"]}
-        stale = f"; {STALE}" if before & foboots() else ""
+        stale = f"; {STALE}" if stale_now else ""
         return {
             **entry,
             "result": "fail",
