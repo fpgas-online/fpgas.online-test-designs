@@ -1688,3 +1688,15 @@ def test_every_per_test_reason_in_the_event_fits_what_the_site_keeps(opts):
     per_test = {k: v for k, v in d.items() if k.startswith(("board0_not_run_", "board0_not_applicable_"))}
     assert per_test and all(len(v) <= 300 for v in per_test.values())
     assert d["board0_not_run_ddr"].endswith(" … (the whole reason is the board's)") and len(d["board0_reason"]) == 500
+
+
+def test_a_crashed_check_has_its_derived_wiring_not_run_and_says_where_it_comes_from(opts):
+    class DerivesThenCrashes(PlanCrashes):
+        def derived(self, variant, found=None):
+            return {"wiring": (("uart", "ddr"), "its UART and DDR lines")}
+
+    report = runner.verify(opts, _boards(DerivesThenCrashes("arty", seen=[{"variant": "a7-35"}])), usb=[], pci=[],
+                           mode=("arty", "test"))  # fmt: skip
+    (b,) = report["boards"]
+    assert b["result"] == "error" and b["not_run"]["wiring"] == "it is derived from uart, ddr: uart, ddr did not run"
+    assert runner.details(report)["board0_wiring_from"] == "its UART and DDR lines"

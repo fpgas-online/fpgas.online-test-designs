@@ -74,7 +74,9 @@ class NeTV2(TestBoard):
                      "args": ["--board", "netv2", "--uart-port", "{port}"], "says": "ETHERNET:"},
         "pmod": {"artifact": "gpio-loopback-netv2-{v}/kosagi_netv2.bit", "script": "test_pmod_loopback.py",
                  "args": ["--board", "netv2"]},
-        "wiring": {"artifact": "pmod-pin-id-netv2-{v}/kosagi_netv2.bit", "script": "identify_pmod_pins.py", "args": []},
+        # The Pmod pin-ID scan, -debug only: the NeTV2 has no Pmod HAT cabling. Its `wiring` is derived (derives).
+        "pmod-pin-id": {"artifact": "pmod-pin-id-netv2-{v}/kosagi_netv2.bit", "script": "identify_pmod_pins.py",
+                        "args": []},
     }  # fmt: skip
     # #340: the ethernet test is not in the boot check yet (#341). Its only wires to the Pi are the header's JTAG
     # and UART lines, which jtag and uart test: its wiring is theirs (checks.derive).

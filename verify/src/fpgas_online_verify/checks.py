@@ -44,6 +44,7 @@ GROUP_OF = {
     "sdk": "board-specific",
     "dip-switches": "board-specific",
     "pmod": "board-specific",
+    "pmod-pin-id": "board-specific",
 }
 
 # The checks every board type answers for: planned, or not applicable with the reason.
@@ -75,7 +76,10 @@ def derive(report, derived):
     it not run, saying which. Tim, 15 Oct 2026: "anything which has wires should be getting wiring": a board whose
     wires to the Pi are each checked by a test of their own gets its wiring from those tests. The entry says where
     it came from: "from" (the source tests) and "about" (what they cover)."""
-    for test, (sources, about) in derived.items():
+    for test, (all_sources, about) in derived.items():
+        # a source the board's setup has no wires for (the report's "unwired": an Acorn setup without J5/H5) is
+        # not part of it
+        sources = [s for s in all_sources if s not in report.get("unwired", ())]
         ran = {t["test"]: t for t in report.get("tests", [])}
         if test in ran or test in report.get("not_run", {}):
             continue

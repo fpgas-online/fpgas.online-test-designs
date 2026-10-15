@@ -2093,3 +2093,31 @@ def test_a_netv2_check_reports_its_wiring_from_jtag_and_uart(tmp_path):
     flat = runner.details({"result": report["result"], "boards": [report]})
     assert "wiring=pass" in flat["board0_tests"]
     assert flat["board0_wiring_from"] == "its wires to the Pi are the header's JTAG lines (jtag) and UART lines (uart)"
+
+
+def test_a_fomu_whose_foboot_failed_has_its_wiring_not_run_and_its_result_unchanged(tmp_path, fomu_usb):
+    run = Runner([("fomu_header_id.py", _says(FOMU_READING)), ("openFPGALoader", (1, "no device found"))])
+    found = {"variant": "evt"}
+    report = _check(FOMU, tmp_path, found, run)
+    before = report["result"]
+    runner.plan(FOMU, report, found, {})
+    assert report["result"] == before
+    assert report["not_run"]["wiring"] == "it is derived from header, uart: uart did not run"
+
+
+def test_an_acorn_setup_without_p2_gpio_wires_derives_its_wiring_from_the_wires_it_has():
+    report = {"tests": [{"test": t, "result": "pass"} for t in ("jtag", "p2-uart", "p2-serial")],
+              "not_run": {"p2-gpio": "J5 and H5 are not wired on the blade setup"}, "unwired": ["p2-gpio"]}  # fmt: skip
+    checks.derive(report, ACORN.derived(None, {}))
+    wiring = report["tests"][-1]
+    assert wiring["test"] == "wiring" and wiring["result"] == "pass" and "wiring" not in report["not_run"]
+
+
+def test_a_failed_derived_wiring_does_not_change_the_board_result():
+    report = {"result": "fail", "tests": [{"test": "jtag", "result": "pass"}, {"test": "uart", "result": "fail"}]}
+    checks.derive(report, NETV2.derived("a7-35"))
+    assert report["result"] == "fail" and report["tests"][-1]["reason"] == "uart fail"
+
+
+def test_a_card_named_as_another_board_derives_nothing():
+    assert ACORN.derived(None, {"variant": "cle-215+", "title": "PicoEVB"}) == {}

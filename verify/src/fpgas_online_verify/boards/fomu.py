@@ -174,7 +174,8 @@ class Fomu(TestBoard):
                      "args": ["--port", "{port}", "--board", "fomu"], "needs": ("foboot",)},
         "pmod": {"artifact": "gpio-loopback-fomu-{v}/kosagi_fomu_evt.bin", "script": "test_pmod_loopback.py",
                  "args": ["--board", "fomu"], "pre": PMOD_PRE, "needs": ("foboot",)},
-        "wiring": {"artifact": "pmod-pin-id-fomu-{v}/kosagi_fomu_evt.bin", "script": "identify_pmod_pins.py",
+        # The Pmod pin-ID scan, -debug only (#202: it cannot pass on the EVT). Its `wiring` is derived (derives).
+        "pmod-pin-id": {"artifact": "pmod-pin-id-fomu-{v}/kosagi_fomu_evt.bin", "script": "identify_pmod_pins.py",
                    "args": [], "pre": PMOD_PRE, "needs": ("foboot",)},
     }  # fmt: skip
     closing_test = "foboot-after"
