@@ -71,7 +71,7 @@ class NeTV2(TestBoard):
                      "args": ["--port", "{port}", "--board", "netv2", "--timeout", "180"], "verify": True,
                      "listen": True},
         "ethernet": {"artifact": "ethernet-test-netv2-{v}/kosagi_netv2.bit", "script": "test_ethernet.py",
-                     "args": ["--board", "netv2", "--uart-port", "{port}"]},
+                     "args": ["--board", "netv2", "--uart-port", "{port}"], "says": "ETHERNET:"},
         "pmod": {"artifact": "gpio-loopback-netv2-{v}/kosagi_netv2.bit", "script": "test_pmod_loopback.py",
                  "args": ["--board", "netv2"]},
         "pin-id": {"artifact": "pmod-pin-id-netv2-{v}/kosagi_netv2.bit", "script": "identify_pmod_pins.py", "args": []},
