@@ -39,6 +39,10 @@ S3   = 19  # x19 — callee-saved (JEDEC byte 1)
 S4   = 20  # x20 — callee-saved (JEDEC byte 2)
 S5   = 21  # x21 — callee-saved (saved return address)
 T3   = 28  # x28 — temporary (hex table base)
+A2   = 12  # x12 — argument (SPRAM pattern inversion mask)
+S6   = 22  # x22 — callee-saved (SPRAM: the word read back)
+S7   = 23  # x23 — callee-saved (SPRAM: byte lane)
+S8   = 24  # x24 — callee-saved (SPRAM: block start)
 
 
 # ---------------------------------------------------------------------------
@@ -106,12 +110,17 @@ def _bne(rs1, rs2, off):   return _b_type(_OP_BRANCH, 0b001, rs1, rs2, off)
 def _lw(rd, rs1, off=0):   return _i_type(_OP_LOAD, rd, 0b010, rs1, off)
 def _lbu(rd, rs1, off=0):  return _i_type(_OP_LOAD, rd, 0b100, rs1, off)
 def _sw(rs2, rs1, off=0):  return _s_type(_OP_STORE, 0b010, rs1, rs2, off)
+def _sb(rs2, rs1, off=0):  return _s_type(_OP_STORE, 0b000, rs1, rs2, off)
 def _addi(rd, rs1, imm):   return _i_type(_OP_IMM, rd, 0b000, rs1, imm)
 def _andi(rd, rs1, imm):   return _i_type(_OP_IMM, rd, 0b111, rs1, imm)
 def _ori(rd, rs1, imm):    return _i_type(_OP_IMM, rd, 0b110, rs1, imm)
+def _xori(rd, rs1, imm):   return _i_type(_OP_IMM, rd, 0b100, rs1, imm)
 def _slli(rd, rs1, shamt): return _i_type(_OP_IMM, rd, 0b001, rs1, shamt)
 def _srli(rd, rs1, shamt): return _i_type(_OP_IMM, rd, 0b101, rs1, shamt)
 def _add(rd, rs1, rs2):    return _r_type(_OP_ALU, rd, 0b000, rs1, rs2)
+def _sub(rd, rs1, rs2):    return _r_type(_OP_ALU, rd, 0b000, rs1, rs2, 0b0100000)
+def _sll(rd, rs1, rs2):    return _r_type(_OP_ALU, rd, 0b001, rs1, rs2)
+def _xor(rd, rs1, rs2):    return _r_type(_OP_ALU, rd, 0b100, rs1, rs2)
 def _or(rd, rs1, rs2):     return _r_type(_OP_ALU, rd, 0b110, rs1, rs2)
 def _and(rd, rs1, rs2):    return _r_type(_OP_ALU, rd, 0b111, rs1, rs2)
 def _nop():                 return _addi(ZERO, ZERO, 0)
@@ -615,6 +624,232 @@ def generate_spiflash_firmware(uart_base, spiflash_base, ident):
 
 
 # ---------------------------------------------------------------------------
+# SPRAM test firmware (TT FPGA, fpgas.online-test-designs#343)
+# ---------------------------------------------------------------------------
+
+SPRAM_BLOCK = 32 * 1024  # one SB_SPRAM256KA: 16K x 16 bits; the UP5K has four
+
+
+def spram_pattern(offset, inverted=False):
+    """The word the SPRAM firmware writes at byte *offset* from the SPRAM's start: its word index in bits 0-14,
+    again in bits 15-29, and the index's two low bits in bits 30-31. Every word holds its own address, so two
+    addresses that reach one cell are found, and every data bit is 0 in some words and 1 in others; the second
+    pass writes the inverse, so each bit of each word holds both values."""
+    index = offset >> 2
+    word = (index | (index << 15) | (offset << 28)) & 0xFFFFFFFF
+    return word ^ 0xFFFFFFFF if inverted else word
+
+
+def generate_spram_firmware(uart_base, spram_base, spram_size, ident):
+    """Generate the SPRAM test firmware: on each byte received, test the whole SPRAM and say the result.
+
+    The firmware uses no stack and no RAM: every value is in a register, so nothing but the test touches the
+    SPRAM. It prints a banner, *ident* and "SPRAM_READY", then for each byte it receives:
+
+      1. writes spram_pattern() to every word of the SPRAM, then reads every word back;
+      2. the same with the inverse pattern;
+      3. at the start of each 32 KB block, for each byte lane: writes 0xFFFFFFFF, stores one 0x00 byte in the
+         lane (SB), and reads the word back: only that lane may have changed (the SPRAM's write masks);
+      4. prints "SPRAM_TEST: PASS" or, at the first word that differs,
+         "SPRAM_TEST: FAIL at 0xAAAAAAAA read 0xRRRRRRRR expected 0xEEEEEEEE", then waits for the next byte.
+
+    Parameters
+    ----------
+    uart_base : int
+        UART CSR base address.
+    spram_base : int
+        The SPRAM's bus address.
+    spram_size : int
+        Its size in bytes: a whole number of 32 KB blocks.
+    ident : str
+        SoC identification string.
+
+    Returns
+    -------
+    list[int]
+        32-bit words for ``integrated_rom_init``.
+    """
+    assert spram_size > 0 and spram_size % SPRAM_BLOCK == 0, spram_size
+    words = []
+    labels = {}
+    patches = []  # (word index, kind, label): filled in once every label is known
+
+    def w(idx):
+        """Byte address of word *idx*."""
+        return idx * 4
+
+    def label(name):
+        labels[name] = len(words)
+
+    def later(kind, target):
+        patches.append((len(words), kind, target))
+        words.append(0)
+
+    def puts(data):
+        later("auipc_a0", data)
+        later("addi_a0", data)
+        later("call", "putstr")
+
+    def load(reg, value):
+        upper, lower = _split_imm32(value)
+        words.append(_lui(reg, upper))
+        words.append(_addi(reg, reg, lower))
+
+    # === Code section =====================================================
+    load(S0, uart_base)
+    load(S1, spram_base)
+    load(S2, spram_base + spram_size)
+
+    # TX idle before the first character, as the SPI flash firmware does (fpgas.online-test-designs#51).
+    words.append(_lui(T0, 0x40))
+    words.append(_addi(T0, T0, -1))
+    words.append(_bne(T0, ZERO, -4))
+
+    puts("banner")
+    puts("ident")
+    puts("ready")
+
+    # Wait for a byte and take it out of the RX FIFO (generate_uart_firmware says why the write); then test.
+    label("wait")
+    words.append(_lw(T0, S0, 8))                        # UART_RXEMPTY
+    later(("bne", T0, ZERO), "wait")
+    words.append(_lw(T0, S0, 0))                        # the byte: its value does not matter
+    words.append(_addi(T0, ZERO, 2))
+    words.append(_sw(T0, S0, 16))                       # UART_EV_PENDING = RX: pop it
+
+    # Passes 1 and 2: the pattern, then its inverse.
+    words.append(_addi(A2, ZERO, 0))
+    label("pass")
+    words.append(_addi(S3, S1, 0))
+    label("write")
+    later("call", "pattern")
+    words.append(_sw(T0, S3, 0))
+    words.append(_addi(S3, S3, 4))
+    later(("bne", S3, S2), "write")
+    words.append(_addi(S3, S1, 0))
+    label("read")
+    later("call", "pattern")
+    words.append(_addi(S4, T0, 0))                      # expected
+    words.append(_lw(S6, S3, 0))                        # read
+    later(("bne", S6, S4), "fail")
+    words.append(_addi(S3, S3, 4))
+    later(("bne", S3, S2), "read")
+    later(("bne", A2, ZERO), "lanes")                   # both passes done
+    words.append(_addi(A2, ZERO, -1))
+    later("jump", "pass")
+
+    # The byte lanes, at the start of each block.
+    label("lanes")
+    words.append(_addi(S8, S1, 0))
+    label("block")
+    words.append(_addi(S3, S8, 0))
+    words.append(_addi(S7, ZERO, 0))
+    label("lane")
+    words.append(_addi(T0, ZERO, -1))
+    words.append(_sw(T0, S3, 0))                        # 0xFFFFFFFF
+    words.append(_add(T1, S3, S7))
+    words.append(_sb(ZERO, T1, 0))                      # one byte of it 0x00
+    words.append(_slli(T1, S7, 3))
+    words.append(_addi(T2, ZERO, 0xFF))
+    words.append(_sll(T2, T2, T1))
+    words.append(_xori(S4, T2, -1))                     # expected: 0xFF in every other lane
+    words.append(_lw(S6, S3, 0))
+    later(("bne", S6, S4), "fail")
+    words.append(_addi(S7, S7, 1))
+    words.append(_addi(T0, ZERO, 4))
+    later(("bne", S7, T0), "lane")
+    load(T0, SPRAM_BLOCK)
+    words.append(_add(S8, S8, T0))
+    later(("bne", S8, S2), "block")
+
+    puts("pass_text")
+    later("jump", "wait")
+
+    label("fail")
+    puts("fail_text")
+    words.append(_addi(A0, S3, 0))
+    later("call", "puthex32")
+    puts("read_text")
+    words.append(_addi(A0, S6, 0))
+    later("call", "puthex32")
+    puts("expected_text")
+    words.append(_addi(A0, S4, 0))
+    later("call", "puthex32")
+    puts("crlf")
+    later("jump", "wait")
+
+    # === Subroutines: leaves, none calls another ==========================
+
+    # pattern(s3=address, a2=inversion mask) -> t0 = spram_pattern(s3 - s1, a2 != 0). Uses t1, t2.
+    label("pattern")
+    words.append(_sub(T0, S3, S1))                      # offset
+    words.append(_slli(T1, T0, 28))                     # offset << 28 = index << 30
+    words.append(_srli(T0, T0, 2))                      # index
+    words.append(_slli(T2, T0, 15))
+    words.append(_or(T0, T0, T2))
+    words.append(_or(T0, T0, T1))
+    words.append(_xor(T0, T0, A2))
+    words.append(_jalr(ZERO, RA, 0))
+
+    # putstr(a0=string). Uses t0, t1.
+    label("putstr")
+    words.append(_lbu(T0, A0, 0))
+    later(("beq", T0, ZERO), "putstr_ret")
+    label("putstr_tx")
+    words.append(_lw(T1, S0, 4))                        # UART_TXFULL
+    later(("bne", T1, ZERO), "putstr_tx")
+    words.append(_sw(T0, S0, 0))
+    words.append(_addi(A0, A0, 1))
+    later("jump", "putstr")
+    label("putstr_ret")
+    words.append(_jalr(ZERO, RA, 0))
+
+    # puthex32(a0=word): eight hex digits, the most significant first. Uses t0 to t3.
+    label("puthex32")
+    later("auipc_t3", "hex")
+    later("addi_t3", "hex")
+    words.append(_addi(T2, ZERO, 8))
+    label("puthex32_digit")
+    words.append(_srli(T0, A0, 28))
+    words.append(_add(T0, T3, T0))
+    words.append(_lbu(T0, T0, 0))
+    label("puthex32_tx")
+    words.append(_lw(T1, S0, 4))                        # UART_TXFULL
+    later(("bne", T1, ZERO), "puthex32_tx")
+    words.append(_sw(T0, S0, 0))
+    words.append(_slli(A0, A0, 4))
+    words.append(_addi(T2, T2, -1))
+    later(("bne", T2, ZERO), "puthex32_digit")
+    words.append(_jalr(ZERO, RA, 0))
+
+    # === String data ======================================================
+    for name, text in (("banner", "\r\nLiteX custom firmware\r\n"), ("ident", ident + "\r\n"),
+                       ("ready", "SPRAM_READY\r\n"), ("pass_text", "SPRAM_TEST: PASS\r\n"),
+                       ("fail_text", "SPRAM_TEST: FAIL at 0x"), ("read_text", " read 0x"),
+                       ("expected_text", " expected 0x"), ("crlf", "\r\n"), ("hex", "0123456789ABCDEF")):
+        label(name)
+        _emit_string(words, text)
+
+    # === Patch forward references =========================================
+    for idx, kind, target in patches:
+        off = w(labels[target]) - w(idx)
+        if kind == "call":
+            words[idx] = _jal(RA, off)
+        elif kind == "jump":
+            words[idx] = _jal(ZERO, off)
+        elif kind in ("auipc_a0", "auipc_t3"):
+            words[idx] = _auipc(A0 if kind == "auipc_a0" else T3, 0)
+        elif kind in ("addi_a0", "addi_t3"):              # relative to the auipc one word before
+            reg = A0 if kind == "addi_a0" else T3
+            words[idx] = _addi(reg, reg, off + 4)
+        else:
+            op, rs1, rs2 = kind
+            words[idx] = (_bne if op == "bne" else _beq)(rs1, rs2, off)
+
+    return words
+
+
+# ---------------------------------------------------------------------------
 # Helpers for SoC scripts
 # ---------------------------------------------------------------------------
 
@@ -653,6 +888,23 @@ def install_spiflash_firmware(soc, ident):
         spiflash_base=spi_base,
         ident=ident,
     )
+    soc.rom.mem.init = fw
+    return fw
+
+
+def install_spram_firmware(soc, ident):
+    """Finalize *soc*, generate the SPRAM test firmware, and install it into ROM.
+
+    Same contract as :func:`install_uart_firmware`. The SoC must have a ``uart`` CSR group and the SPRAM as
+    its ``psram`` bus region (Up5kSPRAM).
+    """
+    soc.finalize()
+    csr_origin = soc.bus.regions["csr"].origin
+    uart_base  = csr_origin + soc.csr.locs["uart"] * soc.csr.paging
+    spram      = soc.bus.regions["psram"]
+    fw = generate_spram_firmware(uart_base=uart_base, spram_base=spram.origin, spram_size=spram.size,
+                                 ident=ident)
+    assert len(fw) * 4 <= soc.integrated_rom_size, f"the firmware's {len(fw) * 4} bytes do not fit the ROM"
     soc.rom.mem.init = fw
     return fw
 
