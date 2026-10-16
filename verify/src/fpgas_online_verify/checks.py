@@ -57,6 +57,20 @@ GROUP_OF = {
     "pmod-pin-id": "board-specific",
 }
 
+# What a check is, said once for every board that gets it, where its name alone does not tell it from another check:
+# the checks page (scripts/gen_checks_doc.py) puts it at the top of the check's section. Tim, 16 Oct 2026 (coord-74):
+# "What is the difference between uart and p2-uart?" (#362).
+WHAT = {
+    "uart": "A UART test design is loaded into the FPGA and printable text echoes back over the board's own serial "
+    "link to the Pi: the USB FT2232H on the Arty A7, the Pi header's UART on the NeTV2 and Fomu EVT, the RP2350's "
+    "bridge on the TT FPGA demo board. The Acorn has no `uart`: its serial lines come over its P2 cable, and "
+    "`p2-uart` tests them.",
+    "p2-uart": "The Acorn only: its serial lines reach the Pi over its P2 cable. The check loads no design: it talks "
+    "to the UARTBone bridge (Wishbone over the UART) in the gateware the Acorn is already running, at both baud "
+    "rates, and reads the identifier, DNA and XADC through it. The other boards' serial links are tested by "
+    "`uart` instead.",
+}
+
 # The longest one-line description of a test (Board.about) the event carries (#346).
 ABOUT_MAX = 120
 

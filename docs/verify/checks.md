@@ -160,6 +160,8 @@ The messages any check can give (a design that would not load, a test that did n
 
 ## p2-uart
 
+The Acorn only: its serial lines reach the Pi over its P2 cable. The check loads no design: it talks to the UARTBone bridge (Wishbone over the UART) in the gateware the Acorn is already running, at both baud rates, and reads the identifier, DNA and XADC through it. The other boards' serial links are tested by `uart` instead.
+
 Group on the dashboards: `peripherals`.
 
 | Board | Variants | What it checks | What the check runs |
@@ -263,6 +265,8 @@ When it fails:
 The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
 
 ## uart
+
+A UART test design is loaded into the FPGA and printable text echoes back over the board's own serial link to the Pi: the USB FT2232H on the Arty A7, the Pi header's UART on the NeTV2 and Fomu EVT, the RP2350's bridge on the TT FPGA demo board. The Acorn has no `uart`: its serial lines come over its P2 cable, and `p2-uart` tests them.
 
 Group on the dashboards: `peripherals`.
 
