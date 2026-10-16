@@ -141,7 +141,7 @@ HOSTS = {
 PROGRAM_CMD = {
     "arty": "openFPGALoader -b arty {bitstream}",
     "fomu": "openFPGALoader -b fomu {bitstream}",
-    "tt": "python3 ~/tt_fpga_program.py /dev/ttyACM0 {bitstream}",
+    "tt": "openFPGALoader -b tt_fpga -d /dev/ttyACM0 {bitstream}",
     # Acorn on RPi 5 (docs/hardware/acorn-pinmap.md, "Pi 5" notes):
     #  1. detach the PCIe endpoint — reconfiguring an enumerated endpoint
     #     crashes the Pi 5 (2026-08-31, pi-sw2-p47);
@@ -314,7 +314,7 @@ DESIGNS = {
                 "artifact": "gpio-loopback-tt-fpga/tt_fpga_platform.bin",
                 "test_args": "--board tt",
                 "pre_test": "rmmod spidev spi_bcm2835 2>&1; true",
-                "program_cmd": "python3 ~/tt_fpga_program.py /dev/ttyACM0 {bitstream} --gpio-release",
+                "program_cmd": "openFPGALoader -b tt_fpga -d /dev/ttyACM0 {bitstream}",
             },
             "acorn": {
                 "artifact": "gpio-loopback-acorn-cle-215plus/sqrl_acorn.bit",
@@ -361,7 +361,6 @@ EXTRA_UPLOADS = {
         ("designs/acorn-pcie/host/pcie_match_mps.py", "~/pcie_match_mps.py"),
     ],
     "tt": [
-        ("designs/_host/tt_fpga_program.py", "~/tt_fpga_program.py"),
         ("designs/_host/tt_test_wrapper.py", "~/tt_test_wrapper.py"),
     ],
 }
@@ -657,7 +656,7 @@ def run_single_test(test, skip_upload=False):
     output = stdout + stderr
     # Check for successful programming indicators:
     # - openFPGALoader: prints "done 1" in FPGA status register output
-    # - tt_fpga_program.py: returns rc=0
+    # - openFPGALoader -b tt_fpga: returns rc=0 (non-zero when the load, clock or pin release failed)
     programming_ok = rc == 0 or "done 1" in output.lower()
     if not programming_ok:
         # For Fomu: DFU bootloader may have timed out. PoE-reset to
