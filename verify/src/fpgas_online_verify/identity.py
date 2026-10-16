@@ -20,6 +20,7 @@ Stdlib only: the Pi hosts boot a tmpfs root with no LiteX.
 import datetime
 import importlib.metadata
 import json
+import re
 
 from fpgas_online_verify import idcode
 
@@ -159,6 +160,103 @@ def flash_fields(ident, source):
     elif ident.get("sfdp_error"):
         out["flash_sfdp_error"] = ident["sfdp_error"]
     out["flash_source"] = source
+    return out
+
+
+# openFPGALoader's --flash-info-json document (the fpgas.online builds; its doc/guide/advanced.rst): the only
+# format and version this reads. A version 1 document's "sfdp": null may be a failed read, so it is refused.
+FLASH_INFO_FORMAT = "openFPGALoader-flash-info"
+FLASH_INFO_VERSION = 2
+UID_STATES = ("read", "blank", "none")
+_HEX_ID = re.compile(r"0x[0-9a-fA-F]{6}")
+_SFDP_REVISION = re.compile(r"[0-9]+\.[0-9]+")
+
+
+class FlashInfoError(ValueError):
+    """An openFPGALoader flash-info document this reader does not take: its message says why."""
+
+
+def _flash_info_record(doc):
+    """The one flash of a --flash-info-json document, checked; FlashInfoError saying why it is not one."""
+    if not isinstance(doc, dict):
+        raise FlashInfoError("the document is not a JSON object")
+    if doc.get("format") != FLASH_INFO_FORMAT:
+        raise FlashInfoError(f"its format is {doc.get('format')!r}, not {FLASH_INFO_FORMAT!r}")
+    version = doc.get("version")
+    if type(version) is not int or version != FLASH_INFO_VERSION:  # True is an int, and no version
+        raise FlashInfoError(f"it is version {version!r}; this reader takes only version {FLASH_INFO_VERSION}")
+    flashes = doc.get("flashes")
+    if not isinstance(flashes, list):
+        raise FlashInfoError("it has no list of flashes")
+    if len(flashes) != 1:
+        raise FlashInfoError(f"it describes {len(flashes)} flashes, not the board's one")
+    (flash,) = flashes
+    if not isinstance(flash, dict):
+        raise FlashInfoError("its flash is not a JSON object")
+    for key in ("jedec_id", "extended_id"):
+        if key == "extended_id" and flash.get(key) is None:  # null: the part's family defines no bytes 4-6
+            continue
+        if not isinstance(flash.get(key), str) or not _HEX_ID.fullmatch(flash[key]):
+            raise FlashInfoError(f"its {key} is {flash.get(key)!r}, not 0x and 6 hex digits")
+    if int(flash["jedec_id"], 16) in (0, 0xFFFFFF):
+        raise FlashInfoError(f"its JEDEC ID is {flash['jedec_id']}: no flash answered")
+    uid = flash.get("unique_id")
+    if not isinstance(uid, dict) or uid.get("state") not in UID_STATES:
+        raise FlashInfoError(f"its unique_id state is not one of {', '.join(UID_STATES)}: {uid!r}")
+    if uid["state"] in ("read", "blank"):
+        if type(uid.get("bits")) is not int or uid["bits"] <= 0:
+            raise FlashInfoError(f"its unique_id is {uid['state']} with no length in bits: {uid!r}")
+        if not isinstance(uid.get("opcode"), str) or not re.fullmatch(r"0x[0-9a-fA-F]{2}", uid["opcode"]):
+            raise FlashInfoError(f"its unique_id is {uid['state']} with no opcode: {uid!r}")
+    if uid["state"] == "read":
+        value = uid.get("value")
+        if not isinstance(value, str) or not re.fullmatch(r"[0-9a-fA-F]+", value) or len(value) * 4 != uid["bits"]:
+            raise FlashInfoError(f"its unique_id is read, but its value is not {uid['bits']} bits of hex: {uid!r}")
+        if set(value.lower()) <= {"0"} or set(value.lower()) <= {"f"}:  # flash_fields' rule for blank
+            raise FlashInfoError(f"its unique_id is read, but {value} is all 0x00 or 0xff: a blank read, not an ID")
+    if uid["state"] == "none" and uid.get("note") is not None and not (isinstance(uid["note"], str) and uid["note"]):
+        raise FlashInfoError(f"its unique_id note is neither text nor null: {uid!r}")
+    sfdp = flash.get("sfdp", ...)
+    if sfdp is ...:
+        raise FlashInfoError("it has no sfdp (null when the part has none)")
+    if sfdp is not None and not (isinstance(sfdp, dict) and isinstance(sfdp.get("revision"), str)
+                                 and _SFDP_REVISION.fullmatch(sfdp["revision"])):  # fmt: skip
+        raise FlashInfoError(f"its sfdp has no revision major.minor: {sfdp!r}"[:300])
+    if flash.get("part") is not None and not (isinstance(flash["part"], str) and flash["part"]):
+        raise FlashInfoError(f"its part is {flash['part']!r}, neither text nor null")
+    size = flash.get("size_bytes")
+    if size is not None and (type(size) is not int or size <= 0):
+        raise FlashInfoError(f"its size_bytes is {size!r}, neither a positive number nor null")
+    return flash
+
+
+def flash_info_fields(doc, source):
+    """The flash fields from openFPGALoader's --flash-info-json document `doc` (parsed JSON), the same fields
+    flash_fields() gives, and flash_uid_note: {"flash_error": why} for a document that is not version 2 of
+    that format with exactly one flash.
+
+    The unique ID as openFPGALoader read it: `read` gives flash_uid, flash_uid_bits, flash_uid_opcode; `blank`
+    (it read all 0x00 or 0xff) flash_uid_bits and flash_uid_opcode; `none` with a note (the chip said it has
+    no unique ID) flash_uid_note. `none` without a note is openFPGALoader knowing no unique ID command for
+    the part, which says nothing about the silicon: no flash_uid_note, so rpi-hwid makes no label from it.
+    flash_sfdp is the SFDP revision, or "none" when the part answered without the SFDP signature."""
+    try:
+        flash = _flash_info_record(doc)
+    except FlashInfoError as e:
+        return {"flash_error": f"openFPGALoader's flash-info JSON is not one this reads: {e}"}
+    uid = flash["unique_id"]
+    rdid = flash["jedec_id"][2:] + (flash["extended_id"][2:] if flash.get("extended_id") else "")
+    ident = {"rdid": rdid, "part": flash.get("part"), "size_bytes": flash.get("size_bytes"),
+             "sfdp": "none" if flash["sfdp"] is None else flash["sfdp"]["revision"]}  # fmt: skip
+    if uid["state"] == "read":
+        ident.update(unique_id=uid["value"], unique_id_opcode=int(uid["opcode"], 16))
+    out = flash_fields(ident, source)
+    out["flash_uid_state"] = uid["state"]
+    if uid["state"] == "blank":
+        out["flash_uid_bits"] = uid["bits"]
+        out["flash_uid_opcode"] = hex_id(int(uid["opcode"], 16), REGISTER_DIGITS)
+    elif uid["state"] == "none" and uid.get("note"):
+        out["flash_uid_note"] = uid["note"]
     return out
 
 

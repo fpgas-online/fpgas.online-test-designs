@@ -19,7 +19,8 @@ class Arty(TestBoard):
     usb = (("0403", "6010"),)
     variants: ClassVar[dict] = {"a7-35": "a7-35t"}
     idcodes: ClassVar[dict] = {"a7-35": 0x0362D093}  # XC7A35T
-    label_fields = ("idcode", "dna", "flash_jedec", "flash_uid")
+    # and flash_uid or flash_uid_note, as flash_uid_state says (identify.missing; rpi-hwid's label needs them)
+    label_fields = ("serial", "idcode", "dna", "flash_jedec", "flash_uid_state")
     port = "/dev/ttyUSB1"
     flash_region: ClassVar[dict] = {"a7-35": 0x220000}  # an XC7A35T .bit is 2,192,123 bytes
     jtag_loads_7_series = True  # openFPGALoader's `done` line says whether it loaded (#300)

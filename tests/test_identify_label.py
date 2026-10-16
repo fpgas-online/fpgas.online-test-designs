@@ -643,8 +643,8 @@ def test_the_arty_reads_only_its_idcode_and_dna_and_loads_nothing(tmp_path):
         "dna": DNA,
     }  # fmt: skip
     assert ARTY.report_fields == ("flash",)
-    # whole but for the flash, which only a loaded design can read
-    assert identify.missing(ARTY, out) == [("flash_jedec", "not read"), ("flash_uid", "not read")]
+    # whole but for the flash, whose identity only the boot check reads (the bridge replaces the running design)
+    assert identify.missing(ARTY, out) == [("flash_jedec", "not read"), ("flash_uid_state", "not read")]
 
 
 def test_an_arty_whose_dna_cannot_be_read_says_why_in_dna_error(tmp_path):
