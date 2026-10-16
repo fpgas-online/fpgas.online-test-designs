@@ -115,7 +115,7 @@ Not for:
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| Sqrl Acorn | every | the FPGA restarted since the last boot's check (scratch holds its reset value or this boot's marker) | the FPGA restarted since the last check (check.power_cycle_verdict): the ctrl scratch register holds its reset value, or this boot's marker. The marker is written at the end of the check, the only write that is not put back.; set `power-cycle-check = on` in /etc/fpgas-verify/*.ini to run it |
+| Sqrl Acorn | every | the FPGA restarted since the last boot's check (scratch holds its reset value or this boot's marker) | the FPGA restarted since the last check (check.power_cycle_verdict): the ctrl scratch register holds its reset value, or this boot's marker. The marker is written at the end of the check, the only write that is not put back; set `power-cycle-check = on` in /etc/fpgas-verify/*.ini to run it |
 
 ## uart
 

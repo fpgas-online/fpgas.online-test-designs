@@ -79,7 +79,7 @@ def runs(board, variant, test, untested, derived, only_when_asked):
         detail = acorn_details().get(test)
         if not detail:
             raise GapError(f"{board.title}: the Acorn suite's docstring has no line for {test!r}")
-        return detail + (f"; {acorn_suite.OPT_IN.split(': ', 1)[1]}" if only_when_asked else "")
+        return detail.rstrip(".") + (f"; {acorn_suite.OPT_IN.split(': ', 1)[1]}" if only_when_asked else "")
     if variant is None:
         return "the tests of the board's own variant (the rows above), once the board has said which it is"
     script = board.script_tests.get(test)
