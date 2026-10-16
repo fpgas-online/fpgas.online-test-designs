@@ -33,8 +33,8 @@ Then the tests of an FPGA board, in this order:
 3. The `wiring` test: the check loads the PMOD pin identification design and checks the PMOD HAT cabling against
    the expected map (ui_in on HAT JA, uio on JB, uo_out on JC:
    [Tiny Tapeout FPGA demo board pin mapping](https://docs.fpgas.online/en/latest/boards/tt-fpga/overview/pin-mapping.html)). A miswired HAT fails the board.
-4. The `uart` test: the check loads the UART test design through the microcontroller (`tt_fpga_program.py`, over
-   `mpremote`), and runs its host test through the UART bridge on `/dev/ttyACM0`.
+4. The `uart` test: the check loads the UART test design through the microcontroller (`openFPGALoader -b tt_fpga`),
+   and runs its host test through the UART bridge on `/dev/ttyACM0`.
 5. [The `spram` test](#the-spram-test): the same way, the SPRAM test design, which writes and reads back the
    iCE40's 128 KB of SPRAM. A word that does not read back fails the board.
 6. When the tests are done it streams one more design, which moves the seven-segment display and is left running
@@ -105,7 +105,7 @@ The `dip-switches` test checks it, before any other test loads a design
   the board. For each line it drives the pin low for a moment, then reads it as an input with its pull-down,
   so a switch that is on reads high and one that is off reads low.
 * Nothing else may hold the lines while they are read. So the check first streams
-  [`tt-display`](../../designs/tt-display/README.md) with `--gpio-release`: it drives only `uo_out`, and leaves
+  [`tt-display`](../../designs/tt-display/README.md), with the microcontroller's own pins left high-impedance: it drives only `uo_out`, and leaves
   `ui_in` and `uio` undriven with the FPGA's pull-up off. The Pi's eight GPIOs on HAT JA are made inputs with
   their pull-down for the read, and are then put back as they were (with `pinctrl`). JA pins 2 to 4 are also
   JB's, `uio[1]` to `uio[3]`: for switches 2 to 4 the board's microcontroller sets its `uio[1]` to `uio[3]`

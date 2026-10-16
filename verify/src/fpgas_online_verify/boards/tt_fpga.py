@@ -1,6 +1,6 @@
-"""TT FPGA Demo Board (iCE40UP5K behind an RP2350): found by the RP2350 on USB, loaded through it (tt_fpga_program.py,
-over mpremote). The FPGA's UART reaches the Pi only through the RP2350, so the UART test runs
-through tt_test_wrapper.py's bridge, which loads the design too. There is no SPI-flash test: the breakout has
+"""TT FPGA Demo Board (iCE40UP5K behind an RP2350): found by the RP2350 on USB, loaded through it (openFPGALoader's
+tt_fpga board, over the RP2350's raw REPL). The FPGA's UART reaches the Pi only through the RP2350, so the UART test
+runs through tt_test_wrapper.py's bridge, which loads the design too. There is no SPI-flash test: the breakout has
 no flash (docs/hardware/tt-fpga.md).
 
 Which Tiny Tapeout board it is, is the board's own word, never a guess (#124). The same demo board carries an
@@ -28,10 +28,14 @@ pin. The script then puts the board back from RAM as its SDK had it (tt_sdk_star
 test was here such a board failed as untested (Tim, 2026-10-05: "Fail until wiring is tested and prioritize
 landing the setup which properly tests the wiring"). The FPGA board's wiring test (also `wiring`) loads a design.
 
-Nothing is written to the demo board: for every load the RP2350 reads the bitstream from the Pi over the serial
-link (tt_fpga_program.py, `mpremote mount`). The board has no flash of its own to compare, so the state is the
-RP2350's USB serial number. Loading needs mpremote (micropython-mpremote: in trixie, and only
-bookworm-backports for bookworm).
+Nothing is written to the demo board: for every load `openFPGALoader -b tt_fpga` (our build, the
+openfpgaloader-fpgasonline packages of fpgas.online-fpga-tools) streams the bitstream to the RP2350 over its raw
+REPL, which clocks it into the iCE40 from RAM. After each load it starts the TTDBv3 project clock (GPIO16, 50 MHz)
+and leaves the SPI pins and the RP2350's ui_in, uo_out and uio pins (GPIO17-40) high-impedance, and it exits
+non-zero when any of that did not happen (fpga-tools #18); a load that exits 0 without saying `SRAM programming
+complete` fails too (load_failure). The board has no flash of its own to compare, so the state is the RP2350's
+USB serial number. The board's other reads (tt_main_py.py, tt_dip_switches.py, tt_pmod_wiring.py) still need
+mpremote (micropython-mpremote: in trixie, and only bookworm-backports for bookworm).
 
 Who the board is, for rpi-hwid's Tiny Tapeout label, comes from `rpi-hwid tinytapeout --json --no-stop-service`,
 run while the check holds the RP2350's port (fpgas-tt.service stopped) and before any test loads a design: it
@@ -54,6 +58,8 @@ from ..core import Problem, run, tail, usb_matching
 from ..testbench import TestBoard
 
 RPI_HWID = "rpi-hwid"
+# What openFPGALoader's tt_fpga load prints last when the stream, the clock and the pin release all succeeded.
+LOADED = "SRAM programming complete"
 # The command reads every MicroPython RP2 board on USB, each REPL read with its own 10 s deadline.
 RPI_HWID_TIMEOUT = 60
 # --no-stop-service: the check has already stopped fpgas-tt.service, and starts it again itself.
@@ -288,14 +294,13 @@ class TTFPGA(TestBoard):
     tests: ClassVar[dict] = {
         # Each of the demo board's DIP switches on ui_in is off: one that is on fails the board, named.
         "dip-switches": {"artifact": "tt-display-{v}/tt_fpga_platform.bin", "script": "tt_dip_switches.py",
-                         "args": ["{port}"], "program_args": ["--gpio-release"], "says": "DIP_SWITCHES:",
+                         "args": ["{port}"], "says": "DIP_SWITCHES:",
                          "verify": True},
         # The Pmod HAT cabling, against identify_pmod_pins.BOARDS["tt"] (ui_in on HAT JA, uio JB, uo_out JC). It
         # was `pin-id` until 15 Oct 2026 (#340): `wiring` is the cabling test's name on every board, as on a board
         # with a Tiny Tapeout chip (script_tests), which never runs this one.
         "wiring": {"artifact": "pmod-pin-id-{v}/tt_fpga_platform.bin", "script": "identify_pmod_pins.py",
-                   "args": ["--board", "tt"], "pre": PMOD_PRE, "program_args": ["--gpio-release"],
-                   "verify": True, "says": "PIN-ID:"},
+                   "args": ["--board", "tt"], "pre": PMOD_PRE, "verify": True, "says": "PIN-ID:"},
         "uart": {"artifact": "uart-test-tt-fpga/tt_fpga_platform.bin", "script": "test_uart.py",
                  "args": ["--port", "{port}", "--board", "tt", "--skip-banner"], "verify": True,
                  "runner": "tt-bridge"},
@@ -304,7 +309,7 @@ class TTFPGA(TestBoard):
         "spram": {"artifact": "spram-test-tt-fpga/tt_fpga_platform.bin", "script": "test_spram.py",
                   "args": ["--port", "{port}"], "verify": True, "runner": "tt-bridge", "says": "SPRAM:"},
         "pmod": {"artifact": "gpio-loopback-{v}/tt_fpga_platform.bin", "script": "test_pmod_loopback.py",
-                 "args": ["--board", "tt"], "pre": PMOD_PRE, "program_args": ["--gpio-release"]},
+                 "args": ["--board", "tt"], "pre": PMOD_PRE},
     }  # fmt: skip
 
     # What the whole check is asked about (#340).
@@ -344,13 +349,12 @@ class TTFPGA(TestBoard):
 
     # #139: the check ends by streaming a design that moves the seven-segment display, so the board looks
     # alive on its camera until a visitor loads a design (designs/tt-display: clocked by the iCE40's own
-    # oscillator, it needs nothing of the RP2350 afterwards and drives only uo_out). --gpio-release: the
-    # RP2350's own pins on ui_in, uo_out and uio are left as inputs, so nothing but the FPGA drives the display.
+    # oscillator, it needs nothing of the RP2350 afterwards and drives only uo_out). openFPGALoader leaves the
+    # RP2350's own pins on ui_in, uo_out and uio high-impedance, so nothing but the FPGA drives the display.
     # It lasts until the board's SDK next starts (a visitor's Commander, the site's Run), which puts the SDK's
     # own default project into the FPGA.
     left_running: ClassVar[dict] = {
-        "tt-fpga": {"design": "display", "artifact": "tt-display-tt-fpga/tt_fpga_platform.bin",
-                    "program_args": ["--gpio-release"]},
+        "tt-fpga": {"design": "display", "artifact": "tt-display-tt-fpga/tt_fpga_platform.bin"},
     }  # fmt: skip
 
     def spot(self, host, usb, pci):
@@ -402,8 +406,19 @@ class TTFPGA(TestBoard):
         return []
 
     def program_argv(self, bitstream, host, test):
-        extra = self.tests.get(test, {}).get("program_args", [])
-        return [sys.executable, host_tests.path("tt_fpga_program.py"), host["port"], bitstream, *extra]
+        """Every load is the same: openFPGALoader also starts the clock and leaves the RP2350's pins on ui_in,
+        uo_out and uio high-impedance, so nothing but the FPGA and the Pi drives them (what the mpremote loader,
+        tt_fpga_program.py, did with --gpio-release until 17 Oct 2026)."""
+        return ["openFPGALoader", "-b", "tt_fpga", "-d", host["port"], bitstream]
+
+    def load_failure(self, argv, text):
+        """openFPGALoader's tt_fpga load exits non-zero when the stream, the clock or the pin release failed
+        (fpga-tools #18); one that exits 0 must also have said it finished, or whether it did is not known.
+        It cannot say whether the iCE40 configured: it does not read CDONE (fpga-tools #17); the designs' own
+        tests do."""
+        if argv and argv[0] == "openFPGALoader" and LOADED not in text:
+            return f"openFPGALoader exited 0 but did not say '{LOADED}'"
+        return None
 
 
 BOARD = TTFPGA()

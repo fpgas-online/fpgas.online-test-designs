@@ -7,6 +7,7 @@ scripts) goes through a fake runner that records it and answers as the hardware 
 import hashlib
 import importlib.util
 import json
+import os
 import struct
 import sys
 
@@ -76,6 +77,11 @@ FLASH_INFO_FIELDS = {
 }  # fmt: skip
 
 
+# openFPGALoader's TT FPGA load, and what it says last when the stream, the clock and the pin release succeeded.
+TT_LOAD = ["openFPGALoader", "-b", "tt_fpga"]
+TT_LOADED = "SRAM programming complete\n"
+
+
 class Runner:
     """Stands in for core.run: records argv, answers from `answers` (the first needle found wins). A dump
     request writes `flash` to the output file, and a --flash-info-json request writes `flash_info` (JSON, or
@@ -112,6 +118,8 @@ class Runner:
             return 0, LOADED
         if "fpgas_online_verify.listen" in argv and "openFPGALoader" in argv:  # listen.py passes the load's lines on
             return 0, LOADED + "ok"
+        if argv[:3] == TT_LOAD:  # a TT FPGA load that finished
+            return 0, TT_LOADED
         return 0, "ok"
 
 
@@ -511,7 +519,48 @@ def test_only_a_jtag_load_by_openfpgaloader_is_judged_by_its_done_line():
     # the NeTV2 on a Pi 3/4 loads with OpenOCD, which prints no such line; the Fomu and TT boards load no 7-series
     assert NETV2.load_failure(["openocd", "-c", "init; pld load 0 x.bit; exit"], "ok") is None
     assert NETV2.load_failure(["openFPGALoader", "-c", "rp1pio", "x.bit"], NOT_LOADED) is not None
-    assert FOMU.load_failure(["openFPGALoader", "x.bin"], "ok") is None and TT.load_failure(["x"], "ok") is None
+    assert FOMU.load_failure(["openFPGALoader", "x.bin"], "ok") is None
+
+
+def test_a_tt_fpga_load_counts_only_when_openfpgaloader_said_it_finished():
+    load = [*TT_LOAD, "-d", "/dev/ttyACM0", "x.bin"]
+    assert TT.load_failure(load, "Writing: 100.00%\n" + TT_LOADED) is None
+    assert TT.load_failure(load, "Writing: 100.00%\n") == (
+        "openFPGALoader exited 0 but did not say 'SRAM programming complete'"
+    )
+
+
+def test_a_tt_fpga_check_fails_a_load_that_exits_0_without_saying_it_finished(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    pin_id = "pmod-pin-id-tt-fpga/tt_fpga_platform.bin"
+    run = Runner([(pin_id, (0, "Writing: 100.00%\n")), _rpi_hwid(TT_BOARD)])
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    wiring = next(t for t in report["tests"] if t["test"] == "wiring")
+    assert wiring["result"] == "fail" and wiring["reason"] == (
+        "loading it failed: openFPGALoader exited 0 but did not say 'SRAM programming complete'"
+    )
+    assert not any("identify_pmod_pins.py" in " ".join(c) for c in run.calls)  # nothing reads a design not loaded
+
+
+@pytest.mark.parametrize("says, rc, verdict", [
+    ("Writing: 100.00%\nSRAM programming complete\n", 0, None),
+    ("Writing: 100.00%\n", 0, "loading it failed: openFPGALoader exited 0 but did not say"),
+])  # fmt: skip
+def test_the_debug_tools_judge_a_load_as_the_check_does(tmp_path, monkeypatch, capsys, says, rc, verdict):
+    (tmp_path / "said.txt").write_text(says)
+    fake = tmp_path / "openFPGALoader"
+    fake.write_text(f"#!/bin/sh\ncat {tmp_path / 'said.txt'}\n")
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ['PATH']}")
+    assert debug._load(TT, ["openFPGALoader", "-b", "tt_fpga", "-d", "/dev/ttyACM0", "x.bin"]) == (1 if verdict else rc)
+    shown = capsys.readouterr().out
+    assert "Writing: 100.00%" in shown and ((verdict in shown) if verdict else "loading it failed" not in shown)
+
+
+def test_the_debug_tools_say_a_missing_loader_is_not_installed(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("PATH", str(tmp_path))
+    assert debug._load(TT, ["openFPGALoader", "x.bin"]) == 127
+    assert "openFPGALoader is not installed" in capsys.readouterr().out
 
 
 def test_only_the_tests_asked_for_run(tmp_path):
@@ -642,8 +691,9 @@ def test_the_tt_board_loads_and_tests_through_the_rp2350_bridge_and_does_not_rea
     # first of all the board's own word is judged (sdk), which loads nothing
     assert [t["test"] for t in report["tests"]] == ["sdk", "dip-switches", "wiring", "uart", "spram"]
     assert report["result"] == "pass" and "not_run" not in report and "bitstream" not in report["tests"][0]
-    _dip, load, _display = [c for c in run.calls if "tt_fpga_program.py" in " ".join(c)]
-    assert load[3].endswith("pmod-pin-id-tt-fpga/tt_fpga_platform.bin") and load[4:] == ["--gpio-release"]
+    _dip, load, _display = [c for c in run.calls if c[:3] == TT_LOAD]
+    assert load == [*TT_LOAD, "-d", "/dev/ttyACM0", load[5]]
+    assert load[5].endswith("pmod-pin-id-tt-fpga/tt_fpga_platform.bin")
     bridged = [c for c in run.calls if "tt_test_wrapper.py" in " ".join(c)]
     assert [c[3].rsplit("/", 2)[-2] for c in bridged] == ["uart-test-tt-fpga", "spram-test-tt-fpga"]
     assert bridged[0][2] == "/dev/ttyACM0" and bridged[0][5].endswith("test_uart.py")
@@ -724,7 +774,7 @@ E6_SAYS_FPGA = _rpi_hwid({**TT_BOARD, "usb_serial": "E6"})  # what the board wit
 def _nothing_loaded(report, run):
     """No test that loads a design ran and no design went to the board: neither loader was called."""
     return not any("bitstream" in t for t in report["tests"]) and not any(
-        "tt_fpga_program.py" in " ".join(c) or "tt_test_wrapper.py" in " ".join(c) for c in run.calls)  # fmt: skip
+        c[:3] == TT_LOAD or "tt_test_wrapper.py" in " ".join(c) for c in run.calls)  # fmt: skip
 
 
 def _restarted_last(run):
@@ -821,7 +871,7 @@ def test_a_main_py_check_that_could_not_run_is_an_error_and_nothing_is_loaded(tm
     assert report["result"] == "error" and why.endswith(
         "it could not be checked: tt_main_py.py did not finish within 90 s"
     )
-    assert report["tests"] == [] and not any("tt_fpga_program.py" in " ".join(c) for c in calls)
+    assert report["tests"] == [] and not any(c[:3] == TT_LOAD for c in calls)
 
 
 def test_a_field_rpi_hwid_left_out_stays_out_and_leaves_the_tt_identity_not_whole(tmp_path, monkeypatch):
@@ -1571,6 +1621,7 @@ def test_debug_test_loads_then_runs_with_extra_arguments(tmp_path, monkeypatch):
     monkeypatch.setattr(debug, "hold_lock", lambda *a: _Nothing())
     ran = []
     monkeypatch.setattr(debug, "_live", lambda argv: ran.append([str(a) for a in argv]) or 0)
+    monkeypatch.setattr(debug, "_load", lambda board, argv: debug._live(argv))
     images = _install(tmp_path, ARTY)
     args = cli.argparse.Namespace(command="test", test="wiring", extra=["--hat-port", "JA"], images=images,
                                   variant=None, port=None)  # fmt: skip
@@ -1608,6 +1659,7 @@ def test_a_by_name_fomu_load_says_how_to_put_foboot_back(tmp_path, monkeypatch, 
     args = _fomu_debug(monkeypatch, "program", test="uart", extra=[])
     args.images = _install(tmp_path, FOMU)
     monkeypatch.setattr(debug, "_live", lambda argv: 0)
+    monkeypatch.setattr(debug, "_load", lambda board, argv: debug._live(argv))
     assert debug.run(FOMU, args) == 0
     assert "fpgas-fomu-debug reset" in capsys.readouterr().out
 
@@ -1616,6 +1668,7 @@ def test_a_failed_by_name_fomu_load_does_not_say_the_design_runs(tmp_path, monke
     args = _fomu_debug(monkeypatch, "program", test="uart", extra=[])
     args.images = _install(tmp_path, FOMU)
     monkeypatch.setattr(debug, "_live", lambda argv: 1)  # the DFU load failed: foboot may still be there
+    monkeypatch.setattr(debug, "_load", lambda board, argv: debug._live(argv))
     assert debug.run(FOMU, args) == 1
     assert "fpgas-fomu-debug reset" not in capsys.readouterr().out
 
@@ -1626,6 +1679,7 @@ def test_a_by_name_fomu_test_whose_host_test_fails_still_says_the_design_runs(tm
     # the load worked; the host test failed: the design runs all the same (the serial-getty stop in pre_steps
     # runs through _live too, so answers in call order would not reach the load)
     monkeypatch.setattr(debug, "_live", lambda argv: 1 if any(str(a).endswith("test_uart.py") for a in argv) else 0)
+    monkeypatch.setattr(debug, "_load", lambda board, argv: debug._live(argv))
     assert debug.run(FOMU, args) == 1
     assert "fpgas-fomu-debug reset" in capsys.readouterr().out
 
@@ -1676,8 +1730,7 @@ def test_a_board_that_says_it_is_an_fpga_board_is_a_tt_fpga_and_only_then_is_a_d
     report = _check(TT, tmp_path, TT_FOUND, run)
     assert _passed_what_it_has(report) and report["variant"] == report["identity"]["variant"] == "tt-fpga"
     asked = run.calls.index(RPI_HWID_TT)
-    loaders = ("tt_fpga_program.py", "tt_test_wrapper.py")
-    loads = [i for i, c in enumerate(run.calls) if any(name in " ".join(c) for name in loaders)]
+    loads = [i for i, c in enumerate(run.calls) if c[:3] == TT_LOAD or "tt_test_wrapper.py" in " ".join(c)]
     assert loads and min(loads) > asked  # the board is asked first
 
 
@@ -1932,9 +1985,9 @@ DISPLAY = "tt-display-tt-fpga/tt_fpga_platform.bin"
 
 
 def _loads(run):
-    """The designs that went to the board, in order: by the programmer, or by the UART test's bridge."""
-    return [c[3].rsplit("/", 2)[-2] for c in run.calls
-            if "tt_fpga_program.py" in " ".join(c) or "tt_test_wrapper.py" in " ".join(c)]  # fmt: skip
+    """The designs that went to the board, in order: by openFPGALoader, or by the UART test's bridge."""
+    return [c[5 if c[:3] == TT_LOAD else 3].rsplit("/", 2)[-2] for c in run.calls
+            if c[:3] == TT_LOAD or "tt_test_wrapper.py" in " ".join(c)]  # fmt: skip
 
 
 def test_the_check_of_an_fpga_board_ends_by_leaving_the_display_design_running(tmp_path, monkeypatch):
@@ -1947,8 +2000,7 @@ def test_the_check_of_an_fpga_board_ends_by_leaving_the_display_design_running(t
     assert _loads(run) == ["tt-display-tt-fpga", "pmod-pin-id-tt-fpga", "uart-test-tt-fpga", "spram-test-tt-fpga",
                            "tt-display-tt-fpga"]  # fmt: skip
     last = run.calls[-2]
-    assert last[1].endswith("tt_fpga_program.py") and last[2] == "/dev/ttyACM0" and last[3].endswith(DISPLAY)
-    assert last[4:] == ["--gpio-release"] and _restarted_last(run)
+    assert last == [*TT_LOAD, "-d", "/dev/ttyACM0", last[5]] and last[5].endswith(DISPLAY) and _restarted_last(run)
     # it is no test: not in the tests, and nothing is run to read it
     assert [t["test"] for t in report["tests"]] == ["sdk", "dip-switches", "wiring", "uart", "spram"]
     assert "display" not in TT.tests
@@ -1961,12 +2013,12 @@ def test_the_check_of_an_fpga_board_ends_by_leaving_the_display_design_running(t
 def test_a_display_design_that_cannot_be_loaded_is_a_warning_not_the_boards_result(tmp_path, monkeypatch):
     """The board was tested before it; the design is for the camera. But it is said, in the report and the event."""
     _installed(monkeypatch)
-    run = Runner([(DISPLAY, [(0, "ok"), (1, "mpremote: no device found\nPROGRAM_FAILED")]), _rpi_hwid(TT_BOARD)])
+    run = Runner([(DISPLAY, [(0, TT_LOADED), (1, "ERROR: no device found on /dev/ttyACM0")]), _rpi_hwid(TT_BOARD)])
     report = _check(TT, tmp_path, TT_FOUND, run)
     assert report["result"] == "pass" and "reason" not in report and "left_running" not in report
     assert report["warnings"] == [
         "the display design, which the check leaves running, could not be loaded (loading it failed (exit 1): "
-        "mpremote: no device found PROGRAM_FAILED): the board is left as its last test left it"]  # fmt: skip
+        "ERROR: no device found on /dev/ttyACM0): the board is left as its last test left it"]  # fmt: skip
     assert [t["result"] for t in report["tests"]] == ["pass", "pass", "pass", "pass", "pass"] and _restarted_last(run)
     whole = {"result": "pass", "mode": "tt", "boards": [report]}
     assert "    WARNING: the display design, which the check leaves running, could not" in runner.summary(whole)
@@ -2013,7 +2065,7 @@ def test_the_display_design_is_left_after_single_tests_and_after_a_failed_test_t
 def test_a_load_that_times_out_is_a_warning_and_a_failing_boards_closing_lines_keep_it_apart(tmp_path, monkeypatch):
     _installed(monkeypatch)
     # the display design is loaded twice: for the DIP switch read first (it loads), and last (it times out)
-    run = Runner([(DISPLAY, [(0, "ok"), core.Problem("error", "tt_fpga_program.py did not finish within 300 s")]),
+    run = Runner([(DISPLAY, [(0, TT_LOADED), core.Problem("error", "openFPGALoader did not finish within 300 s")]),
                   ("tt_test_wrapper.py", (1, "could not enter raw repl")), _rpi_hwid(TT_BOARD)])  # fmt: skip
     report = _check(TT, tmp_path, TT_FOUND, run)
     assert report["result"] == "fail" and "did not finish within 300 s" in report["warnings"][0]
@@ -2129,10 +2181,12 @@ def test_the_dip_switches_are_read_first_under_the_display_design_and_one_on_fai
     dip = report["tests"][1]
     assert dip == {**dip, "test": "dip-switches", "result": "fail", "bitstream": DISPLAY,
                    "reason": "switch 4 is on: set all DIP switches off"}  # fmt: skip
-    # the display design went to the board with --gpio-release, then the read, on the board's port
-    load = next(c for c in run.calls if "tt_fpga_program.py" in " ".join(c))
+    # the display design went to the board (openFPGALoader leaves the RP2350's pins high-impedance), then the read,
+    # on the board's port
+    load = next(c for c in run.calls if c[:3] == TT_LOAD)
     read = next(c for c in run.calls if "tt_dip_switches.py" in " ".join(c))
-    assert load[3].endswith(DISPLAY) and load[4:] == ["--gpio-release"] and read[2:] == ["/dev/ttyACM0"]
+    assert load == [*TT_LOAD, "-d", "/dev/ttyACM0", load[5]] and load[5].endswith(DISPLAY)
+    assert read[2:] == ["/dev/ttyACM0"]
     assert (
         run.calls.index(load)
         < run.calls.index(read)

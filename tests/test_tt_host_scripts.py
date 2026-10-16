@@ -25,7 +25,6 @@ def _load(name):
 
 
 sdk_start = _load("tt_sdk_start")
-program = _load("tt_fpga_program")
 wrapper = _load("tt_test_wrapper")
 _load("tt_pmod_wrapper")
 main_py = _load("tt_main_py")
@@ -246,92 +245,86 @@ def _bitstream(tmp_path):
     return bitstream
 
 
-def test_programming_is_one_mpremote_run_that_mounts_a_copy_of_the_bitstream_and_nothing_else(tmp_path, monkeypatch):
+def test_a_load_is_one_openfpgaloader_run_of_the_tt_fpga_board_on_the_port(tmp_path, monkeypatch):
     bitstream = _bitstream(tmp_path)
     calls = []
 
-    def run_mpremote(port, args, timeout=60):
-        mounted = pathlib.Path(args[1])
-        calls.append((port, args, pathlib.Path(args[3]).read_text(), sorted(f.name for f in mounted.iterdir()),
-                      (mounted / "design.bin").read_bytes(), timeout))  # fmt: skip
-        return 0, "PROGRAM_OK\n", ""
+    def run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return subprocess.CompletedProcess(argv, 0, "SRAM programming complete\n", "")
 
-    monkeypatch.setattr(program, "run_mpremote", run_mpremote)
-    assert program.program("/dev/ttyACM0", str(bitstream)) == (0, "PROGRAM_OK\n", "")
-    ((port, args, script, mounted, data, timeout),) = calls
-    assert port == "/dev/ttyACM0" and args[0] == "mount" and args[2] == "run"
-    assert mounted == ["design.bin"] and data == b"\xff" * 16  # the board is given the bitstream and nothing else
-    assert pathlib.Path(args[1]) != bitstream.parent
-    assert 'open("/remote/design.bin", "rb")' in script
-    assert timeout == program.PROGRAM_TIMEOUT
-    assert not pathlib.Path(args[1]).exists() and not pathlib.Path(args[3]).exists()  # both temporary
+    monkeypatch.setattr(wrapper.subprocess, "run", run)
+    assert wrapper.load("/dev/ttyACM0", str(bitstream)) == (0, "SRAM programming complete\n", "")
+    ((argv, kwargs),) = calls
+    assert argv == ["openFPGALoader", "-b", "tt_fpga", "-d", "/dev/ttyACM0", str(bitstream)]
+    assert kwargs["timeout"] == wrapper.LOAD_TIMEOUT and kwargs["capture_output"] and kwargs["text"]
 
 
-def test_a_bitstream_reached_through_a_symlink_is_loaded(tmp_path, monkeypatch):
-    """mpremote refuses a file that resolves outside the mounted directory; the copy is of what the link names."""
-    bitstream = _bitstream(tmp_path)
-    link = tmp_path / "link.bin"
-    link.symlink_to(bitstream)
-    seen = []
-    monkeypatch.setattr(program, "run_mpremote", lambda port, args, timeout=60: (
-        seen.append((pathlib.Path(args[1]) / "design.bin").is_symlink()) or (0, "PROGRAM_OK\n", "")))  # fmt: skip
-    assert program.program("/dev/ttyACM0", str(link))[0] == 0 and seen == [False]
-
-
-def test_a_bitstream_that_cannot_be_copied_is_a_result_with_the_reason(tmp_path, monkeypatch):
-    monkeypatch.setattr(program, "run_mpremote", lambda *a, **k: pytest.fail("mpremote was run"))
-    rc, out, err = program.program("/dev/ttyACM0", str(tmp_path / "gone.bin"))
-    assert (rc, out) == (1, "") and err.startswith("the bitstream could not be copied for the board to read: ")
-
-
-def test_mpremote_not_finishing_or_not_installed_is_a_result_not_an_exception(tmp_path, monkeypatch):
+def test_openfpgaloader_not_finishing_or_not_installed_is_a_result_not_an_exception(tmp_path, monkeypatch):
     bitstream = _bitstream(tmp_path)
 
-    def hangs(port, args, timeout=60):
-        raise subprocess.TimeoutExpired(["mpremote"], timeout, output=b"Programming iCE40")
+    def hangs(argv, **kwargs):
+        raise subprocess.TimeoutExpired(argv, kwargs["timeout"], output=b"TT FPGA: SRAM programming")
 
-    monkeypatch.setattr(program, "run_mpremote", hangs)
-    assert program.program("/dev/ttyACM0", str(bitstream), timeout=7) == (
-        124, "Programming iCE40", "mpremote did not finish within 7 s")  # fmt: skip
+    monkeypatch.setattr(wrapper.subprocess, "run", hangs)
+    assert wrapper.load("/dev/ttyACM0", str(bitstream), timeout=7) == (
+        124, "TT FPGA: SRAM programming", "openFPGALoader did not finish within 7 s")  # fmt: skip
 
-    def absent(port, args, timeout=60):
-        raise FileNotFoundError("mpremote")
+    def absent(argv, **kwargs):
+        raise FileNotFoundError("openFPGALoader")
 
-    monkeypatch.setattr(program, "run_mpremote", absent)
-    assert program.program("/dev/ttyACM0", str(bitstream)) == (127, "", "mpremote is not installed")
+    monkeypatch.setattr(wrapper.subprocess, "run", absent)
+    assert wrapper.load("/dev/ttyACM0", str(bitstream)) == (
+        127, "", "openFPGALoader is not installed (openfpgaloader-fpgasonline-git)")  # fmt: skip
+
+
+def test_a_missing_openfpgaloader_fails_at_once_with_no_usb_power_cycle(monkeypatch, capsys):
+    calls = []
+    monkeypatch.setattr(wrapper, "reset_rp2350", lambda port: calls.append("reset"))
+    monkeypatch.setattr(wrapper, "usb_power_cycle", lambda port: calls.append("power cycle"))
+    monkeypatch.setattr(
+        wrapper, "load", lambda port, path: calls.append("load") or (127, "", "openFPGALoader is not installed")
+    )
+    assert wrapper.program_fpga("/dev/ttyACM0", "design.bin") is False
+    assert calls == ["reset", "load"] and "openFPGALoader is not installed" in capsys.readouterr().err
 
 
 def test_the_uart_wrapper_power_cycles_and_tries_again_after_a_load_that_hung(monkeypatch):
     calls = []
-    results = iter([(124, "", "mpremote did not finish within 60 s"), (0, "PROGRAM_OK\n", "")])
+    results = iter([(124, "", "openFPGALoader did not finish within 60 s"), (0, "SRAM programming complete\n", "")])
     monkeypatch.setattr(wrapper, "reset_rp2350", lambda port: calls.append("reset"))
     monkeypatch.setattr(wrapper, "usb_power_cycle", lambda port: calls.append("power cycle"))
-    monkeypatch.setattr(wrapper.tt_fpga_program, "program", lambda port, path: calls.append("load") or next(results))
+    monkeypatch.setattr(wrapper, "load", lambda port, path: calls.append("load") or next(results))
     assert wrapper.program_fpga("/dev/ttyACM0", "design.bin") is True
     assert calls == ["reset", "load", "power cycle", "reset", "load"]
 
 
-@pytest.mark.parametrize("rc, out, exit_code", [
-    (0, "PROGRAM_OK\n", 0),
-    (1, "PROGRAM_OK\n", 1),  # mpremote failing after the marker is still a failure
-    (0, "Transmitted 12 bytes\n", 1),
-    (124, "", 1),
+@pytest.mark.parametrize("rc, out, ok", [
+    (0, "SRAM programming complete\n", True),
+    (1, "SRAM programming complete\n", False),  # openFPGALoader failing after its last word is still a failure
+    (0, "Writing: 100.00%\n", False),  # exit 0 without its last word: whether it finished is not known
+    (124, "", False),
 ])  # fmt: skip
-def test_the_programmer_exits_nonzero_unless_mpremote_and_the_board_both_say_it_worked(
-    tmp_path, monkeypatch, rc, out, exit_code
-):
-    bitstream = _bitstream(tmp_path)
-    monkeypatch.setattr(program, "program", lambda *a, **k: (rc, out, ""))
-    monkeypatch.setattr(sys, "argv", ["tt_fpga_program.py", "/dev/ttyACM0", str(bitstream)])
-    assert program.main() == exit_code
+def test_a_load_counts_only_when_openfpgaloader_exits_0_and_says_it_finished(monkeypatch, rc, out, ok):
+    monkeypatch.setattr(wrapper, "reset_rp2350", lambda port: None)
+    monkeypatch.setattr(wrapper, "usb_power_cycle", lambda port: None)
+    monkeypatch.setattr(wrapper, "load", lambda port, path: (rc, out, ""))
+    assert wrapper.program_fpga("/dev/ttyACM0", "design.bin") is ok
 
 
-@pytest.mark.parametrize("method, release", [("pio", False), ("pio", True), ("bitbang", False)])
-def test_the_script_run_on_the_board_reads_the_mount_and_writes_no_file(method, release):
-    script = program.board_script(method, release)
-    assert 'open("/remote/design.bin", "rb")' in script and script.rstrip().endswith('os.chdir("/")')
-    assert ("GPIO_RELEASED" in script) is release
-    assert not board_writes(script)
+@pytest.mark.parametrize("rc, out, exit_code", [
+    (0, "SRAM programming complete\n", 0),
+    (1, "SRAM programming complete\n", 1),
+    (0, "Writing: 100.00%\n", 1),
+    (127, "", 1),
+])  # fmt: skip
+def test_the_pmod_wrapper_exits_nonzero_unless_openfpgaloader_says_it_finished(monkeypatch, rc, out, exit_code):
+    pmod = sys.modules["tt_pmod_wrapper"]
+    loads = []
+    monkeypatch.setattr(pmod, "reset_rp2350", lambda port: None)
+    monkeypatch.setattr(pmod, "load", lambda port, path: loads.append((port, path)) or (rc, out, ""))
+    monkeypatch.setattr(sys, "argv", ["tt_pmod_wrapper.py", "/dev/ttyACM0", "loopback.bin"])
+    assert pmod.main() == exit_code and loads == [("/dev/ttyACM0", "loopback.bin")]
 
 
 # -- the guard: Tim, 2026-10-05: no code of ours modifies files on the Tiny Tapeout boards -------------------
@@ -400,7 +393,6 @@ def test_no_tiny_tapeout_host_script_can_change_a_file_on_the_board(path):
 
 def test_the_guard_covers_every_tiny_tapeout_host_script():
     assert {
-        "tt_fpga_program.py",
         "tt_test_wrapper.py",
         "tt_pmod_wrapper.py",
         "tt_sdk_start.py",
@@ -449,13 +441,13 @@ def test_the_guard_passes_reading_and_the_pi_side_of_the_scripts():
     assert not [text for text in strings_of(source) if board_writes(text)]
 
 
-def test_the_uart_wrapper_programs_through_the_programmer_and_then_only_bridges(monkeypatch):
+def test_the_uart_wrapper_programs_through_openfpgaloader_and_then_only_bridges(monkeypatch):
     calls = []
     monkeypatch.setattr(wrapper, "reset_rp2350", lambda port: calls.append(("reset", port)))
     monkeypatch.setattr(
-        wrapper.tt_fpga_program,
-        "program",
-        lambda port, path: calls.append(("program", port, path)) or (0, "PROGRAM_OK", ""),
+        wrapper,
+        "load",
+        lambda port, path: calls.append(("program", port, path)) or (0, "SRAM programming complete", ""),
     )
     assert wrapper.program_fpga("/dev/ttyACM0", "design.bin") is True
     assert calls == [("reset", "/dev/ttyACM0"), ("program", "/dev/ttyACM0", "design.bin")]
@@ -463,11 +455,11 @@ def test_the_uart_wrapper_programs_through_the_programmer_and_then_only_bridges(
 
 
 def test_a_failed_program_is_retried_once_after_a_usb_power_cycle(monkeypatch):
-    answers = [(1, "", "could not enter raw repl"), (0, "PROGRAM_OK", "")]
+    answers = [(1, "", "could not enter raw repl"), (0, "SRAM programming complete", "")]
     cycled = []
     monkeypatch.setattr(wrapper, "reset_rp2350", lambda port: None)
     monkeypatch.setattr(wrapper, "usb_power_cycle", lambda port: cycled.append(port))
-    monkeypatch.setattr(wrapper.tt_fpga_program, "program", lambda port, path: answers.pop(0))
+    monkeypatch.setattr(wrapper, "load", lambda port, path: answers.pop(0))
     assert wrapper.program_fpga("/dev/ttyACM0", "design.bin") is True and cycled == ["/dev/ttyACM0"]
     answers[:] = [(1, "", "x"), (1, "", "x")]
     assert wrapper.program_fpga("/dev/ttyACM0", "design.bin") is False

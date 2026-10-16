@@ -42,8 +42,8 @@ A simulation of the pattern, and a check that the design asks the platform for `
 
 ```sh
 sudo fpgas-tt-fpga-debug list     # shows the file, marked "left running"
-python3 /usr/lib/python3/dist-packages/fpgas_online_verify/scripts/tt_fpga_program.py /dev/ttyACM0 \
-    /usr/share/fpgas-online/tt-fpga/bitstreams/tt-display-tt-fpga/tt_fpga_platform.bin --gpio-release
+openFPGALoader -b tt_fpga -d /dev/ttyACM0 \
+    /usr/share/fpgas-online/tt-fpga/bitstreams/tt-display-tt-fpga/tt_fpga_platform.bin
 ```
 
 with `fpgas-tt.service` stopped, as for any load by hand.

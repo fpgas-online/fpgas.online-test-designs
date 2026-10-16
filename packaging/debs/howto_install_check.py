@@ -609,6 +609,8 @@ def judge(board, package, page, got, asked, all_boards, failures):
     """The verdicts on what one board's install would install."""
     if f"fpgas-online-{board}-tools" not in got:
         failures.append(f"{page}: installing {package} does not install fpgas-online-{board}-tools")
+    # The TT FPGA's tools Depend on fpgas.online's openFPGALoader since #368; the published packages this judges
+    # carry that from the first release after it, and #369 drops this exemption then.
     if board != "tt-fpga":
         if not OPENFPGALOADER & set(got):
             failures.append(f"{page}: installing {package} brings no openFPGALoader")
