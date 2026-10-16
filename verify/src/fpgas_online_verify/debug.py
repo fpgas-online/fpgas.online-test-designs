@@ -44,10 +44,15 @@ def _load(board, argv):
         print(f"{argv[0]} is not installed", flush=True)
         return 127
     said = []
-    for line in p.stdout:
-        print(line, end="", flush=True)
-        said.append(line)
-    rc = p.wait()
+    try:
+        for line in p.stdout:
+            print(line, end="", flush=True)
+            said.append(line)
+        rc = p.wait()
+    finally:  # interrupted: the load does not run on while the board's services are started again
+        if p.poll() is None:
+            p.terminate()
+            p.wait()
     why = board.load_failure(argv, "".join(said)) if rc == 0 else None
     if why:
         print(f"loading it failed: {why}", flush=True)
