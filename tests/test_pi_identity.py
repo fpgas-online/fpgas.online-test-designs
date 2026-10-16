@@ -244,17 +244,14 @@ def test_a_pi_with_no_board_and_its_facts_unread_is_missing_and_says_the_read_fa
 
 PI5 = "raspberrypi,5-model-b brcm,bcm2712"
 # nothing on the ID bus: the header not read
-NO_HEADER = {"reader": "rpi-hwid", "facts": {"compatible": PI5, "fan": None}}
+NO_HEADER = {"reader": "rpi-hwid", "facts": {"compatible": PI5, "fan": None}, "as_found": True}
 # both buses read, nothing on either
-BARE = {"reader": "rpi-hwid", "facts": {"compatible": PI5, "header": [], "fan": None}}
+BARE = {"reader": "rpi-hwid", "facts": {"compatible": PI5, "header": [], "fan": None}, "as_found": True}
+# what rpi-hwid 0.0.post597 gives: no sources.header_buses, so not trusted with the scan
+OLD = {**NO_HEADER, "as_found": False}
 
 
 original_find = runner.find
-
-
-def _trusted(monkeypatch):
-    """As when an rpi-hwid that leaves the Pi as found is named (pi_identity.USER_BUS_SAFE): the scan may run."""
-    monkeypatch.setattr(pi_identity, "USER_BUS_SAFE", True)
 
 
 def _nolocks(monkeypatch):
@@ -272,7 +269,6 @@ def test_the_user_bus_is_read_with_the_flag_and_only_when_asked():
 
 
 def test_a_pi_with_nothing_on_its_id_bus_and_no_board_on_gpio2_3_is_scanned_after_find_before_the_check(monkeypatch):
-    _trusted(monkeypatch)
     _nolocks(monkeypatch)
     scans = []
     report, events = checked(NO_HEADER, rescan=BARE, scans=scans)
@@ -294,7 +290,6 @@ def test_a_pi_whose_board_is_wired_to_gpio2_3_is_never_scanned_and_says_why(monk
 
 
 def test_a_bare_pi_with_no_board_is_scanned_and_still_missing(monkeypatch):
-    _trusted(monkeypatch)
     monkeypatch.setattr(runner, "compare_state", lambda *a: {})
     scans = []
     report, events = checked(NO_HEADER, spotted=False, rescan=BARE, scans=scans)
@@ -304,7 +299,6 @@ def test_a_bare_pi_with_no_board_is_scanned_and_still_missing(monkeypatch):
 
 
 def test_a_scan_that_cannot_read_the_header_says_so(monkeypatch):
-    _trusted(monkeypatch)
     _nolocks(monkeypatch)
     report, events = checked(NO_HEADER, rescan=NO_HEADER)
     assert events[0][1]["user_bus"] == "scanned: header not read" and "header" not in events[0][1]
@@ -312,7 +306,6 @@ def test_a_scan_that_cannot_read_the_header_says_so(monkeypatch):
 
 
 def test_a_failed_scan_is_a_reader_error_and_the_boards_result_stands(monkeypatch):
-    _trusted(monkeypatch)
     _nolocks(monkeypatch)
     failed = {"reader": "rpi-hwid", "reader_error": "rpi-hwid label-input --pi-only --user-bus exited 1: x"}
     report, events = checked(NO_HEADER, rescan=failed)
@@ -458,17 +451,28 @@ def test_a_crash_before_the_search_still_sends_the_pis_facts_unscanned(monkeypat
     assert events[0][1]["user_bus"] == "skipped: boards not known: the search crashed: OSError: sysfs"
 
 
-def test_no_rpi_hwid_is_trusted_with_the_scan_yet(monkeypatch):
+def test_an_rpi_hwid_that_does_not_say_it_leaves_the_pi_as_found_is_never_asked_to_scan(monkeypatch):
     """The dry run of 17 Oct 2026 08:38: rpi-hwid 0.0.post597's --user-bus left the bare Pi 5's GPIO2/3 muxed and two
-    modules loaded, and said it had put everything back. Until a fixed rpi-hwid is named, a scan the rules allow is
-    skipped, said, and never run (the coordinator's decision of 17 Oct 2026 08:4x)."""
-    assert pi_identity.USER_BUS_SAFE is False
+    modules loaded, and said it had put everything back. Only an rpi-hwid whose read says `sources.header_buses =
+    "as-found"` (mithro/rpi-hwid #93) is asked; with any other a scan the rules allow is skipped, and said."""
     _nolocks(monkeypatch)
     scans = []
-    report, events = checked(NO_HEADER, rescan=BARE, scans=scans)
+    report, events = checked(OLD, rescan=BARE, scans=scans)
     assert scans == [] and report["result"] == "pass"
     assert events[0][1]["user_bus"] == "skipped: rpi-hwid too old" and "header" not in events[0][1]
-    report, events = checked(NO_HEADER, spotted=False, rescan=BARE, scans=scans)
+    report, events = checked(OLD, spotted=False, rescan=BARE, scans=scans)
     assert scans == [] and events[0][1]["user_bus"] == "skipped: rpi-hwid too old"
     # the rules that come first still say their own reason
-    assert checked(NO_HEADER, user_bus=True)[1][0][1]["user_bus"] == "skipped: Fake wired to GPIO2/3"
+    assert checked(OLD, user_bus=True)[1][0][1]["user_bus"] == "skipped: Fake wired to GPIO2/3"
+    assert "as_found" not in events[0][1]  # not an event detail: the site reads PI_FIELDS
+
+
+def test_as_found_is_read_from_rpi_hwids_sources():
+    old = pi_identity.read(ran(json.dumps(PI5_DOC)), installed)
+    assert old["as_found"] is False  # 0.0.post597's document has no sources.header_buses
+    doc = copy.deepcopy(PI5_DOC)
+    doc["sources"]["header_buses"] = "as-found"
+    assert pi_identity.read(ran(json.dumps(doc)), installed)["as_found"] is True
+    for other in ("as found", True, None):
+        doc["sources"]["header_buses"] = other
+        assert pi_identity.read(ran(json.dumps(doc)), installed)["as_found"] is False

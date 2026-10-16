@@ -77,6 +77,18 @@ def facts(document, argv=ARGV):
     return out
 
 
+AS_FOUND = "as-found"
+
+
+def as_found(document):
+    """Whether rpi-hwid says its header-bus reads leave the Pi as it found it: `sources.header_buses = "as-found"`
+    (mithro/rpi-hwid #93, docs/LABEL-INPUT.md): no dtparam, no module, every bus pin's function and pad put back
+    and checked, or exit 1 and no document. An rpi-hwid that does not say so (0.0.post597 and before) is never
+    asked to scan the user bus."""
+    sources = document.get("sources")
+    return isinstance(sources, dict) and sources.get("header_buses") == AS_FOUND
+
+
 def details(read):
     """The `pi-identified` event's details for `read` (read(): {"reader": ..., "facts" or "reader_error"})."""
     out = {"schema": SCHEMA, "reader": read["reader"]}
@@ -155,7 +167,7 @@ def _read(run, which, argv):
         return {"reader": TOOL, "reader_error": f"{' '.join(argv)} printed no JSON document"}
     try:
         document = json.loads(out)
-        return {"reader": TOOL, "facts": facts(document, argv)}
+        return {"reader": TOOL, "facts": facts(document, argv), "as_found": as_found(document)}
     except json.JSONDecodeError as e:
         return {"reader": TOOL, "reader_error": f"{' '.join(argv)} printed JSON that does not parse: {e}"}
     except Unread as e:
@@ -166,12 +178,11 @@ def _read(run, which, argv):
 # a table cell holds a value); a skipped scan names the board(s) wired to GPIO2/3, or why the boards are not known.
 NOT_NEEDED = "not needed"  # the ID bus (or the firmware) gave the header
 TOO_OLD = "skipped: rpi-hwid too old"
-# No rpi-hwid yet reads the user bus and leaves the Pi as it found it: 0.0.post597's --user-bus applies the i2c_arm
-# dtparam at runtime and leaves GPIO2/3 muxed and the i2c_designware modules loaded, and says it put everything back
-# (the td #365 dry run on the bare Pi 5 1 GB 64f48c65009558ab, 17 Oct 2026 08:38). So no rpi-hwid is trusted with the
-# scan, and every scan the rules allow is skipped as TOO_OLD, until the fixed rpi-hwid is named here (with how its
-# output says so) after its own proof (the coordinator's decision of 17 Oct 2026 08:4x under Tim's coord-78 (B)).
-USER_BUS_SAFE = False
+# rpi-hwid 0.0.post597's --user-bus applied the i2c_arm dtparam at runtime and left GPIO2/3 muxed and the
+# i2c_designware modules loaded, and said it had put everything back (the td #365 dry run on the bare Pi 5 1 GB
+# 64f48c65009558ab, 17 Oct 2026 08:38). So the scan is asked of an rpi-hwid only when its first read says it leaves
+# the Pi as found (as_found); otherwise a scan the rules allow is skipped as TOO_OLD (the coordinator's decision of
+# 17 Oct 2026 08:5x under Tim's coord-78 (B)).
 SCANNED = "scanned"
 
 
@@ -191,13 +202,12 @@ def wired_boards(boards, mode, targets):
     return sorted(titles)
 
 
-def with_user_bus(pi, rescan, wired, boards_unknown=None, safe=None):
+def with_user_bus(pi, rescan, wired, boards_unknown=None):
     """The Pi's read once the boards are known: `pi` as read with the ID bus alone and, when its header was left not
     read and no board is wired to GPIO2/3 (`wired` empty, the boards known), `rescan()` (read(user_bus=True)) in its
     place. Either way with its `user_bus` value. `boards_unknown` is why the boards are not known (the check could
-    not look): then nothing is scanned. `safe` (default USER_BUS_SAFE): whether the installed rpi-hwid may be trusted
-    with the scan; when not, a scan the rules allow is skipped as TOO_OLD."""
-    safe = USER_BUS_SAFE if safe is None else safe
+    not look): then nothing is scanned. The scan is asked only of an rpi-hwid whose first read said it leaves the Pi
+    as found (pi["as_found"]); of any other, a scan the rules allow is skipped as TOO_OLD."""
     if "facts" not in pi:
         return pi  # rpi-hwid not installed, or the read failed: said as such, nothing to add
     if not header_unread(pi):
@@ -214,7 +224,7 @@ def with_user_bus(pi, rescan, wired, boards_unknown=None, safe=None):
         return {**pi, "user_bus": f"skipped: boards not known: {boards_unknown}"}
     if wired:
         return {**pi, "user_bus": f"skipped: {', '.join(wired)} wired to GPIO2/3"}
-    if not safe:
+    if pi.get("as_found") is not True:
         return {**pi, "user_bus": TOO_OLD}
     again = rescan()
     if "reader_error" in again:
