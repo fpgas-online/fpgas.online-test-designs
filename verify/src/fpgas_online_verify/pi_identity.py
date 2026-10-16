@@ -177,9 +177,9 @@ def wired_boards(boards, mode, targets):
     """The titles of the boards wired to GPIO2/3 among those the check found (`targets`, [(board, host, found)]),
     and, when the host is set up for one board (`mode` not auto), that board whether found or not: its wiring is
     there all the same. `boards` is {name: Board}, the installed ones."""
-    titles = {b.title for b, _, _ in targets or () if b.user_bus}
+    titles = {b.title for b, _, _ in targets or () if b.user_bus is not False}  # None: not said, so wired
     configured = boards.get(mode) or next((b for b in boards.values() if b.slug == mode), None)
-    if configured is not None and configured.user_bus:
+    if configured is not None and configured.user_bus is not False:
         titles.add(configured.title)
     return sorted(titles)
 
@@ -193,11 +193,17 @@ def with_user_bus(pi, rescan, wired, boards_unknown=None):
         return pi  # rpi-hwid not installed, or the read failed: said as such, nothing to add
     if not header_unread(pi):
         return {**pi, "user_bus": NOT_NEEDED}
+    if "compute-module" in str(pi["facts"].get("compatible")):
+        # rpi-hwid's own rule: a Compute Module's header pins are its carrier's (a Compute Blade has an Acorn's JTAG
+        # on GPIO2/3), so they are left alone, whatever the check found
+        return {**pi, "user_bus": "skipped: Compute Module"}
     if boards_unknown:
         return {**pi, "user_bus": f"skipped: boards not known: {boards_unknown}"}
     if wired:
         return {**pi, "user_bus": f"skipped: {', '.join(wired)} wired to GPIO2/3"}
     again = rescan()
+    if "reader_error" in again:
+        return {**again, "user_bus": "scan failed"}
     if header_unread(again):  # rpi-hwid could not read the user bus either: the header stays not read, saying so
         return {**again, "user_bus": f"{SCANNED}: header not read"}
     return {**again, "user_bus": SCANNED}

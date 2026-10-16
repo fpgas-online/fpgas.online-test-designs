@@ -52,6 +52,7 @@ class NeTV2(TestBoard):
     # and flash_uid or flash_uid_note, as flash_uid_state says (identify.missing; rpi-hwid's label needs them)
     label_fields = ("idcode", "dna", "flash_jedec", "flash_uid_state")
     port = "/dev/ttyAMA0"
+    user_bus = False  # JTAG_GPIOS (4, 17, 27, 22) and the UART: no GPIO2/3
     flash_region: ClassVar[dict] = {
         "a7-35": 0x220000,
         "a7-100": 0x3B0000,

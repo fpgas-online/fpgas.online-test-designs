@@ -3,6 +3,7 @@
 Tim, 16 Oct 2026 (coord-74): "Why are there no RPi labels on https://welland.fpgas.online/fleet/55effc3376226b41/"
 """
 
+import contextlib
 import copy
 import importlib.util
 import json
@@ -245,6 +246,9 @@ NO_HEADER = {"reader": "rpi-hwid", "facts": {"fan": None}}  # nothing on the ID 
 BARE = {"reader": "rpi-hwid", "facts": {"header": [], "fan": None}}  # both buses read, nothing on either
 
 
+original_find = runner.find
+
+
 def _nolocks(monkeypatch):
     monkeypatch.setattr(runner, "hold_lock", lambda lock, title: __import__("contextlib").nullcontext())
     monkeypatch.setattr(runner, "compare_state", lambda *a: {})
@@ -263,7 +267,7 @@ def test_a_pi_with_nothing_on_its_id_bus_and_no_board_on_gpio2_3_is_scanned_afte
     _nolocks(monkeypatch)
     scans = []
     report, events = checked(NO_HEADER, rescan=BARE, scans=scans)
-    assert scans == [[]]  # once, before anything was sent: before the boards' events and their locks
+    assert scans == [[]]  # once, before anything was sent: before the boards' events
     assert [s for s, _ in events][:2] == ["pi-identified", "fpga-board-found"]
     assert events[0][1]["header"] == "[]" and events[0][1]["user_bus"] == "scanned"  # a measured "HAT none"
     assert report["pi"] == {**BARE, "user_bus": "scanned"} and report["result"] == "pass"
@@ -300,7 +304,7 @@ def test_a_failed_scan_is_a_reader_error_and_the_boards_result_stands(monkeypatc
     _nolocks(monkeypatch)
     failed = {"reader": "rpi-hwid", "reader_error": "rpi-hwid label-input --pi-only --user-bus exited 1: x"}
     report, events = checked(NO_HEADER, rescan=failed)
-    assert events[0][1]["reader_error"].endswith("--user-bus exited 1: x") and events[0][1]["user_bus"] == "scanned"
+    assert events[0][1]["reader_error"].endswith("--user-bus exited 1: x") and events[0][1]["user_bus"] == "scan failed"
     assert report["result"] == "pass" and "NOT READ" in runner.summary(report)
 
 
@@ -355,4 +359,67 @@ def test_each_boards_user_bus_flag_follows_its_wiring_source():
     have = boards()
     assert set(have) == set(wiring)
     for name, board in have.items():
-        assert board.user_bus == bool(wiring[name] & {2, 3}), name
+        assert board.user_bus is bool(wiring[name] & {2, 3}), name
+
+
+def test_the_scan_is_after_find_and_before_the_lock(monkeypatch):
+    """The order itself, recorded where it happens: find, the scan, then the board's lock."""
+    _nolocks(monkeypatch)
+    order = []
+    monkeypatch.setattr(runner, "find", lambda *a: order.append("find") or original_find(*a))
+    monkeypatch.setattr(runner, "hold_lock", lambda lock, title: order.append("lock") or contextlib.nullcontext())
+    monkeypatch.setattr(pi_identity, "with_user_bus", lambda *a: order.append("scan") or {**BARE, "user_bus": "x"})
+    checked(NO_HEADER, rescan=BARE)
+    assert order == ["find", "scan", "lock"]
+
+
+def test_a_search_that_fails_is_never_scanned_and_says_why(monkeypatch):
+    def broken(*a):
+        raise Problem("error", "conflicting fpga-board settings")
+
+    monkeypatch.setattr(runner, "find", broken)
+    scans = []
+    report, events = checked(NO_HEADER, rescan=BARE, scans=scans)
+    assert scans == [] and report["result"] == "error"
+    why = "skipped: boards not known: conflicting fpga-board settings"
+    assert events[0] == ("pi-identified", {"schema": "pi-identity/1", "reader": "rpi-hwid", "fan": "-",
+                                           "user_bus": why})  # fmt: skip
+
+
+def test_a_search_that_crashes_still_sends_the_pis_facts_unscanned(monkeypatch):
+    def crashed(*a):
+        raise KeyError("x")
+
+    monkeypatch.setattr(runner, "find", crashed)
+    events = []
+    options = {"event": lambda s, d: events.append((s, d)), "read_pi": lambda user_bus=False: pytest.fail("scanned")
+               if user_bus else NO_HEADER}  # fmt: skip
+    with pytest.raises(KeyError):
+        runner.verify(options, boards={}, usb=[], pci=[], mode=("auto", "test"))
+    why = "skipped: boards not known: the search crashed: KeyError: 'x'"
+    assert events == [("pi-identified", {"schema": "pi-identity/1", "reader": "rpi-hwid", "fan": "-", "user_bus": why})]
+
+
+def test_a_compute_module_is_never_scanned():
+    cm = {"reader": "rpi-hwid", "facts": {"compatible": "raspberrypi,5-compute-module brcm,bcm2712"}}
+    pi = pi_identity.with_user_bus(cm, lambda: pytest.fail("scanned"), [])
+    assert pi["user_bus"] == "skipped: Compute Module"
+
+
+def test_a_board_that_does_not_say_counts_as_wired():
+    class Quiet:
+        name = slug = "quiet"
+        title = "Quiet"
+        user_bus = None
+
+    class Free(Quiet):
+        name = slug = "free"
+        title = "Free"
+        user_bus = False
+
+    have = {"quiet": Quiet(), "free": Free()}
+    assert pi_identity.wired_boards(have, "auto", [(have["quiet"], {}, {}), (have["free"], {}, {})]) == ["Quiet"]
+    assert pi_identity.wired_boards(have, "quiet", []) == ["Quiet"]
+    from fpgas_online_verify.board import Board
+
+    assert Board.user_bus is None

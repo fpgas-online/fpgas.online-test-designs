@@ -231,7 +231,12 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
         tools = debug_tools(boards, usb)
         if tools:
             report["usb_debug_tools"] = tools
-        targets, report["chosen_by"] = find(boards, report["mode"], options, usb, pci)
+        try:
+            targets, report["chosen_by"] = find(boards, report["mode"], options, usb, pci)
+        except Exception as e:  # a crash in the search: the Pi's facts are still sent, unscanned, before it goes on
+            if not isinstance(e, Problem):
+                _pi_identified(report, options, event, boards, [], f"the search crashed: {type(e).__name__}: {e}")
+            raise
     except Problem as p:
         report.update(result=p.result, reason=p.reason)
         # missing: no board is there, so none is wired to GPIO2/3 (bar the one the host is set up for)
