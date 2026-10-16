@@ -24,18 +24,22 @@ installed() { dpkg-query -W -f='${db:Status-Status}' "$1" 2>&1 | grep -qx instal
 enabled() { [ -L /etc/systemd/system/multi-user.target.wants/fpgas-verify.service ]; }
 
 # The boards need an openFPGALoader that has --read-dna: fpgas.online's build, or Debian's own from 0.13.0 on.
-# Bookworm's own is 0.10.0, so there a board is refused until apt.fpgas.online's build is available; this
-# repository has none, so an empty stand-in named like it (pulling in Debian's binary) takes its place.
+# Bookworm's own is 0.10.0, so there a board is refused until apt.fpgas.online's build is available. The TT FPGA
+# board needs fpgas.online's build on every release (its tt_fpga board, from the build that starts the project
+# clock: build_debs.py's TT_OPENFPGALOADER), so it is refused everywhere until then. This repository has none, so
+# an empty stand-in named and versioned like it (pulling in Debian's binary) takes its place.
+echo "--- without fpgas.online's openFPGALoader: fpgas-online-tt-fpga refused"
+if apt-get install -qq fpgas-online-tt-fpga >/dev/null; then fail "fpgas-online-tt-fpga installed with Debian's openFPGALoader"; fi
 if [ "$VERSION_CODENAME" = bookworm ]; then
   echo "--- bookworm without fpgas.online's openFPGALoader: fpgas-online-arty refused"
   if apt-get install -qq fpgas-online-arty >/dev/null; then fail "fpgas-online-arty installed with openFPGALoader 0.10.0"; fi
-  mkdir -p /standin/DEBIAN
-  printf 'Package: openfpgaloader-fpgasonline\nVersion: 0.0-standin\nArchitecture: all\nDepends: openfpgaloader\nMaintainer: install test <noreply@fpgas.online>\nDescription: stand-in for the install test\n' \
-    > /standin/DEBIAN/control
-  dpkg-deb --build /standin /repo/openfpgaloader-fpgasonline_0.0-standin_all.deb >/dev/null
-  (cd /repo && dpkg-scanpackages --multiversion . > Packages)
-  apt-get update -qq
 fi
+mkdir -p /standin/DEBIAN
+printf 'Package: openfpgaloader-fpgasonline\nVersion: 1.1.1+fpgasonline.0.0.post105~standin\nArchitecture: all\nDepends: openfpgaloader\nMaintainer: install test <noreply@fpgas.online>\nDescription: stand-in for the install test\n' \
+  > /standin/DEBIAN/control
+dpkg-deb --build /standin /repo/openfpgaloader-fpgasonline_standin_all.deb >/dev/null
+(cd /repo && dpkg-scanpackages --multiversion . > Packages)
+apt-get update -qq
 
 echo "--- one board: fpgas-online-arty"
 apt-get install -qq fpgas-online-arty >/dev/null
