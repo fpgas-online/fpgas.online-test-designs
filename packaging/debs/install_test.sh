@@ -38,11 +38,13 @@ standin() {
   apt-get update -qq
 }
 echo "--- without fpgas.online's openFPGALoader: fpgas-online-tt-fpga refused, for that"
-if refused=$(apt-get install -qq fpgas-online-tt-fpga 2>&1); then fail "fpgas-online-tt-fpga installed with Debian's openFPGALoader"; fi
+# -q, not -qq: bookworm's apt -qq prints only "held broken packages", not the dependency that cannot be met.
+if refused=$(apt-get install -q fpgas-online-tt-fpga 2>&1); then fail "fpgas-online-tt-fpga installed with Debian's openFPGALoader"; fi
 echo "$refused" | grep -q 'openfpgaloader-fpgasonline' || fail "fpgas-online-tt-fpga refused for another reason: $refused"
 if [ "$VERSION_CODENAME" = bookworm ]; then
   echo "--- bookworm without fpgas.online's openFPGALoader: fpgas-online-arty refused"
-  if apt-get install -qq fpgas-online-arty >/dev/null; then fail "fpgas-online-arty installed with openFPGALoader 0.10.0"; fi
+  if refused=$(apt-get install -q fpgas-online-arty 2>&1); then fail "fpgas-online-arty installed with openFPGALoader 0.10.0"; fi
+  echo "$refused" | grep -q 'openfpgaloader' || fail "fpgas-online-arty refused for another reason: $refused"
   standin
 fi
 
