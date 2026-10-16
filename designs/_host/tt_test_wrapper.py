@@ -185,6 +185,9 @@ def program_fpga(port, local_path):
     # Break any stuck MicroPython script before openFPGALoader enters the raw REPL.
     reset_rp2350(port)
     rc, out, err = load(port, local_path)
+    if rc == 127:  # openFPGALoader is not installed: no power cycle mends that
+        print(err, file=sys.stderr)
+        return False
     if rc != 0 or LOADED not in out:
         # the load failed: try a USB power cycle and retry once
         print("programming failed, trying USB power cycle recovery...")

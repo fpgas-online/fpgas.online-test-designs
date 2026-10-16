@@ -278,6 +278,17 @@ def test_openfpgaloader_not_finishing_or_not_installed_is_a_result_not_an_except
         127, "", "openFPGALoader is not installed (openfpgaloader-fpgasonline-git)")  # fmt: skip
 
 
+def test_a_missing_openfpgaloader_fails_at_once_with_no_usb_power_cycle(monkeypatch, capsys):
+    calls = []
+    monkeypatch.setattr(wrapper, "reset_rp2350", lambda port: calls.append("reset"))
+    monkeypatch.setattr(wrapper, "usb_power_cycle", lambda port: calls.append("power cycle"))
+    monkeypatch.setattr(
+        wrapper, "load", lambda port, path: calls.append("load") or (127, "", "openFPGALoader is not installed")
+    )
+    assert wrapper.program_fpga("/dev/ttyACM0", "design.bin") is False
+    assert calls == ["reset", "load"] and "openFPGALoader is not installed" in capsys.readouterr().err
+
+
 def test_the_uart_wrapper_power_cycles_and_tries_again_after_a_load_that_hung(monkeypatch):
     calls = []
     results = iter([(124, "", "openFPGALoader did not finish within 60 s"), (0, "SRAM programming complete\n", "")])
