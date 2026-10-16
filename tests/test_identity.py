@@ -274,3 +274,32 @@ def test_rpi_hwid_takes_flash_sfdp_as_an_fpgaboard_field_when_it_is_installed():
     board = {"kind": "acorn", **identity.flash_fields({**P48_FLASH, "sfdp": "none"}, "pcie")}
     fpga = model.FpgaBoard(**{k: v for k, v in board.items() if k in identity.FPGABOARD_FIELDS})
     assert fpga.flash_sfdp == "none"
+
+
+def test_rpi_hwid_makes_a_pi_label_from_the_pi_identified_event_when_it_is_installed():
+    """The pi-identified event (#76), read back as the site reads it (fpgas.online-site fleet/hwid.py PI_FIELDS) and
+    put with the registration's model, serial, revision and MACs, is a label input rpi-hwid takes, and the Pi's
+    label needs nothing more."""
+    label_input = pytest.importorskip("rpi_hwid.label_input")
+    from fpgas_online_verify import pi_identity
+
+    pi5 = json.loads((pathlib.Path(__file__).parent / "data" / "pi-only-pi5.json").read_text())
+    read = pi_identity.read(lambda argv, timeout: (0, json.dumps(pi5)), lambda name: f"/usr/bin/{name}")
+    sent = pi_identity.details(read)
+    kinds = {"fan": bool, "rtc_battery": bool, "max_current_ma": int, "ext5v_v": float}
+
+    def back(field, text):  # the site's reading of a flat value
+        if field in pi_identity.LISTS:
+            return json.loads(text)
+        if text == "-":
+            return None
+        if kinds.get(field) is bool:
+            return {"true": True, "false": False}[text]
+        return kinds.get(field, str)(text)
+
+    facts = {k: back(k, v) for k, v in sent.items() if k in pi_identity.FIELDS}
+    registration = {k: pi5["summary"][k] for k in ("model", "serial", "revision", "memory")}
+    doc = label_input.build("pi-sw2-p48", {**registration, **facts})
+    assert label_input.check(doc) == [] and label_input.missing(doc)["board"] == []
+    assert doc["summary"]["header"] == ["Waveshare PoE M.2 HAT+ (B)"] and doc["summary"]["ext5v_v"] == 5.08
+    assert set(pi_identity.FIELDS) <= set(label_input.PI_FIELDS)

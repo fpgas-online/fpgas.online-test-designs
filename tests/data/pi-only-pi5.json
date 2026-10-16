@@ -1,0 +1,40 @@
+{
+ "host": "pi-sw2-p48",
+ "schema": "rpi-hwid/label-input",
+ "sources": {
+  "header": "rpi-hwid",
+  "macs": "rpi-hwid"
+ },
+ "summary": {
+  "cameras": null,
+  "compatible": "raspberrypi,5-model-b brcm,bcm2712",
+  "cpu": null,
+  "dmi": null,
+  "ext5v_v": 5.08,
+  "fan": true,
+  "fpga": [],
+  "hat_uuid": "9729525c-eeee-98e9-f348-a0720f4c16eb",
+  "header": [
+   "Waveshare PoE M.2 HAT+ (B)"
+  ],
+  "macs": [
+   {
+    "kind": "eth",
+    "mac": "88:a2:9e:45:85:77",
+    "signal": "otp"
+   }
+  ],
+  "max_current_ma": 3000,
+  "memory": "1 GB",
+  "model": "Raspberry Pi 5 Model B Rev 1.1",
+  "power_class": "poe",
+  "revision": "b04171",
+  "riscv": null,
+  "rtc_battery": false,
+  "sdr": [],
+  "serial": "0cd35697db04a4ab",
+  "tinytapeout": [],
+  "usb_net": []
+ },
+ "version": 1
+}

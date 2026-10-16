@@ -22,9 +22,9 @@ import pathlib
 import sys
 import tempfile
 
-from . import checks, conclusion, config, identity, state
+from . import checks, conclusion, config, identity, pi_identity, state
 from .board import installed
-from .core import Problem, flatten, hold_lock, pci_devices, publish, tail, usb_devices, worst
+from .core import Problem, flatten, hold_lock, is_pi, pci_devices, pi_model, publish, tail, usb_devices, worst
 from .core import run as run_command
 
 SCHEMA_VERSION = 2
@@ -33,6 +33,7 @@ REPORT = pathlib.Path("/run/fpgas-online/verify.json")
 # only fpga-verifying and fpga-verified (fpgas.online-site fleet/services.py FPGA_STAGES).
 EVENTS = {
     "fpga-verifying": "started_at",
+    "pi-identified": "schema (pi-identity/1), reader, then the Pi's own facts for its label (pi_identity.py)",
     "fpga-board-found": "board, variant, where (PCI slot, USB path or JTAG IDCODE)",
     "fpga-no-board": "reason",
     "fpga-board-identified": "schema (fpga-identity/1), board, then who it is (identity.py, docs/identity.md)",
@@ -206,6 +207,9 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
             if on:
                 options = {**options, "power_cycle_check": True}
                 report["power_cycle_check"] = {"on": True, "configured_by": str(path)}
+        if options.get("read_pi"):  # the Pi's own facts, before any board's lock (pi_identity.py, #76)
+            report["pi"] = options["read_pi"]()
+            event("pi-identified", pi_identity.details(report["pi"]))
         usb = usb_devices() if usb is None else usb
         pci = pci_devices() if pci is None else pci
         tools = debug_tools(boards, usb)
@@ -218,6 +222,7 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
             report["reason"] = "; ".join([p.reason, *report.get("usb_debug_tools", [])])
             event("fpga-no-board", {"reason": report["reason"]})
             report["state"] = compare_state(report, [], [], False, options.get("state", state.STATE))
+        _pi_unread(report)
         return report
     reports, not_checked = [], []
     keys = _keys(targets)
@@ -277,6 +282,7 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
                                              f"{', '.join(options['tests'])}")  # fmt: skip
     else:
         report["result"] = worst(r["result"] for r in reports)
+    _pi_unread(report)
     if options.get("tests"):
         # Only some tests ran, so some of the state (the flash JEDEC ID) may not have been read: recording it would
         # make the next full run report "changed", and comparing it says nothing about what was not run.
@@ -287,6 +293,15 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
     if report["state"].get("changes"):
         report["result"] = worst([report["result"], "changed"])
     return report
+
+
+def _pi_unread(report):
+    """A Pi whose own facts rpi-hwid could not read is the boot's error, with the reason: a Pi label is never made
+    from half a read (pi_identity.py)."""
+    if "reader_error" in report.get("pi", {}):
+        report["result"] = worst([report["result"], "error"])
+        why = f"the Pi's own facts were not read: {report['pi']['reader_error']}"
+        report["reason"] = "; ".join([report["reason"], why] if report.get("reason") else [why])
 
 
 def plan(board, report, found, options):
@@ -398,6 +413,16 @@ def summary(report, kept_in=None):
         pub = report["publish"]
         by = f"`{config.PUBLISH} = {'on' if pub['on'] else 'off'}` in {pub.get('configured_by')}"
         lines.append(f"  published to the fleet: {by}" if pub["on"] else f"  not published: {pub.get('why') or by}")
+    pi = report.get("pi")
+    if pi:
+        if "reader_error" in pi:
+            lines.append(f"  the Pi's own facts: NOT READ: {pi['reader_error']}")
+        elif pi["reader"] == "none":
+            lines.append("  the Pi's own facts: not read: rpi-hwid is not installed")
+        else:
+            shown = {k: v for k, v in pi["facts"].items() if k not in ("macs", "usb_net")}  # long, and in the event
+            got = ", ".join(f"{k}={pi_identity.detail(v)}" for k, v in shown.items())
+            lines.append(f"  the Pi's own facts (rpi-hwid --pi-only): {got or 'none'}")
     if report.get("not_checked"):
         lines.append(f"  not checked (none of the tests asked for): {', '.join(report['not_checked'])}")
     for b in report["boards"]:
@@ -512,6 +537,8 @@ def run(options, prog="fpgas-verify"):
             published = {"on": publishing, "configured_by": str(said_by)} if said_by else {"on": False, "why": NO_FILE}
         except Problem as p:
             unreadable, published = p, {"on": False, "why": "the setting could not be read"}
+    if not options.get("tests") and "read_pi" not in options and is_pi(pi_model()):
+        options = {**options, "read_pi": pi_identity.read}  # the whole check on a Pi: its facts too (#76)
     if publishing:
         # The site hears the check has started, and says the board is being verified until the result follows.
         working = publish("fpga-verifying", {"started_at": _now()}, prog=prog, timeout=EVENT_TIMEOUT)

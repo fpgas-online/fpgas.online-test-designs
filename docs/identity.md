@@ -137,6 +137,33 @@ tests), still gets one, with what finding the board showed (for the NeTV2, the I
 event form (a bug in the board's module) is left out of both, and that board's result is `error`, its
 reason naming the field; the other boards are still checked.
 
+## The Pi's own facts: `pi-identified`
+
+The Pi's label needs facts about the Pi that its registration does not carry: what is on its 40-pin header
+(the HAT's EEPROM), its power class and, on a Pi 5, the fan and the RTC battery. At every boot, before any
+board's lock is taken, the boot check runs `rpi-hwid label-input --pi-only` and sends what it read as one
+`pi-identified` event ([`pi_identity.py`](../verify/src/fpgas_online_verify/pi_identity.py); rpi-hwid's
+`docs/LABEL-CONTRACT.md`, section 5). The site puts these with the registration's model, serial, revision,
+memory and MACs, and makes the Pi's label.
+
+| Detail | Value |
+|---|---|
+| `schema` | `pi-identity/1` |
+| `reader` | `rpi-hwid`, or `none` when rpi-hwid is not installed (then no other field is sent) |
+| `reader_error` | why rpi-hwid did not give the facts: it failed, did not finish, or printed something that is not a label input |
+| `compatible`, `power_class`, `hat_uuid`, `fan`, `rtc_battery`, `max_current_ma`, `ext5v_v`, `header`, `macs`, `usb_net` | rpi-hwid's `Summary` fields of the same names, as `--pi-only` read them |
+
+The values are encoded as in [the event](#the-event) above, and a decimal (`ext5v_v`) is written as a decimal
+number: `5.08`. `header`, `macs` and `usb_net` are each one key of compact JSON. A `header` nobody read (nothing on
+the HAT ID bus named a HAT) is left out, never sent as `[]`, so the site refuses the label rather than print
+"HAT none". The scan of the header's user bus (`--user-bus`) is not run: it waits until each setup's wiring says
+GPIO2 and GPIO3 are safe to drive then.
+
+A `reader_error` makes the boot's result `error`, and its reason starts "the Pi's own facts were not read". The
+boards are still checked, and their results stand. `--pi-only` loads `i2c-dev` and turns on the HAT ID bus
+(`dtparam i2c_vc=on`) where they are not already, and takes both away again afterwards. `--test` runs and
+`fpgas-<board>-debug` do not read the Pi. The report keeps the read as `pi`.
+
 ## The document
 
 The identity document holds the fields of every board found:
