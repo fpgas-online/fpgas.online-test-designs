@@ -51,7 +51,7 @@ def test_every_acorn_test_and_fact_test_says_what_it_runs():
     text = gen.PAGE.read_text()
     details = gen.acorn_details()
     for test in gen.acorn_suite.SELECTABLE:
-        assert details.get(test) and details[test] in text, test
+        assert details.get(test) and details[test].rstrip(".") in text, test
     for board in gen.board_api.installed().values():
         for test, spec in getattr(board, "fact_tests", {}).items():
             assert spec["reads"] in text, (board.title, test)
