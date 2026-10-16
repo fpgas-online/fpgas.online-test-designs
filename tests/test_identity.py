@@ -296,16 +296,27 @@ def _flash_info(**changes):
 def test_a_flash_info_read_gives_the_same_fields_as_flash_fields_with_source_jtag():
     out = identity.flash_info_fields(_flash_info(), "jtag")
     assert out == {
-        "flash_jedec": "0x010219", "flash_extended_id": "0x4d0180", "flash": "S25FL256S",
-        "flash_size_bytes": 33554432, "flash_uid": "e2789916a0809a22bbc76634c1bf53ed", "flash_uid_bits": 128,
+        "flash_jedec": "0x010219", "flash_extended_id": "0x4d0180",
+        "flash_uid": "e2789916a0809a22bbc76634c1bf53ed", "flash_uid_bits": 128,
         "flash_uid_state": "read", "flash_uid_opcode": "0x4b", "flash_sfdp": "1.6", "flash_source": "jtag",
     }  # fmt: skip
     assert all(identity.known(k) for k in out)
-    # the same reading as the Acorn's spi_flash.Flash.identify() dict gives the same fields
-    same = identity.flash_fields({"rdid": "0102194d0180", "part": "S25FL256S", "size_bytes": 33554432,
-                                  "unique_id": "E2789916A0809A22BBC76634C1BF53ED", "unique_id_opcode": 0x4B,
-                                  "sfdp": "1.6"}, "jtag")  # fmt: skip
+    # the same reading as the Acorn's spi_flash.Flash.identify() dict gives the same fields, part and size aside
+    same = identity.flash_fields({"rdid": "0102194d0180", "unique_id": "E2789916A0809A22BBC76634C1BF53ED",
+                                  "unique_id_opcode": 0x4B, "sfdp": "1.6"}, "jtag")  # fmt: skip
     assert out == same
+
+
+def test_a_flash_info_part_and_size_from_openfpgaloaders_database_are_not_sent():
+    """A JEDEC ID several parts share (the contract names 0xc22017, the NeTV2's Macronix, read 16 Oct 2026) must
+    not put a part on a label that the chip never said: `flash` only from the chip, the size from its SFDP."""
+    out = identity.flash_info_fields(_flash_info(), "jtag")
+    assert "flash" not in out and "flash_size_bytes" not in out
+    sfdp = {"revision": "1.0", "tables": [], "bfpt": {"density_bits": 67108864}}
+    out = identity.flash_info_fields(_flash_info(sfdp=sfdp), "jtag")
+    assert "flash" not in out and out["flash_size_bytes"] == 8388608
+    out = identity.flash_info_fields(_flash_info(size_source="sfdp", sfdp=None), "jtag")
+    assert out["flash_size_bytes"] == 33554432 and out["flash_sfdp"] == "none"
 
 
 def test_a_flash_info_unique_id_read_blank_has_its_length_and_command_and_no_id():

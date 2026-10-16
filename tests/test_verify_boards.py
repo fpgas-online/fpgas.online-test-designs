@@ -70,7 +70,7 @@ FLASH_INFO = {
 }  # fmt: skip
 # The identity fields that document gives.
 FLASH_INFO_FIELDS = {
-    "flash_jedec": "0x20ba18", "flash_extended_id": "0x104400", "flash": "N25Q128", "flash_size_bytes": 16777216,
+    "flash_jedec": "0x20ba18", "flash_extended_id": "0x104400",  # no part or size: both are openFPGALoader's database
     "flash_uid": "0123456789abcdef0123456789abcdef", "flash_uid_bits": 128, "flash_uid_state": "read",
     "flash_uid_opcode": "0x4b", "flash_sfdp": "1.6", "flash_source": "jtag",
 }  # fmt: skip

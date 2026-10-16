@@ -32,7 +32,7 @@ rpi-hwid's `FpgaBoard` fields:
 | `serial` | string | the USB serial number (Arty: its FT2232H; TT: its RP2350) | the board is not found on USB, or has no USB serial (the Fomu: foboot has none) |
 | `dna` | string | the Xilinx device DNA, 16 hex digits: `0x0054b48664b04854` | not read: the board has no DNA (TT, Fomu). The Acorn reads it over BAR0, or over JTAG when BAR0 cannot be used; the Arty and NeTV2 over JTAG (`openFPGALoader --read-dna`). When the JTAG read fails or is not run (the chain did not show the one FPGA expected, or the scan that showed it exited non-zero), `dna_error` says why the DNA itself was not read. A DNA of all zeros or all ones means the DNA port is not being read, so it is no DNA: on the Acorn the other path's is used if it is good, and otherwise `dna_error` says so |
 | `idcode` | string | the whole 32-bit JTAG IDCODE, 8 hex digits: `0x13636093` | the board has no JTAG link to the Pi (TT, Fomu), or the JTAG test was not run. The NeTV2 is found by scanning its JTAG chain, so it has the IDCODE that scan read even when its JTAG test is not run |
-| `flash` | string | the flash part: `S25FL256S`, `S25FS256S`, told apart by RDID byte 6 (the family ID); the family's name, `S25Fx256S`, when byte 6 is not known. On the Arty and NeTV2, openFPGALoader's name for the JEDEC ID, from its own list of parts, not read from the chip (several parts may share an ID) | the flash was not read, or its part is not known |
+| `flash` | string | the flash part: `S25FL256S`, `S25FS256S`, told apart by RDID byte 6 (the family ID); the family's name, `S25Fx256S`, when byte 6 is not known. Never sent for the Arty and NeTV2: openFPGALoader's name for the JEDEC ID comes from its own list of parts, not from the chip, and several parts share an ID (the NeTV2's Macronix `0xc22017` does), so rpi-hwid names the family from the JEDEC ID, the extended ID and the SFDP instead | the flash was not read, its part is not known, or (Arty, NeTV2) the chip does not name it |
 | `flash_jedec` | string | RDID bytes 1-3, 6 hex digits: `0x010219` | the flash was not read |
 | `flash_extended_id` | string | RDID bytes 4-6, 6 hex digits: `0x4d0180` | the flash was not read, or (Arty, NeTV2) its family defines no RDID bytes after the JEDEC ID |
 | `flash_sfdp` | string | the SFDP revision the flash answered Read SFDP with, `major.minor`: `1.6`; or `none` when its answer has no SFDP signature, which is what an S25FL256S gives (see [SFDP](#sfdp)) | the flash was not read; `flash_sfdp_error` says why when the flash's IDs were read but Read SFDP failed |
@@ -131,7 +131,7 @@ Pi 5) with `--fpga-part xc7a35tfgg484` or `xc7a100tfgg484`. Only the fpgas.onlin
 |---|---|
 | `flash_jedec` | `jedec_id` |
 | `flash_extended_id` | `extended_id`, when not `null` |
-| `flash`, `flash_size_bytes` | `part`, `size_bytes`, when not `null` |
+| `flash_size_bytes` | the SFDP's `bfpt.density_bits` / 8, the chip's own; else `size_bytes` unless its `size_source` is `database`. `part` is not taken: it is always openFPGALoader's database |
 | `flash_uid_state` | `unique_id.state`: `read`, `blank` or `none` |
 | `flash_uid`, `flash_uid_bits`, `flash_uid_opcode` | `unique_id.value` (when `read`), `bits` and `opcode` (when `read` or `blank`) |
 | `flash_uid_note` | `unique_id.note`, when the state is `none` and the note is not `null` |

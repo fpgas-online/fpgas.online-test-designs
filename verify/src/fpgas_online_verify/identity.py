@@ -246,7 +246,15 @@ def flash_info_fields(doc, source):
         return {"flash_error": f"openFPGALoader's flash-info JSON is not one this reads: {e}"}
     uid = flash["unique_id"]
     rdid = flash["jedec_id"][2:] + (flash["extended_id"][2:] if flash.get("extended_id") else "")
-    ident = {"rdid": rdid, "part": flash.get("part"), "size_bytes": flash.get("size_bytes"),
+    # What the chip said, never openFPGALoader's database: its `part` is a lookup of the JEDEC ID, which several
+    # parts share (the contract names 0xc22017), so `flash` is left out and rpi-hwid names the family from the
+    # JEDEC ID, the extended ID and the SFDP. The size is the SFDP's density, or size_bytes when the chip gave it.
+    density = ((flash["sfdp"] or {}).get("bfpt") or {}).get("density_bits")
+    if isinstance(density, int) and not isinstance(density, bool) and density > 0 and density % 8 == 0:
+        size = density // 8
+    else:
+        size = flash.get("size_bytes") if flash.get("size_source") != "database" else None
+    ident = {"rdid": rdid, "size_bytes": size,
              "sfdp": "none" if flash["sfdp"] is None else flash["sfdp"]["revision"]}  # fmt: skip
     if uid["state"] == "read":
         ident.update(unique_id=uid["value"], unique_id_opcode=int(uid["opcode"], 16))
