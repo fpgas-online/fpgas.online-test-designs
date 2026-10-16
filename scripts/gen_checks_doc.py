@@ -230,6 +230,17 @@ def page():
         "not for and why. How the whole check runs is on [what the check tests on each board](tests.md) and "
         "[what an Acorn check tests](acorn.md#acorn).",
         "",
+        "The dashboards show the checks' columns in four groups; each check's section says its group.",
+        "",
+        "| Group | What it holds | Checks |",
+        "|---|---|---|",
+        *(
+            f"| `{g}` | {checks.GROUP_ABOUT[g]} | "
+            + ", ".join(f"[`{c}`](#{c})" for c in order if checks.GROUP_OF.get(c) == g)
+            + " |"
+            for g in checks.GROUPS
+        ),
+        "",
         "Checks: [Boot check](#boot-check), [Check ran](#check-ran), "
         + ", ".join(f"[`{c}`](#{c})" for c in order)
         + ".",

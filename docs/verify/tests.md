@@ -91,7 +91,7 @@ a DFU load replaces foboot until the next reset. `fpgas-fomu-debug` runs it too.
 
 A section per check, with what it checks on each board and what it runs, is on [each check, what it tests](checks.md).
 
-The report puts each planned test in one of four groups:
+The report puts each planned test in one of four groups, and the dashboards group the check columns the same way: `basic`, the checks every board with that hardware gets first (its JTAG and its cabling to the Pi); `memory`; `peripherals`, the links to the Pi other than JTAG; `board-specific`, the checks of one board type's own hardware.
 
 | Group | Tests |
 |---|---|

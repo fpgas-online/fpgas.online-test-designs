@@ -19,6 +19,13 @@ test (it was `spiflash` on the Arty, NeTV2 and Fomu, and `flash` on the Acorn).
 """
 
 GROUPS = ("basic", "memory", "peripherals", "board-specific")
+# What each group holds, as the checks page says it (scripts/gen_checks_doc.py).
+GROUP_ABOUT = {
+    "basic": "what every board with that hardware gets first: its JTAG, its cabling to the Pi",
+    "memory": "the board's memories",
+    "peripherals": "the board's other links to the Pi: serial, GPIO, Ethernet",
+    "board-specific": "one board type's own hardware",
+}
 
 # Every test name a board's check can report, and its group. A name missing here is a KeyError, never a guess:
 # tests/test_verify_boards.py checks every board's tests are in it.

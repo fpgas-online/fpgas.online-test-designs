@@ -4,6 +4,15 @@
 
 For anyone who clicked a check's name on an fpgas.online dashboard, or who runs fpgas-verify on an Arty A7, NeTV2, Fomu EVT, TT FPGA demo board or Acorn: a section for every check, named as the dashboards name it, with, for each board type that gets it, what it checks and what the check runs, and the board types it is not for and why. How the whole check runs is on [what the check tests on each board](tests.md) and [what an Acorn check tests](acorn.md#acorn).
 
+The dashboards show the checks' columns in four groups; each check's section says its group.
+
+| Group | What it holds | Checks |
+|---|---|---|
+| `basic` | what every board with that hardware gets first: its JTAG, its cabling to the Pi | [`jtag`](#jtag), [`wiring`](#wiring) |
+| `memory` | the board's memories | [`flash`](#flash), [`ddr`](#ddr), [`spram`](#spram) |
+| `peripherals` | the board's other links to the Pi: serial, GPIO, Ethernet | [`p2-uart`](#p2-uart), [`p2-serial`](#p2-serial), [`p2-gpio`](#p2-gpio), [`uart`](#uart), [`ethernet`](#ethernet) |
+| `board-specific` | one board type's own hardware | [`pcie-link`](#pcie-link), [`pcie-bar0`](#pcie-bar0), [`rp1-pio`](#rp1-pio), [`scratch`](#scratch), [`power-cycle`](#power-cycle), [`header`](#header), [`foboot`](#foboot), [`foboot-after`](#foboot-after), [`sdk`](#sdk), [`dip-switches`](#dip-switches) |
+
 Checks: [Boot check](#boot-check), [Check ran](#check-ran), [`pcie-link`](#pcie-link), [`pcie-bar0`](#pcie-bar0), [`rp1-pio`](#rp1-pio), [`jtag`](#jtag), [`flash`](#flash), [`ddr`](#ddr), [`p2-uart`](#p2-uart), [`p2-serial`](#p2-serial), [`scratch`](#scratch), [`p2-gpio`](#p2-gpio), [`wiring`](#wiring), [`power-cycle`](#power-cycle), [`uart`](#uart), [`ethernet`](#ethernet), [`header`](#header), [`foboot`](#foboot), [`foboot-after`](#foboot-after), [`sdk`](#sdk), [`dip-switches`](#dip-switches), [`spram`](#spram).
 
 ## Boot check

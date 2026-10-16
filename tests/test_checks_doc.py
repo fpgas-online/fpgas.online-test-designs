@@ -40,6 +40,11 @@ def test_each_check_section_says_its_group_on_the_dashboards():
             assert f"Group on the dashboards: `{gen.checks.GROUP_OF[check]}`." in section(check), check
 
 
+def test_the_page_says_what_each_group_holds():
+    assert set(gen.checks.GROUP_ABOUT) == set(gen.checks.GROUPS)
+    assert all(f"| `{g}` | {gen.checks.GROUP_ABOUT[g]} |" in gen.PAGE.read_text() for g in gen.checks.GROUPS)
+
+
 def test_the_dashboards_two_other_columns_have_sections_too():
     assert {"Boot check", "Check ran"} <= set(headings())
 
