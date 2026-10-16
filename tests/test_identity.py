@@ -284,7 +284,7 @@ def test_rpi_hwid_makes_a_pi_label_from_the_pi_identified_event_when_it_is_insta
     from fpgas_online_verify import pi_identity
 
     pi5 = json.loads((pathlib.Path(__file__).parent / "data" / "pi-only-pi5.json").read_text())
-    read = pi_identity.read(lambda argv, timeout: (0, json.dumps(pi5)), lambda name: f"/usr/bin/{name}")
+    read = pi_identity.read(lambda argv, timeout: (0, json.dumps(pi5), ""), lambda name: f"/usr/bin/{name}")
     sent = pi_identity.details(read)
     kinds = {"fan": bool, "rtc_battery": bool, "max_current_ma": int, "ext5v_v": float}
 
