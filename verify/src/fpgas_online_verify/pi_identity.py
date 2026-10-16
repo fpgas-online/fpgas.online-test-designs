@@ -13,8 +13,9 @@ https://welland.fpgas.online/fleet/55effc3376226b41/".
 
 Only the fields the site reads from the event are sent (fpgas.online-site fleet/hwid.py PI_FIELDS): model, serial,
 revision and memory come from the Pi's registration. rpi-hwid not installed is `reader=none`, as the contract
-says; rpi-hwid installed and failing, or printing what is not a label input, is `reader_error=<why>` and makes the
-boot's result an error: a Pi label is never made from half a read.
+says; rpi-hwid installed and failing, or printing what is not a label input, is `reader_error=<why>`: the site
+refuses the Pi's own label and shows why, and a Pi label is never made from half a read. The boards' result is
+untouched (the coordinator's decision of 17 Oct 2026, from Tim's rules of 5 and 16 Oct 2026).
 """
 
 import json

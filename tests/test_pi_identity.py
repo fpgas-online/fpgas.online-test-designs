@@ -187,13 +187,16 @@ def test_the_check_sends_pi_identified_first_and_keeps_the_read_in_the_report(mo
     assert "the Pi's own facts (rpi-hwid --pi-only): header=[], fan=-" in runner.summary(report)
 
 
-def test_a_pi_whose_facts_were_not_read_makes_the_boot_an_error_saying_why(monkeypatch):
+def test_a_pi_whose_facts_were_not_read_says_so_and_leaves_the_boards_result_alone(monkeypatch):
+    """The coordinator's decision of 17 Oct 2026, from Tim's rules of 5 and 16 Oct: a Pi-label read is not a board
+    test. Its failure is in the pi-identified event and the report, said loudly, and the boards are still offered
+    on their own result."""
     monkeypatch.setattr(runner, "hold_lock", lambda lock, title: __import__("contextlib").nullcontext())
     monkeypatch.setattr(runner, "compare_state", lambda *a: {})
     monkeypatch.setattr(runner, "plan", lambda *a: None)
     report, events = checked({"reader": "rpi-hwid", "reader_error": "rpi-hwid label-input --pi-only exited 1: x"})
-    assert report["result"] == "error"
-    assert report["reason"] == "the Pi's own facts were not read: rpi-hwid label-input --pi-only exited 1: x"
+    assert report["result"] == "pass" and "reason" not in report
+    assert report["pi"]["reader_error"].endswith("exited 1: x")
     assert events[0][1]["reader_error"].endswith("exited 1: x")
     assert "the Pi's own facts: NOT READ: " in runner.summary(report)
 
@@ -210,12 +213,12 @@ def test_only_the_whole_check_on_a_pi_reads_the_pi(monkeypatch):
     assert seen == [pi_identity.read, None, None]
 
 
-def test_a_pi_with_no_board_and_its_facts_unread_is_an_error_saying_both(monkeypatch):
-    """#365 review N6: "missing" (no board) and the Pi's facts not read: the worse, error, with both reasons."""
+def test_a_pi_with_no_board_and_its_facts_unread_is_missing_and_says_the_read_failed(monkeypatch):
+    """#365 review N6: no board is "missing", as ever; the failed read is said in its event and the report."""
     monkeypatch.setattr(runner, "compare_state", lambda *a: {})
     report, events = checked({"reader": "rpi-hwid", "reader_error": "rpi-hwid label-input --pi-only exited 1: x"},
                              spotted=False)  # fmt: skip
-    assert report["result"] == "error"
-    assert "none of the installed boards" in report["reason"]
-    assert report["reason"].endswith("the Pi's own facts were not read: rpi-hwid label-input --pi-only exited 1: x")
+    assert report["result"] == "missing"
+    assert "the Pi's own facts" not in report["reason"]
+    assert report["pi"]["reader_error"].endswith("exited 1: x")
     assert [s for s, _ in events][:2] == ["pi-identified", "fpga-no-board"]

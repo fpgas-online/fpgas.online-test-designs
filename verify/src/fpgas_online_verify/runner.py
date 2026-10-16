@@ -207,7 +207,11 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
             if on:
                 options = {**options, "power_cycle_check": True}
                 report["power_cycle_check"] = {"on": True, "configured_by": str(path)}
-        if options.get("read_pi"):  # the Pi's own facts, before any board's lock (pi_identity.py, #76)
+        # The Pi's own facts, before any board's lock (pi_identity.py, #76). A read that fails is said in its
+        # pi-identified event (reader_error), the Pi's own label is refused, and the boards' result is untouched: a
+        # Pi-label read is not a board test (the coordinator's decision of 17 Oct 2026, from Tim's rules of 5 and 16
+        # Oct: "fail until tested" is about a board's planned checks, and fixes never take visitor controls away).
+        if options.get("read_pi"):
             report["pi"] = options["read_pi"]()
             event("pi-identified", pi_identity.details(report["pi"]))
         usb = usb_devices() if usb is None else usb
@@ -222,7 +226,6 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
             report["reason"] = "; ".join([p.reason, *report.get("usb_debug_tools", [])])
             event("fpga-no-board", {"reason": report["reason"]})
             report["state"] = compare_state(report, [], [], False, options.get("state", state.STATE))
-        _pi_unread(report)
         return report
     reports, not_checked = [], []
     keys = _keys(targets)
@@ -282,7 +285,6 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
                                              f"{', '.join(options['tests'])}")  # fmt: skip
     else:
         report["result"] = worst(r["result"] for r in reports)
-    _pi_unread(report)
     if options.get("tests"):
         # Only some tests ran, so some of the state (the flash JEDEC ID) may not have been read: recording it would
         # make the next full run report "changed", and comparing it says nothing about what was not run.
@@ -293,15 +295,6 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
     if report["state"].get("changes"):
         report["result"] = worst([report["result"], "changed"])
     return report
-
-
-def _pi_unread(report):
-    """A Pi whose own facts rpi-hwid could not read is the boot's error, with the reason: a Pi label is never made
-    from half a read (pi_identity.py)."""
-    if "reader_error" in report.get("pi", {}):
-        report["result"] = worst([report["result"], "error"])
-        why = f"the Pi's own facts were not read: {report['pi']['reader_error']}"
-        report["reason"] = "; ".join([report["reason"], why] if report.get("reason") else [why])
 
 
 def plan(board, report, found, options):

@@ -192,8 +192,10 @@ the HAT ID bus named a HAT) is left out, never sent as `[]`, so the site refuses
 "HAT none". The scan of the header's user bus (`--user-bus`) is not run: it waits until each setup's wiring says
 GPIO2 and GPIO3 are safe to drive then.
 
-A `reader_error` makes the boot's result `error`, and its reason starts "the Pi's own facts were not read". The
-boards are still checked, and their results stand. `--pi-only` (rpi-hwid 0.0.post597 and later, mithro/rpi-hwid
+A `reader_error` is said in the event and in the boot report (`pi`), and the check's summary says the Pi's own
+facts were NOT READ; the site refuses the Pi's own label and shows the reason. The boards' result is untouched: a
+Pi-label read is not a board test (the coordinator's decision of 17 Oct 2026, from Tim's rules of 5 Oct, fixes never
+take visitor controls away, and 16 Oct, "fail until tested" is about a board's planned checks). `--pi-only` (rpi-hwid 0.0.post597 and later, mithro/rpi-hwid
 #92) reads the HAT's EEPROM over GPIO0/1 itself, as an I2C master through the GPIO character device, with no
 `dtparam` and no module loaded; where `/dev/i2c-0` already exists it reads through that. It reads each pin's
 function and pull before and after and puts them back, and anything it cannot read or put back is an error
