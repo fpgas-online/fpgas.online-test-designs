@@ -35,7 +35,7 @@ The iCE40 is programmed via the RP2350 over USB CDC, not directly from the RPi.
 | Interface      | RP2350 PIO SPI → iCE40 SPI configuration port         |
 | USB device     | `/dev/ttyACM0` (MicroPython REPL)                     |
 | USB VID:PID    | `2e8a:0005` (MicroPython Board in FS mode)            |
-| Tool           | `python3 tt_fpga_program.py /dev/ttyACM0 <bitstream>` |
+| Tool           | `openFPGALoader -b tt_fpga -d /dev/ttyACM0 <bitstream>` |
 | Bitstream type | `.bin` (volatile SRAM load)                           |
 
 ### RP2350 SPI Programming Pins
