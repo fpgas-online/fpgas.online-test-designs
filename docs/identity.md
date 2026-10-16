@@ -59,7 +59,7 @@ fpgas-verify's own fields:
 | `idcode_manufacturer_id` | string | IDCODE bits 11-1, the JEP106 code, 3 hex digits: `0x049` | as `idcode` |
 | `idcode_manufacturer` | string | `Xilinx`, `Lattice`, or `unknown` | as `idcode` |
 | `idcode_device` | string | `XC7A200T`, or `unknown` | as `idcode` |
-| `flash_size_bytes` | number | the flash's size from its RDID (Arty, NeTV2: as openFPGALoader gives it, from its list of parts, the SFDP, or the RDID capacity byte): `33554432` | the flash was not read, or its RDID gives no size |
+| `flash_size_bytes` | number | the flash's size from its RDID (Arty, NeTV2: the SFDP's density, or openFPGALoader's size when it did not take it from its list of parts): `33554432` | the flash was not read, or its RDID gives no size |
 | `flash_status` | string | status register 1, 2 hex digits: `0x00` | the flash was not read |
 | `flash_config` | string | the configuration register, 2 hex digits: `0x02` | the flash was not read |
 | `flash_quad` | boolean | the configuration register's QUAD bit | the flash was not read |
