@@ -2120,6 +2120,14 @@ def test_every_test_a_board_can_report_has_a_group():
     assert set(checks.GROUP_OF.values()) == set(checks.GROUPS)
 
 
+def test_basic_holds_only_the_checks_every_board_answers_for():
+    """Tim, 16 Oct 2026 (coord-74, #361): "Why is `header` in basic when it appears to be fomu only?" A check one board
+    type runs on hardware of its own is board-specific; basic is the common checks a board gets first."""
+    basic = {t for t, g in checks.GROUP_OF.items() if g == "basic"}
+    assert basic and basic <= set(checks.COMMON)
+    assert checks.GROUP_OF["header"] == "board-specific"
+
+
 def test_jtag_is_planned_on_every_board_with_jtag_and_wiring_on_every_board_with_cabling():
     assert [b.planned(v)[0] for b, v in ((ARTY, "a7-35"), (NETV2, "a7-35"), (NETV2, "a7-100"))] == ["jtag"] * 3
     assert "jtag" in ACORN.planned(None, {})

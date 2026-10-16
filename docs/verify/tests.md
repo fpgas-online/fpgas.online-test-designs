@@ -91,14 +91,14 @@ a DFU load replaces foboot until the next reset. `fpgas-fomu-debug` runs it too.
 
 A section per check, with what it checks on each board and what it runs, is on [each check, what it tests](checks.md).
 
-The report puts each planned test in one of four groups:
+The report puts each planned test in one of four groups, and the dashboards group the check columns the same way: `basic`, the checks every board with that hardware gets first (its JTAG and its cabling to the Pi); `memory`; `peripherals`, the links to the Pi other than JTAG; `board-specific`, the checks of one board type's own hardware.
 
 | Group | Tests |
 |---|---|
-| `basic` | `jtag`, `header`, `wiring` |
+| `basic` | `jtag`, `wiring` |
 | `memory` | `flash`, `ddr`, `spram` |
 | `peripherals` | `uart`, `p2-uart`, `p2-serial`, `p2-gpio`, `ethernet` |
-| `board-specific` | `pcie-link`, `pcie-bar0`, `power-cycle`, `rp1-pio`, `scratch`, `foboot`, `foboot-after`, `sdk`, `dip-switches`, `pmod` |
+| `board-specific` | `pcie-link`, `pcie-bar0`, `power-cycle`, `rp1-pio`, `scratch`, `foboot`, `foboot-after`, `sdk`, `dip-switches`, `pmod`, `header` |
 
 ### The Arty A7 check at boot
 
