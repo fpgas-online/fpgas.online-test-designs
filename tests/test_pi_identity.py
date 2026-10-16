@@ -293,6 +293,7 @@ def test_a_scan_that_cannot_read_the_header_says_so(monkeypatch):
     _nolocks(monkeypatch)
     report, events = checked(NO_HEADER, rescan=NO_HEADER)
     assert events[0][1]["user_bus"] == "scanned: header not read" and "header" not in events[0][1]
+    assert report["pi"]["user_bus"] == "scanned: header not read" and report["result"] == "pass"
 
 
 def test_a_failed_scan_is_a_reader_error_and_the_boards_result_stands(monkeypatch):
