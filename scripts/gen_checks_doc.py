@@ -250,7 +250,15 @@ def page():
         "",
     ]
     for check in order:
-        out += [f"## {check}", "", "| Board | Variants | What it checks | What the check runs |", "|---|---|---|---|"]
+        if check not in checks.GROUP_OF:
+            raise GapError(f"{check!r} has no group in checks.GROUP_OF")
+        out += [f"## {check}", ""]
+        out += [
+            f"Group on the dashboards: `{checks.GROUP_OF[check]}`.",
+            "",
+            "| Board | Variants | What it checks | What the check runs |",
+            "|---|---|---|---|",
+        ]
         for (title, text, ran), variants in rows.get(check, []):
             out.append(f"| {title} | {variants_text(BOARD_VARIANTS[title], variants)} | {text} | {ran} |")
         nots = not_for.get(check, {})

@@ -30,6 +30,16 @@ def test_every_check_any_board_plans_has_its_own_section():
     assert planned and planned <= set(headings())
 
 
+def section(check):
+    return gen.PAGE.read_text().split(f"\n## {check}\n", 1)[1].split("\n## ", 1)[0]
+
+
+def test_each_check_section_says_its_group_on_the_dashboards():
+    for check in headings():
+        if check in gen.checks.GROUP_OF:
+            assert f"Group on the dashboards: `{gen.checks.GROUP_OF[check]}`." in section(check), check
+
+
 def test_the_dashboards_two_other_columns_have_sections_too():
     assert {"Boot check", "Check ran"} <= set(headings())
 

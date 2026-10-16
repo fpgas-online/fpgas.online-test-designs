@@ -24,7 +24,6 @@ GROUPS = ("basic", "memory", "peripherals", "board-specific")
 # tests/test_verify_boards.py checks every board's tests are in it.
 GROUP_OF = {
     "jtag": "basic",
-    "header": "basic",
     "wiring": "basic",
     "flash": "memory",
     "ddr": "memory",
@@ -34,6 +33,10 @@ GROUP_OF = {
     "p2-serial": "peripherals",
     "p2-gpio": "peripherals",
     "ethernet": "peripherals",
+    # The Fomu EVT's own check of the lines it has on the Pi's header (CDONE, CRESET, the SPI flash): no other board
+    # runs it, so it is not basic. Tim, 16 Oct 2026 (coord-74): "Why is `header` in basic when it appears to be fomu
+    # only?" (#361). `basic` holds only COMMON checks (tests/test_verify_boards.py).
+    "header": "board-specific",
     "pcie-link": "board-specific",
     "pcie-bar0": "board-specific",
     "power-cycle": "board-specific",

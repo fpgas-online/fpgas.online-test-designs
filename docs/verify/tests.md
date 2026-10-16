@@ -95,10 +95,10 @@ The report puts each planned test in one of four groups:
 
 | Group | Tests |
 |---|---|
-| `basic` | `jtag`, `header`, `wiring` |
+| `basic` | `jtag`, `wiring` |
 | `memory` | `flash`, `ddr`, `spram` |
 | `peripherals` | `uart`, `p2-uart`, `p2-serial`, `p2-gpio`, `ethernet` |
-| `board-specific` | `pcie-link`, `pcie-bar0`, `power-cycle`, `rp1-pio`, `scratch`, `foboot`, `foboot-after`, `sdk`, `dip-switches`, `pmod` |
+| `board-specific` | `pcie-link`, `pcie-bar0`, `power-cycle`, `rp1-pio`, `scratch`, `foboot`, `foboot-after`, `sdk`, `dip-switches`, `pmod`, `header` |
 
 ### The Arty A7 check at boot
 
