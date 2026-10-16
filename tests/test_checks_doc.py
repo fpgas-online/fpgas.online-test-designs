@@ -45,6 +45,14 @@ def test_the_page_says_what_each_group_holds():
     assert all(f"| `{g}` | {gen.checks.GROUP_ABOUT[g]} |" in gen.PAGE.read_text() for g in gen.checks.GROUPS)
 
 
+def test_uart_and_p2_uart_each_say_how_they_differ_from_the_other():
+    """Tim, 16 Oct 2026 (coord-74, #362): "What is the difference between uart and p2-uart?" """
+    assert set(gen.checks.WHAT) <= set(gen.checks.GROUP_OF)
+    assert "`p2-uart`" in section("uart") and "`uart`" in section("p2-uart")
+    assert section("uart").lstrip().startswith(gen.checks.WHAT["uart"])
+    assert section("p2-uart").lstrip().startswith(gen.checks.WHAT["p2-uart"])
+
+
 def test_the_dashboards_two_other_columns_have_sections_too():
     assert {"Boot check", "Check ran"} <= set(headings())
 
