@@ -14,6 +14,7 @@ not what this writes.
 import argparse
 import pathlib
 import re
+import subprocess
 import sys
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
@@ -25,6 +26,14 @@ from fpgas_online_verify.boards.acorn import suite as acorn_suite  # noqa: E402
 from fpgas_online_verify.testbench import TestBoard  # noqa: E402
 
 PAGE = REPO / "docs" / "verify" / "checks.md"
+FAILURES = REPO / "docs" / "verify" / "common-failures.md"
+# A message of one test's own, quoted in a common-failures row as the board's reason gives it: "`<test> fail: …`".
+TEST_MESSAGE = re.compile(r"`([a-z0-9-]+) (?:fail|error): ")
+ANY_CHECK = (
+    "The messages any check can give (a design that would not load, a test that did not finish, a tool or package "
+    "missing, a planned test that has no boot-check test yet) are in "
+    "[common failures](common-failures.md#common-failures)."
+)
 ISSUE = "https://github.com/fpgas-online/fpgas.online-test-designs/issues/{}"
 # Acorn's power-cycle test runs only when the check is asked for it (power_cycle_check in fpgas-verify.toml).
 ASKED = {"power_cycle_check": True}
@@ -53,6 +62,50 @@ def acorn_details():
     return out
 
 
+ACORN_DIR = pathlib.Path(acorn_suite.__file__).resolve().parent
+# A file the Acorn suite's text names ("links.py", "expected.toml") or a module's attribute
+# ("check.power_cycle_verdict"), not part of a longer name or path ("fpgas-verify.toml" is the Pi's configuration,
+# not a file of this repository).
+NAMED_FILE = re.compile(r"(?<![\w./-])([a-z_][a-z0-9_]*)\.(py|toml)\b")
+NAMED_ATTR = re.compile(r"(?<![\w./-])([a-z_][a-z0-9_]*)\.([a-z_][a-z0-9_]*)\b(?!\.)")
+
+
+def repo_files():
+    return subprocess.run(
+        ["git", "-C", str(REPO), "ls-files"], capture_output=True, text=True, check=True
+    ).stdout.split()
+
+
+def repo_path(name):
+    """This repository's path of a file the Acorn suite names: in the Acorn module's own directory, else the one file
+    of that name in the repository. None or two candidates stop the generator: a link is never guessed."""
+    own = ACORN_DIR / name
+    if own.is_file():
+        return own.relative_to(REPO).as_posix()
+    found = [f for f in repo_files() if pathlib.PurePosixPath(f).name == name]
+    if len(found) != 1:
+        raise GapError(
+            f"the Acorn suite names {name!r}, which is {len(found)} files of this repository: link it by path"
+        )
+    return found[0]
+
+
+def linked(text):
+    """`text` with each file it names linked to that file in this repository (the page is docs/verify/checks.md), and
+    each Acorn module's attribute it names (check.power_cycle_verdict) linked to its module."""
+
+    def file_link(m):
+        return f"[`{m[0]}`](../../{repo_path(m[0])})"
+
+    def attr_link(m):
+        module = ACORN_DIR / f"{m[1]}.py"
+        if m[2] in ("py", "toml") or not module.is_file():
+            return m[0]
+        return f"[`{m[0]}`](../../{module.relative_to(REPO).as_posix()})"
+
+    return NAMED_ATTR.sub(attr_link, NAMED_FILE.sub(file_link, text))
+
+
 def variants_of(board):
     """Every variant a board module names, in its own order; [None] for a board that plans the same for all."""
     if not isinstance(board, TestBoard):
@@ -79,7 +132,7 @@ def runs(board, variant, test, untested, derived, only_when_asked):
         detail = acorn_details().get(test)
         if not detail:
             raise GapError(f"{board.title}: the Acorn suite's docstring has no line for {test!r}")
-        return detail.rstrip(".") + (f"; {acorn_suite.OPT_IN.split(': ', 1)[1]}" if only_when_asked else "")
+        return linked(detail.rstrip(".")) + (f"; {acorn_suite.OPT_IN.split(': ', 1)[1]}" if only_when_asked else "")
     if variant is None:
         return "the tests of the board's own variant (the rows above), once the board has said which it is"
     script = board.script_tests.get(test)
@@ -132,6 +185,28 @@ def collect():
     return rows, not_for, order + [c for c in not_for if c not in order]
 
 
+def failure_rows(checks_on_page):
+    """({check: [row]}, the table's header lines): the rows of common-failures.md's table that quote a check's own
+    message ("`<check> fail: …`"), copied whole, so the reader has what to do where they are. A row naming a check this
+    page has no section for stops the generator: it is a misspelt name, or a check no board plans."""
+    lines = FAILURES.read_text().splitlines()
+    try:
+        start = lines.index("| It says | Meaning, and what to do |")
+    except ValueError:
+        raise GapError(f"{FAILURES.name} has no table headed 'It says | Meaning, and what to do'") from None
+    header = lines[start : start + 2]
+    out = {}
+    for line in lines[start + 2 :]:
+        if not line.startswith("| "):
+            break
+        named = list(dict.fromkeys(TEST_MESSAGE.findall(line.split(" | ", 1)[0])))
+        for check in named:
+            if check not in checks_on_page:
+                raise GapError(f"{FAILURES.name} quotes a message of {check!r}, which has no section here")
+            out.setdefault(check, []).append(line)
+    return out, header
+
+
 def variants_text(board_variants, variants):
     """The variants a row is for: "every" for a board that plans the same for all, "not yet known" for a board whose
     check has not settled its variant."""
@@ -142,6 +217,7 @@ def variants_text(board_variants, variants):
 
 def page():
     rows, not_for, order = collect()
+    failures, failures_header = failure_rows(order)
     out = [
         "# Each check, what it tests",
         "",
@@ -154,7 +230,9 @@ def page():
         "not for and why. How the whole check runs is on [what the check tests on each board](tests.md) and "
         "[what an Acorn check tests](acorn.md#acorn).",
         "",
-        "Checks: " + ", ".join(f"[`{c}`](#{c})" for c in order) + ".",
+        "Checks: [Boot check](#boot-check), [Check ran](#check-ran), "
+        + ", ".join(f"[`{c}`](#{c})" for c in order)
+        + ".",
         "",
         "## Boot check",
         "",
@@ -162,7 +240,8 @@ def page():
         "below that the board's type gets, in order, and reports one result for the boot: `pass` (every check "
         "passed), `fail` (a check failed), `error` (the check could not finish), or `missing` (it found no board). "
         "The dashboards show it as the Boot check column; a board is offered to visitors only after a `pass`. "
-        "[Reading the result](reading-the-result.md) says what each result means.",
+        "[Reading the result](reading-the-result.md) says what each result means, and "
+        "[common failures](common-failures.md#common-failures) what to do about each message.",
         "",
         "## Check ran",
         "",
@@ -180,7 +259,17 @@ def page():
             for (title, why), variants in nots.items():
                 which = variants_text(BOARD_VARIANTS[title], variants)
                 out.append(f"* {title}" + ("" if which == "every" else f" ({which})") + f": {why}")
-        out.append("")
+        out += ["", "When it fails:", ""]
+        if failures.get(check):
+            out += [*failures_header, *failures[check], ""]
+        else:
+            out += [
+                "Common failures lists no message of this check's own. Under the failed test, the check's summary "
+                "shows the last lines its test printed, which say what went wrong; `fpgas-<board>-debug test "
+                "<check>` shows all of them.",
+                "",
+            ]
+        out += [ANY_CHECK, ""]
     return "\n".join(out)
 
 

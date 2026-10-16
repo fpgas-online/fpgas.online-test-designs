@@ -51,7 +51,54 @@ def test_every_acorn_test_and_fact_test_says_what_it_runs():
     text = gen.PAGE.read_text()
     details = gen.acorn_details()
     for test in gen.acorn_suite.SELECTABLE:
-        assert details.get(test) and details[test].rstrip(".") in text, test
+        assert details.get(test) and gen.linked(details[test].rstrip(".")) in text, test
     for board in gen.board_api.installed().values():
         for test, spec in getattr(board, "fact_tests", {}).items():
             assert spec["reads"] in text, (board.title, test)
+
+
+def test_the_index_names_every_section_the_dashboards_link():
+    """#357: the "Checks:" line at the top links every section, Boot check and Check ran too."""
+    index = next(line for line in gen.PAGE.read_text().splitlines() if line.startswith("Checks: "))
+    anchors = re.findall(r"\]\(#([^)]+)\)", index)
+    slugs = [h.lower().replace(" ", "-") for h in headings()]
+    assert anchors[:2] == ["boot-check", "check-ran"] and sorted(anchors) == sorted(slugs)
+
+
+def test_a_file_the_acorn_rows_name_links_to_it_in_this_repository():
+    """#357: links.py, bist.py, expected.toml and check.power_cycle_verdict are links to the files, and a name that is
+    no file here stops the generator rather than being left plain or guessed."""
+    text = gen.PAGE.read_text()
+    acorn = "../../verify/src/fpgas_online_verify/boards/acorn/"
+    for name, path in [("links.py", f"{acorn}links.py"), ("bist.py", f"{acorn}bist.py"),
+                       ("expected.toml", "../../docs/wiring/acorn/expected.toml"),
+                       ("check.power_cycle_verdict", f"{acorn}check.py")]:  # fmt: skip
+        assert f"[`{name}`]({path})" in text, name
+        assert (gen.PAGE.parent / path).resolve().is_file(), path
+    assert gen.linked("read by fpgas-verify.toml and e.g. so on") == "read by fpgas-verify.toml and e.g. so on"
+    with pytest.raises(gen.GapError, match=r"'nowhere\.py', which is 0 files"):
+        gen.linked("see nowhere.py")
+
+
+def test_each_check_says_what_to_do_when_it_fails_from_common_failures():
+    """#357: every check's section ends with what to do when it fails: the common-failures rows that quote its own
+    message ("`<check> fail: …`"), copied whole, and where the messages any check can give are."""
+    text = gen.PAGE.read_text()
+    sections = re.split(r"^## ", text, flags=re.M)[1:]
+    failures, _ = gen.failure_rows([s.split("\n", 1)[0] for s in sections])
+    for section in sections:
+        name, body = section.split("\n", 1)
+        if name in ("Boot check", "Check ran"):
+            continue
+        assert "When it fails:" in body and gen.ANY_CHECK in body, name
+        for row in failures.get(name, []):
+            assert row in body, (name, row)
+    assert {"jtag", "header", "wiring", "spram", "flash", "ddr", "pcie-link", "p2-serial"} <= set(failures)
+
+
+def test_a_common_failures_row_naming_a_check_the_page_lacks_stops_the_generator(monkeypatch, tmp_path):
+    rows = gen.FAILURES.read_text().replace("`jtag fail: the JTAG chain has", "`jtagg fail: the JTAG chain has")
+    (tmp_path / "common-failures.md").write_text(rows)
+    monkeypatch.setattr(gen, "FAILURES", tmp_path / "common-failures.md")
+    with pytest.raises(gen.GapError, match="'jtagg', which has no section here"):
+        gen.page()

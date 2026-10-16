@@ -51,18 +51,22 @@ USES = {
 ACORN_FAILURES = [
     "`fail`: `unconverted: …`",
     "`fail`: `… is not a design we built`",
-    "`fail`: `running the golden image`",
-    "`fail`: `link is x2, expected x1`",
-    "`fail`: `no device on the P1 JTAG chain`",
-    "`fail`: `P1 JTAG could not be probed: GPIO14 (TMS) is held by",
-    "`fail`: `… gpiod_line_request_set_values_subset: Assertion",
-    "`fail`: `openFPGALoader printed no raw IDCODE scan",
-    "`fail`: `… failed (exit N) before scanning the JTAG chain",
-    "`fail`: `device DNA over P1 JTAG reads 0x…",
-    "`fail`: `device DNA over JTAG … is not the one over BAR0`",
-    "`fail`: `J5 -> GPIO3:",
-    "`fail`: `K2 -> GPIO15:",
-    "`fail`: `DRAM write",
+    "`fail`: `pcie-bar0 fail: running the golden image`",
+    "`fail`: `pcie-link fail: link is x2, expected x1`",
+    "`fail`: `rp1-pio fail:",
+    "`fail`: `jtag fail: P1 JTAG chain has",
+    "`fail`: `jtag fail: no device on the P1 JTAG chain`",
+    "`fail`: `jtag fail: P1 JTAG could not be probed: GPIO14 (TMS) is held by",
+    "`fail`: `jtag fail: … gpiod_line_request_set_values_subset: Assertion",
+    "`fail`: `jtag fail: openFPGALoader printed no raw IDCODE scan",
+    "`fail`: `jtag fail: … failed (exit N) before scanning the JTAG chain",
+    "`fail`: `jtag fail: openFPGALoader --detect exited N on the P1 JTAG chain",
+    "`fail`: `jtag fail: device DNA over P1 JTAG reads 0x…",
+    "`fail`: `jtag fail: device DNA over JTAG … is not the one over BAR0`",
+    "`fail`: `p2-gpio fail: J5 -> GPIO3:",
+    "`fail`: `p2-serial fail: K2 -> GPIO15:",
+    "`fail`: `scratch fail:",
+    "`fail`: `ddr fail: DRAM write",
     "`fail`: `power-cycle fail:",
     "`error`: `this host (…) is not an Acorn setup in wiring.toml`",
     "`error`: `… does not match its manifest`",
@@ -71,7 +75,7 @@ ACORN_FAILURES = [
 # A row that can only be met on one carrier: the marks are looked for in the row's start above.
 ONLY = {
     "blade": ["GPIO14 (TMS) is held by", "gpiod_line_request_set_values_subset"],
-    "pi5": ["`J5 -> GPIO3:", "power-cycle fail:"],  # the power-cycle check was measured on a Pi 5 only
+    "pi5": ["J5 -> GPIO3:", "power-cycle fail:"],  # the power-cycle check was measured on a Pi 5 only
 }
 if set(ONLY) - set(wiring.CARRIERS) or any(
     sum(m in s for s in ACORN_FAILURES) != 1 for ms in ONLY.values() for m in ms
