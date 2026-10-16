@@ -61,7 +61,13 @@ select = [
     "B",      # flake8-bugbear
     "SIM",    # flake8-simplify
     "RUF",    # ruff-specific rules
+    "TID251", # banned APIs (below)
 ]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# Its bank select compares one address bit too many against the whole word address: at the iCE40 SoCs' SPRAM
+# address (0x00020000) it chose no bank, so nothing was written and every word read 0 (#343, #355).
+"litex.soc.cores.ram.Up5kSPRAM".msg = "use designs._shared.up5k_spram.Up5kSPRAM: LiteX's chooses the wrong bank (#355)"
 
 [tool.ruff.lint.per-file-ignores]
 # LiteX/migen gateware code requires monkey-patching before imports and uses
