@@ -253,9 +253,9 @@ class TTFPGA(TestBoard):
         "sdk": {
             "variants": ("tt-fpga", "tt-asic"),
             "check": sdk_check,
-            "reads": "before the tests, over the board's USB serial: `tt_main_py.py` reads main.py's SHA-256, "
-            "`tt_sdk_start.py` starts the SDK (a soft reset), then rpi-hwid asks the board what it is; "
-            "nothing is loaded",
+            "reads": "before the tests, over the board's USB serial: `tt_main_py.py` reads main.py's SHA-256 (a "
+            "main.py that is not the SDK's stops it there); then, where rpi-hwid is installed, `tt_sdk_start.py` "
+            "starts the SDK (a soft reset) and rpi-hwid asks the board what it is; nothing is loaded",
         }
     }
     # The Pmod cabling of a board with a Tiny Tapeout chip, against the cabling the boards have (ui_in on HAT

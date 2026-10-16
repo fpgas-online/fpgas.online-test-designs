@@ -224,6 +224,11 @@ class Fomu(TestBoard):
                    "args": [], "pre": PMOD_PRE, "needs": ("foboot",)},
     }  # fmt: skip
     closing_test = "foboot-after"
+    # what the closing step runs, for docs/verify/checks.md (finish() below)
+    closing_runs = (
+        "the last step, after every test, only when header and foboot passed: the iCE40 is reset through the header "
+        "back into foboot"
+    )
     # It sits on the Pi's header: its wiring is the header and uart tests' (checks.derive).
     derives: ClassVar[dict] = {
         "evt": {"wiring": (("header", "uart"), "it sits on the Pi's header: its reset, CDONE and SPI flash lines "

@@ -23,7 +23,9 @@ read; and the FPGA is never reconfigured.
   p2-uart    the UARTBone bridge on P2 at both baud rates: identifier, DNA, XADC (links.py)
   p2-serial  J2/K2 in both directions through the p2_serial switch, then the UARTBone again (links.py)
   scratch    the ctrl scratch register written and read back over BAR0 and over the P2 UART
-  p2-gpio    J5/H5 in both directions (links.py), on a setup whose cable carries them
+  p2-gpio    J5/H5 in both directions (links.py), on a setup whose cable carries them: the Pi 5 with the
+             Waveshare HAT. On a Compute Blade (CM4 or CM5) they are not wired: the test is not run there, said
+             so, and left out of `wiring`
 
 Opt-in (`power-cycle-check = on`, config.py; off outside the fpgas.online fleet), after pcie-bar0:
 

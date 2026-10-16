@@ -79,8 +79,7 @@ def runs(board, variant, test, untested, derived, only_when_asked):
         detail = acorn_details().get(test)
         if not detail:
             raise GapError(f"{board.title}: the Acorn suite's docstring has no line for {test!r}")
-        text = f"{detail} ([the Acorn check](acorn.md#acorn))"
-        return text + (f"; {acorn_suite.OPT_IN.split(': ', 1)[1]}" if only_when_asked else "")
+        return detail + (f"; {acorn_suite.OPT_IN.split(': ', 1)[1]}" if only_when_asked else "")
     if variant is None:
         return "the tests of the board's own variant (the rows above), once the board has said which it is"
     script = board.script_tests.get(test)
@@ -97,7 +96,10 @@ def runs(board, variant, test, untested, derived, only_when_asked):
     if test == "jtag" and variant in board.idcodes:
         return "reads the JTAG IDCODE and device DNA; loads nothing"
     if test == board.closing_test:
-        return "the last step, after every test"
+        closing = getattr(board, "closing_runs", None)
+        if not closing:
+            raise GapError(f"{board.title}: the closing step {test!r} does not say what it runs")
+        return closing
     raise GapError(f"{board.title} {variant}: no way to say what runs for {test!r}")
 
 

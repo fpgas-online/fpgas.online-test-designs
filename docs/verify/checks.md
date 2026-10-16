@@ -18,25 +18,25 @@ When the boot check of the boot the Pi is running reported its result (its `fpga
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| Sqrl Acorn | every | the PCIe link's speed and width are the setup's | the link speed and width in sysfs, against the setup's expected figures (expected.toml) ([the Acorn check](acorn.md#acorn)) |
+| Sqrl Acorn | every | the PCIe link's speed and width are the setup's | the link speed and width in sysfs, against the setup's expected figures (expected.toml) |
 
 ## pcie-bar0
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| Sqrl Acorn | every | over PCIe BAR0: the build running, the flash's identity, the device DNA, the XADC readings | over BAR0: which build runs (golden is a fault: the operational slot did not boot), the flash's identity, the device DNA and the XADC temperature and voltages ([the Acorn check](acorn.md#acorn)) |
+| Sqrl Acorn | every | over PCIe BAR0: the build running, the flash's identity, the device DNA, the XADC readings | over BAR0: which build runs (golden is a fault: the operational slot did not boot), the flash's identity, the device DNA and the XADC temperature and voltages |
 
 ## rp1-pio
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| Sqrl Acorn | every | the Pi 5's RP1 PIO, which JTAG uses, is there and can be opened | on a Pi 5 / CM5: the RP1 PIO that openFPGALoader's rp1pio cable uses, /dev/pio0 there and openable (links.py) ([the Acorn check](acorn.md#acorn)) |
+| Sqrl Acorn | every | the Pi 5's RP1 PIO, which JTAG uses, is there and can be opened | on a Pi 5 / CM5: the RP1 PIO that openFPGALoader's rp1pio cable uses, /dev/pio0 there and openable (links.py) |
 
 ## jtag
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| Sqrl Acorn | every | over the P1 cable, the JTAG IDCODE and device DNA read, and the DNA is BAR0's | IDCODE and device DNA over P1 (links.py); the DNA must be BAR0's ([the Acorn check](acorn.md#acorn)) |
+| Sqrl Acorn | every | over the P1 cable, the JTAG IDCODE and device DNA read, and the DNA is BAR0's | IDCODE and device DNA over P1 (links.py); the DNA must be BAR0's |
 | Digilent Arty A7 | `a7-35` | over its FT2232H, the JTAG IDCODE is an XC7A35T's and the device DNA reads | reads the JTAG IDCODE and device DNA; loads nothing |
 | Kosagi NeTV2 | `a7-35`, `a7-100` | over the Pi's header, the JTAG IDCODE is the variant's part and the device DNA reads | reads the JTAG IDCODE and device DNA; loads nothing |
 
@@ -51,7 +51,7 @@ Not for:
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| Sqrl Acorn | every | both flash slots are read whole and match the release's images | both flash slots read whole and compared with the release's images ([the Acorn check](acorn.md#acorn)) |
+| Sqrl Acorn | every | both flash slots are read whole and match the release's images | both flash slots read whole and compared with the release's images |
 | Digilent Arty A7 | `a7-35` | a test design reads the SPI flash's JEDEC ID | loads its test design, then runs [`test_spiflash.py`](../../designs/spi-flash-id/host/test_spiflash.py) |
 | Fomu EVT | `evt` | a test design loaded over DFU reads the SPI flash's JEDEC ID: the EVT's W25Q128JV (ef7018) | loads its test design, then runs [`test_spiflash.py`](../../designs/spi-flash-id/host/test_spiflash.py) |
 | Kosagi NeTV2 | `a7-35`, `a7-100` | a test design reads the SPI flash's JEDEC ID | loads its test design, then runs [`test_spiflash.py`](../../designs/spi-flash-id/host/test_spiflash.py) |
@@ -66,7 +66,7 @@ Not for:
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| Sqrl Acorn | every | the DRAM self-test over the whole DRAM: no errors, bandwidth at least the variant's minimum | the BIOS console read out (it lets the BIOS finish DRAM set-up, #47), then the DRAM BIST over the whole DRAM, two passes (bist.py): no errors, and write and read bandwidth at least the variant's minimum (expected.toml) ([the Acorn check](acorn.md#acorn)) |
+| Sqrl Acorn | every | the DRAM self-test over the whole DRAM: no errors, bandwidth at least the variant's minimum | the BIOS console read out (it lets the BIOS finish DRAM set-up, #47), then the DRAM BIST over the whole DRAM, two passes (bist.py): no errors, and write and read bandwidth at least the variant's minimum (expected.toml) |
 | Digilent Arty A7 | `a7-35` | the LiteX BIOS calibrates the DDR3 and its memory test passes | loads its test design, then runs [`test_ddr.py`](../../designs/ddr-memory/host/test_ddr.py) |
 | Kosagi NeTV2 | `a7-35`, `a7-100` | the LiteX BIOS calibrates the DDR3 and its memory test passes | loads its test design, then runs [`test_ddr.py`](../../designs/ddr-memory/host/test_ddr.py) |
 
@@ -79,25 +79,25 @@ Not for:
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| Sqrl Acorn | every | the UARTBone bridge on the P2 cable answers at both baud rates | the UARTBone bridge on P2 at both baud rates: identifier, DNA, XADC (links.py) ([the Acorn check](acorn.md#acorn)) |
+| Sqrl Acorn | every | the UARTBone bridge on the P2 cable answers at both baud rates | the UARTBone bridge on P2 at both baud rates: identifier, DNA, XADC (links.py) |
 
 ## p2-serial
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| Sqrl Acorn | every | J2 and K2 on the P2 cable work in both directions through the P2 serial switch | J2/K2 in both directions through the p2_serial switch, then the UARTBone again (links.py) ([the Acorn check](acorn.md#acorn)) |
+| Sqrl Acorn | every | J2 and K2 on the P2 cable work in both directions through the P2 serial switch | J2/K2 in both directions through the p2_serial switch, then the UARTBone again (links.py) |
 
 ## scratch
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| Sqrl Acorn | every | the scratch register reads back what was written, over BAR0 and over the P2 UART | the ctrl scratch register written and read back over BAR0 and over the P2 UART ([the Acorn check](acorn.md#acorn)) |
+| Sqrl Acorn | every | the scratch register reads back what was written, over BAR0 and over the P2 UART | the ctrl scratch register written and read back over BAR0 and over the P2 UART |
 
 ## p2-gpio
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| Sqrl Acorn | every | J5 and H5 on the P2 cable work in both directions | J5/H5 in both directions (links.py), on a setup whose cable carries them ([the Acorn check](acorn.md#acorn)) |
+| Sqrl Acorn | every | J5 and H5 on the P2 cable work in both directions | J5/H5 in both directions (links.py), on a setup whose cable carries them: the Pi 5 with the Waveshare HAT. On a Compute Blade (CM4 or CM5) they are not wired: the test is not run there, said so, and left out of `wiring` |
 
 ## wiring
 
@@ -115,7 +115,7 @@ Not for:
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| Sqrl Acorn | every | the FPGA restarted since the last boot's check (scratch holds its reset value or this boot's marker) | the FPGA restarted since the last check (check.power_cycle_verdict): the ctrl scratch register holds its reset value, or this boot's marker. The marker is written at the end of the check, the only write that is not put back. ([the Acorn check](acorn.md#acorn)); set `power-cycle-check = on` in /etc/fpgas-verify/*.ini to run it |
+| Sqrl Acorn | every | the FPGA restarted since the last boot's check (scratch holds its reset value or this boot's marker) | the FPGA restarted since the last check (check.power_cycle_verdict): the ctrl scratch register holds its reset value, or this boot's marker. The marker is written at the end of the check, the only write that is not put back.; set `power-cycle-check = on` in /etc/fpgas-verify/*.ini to run it |
 
 ## uart
 
@@ -161,13 +161,13 @@ Not for:
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| Fomu EVT | `evt` | the closing reset brings foboot back on USB, so the next user can load a design | the last step, after every test |
+| Fomu EVT | `evt` | the closing reset brings foboot back on USB, so the next user can load a design | the last step, after every test, only when header and foboot passed: the iCE40 is reset through the header back into foboot |
 
 ## sdk
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| TT FPGA Demo Board | `tt-fpga`, `tt-asic` | the board's chip, shuttle, microcontroller and SDK release are a combination the SDK supports | judges what the check read: before the tests, over the board's USB serial: `tt_main_py.py` reads main.py's SHA-256, `tt_sdk_start.py` starts the SDK (a soft reset), then rpi-hwid asks the board what it is; nothing is loaded |
+| TT FPGA Demo Board | `tt-fpga`, `tt-asic` | the board's chip, shuttle, microcontroller and SDK release are a combination the SDK supports | judges what the check read: before the tests, over the board's USB serial: `tt_main_py.py` reads main.py's SHA-256 (a main.py that is not the SDK's stops it there); then, where rpi-hwid is installed, `tt_sdk_start.py` starts the SDK (a soft reset) and rpi-hwid asks the board what it is; nothing is loaded |
 | TT FPGA Demo Board | not yet known | the board's chip, shuttle, microcontroller and SDK release are a combination the SDK supports | the tests of the board's own variant (the rows above), once the board has said which it is |
 
 ## dip-switches
