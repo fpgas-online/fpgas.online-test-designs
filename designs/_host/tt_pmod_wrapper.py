@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """Program TT FPGA Demo Board for PMOD loopback and release RP2350 GPIOs.
 
-Programs the iCE40 with the loopback bitstream via RP2350, starts the
-50 MHz clock, then releases all RP2350 GPIOs to high-Z so the RPi can
-drive/read them directly through the PMOD HAT. That is exactly
-`tt_fpga_program.py --gpio-release`, which this calls: the RP2350 reads
-the bitstream from this host over the serial link, and nothing is written
-to the demo board.
+Programs the iCE40 with the loopback bitstream via RP2350 (`openFPGALoader
+-b tt_fpga`, tt_test_wrapper.load), which also starts the 50 MHz clock and
+leaves the RP2350's ui_in/uo_out/uio GPIOs high-Z so the RPi can drive/read
+them directly through the PMOD HAT. The bitstream is streamed from this host
+over the serial link, and nothing is written to the demo board.
 
 The actual GPIO loopback test runs on the RPi via test_pmod_loopback.py.
 
@@ -18,8 +17,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import tt_fpga_program
-from tt_test_wrapper import reset_rp2350
+from tt_test_wrapper import LOADED, load, reset_rp2350
 
 
 def main():
@@ -30,11 +28,11 @@ def main():
 
     print("Programming FPGA and releasing GPIOs...")
     reset_rp2350(port)
-    rc, out, err = tt_fpga_program.program(port, bitstream, gpio_release=True)
+    rc, out, err = load(port, bitstream)
     print(out.strip())
     if err.strip():
         print(err.strip(), file=sys.stderr)
-    if rc != 0 or "GPIO_RELEASED" not in out:
+    if rc != 0 or LOADED not in out:
         print("ERROR: Setup did not complete", file=sys.stderr)
         return 1
     print("FPGA programmed with loopback, GPIOs released.")

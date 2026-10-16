@@ -15,9 +15,9 @@ back down); it is the same load a switch that is on puts on the tests. The pins 
 pull-down, which is how the Tiny Tapeout SDK sets them on a board with the FPGA breakout.
 
 Nothing else may hold the lines while they are read, so it runs:
-  - after the check has loaded the display design (designs/tt-display) with --gpio-release: that design
+  - after the check has loaded the display design (designs/tt-display) with openFPGALoader: that design
     drives only uo_out and leaves ui_in and uio undriven with the iCE40's pull-up off (an unused iCE40 pin
-    keeps a weak pull-up, which would stand against the pull-down), and --gpio-release has made the RP2350's
+    keeps a weak pull-up, which would stand against the pull-down), and openFPGALoader has made the RP2350's
     signal pins inputs;
   - with the Raspberry Pi's eight GPIOs on HAT JA (ui_in) set to inputs with their pull-down, for the read
     only, then put back as they were, with pinctrl. JA pins 2 to 4 are also JB's: the HAT joins ui_in[1..3]
