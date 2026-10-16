@@ -264,6 +264,8 @@ def page():
         if check not in checks.GROUP_OF:
             raise GapError(f"{check!r} has no group in checks.GROUP_OF")
         out += [f"## {check}", ""]
+        if check in checks.WHAT:
+            out += [checks.WHAT[check], ""]
         out += [
             f"Group on the dashboards: `{checks.GROUP_OF[check]}`.",
             "",
