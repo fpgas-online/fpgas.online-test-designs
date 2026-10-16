@@ -20,21 +20,22 @@ boot's result an error: a Pi label is never made from half a read.
 import json
 import math
 import shutil
+import subprocess
 
 from . import identity
 from .core import Problem
-from .core import run as run_command
 
 TOOL = "rpi-hwid"
 ARGV = (TOOL, "label-input", "--pi-only")
 SCHEMA = "pi-identity/1"
-TIMEOUT = 120  # the HAT EEPROM read and the i2c-dev / dtparam set-up and take-down it puts back
+TIMEOUT = 120  # the whole --pi-only read: the HAT EEPROM over GPIO0/1 (rpi-hwid #92), vcgencmd, sysfs
+KILL_REAP_S = 5  # how long a killed rpi-hwid is given to exit
 # rpi-hwid's Summary fields the site takes from this event (fpgas.online-site fleet/hwid.py PI_FIELDS), in its order
 FIELDS = ("compatible", "power_class", "hat_uuid", "fan", "rtc_battery", "max_current_ma", "ext5v_v",
           "header", "macs", "usb_net")  # fmt: skip
 LISTS = ("header", "macs", "usb_net")
-# The site keeps 300 characters of an event value in its displays; the label builder takes the whole value. A
-# reason is cut here, saying so, so the note on the page stays readable.
+# A reason is cut to this many characters, keeping its end, where the cause is ("… exited 1: <what rpi-hwid said>"),
+# as checks.FIT keeps the fleet pages' per-test reasons; the site shows a reader_error whole up to its own limit.
 REASON_MAX = 300
 
 
@@ -72,7 +73,8 @@ def details(read):
     out = {"schema": SCHEMA, "reader": read["reader"]}
     if "reader_error" in read:
         why = read["reader_error"]
-        out["reader_error"] = why if len(why) <= REASON_MAX else why[: REASON_MAX - 1] + "…"
+        # the cause is at the end of a reason ("… exited 1: <rpi-hwid's last lines>"), so a long one keeps its end
+        out["reader_error"] = why if len(why) <= REASON_MAX else "…" + why[-(REASON_MAX - 1) :]
         return out
     for field, value in read.get("facts", {}).items():
         out[field] = detail(value)
@@ -90,25 +92,56 @@ def detail(value):
     return identity.detail(value)
 
 
-def read(run=run_command, which=shutil.which):
+def run_apart(argv, timeout):
+    """(returncode, stdout, stderr) of argv, kept apart: rpi-hwid prints its document on stdout and what it did on
+    stderr, so the document is all of stdout. A timeout kills the child and waits for it a bounded KILL_REAP_S at
+    most, then raises Problem: a child stuck in the kernel (mithro/rpi-hwid #91) never holds up the boot check.
+    A command that cannot be started is a Problem too."""
+    try:
+        p = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    except OSError as e:
+        raise Problem("error", f"{argv[0]} could not be run: {e.strerror or e}") from None
+    try:
+        out, err = p.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        how = "it was killed"
+        try:
+            p.kill()
+            p.wait(timeout=KILL_REAP_S)
+        except OSError as e:
+            how = f"it could not be killed ({e.strerror or e})"
+        except subprocess.TimeoutExpired:
+            how = f"it was killed but had not exited {KILL_REAP_S} s later"
+        for pipe in (p.stdout, p.stderr):
+            pipe.close()
+        raise Problem("error", f"{' '.join(argv)} did not finish within {timeout} s; {how}") from None
+    return p.returncode, out, err
+
+
+def read(run=run_apart, which=shutil.which):
     """{"reader": "rpi-hwid", "facts": {...}}; {"reader": "none"} when rpi-hwid is not installed; or
-    {"reader": "rpi-hwid", "reader_error": why} when it ran and did not give the facts."""
+    {"reader": "rpi-hwid", "reader_error": why} when it ran and did not give the facts. Whatever goes wrong in the
+    read is a reader_error, never an exception: the boards are still checked."""
+    try:
+        return _read(run, which)
+    except Exception as e:  # a bug here must not stop the boards' checks: the boot is still an error, saying why
+        return {"reader": TOOL, "reader_error": f"reading the Pi's facts crashed: {type(e).__name__}: {e}"}
+
+
+def _read(run, which):
     if not which(TOOL):
         return {"reader": "none"}
     try:
-        rc, text = run(list(ARGV), TIMEOUT)
+        rc, out, err = run(list(ARGV), TIMEOUT)
     except Problem as p:
         return {"reader": TOOL, "reader_error": p.reason}
     if rc != 0:
-        last = " / ".join(line for line in text.strip().splitlines()[-3:] if line.strip()) or "no output"
+        last = " / ".join(line for line in (err or out).strip().splitlines()[-3:] if line.strip()) or "no output"
         return {"reader": TOOL, "reader_error": f"{' '.join(ARGV)} exited {rc}: {last}"}
-    # rpi-hwid prints the document on stdout and what it did on stderr; run() gives both, so the document is the
-    # one JSON object in the output, from its first "{" line.
-    start = next((i for i, line in enumerate(text.splitlines()) if line.startswith("{")), None)
-    if start is None:
+    if not out.strip():
         return {"reader": TOOL, "reader_error": f"{' '.join(ARGV)} printed no JSON document"}
     try:
-        document = json.loads("\n".join(text.splitlines()[start:]))
+        document = json.loads(out)
         return {"reader": TOOL, "facts": facts(document)}
     except json.JSONDecodeError as e:
         return {"reader": TOOL, "reader_error": f"{' '.join(ARGV)} printed JSON that does not parse: {e}"}

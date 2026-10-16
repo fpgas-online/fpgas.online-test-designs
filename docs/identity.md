@@ -193,8 +193,12 @@ the HAT ID bus named a HAT) is left out, never sent as `[]`, so the site refuses
 GPIO2 and GPIO3 are safe to drive then.
 
 A `reader_error` makes the boot's result `error`, and its reason starts "the Pi's own facts were not read". The
-boards are still checked, and their results stand. `--pi-only` loads `i2c-dev` and turns on the HAT ID bus
-(`dtparam i2c_vc=on`) where they are not already, and takes both away again afterwards. `--test` runs and
+boards are still checked, and their results stand. `--pi-only` (rpi-hwid 0.0.post597 and later, mithro/rpi-hwid
+#92) reads the HAT's EEPROM over GPIO0/1 itself, as an I2C master through the GPIO character device, with no
+`dtparam` and no module loaded; where `/dev/i2c-0` already exists it reads through that. It reads each pin's
+function and pull before and after and puts them back, and anything it cannot read or put back is an error
+(exit 1), which here is a `reader_error`. rpi-hwid's stdout is the document; what it says on stderr is kept apart,
+and named in the reason when it fails. `--test` runs and
 `fpgas-<board>-debug` do not read the Pi. The report keeps the read as `pi`.
 
 ## The document
