@@ -8,7 +8,7 @@ Checks: [Boot check](#boot-check), [Check ran](#check-ran), [`pcie-link`](#pcie-
 
 ## Boot check
 
-The check fpgas-verify runs at every boot of a Pi with an FPGA board: it finds the board, runs every check below that the board's type gets, in order, and reports one result for the boot: `pass` (every check passed), `fail` (a check failed), `error` (the check could not finish), or `missing` (it found no board). The dashboards show it as the Boot check column; a board is offered to visitors only after a `pass`. [Reading the result](reading-the-result.md) says what each result means.
+The check fpgas-verify runs at every boot of a Pi with an FPGA board: it finds the board, runs every check below that the board's type gets, in order, and reports one result for the boot: `pass` (every check passed), `fail` (a check failed), `error` (the check could not finish), or `missing` (it found no board). The dashboards show it as the Boot check column; a board is offered to visitors only after a `pass`. [Reading the result](reading-the-result.md) says what each result means, and [common failures](common-failures.md#common-failures) what to do about each message.
 
 ## Check ran
 
@@ -20,17 +20,39 @@ When the boot check of the boot the Pi is running reported its result (its `fpga
 |---|---|---|---|
 | Sqrl Acorn | every | the PCIe link's speed and width are the setup's | the link speed and width in sysfs, against the setup's expected figures ([`expected.toml`](../../docs/wiring/acorn/expected.toml)) |
 
+When it fails:
+
+| It says | Meaning, and what to do |
+|---|---|
+| `fail`: `pcie-link fail: link is x2, expected x1` | the Acorn's PCIe link is not the setup's (`expected.toml`) |
+
+The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
+
 ## pcie-bar0
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
 | Sqrl Acorn | every | over PCIe BAR0: the build running, the flash's identity, the device DNA, the XADC readings | over BAR0: which build runs (golden is a fault: the operational slot did not boot), the flash's identity, the device DNA and the XADC temperature and voltages |
 
+When it fails:
+
+| It says | Meaning, and what to do |
+|---|---|
+| `fail`: `pcie-bar0 fail: running the golden image` | the Acorn's operational slot did not boot; it fell back to golden |
+
+The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
+
 ## rp1-pio
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
 | Sqrl Acorn | every | the Pi 5's RP1 PIO, which JTAG uses, is there and can be opened | on a Pi 5 / CM5: the RP1 PIO that openFPGALoader's rp1pio cable uses, /dev/pio0 there and openable ([`links.py`](../../verify/src/fpgas_online_verify/boards/acorn/links.py)) |
+
+When it fails:
+
+Its reason is the last line its test printed.
+
+The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
 
 ## jtag
 
@@ -47,6 +69,25 @@ Not for:
 * TT FPGA Demo Board (`tt-asic`): a Tiny Tapeout chip is an ASIC, not an FPGA: nothing on it is configured over JTAG
 * TT FPGA Demo Board (not yet known): neither a TT FPGA breakout (an iCE40UP5K, loaded through the RP2350) nor a Tiny Tapeout chip has a JTAG port
 
+When it fails:
+
+| It says | Meaning, and what to do |
+|---|---|
+| `fail`: `jtag fail: … is an XC7A100T, not the a7-35's XC7A35T …` / `jtag fail: P1 JTAG chain has … expected one …` | the JTAG IDCODE is not the variant's part: the wrong board, or the wrong `--variant` |
+| `fail`: `jtag fail: the JTAG chain has N devices (…), not one` | more than the board's FPGA answers on its JTAG chain (an Arty or a NeTV2): another device wired into it, or a fault on the cable |
+| `fail`: `jtag fail: no device on the P1 JTAG chain` / `p2-uart fail: no UARTBone reply on /dev/ttyAMA0` | an Acorn's JTAG or P2 UART cable is off or miswired |
+| `fail`: `jtag fail: P1 JTAG could not be probed: GPIO14 (TMS) is held by 1f00030000.serial (uart0): the kernel does not hand out a pin that is held…` | an Acorn's JTAG pin is in use by another driver, so the JTAG tool was not started. On a Compute Blade with a CM5 (kernel 6.18), TMS and the serial port's TX are both GPIO14, and with the serial port on the kernel does not lend the pin: JTAG cannot be tested there while the serial port is on. With the header's serial port off at boot the pin is free: [How to make a Compute Blade boot ready for JTAG](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html) |
+| `fail`: `jtag fail: … gpiod_line_request_set_values_subset: Assertion 'request' failed` | openFPGALoader could not have one of the JTAG pins, because a driver holds it. On a Compute Blade with a CM5 (kernel 6.18) the serial port holds GPIO14, which is also JTAG TMS: the JTAG test cannot run there while the serial port is on. With the header's serial port off at boot the pin is free: [How to make a Compute Blade boot ready for JTAG](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html) |
+| `fail`: `jtag fail: openFPGALoader printed no raw IDCODE scan (needs --verbose-level 2 output)` | the tool's version, not the board: openFPGALoader exited 0 but printed no `- 0 -> 0x...` lines at `--verbose-level 2`, so it is older than v0.9.0. Its last lines are in the report's `output` |
+| `fail`: `jtag fail: … failed (exit N) before scanning the JTAG chain: …` | the scan tool exited with an error and printed no scan: the cable or gpiochip would not open, say. The reason ends with its last line of output; more is in the report's `output` |
+| `fail`: `jtag fail: … exited N reading the IDCODE` / `jtag fail: openFPGALoader --detect exited N …` | the IDCODE scan reported an error, even if it printed an IDCODE; its last lines are in the report's `output` |
+| `fail`: `jtag fail: device DNA over P1 JTAG reads 0x…: the DNA port is not being read` | the DNA read over JTAG is all zeros or all ones, which is no chip's DNA. The IDCODE read worked without TDI, so check the P1 TDI wire first. On a Raspberry Pi 5: then run `openFPGALoader --read-dna` by hand. On a Compute Blade: ask the site operator, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Check the TDI wire with the card out and both plugs pulled, as steps 3 and 4 of [How to fill the JTAG cable's housing (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/jtag-housing.html) do; fit the cables again ([How to fit the cables and the card (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/fitting.html)), and run only the check's `jtag` test (`sudo fpgas-acorn-verify --no-publish --test jtag`), in a boot with the header's serial port off, and only after steps 7 and 8 of [How to make a Compute Blade boot ready for JTAG](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html) pass (check that GPIO14 is free; check that nothing on the card drives GPIO14); not `openFPGALoader` by hand |
+| `fail`: `jtag fail: device DNA over JTAG reads 0x…: the DNA port is not being read` | an Arty's or NeTV2's DNA read is all zeros or all ones. Its IDCODE scan works without TDI, so check TDI first (the NeTV2's GPIO27); then run `openFPGALoader --read-dna` by hand |
+| `fail`: `jtag fail: openFPGALoader --read-dna read no device DNA (exit N): …` | an Arty's or NeTV2's DNA read failed; the reason ends with its last line. An openFPGALoader older than 0.13.0 (Debian bookworm's) has no `--read-dna`: install fpgas.online's ([Installing](installing.md#installing)) |
+| `fail`: `jtag fail: device DNA over JTAG … is not the one over BAR0` | the P1 TDI wire does not carry, or the DNA readout is wrong. Only a good BAR0 DNA is compared: one of all zeros or all ones is pcie-bar0's own fault (`device DNA over BAR0 reads 0x0: the DNA port is not being read`) |
+
+The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
+
 ## flash
 
 | Board | Variants | What it checks | What the check runs |
@@ -62,6 +103,15 @@ Not for:
 * TT FPGA Demo Board (`tt-asic`): a Tiny Tapeout chip is an ASIC: it has no configuration flash to test
 * TT FPGA Demo Board (not yet known): neither a TT FPGA breakout nor a Tiny Tapeout chip has a configuration flash
 
+When it fails:
+
+| It says | Meaning, and what to do |
+|---|---|
+| `fail`: `flash fail: the reset back into foboot before it: foboot (1209:5bf0) did not come back on USB…` (Fomu) | `uart`'s design ran, but the reset through the header between the two DFU loads did not bring foboot back, so `flash`'s design was not loaded. Look at the Fomu's USB path, as for `foboot fail` |
+| `fail`: `flash fail: JEDEC ID mismatch -- expected 0xEF 0x70 0x18, got …` (Fomu) | the test design read another flash than the EVT's W25Q128JV over the FPGA's own SPI pins, while `header` read `ef7018` over the Pi's: the FPGA's path to its flash is faulty |
+
+The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
+
 ## ddr
 
 | Board | Variants | What it checks | What the check runs |
@@ -75,11 +125,27 @@ Not for:
 * Fomu EVT (`evt`): the Fomu EVT has no DRAM
 * TT FPGA Demo Board (`tt-fpga`, `tt-asic`, not yet known): the demo board has no DRAM
 
+When it fails:
+
+| It says | Meaning, and what to do |
+|---|---|
+| `fail`: `ddr fail: DRAM write … MB/s, below the … MB/s expected` / `ddr fail: … words wrong in the … half` | the DRAM is slow or broken; `selftest.py` shows more |
+
+The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
+
 ## p2-uart
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
 | Sqrl Acorn | every | the UARTBone bridge on the P2 cable answers at both baud rates | the UARTBone bridge on P2 at both baud rates: identifier, DNA, XADC ([`links.py`](../../verify/src/fpgas_online_verify/boards/acorn/links.py)) |
+
+When it fails:
+
+| It says | Meaning, and what to do |
+|---|---|
+| `fail`: `jtag fail: no device on the P1 JTAG chain` / `p2-uart fail: no UARTBone reply on /dev/ttyAMA0` | an Acorn's JTAG or P2 UART cable is off or miswired |
+
+The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
 
 ## p2-serial
 
@@ -87,17 +153,39 @@ Not for:
 |---|---|---|---|
 | Sqrl Acorn | every | J2 and K2 on the P2 cable work in both directions through the P2 serial switch | J2/K2 in both directions through the p2_serial switch, then the UARTBone again ([`links.py`](../../verify/src/fpgas_online_verify/boards/acorn/links.py)) |
 
+When it fails:
+
+| It says | Meaning, and what to do |
+|---|---|
+| `fail`: `p2-serial fail: K2 -> GPIO15: …` / `p2-serial fail: GPIO14 -> J2: …` | a P2 serial wire is cut or miswired |
+
+The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
+
 ## scratch
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
 | Sqrl Acorn | every | the scratch register reads back what was written, over BAR0 and over the P2 UART | the ctrl scratch register written and read back over BAR0 and over the P2 UART |
 
+When it fails:
+
+Its reason is the last line its test printed.
+
+The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
+
 ## p2-gpio
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
 | Sqrl Acorn | every | J5 and H5 on the P2 cable work in both directions | J5/H5 in both directions ([`links.py`](../../verify/src/fpgas_online_verify/boards/acorn/links.py)), on a setup whose cable carries them: the Pi 5 with the Waveshare HAT. On a Compute Blade (CM4 or CM5) they are not wired: the test is not run there, said so, and left out of `wiring` |
+
+When it fails:
+
+| It says | Meaning, and what to do |
+|---|---|
+| `fail`: `p2-gpio fail: J5 -> GPIO3: the FPGA drove 0, the Pi read 1` (or the other way) | a P2 spare wire is cut or miswired |
+
+The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
 
 ## wiring
 
@@ -111,11 +199,29 @@ Not for:
 | TT FPGA Demo Board | `tt-asic` | the RP2040 drives each ui_in and uio line and the Pi reads it on its HAT pin, bit by bit | runs [`tt_pmod_wiring.py`](../../designs/_host/tt_pmod_wiring.py); loads nothing |
 | TT FPGA Demo Board | not yet known | the three Pmod ribbons to the Pi's HAT, pin by pin (how depends on the board, not yet said) | the tests of the board's own variant (the rows above), once the board has said which it is |
 
+When it fails:
+
+| It says | Meaning, and what to do |
+|---|---|
+| `fail`: `wiring fail: the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) did not reach HAT JA pin 8…` | a demo board with a Tiny Tapeout chip whose Pmod ribbon to the Pi's Pmod HAT is not where it should be: the reason names the ribbon (`ui_in` to HAT JA, `uio` to JB, `uo_out` to JC), the signal and the pins. `none of its signals reached the Pi` is a ribbon not plugged in; `on each other's HAT ports` is two ribbons swapped; `turned round and one position over` is a ribbon plugged in the wrong way round; `is held high on the demo board` is a DIP switch that is on. Seat, move or switch as it says and run the check again. [The wiring test](tt-fpga.md#the-wiring-test) |
+| `error`: `wiring error: the wiring could not be tested: …` | the wiring test could not make its reading (the board did not answer, its SDK could not select the factory test, too little RP2040 heap, `pinctrl` or gpiod could not read the HAT GPIOs), or did not put the Pi or the board back as they were: the reason says which. [The wiring test](tt-fpga.md#the-wiring-test) |
+| `fail`: `wiring fail: N/24 pins match: HAT JA reads …, HAT JB reads …, HAT JC reads …` (TT FPGA) or `wiring fail: N/18 pins match: …` (Arty), maybe ending `(no signal on HAT JA.10, …)` | the Pmod HAT cabling differs from the board's expected map. The reason names, for each HAT connector, the Arty connector (or the TT's `ui_in`, `uio` or `uo_out`) whose pins it actually reads, and the HAT pins nothing was heard on. In the test's output, the table above that line shows each wire, what was expected on it and what was heard. The line after it says how many of the cabling's signal wires the test covers: all 24 on a TT FPGA board; 18 of 24 on an Arty, whose design cannot test the six wires on the three Pi pins two Pmods share |
+
+The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
+
 ## power-cycle
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
 | Sqrl Acorn | every | the FPGA restarted since the last boot's check (scratch holds its reset value or this boot's marker) | the FPGA restarted since the last check ([`check.power_cycle_verdict`](../../verify/src/fpgas_online_verify/boards/acorn/check.py)): the ctrl scratch register holds its reset value, or this boot's marker. The marker is written at the end of the check, the only write that is not put back; set `power-cycle-check = on` in /etc/fpgas-verify/*.ini to run it |
+
+When it fails:
+
+| It says | Meaning, and what to do |
+|---|---|
+| `fail`: `power-cycle fail: the FPGA has not restarted since an earlier boot's check` | the Acorn kept its configuration across the Pi's restart: power-cycle the Pi (PoE). [The power-cycle check](acorn-power-cycle.md#the-acorn-power-cycle-check-opt-in) |
+
+The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
 
 ## uart
 
@@ -132,6 +238,12 @@ Not for:
 * TT FPGA Demo Board (`tt-asic`): a Tiny Tapeout chip's projects are fixed in silicon: no UART design can be loaded; the wiring test checks its lines to the Pi
 * TT FPGA Demo Board (not yet known): only an FPGA board has a UART test, and the board did not say whether it carries an FPGA
 
+When it fails:
+
+Its reason is the last line its test printed.
+
+The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
+
 ## ethernet
 
 | Board | Variants | What it checks | What the check runs |
@@ -145,11 +257,27 @@ Not for:
 * Fomu EVT (`evt`): the Fomu EVT has no Ethernet
 * TT FPGA Demo Board (`tt-fpga`, `tt-asic`, not yet known): the demo board has no Ethernet
 
+When it fails:
+
+Its reason is the last line its test printed.
+
+The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
+
 ## header
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
 | Fomu EVT | `evt` | over the Pi's header: CDONE, the iCE40 held in reset, the SPI flash's JEDEC and unique IDs | judges what the check read: before the tests, `fomu_header_id.py` over the Pi's header: it holds the iCE40 in reset (CRESET), reads the SPI flash's JEDEC and unique IDs, then lets it boot into foboot |
+
+When it fails:
+
+| It says | Meaning, and what to do |
+|---|---|
+| `header fail: CDONE stayed high with CRESET held low: …` | the Fomu's header does not reach an iCE40's reset: it is not seated on the header, or this is not a Fomu EVT. The flash was not read |
+| `header fail: CDONE was low before the reset: …` | the Fomu's iCE40 runs no design (its flash's boot image did not load), or the board was found on USB but is not on the header. Nothing on the header was driven |
+| `header fail: the flash's JEDEC ID is …, not the EVT's W25Q128JV (ef7018)` | something answered on the header's SPI pins, but not the EVT's flash |
+
+The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
 
 ## foboot
 
@@ -157,11 +285,27 @@ Not for:
 |---|---|---|---|
 | Fomu EVT | `evt` | foboot, its USB DFU bootloader, enumerates again after the reset | judges what the check read: after that reset, the Pi's USB is watched for foboot (1209:5bf0); nothing is loaded |
 
+When it fails:
+
+| It says | Meaning, and what to do |
+|---|---|
+| `foboot fail: foboot (1209:5bf0) did not appear on USB within 10 s of the reset…` | the iCE40 booted (the `header` test says so) but foboot did not enumerate: look at the Fomu's USB path, and at the OpenVizsla when one is inline. The DFU loads (`uart`) fail with it. When the reason ends `only the foboot from before the reset is still listed`, the Fomu did not leave USB at the reset: check that it sits on the Pi's header and that its reset line (CRESET, GPIO27) reaches it |
+
+The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
+
 ## foboot-after
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
 | Fomu EVT | `evt` | the closing reset brings foboot back on USB, so the next user can load a design | the last step, after every test, only when header and foboot passed: the iCE40 is reset through the header back into foboot |
+
+When it fails:
+
+| It says | Meaning, and what to do |
+|---|---|
+| `foboot-after fail: foboot (1209:5bf0) did not come back on USB within 10 s of the closing reset…` | the check's last reset, which puts foboot back for the next user, did not bring foboot back: no design can be loaded over DFU until the Fomu is power-cycled (the site operator's power cycle of the Pi does it). With `only the foboot from before the reset is still listed` in the reason, the Fomu did not leave USB at the reset: check that it sits on the Pi's header and that CRESET (GPIO27) reaches it |
+
+The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
 
 ## sdk
 
@@ -170,14 +314,39 @@ Not for:
 | TT FPGA Demo Board | `tt-fpga`, `tt-asic` | the board's chip, shuttle, microcontroller and SDK release are a combination the SDK supports | judges what the check read: before the tests, over the board's USB serial: `tt_main_py.py` reads main.py's SHA-256 (a main.py that is not the SDK's stops it there); then, where rpi-hwid is installed, `tt_sdk_start.py` starts the SDK (a soft reset) and rpi-hwid asks the board what it is; nothing is loaded |
 | TT FPGA Demo Board | not yet known | the board's chip, shuttle, microcontroller and SDK release are a combination the SDK supports | the tests of the board's own variant (the rows above), once the board has said which it is |
 
+When it fails:
+
+| It says | Meaning, and what to do |
+|---|---|
+| `fail`: `sdk fail: a tt06 chip needs SDK 2.0.x on an RP2040, and the board runs SDK …` / `no SDK release is recorded as supporting …` | the Tiny Tapeout SDK on the demo board is not a release known to work with the chip it carries. The firmware is installed by whoever looks after the board; the check writes nothing to it. [The `sdk` test](tt-fpga.md#the-sdk-test) |
+
+The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
+
 ## dip-switches
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
 | TT FPGA Demo Board | `tt-fpga` | every DIP switch on ui_in is off | loads its test design, then runs [`tt_dip_switches.py`](../../designs/_host/tt_dip_switches.py) |
 
+When it fails:
+
+| It says | Meaning, and what to do |
+|---|---|
+| `fail`: `dip-switches fail: switch N is on: set all DIP switches off` | one or more of the demo board's DIP switches on `ui_in` is on. Set every switch off and run the check again. [The DIP switches](tt-fpga.md#the-dip-switches) |
+
+The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
+
 ## spram
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
 | TT FPGA Demo Board | `tt-fpga` | the iCE40's 128 KB of SPRAM reads back each word's address and its inverse, and each byte lane writes alone | loads its test design, then runs [`test_spram.py`](../../designs/spram/host/test_spram.py) |
+
+When it fails:
+
+| It says | Meaning, and what to do |
+|---|---|
+| `fail`: `spram fail: FAIL at 0x… read 0x… expected 0x…` (TT FPGA) | a word of the iCE40's SPRAM did not read back what was written: the FPGA's internal memory is faulty, or the design did not run as built. [The `spram` test](tt-fpga.md#the-spram-test) |
+| `error`: `spram error: no answer from the SPRAM test design in 15 s: nothing was tested` (TT FPGA) | the SPRAM test design never answered through the RP2350's UART bridge: it did not load or did not start. The `uart` test, which uses the same bridge, says whether the bridge works |
+
+The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).

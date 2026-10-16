@@ -26,6 +26,14 @@ from fpgas_online_verify.boards.acorn import suite as acorn_suite  # noqa: E402
 from fpgas_online_verify.testbench import TestBoard  # noqa: E402
 
 PAGE = REPO / "docs" / "verify" / "checks.md"
+FAILURES = REPO / "docs" / "verify" / "common-failures.md"
+# A message of one test's own, quoted in a common-failures row as the board's reason gives it: "`<test> fail: …`".
+TEST_MESSAGE = re.compile(r"`([a-z0-9-]+) (?:fail|error): ")
+ANY_CHECK = (
+    "The messages any check can give (a design that would not load, a test that did not finish, a tool or package "
+    "missing, a planned test that has no boot-check test yet) are in "
+    "[common failures](common-failures.md#common-failures)."
+)
 ISSUE = "https://github.com/fpgas-online/fpgas.online-test-designs/issues/{}"
 # Acorn's power-cycle test runs only when the check is asked for it (power_cycle_check in fpgas-verify.toml).
 ASKED = {"power_cycle_check": True}
@@ -177,6 +185,30 @@ def collect():
     return rows, not_for, order + [c for c in not_for if c not in order]
 
 
+def failure_rows(checks_on_page):
+    """({check: [row]}, the table's header lines): the rows of common-failures.md's table that quote a check's own
+    message ("`<check> fail: …`"), copied whole, so the reader has what to do where they are. A row naming a check this
+    page has no section for stops the generator: it is a misspelt name, or a check no board plans."""
+    lines = FAILURES.read_text().splitlines()
+    try:
+        start = lines.index("| It says | Meaning, and what to do |")
+    except ValueError:
+        raise GapError(
+            f"{FAILURES.name} has no table headed 'It says | Meaning, and what to do'"
+        ) from None
+    header = lines[start : start + 2]
+    out = {}
+    for line in lines[start + 2 :]:
+        if not line.startswith("| "):
+            break
+        named = list(dict.fromkeys(TEST_MESSAGE.findall(line.split(" | ", 1)[0])))
+        for check in named:
+            if check not in checks_on_page:
+                raise GapError(f"{FAILURES.name} quotes a message of {check!r}, which has no section here")
+            out.setdefault(check, []).append(line)
+    return out, header
+
+
 def variants_text(board_variants, variants):
     """The variants a row is for: "every" for a board that plans the same for all, "not yet known" for a board whose
     check has not settled its variant."""
@@ -187,6 +219,7 @@ def variants_text(board_variants, variants):
 
 def page():
     rows, not_for, order = collect()
+    failures, failures_header = failure_rows(order)
     out = [
         "# Each check, what it tests",
         "",
@@ -209,7 +242,8 @@ def page():
         "below that the board's type gets, in order, and reports one result for the boot: `pass` (every check "
         "passed), `fail` (a check failed), `error` (the check could not finish), or `missing` (it found no board). "
         "The dashboards show it as the Boot check column; a board is offered to visitors only after a `pass`. "
-        "[Reading the result](reading-the-result.md) says what each result means.",
+        "[Reading the result](reading-the-result.md) says what each result means, and "
+        "[common failures](common-failures.md#common-failures) what to do about each message.",
         "",
         "## Check ran",
         "",
@@ -227,7 +261,12 @@ def page():
             for (title, why), variants in nots.items():
                 which = variants_text(BOARD_VARIANTS[title], variants)
                 out.append(f"* {title}" + ("" if which == "every" else f" ({which})") + f": {why}")
-        out.append("")
+        out += ["", "When it fails:", ""]
+        if failures.get(check):
+            out += [*failures_header, *failures[check], ""]
+        else:
+            out += ["Its reason is the last line its test printed.", ""]
+        out += [ANY_CHECK, ""]
     return "\n".join(out)
 
 
