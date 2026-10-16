@@ -50,7 +50,9 @@ The messages any check can give (a design that would not load, a test that did n
 
 When it fails:
 
-Its reason is the last line its test printed.
+| It says | Meaning, and what to do |
+|---|---|
+| `fail`: `rp1-pio fail: /dev/pio0: No such file or directory; kernel module rp1_pio is not loaded; kernel: …` (Acorn on a Pi 5 or CM5) | the Pi's RP1 PIO, which the Acorn's JTAG cable runs on, is not there or cannot be opened, so the JTAG tests cannot run. The reason lists what is missing: `/dev/pio0`, the `rp1_fw` and `rp1_pio` kernel modules, and the kernel's own last line about the RP1. `failed to contact RP1 firmware` there means the Pi's bootloader carries RP1 firmware that `rp1_pio` cannot talk to |
 
 The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
 
@@ -73,18 +75,18 @@ When it fails:
 
 | It says | Meaning, and what to do |
 |---|---|
-| `fail`: `jtag fail: … is an XC7A100T, not the a7-35's XC7A35T …` / `jtag fail: P1 JTAG chain has … expected one …` | the JTAG IDCODE is not the variant's part: the wrong board, or the wrong `--variant` |
-| `fail`: `jtag fail: the JTAG chain has N devices (…), not one` | more than the board's FPGA answers on its JTAG chain (an Arty or a NeTV2): another device wired into it, or a fault on the cable |
-| `fail`: `jtag fail: no device on the P1 JTAG chain` / `p2-uart fail: no UARTBone reply on /dev/ttyAMA0` | an Acorn's JTAG or P2 UART cable is off or miswired |
-| `fail`: `jtag fail: P1 JTAG could not be probed: GPIO14 (TMS) is held by 1f00030000.serial (uart0): the kernel does not hand out a pin that is held…` | an Acorn's JTAG pin is in use by another driver, so the JTAG tool was not started. On a Compute Blade with a CM5 (kernel 6.18), TMS and the serial port's TX are both GPIO14, and with the serial port on the kernel does not lend the pin: JTAG cannot be tested there while the serial port is on. With the header's serial port off at boot the pin is free: [How to make a Compute Blade boot ready for JTAG](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html) |
-| `fail`: `jtag fail: … gpiod_line_request_set_values_subset: Assertion 'request' failed` | openFPGALoader could not have one of the JTAG pins, because a driver holds it. On a Compute Blade with a CM5 (kernel 6.18) the serial port holds GPIO14, which is also JTAG TMS: the JTAG test cannot run there while the serial port is on. With the header's serial port off at boot the pin is free: [How to make a Compute Blade boot ready for JTAG](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html) |
+| `fail`: `jtag fail: … is an XC7A100T, not the a7-35's XC7A35T …` (Arty, NeTV2) / `jtag fail: P1 JTAG chain has … expected one …` (Acorn) | the JTAG IDCODE is not the variant's part: the wrong board, or the wrong `--variant` |
+| `fail`: `jtag fail: the JTAG chain has N devices (…), not one` (Arty, NeTV2) | more than the board's FPGA answers on its JTAG chain (an Arty or a NeTV2): another device wired into it, or a fault on the cable |
+| `fail`: `jtag fail: no device on the P1 JTAG chain` / `p2-uart fail: no UARTBone reply on /dev/ttyAMA0` (Acorn) | an Acorn's JTAG or P2 UART cable is off or miswired |
+| `fail`: `jtag fail: P1 JTAG could not be probed: GPIO14 (TMS) is held by 1f00030000.serial (uart0): the kernel does not hand out a pin that is held…` (Acorn) | an Acorn's JTAG pin is in use by another driver, so the JTAG tool was not started. On a Compute Blade with a CM5 (kernel 6.18), TMS and the serial port's TX are both GPIO14, and with the serial port on the kernel does not lend the pin: JTAG cannot be tested there while the serial port is on. With the header's serial port off at boot the pin is free: [How to make a Compute Blade boot ready for JTAG](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html) |
+| `fail`: `jtag fail: … gpiod_line_request_set_values_subset: Assertion 'request' failed` (Acorn on a Compute Blade) | openFPGALoader could not have one of the JTAG pins, because a driver holds it. On a Compute Blade with a CM5 (kernel 6.18) the serial port holds GPIO14, which is also JTAG TMS: the JTAG test cannot run there while the serial port is on. With the header's serial port off at boot the pin is free: [How to make a Compute Blade boot ready for JTAG](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html) |
 | `fail`: `jtag fail: openFPGALoader printed no raw IDCODE scan (needs --verbose-level 2 output)` | the tool's version, not the board: openFPGALoader exited 0 but printed no `- 0 -> 0x...` lines at `--verbose-level 2`, so it is older than v0.9.0. Its last lines are in the report's `output` |
 | `fail`: `jtag fail: … failed (exit N) before scanning the JTAG chain: …` | the scan tool exited with an error and printed no scan: the cable or gpiochip would not open, say. The reason ends with its last line of output; more is in the report's `output` |
-| `fail`: `jtag fail: … exited N reading the IDCODE` / `jtag fail: openFPGALoader --detect exited N …` | the IDCODE scan reported an error, even if it printed an IDCODE; its last lines are in the report's `output` |
-| `fail`: `jtag fail: device DNA over P1 JTAG reads 0x…: the DNA port is not being read` | the DNA read over JTAG is all zeros or all ones, which is no chip's DNA. The IDCODE read worked without TDI, so check the P1 TDI wire first. On a Raspberry Pi 5: then run `openFPGALoader --read-dna` by hand. On a Compute Blade: ask the site operator, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Check the TDI wire with the card out and both plugs pulled, as steps 3 and 4 of [How to fill the JTAG cable's housing (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/jtag-housing.html) do; fit the cables again ([How to fit the cables and the card (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/fitting.html)), and run only the check's `jtag` test (`sudo fpgas-acorn-verify --no-publish --test jtag`), in a boot with the header's serial port off, and only after steps 7 and 8 of [How to make a Compute Blade boot ready for JTAG](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html) pass (check that GPIO14 is free; check that nothing on the card drives GPIO14); not `openFPGALoader` by hand |
-| `fail`: `jtag fail: device DNA over JTAG reads 0x…: the DNA port is not being read` | an Arty's or NeTV2's DNA read is all zeros or all ones. Its IDCODE scan works without TDI, so check TDI first (the NeTV2's GPIO27); then run `openFPGALoader --read-dna` by hand |
-| `fail`: `jtag fail: openFPGALoader --read-dna read no device DNA (exit N): …` | an Arty's or NeTV2's DNA read failed; the reason ends with its last line. An openFPGALoader older than 0.13.0 (Debian bookworm's) has no `--read-dna`: install fpgas.online's ([Installing](installing.md#installing)) |
-| `fail`: `jtag fail: device DNA over JTAG … is not the one over BAR0` | the P1 TDI wire does not carry, or the DNA readout is wrong. Only a good BAR0 DNA is compared: one of all zeros or all ones is pcie-bar0's own fault (`device DNA over BAR0 reads 0x0: the DNA port is not being read`) |
+| `fail`: `jtag fail: … exited N reading the IDCODE` (Arty, NeTV2) / `jtag fail: openFPGALoader --detect exited N …` (Acorn) | the IDCODE scan reported an error, even if it printed an IDCODE; its last lines are in the report's `output` |
+| `fail`: `jtag fail: device DNA over P1 JTAG reads 0x…: the DNA port is not being read` (Acorn) | the DNA read over JTAG is all zeros or all ones, which is no chip's DNA. The IDCODE read worked without TDI, so check the P1 TDI wire first. On a Raspberry Pi 5: then run `openFPGALoader --read-dna` by hand. On a Compute Blade: ask the site operator, then power off the Compute Blade: unplug its PoE cable, and a USB-C cable if one is plugged in. Check the TDI wire with the card out and both plugs pulled, as steps 3 and 4 of [How to fill the JTAG cable's housing (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/jtag-housing.html) do; fit the cables again ([How to fit the cables and the card (Compute Blade)](https://docs.fpgas.online/en/latest/boards/acorn/setup/compute-blade/fitting.html)), and run only the check's `jtag` test (`sudo fpgas-acorn-verify --no-publish --test jtag`), in a boot with the header's serial port off, and only after steps 7 and 8 of [How to make a Compute Blade boot ready for JTAG](https://docs.fpgas.online/en/latest/boards/acorn/checks/compute-blade-jtag.html) pass (check that GPIO14 is free; check that nothing on the card drives GPIO14); not `openFPGALoader` by hand |
+| `fail`: `jtag fail: device DNA over JTAG reads 0x…: the DNA port is not being read` (Arty, NeTV2) | an Arty's or NeTV2's DNA read is all zeros or all ones. Its IDCODE scan works without TDI, so check TDI first (the NeTV2's GPIO27); then run `openFPGALoader --read-dna` by hand |
+| `fail`: `jtag fail: openFPGALoader --read-dna read no device DNA (exit N): …` (Arty, NeTV2) | an Arty's or NeTV2's DNA read failed; the reason ends with its last line. An openFPGALoader older than 0.13.0 (Debian bookworm's) has no `--read-dna`: install fpgas.online's ([Installing](installing.md#installing)) |
+| `fail`: `jtag fail: device DNA over JTAG … is not the one over BAR0` (Acorn) | the P1 TDI wire does not carry, or the DNA readout is wrong. Only a good BAR0 DNA is compared: one of all zeros or all ones is pcie-bar0's own fault (`device DNA over BAR0 reads 0x0: the DNA port is not being read`) |
 
 The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
 
@@ -143,7 +145,7 @@ When it fails:
 
 | It says | Meaning, and what to do |
 |---|---|
-| `fail`: `jtag fail: no device on the P1 JTAG chain` / `p2-uart fail: no UARTBone reply on /dev/ttyAMA0` | an Acorn's JTAG or P2 UART cable is off or miswired |
+| `fail`: `jtag fail: no device on the P1 JTAG chain` / `p2-uart fail: no UARTBone reply on /dev/ttyAMA0` (Acorn) | an Acorn's JTAG or P2 UART cable is off or miswired |
 
 The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
 
@@ -169,7 +171,9 @@ The messages any check can give (a design that would not load, a test that did n
 
 When it fails:
 
-Its reason is the last line its test printed.
+| It says | Meaning, and what to do |
+|---|---|
+| `fail`: `scratch fail: scratch over BAR0: wrote 0x…, read 0x…` / `scratch fail: scratch over P2 UART: no reply on … (…)` (Acorn) | the FPGA's control scratch register did not read back what was written over PCIe (BAR0), or the UARTBone bridge on the P2 cable did not answer. Over BAR0: the design is not running as built, so look at `pcie-bar0` first. Over the P2 UART: the P2 cable, as for `p2-uart` |
 
 The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
 
@@ -240,7 +244,7 @@ Not for:
 
 When it fails:
 
-Its reason is the last line its test printed.
+Common failures lists no message of this check's own: the reason in the check's summary says what it found.
 
 The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
 
@@ -259,7 +263,7 @@ Not for:
 
 When it fails:
 
-Its reason is the last line its test printed.
+Common failures lists no message of this check's own: the reason in the check's summary says what it found.
 
 The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
 

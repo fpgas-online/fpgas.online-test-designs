@@ -263,7 +263,11 @@ def page():
         if failures.get(check):
             out += [*failures_header, *failures[check], ""]
         else:
-            out += ["Its reason is the last line its test printed.", ""]
+            out += [
+                "Common failures lists no message of this check's own: the reason in the check's summary says "
+                "what it found.",
+                "",
+            ]
         out += [ANY_CHECK, ""]
     return "\n".join(out)
 
