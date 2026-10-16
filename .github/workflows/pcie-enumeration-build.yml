@@ -26,12 +26,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
+# The openXC7 toolchain image is pinned by digest, in every job below, and the pin moves only by a pull request that
+# says what the new image changes (#98): an unpinned `regymm/openxc7` is whatever `:latest` is that day, and a newer
+# one brought in a fasm2frames rule (a GFAN0 glue bit 10 rows above an INT_L_X62 GND tie) that fails at the top of the
+# XC7A200T. This digest is the one every run used from at least 2 to 16 Oct 2026.
 jobs:
   build-netv2-a7-35:
     name: "NeTV2 A7-35T PCIe endpoint"
     runs-on: ubuntu-latest
     container:
-      image: regymm/openxc7
+      image: regymm/openxc7@sha256:35c910739e3a4b40850b85de31ebc8954985a66e982009f09123b70dbb0e75da
     steps:
       - uses: actions/checkout@v4
         with:
@@ -84,7 +88,7 @@ jobs:
     name: "NeTV2 A7-100T PCIe endpoint"
     runs-on: ubuntu-latest
     container:
-      image: regymm/openxc7
+      image: regymm/openxc7@sha256:35c910739e3a4b40850b85de31ebc8954985a66e982009f09123b70dbb0e75da
     steps:
       - uses: actions/checkout@v4
         with:
@@ -149,7 +153,7 @@ jobs:
     name: "Acorn CLE-215+"
     runs-on: ubuntu-latest
     container:
-      image: regymm/openxc7
+      image: regymm/openxc7@sha256:35c910739e3a4b40850b85de31ebc8954985a66e982009f09123b70dbb0e75da
     steps:
       - uses: actions/checkout@v4
         with:
@@ -195,7 +199,7 @@ jobs:
     name: "NiteFury (CLE-215)"
     runs-on: ubuntu-latest
     container:
-      image: regymm/openxc7
+      image: regymm/openxc7@sha256:35c910739e3a4b40850b85de31ebc8954985a66e982009f09123b70dbb0e75da
     steps:
       - uses: actions/checkout@v4
         with:
@@ -241,7 +245,7 @@ jobs:
     name: "LiteFury (CLE-101)"
     runs-on: ubuntu-latest
     container:
-      image: regymm/openxc7
+      image: regymm/openxc7@sha256:35c910739e3a4b40850b85de31ebc8954985a66e982009f09123b70dbb0e75da
     steps:
       - uses: actions/checkout@v4
         with:
