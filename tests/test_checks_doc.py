@@ -34,8 +34,24 @@ def test_the_dashboards_two_other_columns_have_sections_too():
     assert {"Boot check", "Check ran"} <= set(headings())
 
 
-def test_a_planned_test_with_no_description_writes_nothing(monkeypatch):
-    board = next(iter(gen.board_api.installed().values()))
+@pytest.mark.parametrize("name", sorted(gen.board_api.installed()))
+def test_a_planned_test_with_no_description_writes_nothing(monkeypatch, tmp_path, name):
+    """Any board whose description of a planned test is missing stops the generator before the page is written."""
+    board = gen.board_api.installed()[name]
     monkeypatch.setattr(type(board), "about", lambda self, variant, found=None: {})
+    monkeypatch.setattr(gen, "PAGE", tmp_path / "checks.md")
     with pytest.raises(gen.GapError, match="is planned and has no description"):
-        gen.page()
+        gen.main([])
+    assert not (tmp_path / "checks.md").exists()
+
+
+def test_every_acorn_test_and_fact_test_says_what_it_runs():
+    """The Acorn rows carry the suite's own line for the test, the fact tests what they read: never one generic line
+    for all of them (the review of #354)."""
+    text = gen.PAGE.read_text()
+    details = gen.acorn_details()
+    for test in gen.acorn_suite.SELECTABLE:
+        assert details.get(test) and details[test] in text, test
+    for board in gen.board_api.installed().values():
+        for test, spec in getattr(board, "fact_tests", {}).items():
+            assert spec["reads"] in text, (board.title, test)

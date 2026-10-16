@@ -193,8 +193,18 @@ class Fomu(TestBoard):
     port = "/dev/serial0"
     flash_note = "not read back: every verify rewrites the user image by DFU; its IDs are read over the header"
     fact_tests: ClassVar[dict] = {
-        "header": {"variants": ("evt",), "check": header_check},
-        "foboot": {"variants": ("evt",), "check": foboot_check},
+        # `reads`: what the check runs to have the facts the test judges (docs/verify/checks.md says it)
+        "header": {
+            "variants": ("evt",),
+            "check": header_check,
+            "reads": "before the tests, `fomu_header_id.py` over the Pi's header: it holds the iCE40 in reset "
+            "(CRESET), reads the SPI flash's JEDEC and unique IDs, then lets it boot into foboot",
+        },
+        "foboot": {
+            "variants": ("evt",),
+            "check": foboot_check,
+            "reads": "after that reset, the Pi's USB is watched for foboot (1209:5bf0); nothing is loaded",
+        },
     }
     # Every test loads its design over DFU, which needs foboot on USB: when `foboot` did not pass, they are not run.
     tests: ClassVar[dict] = {
