@@ -86,8 +86,10 @@ the cabling pin by pin. On the NeTV2, Fomu and Acorn every wire is already check
 `wiring` is derived from those tests: it passes when all of them passed, takes the result of the first that did not
 (its reason then reads `p2-uart fail`), and is not run when one of them did not run.
 
-The Fomu's `flash` test exists in `fpgas-fomu-debug`. It is not in the boot check because a DFU load replaces
-foboot until the next reset.
+The Fomu's `flash` test is in the boot check: before it the Fomu is reset back into foboot through the header, as
+a DFU load replaces foboot until the next reset. `fpgas-fomu-debug` runs it too.
+
+A section per check, with what it checks on each board and what it runs, is on [each check, what it tests](checks.md).
 
 The report puts each planned test in one of four groups:
 

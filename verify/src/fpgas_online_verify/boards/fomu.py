@@ -193,8 +193,18 @@ class Fomu(TestBoard):
     port = "/dev/serial0"
     flash_note = "not read back: every verify rewrites the user image by DFU; its IDs are read over the header"
     fact_tests: ClassVar[dict] = {
-        "header": {"variants": ("evt",), "check": header_check},
-        "foboot": {"variants": ("evt",), "check": foboot_check},
+        # `reads`: what the check runs to have the facts the test judges (docs/verify/checks.md says it)
+        "header": {
+            "variants": ("evt",),
+            "check": header_check,
+            "reads": "before the tests, `fomu_header_id.py` over the Pi's header: it holds the iCE40 in reset "
+            "(CRESET), reads the SPI flash's JEDEC and unique IDs, then lets it boot into foboot",
+        },
+        "foboot": {
+            "variants": ("evt",),
+            "check": foboot_check,
+            "reads": "after that reset, the Pi's USB is watched for foboot (1209:5bf0); nothing is loaded",
+        },
     }
     # Every test loads its design over DFU, which needs foboot on USB: when `foboot` did not pass, they are not run.
     tests: ClassVar[dict] = {
@@ -214,6 +224,11 @@ class Fomu(TestBoard):
                    "args": [], "pre": PMOD_PRE, "needs": ("foboot",)},
     }  # fmt: skip
     closing_test = "foboot-after"
+    # what the closing step runs, for docs/verify/checks.md (finish() below)
+    closing_runs = (
+        "the last step, after every test, only when header and foboot passed: the iCE40 is reset through the header "
+        "back into foboot"
+    )
     # It sits on the Pi's header: its wiring is the header and uart tests' (checks.derive).
     derives: ClassVar[dict] = {
         "evt": {"wiring": (("header", "uart"), "it sits on the Pi's header: its reset, CDONE and SPI flash lines "

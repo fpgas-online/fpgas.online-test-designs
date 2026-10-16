@@ -248,7 +248,16 @@ class TTFPGA(TestBoard):
     usb = tuple((VENDOR, product) for product in (*MICROPYTHON, BOOTLOADER))
     variants: ClassVar[dict] = {"tt-fpga": "tt-fpga"}  # the variants there are bitstreams for
     variant_from_board = True
-    fact_tests: ClassVar[dict] = {"sdk": {"variants": ("tt-fpga", "tt-asic"), "check": sdk_check}}
+    # `reads`: what the check runs to have the facts the test judges (docs/verify/checks.md says it)
+    fact_tests: ClassVar[dict] = {
+        "sdk": {
+            "variants": ("tt-fpga", "tt-asic"),
+            "check": sdk_check,
+            "reads": "before the tests, over the board's USB serial: `tt_main_py.py` reads main.py's SHA-256 (a "
+            "main.py that is not the SDK's stops it there); then, where rpi-hwid is installed, `tt_sdk_start.py` "
+            "starts the SDK (a soft reset) and rpi-hwid asks the board what it is; nothing is loaded",
+        }
+    }
     # The Pmod cabling of a board with a Tiny Tapeout chip, against the cabling the boards have (ui_in on HAT
     # JA, uio JB, uo_out JC: identify_pmod_pins.BOARDS["tt"]). The check has stopped fpgas-tt itself, so
     # --no-daemon; tt_pmod_wiring.py unloads the SPI drivers itself and loads them again. It puts the board back

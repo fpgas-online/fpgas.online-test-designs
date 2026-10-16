@@ -61,6 +61,7 @@ One page for each task, in this order:
 <a id="acorn"></a>
 
 * [What an Acorn check tests](verify/acorn.md#acorn): for you if you have an Acorn and want to know what its check does.
+* [Each check, what it tests](verify/checks.md): for you if you clicked a check's name on an fpgas.online dashboard: a section per check, every board type.
 
 <a id="the-acorn-s-power-cycle-check-opt-in"></a>
 

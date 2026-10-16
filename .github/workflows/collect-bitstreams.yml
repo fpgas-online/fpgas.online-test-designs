@@ -33,7 +33,7 @@ env:
     tests/test_spi_flash.py tests/test_uartbone_link.py tests/test_acorn_pcie_publish_release.py tests/test_pcie_match_mps.py
     tests/test_acorn_bist.py tests/test_acorn_selftest.py tests/test_jtag_idcode.py tests/test_identity.py
     tests/test_identify_label.py tests/test_release.py tests/test_tt_host_scripts.py tests/test_tt_pmod_wiring.py
-    tests/test_fomu_header_id.py tests/test_ethernet_interface.py tests/test_spram.py
+    tests/test_fomu_header_id.py tests/test_ethernet_interface.py tests/test_spram.py tests/test_checks_doc.py
   VERIFY_PY: >-
     verify/src packaging/debs/build_debs.py packaging/acorn-pcie/build_debs.py tests/conftest.py
     tests/test_verify_runner.py tests/test_verify_conclusion.py tests/test_verify_boards.py tests/test_debs_packaging.py
@@ -49,6 +49,7 @@ env:
     packaging/release.py tests/test_release.py
     designs/ethernet-test/host/test_ethernet.py tests/test_ethernet_interface.py
     designs/spram/host/test_spram.py tests/test_spram.py
+    scripts/gen_checks_doc.py tests/test_checks_doc.py
 
 jobs:
   collect:
