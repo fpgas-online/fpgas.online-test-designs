@@ -165,6 +165,13 @@ def _read(run, which, argv):
 # The `user_bus` detail of pi-identified: what became of the user-bus scan. One short value each (Tim, 9 Oct 2026:
 # a table cell holds a value); a skipped scan names the board(s) wired to GPIO2/3, or why the boards are not known.
 NOT_NEEDED = "not needed"  # the ID bus (or the firmware) gave the header
+TOO_OLD = "skipped: rpi-hwid too old"
+# No rpi-hwid yet reads the user bus and leaves the Pi as it found it: 0.0.post597's --user-bus applies the i2c_arm
+# dtparam at runtime and leaves GPIO2/3 muxed and the i2c_designware modules loaded, and says it put everything back
+# (the td #365 dry run on the bare Pi 5 1 GB 64f48c65009558ab, 17 Oct 2026 08:38). So no rpi-hwid is trusted with the
+# scan, and every scan the rules allow is skipped as TOO_OLD, until the fixed rpi-hwid is named here (with how its
+# output says so) after its own proof (the coordinator's decision of 17 Oct 2026 08:4x under Tim's coord-78 (B)).
+USER_BUS_SAFE = False
 SCANNED = "scanned"
 
 
@@ -184,11 +191,13 @@ def wired_boards(boards, mode, targets):
     return sorted(titles)
 
 
-def with_user_bus(pi, rescan, wired, boards_unknown=None):
+def with_user_bus(pi, rescan, wired, boards_unknown=None, safe=None):
     """The Pi's read once the boards are known: `pi` as read with the ID bus alone and, when its header was left not
     read and no board is wired to GPIO2/3 (`wired` empty, the boards known), `rescan()` (read(user_bus=True)) in its
     place. Either way with its `user_bus` value. `boards_unknown` is why the boards are not known (the check could
-    not look): then nothing is scanned."""
+    not look): then nothing is scanned. `safe` (default USER_BUS_SAFE): whether the installed rpi-hwid may be trusted
+    with the scan; when not, a scan the rules allow is skipped as TOO_OLD."""
+    safe = USER_BUS_SAFE if safe is None else safe
     if "facts" not in pi:
         return pi  # rpi-hwid not installed, or the read failed: said as such, nothing to add
     if not header_unread(pi):
@@ -205,6 +214,8 @@ def with_user_bus(pi, rescan, wired, boards_unknown=None):
         return {**pi, "user_bus": f"skipped: boards not known: {boards_unknown}"}
     if wired:
         return {**pi, "user_bus": f"skipped: {', '.join(wired)} wired to GPIO2/3"}
+    if not safe:
+        return {**pi, "user_bus": TOO_OLD}
     again = rescan()
     if "reader_error" in again:
         return {**again, "user_bus": "scan failed"}
