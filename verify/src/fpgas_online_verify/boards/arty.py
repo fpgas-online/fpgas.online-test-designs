@@ -23,6 +23,7 @@ class Arty(TestBoard):
     # and flash_uid or flash_uid_note, as flash_uid_state says (identify.missing; rpi-hwid's label needs them)
     label_fields = ("serial", "idcode", "dna", "flash_jedec", "flash_uid_state")
     port = "/dev/ttyUSB1"
+    user_bus = True  # its Pmods on the Digilent Pmod HAT: JB9/JB10 are GPIO3/GPIO2 (identify_pmod_pins.BOARDS["arty"])
     flash_region: ClassVar[dict] = {"a7-35": 0x220000}  # an XC7A35T .bit is 2,192,123 bytes
     jtag_loads_7_series = True  # openFPGALoader's `done` line says whether it loaded (#300)
     tests: ClassVar[dict] = {

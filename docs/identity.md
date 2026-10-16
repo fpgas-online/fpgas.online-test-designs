@@ -175,7 +175,7 @@ reason naming the field; the other boards are still checked.
 The Pi's label needs facts about the Pi that its registration does not carry: what is on its 40-pin header
 (the HAT's EEPROM), its power class and, on a Pi 5, the fan and the RTC battery. At every boot, before any
 board's lock is taken, the boot check runs `rpi-hwid label-input --pi-only` and sends what it read as one
-`pi-identified` event ([`pi_identity.py`](../verify/src/fpgas_online_verify/pi_identity.py); rpi-hwid's
+`pi-identified` event, once the boards are found ([`pi_identity.py`](../verify/src/fpgas_online_verify/pi_identity.py); rpi-hwid's
 `docs/LABEL-CONTRACT.md`, section 5). The site puts these with the registration's model, serial, revision,
 memory and MACs, and makes the Pi's label.
 
@@ -184,13 +184,32 @@ memory and MACs, and makes the Pi's label.
 | `schema` | `pi-identity/1` |
 | `reader` | `rpi-hwid`, or `none` when rpi-hwid is not installed (then no other field is sent) |
 | `reader_error` | why rpi-hwid did not give the facts: it failed, did not finish, or printed something that is not a label input |
+| `user_bus` | what became of the scan of the header's user bus (GPIO2/3), sent with the facts: `not needed` (the ID bus or the firmware gave the header), `scanned`, `scanned: header not read` (rpi-hwid could not read that bus either), `skipped: <board> wired to GPIO2/3`, or `skipped: boards not known: <why>` |
 | `compatible`, `power_class`, `hat_uuid`, `fan`, `rtc_battery`, `max_current_ma`, `ext5v_v`, `header`, `macs`, `usb_net` | rpi-hwid's `Summary` fields of the same names, as `--pi-only` read them |
 
 The values are encoded as in [the event](#the-event) above, and a decimal (`ext5v_v`) is written as a decimal
 number: `5.08`. `header`, `macs` and `usb_net` are each one key of compact JSON. A `header` nobody read (nothing on
 the HAT ID bus named a HAT) is left out, never sent as `[]`, so the site refuses the label rather than print
-"HAT none". The scan of the header's user bus (`--user-bus`) is not run: it waits until each setup's wiring says
-GPIO2 and GPIO3 are safe to drive then.
+"HAT none": a HAT known only by its chips on the user bus (a Waveshare PoE HAT (B)) is invisible on the ID bus.
+
+So when the ID bus gave no header, the boot check scans the user bus (GPIO2/3, I2C1) for one, reading only, by
+running `rpi-hwid label-input --pi-only --user-bus` again (Tim, 17 Oct 2026, coord-78: "(B) User-bus scan per
+setup"). It does so after finding the boards and before taking any board's lock, and only where no board is wired
+to GPIO2/3: neither a board it found nor the one the host is set up for (`fpga-board = <board>`, found or not).
+Each board's definition says whether it is (`Board.user_bus`), held by a test to the board's wiring source:
+
+| Board | Wired to GPIO2/3 | Wiring source |
+|---|---|---|
+| Sqrl Acorn | yes: P2's J5 is GPIO3 | `designs/_shared/acorn_p2.py` |
+| Digilent Arty A7 | yes: the Pmod HAT's JB9/JB10 | `identify_pmod_pins.BOARDS["arty"]` |
+| TT FPGA Demo Board | yes: the Pmod HAT's JB9/JB10 | `identify_pmod_pins.BOARDS["tt"]` |
+| Fomu EVT | no | `boards/fomu.py` `HEADER_GPIOS`, CRESET, CDONE, the UART |
+| Kosagi NeTV2 | no | `boards/netv2.py` `JTAG_GPIOS`, the UART |
+
+A Pi with no board (the check's result is `missing`) is scanned. The Arty and TT FPGA hosts' Pmod HAT and the
+Acorn hosts' HAT+ carry an ID EEPROM, so their header comes from the ID bus and the scan is not needed there. With
+the scan, a header found empty on both buses is read, none (`[]`, "HAT none" on the label), as rpi-hwid's contract
+says; without it the header stays not read, and `user_bus` says why.
 
 A `reader_error` is said in the event and in the boot report (`pi`), and the check's summary says the Pi's own
 facts were NOT READ; the site refuses the Pi's own label and shows the reason. The boards' result is untouched: a

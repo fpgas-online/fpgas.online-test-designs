@@ -38,6 +38,10 @@ class Board:
     # USB devices that sit beside this board as debug tools, never boards: {(vendor, product): name} (the Fomu's
     # OpenVizsla, inline on its USB). The report names each one seen, and a board not found is not blamed on it.
     debug_usb: ClassVar[dict] = {}
+    # True for a board wired to the header's user bus, GPIO2/3 (I2C1): the boot check then never scans that bus for
+    # the Pi's HAT (pi_identity.py), which would drive the board's lines. tests/test_pi_identity.py holds each
+    # board's flag to its wiring source.
+    user_bus = False
 
     def facts(self, port=None):
         """What the check needs to know about this host."""

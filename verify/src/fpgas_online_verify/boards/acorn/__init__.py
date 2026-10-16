@@ -26,6 +26,7 @@ class Acorn(Board):
     tests = suite.SELECTABLE  # each can be run on its own with --test (power-cycle only when switched on)
     opt_in = ((suite.POWER_CYCLE, "power-cycle-check = on"),)  # not run, or selectable, without the setting
     label_fields = ("dna", "idcode", "flash", "flash_jedec", "flash_uid", "identifier")
+    user_bus = True  # its P2 header's J5 is on GPIO3 (acorn_p2.py, identify_pmod_pins.BOARDS["acorn"])
 
     def spot(self, host, usb, pci):
         return [d for d in map(check.describe, pci) if d]

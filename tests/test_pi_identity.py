@@ -4,6 +4,7 @@ Tim, 16 Oct 2026 (coord-74): "Why are there no RPi labels on https://welland.fpg
 """
 
 import copy
+import importlib.util
 import json
 import pathlib
 from typing import ClassVar
@@ -17,11 +18,12 @@ from fpgas_online_verify.core import Problem
 PI5_DOC = json.loads((pathlib.Path(__file__).parent / "data" / "pi-only-pi5.json").read_text())
 
 
-def ran(text, rc=0, err=""):
+def ran(text, rc=0, err="", argv=pi_identity.ARGV):
     """A stand-in for pi_identity.run_apart: rpi-hwid printed `text` on stdout and `err` on stderr."""
+    expected = argv
 
     def run(argv, timeout):
-        assert argv == list(pi_identity.ARGV) and timeout == pi_identity.TIMEOUT
+        assert argv == list(expected) and timeout == pi_identity.TIMEOUT
         return rc, text, err
 
     return run
@@ -139,15 +141,27 @@ def test_rpi_hwid_runs_with_stdout_and_stderr_apart_and_a_bounded_timeout(tmp_pa
 # -- in the check -------------------------------------------------------------------------------------------
 
 
-def checked(read, board_result="pass", spotted=True):
-    """The report and the events of verify() with one fake board, and `read` as the Pi's facts."""
+def checked(read, board_result="pass", spotted=True, rescan=None, user_bus=False, scans=None):
+    """The report and the events of verify() with one fake board, and `read` as the Pi's facts: `rescan` as its
+    read with --user-bus (each one recorded in `scans`). `user_bus`: whether the fake board is wired to GPIO2/3."""
     events = []
+    scans = [] if scans is None else scans
+
+    def read_pi(user_bus=False):
+        if user_bus:
+            assert rescan is not None, "the user bus was scanned"
+            scans.append([s for s, _ in events])  # what had been sent when it was scanned
+            return rescan
+        return read
+
+    wired = user_bus
 
     class Board:
         name = slug = "fake"
         title = "Fake"
         probes = False
         lock = None
+        user_bus = wired
         debug_usb: ClassVar[dict] = {}
 
         def facts(self, port):
@@ -169,7 +183,7 @@ def checked(read, board_result="pass", spotted=True):
         def not_applicable(self, variant, found=None):
             return {}
 
-    options = {"mode": None, "board": "auto", "event": lambda s, d: events.append((s, d)), "read_pi": lambda: read,
+    options = {"mode": None, "board": "auto", "event": lambda s, d: events.append((s, d)), "read_pi": read_pi,
                "state": "/nonexistent/state.json", "update": False, "tests": None}  # fmt: skip
     report = runner.verify(options, boards={"fake": Board()}, usb=[], pci=[], mode=("auto", "test"))
     return report, events
@@ -181,9 +195,9 @@ def test_the_check_sends_pi_identified_first_and_keeps_the_read_in_the_report(mo
     monkeypatch.setattr(runner, "plan", lambda *a: None)
     read = {"reader": "rpi-hwid", "facts": {"header": [], "fan": None}}
     report, events = checked(read)
-    assert events[0] == ("pi-identified", {"schema": "pi-identity/1", "reader": "rpi-hwid", "header": "[]",
-                                           "fan": "-"})  # fmt: skip
-    assert report["pi"] == read and report["result"] == "pass"
+    assert events[0] == ("pi-identified", {"schema": "pi-identity/1", "reader": "rpi-hwid", "user_bus": "not needed",
+                                           "header": "[]", "fan": "-"})  # fmt: skip
+    assert report["pi"] == {**read, "user_bus": "not needed"} and report["result"] == "pass"
     assert "the Pi's own facts (rpi-hwid --pi-only): header=[], fan=-" in runner.summary(report)
 
 
@@ -222,3 +236,122 @@ def test_a_pi_with_no_board_and_its_facts_unread_is_missing_and_says_the_read_fa
     assert "the Pi's own facts" not in report["reason"]
     assert report["pi"]["reader_error"].endswith("exited 1: x")
     assert [s for s, _ in events][:2] == ["pi-identified", "fpga-no-board"]
+
+
+# -- the header's user bus (GPIO2/3): Tim, 17 Oct 2026 (coord-78), "(B) User-bus scan per setup" --------------
+
+
+NO_HEADER = {"reader": "rpi-hwid", "facts": {"fan": None}}  # nothing on the ID bus: the header not read
+BARE = {"reader": "rpi-hwid", "facts": {"header": [], "fan": None}}  # both buses read, nothing on either
+
+
+def _nolocks(monkeypatch):
+    monkeypatch.setattr(runner, "hold_lock", lambda lock, title: __import__("contextlib").nullcontext())
+    monkeypatch.setattr(runner, "compare_state", lambda *a: {})
+    monkeypatch.setattr(runner, "plan", lambda *a: None)
+
+
+def test_the_user_bus_is_read_with_the_flag_and_only_when_asked():
+    doc = copy.deepcopy(PI5_DOC)
+    argv = (*pi_identity.ARGV, "--user-bus")
+    assert pi_identity.read(ran(json.dumps(doc), argv=argv), installed, user_bus=True)["facts"]["header"]
+    bad = pi_identity.read(ran("", rc=1, err="label-input: user bus", argv=argv), installed, user_bus=True)
+    assert bad["reader_error"] == "rpi-hwid label-input --pi-only --user-bus exited 1: label-input: user bus"
+
+
+def test_a_pi_with_nothing_on_its_id_bus_and_no_board_on_gpio2_3_is_scanned_after_find_before_the_check(monkeypatch):
+    _nolocks(monkeypatch)
+    scans = []
+    report, events = checked(NO_HEADER, rescan=BARE, scans=scans)
+    assert scans == [[]]  # once, before anything was sent: before the boards' events and their locks
+    assert [s for s, _ in events][:2] == ["pi-identified", "fpga-board-found"]
+    assert events[0][1]["header"] == "[]" and events[0][1]["user_bus"] == "scanned"  # a measured "HAT none"
+    assert report["pi"] == {**BARE, "user_bus": "scanned"} and report["result"] == "pass"
+    assert "the header's user bus (GPIO2/3): scanned" in runner.summary(report)
+
+
+def test_a_pi_whose_board_is_wired_to_gpio2_3_is_never_scanned_and_says_why(monkeypatch):
+    _nolocks(monkeypatch)
+    scans = []
+    report, events = checked(NO_HEADER, user_bus=True, scans=scans)
+    assert scans == []
+    assert "header" not in events[0][1]  # not read: the site refuses the Pi's label, showing user_bus
+    assert events[0][1]["user_bus"] == "skipped: Fake wired to GPIO2/3"
+    assert report["result"] == "pass"
+
+
+def test_a_bare_pi_with_no_board_is_scanned_and_still_missing(monkeypatch):
+    monkeypatch.setattr(runner, "compare_state", lambda *a: {})
+    scans = []
+    report, events = checked(NO_HEADER, spotted=False, rescan=BARE, scans=scans)
+    assert scans == [[]] and report["result"] == "missing"
+    assert [s for s, _ in events][:2] == ["pi-identified", "fpga-no-board"]
+    assert events[0][1]["user_bus"] == "scanned" and events[0][1]["header"] == "[]"
+
+
+def test_a_scan_that_cannot_read_the_header_says_so(monkeypatch):
+    _nolocks(monkeypatch)
+    report, events = checked(NO_HEADER, rescan=NO_HEADER)
+    assert events[0][1]["user_bus"] == "scanned: header not read" and "header" not in events[0][1]
+
+
+def test_a_failed_scan_is_a_reader_error_and_the_boards_result_stands(monkeypatch):
+    _nolocks(monkeypatch)
+    failed = {"reader": "rpi-hwid", "reader_error": "rpi-hwid label-input --pi-only --user-bus exited 1: x"}
+    report, events = checked(NO_HEADER, rescan=failed)
+    assert events[0][1]["reader_error"].endswith("--user-bus exited 1: x") and events[0][1]["user_bus"] == "scanned"
+    assert report["result"] == "pass" and "NOT READ" in runner.summary(report)
+
+
+def test_a_header_on_the_id_bus_or_a_failed_read_needs_no_scan(monkeypatch):
+    _nolocks(monkeypatch)
+    for read in (BARE, {"reader": "none"}, {"reader": "rpi-hwid", "reader_error": "x"}):
+        scans = []
+        checked(read, scans=scans)
+        assert scans == []
+    assert "user_bus" not in checked({"reader": "none"})[1][0][1]
+
+
+def test_boards_not_known_are_never_scanned():
+    pi = pi_identity.with_user_bus(NO_HEADER, lambda: pytest.fail("scanned"), [], "conflicting fpga-board settings")
+    assert pi["user_bus"] == "skipped: boards not known: conflicting fpga-board settings"
+
+
+def test_the_board_the_host_is_set_up_for_counts_whether_found_or_not():
+    from fpgas_online_verify.board import installed as boards
+
+    have = boards()
+    assert pi_identity.wired_boards(have, "arty", []) == ["Digilent Arty A7"]
+    assert pi_identity.wired_boards(have, "tt-fpga", []) == ["TT FPGA Demo Board"]  # by slug too
+    assert pi_identity.wired_boards(have, "fomu", []) == []
+    assert pi_identity.wired_boards(have, "auto", []) == []
+    found = [(have["acorn"], {}, {}), (have["netv2"], {}, {})]
+    assert pi_identity.wired_boards(have, "auto", found) == ["Sqrl Acorn"]
+
+
+def _pin_id_map():
+    path = pathlib.Path(__file__).resolve().parents[1] / "designs" / "pmod-pin-id" / "host" / "identify_pmod_pins.py"
+    spec = importlib.util.spec_from_file_location("identify_pmod_pins", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return {name: {gpio for gpio, *_ in b["pins"]} for name, b in module.BOARDS.items()}
+
+
+def test_each_boards_user_bus_flag_follows_its_wiring_source():
+    """Board.user_bus says whether the board is wired to GPIO2/3; each is held to the source of its wiring, so a
+    board rewired onto them cannot be scanned by mistake. A new board must be added here."""
+    from fpgas_online_verify.board import installed as boards
+    from fpgas_online_verify.boards import fomu, netv2
+
+    pins = _pin_id_map()
+    wiring = {
+        "acorn": pins["acorn"],  # its P2 header (acorn_p2.py): J5 is GPIO3
+        "arty": pins["arty"],  # its Pmods on the Digilent Pmod HAT: JB9/JB10 are GPIO3/2
+        "tt": pins["tt"],  # uio on the Pmod HAT's JB
+        "fomu": {*fomu.HEADER_GPIOS, fomu.CRESET, fomu.CDONE, 14, 15},  # the header's SPI, reset, done, UART
+        "netv2": {*netv2.JTAG_GPIOS, 14, 15},  # JTAG on the header, and the UART
+    }
+    have = boards()
+    assert set(have) == set(wiring)
+    for name, board in have.items():
+        assert board.user_bus == bool(wiring[name] & {2, 3}), name
