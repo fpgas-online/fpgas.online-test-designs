@@ -10,8 +10,6 @@ The TinyTapeout (TT) FPGA Demo Board is a development platform that combines an 
 
 - a Raspberry Pi with the Tiny Tapeout demo board on one of its USB ports
 - the fpgas.online apt repository added on the Pi ([fpgas-verify: installing it, step 1](../verify/installing.md#installing))
-- the fpgas.online-fpga-tools repository added on the Pi ([step 2](../verify/installing.md#installing)): only its
-  openFPGALoader has the `tt_fpga` board, which loads every design into the demo board's FPGA
 - a network that reaches `mith.ro`, where rpi-hwid's apt repository is, and on bookworm `deb.debian.org`
 
 `grep VERSION_CODENAME /etc/os-release` says which release the Pi runs.
@@ -32,7 +30,26 @@ sudo apt update
 sudo apt install python3-rpi-hwid
 ```
 
-**2.** On bookworm only, add bookworm-backports and install `mpremote` from it. On trixie the next step installs it.
+**2.** Add the fpgas.online-fpga-tools repository, on every release, before step 4: only its openFPGALoader has
+the `tt_fpga` board, which loads every design into the demo board's FPGA. Without it step 4 stops with an unmet
+dependency on `openfpgaloader-fpgasonline`. On 32-bit Raspberry Pi OS (`ID=raspbian`) the suite is
+`raspbian-<release>`. This is [fpgas-verify: installing it](../verify/installing.md#installing)'s step 2 again: if
+you did that, skip this one.
+
+The step is safe to run again. The `ls` line lists the key, `fpgas.online-fpga-tools.gpg`, about 1.2 kB (1174
+bytes). If it is missing or its size is far from that, run the `curl` line again.
+
+```bash
+sudo install -d -m0755 /etc/apt/keyrings
+sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/fpgas.online-fpga-tools.gpg \
+  https://fpgas.online/fpgas.online-fpga-tools/fpgas.online-fpga-tools.gpg
+echo "deb [signed-by=/etc/apt/keyrings/fpgas.online-fpga-tools.gpg] https://fpgas.online/fpgas.online-fpga-tools/$(. /etc/os-release; if [ "$ID" = raspbian ]; then echo "raspbian-$VERSION_CODENAME"; else echo "$VERSION_CODENAME"; fi)/ ./" \
+  | sudo tee /etc/apt/sources.list.d/fpgas.online-fpga-tools.list
+ls -l /etc/apt/keyrings/fpgas.online-fpga-tools.gpg
+sudo apt update
+```
+
+**3.** On bookworm only, add bookworm-backports and install `mpremote` from it. On trixie step 4 installs it.
 Debian's archive key is not on 32-bit Raspberry Pi OS, so the source names it. Its fingerprint is
 `B8B8 0B5B 623E AB6A D877 5C45 B7C5 D7D6 3509 47F8`.
 
@@ -50,13 +67,13 @@ sudo apt update
 sudo apt install -t bookworm-backports micropython-mpremote
 ```
 
-**3.** Install the TT FPGA's packages. This also turns the check at boot on (`fpgas-verify.service`). `fpgas-online-tt` is a different package: the TT site's own.
+**4.** Install the TT FPGA's packages. This also turns the check at boot on (`fpgas-verify.service`). `fpgas-online-tt` is a different package: the TT site's own.
 
 ```bash
 sudo apt install fpgas-online-tt-fpga
 ```
 
-**4.** Check the board. Nothing is sent to the site: `--no-publish` makes sure.
+**5.** Check the board. Nothing is sent to the site: `--no-publish` makes sure.
 
 ```bash
 sudo fpgas-tt-fpga-verify --no-publish

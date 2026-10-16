@@ -54,8 +54,9 @@ def test_the_tt_backports_step_runs_on_bookworm_only():
     page = "docs/hardware/tt-fpga.md"
     bookworm = check.board_plan(page, "bookworm")
     trixie = check.board_plan(page, "trixie")
-    assert [n for n, _k, _c in bookworm] == [1] * 6 + [2] * 6 + [3]
-    assert [n for n, _k, _c in trixie] == [1] * 6 + [3]
+    # step 2 (the fpga-tools repository, every release: our openFPGALoader has the tt_fpga board) has 5 commands
+    assert [n for n, _k, _c in bookworm] == [1] * 6 + [2] * 5 + [3] * 6 + [4]
+    assert [n for n, _k, _c in trixie] == [1] * 6 + [2] * 5 + [4]
     assert bookworm[-2][2] == "sudo apt install -t bookworm-backports micropython-mpremote"
     assert all("backports" not in c for _n, _k, c in trixie)
 

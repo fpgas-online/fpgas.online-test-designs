@@ -49,19 +49,21 @@ The iCE40 is programmed via the RP2350 over USB CDC, not directly from the RPi.
 
 ### Programming Flow
 
-1. Show the RP2350 a copy of the bitstream on the Pi (`mpremote mount`, served over the serial link; nothing is
-   written to the RP2350's filesystem)
-2. Execute MicroPython script via raw REPL:
+`openFPGALoader -b tt_fpga` (the [fpgas.online-fpga-tools](https://github.com/fpgas-online/fpgas.online-fpga-tools)
+build, 0.0.post105 or later) does every load:
+
+1. Enter the RP2350's MicroPython raw REPL and stream the bitstream to it, in RAM (nothing is written to the RP2350's
+   filesystem)
+2. On the RP2350:
    - Assert CRESET_B low, then high (reset iCE40 into config mode)
-   - Stream bitstream via PIO SPI at 1 MHz
-   - Start 50 MHz PWM clock on GPIO16
-3. Release all shared GPIOs to high-Z (input mode)
+   - Bit-bang the bitstream over SPI (SCK GPIO6, MOSI GPIO3, SS GPIO5)
+   - Release CRESET_B with a pull-up; CDONE is not read
+     ([fpga-tools #17](https://github.com/fpgas-online/fpgas.online-fpga-tools/issues/17))
+   - Start the 50 MHz PWM clock on GPIO16
+3. Release the SPI pins and every shared GPIO (GPIO17-40) to high-Z: inputs with no pull
+4. Exit non-zero if any of that failed; print `SRAM programming complete` if all of it worked
 
-### openFPGALoader Support (work in progress)
-
-Direct programming of the iCE40 via openFPGALoader (bypassing the MicroPython REPL) is being developed. This would allow faster, more reliable programming without needing `mpremote` or the RP2350 filesystem.
-
-- openFPGALoader fork with TT FPGA support: [mithro/openFPGALoader (tt-fpga-support)](https://github.com/mithro/openFPGALoader/tree/tt-fpga-support)
+The TT FPGA support is in our openFPGALoader's patches 0025-0031 and 0033; it is not upstream.
 
 ### RP2350 Considerations
 
