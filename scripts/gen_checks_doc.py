@@ -193,9 +193,7 @@ def failure_rows(checks_on_page):
     try:
         start = lines.index("| It says | Meaning, and what to do |")
     except ValueError:
-        raise GapError(
-            f"{FAILURES.name} has no table headed 'It says | Meaning, and what to do'"
-        ) from None
+        raise GapError(f"{FAILURES.name} has no table headed 'It says | Meaning, and what to do'") from None
     header = lines[start : start + 2]
     out = {}
     for line in lines[start + 2 :]:
