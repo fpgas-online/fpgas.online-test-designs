@@ -301,7 +301,7 @@ def test_rpi_hwid_makes_a_pi_label_from_the_pi_identified_event_when_it_is_insta
     registration = {k: pi5["summary"][k] for k in ("model", "serial", "revision", "memory")}
     doc = label_input.build("pi-sw2-p48", {**registration, **facts})
     assert label_input.check(doc) == [] and label_input.missing(doc)["board"] == []
-    assert doc["summary"]["header"] == ["Waveshare PoE M.2 HAT+ (B)"] and doc["summary"]["ext5v_v"] == 5.08
+    assert doc["summary"]["header"] == ["Waveshare PoE M.2 HAT+ (B)"] and doc["summary"]["ext5v_v"] == 5.14962
     assert set(pi_identity.FIELDS) <= set(label_input.PI_FIELDS)
 
 

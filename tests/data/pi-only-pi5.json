@@ -1,16 +1,32 @@
 {
- "host": "pi-sw2-p48",
+ "host": "pi-sw2-p41",
  "schema": "rpi-hwid/label-input",
  "sources": {
+  "cameras": "rpi-hwid",
+  "compatible": "rpi-hwid",
+  "cpu": "rpi-hwid",
+  "dmi": "rpi-hwid",
+  "ext5v_v": "rpi-hwid",
+  "fan": "rpi-hwid",
+  "hat_uuid": "rpi-hwid",
   "header": "rpi-hwid",
-  "macs": "rpi-hwid"
+  "macs": "rpi-hwid",
+  "max_current_ma": "rpi-hwid",
+  "memory": "rpi-hwid",
+  "model": "rpi-hwid",
+  "power_class": "rpi-hwid",
+  "revision": "rpi-hwid",
+  "riscv": "rpi-hwid",
+  "rtc_battery": "rpi-hwid",
+  "serial": "rpi-hwid",
+  "usb_net": "rpi-hwid"
  },
  "summary": {
   "cameras": null,
   "compatible": "raspberrypi,5-model-b brcm,bcm2712",
   "cpu": null,
   "dmi": null,
-  "ext5v_v": 5.08,
+  "ext5v_v": 5.14962,
   "fan": true,
   "fpga": [],
   "hat_uuid": "9729525c-eeee-98e9-f348-a0720f4c16eb",
@@ -20,19 +36,19 @@
   "macs": [
    {
     "kind": "eth",
-    "mac": "88:a2:9e:45:85:77",
-    "signal": "otp"
+    "mac": "98:fe:54:13:e0:75",
+    "signal": "driver"
    }
   ],
   "max_current_ma": 3000,
   "memory": "1 GB",
   "model": "Raspberry Pi 5 Model B Rev 1.1",
-  "power_class": "poe",
-  "revision": "b04171",
+  "power_class": "gpio-poe-hat",
+  "revision": "a04171",
   "riscv": null,
   "rtc_battery": false,
   "sdr": [],
-  "serial": "0cd35697db04a4ab",
+  "serial": "55effc3376226b41",
   "tinytapeout": [],
   "usb_net": []
  },

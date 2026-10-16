@@ -12,8 +12,8 @@ import pytest
 from fpgas_online_verify import pi_identity, runner
 from fpgas_online_verify.core import Problem
 
-# What `rpi-hwid label-input --pi-only` prints for a Pi 5 with a HAT+ on its ID bus (rpi-hwid docs/LABEL-INPUT.md,
-# version 1; the summary as dumps() writes it, every field filled in).
+# What `rpi-hwid label-input --pi-only` printed on the fleet's Pi 5 1 GB 55effc3376226b41 (acorn-linden's host, a
+# Waveshare PoE M.2 HAT+ (B) on its ID bus), with rpi-hwid #92 (0.0.post597), 17 Oct 2026 00:11 ACDT.
 PI5_DOC = json.loads((pathlib.Path(__file__).parent / "data" / "pi-only-pi5.json").read_text())
 
 
@@ -43,9 +43,9 @@ def test_the_event_is_encoded_as_the_label_contract_says():
     d = pi_identity.details(pi_identity.read(ran(json.dumps(doc)), installed))
     assert d["schema"] == "pi-identity/1" and d["reader"] == "rpi-hwid"
     assert d["header"] == '["Waveshare PoE M.2 HAT+ (B)"]' and d["usb_net"] == "[]"
-    assert d["macs"] == '[{"kind":"eth","mac":"88:a2:9e:45:85:77","signal":"otp"}]'
+    assert d["macs"] == '[{"kind":"eth","mac":"98:fe:54:13:e0:75","signal":"driver"}]'
     assert (d["fan"], d["rtc_battery"], d["hat_uuid"]) == ("true", "-", "-")
-    assert (d["max_current_ma"], d["ext5v_v"], d["power_class"]) == ("3000", "5.08", "poe")
+    assert (d["max_current_ma"], d["ext5v_v"], d["power_class"]) == ("3000", "5.14962", "gpio-poe-hat")
     assert not {"model", "serial", "revision", "memory", "fpga", "cameras"} & set(d)  # the registration has those
     assert all(isinstance(v, str) for v in d.values())
 
@@ -59,7 +59,7 @@ def test_a_header_nobody_read_is_left_out_never_sent_as_none_or_empty():
 
 def test_rpi_hwids_progress_on_stderr_before_the_document_is_not_the_document():
     text = "i2c-dev loaded; dtparam i2c_vc=on\n" + json.dumps(PI5_DOC, indent=1) + "\n"
-    assert pi_identity.read(ran(text), installed)["facts"]["power_class"] == "poe"
+    assert pi_identity.read(ran(text), installed)["facts"]["power_class"] == "gpio-poe-hat"
 
 
 def test_without_rpi_hwid_the_event_says_reader_none_and_nothing_else():
