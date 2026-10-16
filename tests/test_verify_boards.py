@@ -57,12 +57,32 @@ def _install(tmp_path, board, corrupt=None):
     return images
 
 
+# What openFPGALoader --flash-info-json writes for the flash of an Arty or a NeTV2 (its doc/guide/advanced.rst):
+# a part it knows, with a factory unique ID it read.
+FLASH_INFO = {
+    "format": "openFPGALoader-flash-info", "version": 2,
+    "flashes": [{"jedec_id": "0x20ba18", "manufacturer_id": "0x20", "memory_type": "0xba", "capacity": "0x18",
+                 "manufacturer": "Micron", "part": "N25Q128", "extended_id": "0x104400", "size_bytes": 16777216,
+                 "size_source": "database",
+                 "unique_id": {"state": "read", "value": "0123456789ABCDEF0123456789abcdef", "bits": 128,
+                               "opcode": "0x4b", "note": None},
+                 "sfdp": {"revision": "1.6", "tables": []}}],
+}  # fmt: skip
+# The identity fields that document gives.
+FLASH_INFO_FIELDS = {
+    "flash_jedec": "0x20ba18", "flash_extended_id": "0x104400", "flash": "N25Q128", "flash_size_bytes": 16777216,
+    "flash_uid": "0123456789abcdef0123456789abcdef", "flash_uid_bits": 128, "flash_uid_state": "read",
+    "flash_uid_opcode": "0x4b", "flash_sfdp": "1.6", "flash_source": "jtag",
+}  # fmt: skip
+
+
 class Runner:
     """Stands in for core.run: records argv, answers from `answers` (the first needle found wins). A dump
-    request writes `flash` to the output file."""
+    request writes `flash` to the output file, and a --flash-info-json request writes `flash_info` (JSON, or
+    text or bytes as they are; None writes nothing) to its file, before the answer."""
 
-    def __init__(self, answers=(), flash=None):
-        self.calls, self.answers, self.flash = [], list(answers), flash
+    def __init__(self, answers=(), flash=None, flash_info=FLASH_INFO):
+        self.calls, self.answers, self.flash, self.flash_info = [], list(answers), flash, flash_info
 
     def __call__(self, argv, timeout, **kw):
         argv = [str(a) for a in argv]
@@ -71,6 +91,10 @@ class Runner:
         if "--dump-flash" in argv and self.flash is not None:
             with open(argv[-1], "wb") as f:
                 f.write(self.flash)
+        if "--flash-info-json" in argv and self.flash_info is not None:
+            written = self.flash_info if isinstance(self.flash_info, (str, bytes)) else json.dumps(self.flash_info)
+            with open(argv[argv.index("--flash-info-json") + 1], "wb") as f:
+                f.write(written.encode() if isinstance(written, str) else written)
         for needle, answer in self.answers:
             if needle in line:
                 if isinstance(answer, list):  # one answer for each call, in turn; the last for any after
@@ -321,7 +345,9 @@ def test_an_arty_that_passes_loads_each_test_runs_it_and_records_its_flash(tmp_p
     images = tmp_path / "images"
     assert run.calls[0] == ["openFPGALoader", "-b", "arty", "--detect", "--verbose-level", "2"]
     assert run.calls[1] == ["openFPGALoader", "-b", "arty", "--read-dna"]  # same cable, before anything loads
-    assert run.calls[3] == ["openFPGALoader", "-b", "arty", str(images / "uart-test-arty/digilent_arty.bit")]
+    # the flash's identity, through the bridge, before any design is loaded
+    assert run.calls[2][:4] == ["openFPGALoader", "-b", "arty", "--flash-info-json"] and len(run.calls[2]) == 5
+    assert run.calls[4] == ["openFPGALoader", "-b", "arty", str(images / "uart-test-arty/digilent_arty.bit")]
     assert run.calls[-1][:5] == ["openFPGALoader", "-b", "arty", "--dump-flash", "--file-size"]
     assert {k: v for k, v in report["jtag"].items() if k != "output"} == {
         "result": "pass", "idcode": "0x0362d093", "idcode_version": 0, "idcode_part_number": "0x362d",
@@ -1203,7 +1229,7 @@ def test_an_arty_says_who_it_is_before_its_tests_with_its_whole_idcode(tmp_path)
     assert report["identity"] == {
         "board": "arty", "kind": "arty", "variant": "a7-35", "serial": "210319B", "usb": "1-1",
         "idcode": "0x0362d093", "idcode_version": 0, "idcode_part_number": "0x362d", "idcode_manufacturer_id": "0x049",
-        "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A35T", "dna": DNA,
+        "idcode_manufacturer": "Xilinx", "idcode_device": "XC7A35T", "dna": DNA, **FLASH_INFO_FIELDS,
     }  # fmt: skip
     assert events[2][1] == identity.details(report["identity"])
 
@@ -1310,6 +1336,127 @@ def test_the_netv2_dna_is_not_read_when_its_pins_cannot_be_put_back(tmp_path):
     report = _check(NETV2, tmp_path, _netv2_found("0x13631093"), run)
     assert report["identity"]["dna"] == DNA  # read, but a pin left driven is still an error
     assert report["jtag"]["result"] == "error" and "could not put GPIO4 back" in report["jtag"]["reason"]
+
+
+# -- the flash's identity (openFPGALoader --flash-info-json, through the SPI-over-JTAG bridge) -------------------
+
+
+def _flash_info_calls(run):
+    return [c for c in run.calls if "--flash-info-json" in c]
+
+
+def test_the_netv2_reads_its_flash_identity_after_its_dna_before_any_load_and_puts_its_pins_back(tmp_path):
+    events = []
+    run = Runner([("pinctrl get", (0, NETV2_PINS))], flash=b"\0" * NETV2.flash_region["a7-100"])
+    report = _check(NETV2, tmp_path, _netv2_found("0x13631093"), run, board_key="netv2",
+                    event=lambda stage, d: events.append((stage, d)))  # fmt: skip
+    assert _passed_what_it_has(report), report
+    (info,) = _flash_info_calls(run)
+    assert info[:-1] == ["openFPGALoader", "--cable", "libgpiod", "--pins", "27:22:4:17", "--fpga-part",
+                         "xc7a100tfgg484", "--flash-info-json"]  # fmt: skip
+    at = run.calls.index(info)
+    assert run.calls.index(["openFPGALoader", "--cable", "libgpiod", "--pins", "27:22:4:17", "--read-dna"]) < at
+    assert run.calls[at - 1] == ["pinctrl", "get", "4,17,27,22"]
+    assert run.calls[at + 1 : at + 5] == [["pinctrl", "set", *g.split()] for g in
+                                          ("4 ip pn", "17 ip pu", "22 ip pd", "27 a3 pn")]  # fmt: skip
+    first_load = next(i for i, c in enumerate(run.calls) if any(".bit" in a for a in c))  # openocd: "pld load 0 …"
+    assert at < first_load
+    # the one fpga-board-identified, keyed as before, carries the flash's fields
+    identified = [d for stage, d in events if stage == "fpga-board-identified"]
+    assert identified == [identity.details(report["identity"])]
+    assert {k: report["identity"][k] for k in FLASH_INFO_FIELDS} == FLASH_INFO_FIELDS
+    assert identified[0]["flash_uid"] == FLASH_INFO_FIELDS["flash_uid"] and identified[0]["flash_source"] == "jtag"
+    assert report["state"]["flash_jedec"] == "0x20ba18"
+
+
+def test_the_netv2_on_a_pi5_reads_its_flash_identity_over_rp1pio():
+    run = Runner()
+    fields, faults = NETV2.read_flash_identity(_host(NETV2, PI5, None), "a7-35", {"result": "pass"}, run)
+    (info,) = _flash_info_calls(run)
+    assert info[:-1] == ["openFPGALoader", "-c", "rp1pio", "--pins", "27:22:4:17", "--fpga-part", "xc7a35tfgg484",
+                         "--flash-info-json"]  # fmt: skip
+    assert (fields, faults) == (FLASH_INFO_FIELDS, [])
+
+
+def test_the_arty_reads_its_flash_identity_with_its_board_cable_and_part():
+    run = Runner()
+    fields, faults = ARTY.read_flash_identity(_host(ARTY), "a7-35", {"result": "pass"}, run)
+    assert run.calls == [["openFPGALoader", "-b", "arty", "--flash-info-json", run.calls[0][-1]]]
+    assert run.calls[0][-1].endswith("/flash-info.json")
+    assert (fields, faults) == (FLASH_INFO_FIELDS, [])
+
+
+@pytest.mark.parametrize(
+    ("answer", "flash_info", "why"),
+    [
+        ((1, "Fail\nunable to read the unique ID\n"), None,
+         "openFPGALoader --flash-info-json exited 1: Fail unable to read the unique ID"),
+        ((1, "Fail\n"), FLASH_INFO, "openFPGALoader --flash-info-json exited 1: Fail"),  # a file is not trusted
+        ((0, "done\n"), None, "openFPGALoader --flash-info-json exited 0 and wrote no file: done"),
+        ((0, ""), "{not json", "openFPGALoader --flash-info-json wrote a file that is not JSON"),
+        ((0, ""), b"\xff\xfe{", "openFPGALoader --flash-info-json wrote a file that is not JSON"),
+        ((0, ""), {**FLASH_INFO, "version": 1},
+         "openFPGALoader's flash-info JSON is not one this reads: it is version 1; this reader takes only version 2"),
+        ((0, ""), {**FLASH_INFO, "flashes": FLASH_INFO["flashes"] * 2},
+         "openFPGALoader's flash-info JSON is not one this reads: it describes 2 flashes, not the board's one"),
+        (core.Problem("error", "openFPGALoader is not installed"), None,
+         "openFPGALoader --flash-info-json could not be run: openFPGALoader is not installed"),
+    ],
+    ids=["exit-no-file", "exit-with-file", "no-file", "not-json", "not-utf-8", "version-1", "two-flashes",
+         "not-installed"],
+)  # fmt: skip
+def test_a_flash_identity_that_cannot_be_read_is_a_flash_error_and_the_board_an_error(
+    tmp_path, answer, flash_info, why
+):
+    events = []
+    run = Runner([("--flash-info-json", answer)], flash=b"\0" * ARTY.flash_region["a7-35"], flash_info=flash_info)
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run, event=lambda stage, d: events.append((stage, d)))
+    assert report["identity"]["flash_error"].startswith(why), report["identity"]["flash_error"]
+    assert not {k for k in report["identity"] if k.startswith("flash") and k != "flash_error"}
+    assert report["result"] == "error" and f"flash_error: {report['identity']['flash_error']}" in report["reason"]
+    assert [d["flash_error"] for stage, d in events if stage == "fpga-board-identified"] == [
+        report["identity"]["flash_error"]]  # fmt: skip
+    assert "flash_jedec" not in report["state"]
+    # the tests still ran: the identity is not what they test
+    assert [t["test"] for t in report["tests"]] == ["jtag", "uart", "ddr", "flash", "ethernet", "wiring"]
+
+
+def test_the_flash_identity_is_not_read_unless_the_jtag_check_passed(tmp_path):
+    run = Runner([("--read-dna", (1, "no DNA"))], flash=b"\0" * ARTY.flash_region["a7-35"])
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    assert not _flash_info_calls(run)
+    assert report["identity"]["flash_error"] == testbench.FLASH_INFO_SKIPPED
+    # the jtag test has failed the board; not reading the flash after it is no error of its own
+    assert report["result"] == "fail" and "flash_error" not in report["reason"]
+
+
+def test_the_netv2_flash_identity_read_with_a_pin_left_driven_is_an_error(tmp_path):
+    run = Runner([("pinctrl set 4", [(0, ""), (1, "no such pin")])],
+                 flash=b"\0" * NETV2.flash_region["a7-100"])  # fmt: skip
+    report = _check(NETV2, tmp_path, _netv2_found("0x13631093"), run)
+    assert report["jtag"]["result"] == "pass" and report["identity"]["flash_uid"] == FLASH_INFO_FIELDS["flash_uid"]
+    assert report["result"] == "error"
+    assert "after openFPGALoader --flash-info-json: could not put GPIO4 back" in report["reason"]
+
+
+def test_the_state_records_the_flash_jedec_id_openfpgaloader_read_not_the_test_designs(tmp_path):
+    """The flash test's design prints a JEDEC ID too (it stays in its test entry); the state's is the identity's,
+    so the two never disagree."""
+    run = Runner([("test_spiflash.py", (0, "JEDEC ID: 0xEF 0x40 0x18\nRESULT: PASS"))],
+                 flash=b"\0" * ARTY.flash_region["a7-35"])  # fmt: skip
+    report = _check(ARTY, tmp_path, ARTY_FOUND, run)
+    assert report["state"]["flash_jedec"] == report["identity"]["flash_jedec"] == "0x20ba18"
+    assert next(t for t in report["tests"] if t["test"] == "flash")["flash_jedec"] == "0xef4018"
+
+
+def test_identify_never_reads_the_flash_identity_on_the_arty_or_the_netv2():
+    """--identify loads nothing: the bridge would replace the running design. The flash's fields come from the
+    boot report (report_fields)."""
+    run = Runner([("pinctrl get", (0, NETV2_PINS))])
+    ARTY.identify(_host(ARTY), ARTY_FOUND, {"board_key": "arty"}, runner=run)
+    NETV2.identify(_host(NETV2), _netv2_found("0x13631093"), {"board_key": "netv2"}, runner=run)
+    assert not _flash_info_calls(run) and not [c for c in run.calls if "--dump-flash" in c]
+    assert ARTY.report_fields == NETV2.report_fields == ("flash",)
 
 
 def test_a_board_whose_check_stops_before_its_tests_still_says_who_it_is(tmp_path, monkeypatch):

@@ -13,9 +13,10 @@ driven); without pinctrl to do that, the scan is not run.
 The device DNA is read with `openFPGALoader --read-dna` on the same pins (rp1pio on a Pi 5, libgpiod on a Pi 3/4,
 as the flash readback), its pins put back the same way.
 
-The flash readback uses openFPGALoader's SPI-over-JTAG bridge for the part (libgpiod on a Pi 3/4, rp1pio on a
+The flash's identity (`openFPGALoader --flash-info-json`, before any test, its pins put back as the DNA read's)
+and the flash readback use openFPGALoader's SPI-over-JTAG bridge for the part (libgpiod on a Pi 3/4, rp1pio on a
 Pi 5). Debian bookworm's openfpgaloader has no bridge for the XC7A35T-FGG484 (trixie's has); the fpgas.online
-builds have both.
+builds have both, and only they have --flash-info-json.
 """
 
 import contextlib
@@ -177,9 +178,9 @@ class NeTV2(TestBoard):
             return ["openFPGALoader", "-c", "rp1pio", "--pins", PINS, bitstream]
         return self.openocd_argv(host, f"init; pld load 0 {bitstream}; exit")
 
-    def flash_dump_argv(self, host, variant, size, out):
-        return [*self.openfpgaloader_cable(host), "--fpga-part", FPGA_PART[variant],
-                "--dump-flash", "--file-size", str(size), out]  # fmt: skip
+    def flash_argv(self, host, variant):
+        """The bridge for the variant's part, over the header's JTAG: the flash's readback and its identity."""
+        return [*self.openfpgaloader_cable(host), "--fpga-part", FPGA_PART[variant]]
 
     def uart_pre(self, host):
         steps = super().uart_pre(host)
