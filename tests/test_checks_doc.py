@@ -51,7 +51,30 @@ def test_every_acorn_test_and_fact_test_says_what_it_runs():
     text = gen.PAGE.read_text()
     details = gen.acorn_details()
     for test in gen.acorn_suite.SELECTABLE:
-        assert details.get(test) and details[test].rstrip(".") in text, test
+        assert details.get(test) and gen.linked(details[test].rstrip(".")) in text, test
     for board in gen.board_api.installed().values():
         for test, spec in getattr(board, "fact_tests", {}).items():
             assert spec["reads"] in text, (board.title, test)
+
+
+def test_the_index_names_every_section_the_dashboards_link():
+    """#357: the "Checks:" line at the top links every section, Boot check and Check ran too."""
+    index = next(line for line in gen.PAGE.read_text().splitlines() if line.startswith("Checks: "))
+    anchors = re.findall(r"\]\(#([^)]+)\)", index)
+    slugs = [h.lower().replace(" ", "-") for h in headings()]
+    assert anchors[:2] == ["boot-check", "check-ran"] and sorted(anchors) == sorted(slugs)
+
+
+def test_a_file_the_acorn_rows_name_links_to_it_in_this_repository():
+    """#357: links.py, bist.py, expected.toml and check.power_cycle_verdict are links to the files, and a name that is
+    no file here stops the generator rather than being left plain or guessed."""
+    text = gen.PAGE.read_text()
+    acorn = "../../verify/src/fpgas_online_verify/boards/acorn/"
+    for name, path in [("links.py", f"{acorn}links.py"), ("bist.py", f"{acorn}bist.py"),
+                       ("expected.toml", "../../docs/wiring/acorn/expected.toml"),
+                       ("check.power_cycle_verdict", f"{acorn}check.py")]:  # fmt: skip
+        assert f"[`{name}`]({path})" in text, name
+        assert (gen.PAGE.parent / path).resolve().is_file(), path
+    assert gen.linked("read by fpgas-verify.toml and e.g. so on") == "read by fpgas-verify.toml and e.g. so on"
+    with pytest.raises(gen.GapError, match=r"'nowhere\.py', which is 0 files"):
+        gen.linked("see nowhere.py")

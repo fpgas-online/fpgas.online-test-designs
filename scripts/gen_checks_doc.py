@@ -14,6 +14,7 @@ not what this writes.
 import argparse
 import pathlib
 import re
+import subprocess
 import sys
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
@@ -53,6 +54,50 @@ def acorn_details():
     return out
 
 
+ACORN_DIR = pathlib.Path(acorn_suite.__file__).resolve().parent
+# A file the Acorn suite's text names ("links.py", "expected.toml") or a module's attribute
+# ("check.power_cycle_verdict"), not part of a longer name or path ("fpgas-verify.toml" is the Pi's configuration,
+# not a file of this repository).
+NAMED_FILE = re.compile(r"(?<![\w./-])([a-z_][a-z0-9_]*)\.(py|toml)\b")
+NAMED_ATTR = re.compile(r"(?<![\w./-])([a-z_][a-z0-9_]*)\.([a-z_][a-z0-9_]*)\b(?!\.)")
+
+
+def repo_files():
+    return subprocess.run(
+        ["git", "-C", str(REPO), "ls-files"], capture_output=True, text=True, check=True
+    ).stdout.split()
+
+
+def repo_path(name):
+    """This repository's path of a file the Acorn suite names: in the Acorn module's own directory, else the one file
+    of that name in the repository. None or two candidates stop the generator: a link is never guessed."""
+    own = ACORN_DIR / name
+    if own.is_file():
+        return own.relative_to(REPO).as_posix()
+    found = [f for f in repo_files() if pathlib.PurePosixPath(f).name == name]
+    if len(found) != 1:
+        raise GapError(
+            f"the Acorn suite names {name!r}, which is {len(found)} files of this repository: link it by path"
+        )
+    return found[0]
+
+
+def linked(text):
+    """`text` with each file it names linked to that file in this repository (the page is docs/verify/checks.md), and
+    each Acorn module's attribute it names (check.power_cycle_verdict) linked to its module."""
+
+    def file_link(m):
+        return f"[`{m[0]}`](../../{repo_path(m[0])})"
+
+    def attr_link(m):
+        module = ACORN_DIR / f"{m[1]}.py"
+        if m[2] in ("py", "toml") or not module.is_file():
+            return m[0]
+        return f"[`{m[0]}`](../../{module.relative_to(REPO).as_posix()})"
+
+    return NAMED_ATTR.sub(attr_link, NAMED_FILE.sub(file_link, text))
+
+
 def variants_of(board):
     """Every variant a board module names, in its own order; [None] for a board that plans the same for all."""
     if not isinstance(board, TestBoard):
@@ -79,7 +124,7 @@ def runs(board, variant, test, untested, derived, only_when_asked):
         detail = acorn_details().get(test)
         if not detail:
             raise GapError(f"{board.title}: the Acorn suite's docstring has no line for {test!r}")
-        return detail.rstrip(".") + (f"; {acorn_suite.OPT_IN.split(': ', 1)[1]}" if only_when_asked else "")
+        return linked(detail.rstrip(".")) + (f"; {acorn_suite.OPT_IN.split(': ', 1)[1]}" if only_when_asked else "")
     if variant is None:
         return "the tests of the board's own variant (the rows above), once the board has said which it is"
     script = board.script_tests.get(test)
@@ -154,7 +199,9 @@ def page():
         "not for and why. How the whole check runs is on [what the check tests on each board](tests.md) and "
         "[what an Acorn check tests](acorn.md#acorn).",
         "",
-        "Checks: " + ", ".join(f"[`{c}`](#{c})" for c in order) + ".",
+        "Checks: [Boot check](#boot-check), [Check ran](#check-ran), "
+        + ", ".join(f"[`{c}`](#{c})" for c in order)
+        + ".",
         "",
         "## Boot check",
         "",

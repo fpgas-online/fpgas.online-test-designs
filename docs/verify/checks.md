@@ -4,7 +4,7 @@
 
 For anyone who clicked a check's name on an fpgas.online dashboard, or who runs fpgas-verify on an Arty A7, NeTV2, Fomu EVT, TT FPGA demo board or Acorn: a section for every check, named as the dashboards name it, with, for each board type that gets it, what it checks and what the check runs, and the board types it is not for and why. How the whole check runs is on [what the check tests on each board](tests.md) and [what an Acorn check tests](acorn.md#acorn).
 
-Checks: [`pcie-link`](#pcie-link), [`pcie-bar0`](#pcie-bar0), [`rp1-pio`](#rp1-pio), [`jtag`](#jtag), [`flash`](#flash), [`ddr`](#ddr), [`p2-uart`](#p2-uart), [`p2-serial`](#p2-serial), [`scratch`](#scratch), [`p2-gpio`](#p2-gpio), [`wiring`](#wiring), [`power-cycle`](#power-cycle), [`uart`](#uart), [`ethernet`](#ethernet), [`header`](#header), [`foboot`](#foboot), [`foboot-after`](#foboot-after), [`sdk`](#sdk), [`dip-switches`](#dip-switches), [`spram`](#spram).
+Checks: [Boot check](#boot-check), [Check ran](#check-ran), [`pcie-link`](#pcie-link), [`pcie-bar0`](#pcie-bar0), [`rp1-pio`](#rp1-pio), [`jtag`](#jtag), [`flash`](#flash), [`ddr`](#ddr), [`p2-uart`](#p2-uart), [`p2-serial`](#p2-serial), [`scratch`](#scratch), [`p2-gpio`](#p2-gpio), [`wiring`](#wiring), [`power-cycle`](#power-cycle), [`uart`](#uart), [`ethernet`](#ethernet), [`header`](#header), [`foboot`](#foboot), [`foboot-after`](#foboot-after), [`sdk`](#sdk), [`dip-switches`](#dip-switches), [`spram`](#spram).
 
 ## Boot check
 
@@ -18,7 +18,7 @@ When the boot check of the boot the Pi is running reported its result (its `fpga
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| Sqrl Acorn | every | the PCIe link's speed and width are the setup's | the link speed and width in sysfs, against the setup's expected figures (expected.toml) |
+| Sqrl Acorn | every | the PCIe link's speed and width are the setup's | the link speed and width in sysfs, against the setup's expected figures ([`expected.toml`](../../docs/wiring/acorn/expected.toml)) |
 
 ## pcie-bar0
 
@@ -30,13 +30,13 @@ When the boot check of the boot the Pi is running reported its result (its `fpga
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| Sqrl Acorn | every | the Pi 5's RP1 PIO, which JTAG uses, is there and can be opened | on a Pi 5 / CM5: the RP1 PIO that openFPGALoader's rp1pio cable uses, /dev/pio0 there and openable (links.py) |
+| Sqrl Acorn | every | the Pi 5's RP1 PIO, which JTAG uses, is there and can be opened | on a Pi 5 / CM5: the RP1 PIO that openFPGALoader's rp1pio cable uses, /dev/pio0 there and openable ([`links.py`](../../verify/src/fpgas_online_verify/boards/acorn/links.py)) |
 
 ## jtag
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| Sqrl Acorn | every | over the P1 cable, the JTAG IDCODE and device DNA read, and the DNA is BAR0's | IDCODE and device DNA over P1 (links.py); the DNA must be BAR0's |
+| Sqrl Acorn | every | over the P1 cable, the JTAG IDCODE and device DNA read, and the DNA is BAR0's | IDCODE and device DNA over P1 ([`links.py`](../../verify/src/fpgas_online_verify/boards/acorn/links.py)); the DNA must be BAR0's |
 | Digilent Arty A7 | `a7-35` | over its FT2232H, the JTAG IDCODE is an XC7A35T's and the device DNA reads | reads the JTAG IDCODE and device DNA; loads nothing |
 | Kosagi NeTV2 | `a7-35`, `a7-100` | over the Pi's header, the JTAG IDCODE is the variant's part and the device DNA reads | reads the JTAG IDCODE and device DNA; loads nothing |
 
@@ -66,7 +66,7 @@ Not for:
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| Sqrl Acorn | every | the DRAM self-test over the whole DRAM: no errors, bandwidth at least the variant's minimum | the BIOS console read out (it lets the BIOS finish DRAM set-up, #47), then the DRAM BIST over the whole DRAM, two passes (bist.py): no errors, and write and read bandwidth at least the variant's minimum (expected.toml) |
+| Sqrl Acorn | every | the DRAM self-test over the whole DRAM: no errors, bandwidth at least the variant's minimum | the BIOS console read out (it lets the BIOS finish DRAM set-up, #47), then the DRAM BIST over the whole DRAM, two passes ([`bist.py`](../../verify/src/fpgas_online_verify/boards/acorn/bist.py)): no errors, and write and read bandwidth at least the variant's minimum ([`expected.toml`](../../docs/wiring/acorn/expected.toml)) |
 | Digilent Arty A7 | `a7-35` | the LiteX BIOS calibrates the DDR3 and its memory test passes | loads its test design, then runs [`test_ddr.py`](../../designs/ddr-memory/host/test_ddr.py) |
 | Kosagi NeTV2 | `a7-35`, `a7-100` | the LiteX BIOS calibrates the DDR3 and its memory test passes | loads its test design, then runs [`test_ddr.py`](../../designs/ddr-memory/host/test_ddr.py) |
 
@@ -79,13 +79,13 @@ Not for:
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| Sqrl Acorn | every | the UARTBone bridge on the P2 cable answers at both baud rates | the UARTBone bridge on P2 at both baud rates: identifier, DNA, XADC (links.py) |
+| Sqrl Acorn | every | the UARTBone bridge on the P2 cable answers at both baud rates | the UARTBone bridge on P2 at both baud rates: identifier, DNA, XADC ([`links.py`](../../verify/src/fpgas_online_verify/boards/acorn/links.py)) |
 
 ## p2-serial
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| Sqrl Acorn | every | J2 and K2 on the P2 cable work in both directions through the P2 serial switch | J2/K2 in both directions through the p2_serial switch, then the UARTBone again (links.py) |
+| Sqrl Acorn | every | J2 and K2 on the P2 cable work in both directions through the P2 serial switch | J2/K2 in both directions through the p2_serial switch, then the UARTBone again ([`links.py`](../../verify/src/fpgas_online_verify/boards/acorn/links.py)) |
 
 ## scratch
 
@@ -97,7 +97,7 @@ Not for:
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| Sqrl Acorn | every | J5 and H5 on the P2 cable work in both directions | J5/H5 in both directions (links.py), on a setup whose cable carries them: the Pi 5 with the Waveshare HAT. On a Compute Blade (CM4 or CM5) they are not wired: the test is not run there, said so, and left out of `wiring` |
+| Sqrl Acorn | every | J5 and H5 on the P2 cable work in both directions | J5/H5 in both directions ([`links.py`](../../verify/src/fpgas_online_verify/boards/acorn/links.py)), on a setup whose cable carries them: the Pi 5 with the Waveshare HAT. On a Compute Blade (CM4 or CM5) they are not wired: the test is not run there, said so, and left out of `wiring` |
 
 ## wiring
 
@@ -115,7 +115,7 @@ Not for:
 
 | Board | Variants | What it checks | What the check runs |
 |---|---|---|---|
-| Sqrl Acorn | every | the FPGA restarted since the last boot's check (scratch holds its reset value or this boot's marker) | the FPGA restarted since the last check (check.power_cycle_verdict): the ctrl scratch register holds its reset value, or this boot's marker. The marker is written at the end of the check, the only write that is not put back; set `power-cycle-check = on` in /etc/fpgas-verify/*.ini to run it |
+| Sqrl Acorn | every | the FPGA restarted since the last boot's check (scratch holds its reset value or this boot's marker) | the FPGA restarted since the last check ([`check.power_cycle_verdict`](../../verify/src/fpgas_online_verify/boards/acorn/check.py)): the ctrl scratch register holds its reset value, or this boot's marker. The marker is written at the end of the check, the only write that is not put back; set `power-cycle-check = on` in /etc/fpgas-verify/*.ini to run it |
 
 ## uart
 
