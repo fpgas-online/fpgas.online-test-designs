@@ -81,7 +81,9 @@ def test_each_board_tools_package_has_its_module_and_only_its_own_tooling(tmp_pa
     tt = bd.tools_nfpm(B["tt"], V, V, tmp_path)
     assert tt["name"] == "fpgas-online-tt-fpga-tools" and tt["recommends"] == ["micropython-mpremote", bd.PINCTRL]
     assert arty["recommends"] == [bd.PINCTRL]  # the PMOD HAT scan puts back the pins' UART/I2C/SPI functions
-    assert bd.OPENFPGALOADER not in tt["depends"] and "python3-libgpiod" in tt["depends"]
+    # the TT FPGA is loaded by fpgas.online's openFPGALoader only (its tt_fpga board), from the build with #18's clock
+    assert bd.TT_OPENFPGALOADER in tt["depends"] and "python3-libgpiod" in tt["depends"]
+    assert bd.OPENFPGALOADER not in tt["depends"] and "openfpgaloader (" not in bd.TT_OPENFPGALOADER
     for config in (arty, acorn, netv2, tt):
         assert "fpgas-online-setup-pi" not in config["depends"] + config.get("recommends", [])
         assert "sudo" not in config["depends"] + config.get("recommends", [])  # the checks run as root

@@ -30,7 +30,26 @@ sudo apt update
 sudo apt install python3-rpi-hwid
 ```
 
-**2.** On bookworm only, add bookworm-backports and install `mpremote` from it. On trixie the next step installs it.
+**2.** Add the fpgas.online-fpga-tools repository, on every release, before step 4: only its openFPGALoader has
+the `tt_fpga` board, which loads every design into the demo board's FPGA. Without it step 4 stops with an unmet
+dependency on `openfpgaloader-fpgasonline`. On 32-bit Raspberry Pi OS (`ID=raspbian`) the suite is
+`raspbian-<release>`. This is [fpgas-verify: installing it](../verify/installing.md#installing)'s step 2 again: if
+you did that, skip this one.
+
+The step is safe to run again. The `ls` line lists the key, `fpgas.online-fpga-tools.gpg`, about 1.2 kB (1174
+bytes). If it is missing or its size is far from that, run the `curl` line again.
+
+```bash
+sudo install -d -m0755 /etc/apt/keyrings
+sudo curl -fsSL --remove-on-error -o /etc/apt/keyrings/fpgas.online-fpga-tools.gpg \
+  https://fpgas.online/fpgas.online-fpga-tools/fpgas.online-fpga-tools.gpg
+echo "deb [signed-by=/etc/apt/keyrings/fpgas.online-fpga-tools.gpg] https://fpgas.online/fpgas.online-fpga-tools/$(. /etc/os-release; if [ "$ID" = raspbian ]; then echo "raspbian-$VERSION_CODENAME"; else echo "$VERSION_CODENAME"; fi)/ ./" \
+  | sudo tee /etc/apt/sources.list.d/fpgas.online-fpga-tools.list
+ls -l /etc/apt/keyrings/fpgas.online-fpga-tools.gpg
+sudo apt update
+```
+
+**3.** On bookworm only, add bookworm-backports and install `mpremote` from it. On trixie step 4 installs it.
 Debian's archive key is not on 32-bit Raspberry Pi OS, so the source names it. Its fingerprint is
 `B8B8 0B5B 623E AB6A D877 5C45 B7C5 D7D6 3509 47F8`.
 
@@ -48,13 +67,13 @@ sudo apt update
 sudo apt install -t bookworm-backports micropython-mpremote
 ```
 
-**3.** Install the TT FPGA's packages. This also turns the check at boot on (`fpgas-verify.service`). `fpgas-online-tt` is a different package: the TT site's own.
+**4.** Install the TT FPGA's packages. This also turns the check at boot on (`fpgas-verify.service`). `fpgas-online-tt` is a different package: the TT site's own.
 
 ```bash
 sudo apt install fpgas-online-tt-fpga
 ```
 
-**4.** Check the board. Nothing is sent to the site: `--no-publish` makes sure.
+**5.** Check the board. Nothing is sent to the site: `--no-publish` makes sure.
 
 ```bash
 sudo fpgas-tt-fpga-verify --no-publish
@@ -198,24 +217,28 @@ The demo PCB has DIP switches connected to the `ui_in` pins, allowing manual inp
 
 ## Programming
 
-The RP2040 programs the iCE40UP5K over SPI using the `fabricfox` MicroPython
-module (PIO-accelerated or bitbang fallback).
+The RP2350 programs the iCE40UP5K over SPI, driven by `openFPGALoader`'s `tt_fpga` board (our build: the
+`openfpgaloader-fpgasonline` packages of
+[fpgas.online-fpga-tools](https://github.com/fpgas-online/fpgas.online-fpga-tools)).
 
 ```bash
-python3 designs/_host/tt_fpga_program.py /dev/ttyACM0 bitstream.bin
+openFPGALoader -b tt_fpga -d /dev/ttyACM0 bitstream.bin
 ```
 
 **Programming workflow:**
 
-1. `mpremote mount` shows a temporary directory on the Pi, holding a copy of the bitstream and nothing else, to
-   the RP2350 as `/remote`, served over the serial link. **Nothing is written to the demo board's filesystem**: no file is copied to it and no directory
-   is made on it.
-2. A MicroPython script, run in the raw REPL, reads the bitstream from `/remote` and:
+1. openFPGALoader enters the RP2350's MicroPython raw REPL and streams the bitstream to it, in RAM.
+   **Nothing is written to the demo board's filesystem**: no file is copied to it and no directory is made on it.
+2. The RP2350:
    - Asserts `CRESET` (GPIO1) to reset the FPGA
    - Transfers the bitstream over SPI (SCK=GPIO6, MOSI=GPIO3, SS=GPIO5)
-   - Releases `CRESET` (`CDONE` is not read: the tests that follow are what show the design is running)
+   - Releases `CRESET` with a pull-up (`CDONE` is not read, [fpga-tools #17](https://github.com/fpgas-online/fpgas.online-fpga-tools/issues/17): the tests that follow are what show the design is running)
    - Starts the 50 MHz clock on GPIO16
-3. For PMOD tests: release all GPIO pins to high-Z (`--gpio-release`)
+   - Leaves the SPI pins and every `ui_in`, `uo_out` and `uio` pin (GPIO17-40) high-impedance, so the Pi can
+     drive and read them through the Pmod HAT
+3. openFPGALoader exits non-zero when any of that failed, and prints `SRAM programming complete` when it all
+   succeeded. A load takes about 20 s for the 104090-byte bitstreams
+   ([fpga-tools #16](https://github.com/fpgas-online/fpgas.online-fpga-tools/issues/16)).
 
 **No SPI flash:** the breakout has no flash. In its published design
 ([TinyTapeout/breakout-pcb, `ASIC-simulator/ttdbv3-fpga-ICE40UP5k`](https://github.com/TinyTapeout/breakout-pcb/tree/6e3725f7fc5707d0cbe7632c39b867da740d10d7/ASIC-simulator/ttdbv3-fpga-ICE40UP5k),
@@ -259,7 +282,7 @@ mode), with a udev symlink **`/dev/ttboard`** that the Pi daemon opens.
 per-port VLANs). Verified 2026-09-03: `fuser /dev/ttyACM0` shows the daemon's
 python3 process on all ten TT hosts. Consequences for this repo's tooling:
 
-- `mpremote` / `tt_fpga_program.py` cannot open `/dev/ttyACM0` while the
+- `mpremote` / `openFPGALoader` cannot open `/dev/ttyACM0` while the
   daemon runs. Stop it first (`sudo systemctl stop fpgas-tt`) and start it
   again afterwards, or drive the board through the daemon's `/serial` socket.
 - The bitstream-loading and design-listing features live in the daemon
@@ -277,11 +300,10 @@ to bring up the PS1 boards.
 ## Test Infrastructure
 
 The RP2040 provides bitstream loading, clock generation, and USB-to-UART
-bridging. Three host-side wrapper scripts handle the RP2040 interaction:
+bridging. `openFPGALoader -b tt_fpga` loads every design, and two host-side wrapper scripts handle the rest of the RP2350 interaction:
 
 | Script                                                              | Purpose                                          |
 |---------------------------------------------------------------------|--------------------------------------------------|
-| [`tt_fpga_program.py`](../../designs/_host/tt_fpga_program.py)      | Program the iCE40 from the Pi via mpremote        |
 | [`tt_test_wrapper.py`](../../designs/_host/tt_test_wrapper.py)      | Program + UART bridge (PTY) + run test            |
 | [`tt_pmod_wrapper.py`](../../designs/_host/tt_pmod_wrapper.py)      | Program + release GPIOs + hand off to RPi GPIO test |
 

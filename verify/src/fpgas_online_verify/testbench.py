@@ -23,7 +23,6 @@ programmer and its tests; `tests` maps a test to:
   pre           commands to run first (each may fail)
   runner        "tt-bridge": the script runs through the TT board's RP2350, which also loads the design
   listen        True if the script must have the UART open before the design starts (listen.py)
-  program_args  extra arguments to the programmer
   says          a prefix: when the script fails, its last line starting with it is the reason (else "the test
                 exited N"), and an exit of 2 under it is an error (it could not read), not a fail
 """
@@ -486,7 +485,7 @@ class TestBoard(Board):
     pending: ClassVar[dict] = {}
 
     # variant -> a design the check loads last and leaves running, which is no test: nothing reads it (the TT
-    # FPGA's moving display, #139): {"design": its name, "artifact": as a test's, "program_args": as a test's}.
+    # FPGA's moving display, #139): {"design": its name, "artifact": as a test's}.
     # It is in the board's bitstreams package beside the tests' designs. A load that fails is a warning in the
     # report, never the board's result: the board was tested before it, and is left as its last test left it.
     left_running: ClassVar[dict] = {}
@@ -544,7 +543,7 @@ class TestBoard(Board):
         try:
             entry = bitstreams.entry_for(manifest, spec["artifact"], self.bitstreams_package)
             bitstream = bitstreams.checked(images, entry)[0]
-            argv = [*self.program_argv(bitstream, host, None), *spec.get("program_args", [])]
+            argv = self.program_argv(bitstream, host, None)
             rc, text = runner(argv, PROGRAM_TIMEOUT)
         except Problem as p:
             return None, p.reason

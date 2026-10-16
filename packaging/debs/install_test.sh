@@ -24,17 +24,28 @@ installed() { dpkg-query -W -f='${db:Status-Status}' "$1" 2>&1 | grep -qx instal
 enabled() { [ -L /etc/systemd/system/multi-user.target.wants/fpgas-verify.service ]; }
 
 # The boards need an openFPGALoader that has --read-dna: fpgas.online's build, or Debian's own from 0.13.0 on.
-# Bookworm's own is 0.10.0, so there a board is refused until apt.fpgas.online's build is available; this
-# repository has none, so an empty stand-in named like it (pulling in Debian's binary) takes its place.
-if [ "$VERSION_CODENAME" = bookworm ]; then
-  echo "--- bookworm without fpgas.online's openFPGALoader: fpgas-online-arty refused"
-  if apt-get install -qq fpgas-online-arty >/dev/null; then fail "fpgas-online-arty installed with openFPGALoader 0.10.0"; fi
+# Bookworm's own is 0.10.0, so there a board is refused until apt.fpgas.online's build is available. The TT FPGA
+# board needs fpgas.online's build on every release (its tt_fpga board, from the build that starts the project
+# clock: build_debs.py's TT_OPENFPGALOADER), so it is refused everywhere until then. This repository has none, so
+# an empty stand-in named and versioned like it (pulling in Debian's binary) takes its place: on bookworm before
+# the first board, on trixie only before the TT FPGA's install, so the other boards there still take Debian's own.
+standin() {
   mkdir -p /standin/DEBIAN
-  printf 'Package: openfpgaloader-fpgasonline\nVersion: 0.0-standin\nArchitecture: all\nDepends: openfpgaloader\nMaintainer: install test <noreply@fpgas.online>\nDescription: stand-in for the install test\n' \
+  printf 'Package: openfpgaloader-fpgasonline\nVersion: 1.1.1+fpgasonline.0.0.post105~standin\nArchitecture: all\nDepends: openfpgaloader\nMaintainer: install test <noreply@fpgas.online>\nDescription: stand-in for the install test\n' \
     > /standin/DEBIAN/control
-  dpkg-deb --build /standin /repo/openfpgaloader-fpgasonline_0.0-standin_all.deb >/dev/null
+  dpkg-deb --build /standin /repo/openfpgaloader-fpgasonline_standin_all.deb >/dev/null
   (cd /repo && dpkg-scanpackages --multiversion . > Packages)
   apt-get update -qq
+}
+echo "--- without fpgas.online's openFPGALoader: fpgas-online-tt-fpga refused, for that"
+# -q, not -qq: bookworm's apt -qq prints only "held broken packages", not the dependency that cannot be met.
+if refused=$(apt-get install -q fpgas-online-tt-fpga 2>&1); then fail "fpgas-online-tt-fpga installed with Debian's openFPGALoader"; fi
+echo "$refused" | grep -q 'openfpgaloader-fpgasonline' || fail "fpgas-online-tt-fpga refused for another reason: $refused"
+if [ "$VERSION_CODENAME" = bookworm ]; then
+  echo "--- bookworm without fpgas.online's openFPGALoader: fpgas-online-arty refused"
+  if refused=$(apt-get install -q fpgas-online-arty 2>&1); then fail "fpgas-online-arty installed with openFPGALoader 0.10.0"; fi
+  echo "$refused" | grep -q 'openfpgaloader' || fail "fpgas-online-arty refused for another reason: $refused"
+  standin
 fi
 
 echo "--- one board: fpgas-online-arty"
@@ -126,6 +137,9 @@ python3 -c 'from fpgas_online_verify.boards.acorn import setup; s = setup.detect
   || fail "the Acorn's wiring.toml / expected.toml are not installed"
 apt-get purge -qq 'fpgas-online-*' >/dev/null
 apt-get autoremove -qq --purge >/dev/null
+
+# Trixie's boards above took Debian's own openFPGALoader (0.13.x); the TT FPGA needs fpgas.online's.
+[ "$VERSION_CODENAME" = bookworm ] || standin
 
 echo "--- every board: fpgas-online-all-boards"
 apt-get install -qq fpgas-online-all-boards >/dev/null

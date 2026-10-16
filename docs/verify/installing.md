@@ -29,9 +29,10 @@ echo "deb [signed-by=/etc/apt/keyrings/apt.gpg] https://apt.fpgas.online/$(. /et
 ls -l /etc/apt/keyrings/apt.gpg
 ```
 
-**2.** Add the fpgas.online-fpga-tools repository, before installing. On bookworm every board but the TT FPGA board
-needs it: Debian bookworm's openFPGALoader cannot read the device DNA. A NeTV2 on a Raspberry Pi 5 needs it
-on any release: only its build has the `rp1pio` cable. On 32-bit Raspberry Pi OS (`ID=raspbian`) the suite is
+**2.** Add the fpgas.online-fpga-tools repository, before installing. On bookworm every board needs it: Debian
+bookworm's openFPGALoader cannot read the device DNA. On any release the TT FPGA board needs it, since only its
+build has the `tt_fpga` board that loads the demo board's FPGA, and so does a NeTV2 on a Raspberry Pi 5, since only
+its build has the `rp1pio` cable. On 32-bit Raspberry Pi OS (`ID=raspbian`) the suite is
 `raspbian-<release>`, which is built for every Pi down to the Pi 1 and Zero.
 
 As in step 1, the step is safe to run again. Its last line lists the key: `fpgas.online-fpga-tools.gpg` is about
@@ -92,8 +93,9 @@ Where step 2 applies, `dpkg -l 'openfpgaloader*'` lists `openfpgaloader-fpgasonl
   and the key's ID (`BEB0EC3124E538E4` for `apt.fpgas.online`). Run the step that adds that repository again
   (step 1 for `apt.fpgas.online`, step 2 for `fpgas.online-fpga-tools`), check its `ls` line, then run step 3.
 - `apt` cannot find a package: the repository line of step 1 is missing, or step 3 was not run after it.
-- On bookworm, `apt` reports an unmet dependency on `openfpgaloader (>= 0.13.0)`: step 2 was not done. Do
-  steps 2 and 3, then step 4 again.
+- On bookworm, `apt` reports an unmet dependency on `openfpgaloader (>= 0.13.0)`, or on any release
+  `fpgas-online-tt-fpga-tools` reports one on `openfpgaloader-fpgasonline`: step 2 was not done. Do steps 2 and 3,
+  then step 4 again.
 - On trixie, Debian's own openFPGALoader was installed because step 2 came after step 4; it does not have the
   `rp1pio` cable a NeTV2 on a Raspberry Pi 5 needs. Run step 3, then
   `sudo apt install openfpgaloader-fpgasonline` to switch to the repository's build.
@@ -107,8 +109,8 @@ Where step 2 applies, `dpkg -l 'openfpgaloader*'` lists `openfpgaloader-fpgasonl
 
 * `fpgas-online-<board>-debug` adds `fpgas-<board>-debug` and the tools for the tests the boot check skips.
 * Installing does not run the check. It runs at the next boot, or when you run it.
-* The packages are `Architecture: all`. On bookworm, every board's packages but the TT FPGA board's need
-  openFPGALoader from the fpga-tools repository. It is built for arm64 and armhf only, so on bookworm those
+* The packages are `Architecture: all`. On bookworm every board's packages, and on any release the TT FPGA
+  board's, need openFPGALoader from the fpga-tools repository. It is built for arm64 and armhf only, so those
   packages do not install on x86. The NeTV2
   and the Acorn need a Pi's GPIO header, and so does the Fomu EVT, which sits on it; the Arty and TT FPGA board
   need only USB.
@@ -169,7 +171,7 @@ On a Raspberry Pi 5 the [fpgas.online-fpga-tools repository](https://github.com/
 | Package | Installs |
 |---------|----------|
 | `fpgas-online-tt-fpga` | installs everything below to check a TT FPGA Demo Board, and turns the boot check (`fpgas-verify.service`) on for it |
-| `fpgas-online-tt-fpga-tools` | the board's module of `fpgas_online_verify`, and `fpgas-tt-fpga-verify`; with `python3-serial` and `python3-libgpiod` (the PMOD HAT scan), and recommending `micropython-mpremote` and `raspi-utils-core` (`pinctrl`, which puts back the Pi's SPI/UART/I2C pin functions after the scan; Raspberry Pi OS only) |
+| `fpgas-online-tt-fpga-tools` | the board's module of `fpgas_online_verify`, and `fpgas-tt-fpga-verify`; with fpgas.online's openFPGALoader (`openfpgaloader-fpgasonline` or `-git`, from the build of 16 Oct 2026 on: the `tt_fpga` board that loads every design), `python3-serial` and `python3-libgpiod` (the PMOD HAT scan), and recommending `micropython-mpremote` and `raspi-utils-core` (`pinctrl`, which puts back the Pi's SPI/UART/I2C pin functions after the scan; Raspberry Pi OS only) |
 | `fpgas-online-tt-fpga-bitstreams` | the test bitstreams built by the same commit's CI, in `/usr/share/fpgas-online/tt-fpga/bitstreams/` |
 | `fpgas-online-verify` | `fpgas-verify`, the unit, and the host test scripts |
 

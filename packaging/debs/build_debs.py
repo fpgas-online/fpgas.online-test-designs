@@ -59,6 +59,13 @@ DATA = {"file_info": {"mode": 0o644}}
 # Every board here reads the device DNA with --read-dna, which openFPGALoader has from 0.13.0 (Debian
 # bookworm's is 0.10.0); fpgas.online's builds have it.
 OPENFPGALOADER = "openfpgaloader-fpgasonline | openfpgaloader-fpgasonline-git | openfpgaloader (>= 0.13.0)"
+# The TT FPGA's loads are openFPGALoader's tt_fpga board, which only fpgas.online's builds have, from the build that
+# starts the TTDBv3 project clock on GPIO16 and fails loud (fpga-tools #18, build 0.0.post105). The trailing ~ lets
+# the per-suite builds (~deb12, ~deb13) through.
+TT_OPENFPGALOADER = (
+    "openfpgaloader-fpgasonline (>= 1.1.1+fpgasonline.0.0.post105~) | "
+    "openfpgaloader-fpgasonline-git (>= 1.1.1.post182+fpgasonline.0.0.post105~)"
+)
 ETHERNET = ["iproute2", "iputils-ping", "iputils-arping | arping"]  # no sudo: the test asks to be run as root
 # What each board's verify needs, and nothing it does not. Every test the boot check runs needs its tools here,
 # not in -debug (only Suggested): the Arty's Ethernet test and the Arty's and TT's Pmod pin-ID scan (GPIO reads),
@@ -69,7 +76,7 @@ TOOLS_DEPENDS = {
     "arty": ["python3-serial", OPENFPGALOADER, "python3-libgpiod", *ETHERNET],
     "netv2": ["python3-serial", OPENFPGALOADER, "openocd"],
     "fomu": ["python3-serial", OPENFPGALOADER],
-    "tt": ["python3-serial", "python3-libgpiod"],
+    "tt": ["python3-serial", "python3-libgpiod", TT_OPENFPGALOADER],
 }
 # mpremote: in trixie, but only bookworm-backports has it for bookworm. pinctrl (releases the Acorn's and the
 # NeTV2's JTAG pins after their scans; puts back the UART/I2C/SPI functions the PMOD HAT scan takes): Raspberry

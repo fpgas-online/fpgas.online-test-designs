@@ -9,8 +9,9 @@ This wrapper sets up a transparent UART bridge on the RP2350 so test
 scripts can communicate with the FPGA as if connected directly.
 
 Flow:
-  1. Program the FPGA (tt_fpga_program.py: the RP2350 reads the bitstream from
-     this host over the serial link; nothing is written to the board)
+  1. Program the FPGA (`openFPGALoader -b tt_fpga`: the RP2350 is sent the
+     bitstream from this host over its raw REPL; nothing is written to the
+     board)
   2. Open raw serial to RP2350, enter MicroPython raw REPL (no reset: the
      FPGA stays programmed)
   3. Execute the bridge script: set up the UART, start the clock, bridge
@@ -37,10 +38,17 @@ import threading
 import time
 import tty
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import tt_fpga_program
+# One load: openFPGALoader's tt_fpga board (our build, the openfpgaloader-fpgasonline packages of
+# fpgas.online-fpga-tools). It streams the bitstream to the RP2350 over its raw REPL, which clocks it into the
+# iCE40 from RAM, then starts the project clock (GPIO16, 50 MHz) and leaves the SPI pins and GPIO17-40 (ui_in,
+# uo_out, uio) high-impedance; it exits non-zero when any of that failed (fpga-tools #18) and says LOADED last
+# when all of it succeeded. Nothing is written to the board.
+LOADED = "SRAM programming complete"
+# Measured on a demo board, 17 Oct 2026: about 20 s for a 104090-byte bitstream (fpga-tools #16: twice
+# the mpremote loader it replaced, 10 s), clock and pin release included.
+LOAD_TIMEOUT = 60
 
-# MicroPython script that runs on the RP2350 once tt_fpga_program.py has programmed the iCE40:
+# MicroPython script that runs on the RP2350 once openFPGALoader has programmed the iCE40:
 # 1. Sets up UART1 on correct TTDBv3 GPIO pins
 # 2. Starts 50 MHz clock with deinit/recreate PWM fix
 # 3. Enters transparent UART <-> USB CDC bridge
@@ -111,7 +119,7 @@ def reset_rp2350(port):
     """Send Ctrl-C to break any running MicroPython script on the RP2350.
 
     If the RP2350 is stuck in bridge mode from a previous session,
-    mpremote cannot enter raw REPL.  Opening the serial port and
+    openFPGALoader cannot enter raw REPL.  Opening the serial port and
     sending Ctrl-C interrupts the running script.
     """
     try:
@@ -157,22 +165,40 @@ def usb_power_cycle(port):
             break
 
 
+def load(port, bitstream, timeout=LOAD_TIMEOUT):
+    """Load the bitstream file `bitstream` on this host into the iCE40: (returncode, stdout, stderr).
+    openFPGALoader not finishing in time is returncode 124 and not being installed 127, each with the reason as
+    stderr, neither an exception."""
+    argv = ["openFPGALoader", "-b", "tt_fpga", "-d", port, bitstream]
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        out = e.stdout.decode("utf-8", "replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
+        return 124, out, f"openFPGALoader did not finish within {timeout} s"
+    except FileNotFoundError:
+        return 127, "", "openFPGALoader is not installed (openfpgaloader-fpgasonline-git)"
+    return p.returncode, p.stdout, p.stderr
+
+
 def program_fpga(port, local_path):
     """Program the iCE40 with the bitstream `local_path` on this host. Nothing is written to the board."""
-    # Break any stuck MicroPython script before mpremote tries raw REPL.
+    # Break any stuck MicroPython script before openFPGALoader enters the raw REPL.
     reset_rp2350(port)
-    rc, out, err = tt_fpga_program.program(port, local_path)
-    if rc != 0 or "PROGRAM_OK" not in out:
-        # mpremote failed — try USB power cycle and retry once
+    rc, out, err = load(port, local_path)
+    if rc == 127:  # openFPGALoader is not installed: no power cycle mends that
+        print(err, file=sys.stderr)
+        return False
+    if rc != 0 or LOADED not in out:
+        # the load failed: try a USB power cycle and retry once
         print("programming failed, trying USB power cycle recovery...")
         print((out + err).strip()[-500:])
         usb_power_cycle(port)
         reset_rp2350(port)
-        rc, out, err = tt_fpga_program.program(port, local_path)
+        rc, out, err = load(port, local_path)
     print(out.strip())
     if err.strip():
         print(err.strip(), file=sys.stderr)
-    return rc == 0 and "PROGRAM_OK" in out
+    return rc == 0 and LOADED in out
 
 
 def open_raw_serial(port):

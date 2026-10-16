@@ -89,7 +89,7 @@ The `HOSTS` dict maps host names to their properties:
 
 `ssh_upload()` pipes file contents through SSH stdin to `cat > <remote_path>`. This avoids `scp` shell-escaping issues with double-hop SSH. The file data is read locally and sent as raw bytes.
 
-For TT FPGA boards, `EXTRA_UPLOADS` sends additional helper scripts from `designs/_host/` (`tt_fpga_program.py`, `tt_test_wrapper.py`) that handle RP2350 programming and GPIO release.
+For TT FPGA boards, `EXTRA_UPLOADS` sends an additional helper script from `designs/_host/` (`tt_test_wrapper.py`) that loads the design with `openFPGALoader -b tt_fpga` and bridges the UART.
 
 ## Pre-Test Commands
 
@@ -134,7 +134,7 @@ finding recorded in [acorn-pinmap.md](hardware/acorn-pinmap.md):
 4. `echo 1 > /sys/bus/pci/rescan` — brings the endpoint back (the flash
    design's, or the newly loaded design's if it has PCIe).
 
-**TT FPGA**: `python3 ~/tt_fpga_program.py /dev/ttyACM0 <bitstream>` — Programming goes through the RP2350 microcontroller via USB CDC (`/dev/ttyACM0`). The script uses `mpremote mount` to show the RP2350 a copy of the bitstream on the Pi (nothing is written to the RP2350's filesystem), then executes a MicroPython script that reads it from there, programs the iCE40 via PIO-accelerated SPI and starts the 50 MHz clock. After programming, the RP2350 releases all shared GPIO pins to high-impedance so the RPi can communicate with the FPGA directly through the PMOD HAT.
+**TT FPGA**: `openFPGALoader -b tt_fpga -d /dev/ttyACM0 <bitstream>` — Programming goes through the RP2350 microcontroller via USB CDC (`/dev/ttyACM0`). openFPGALoader streams the bitstream to the RP2350's MicroPython raw REPL (nothing is written to the RP2350's filesystem), which programs the iCE40 over SPI and starts the 50 MHz clock. After programming, the RP2350 releases all shared GPIO pins to high-impedance so the RPi can communicate with the FPGA directly through the PMOD HAT.
 
 ### Programming Success Detection
 
@@ -181,11 +181,11 @@ The TT FPGA Demo Board v3 has an RP2350 microcontroller that **programs** the iC
 
 The RPi connects to the FPGA through the same PMOD HAT used for all other boards — PMOD cables run from the RPi's PMOD HAT to the PMOD headers on the TT Demo Board, which connect directly to iCE40 pins. This means **UART and PMOD tests work identically to Arty and Fomu** once the FPGA is programmed. The only TT-specific step is programming.
 
-### Programming Flow (tt_fpga_program.py / tt_pmod_wrapper.py)
+### Programming Flow (`openFPGALoader -b tt_fpga` / tt_pmod_wrapper.py)
 
-1. **Mount a copy of the bitstream** on the RP2350 with `mpremote mount` over USB CDC (`/dev/ttyACM0`); nothing is written to the RP2350's filesystem. Includes `reset_rp2350()` (Ctrl-C to break any stuck MicroPython script) and USB power cycle retry.
-2. **Program FPGA** via MicroPython raw REPL: PIO SPI to the iCE40, then start the 50 MHz PWM clock on GPIO16.
-3. **Release RP2350 GPIOs to high-Z** — all ui_in, uo_out, and uio pins are set to `Pin.IN` (input mode). This is critical: the RP2350 shares the same physical traces as the PMOD headers. Without releasing, the RP2350's output drivers would contend with the RPi's GPIO signals coming through the PMOD HAT.
+1. **Stream the bitstream** to the RP2350's raw REPL over USB CDC (`/dev/ttyACM0`); nothing is written to the RP2350's filesystem. The wrappers first call `reset_rp2350()` (Ctrl-C to break any stuck MicroPython script); `tt_test_wrapper.py` retries once after a USB power cycle.
+2. **Program FPGA** via MicroPython raw REPL: SPI to the iCE40, then start the 50 MHz PWM clock on GPIO16.
+3. **Release RP2350 GPIOs to high-Z** — all ui_in, uo_out, and uio pins (GPIO17-40) are set to inputs with no pull. This is critical: the RP2350 shares the same physical traces as the PMOD headers. Without releasing, the RP2350's output drivers would contend with the RPi's GPIO signals coming through the PMOD HAT.
 
 After step 3, the RPi has clean access to the FPGA through the PMOD HAT, and tests run the same way as on any other board.
 
