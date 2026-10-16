@@ -33,6 +33,28 @@ def _live(argv):
         return 127
 
 
+def _load(board, argv):
+    """A load, its output shown as it comes, judged as the boot check judges it: a load that exits 0 but did not
+    configure (board.load_failure) is exit 1, with the reason."""
+    argv = [str(a) for a in argv]
+    print("$ " + " ".join(argv), flush=True)
+    try:
+        p = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    except FileNotFoundError:
+        print(f"{argv[0]} is not installed", flush=True)
+        return 127
+    said = []
+    for line in p.stdout:
+        print(line, end="", flush=True)
+        said.append(line)
+    rc = p.wait()
+    why = board.load_failure(argv, "".join(said)) if rc == 0 else None
+    if why:
+        print(f"loading it failed: {why}", flush=True)
+        return 1
+    return rc
+
+
 def _find(board, host):
     """board.find, under the board's lock when finding it drives its pins (the NeTV2's JTAG scan), waiting for it
     as the boot check does (runner.probing). Not for use while the lock is already held (program, test)."""
@@ -113,13 +135,13 @@ def _program(board, host, args, bitstream, then_test):
         _live(step)
     if board.tests[args.test].get("runner") == "tt-bridge":  # loads the design and bridges the UART in one go
         if not then_test:
-            return _live(board.program_argv(bitstream, host, args.test))
+            return _load(board, board.program_argv(bitstream, host, args.test))
         return _live([*board.test_argv(args.test, host, bitstream), *args.extra])
     if then_test and board.tests[args.test].get("listen"):  # the test listens first: see listen.py
         test = [*board.test_argv(args.test, host, bitstream), *args.extra]
         return _live([sys.executable, "-m", "fpgas_online_verify.listen", host["port"], str(len(test)), *test,
                       *board.program_argv(bitstream, host, args.test)])  # fmt: skip
-    rc = _live(board.program_argv(bitstream, host, args.test))
+    rc = _load(board, board.program_argv(bitstream, host, args.test))
     args.loaded = rc == 0  # what the board now runs, whatever its test then says (the Fomu's note, #135)
     if rc != 0 or not then_test:
         return rc

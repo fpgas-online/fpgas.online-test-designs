@@ -7,6 +7,7 @@ scripts) goes through a fake runner that records it and answers as the hardware 
 import hashlib
 import importlib.util
 import json
+import os
 import struct
 import sys
 
@@ -518,7 +519,48 @@ def test_only_a_jtag_load_by_openfpgaloader_is_judged_by_its_done_line():
     # the NeTV2 on a Pi 3/4 loads with OpenOCD, which prints no such line; the Fomu and TT boards load no 7-series
     assert NETV2.load_failure(["openocd", "-c", "init; pld load 0 x.bit; exit"], "ok") is None
     assert NETV2.load_failure(["openFPGALoader", "-c", "rp1pio", "x.bit"], NOT_LOADED) is not None
-    assert FOMU.load_failure(["openFPGALoader", "x.bin"], "ok") is None and TT.load_failure(["x"], "ok") is None
+    assert FOMU.load_failure(["openFPGALoader", "x.bin"], "ok") is None
+
+
+def test_a_tt_fpga_load_counts_only_when_openfpgaloader_said_it_finished():
+    load = [*TT_LOAD, "-d", "/dev/ttyACM0", "x.bin"]
+    assert TT.load_failure(load, "Writing: 100.00%\n" + TT_LOADED) is None
+    assert TT.load_failure(load, "Writing: 100.00%\n") == (
+        "openFPGALoader exited 0 but did not say 'SRAM programming complete'"
+    )
+
+
+def test_a_tt_fpga_check_fails_a_load_that_exits_0_without_saying_it_finished(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    pin_id = "pmod-pin-id-tt-fpga/tt_fpga_platform.bin"
+    run = Runner([(pin_id, (0, "Writing: 100.00%\n")), _rpi_hwid(TT_BOARD)])
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    wiring = next(t for t in report["tests"] if t["test"] == "wiring")
+    assert wiring["result"] == "fail" and wiring["reason"] == (
+        "loading it failed: openFPGALoader exited 0 but did not say 'SRAM programming complete'"
+    )
+    assert not any("identify_pmod_pins.py" in " ".join(c) for c in run.calls)  # nothing reads a design not loaded
+
+
+@pytest.mark.parametrize("says, rc, verdict", [
+    ("Writing: 100.00%\nSRAM programming complete\n", 0, None),
+    ("Writing: 100.00%\n", 0, "loading it failed: openFPGALoader exited 0 but did not say"),
+])  # fmt: skip
+def test_the_debug_tools_judge_a_load_as_the_check_does(tmp_path, monkeypatch, capsys, says, rc, verdict):
+    (tmp_path / "said.txt").write_text(says)
+    fake = tmp_path / "openFPGALoader"
+    fake.write_text(f"#!/bin/sh\ncat {tmp_path / 'said.txt'}\n")
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ['PATH']}")
+    assert debug._load(TT, ["openFPGALoader", "-b", "tt_fpga", "-d", "/dev/ttyACM0", "x.bin"]) == (1 if verdict else rc)
+    shown = capsys.readouterr().out
+    assert "Writing: 100.00%" in shown and ((verdict in shown) if verdict else "loading it failed" not in shown)
+
+
+def test_the_debug_tools_say_a_missing_loader_is_not_installed(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("PATH", str(tmp_path))
+    assert debug._load(TT, ["openFPGALoader", "x.bin"]) == 127
+    assert "openFPGALoader is not installed" in capsys.readouterr().out
 
 
 def test_only_the_tests_asked_for_run(tmp_path):
@@ -1579,6 +1621,7 @@ def test_debug_test_loads_then_runs_with_extra_arguments(tmp_path, monkeypatch):
     monkeypatch.setattr(debug, "hold_lock", lambda *a: _Nothing())
     ran = []
     monkeypatch.setattr(debug, "_live", lambda argv: ran.append([str(a) for a in argv]) or 0)
+    monkeypatch.setattr(debug, "_load", lambda board, argv: debug._live(argv))
     images = _install(tmp_path, ARTY)
     args = cli.argparse.Namespace(command="test", test="wiring", extra=["--hat-port", "JA"], images=images,
                                   variant=None, port=None)  # fmt: skip
@@ -1616,6 +1659,7 @@ def test_a_by_name_fomu_load_says_how_to_put_foboot_back(tmp_path, monkeypatch, 
     args = _fomu_debug(monkeypatch, "program", test="uart", extra=[])
     args.images = _install(tmp_path, FOMU)
     monkeypatch.setattr(debug, "_live", lambda argv: 0)
+    monkeypatch.setattr(debug, "_load", lambda board, argv: debug._live(argv))
     assert debug.run(FOMU, args) == 0
     assert "fpgas-fomu-debug reset" in capsys.readouterr().out
 
@@ -1624,6 +1668,7 @@ def test_a_failed_by_name_fomu_load_does_not_say_the_design_runs(tmp_path, monke
     args = _fomu_debug(monkeypatch, "program", test="uart", extra=[])
     args.images = _install(tmp_path, FOMU)
     monkeypatch.setattr(debug, "_live", lambda argv: 1)  # the DFU load failed: foboot may still be there
+    monkeypatch.setattr(debug, "_load", lambda board, argv: debug._live(argv))
     assert debug.run(FOMU, args) == 1
     assert "fpgas-fomu-debug reset" not in capsys.readouterr().out
 
@@ -1634,6 +1679,7 @@ def test_a_by_name_fomu_test_whose_host_test_fails_still_says_the_design_runs(tm
     # the load worked; the host test failed: the design runs all the same (the serial-getty stop in pre_steps
     # runs through _live too, so answers in call order would not reach the load)
     monkeypatch.setattr(debug, "_live", lambda argv: 1 if any(str(a).endswith("test_uart.py") for a in argv) else 0)
+    monkeypatch.setattr(debug, "_load", lambda board, argv: debug._live(argv))
     assert debug.run(FOMU, args) == 1
     assert "fpgas-fomu-debug reset" in capsys.readouterr().out
 
