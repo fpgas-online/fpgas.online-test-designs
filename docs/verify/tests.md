@@ -110,9 +110,14 @@ The check finds the Arty by its FT2232H on USB (`0403:6010`). Then, in this orde
 2. It reads the device DNA with `openFPGALoader -b arty --read-dna` over the same FT2232H, which loads nothing.
    A DNA that cannot be read, or is all zeros or all ones, fails the board
    ([the device DNA](idcode-and-dna.md#the-device-dna)).
-3. It loads the UART, DDR, SPI flash (`flash`), Ethernet and PMOD pin identification (`wiring`) test designs into SRAM with
+3. It reads the SPI flash's identity with `openFPGALoader -b arty --flash-info-json FILE`: its JEDEC ID,
+   unique ID and SFDP, the board's [flash fields](../identity.md#the-arty-and-netv2-flash). This loads
+   openFPGALoader's SPI-over-JTAG bridge in place of the running design, then the FPGA reloads from its flash,
+   so it runs before any test design. It runs only once steps 1 and 2 passed. A read that fails is the
+   identity's `flash_error`, and the board's result is `error`; the tests still run.
+4. It loads the UART, DDR, SPI flash (`flash`), Ethernet and PMOD pin identification (`wiring`) test designs into SRAM with
    openFPGALoader, one at a time, and runs each one's host test.
-4. It reads back the flash's boot image region (the first 2.1 MiB) through openFPGALoader's SPI-over-JTAG
+5. It reads back the flash's boot image region (the first 2.1 MiB) through openFPGALoader's SPI-over-JTAG
    bridge.
 
 About two of the tests:
@@ -124,8 +129,8 @@ About two of the tests:
 
 A failure in either fails the board, like any other test.
 
-What `changed` compares is the FTDI serial number, the IDCODE, the device DNA, the flash's JEDEC ID and the
-sha256 of that flash region. The Arty is left running the SPI-over-JTAG bridge, and comes back to its flash
+What `changed` compares is the FTDI serial number, the IDCODE, the device DNA, the flash's JEDEC ID (from step 3)
+and the sha256 of that flash region. The Arty is left running the SPI-over-JTAG bridge, and comes back to its flash
 image at the next power cycle. Only the PMOD loopback test is left to `fpgas-arty-debug`.
 
 ### The NeTV2 check at boot
@@ -141,6 +146,7 @@ Which tool drives JTAG depends on the Pi:
 |---|---|---|
 | The scan that finds the board | OpenOCD | openFPGALoader's raw scan |
 | The device DNA | openFPGALoader, `libgpiod` cable | openFPGALoader, `rp1pio` cable |
+| The flash's identity, and its readback | openFPGALoader, `libgpiod` cable | openFPGALoader, `rp1pio` cable |
 | Loading a test design | OpenOCD | openFPGALoader, `rp1pio` cable |
 
 Then, in this order:
@@ -152,11 +158,19 @@ Then, in this order:
 2. It reads the device DNA with `openFPGALoader --read-dna` on the same pins, which loads nothing, and puts the
    pins back as after the scan. A DNA that cannot be read, or is all zeros or all ones, fails the board
    ([the device DNA](idcode-and-dna.md#the-device-dna)).
-3. It loads the UART, DDR and SPI flash (`flash`) test designs into SRAM, and runs each design's host test on
+3. It reads the SPI flash's identity with `openFPGALoader <cable> --pins 27:22:4:17 --fpga-part <part>
+   --flash-info-json FILE` (`<part>` is `xc7a35tfgg484` or `xc7a100tfgg484`, from the IDCODE), and puts the pins
+   back as after the DNA read: its JEDEC ID, unique ID and SFDP, the board's
+   [flash fields](../identity.md#the-arty-and-netv2-flash). This loads openFPGALoader's SPI-over-JTAG bridge in
+   place of the running design, then the FPGA reloads from its flash, so it runs before any test design. It runs
+   only once steps 1 and 2 passed. A read that fails is the identity's `flash_error`, and the board's result is
+   `error`; the tests still run.
+4. It loads the UART, DDR and SPI flash (`flash`) test designs into SRAM, and runs each design's host test on
    `/dev/ttyAMA0`.
-4. It reads back the flash's boot image region.
+5. It reads back the flash's boot image region.
 
-What `changed` compares is the IDCODE, the device DNA, the flash's JEDEC ID and the sha256 of that flash region.
+What `changed` compares is the IDCODE, the device DNA, the flash's JEDEC ID (from step 3) and the sha256 of that
+flash region.
 
 ### The Fomu EVT check at boot
 
