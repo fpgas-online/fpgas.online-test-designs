@@ -52,7 +52,7 @@ When it fails:
 
 | It says | Meaning, and what to do |
 |---|---|
-| `fail`: `rp1-pio fail: /dev/pio0: No such file or directory; kernel module rp1_pio is not loaded; kernel: …` (Acorn on a Pi 5 or CM5) | the Pi's RP1 PIO, which the Acorn's JTAG cable runs on, is not there or cannot be opened, so the JTAG tests cannot run. The reason lists what is missing: `/dev/pio0`, the `rp1_fw` and `rp1_pio` kernel modules, and the kernel's own last line about the RP1. `failed to contact RP1 firmware` there means the Pi's bootloader carries RP1 firmware that `rp1_pio` cannot talk to |
+| `fail`: `rp1-pio fail: /dev/pio0: No such file or directory; kernel module rp1_pio is not loaded; kernel: …` (Acorn on a Pi 5 or CM5) | the Pi's RP1 PIO, which the Acorn's JTAG cable runs on, is not there or cannot be opened, so the JTAG tests cannot run. The reason says which: `/dev/pio0` missing, `… is not a character device`, or `cannot open /dev/pio0: …`; then each of the `rp1_fw` and `rp1_pio` modules with no `/sys/module` entry (a driver built into the kernel has none either, so that line alone does not prove it missing); then the kernel's last line about the RP1. With `failed to contact RP1 firmware` there, the Pi's bootloader carries RP1 firmware that `rp1_pio` cannot talk to: update the Pi's bootloader EEPROM. Otherwise load `rp1_pio` (`sudo modprobe rp1_pio`) and run the check again |
 
 The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
 
@@ -173,7 +173,7 @@ When it fails:
 
 | It says | Meaning, and what to do |
 |---|---|
-| `fail`: `scratch fail: scratch over BAR0: wrote 0x…, read 0x…` / `scratch fail: scratch over P2 UART: no reply on … (…)` (Acorn) | the FPGA's control scratch register did not read back what was written over PCIe (BAR0), or the UARTBone bridge on the P2 cable did not answer. Over BAR0: the design is not running as built, so look at `pcie-bar0` first. Over the P2 UART: the P2 cable, as for `p2-uart` |
+| `fail`: `scratch fail: scratch over BAR0: wrote 0x…, read 0x…` / `scratch fail: scratch over P2 UART: no reply on … (…)` (Acorn) | the FPGA's control scratch register did not read back what was written, or the UARTBone bridge on the P2 cable did not answer. Over BAR0 (PCIe), the check reached the design's registers (`pcie-bar0` reads which build runs there), so it answers but does not keep what is written: the reason gives the value written and the value read. Run the check again, and if it stays, the FPGA is faulty or not running the design the release built. Over the P2 UART: no reply is the P2 cable, as for `p2-uart` |
 
 The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
 
@@ -244,7 +244,7 @@ Not for:
 
 When it fails:
 
-Common failures lists no message of this check's own: the reason in the check's summary says what it found.
+Common failures lists no message of this check's own. Under the failed test, the check's summary shows the last lines its test printed, which say what went wrong; `fpgas-<board>-debug test <check>` shows all of them.
 
 The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
 
@@ -263,7 +263,7 @@ Not for:
 
 When it fails:
 
-Common failures lists no message of this check's own: the reason in the check's summary says what it found.
+Common failures lists no message of this check's own. Under the failed test, the check's summary shows the last lines its test printed, which say what went wrong; `fpgas-<board>-debug test <check>` shows all of them.
 
 The messages any check can give (a design that would not load, a test that did not finish, a tool or package missing, a planned test that has no boot-check test yet) are in [common failures](common-failures.md#common-failures).
 

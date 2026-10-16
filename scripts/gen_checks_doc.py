@@ -264,8 +264,9 @@ def page():
             out += [*failures_header, *failures[check], ""]
         else:
             out += [
-                "Common failures lists no message of this check's own: the reason in the check's summary says "
-                "what it found.",
+                "Common failures lists no message of this check's own. Under the failed test, the check's summary "
+                "shows the last lines its test printed, which say what went wrong; `fpgas-<board>-debug test "
+                "<check>` shows all of them.",
                 "",
             ]
         out += [ANY_CHECK, ""]
