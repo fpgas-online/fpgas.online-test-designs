@@ -21,9 +21,10 @@ What [verify-goals.md](../verify-goals.md) asks for that the check does not do y
 * The Arty's and NeTV2's flash is fingerprinted (a sha256 of its boot image region) and compared only with the
   last run's, not checked against a golden full test design.
 * Only the Acorn's flash can be written with its golden images (`fpgas-acorn-flash write`).
-* The Arty's and NeTV2's flash IDs are not read, nor the TT's (the Fomu's are, over its header); their
-  [identity](../identity.md) has only what finding the board, its IDCODE and its device DNA give, and on the
-  TT FPGA what rpi-hwid reads.
+* The TT's flash IDs are not read (the Fomu's are, over its header; the Arty's and NeTV2's through
+  openFPGALoader's SPI-over-JTAG bridge): its [identity](../identity.md) has what finding the board gives, and
+  what rpi-hwid reads.
 * Nothing is compared with the site's records.
-* rpi-hwid refuses the Arty's and NeTV2's labels until their flash IDs are read; `--identify` exits 1 for
-  them meanwhile.
+* rpi-hwid refuses the Arty's and NeTV2's labels when openFPGALoader knows no unique ID command for their flash
+  part (`flash_uid_state` `none` with no `flash_uid_note`), or reads it blank; `--identify` exits 1 for them
+  then, naming `flash_uid_note` or `flash_uid_state`.

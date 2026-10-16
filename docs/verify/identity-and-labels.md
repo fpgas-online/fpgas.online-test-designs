@@ -51,8 +51,9 @@ the check, publishes anything or records any state.
   (acorn < arty < netv2).
 * A field only the boot check reads comes from the boot report, `/run/fpgas-online/verify.json`, when the
   board there is this one by a key no other board has: a TT board's `usb_serial`, the Arty's USB serial, the
-  Acorn's PCI slot, or the device DNA. These are the Arty's and NeTV2's flash fields, which need a design
-  loaded for openFPGALoader's SPI-over-JTAG bridge, and a TT board's Tiny Tapeout fields with
+  Acorn's PCI slot, or the device DNA. These are the Arty's and NeTV2's flash fields, which openFPGALoader reads
+  by loading its SPI-over-JTAG bridge in place of the running design (so `--identify`, which loads nothing,
+  never reads them), and a TT board's Tiny Tapeout fields with
   `tinytapeout_note` or `tinytapeout_error`, which need the port `fpgas-tt.service` holds. Those fields are
   listed in the board's `from_report`. An IDCODE names a part, not a board, so a board known only by its
   IDCODE (a NeTV2 whose DNA could not be read) gets nothing from the report: the fields stay missing, for
@@ -66,9 +67,11 @@ the check, publishes anything or records any state.
 * The exit status is 0 when every board's identity is whole (no field missing, no `<field>_error`), 1
   otherwise. Each missing field is printed on stderr with why. The document is printed either way; readers
   use it and ignore the exit status.
-* For an Arty or a NeTV2, `--identify` exits 1: their labels need the flash's unique ID (`flash_uid`), which
-  neither the boot check nor `--identify` reads.
-  Their IDCODE and device DNA, and any flash fields the boot report has for them, are still in the document.
+* For an Arty or a NeTV2, `--identify` exits 0 only when the boot report has the flash fields rpi-hwid's label
+  needs: `flash_jedec` and `flash_uid_state`, then `flash_uid` when the state is `read` or `flash_uid_note`
+  when it is `none` (the Arty also needs its USB serial). A state of `blank`, or `none` with no note
+  (openFPGALoader knows no unique ID command for the part), leaves the label refused, and `--identify` exits 1
+  naming `flash_uid_state` or `flash_uid_note`. Their IDCODE and device DNA are in the document either way.
 * For a TT board, `--identify` exits 0 only when the boot report has the fields rpi-hwid's Tiny Tapeout label
   needs (`mcu`, `chip`, `demoboard`, `demoboard_version`, `sdk`, besides `usb_serial`). So it exits 1 when
   rpi-hwid was not installed at boot.

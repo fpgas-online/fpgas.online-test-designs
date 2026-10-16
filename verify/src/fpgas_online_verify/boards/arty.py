@@ -1,8 +1,9 @@
 """Digilent Arty A7 (XC7A35T): found by its FT2232H on USB (JTAG on interface 0, the UART on interface 1),
 loaded with openFPGALoader. The check reads its whole IDCODE over that JTAG first (openFPGALoader's raw scan),
-which must be an XC7A35T, then its device DNA (openFPGALoader --read-dna, over the same cable). Its flash (the
-boot image region) is read back with openFPGALoader's SPI-over-JTAG bridge, which openFPGALoader loads into SRAM
-for the purpose."""
+which must be an XC7A35T, then its device DNA (openFPGALoader --read-dna, over the same cable), then its SPI
+flash's identity (openFPGALoader --flash-info-json), before any test. That and the readback of its flash (the
+boot image region) go through openFPGALoader's SPI-over-JTAG bridge, which openFPGALoader loads into SRAM for
+the purpose."""
 
 from typing import ClassVar
 
@@ -19,7 +20,8 @@ class Arty(TestBoard):
     usb = (("0403", "6010"),)
     variants: ClassVar[dict] = {"a7-35": "a7-35t"}
     idcodes: ClassVar[dict] = {"a7-35": 0x0362D093}  # XC7A35T
-    label_fields = ("idcode", "dna", "flash_jedec", "flash_uid")
+    # and flash_uid or flash_uid_note, as flash_uid_state says (identify.missing; rpi-hwid's label needs them)
+    label_fields = ("serial", "idcode", "dna", "flash_jedec", "flash_uid_state")
     port = "/dev/ttyUSB1"
     flash_region: ClassVar[dict] = {"a7-35": 0x220000}  # an XC7A35T .bit is 2,192,123 bytes
     jtag_loads_7_series = True  # openFPGALoader's `done` line says whether it loaded (#300)
@@ -62,8 +64,9 @@ class Arty(TestBoard):
     def program_argv(self, bitstream, host, test):
         return ["openFPGALoader", "-b", "arty", bitstream]
 
-    def flash_dump_argv(self, host, variant, size, out):
-        return ["openFPGALoader", "-b", "arty", "--dump-flash", "--file-size", str(size), out]
+    def flash_argv(self, host, variant):
+        """The bridge for the board's part (-b arty names it): the flash's readback and its identity."""
+        return ["openFPGALoader", "-b", "arty"]
 
 
 BOARD = Arty()

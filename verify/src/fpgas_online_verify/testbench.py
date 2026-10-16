@@ -3,7 +3,11 @@
 On a board with JTAG (the Arty and the NeTV2) its whole IDCODE is read first and decoded (idcode.py): a part
 that is not the variant's fails the board, whatever its silicon version. Once that scan has found the one FPGA
 expected, its device DNA is read over the same JTAG (`openFPGALoader --read-dna`, dna.py), which loads nothing:
-a DNA that cannot be read, or reads all zeros or all ones, fails the board too. For each of the board's boot-check
+a DNA that cannot be read, or reads all zeros or all ones, fails the board too. Once both have passed, the SPI
+flash's identity (JEDEC ID, unique ID, SFDP) is read with `openFPGALoader --flash-info-json` through its
+SPI-over-JTAG bridge, which replaces the running design until the FPGA reloads from its flash: so before any
+test design is loaded, and before the board is said to be identified, so fpga-board-identified carries it. A
+read that fails is the identity's flash_error, and the board's result is error. For each of the board's boot-check
 tests (UART, DDR, SPI flash): check its bitstream against the manifest of fpgas-online-<board>-bitstreams,
 load it (into SRAM, except the Fomu's DFU), run its host test script and keep the tail of its output. Then,
 where the board can, read back the region of its flash that holds the boot image, for the state (state.py):
@@ -26,6 +30,7 @@ programmer and its tests; `tests` maps a test to:
 
 import contextlib
 import hashlib
+import json
 import re
 import sys
 import tempfile
@@ -39,8 +44,13 @@ PROGRAM_TIMEOUT = 300
 TEST_TIMEOUT = 300
 DUMP_TIMEOUT = 900
 JTAG_TIMEOUT = 60
+# Loading the SPI-over-JTAG bridge (a whole bitstream: over libgpiod on a Pi 3/4) and reading the flash's IDs.
+FLASH_INFO_TIMEOUT = PROGRAM_TIMEOUT
 # Why the device DNA was not read when the IDCODE scan did not pass.
 DNA_SKIPPED = "not read: --read-dna runs only once the JTAG scan has found the one FPGA expected"
+# Why the flash's identity was not read when the JTAG check did not pass.
+FLASH_INFO_SKIPPED = ("not read: --flash-info-json runs only once the JTAG check has passed (the one FPGA expected, "
+                      "and its device DNA)")  # fmt: skip
 JEDEC_RE = re.compile(r"JEDEC ID: 0x([0-9A-Fa-f]{2}) 0x([0-9A-Fa-f]{2}) 0x([0-9A-Fa-f]{2})")
 
 
@@ -79,9 +89,21 @@ class TestBoard(Board):
             return "the FPGA did not configure: openFPGALoader's last line says done 0 (it exits 0 all the same)"
         return None
 
-    def flash_dump_argv(self, host, variant, size, out):
-        """openFPGALoader (or similar) reading `size` bytes of flash from 0 into `out`; None if not possible."""
+    def flash_argv(self, host, variant):
+        """openFPGALoader with the cable and FPGA part that reach the board's SPI flash through its SPI-over-JTAG
+        bridge, for the flash's readback and its identity; None for a board whose flash is not read so."""
         return None
+
+    def flash_dump_argv(self, host, variant, size, out):
+        """openFPGALoader reading `size` bytes of flash from 0 into `out`; None if not possible."""
+        argv = self.flash_argv(host, variant)
+        return None if argv is None else [*argv, "--dump-flash", "--file-size", str(size), out]
+
+    def flash_info_argv(self, host, variant, out):
+        """openFPGALoader writing the flash's identity to `out` (--flash-info-json, the fpgas.online builds'),
+        through the same bridge as the readback; None if not possible."""
+        argv = self.flash_argv(host, variant)
+        return None if argv is None else [*argv, "--flash-info-json", out]
 
     # A board with JTAG: variant -> its FPGA's IDCODE at version 0. The check reads the whole IDCODE (from
     # `found`, when finding the board read it, else with idcode_argv) and fails a part that is not the variant's.
@@ -360,6 +382,54 @@ class TestBoard(Board):
 
     # -- the flash -----------------------------------------------------------------------------------------
 
+    def read_flash_identity(self, host, variant, jtag, runner=run):
+        """(the identity's flash fields, the faults that make the check an error) from `openFPGALoader
+        --flash-info-json` (identity.flash_info_fields), run once the JTAG entry `jtag` has passed and held in
+        jtag_driven as the DNA read is. ({}, []) for a board whose flash is not read over JTAG.
+
+        The bridge replaces the running design, then the FPGA reloads from its flash: so it is read before any
+        test design is loaded, and never by --identify. A read that fails (the command could not run, exited
+        non-zero, wrote no file, or wrote one this does not take) is flash_error with why, and a fault; one not
+        tried because the JTAG check did not pass is flash_error (FLASH_INFO_SKIPPED) only: the jtag test has
+        already failed the board."""
+        with tempfile.TemporaryDirectory() as tmp:
+            out = f"{tmp}/flash-info.json"
+            argv = self.flash_info_argv(host, variant, out)
+            if argv is None:
+                return {}, []
+            if jtag.get("result") != "pass":
+                return {"flash_error": FLASH_INFO_SKIPPED}, []
+            driven = []  # what went wrong putting the Pi's JTAG pins back
+            try:
+                with self.jtag_driven(runner, driven):
+                    rc, text = runner(argv, FLASH_INFO_TIMEOUT)
+            except Problem as p:
+                why = f"openFPGALoader --flash-info-json could not be run: {p.reason}"
+                return {"flash_error": why}, [f"flash_error: {why}", *self._after_flash_info(driven)]
+            last = " ".join(tail(text, 2)) or "no output"
+            try:
+                with open(out, "rb") as f:
+                    written = f.read()
+            except FileNotFoundError:
+                written = None
+            if rc != 0:  # it writes no file then; one there is not trusted either
+                why = f"openFPGALoader --flash-info-json exited {rc}: {last}"
+            elif written is None:
+                why = f"openFPGALoader --flash-info-json exited 0 and wrote no file: {last}"
+            else:
+                try:
+                    fields = identity.flash_info_fields(json.loads(written), "jtag")
+                except ValueError as e:  # UnicodeDecodeError too
+                    fields = {"flash_error": f"openFPGALoader --flash-info-json wrote a file that is not JSON: {e}"}
+                why = fields.get("flash_error")
+                if why is None:
+                    return fields, self._after_flash_info(driven)
+            return {"flash_error": why}, [f"flash_error: {why}", *self._after_flash_info(driven)]
+
+    @staticmethod
+    def _after_flash_info(driven):
+        return [f"after openFPGALoader --flash-info-json: {fault}" for fault in driven]
+
     def read_flash(self, host, variant, runner=run):
         """{"region_bytes", "sha256"} of the boot image region, read back over JTAG."""
         size = self.flash_region.get(variant)
@@ -515,13 +585,15 @@ class TestBoard(Board):
         identity.keep(options, out)
         (options.get("event") or (lambda stage, details: None))("fpga-board-identified", identity.details(out))
 
-    # The flash is read back with a design loaded (openFPGALoader's SPI-over-JTAG bridge): --identify takes it
-    # from the boot report.
+    # The flash (its identity, and the readback) is read through openFPGALoader's SPI-over-JTAG bridge, which
+    # replaces the running design: --identify takes the flash's fields from the boot report.
     report_fields = ("flash",)
 
     def identify(self, host, found, options, runner=run):
         """How the board was found, and its IDCODE and device DNA over JTAG on a board with JTAG: nothing is
-        loaded and nothing is reconfigured."""
+        loaded and nothing is reconfigured. So the flash's identity is not read (read_flash_identity loads the
+        SPI-over-JTAG bridge in place of the running design): its fields come from the boot report
+        (report_fields, identify.from_report)."""
         variant = options.get("variant") or found["variant"]
         out = identity.base(options.get("board_key", self.name), self.name, found, variant)
         if self.idcodes and variant in self.idcodes:
@@ -562,6 +634,11 @@ class TestBoard(Board):
                                     **({"reason": jtag["reason"]} if "reason" in jtag else {}),
                                     "output": list(jtag.get("output", []))})  # fmt: skip
             event("fpga-test-finished", {"test": "jtag", "result": jtag["result"], "reason": jtag.get("reason", "")})
+            # Before any design is loaded (the bridge replaces it) and before fpga-board-identified, which
+            # carries what it read: the one event keyed by how the board was found.
+            flash_ident, flash_faults = self.read_flash_identity(host, variant, jtag, runner)
+        else:
+            flash_ident, flash_faults = {}, []
         not_yet = {}  # the planned tests not written yet (checks.NO_TEST_YET)
         with self.services_stopped(runner, options.get("restart_later")) as held:
             facts = self.port_facts(host, found, runner)
@@ -579,7 +656,7 @@ class TestBoard(Board):
                                                f"{' or '.join(self.variants)}, so nothing was loaded")  # fmt: skip
                 except Problem as p:  # not settled, or no bitstreams: no test runs and nothing is loaded
                     refused, tests = p, []
-            self.identified(report, found, options, facts)
+            self.identified(report, found, options, {**facts, **flash_ident})
             # No test named (None, or an empty list, which names none): the board's own word is judged.
             for test in self.fact_tests_for(variant) if not options.get("tests") and not refused else ():
                 event("fpga-test-started", {"test": test})
@@ -637,11 +714,11 @@ class TestBoard(Board):
         jtag = report.get("jtag", {})
         state = self.identity({**found, "variant": variant, "idcode": jtag.get("idcode") or found.get("idcode"),
                                "dna": jtag.get("dna")})  # fmt: skip
-        jedec = next((t["flash_jedec"] for t in report["tests"] if "flash_jedec" in t), None)
-        if jedec:
-            state["flash_jedec"] = jedec
+        if "flash_jedec" in flash_ident:  # the flash's JEDEC ID is the identity's, read by openFPGALoader
+            state["flash_jedec"] = flash_ident["flash_jedec"]
         results = [t["result"] for t in report["tests"]]
         facts_failed = [f"{k}: {v}" for k, v in facts.items() if k.endswith(identity.ERROR_SUFFIX)]
+        facts_failed += flash_faults
         if facts_failed:
             results.append("error")
         try:

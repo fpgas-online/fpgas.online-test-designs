@@ -9,9 +9,10 @@
     that could not be looked for, its lock being busy, is in the document all the same, with every field
     missing for that reason, whatever else was found; so is one whose look failed (a JTAG scan that left a pin
     driven, or a lock that could not be opened), with the look's reason. Only one board's lock is held at a time.
-  * Anything only the boot check reads (the Arty's and NeTV2's flash, which needs a design loaded for
-    openFPGALoader's SPI-over-JTAG bridge; the TT FPGA's fields from rpi-hwid, which need the board's port, held
-    by fpgas-tt.service outside the check) comes from the boot report (runner.REPORT), when the board there is
+  * Anything only the boot check reads (the Arty's and NeTV2's flash identity, which openFPGALoader reads by
+    loading its SPI-over-JTAG bridge in place of the running design; the TT FPGA's fields from rpi-hwid,
+    which need the board's port, held by fpgas-tt.service outside the check) comes from the boot report
+    (runner.REPORT), when the board there is
     this one by a key no other board has (its USB serial, PCI slot or device DNA); the board's dict lists those
     fields in "from_report". An IDCODE names a part, not a board, so a board known only by its IDCODE (a NeTV2
     whose DNA could not be read) gets nothing from the report: those fields stay missing, for the reason NO_MATCH.
@@ -45,6 +46,10 @@ LOCK_WAIT = 30  # seconds --identify waits for a board's lock before it says the
 MATCH_KEYS = ("usb_serial", "serial", "bdf", "dna")
 NO_MATCH = "no board-unique match in the boot report"
 NOT_IN_REPORT = "this board is not in the boot report"
+# rpi-hwid's label for a flash's unique ID (label_input._fpga_needs): flash_uid_state, then what that state needs.
+UID_BLANK = "the flash's unique ID read as all 0x00 or all 0xff, which is no ID"
+UID_NO_COMMAND = ("openFPGALoader knows no unique ID command for this flash part, which says nothing about whether "
+                  "the chip has one")  # fmt: skip
 
 
 class BadDocument(Exception):
@@ -137,14 +142,24 @@ def from_report(board, live, previous):
 
 def missing(board, ident, why=None):
     """What keeps an identity from being whole, as [(field, why)]: each label field not read, and each read that
-    failed (a <field>_error, whose text is the why). `why`: {field prefix: reason} for a field not read that has
-    no <field>_error of its own (the boot report's fields, or "" for every field of a read that stopped)."""
+    failed (a <field>_error, whose text is the why). A board labelled by flash_uid_state (the Arty, the NeTV2)
+    needs what rpi-hwid's label needs for it: not blank, flash_uid when read, flash_uid_note when none.
+    `why`: {field prefix: reason} for a field not read that has no <field>_error of its own (the boot report's
+    fields, or "" for every field of a read that stopped)."""
     why = why or {}
     out = []
     for f in board.label_fields:
         if f not in ident:
             reason = ident.get(f"{f}_error") or next((w for pre, w in why.items() if f.startswith(pre)), "not read")
             out.append((f, str(reason)))
+    if "flash_uid_state" in board.label_fields:  # the unique ID the state says there is, as rpi-hwid's label
+        state = ident.get("flash_uid_state")
+        if state == "blank":
+            out.append(("flash_uid_state", UID_BLANK))
+        elif state == "read" and not ident.get("flash_uid"):
+            out.append(("flash_uid", "the flash's unique ID state is read, and there is no flash_uid"))
+        elif state == "none" and not ident.get("flash_uid_note"):
+            out.append(("flash_uid_note", UID_NO_COMMAND))
     named = {f for f, _ in out}
     failed = [(k.removesuffix("_error"), str(ident[k])) for k in sorted(ident) if k.endswith("_error")]
     return out + [(f, reason) for f, reason in failed if f not in named]

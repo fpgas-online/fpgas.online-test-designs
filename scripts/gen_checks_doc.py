@@ -230,6 +230,17 @@ def page():
         "not for and why. How the whole check runs is on [what the check tests on each board](tests.md) and "
         "[what an Acorn check tests](acorn.md#acorn).",
         "",
+        "The dashboards show the checks' columns in four groups; each check's section says its group.",
+        "",
+        "| Group | What it holds | Checks |",
+        "|---|---|---|",
+        *(
+            f"| `{g}` | {checks.GROUP_ABOUT[g]} | "
+            + ", ".join(f"[`{c}`](#{c})" for c in order if checks.GROUP_OF.get(c) == g)
+            + " |"
+            for g in checks.GROUPS
+        ),
+        "",
         "Checks: [Boot check](#boot-check), [Check ran](#check-ran), "
         + ", ".join(f"[`{c}`](#{c})" for c in order)
         + ".",
@@ -250,7 +261,17 @@ def page():
         "",
     ]
     for check in order:
-        out += [f"## {check}", "", "| Board | Variants | What it checks | What the check runs |", "|---|---|---|---|"]
+        if check not in checks.GROUP_OF:
+            raise GapError(f"{check!r} has no group in checks.GROUP_OF")
+        out += [f"## {check}", ""]
+        if check in checks.WHAT:
+            out += [checks.WHAT[check], ""]
+        out += [
+            f"Group on the dashboards: `{checks.GROUP_OF[check]}`.",
+            "",
+            "| Board | Variants | What it checks | What the check runs |",
+            "|---|---|---|---|",
+        ]
         for (title, text, ran), variants in rows.get(check, []):
             out.append(f"| {title} | {variants_text(BOARD_VARIANTS[title], variants)} | {text} | {ran} |")
         nots = not_for.get(check, {})

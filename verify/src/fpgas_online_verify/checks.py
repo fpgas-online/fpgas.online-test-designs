@@ -19,12 +19,18 @@ test (it was `spiflash` on the Arty, NeTV2 and Fomu, and `flash` on the Acorn).
 """
 
 GROUPS = ("basic", "memory", "peripherals", "board-specific")
+# What each group holds, as the checks page says it (scripts/gen_checks_doc.py).
+GROUP_ABOUT = {
+    "basic": "what every board with that hardware gets first: its JTAG, its cabling to the Pi",
+    "memory": "the board's memories",
+    "peripherals": "the board's other links to the Pi: serial, GPIO, Ethernet",
+    "board-specific": "one board type's own hardware",
+}
 
 # Every test name a board's check can report, and its group. A name missing here is a KeyError, never a guess:
 # tests/test_verify_boards.py checks every board's tests are in it.
 GROUP_OF = {
     "jtag": "basic",
-    "header": "basic",
     "wiring": "basic",
     "flash": "memory",
     "ddr": "memory",
@@ -34,6 +40,10 @@ GROUP_OF = {
     "p2-serial": "peripherals",
     "p2-gpio": "peripherals",
     "ethernet": "peripherals",
+    # The Fomu EVT's own check of the lines it has on the Pi's header (CDONE, CRESET, the SPI flash): no other board
+    # runs it, so it is not basic. Tim, 16 Oct 2026 (coord-74): "Why is `header` in basic when it appears to be fomu
+    # only?" (#361). `basic` holds only COMMON checks (tests/test_verify_boards.py).
+    "header": "board-specific",
     "pcie-link": "board-specific",
     "pcie-bar0": "board-specific",
     "power-cycle": "board-specific",
@@ -45,6 +55,20 @@ GROUP_OF = {
     "dip-switches": "board-specific",
     "pmod": "board-specific",
     "pmod-pin-id": "board-specific",
+}
+
+# What a check is, said once for every board that gets it, where its name alone does not tell it from another check:
+# the checks page (scripts/gen_checks_doc.py) puts it at the top of the check's section. Tim, 16 Oct 2026 (coord-74):
+# "What is the difference between uart and p2-uart?" (#362).
+WHAT = {
+    "uart": "A UART test design is loaded into the FPGA and printable text echoes back over the board's own serial "
+    "link to the Pi: the USB FT2232H on the Arty A7, the Pi header's UART on the NeTV2 and Fomu EVT, the RP2350's "
+    "bridge on the TT FPGA demo board. The Acorn has no `uart`: its serial lines come over its P2 cable, and "
+    "`p2-uart` tests them.",
+    "p2-uart": "The Acorn only: its serial lines reach the Pi over its P2 cable. The check loads no design: it talks "
+    "to the UARTBone bridge (Wishbone over the UART) in the gateware the Acorn is already running, at both baud "
+    "rates, and reads the identifier, DNA and XADC through it. The other boards' serial links are tested by "
+    "`uart` instead.",
 }
 
 # The longest one-line description of a test (Board.about) the event carries (#346).
