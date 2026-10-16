@@ -226,12 +226,12 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
         # board's planned checks, and fixes never take visitor controls away).
         if options.get("read_pi"):
             report["pi"] = options["read_pi"]()
-        usb = usb_devices() if usb is None else usb
-        pci = pci_devices() if pci is None else pci
-        tools = debug_tools(boards, usb)
-        if tools:
-            report["usb_debug_tools"] = tools
         try:
+            usb = usb_devices() if usb is None else usb
+            pci = pci_devices() if pci is None else pci
+            tools = debug_tools(boards, usb)
+            if tools:
+                report["usb_debug_tools"] = tools
             targets, report["chosen_by"] = find(boards, report["mode"], options, usb, pci)
         except Exception as e:  # a crash in the search: the Pi's facts are still sent, unscanned, before it goes on
             if not isinstance(e, Problem):

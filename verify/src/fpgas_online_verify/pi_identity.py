@@ -193,9 +193,13 @@ def with_user_bus(pi, rescan, wired, boards_unknown=None):
         return pi  # rpi-hwid not installed, or the read failed: said as such, nothing to add
     if not header_unread(pi):
         return {**pi, "user_bus": NOT_NEEDED}
-    if "compute-module" in str(pi["facts"].get("compatible")):
-        # rpi-hwid's own rule: a Compute Module's header pins are its carrier's (a Compute Blade has an Acorn's JTAG
-        # on GPIO2/3), so they are left alone, whatever the check found
+    compatible = pi["facts"].get("compatible")
+    if not isinstance(compatible, str) or not compatible.strip():
+        # what the Pi is was not read, so whether it is a Compute Module is not known: never scanned on a guess
+        return {**pi, "user_bus": "skipped: compatible not read"}
+    if "compute-module" in compatible:
+        # rpi-hwid's own rule (probe.collect): a Compute Module's header pins are its carrier's (a Compute Blade has
+        # an Acorn's JTAG on GPIO2/3), so they are left alone, whatever the check found
         return {**pi, "user_bus": "skipped: Compute Module"}
     if boards_unknown:
         return {**pi, "user_bus": f"skipped: boards not known: {boards_unknown}"}

@@ -184,7 +184,7 @@ memory and MACs, and makes the Pi's label.
 | `schema` | `pi-identity/1` |
 | `reader` | `rpi-hwid`, or `none` when rpi-hwid is not installed (then no other field is sent) |
 | `reader_error` | why rpi-hwid did not give the facts: it failed, did not finish, or printed something that is not a label input |
-| `user_bus` | what became of the scan of the header's user bus (GPIO2/3), sent with the facts: `not needed` (the ID bus or the firmware gave the header), `scanned`, `scanned: header not read` (rpi-hwid could not read that bus either), `scan failed` (with the scan's `reader_error`), `skipped: <board> wired to GPIO2/3`, `skipped: Compute Module`, or `skipped: boards not known: <why>` |
+| `user_bus` | what became of the scan of the header's user bus (GPIO2/3), sent with the facts: `not needed` (the ID bus or the firmware gave the header), `scanned`, `scanned: header not read` (rpi-hwid could not read that bus either), `scan failed` (with the scan's `reader_error`), `skipped: <board> wired to GPIO2/3`, `skipped: Compute Module`, `skipped: compatible not read`, or `skipped: boards not known: <why>` |
 | `compatible`, `power_class`, `hat_uuid`, `fan`, `rtc_battery`, `max_current_ma`, `ext5v_v`, `header`, `macs`, `usb_net` | rpi-hwid's `Summary` fields of the same names, as `--pi-only` read them |
 
 The values are encoded as in [the event](#the-event) above, and a decimal (`ext5v_v`) is written as a decimal
@@ -212,7 +212,8 @@ that does not say counts as wired:
 
 A Pi with no board (the check's result is `missing`) is scanned, unless the host is set up for a wired board. A
 Compute Module is never scanned, as rpi-hwid leaves it alone by itself: its header pins are the carrier's (a Compute
-Blade has an Acorn's JTAG on GPIO2/3). Nor is a Pi whose boards could not be looked for (the search failed or
+Blade has an Acorn's JTAG on GPIO2/3); nor is a Pi whose `compatible` was not read, since whether it is one is then
+not known. Nor is a Pi whose boards could not be looked for (the search failed or
 crashed): `skipped: boards not known`, sent before the check goes on. The Arty and TT FPGA hosts' Pmod HAT and the
 Acorn hosts' HAT+ carry an ID EEPROM, so their header comes from the ID bus and the scan is not needed there. With
 the scan, a header found empty on both buses is read, none (`[]`, "HAT none" on the label), as rpi-hwid's contract

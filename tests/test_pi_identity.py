@@ -242,8 +242,11 @@ def test_a_pi_with_no_board_and_its_facts_unread_is_missing_and_says_the_read_fa
 # -- the header's user bus (GPIO2/3): Tim, 17 Oct 2026 (coord-78), "(B) User-bus scan per setup" --------------
 
 
-NO_HEADER = {"reader": "rpi-hwid", "facts": {"fan": None}}  # nothing on the ID bus: the header not read
-BARE = {"reader": "rpi-hwid", "facts": {"header": [], "fan": None}}  # both buses read, nothing on either
+PI5 = "raspberrypi,5-model-b brcm,bcm2712"
+# nothing on the ID bus: the header not read
+NO_HEADER = {"reader": "rpi-hwid", "facts": {"compatible": PI5, "fan": None}}
+# both buses read, nothing on either
+BARE = {"reader": "rpi-hwid", "facts": {"compatible": PI5, "header": [], "fan": None}}
 
 
 original_find = runner.find
@@ -383,7 +386,7 @@ def test_a_search_that_fails_is_never_scanned_and_says_why(monkeypatch):
     assert scans == [] and report["result"] == "error"
     why = "skipped: boards not known: conflicting fpga-board settings"
     assert events[0] == ("pi-identified", {"schema": "pi-identity/1", "reader": "rpi-hwid", "fan": "-",
-                                           "user_bus": why})  # fmt: skip
+                                           "compatible": PI5, "user_bus": why})  # fmt: skip
 
 
 def test_a_search_that_crashes_still_sends_the_pis_facts_unscanned(monkeypatch):
@@ -397,7 +400,8 @@ def test_a_search_that_crashes_still_sends_the_pis_facts_unscanned(monkeypatch):
     with pytest.raises(KeyError):
         runner.verify(options, boards={}, usb=[], pci=[], mode=("auto", "test"))
     why = "skipped: boards not known: the search crashed: KeyError: 'x'"
-    assert events == [("pi-identified", {"schema": "pi-identity/1", "reader": "rpi-hwid", "fan": "-", "user_bus": why})]
+    assert events == [("pi-identified", {"schema": "pi-identity/1", "reader": "rpi-hwid", "fan": "-",
+                                         "compatible": PI5, "user_bus": why})]  # fmt: skip
 
 
 def test_a_compute_module_is_never_scanned():
@@ -423,3 +427,23 @@ def test_a_board_that_does_not_say_counts_as_wired():
     from fpgas_online_verify.board import Board
 
     assert Board.user_bus is None
+
+
+def test_a_pi_whose_compatible_was_not_read_is_never_scanned():
+    for facts in ({"fan": None}, {"compatible": None}, {"compatible": " "}):
+        pi = pi_identity.with_user_bus({"reader": "rpi-hwid", "facts": facts}, lambda: pytest.fail("scanned"), [])
+        assert pi["user_bus"] == "skipped: compatible not read"
+
+
+def test_a_crash_before_the_search_still_sends_the_pis_facts_unscanned(monkeypatch):
+    def crashed():
+        raise OSError("sysfs")
+
+    monkeypatch.setattr(runner, "usb_devices", crashed)
+    events = []
+    options = {"event": lambda s, d: events.append((s, d)), "read_pi": lambda user_bus=False: pytest.fail("scanned")
+               if user_bus else NO_HEADER}  # fmt: skip
+    with pytest.raises(OSError):
+        runner.verify(options, boards={}, pci=[], mode=("auto", "test"))
+    assert [s for s, _ in events] == ["pi-identified"]
+    assert events[0][1]["user_bus"] == "skipped: boards not known: the search crashed: OSError: sysfs"
