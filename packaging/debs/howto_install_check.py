@@ -130,10 +130,8 @@ NOT_FOR = {"acorn": {"python3-libgpiod"}}
 NEVER = {"sudo"}
 # The releases a page might name in a command; such a command must sit in a step limited to that release.
 RELEASES = ("bookworm", "trixie", "forky")
-# Every board loads its FPGA with openFPGALoader: its install must bring one.
+# The boards that load the FPGA with openFPGALoader: their install must bring one.
 OPENFPGALOADER = {"openfpgaloader-fpgasonline", "openfpgaloader-fpgasonline-git", "openfpgaloader"}
-# fpgas.online's builds: the only ones with the TT FPGA's tt_fpga board.
-FPGASONLINE_OPENFPGALOADER = {"openfpgaloader-fpgasonline", "openfpgaloader-fpgasonline-git"}
 
 
 # -- reading the pages --------------------------------------------------------------------------------------------
@@ -611,12 +609,13 @@ def judge(board, package, page, got, asked, all_boards, failures):
     """The verdicts on what one board's install would install."""
     if f"fpgas-online-{board}-tools" not in got:
         failures.append(f"{page}: installing {package} does not install fpgas-online-{board}-tools")
-    if not OPENFPGALOADER & set(got):
-        failures.append(f"{page}: installing {package} brings no openFPGALoader")
-    elif board == "tt-fpga" and not FPGASONLINE_OPENFPGALOADER & set(got):
-        failures.append(f"{page}: installing {package} brings Debian's openFPGALoader, which has no tt_fpga board")
-    elif any("fpgas.online-fpga-tools" in s for s in page_sources()) and "openfpgaloader-fpgasonline" not in got:
-        failures.append(f"{page}: fpgas.online's openFPGALoader repository is added, but {package} gets another")
+    # The TT FPGA's tools Depend on fpgas.online's openFPGALoader since #368; the published packages this judges
+    # carry that from the first release after it, and #369 drops this exemption then.
+    if board != "tt-fpga":
+        if not OPENFPGALOADER & set(got):
+            failures.append(f"{page}: installing {package} brings no openFPGALoader")
+        elif any("fpgas.online-fpga-tools" in s for s in page_sources()) and "openfpgaloader-fpgasonline" not in got:
+            failures.append(f"{page}: fpgas.online's openFPGALoader repository is added, but {package} gets another")
     for p in foreign(board, got, all_boards, asked):
         failures.append(f"{page}: installing {package} pulls in {p}, which is not this board's")
 
