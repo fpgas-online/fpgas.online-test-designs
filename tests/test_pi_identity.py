@@ -473,6 +473,9 @@ def test_as_found_is_read_from_rpi_hwids_sources():
     doc = copy.deepcopy(PI5_DOC)
     doc["sources"]["header_buses"] = "as-found"
     assert pi_identity.read(ran(json.dumps(doc)), installed)["as_found"] is True
-    for other in ("as found", True, None):
+    for other in ("as found", "not as-found", "as-found ", ["as-found"], True, None):
         doc["sources"]["header_buses"] = other
-        assert pi_identity.read(ran(json.dumps(doc)), installed)["as_found"] is False
+        assert pi_identity.read(ran(json.dumps(doc)), installed)["as_found"] is False, other
+    for sources in ("as-found", ["as-found"], None):  # not a dict: nothing it says can be trusted
+        doc["sources"] = sources
+        assert pi_identity.as_found(doc) is False, sources

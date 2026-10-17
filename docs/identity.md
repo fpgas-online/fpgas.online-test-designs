@@ -196,8 +196,10 @@ So when the ID bus gave no header, the boot check scans the user bus (GPIO2/3, I
 `rpi-hwid label-input --pi-only --user-bus` again (Tim, 17 Oct 2026, coord-78: "(B) User-bus scan per setup"). It
 asks this only of an rpi-hwid whose first read says `sources.header_buses = "as-found"` (mithro/rpi-hwid #93): one
 that reads the bus without a `dtparam` or a module (bit-banged through the GPIO character device, or through an
-`/dev/i2c-1` already there), only reads on it (one-byte reads at each address), and puts back and checks every bus
-pin's function and pad and the loaded i2c modules, or exits 1 (a `reader_error`). An older rpi-hwid is not asked
+`/dev/i2c-1` already there), only reads on it (one-byte reads at each address), and leaves the Pi as found: the pins
+it drives itself have their function and pad read first and put back and checked after (a changed drive strength,
+which it cannot set back, is reported), a node's pins are left to their kernel driver, and the loaded i2c modules and
+`/dev/i2c-*` nodes are compared; or it exits 1 (a `reader_error`). An older rpi-hwid is not asked
 (`skipped: rpi-hwid too old`): 0.0.post597's `--user-bus` applied the `i2c_arm` dtparam at runtime and left a Pi 5's
 GPIO2/3 muxed and two i2c modules loaded while saying it had put everything back (17 Oct 2026). The read is the
 whole `--pi-only` read again, bounded by the same 120 s. It does so after finding the boards and before taking any board's lock, and only where no board is wired

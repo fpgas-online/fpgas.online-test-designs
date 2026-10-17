@@ -450,3 +450,13 @@ def test_rpi_hwid_will_not_label_a_netv2_whose_unique_id_is_not_known_when_it_is
     assert _label_needs(blank) == ["flash_uid_state"]
     assert identify.missing(NETV2, blank) == [("flash_uid_state", identify.UID_BLANK)]
     assert identify.missing(NETV2, _netv2_identity()) == []
+
+
+def test_rpi_hwid_says_as_found_as_pi_identity_reads_it_when_it_is_installed():
+    """pi_identity asks for the user-bus scan only when rpi-hwid's read says it leaves the Pi as found
+    (`sources.header_buses`, mithro/rpi-hwid #93); the value it gives is the one pi_identity looks for, so a renamed
+    key or value cannot turn every Pi's scan off unnoticed."""
+    probe = pytest.importorskip("rpi_hwid.probe")
+    from fpgas_online_verify import pi_identity
+
+    assert probe.HEADER_BUSES_AS_FOUND == pi_identity.AS_FOUND
