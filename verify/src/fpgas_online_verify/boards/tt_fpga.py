@@ -254,6 +254,7 @@ class TTFPGA(TestBoard):
     usb = tuple((VENDOR, product) for product in (*MICROPYTHON, BOOTLOADER))
     variants: ClassVar[dict] = {"tt-fpga": "tt-fpga"}  # the variants there are bitstreams for
     variant_from_board = True
+    user_bus = True  # uio on the Digilent Pmod HAT's JB: JB9/JB10 are GPIO3/GPIO2 (identify_pmod_pins.BOARDS["tt"])
     # `reads`: what the check runs to have the facts the test judges (docs/verify/checks.md says it)
     fact_tests: ClassVar[dict] = {
         "sdk": {

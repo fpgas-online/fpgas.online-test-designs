@@ -276,6 +276,35 @@ def test_rpi_hwid_takes_flash_sfdp_as_an_fpgaboard_field_when_it_is_installed():
     assert fpga.flash_sfdp == "none"
 
 
+def test_rpi_hwid_makes_a_pi_label_from_the_pi_identified_event_when_it_is_installed():
+    """The pi-identified event (#76), read back as the site reads it (fpgas.online-site fleet/hwid.py PI_FIELDS) and
+    put with the registration's model, serial, revision and MACs, is a label input rpi-hwid takes, and the Pi's
+    label needs nothing more."""
+    label_input = pytest.importorskip("rpi_hwid.label_input")
+    from fpgas_online_verify import pi_identity
+
+    pi5 = json.loads((pathlib.Path(__file__).parent / "data" / "pi-only-pi5.json").read_text())
+    read = pi_identity.read(lambda argv, timeout: (0, json.dumps(pi5), ""), lambda name: f"/usr/bin/{name}")
+    sent = pi_identity.details(read)
+    kinds = {"fan": bool, "rtc_battery": bool, "max_current_ma": int, "ext5v_v": float}
+
+    def back(field, text):  # the site's reading of a flat value
+        if field in pi_identity.LISTS:
+            return json.loads(text)
+        if text == "-":
+            return None
+        if kinds.get(field) is bool:
+            return {"true": True, "false": False}[text]
+        return kinds.get(field, str)(text)
+
+    facts = {k: back(k, v) for k, v in sent.items() if k in pi_identity.FIELDS}
+    registration = {k: pi5["summary"][k] for k in ("model", "serial", "revision", "memory")}
+    doc = label_input.build("pi-sw2-p48", {**registration, **facts})
+    assert label_input.check(doc) == [] and label_input.missing(doc)["board"] == []
+    assert doc["summary"]["header"] == ["Waveshare PoE M.2 HAT+ (B)"] and doc["summary"]["ext5v_v"] == 5.14962
+    assert set(pi_identity.FIELDS) <= set(label_input.PI_FIELDS)
+
+
 # -- openFPGALoader --flash-info-json (the Arty's and NeTV2's flash, through the SPI-over-JTAG bridge) ----------
 
 # A version 2 document as openFPGALoader's doc/guide/advanced.rst has it, with a field this reader does not know.
@@ -421,3 +450,13 @@ def test_rpi_hwid_will_not_label_a_netv2_whose_unique_id_is_not_known_when_it_is
     assert _label_needs(blank) == ["flash_uid_state"]
     assert identify.missing(NETV2, blank) == [("flash_uid_state", identify.UID_BLANK)]
     assert identify.missing(NETV2, _netv2_identity()) == []
+
+
+def test_rpi_hwid_says_as_found_as_pi_identity_reads_it_when_it_is_installed():
+    """pi_identity asks for the user-bus scan only when rpi-hwid's read says it leaves the Pi as found
+    (`sources.header_buses`, mithro/rpi-hwid #93); the value it gives is the one pi_identity looks for, so a renamed
+    key or value cannot turn every Pi's scan off unnoticed."""
+    probe = pytest.importorskip("rpi_hwid.probe")
+    from fpgas_online_verify import pi_identity
+
+    assert probe.HEADER_BUSES_AS_FOUND == pi_identity.AS_FOUND

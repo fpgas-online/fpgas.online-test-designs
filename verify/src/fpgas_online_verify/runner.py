@@ -16,15 +16,16 @@ found or no board, a board identified, each test started and finished, and the f
 
 import contextlib
 import datetime
+import functools
 import json
 import os
 import pathlib
 import sys
 import tempfile
 
-from . import checks, conclusion, config, identity, state
+from . import checks, conclusion, config, identity, pi_identity, state
 from .board import installed
-from .core import Problem, flatten, hold_lock, pci_devices, publish, tail, usb_devices, worst
+from .core import Problem, flatten, hold_lock, is_pi, pci_devices, pi_model, publish, tail, usb_devices, worst
 from .core import run as run_command
 
 SCHEMA_VERSION = 2
@@ -33,6 +34,7 @@ REPORT = pathlib.Path("/run/fpgas-online/verify.json")
 # only fpga-verifying and fpga-verified (fpgas.online-site fleet/services.py FPGA_STAGES).
 EVENTS = {
     "fpga-verifying": "started_at",
+    "pi-identified": "schema (pi-identity/1), reader, then the Pi's own facts for its label (pi_identity.py)",
     "fpga-board-found": "board, variant, where (PCI slot, USB path or JTAG IDCODE)",
     "fpga-no-board": "reason",
     "fpga-board-identified": "schema (fpga-identity/1), board, then who it is (identity.py, docs/identity.md)",
@@ -186,6 +188,17 @@ def _where(found):
     return found.get("bdf") or found.get("usb") or found.get("idcode") or "-"
 
 
+def _pi_identified(report, options, event, boards, targets, boards_unknown):
+    """Once the boards are known, and before any board's lock: the user-bus scan where it may run
+    (pi_identity.with_user_bus), then the one pi-identified event. Nothing when the Pi was not read."""
+    if "pi" not in report:
+        return
+    wired = pi_identity.wired_boards(boards, report.get("mode"), targets)
+    rescan = functools.partial(options["read_pi"], user_bus=True)
+    report["pi"] = pi_identity.with_user_bus(report["pi"], rescan, wired, boards_unknown)
+    event("pi-identified", pi_identity.details(report["pi"]))
+
+
 def verify(options, boards=None, usb=None, pci=None, mode=None):
     """The report. options["event"], when given, is called as event(stage, details) as the check goes."""
     boards = installed() if boards is None else boards
@@ -206,19 +219,34 @@ def verify(options, boards=None, usb=None, pci=None, mode=None):
             if on:
                 options = {**options, "power_cycle_check": True}
                 report["power_cycle_check"] = {"on": True, "configured_by": str(path)}
-        usb = usb_devices() if usb is None else usb
-        pci = pci_devices() if pci is None else pci
-        tools = debug_tools(boards, usb)
-        if tools:
-            report["usb_debug_tools"] = tools
-        targets, report["chosen_by"] = find(boards, report["mode"], options, usb, pci)
+        # The Pi's own facts, before any board's lock (pi_identity.py, #76): the ID bus now, the user bus once the
+        # boards are known (_pi_identified). A read that fails is said in its pi-identified event (reader_error), the
+        # Pi's own label is refused, and the boards' result is untouched: a Pi-label read is not a board test (the
+        # coordinator's decision of 17 Oct 2026, from Tim's rules of 5 and 16 Oct: "fail until tested" is about a
+        # board's planned checks, and fixes never take visitor controls away).
+        if options.get("read_pi"):
+            report["pi"] = options["read_pi"]()
+        try:
+            usb = usb_devices() if usb is None else usb
+            pci = pci_devices() if pci is None else pci
+            tools = debug_tools(boards, usb)
+            if tools:
+                report["usb_debug_tools"] = tools
+            targets, report["chosen_by"] = find(boards, report["mode"], options, usb, pci)
+        except Exception as e:  # a crash in the search: the Pi's facts are still sent, unscanned, before it goes on
+            if not isinstance(e, Problem):
+                _pi_identified(report, options, event, boards, [], f"the search crashed: {type(e).__name__}: {e}")
+            raise
     except Problem as p:
         report.update(result=p.result, reason=p.reason)
+        # missing: no board is there, so none is wired to GPIO2/3 (bar the one the host is set up for)
+        _pi_identified(report, options, event, boards, [], None if p.result == "missing" else p.reason)
         if p.result == "missing":  # a debug tool on USB is named, so it is not read as the board; nothing is recorded
             report["reason"] = "; ".join([p.reason, *report.get("usb_debug_tools", [])])
             event("fpga-no-board", {"reason": report["reason"]})
             report["state"] = compare_state(report, [], [], False, options.get("state", state.STATE))
         return report
+    _pi_identified(report, options, event, boards, targets, None)
     reports, not_checked = [], []
     keys = _keys(targets)
     for (_, _, found), key in zip(targets, keys):
@@ -398,6 +426,18 @@ def summary(report, kept_in=None):
         pub = report["publish"]
         by = f"`{config.PUBLISH} = {'on' if pub['on'] else 'off'}` in {pub.get('configured_by')}"
         lines.append(f"  published to the fleet: {by}" if pub["on"] else f"  not published: {pub.get('why') or by}")
+    pi = report.get("pi")
+    if pi:
+        if "reader_error" in pi:
+            lines.append(f"  the Pi's own facts: NOT READ: {pi['reader_error']}")
+        elif pi["reader"] == "none":
+            lines.append("  the Pi's own facts: not read: rpi-hwid is not installed")
+        else:
+            shown = {k: v for k, v in pi["facts"].items() if k not in ("macs", "usb_net")}  # long, and in the event
+            got = ", ".join(f"{k}={pi_identity.detail(v)}" for k, v in shown.items())
+            lines.append(f"  the Pi's own facts (rpi-hwid --pi-only): {got or 'none'}")
+        if "user_bus" in pi:
+            lines.append(f"  the header's user bus (GPIO2/3): {pi['user_bus']}")
     if report.get("not_checked"):
         lines.append(f"  not checked (none of the tests asked for): {', '.join(report['not_checked'])}")
     for b in report["boards"]:
@@ -512,6 +552,8 @@ def run(options, prog="fpgas-verify"):
             published = {"on": publishing, "configured_by": str(said_by)} if said_by else {"on": False, "why": NO_FILE}
         except Problem as p:
             unreadable, published = p, {"on": False, "why": "the setting could not be read"}
+    if not options.get("tests") and "read_pi" not in options and is_pi(pi_model()):
+        options = {**options, "read_pi": pi_identity.read}  # the whole check on a Pi: its facts too (#76)
     if publishing:
         # The site hears the check has started, and says the board is being verified until the result follows.
         working = publish("fpga-verifying", {"started_at": _now()}, prog=prog, timeout=EVENT_TIMEOUT)

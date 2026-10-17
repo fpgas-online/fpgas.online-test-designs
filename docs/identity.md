@@ -170,6 +170,71 @@ tests), still gets one, with what finding the board showed (for the NeTV2, the I
 event form (a bug in the board's module) is left out of both, and that board's result is `error`, its
 reason naming the field; the other boards are still checked.
 
+## The Pi's own facts: `pi-identified`
+
+The Pi's label needs facts about the Pi that its registration does not carry: what is on its 40-pin header
+(the HAT's EEPROM), its power class and, on a Pi 5, the fan and the RTC battery. At every boot, before any
+board's lock is taken, the boot check runs `rpi-hwid label-input --pi-only` and sends what it read as one
+`pi-identified` event, once the boards are found ([`pi_identity.py`](../verify/src/fpgas_online_verify/pi_identity.py); rpi-hwid's
+`docs/LABEL-CONTRACT.md`, section 5). The site puts these with the registration's model, serial, revision,
+memory and MACs, and makes the Pi's label.
+
+| Detail | Value |
+|---|---|
+| `schema` | `pi-identity/1` |
+| `reader` | `rpi-hwid`, or `none` when rpi-hwid is not installed (then no other field is sent) |
+| `reader_error` | why rpi-hwid did not give the facts: it failed, did not finish, or printed something that is not a label input |
+| `user_bus` | what became of the scan of the header's user bus (GPIO2/3), sent with the facts: `not needed` (the ID bus or the firmware gave the header), `scanned`, `scanned: header not read` (rpi-hwid could not read that bus either), `scan failed` (with the scan's `reader_error`), `skipped: <board> wired to GPIO2/3`, `skipped: Compute Module`, `skipped: compatible not read`, `skipped: rpi-hwid too old` (the installed rpi-hwid does not say it leaves the Pi as found), or `skipped: boards not known: <why>` |
+| `compatible`, `power_class`, `hat_uuid`, `fan`, `rtc_battery`, `max_current_ma`, `ext5v_v`, `header`, `macs`, `usb_net` | rpi-hwid's `Summary` fields of the same names, as `--pi-only` read them |
+
+The values are encoded as in [the event](#the-event) above, and a decimal (`ext5v_v`) is written as a decimal
+number: `5.08`. `header`, `macs` and `usb_net` are each one key of compact JSON. A `header` nobody read (nothing on
+the HAT ID bus named a HAT) is left out, never sent as `[]`, so the site refuses the label rather than print
+"HAT none": a HAT known only by its chips on the user bus (a Waveshare PoE HAT (B)) is invisible on the ID bus.
+
+So when the ID bus gave no header, the boot check scans the user bus (GPIO2/3, I2C1) for one by running
+`rpi-hwid label-input --pi-only --user-bus` again (Tim, 17 Oct 2026, coord-78: "(B) User-bus scan per setup"). It
+asks this only of an rpi-hwid whose first read says `sources.header_buses = "as-found"` (mithro/rpi-hwid #93): one
+that reads the bus without a `dtparam` or a module (bit-banged through the GPIO character device, or through an
+`/dev/i2c-1` already there), only reads on it (one-byte reads at each address), and leaves the Pi as found: the pins
+it drives itself have their function and pad read first and put back and checked after (a changed drive strength,
+which it cannot set back, is reported), a node's pins are left to their kernel driver, and the loaded i2c modules and
+`/dev/i2c-*` nodes are compared; or it exits 1 (a `reader_error`). An older rpi-hwid is not asked
+(`skipped: rpi-hwid too old`): 0.0.post597's `--user-bus` applied the `i2c_arm` dtparam at runtime and left a Pi 5's
+GPIO2/3 muxed and two i2c modules loaded while saying it had put everything back (17 Oct 2026). The read is the
+whole `--pi-only` read again, bounded by the same 120 s. It does so after finding the boards and before taking any board's lock, and only where no board is wired
+to GPIO2/3: neither a board it found nor the one the host is set up for (`fpga-board = <board>`, found or not).
+Each board's definition says whether it is (`Board.user_bus`), held by a test to the board's wiring source; a board
+that does not say counts as wired:
+
+| Board | Wired to GPIO2/3 | Wiring source |
+|---|---|---|
+| Sqrl Acorn | yes: P2's J5 is GPIO3 | `designs/_shared/acorn_p2.py` |
+| Digilent Arty A7 | yes: the Pmod HAT's JB9/JB10 | `identify_pmod_pins.BOARDS["arty"]` |
+| TT FPGA Demo Board | yes: the Pmod HAT's JB9/JB10 | `identify_pmod_pins.BOARDS["tt"]` |
+| Fomu EVT | no | `boards/fomu.py` `HEADER_GPIOS`, CRESET, CDONE, the UART |
+| Kosagi NeTV2 | no | `boards/netv2.py` `JTAG_GPIOS`, the UART |
+
+A Pi with no board (the check's result is `missing`) is scanned, unless the host is set up for a wired board. A
+Compute Module is never scanned, as rpi-hwid leaves it alone by itself: its header pins are the carrier's (a Compute
+Blade has an Acorn's JTAG on GPIO2/3); nor is a Pi whose `compatible` was not read, since whether it is one is then
+not known. Nor is a Pi whose boards could not be looked for (the search failed or
+crashed): `skipped: boards not known`, sent before the check goes on. The Arty and TT FPGA hosts' Pmod HAT and the
+Acorn hosts' HAT+ carry an ID EEPROM, so their header comes from the ID bus and the scan is not needed there. With
+the scan, a header found empty on both buses is read, none (`[]`, "HAT none" on the label), as rpi-hwid's contract
+says; without it the header stays not read, and `user_bus` says why.
+
+A `reader_error` is said in the event and in the boot report (`pi`), and the check's summary says the Pi's own
+facts were NOT READ; the site refuses the Pi's own label and shows the reason. The boards' result is untouched: a
+Pi-label read is not a board test (the coordinator's decision of 17 Oct 2026, from Tim's rules of 5 Oct, fixes never
+take visitor controls away, and 16 Oct, "fail until tested" is about a board's planned checks). `--pi-only` (rpi-hwid 0.0.post597 and later, mithro/rpi-hwid
+#92) reads the HAT's EEPROM over GPIO0/1 itself, as an I2C master through the GPIO character device, with no
+`dtparam` and no module loaded; where `/dev/i2c-0` already exists it reads through that. It reads each pin's
+function and pull before and after and puts them back, and anything it cannot read or put back is an error
+(exit 1), which here is a `reader_error`. rpi-hwid's stdout is the document; what it says on stderr is kept apart,
+and named in the reason when it fails. `--test` runs and
+`fpgas-<board>-debug` do not read the Pi. The report keeps the read as `pi`.
+
 ## The document
 
 The identity document holds the fields of every board found:

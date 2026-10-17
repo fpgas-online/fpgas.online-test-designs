@@ -188,6 +188,7 @@ class Fomu(TestBoard):
     variants: ClassVar[dict] = {"evt": "evt"}
     label_fields = ("flash_uid",)  # --identify takes it from the boot report: reading it resets the FPGA
     one_per_host = True  # on the Pi's header
+    user_bus = False  # the header lines it takes (HEADER_GPIOS, CRESET, CDONE) and the UART: no GPIO2/3
     yields_to = ("netv2",)  # GPIO17 is the NeTV2's TMS and GPIO27 its TDI: a NeTV2 found by its IDCODE explains it
     yield_reason = "GPIO17 high is the NeTV2's TMS, not a Fomu's CDONE"
     port = "/dev/serial0"

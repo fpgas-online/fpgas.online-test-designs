@@ -1060,7 +1060,8 @@ def test_the_gate_events_are_the_ones_the_site_reads():
     """fpgas.online-site's fpga_states() reads only fpga-verifying and fpga-verified (FPGA_STAGES); the rest are
     progress, and must not be mistaken for them."""
     assert {"fpga-verifying", "fpga-verified"} <= set(runner.EVENTS)
-    assert all(s.startswith("fpga-") for s in runner.EVENTS)
+    # pi-identified is the Pi's, not a board's: the site's label builder reads it (fleet/hwid.py PI_STAGE, #76)
+    assert all(s.startswith("fpga-") for s in runner.EVENTS if s != "pi-identified")
 
 
 class Crashes(Fake):
