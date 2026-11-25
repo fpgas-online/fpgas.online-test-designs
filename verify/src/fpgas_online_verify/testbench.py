@@ -283,12 +283,22 @@ class TestBoard(Board):
     def script_tests_for(self, variant):
         return [name for name, t in self.script_tests.items() if variant in t["variants"]]
 
-    def run_script_test(self, test, host, runner=run):
+    def script_values(self, facts):
+        """What a script test's `args` may name besides {port}, from what the board said (port_facts): nothing,
+        except on a board whose script needs to be told what the board is (TTFPGA.script_values). Raises Problem
+        when the board did not say it."""
+        return {}
+
+    def run_script_test(self, test, host, runner=run, facts=None):
         """A script test (script_tests): its `pre` steps, then its script on the board's port; nothing is loaded.
         A script the check had to kill at its limit could not finish, and could not put back what it changed: an
-        error, not a fail."""
+        error, not a fail. So is a script that could not be told what its `args` name: it is not run."""
         t = self.script_tests[test]
-        argv = [sys.executable, host_tests.path(t["script"]), *(a.format(port=host["port"]) for a in t["args"])]
+        try:
+            values = {"port": host["port"], **self.script_values(facts or {})}
+            argv = [sys.executable, host_tests.path(t["script"]), *(a.format(**values) for a in t["args"])]
+        except Problem as p:
+            return {"test": test, "result": "error", "reason": p.reason}
         try:
             for step in t.get("pre", []):
                 with contextlib.suppress(Problem):
@@ -512,7 +522,15 @@ class TestBoard(Board):
         return dict(self.not_yet.get(variant, {}))
 
     def not_applicable(self, variant, found=None):
-        return dict(self.cannot.get(variant, {}))
+        return {**self.cannot.get(variant, {}), **self.unwired(found)}
+
+    def unwired(self, found):
+        """{test: why} for the tests of wires this host does not have (the TT board's `wiring` on a Pi with no
+        Pmod HAT: TTFPGA.unwired), from how the board was found. Such a test is not planned and not run, and is
+        in the report's not_applicable with that reason, and in its warnings: it does not fail the board, since
+        there is nothing of it to test. {} when `found` does not say, so a host that is not known to lack the
+        wires is tested."""
+        return {}
 
     def derived(self, variant, found=None):
         return dict(self.derives.get(variant, {}))
@@ -522,13 +540,15 @@ class TestBoard(Board):
         return {**self.abouts, **self.abouts_by_variant.get(variant, {}), **derived}
 
     def planned(self, variant, options=None, found=None):
+        unwired = self.unwired(found)
         if variant is None and self.variant_from_board:
-            return list(self.planned_unsettled)
+            return [t for t in self.planned_unsettled if t not in unwired]
         out = ["jtag"] if variant in self.idcodes else []
         out += self.fact_tests_for(variant) + self.script_tests_for(variant)
         out += self.verify_tests if variant in self.variants else []
         out += [t for t in self.untested(variant) if t not in out]
         out += [t for t in self.derived(variant) if t not in out]
+        out = [t for t in out if t not in unwired]
         return out + ([self.closing_test] if self.closing_test else [])
 
     def artifacts(self):
@@ -663,10 +683,15 @@ class TestBoard(Board):
                 done = report["tests"][-1]
                 event("fpga-test-finished", {"test": test, "result": done["result"], "reason": done.get("reason", "")})
             not_run = dict(self.pending.get(variant, {})) if not refused else {}
+            # Wires this host does not have are not tested in the whole check; a test asked for by name is run.
+            unwired = {} if options.get("tests") else self.unwired(found)
             if not refused and not options.get("tests"):
                 not_yet = checks.untested_reasons(self.untested(variant))
                 not_run.update({t: why for t, why in not_yet.items() if t not in not_run})
             for test in self.script_tests_for(variant) if not options.get("tests") and not refused else ():
+                if test in unwired:
+                    report.setdefault("warnings", []).append(f"{test} not tested: {unwired[test]}")
+                    continue
                 failed = [
                     t["test"]
                     for t in report["tests"]
@@ -676,10 +701,13 @@ class TestBoard(Board):
                     not_run[test] = f"it needs {' and '.join(failed)} to pass first"
                     continue
                 event("fpga-test-started", {"test": test})
-                report["tests"].append(self.run_script_test(test, host, runner))
+                report["tests"].append(self.run_script_test(test, host, runner, facts))
                 done = report["tests"][-1]
                 event("fpga-test-finished", {"test": test, "result": done["result"], "reason": done.get("reason", "")})
             for test in tests:
+                if test in unwired:
+                    report.setdefault("warnings", []).append(f"{test} not tested: {unwired[test]}")
+                    continue
                 # a test that needs a fact test (the Fomu's DFU loads need foboot) is not run when that did not pass
                 failed = [t["test"] for t in report["tests"] if t["test"] in self.tests[test].get("needs", ())
                           and t["result"] != "pass"]  # fmt: skip

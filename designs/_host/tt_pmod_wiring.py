@@ -115,6 +115,18 @@ CONTROLLERS = {
     },
 }
 
+# The SIO registers the command server's group/ungroup write, one write per 32 GPIOs: (GPIO_OUT_SET,
+# GPIO_OUT_CLR, GPIO_OE_SET, GPIO_OE_CLR) for GPIO0 to GPIO31, and on a chip with more GPIOs the same four
+# for GPIO32 upwards (the GPIO_HI_ registers). RP2040: datasheet section 2.3.1. RP2350: pico-sdk
+# src/rp2350/hardware_regs/include/hardware/regs/sio.h (the offsets moved: its GPIO_OUT_SET is the RP2040's
+# GPIO_OUT_CLR address). The SDK's own ttboard/util/platform/rp2350.py uses the same GPIO_OUT_SET and
+# GPIO_OUT_CLR; it does not use the OE_SET, OE_CLR or GPIO_HI_ registers, so those four are from sio.h alone,
+# and the RP2350 group drive has not yet run on a board (no chip board's Pi at welland has the Pmod HAT).
+SIO = {
+    "rp2040": ((0xD0000014, 0xD0000018, 0xD0000024, 0xD0000028),),
+    "rp2350": ((0xD0000018, 0xD0000020, 0xD0000038, 0xD0000040), (0xD000001C, 0xD0000024, 0xD000003C, 0xD0000044)),
+}
+
 GROUPS = ("ui_in", "uio", "uo_out")
 PORTS = ("JA", "JB", "JC")
 
@@ -228,6 +240,7 @@ FIRMWARE = r"""
 import gc, sys, time
 from machine import Pin
 DATA = __DATA__
+SIO = __SIO__
 _pins = {}
 _tt = None
 _saved_mode = None
@@ -255,6 +268,13 @@ def _out(g, v, d):
         p = Pin(g, Pin.OUT, value=v)
     _pins[g] = p
     return p
+
+def _masks(gs):
+    # One mask per SIO register word (GPIO0-31, then GPIO32 up where the chip has them).
+    masks = [0] * len(SIO)
+    for g in gs:
+        masks[g >> 5] |= 1 << (g & 31)
+    return masks
 
 def _clock_stop(t):
     try:
@@ -444,28 +464,38 @@ try:
             elif cmd == 'sdk':
                 _sdk(args)
             elif cmd == 'group':
-                # Drive several pins to one level at the same instant (RP2040 SIO, datasheet section 2.3.1:
-                # GPIO_OUT_SET 0xd0000014, GPIO_OUT_CLR 0xd0000018, GPIO_OE_SET 0xd0000024): the level is set while
-                # they are still inputs, then all their outputs are turned on in one write.
+                # Drive several pins to one level together (the SIO registers of this chip, SIO above): the level
+                # is set while they are still inputs, then their outputs are turned on with one write per register
+                # word. Pins in one word (every pin of an RP2040; GPIO0-31 or GPIO32 up of an RP2350) turn on at
+                # the same instant. Pins in both words of an RP2350 (uio[6] is GPIO31, uio[7] GPIO32) turn on one
+                # write apart: for that moment one is driven and the other is still an input, so no two of our
+                # outputs ever disagree; the writes are the two statements next to each other, nothing between.
                 import machine
                 v, gs = int(args[0]), [int(a) for a in args[1:]]
-                mask = 0
                 for g in gs:
                     if not isinstance(_pins.get(g), Pin):
                         _pins[g] = Pin(g, Pin.IN, None)
-                    mask |= 1 << g
-                machine.mem32[0xd0000014 if v else 0xd0000018] = mask
-                machine.mem32[0xd0000024] = mask
+                masks = _masks(gs)
+                for regs, mask in zip(SIO, masks):
+                    if mask:
+                        machine.mem32[regs[0] if v else regs[1]] = mask
+                if len(SIO) > 1 and masks[0] and masks[1]:
+                    lo, hi, mlo, mhi = SIO[0][2], SIO[1][2], masks[0], masks[1]
+                    machine.mem32[lo] = mlo
+                    machine.mem32[hi] = mhi
+                else:
+                    for regs, mask in zip(SIO, masks):
+                        if mask:
+                            machine.mem32[regs[2]] = mask
                 time.sleep_us(50)
                 _emit('VALS ' + ' '.join(str(Pin(g).value()) for g in gs))
             elif cmd == 'ungroup':
-                # All their outputs off in one write (GPIO_OE_CLR 0xd0000028), then plain inputs.
+                # All their outputs off, one write per register word (GPIO_OE_CLR), then plain inputs.
                 import machine
                 gs = [int(a) for a in args]
-                mask = 0
-                for g in gs:
-                    mask |= 1 << g
-                machine.mem32[0xd0000028] = mask
+                for regs, mask in zip(SIO, _masks(gs)):
+                    if mask:
+                        machine.mem32[regs[3]] = mask
                 for g in gs:
                     _pins[g] = Pin(g, Pin.IN, None)
                 _emit('OK')
@@ -492,7 +522,7 @@ finally:
 def build_firmware(controller):
     table = CONTROLLERS[controller]
     data = table["ui_in"] + table["uio"] + table["uo_out"]
-    return FIRMWARE.replace("__DATA__", repr(data))
+    return FIRMWARE.replace("__DATA__", repr(data)).replace("__SIO__", repr(SIO[controller]))
 
 
 # The least free heap the RP2's command server must find once it is loaded, beside the SDK's own objects. Measured
@@ -992,8 +1022,8 @@ class WiringProbe:
         """Drive *names* high and low together (twice; both passes must agree) and return the Pi GPIOs that
         followed them, as one set. For uio[6:7]: driven in phase, the chip's copy of either (uo_out[6:7]) agrees
         with whatever a short joins it to among them, so no two drivers ever disagree on a net."""
-        if self.controller != "rp2040":  # group/ungroup write the RP2040's SIO registers: other chips' differ
-            raise ProtocolError(f"driving {', '.join(names)} together is written for the RP2040 only")
+        if self.controller not in SIO:  # group/ungroup write the chip's SIO registers: each chip's differ
+            raise ProtocolError(f"driving {', '.join(names)} together is not written for the {self.controller}")
         gpios = " ".join(str(self.gpio_of(n)) for n in names)
 
         def group(value):
@@ -2464,7 +2494,8 @@ def parse_args(argv=None):
         dest="fpga_reset",
         action="store_true",
         default=None,
-        help="hold the iCE40 of a TT FPGA board in reset during the test (default for --controller rp2350)",
+        help="hold the iCE40 of a TT FPGA board in reset during the test (default for --controller rp2350, "
+        "except with --cabling asic: a board with a Tiny Tapeout chip has no iCE40)",
     )
     parser.add_argument("--no-fpga-reset", dest="fpga_reset", action="store_false")
     parser.add_argument(
@@ -2488,8 +2519,14 @@ def parse_args(argv=None):
     # uo_out is never tested; only the ui_in rows and the drivable uio rows count.
     if args.asic_project == "none":
         args.strict = False
+    # RP2350 GPIO1 is CRESET_B of the FPGA breakout, and on the same demo board with a Tiny Tapeout chip it is
+    # the reset of the chip's project selector (CTRL_SEL_nRST, the SDK's GPIOMapTTDBv3): pulling it low there
+    # would deselect the project the test needs. So never on a board cabled as a chip board.
+    if args.fpga_reset and args.cabling == "asic":
+        parser.error("--fpga-reset is for a TT FPGA board: with --cabling asic the same pin (RP2350 GPIO1) resets "
+                     "the chip's project selector")  # fmt: skip
     if args.fpga_reset is None:
-        args.fpga_reset = args.controller == "rp2350"
+        args.fpga_reset = args.controller == "rp2350" and args.cabling != "asic"
     if args.port is None:
         args.port = "/dev/ttboard" if os.path.exists("/dev/ttboard") else "/dev/ttyACM0"
     if args.time_limit is None:
@@ -2587,7 +2624,7 @@ def main(argv=None):
             free = mem_free(ready)
             out(f"MEM: {free} bytes of the RP2's heap free with the command server loaded")
             if free is None or free < MIN_HEAP_FREE:
-                raise RuntimeError(f"RP2040 heap too low: {free} bytes free with the command server loaded (the "
+                raise RuntimeError(f"RP2 heap too low: {free} bytes free with the command server loaded (the "
                                    f"test needs {MIN_HEAP_FREE})")  # fmt: skip
             result = run_wiring_test(link, hat, args, log=out, pin_scanner=pin_scanner)
         finally:

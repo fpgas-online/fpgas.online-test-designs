@@ -206,7 +206,7 @@ def test_every_advice_pattern_matches_a_reason_the_code_gives():
         f"{tt_fpga.NOT_SAID}: {tt_fpga.NOT_INSTALLED}",
         f"{tt_fpga.NOT_TT_FIRMWARE}: it is in its USB boot loader (2e8a:0003)",
         tt_fpga.sdk_check("tt-asic", {"chip": "asic", "shuttle": "tt06", "mcu": "RP2040", "sdk": "1.2.2"})[1],
-        tt_fpga.sdk_check("tt-asic", {"chip": "asic", "shuttle": "tt09", "mcu": "RP2040", "sdk": "2.0.4"})[1],
+        tt_fpga.sdk_check("tt-asic", {"chip": "asic", "shuttle": "tt10", "mcu": "RP2040", "sdk": "2.0.4"})[1],
         "wiring fail: the ui_in ribbon (to HAT JA): ui_in[2] (Pmod pin 3) did not reach HAT JA/JB pin 3",
         "wiring fail: the ui_in and uio ribbons are on each other's HAT ports (JB and JA): swap them",
         "wiring fail: these ribbons are plugged in turned round and one position over (ui_in on HAT JC ...)",

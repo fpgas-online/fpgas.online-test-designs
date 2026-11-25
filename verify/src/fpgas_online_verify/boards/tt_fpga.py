@@ -21,12 +21,17 @@ said. Chip, shuttle, microcontroller and SDK release must be a combination the S
 (SDK_SUPPORTED), since an SDK that does not know the board's chip cannot select a project on it.
 
 The `wiring` test of a board with a Tiny Tapeout chip (tt_pmod_wiring.py, a script test: no bitstream) checks
-its three Pmod ribbons to the Pi's Pmod HAT bit for bit: the board's RP2040 drives each ui_in and uio signal
+its three Pmod ribbons to the Pi's Pmod HAT bit for bit: the board's RP2040 (TT08 and earlier) or RP2350 (TT09
+on, the demo board the FPGA breakout sits on too) drives each ui_in and uio signal
 from a command server run in RAM over its raw REPL, the Pi reads every HAT line, and the chip's own
 tt_um_factory_test (uo_out = uio_in) carries the uio walk out on uo_out. A fault is named by its ribbon and
 pin. The script then puts the board back from RAM as its SDK had it (tt_sdk_start.py only if that fails). Until this
 test was here such a board failed as untested (Tim, 2026-10-05: "Fail until wiring is tested and prioritize
 landing the setup which properly tests the wiring"). The FPGA board's wiring test (also `wiring`) loads a design.
+
+Neither wiring test is run on a Pi with no Pmod HAT (pi_hat, TTFPGA.unwired): there are no ribbons to test, so
+`wiring` is not applicable there, with that reason, and the board is judged on its other tests (Tim, 2026-11-25:
+"When no Pmod HAT exists, then the pmod wiring check should be skipped"). Such a board is reached over USB only.
 
 Nothing is written to the demo board: for every load `openFPGALoader -b tt_fpga` (our build, the
 openfpgaloader-fpgasonline packages of fpgas.online-fpga-tools) streams the bitstream to the RP2350 over its raw
@@ -49,6 +54,7 @@ rpi-hwid reads only what the SDK built when the board started, so the board's SD
 not the SDK's does not start it, and that is an error with its own reason."""
 
 import json
+import pathlib
 import shutil
 import sys
 from typing import ClassVar
@@ -82,6 +88,27 @@ ALWAYS_THERE = ("mcu", "chip", "demoboard", "sdk")
 # said is its chip; whether it named a shuttle is settle()'s question, and whether its microcontroller and SDK
 # release are ones for that chip is the `sdk` test's, which fails a board that named no microcontroller.
 ALWAYS_THERE_ON_A_CHIP_BOARD = ("chip",)
+
+
+# Where the Pi's firmware puts the HAT it read from the ID EEPROM (GPIO0/1) when it started: hat/product is the
+# HAT's product name ("Pmod HAT Adaptor" on the hosts at welland that have one). A Pi with no HAT has no hat node.
+DEVICE_TREE = pathlib.Path("/proc/device-tree")
+PMOD_HAT = "pmod"  # in the product name, any case
+NO_PMOD_HAT = "this Pi has no Pmod HAT ({what}), so the board has no ribbons to the Pi to test: USB only"
+
+
+def pi_hat(root=None):
+    """The product name of the Pi's HAT, from its device tree; "" for a Pi with no HAT; None when that is not
+    known (no device tree: not a Pi, or a hat node whose product cannot be read). Never raises."""
+    root = DEVICE_TREE if root is None else pathlib.Path(root)
+    if not root.is_dir():
+        return None
+    if not (root / "hat").is_dir():
+        return ""
+    try:
+        return (root / "hat" / "product").read_bytes().rstrip(b"\0").decode(errors="replace").strip() or None
+    except OSError:
+        return None
 
 
 def which(name):
@@ -176,15 +203,31 @@ def tinytapeout_fields(usb_serial, runner=run):
 
 # What the SDK's releases support: (chip, the shuttles, the microcontroller, the SDK release line). From the
 # releases of TinyTapeout/tt-micropython-firmware, read 2026-10-05: 2.0.4 is the last release for the RP2040
-# demo boards (TT04 to TT08); 3.x is built for the RP2350 demo board, which carries the FPGA breakout; the
-# TT03p5 board (a Pico on the older demo board) runs 1.2.x, whose chip ROM reader names that shuttle itself.
-# A combination that is not here fails the `sdk` test with what the board said: add its row when a release
-# is known to support it.
+# demo boards (TT04 to TT08); 3.x is built for the RP2350 demo board (TTDBv3), which carries the FPGA breakout
+# or a chip from TT09 on; the TT03p5 board (a Pico on the older demo board) runs 1.2.x, whose chip ROM reader
+# names that shuttle itself. The TTDBv3 chip rows are the releases the boards at welland came with, read from
+# them on 2026-11-25: TT09 and TTGF0p2 on 3.0.7, TTGF0p3 on 3.1.1 (each named its own shuttle from its chip ROM
+# and loaded its shuttle file). The TT09 board and one TTGF0p2 board were then put on 3.1.1, the newest release
+# (Tim, 2026-11-25: "Upgrade the SDK on all boards to the latest version"), and each named its shuttle on it too:
+# 3.1.1's release builds both shuttle files in (its release.yml, TT_RUNS_SUPPORTED). That list has no ttgf0p3: the
+# TTGF0p3 boards came with their shuttle file on a 3.1.1 that is not the release's .uf2, so the release .uf2 is
+# not put on them. A combination that is not here fails the `sdk` test with what the board said: add its row when
+# a release is known to support it.
 SDK_SUPPORTED = (
     ("fpga", (None,), "RP2350", "3.1"),
     ("asic", ("tt03p5",), "RP2040", "1.2"),
     ("asic", ("tt04", "tt05", "tt06", "tt07", "tt08"), "RP2040", "2.0"),
+    ("asic", ("tt09", "ttgf0p2"), "RP2350", "3.0"),
+    ("asic", ("tt09", "ttgf0p2", "ttgf0p3"), "RP2350", "3.1"),
 )
+# The demo board's microcontroller, as rpi-hwid names it, to tt_pmod_wiring.py's --controller: its pin map and
+# its GPIO registers. The RP2040 boards and the RP2350 board (TTDBv3) put ui_in, uio and uo_out on different
+# GPIOs, so the wiring test of the wrong one would drive pins that are not the board's ui_in and uio.
+WIRING_CONTROLLER = {"RP2040": "rp2040", "RP2350": "rp2350"}
+# The RP2350 pin map is the TTDBv3's (the SDK's GPIOMapTTDBv3). The SDK also knows an earlier RP2350 board
+# (GPIOMapTTDBv3Alpha) with ui_in, uio, the project reset and the clock on other GPIOs, so a board on an RP2350
+# must also have said it is a TTDBv3: "TTDBv3", or with its version, "TTDBv3 [3.2]"; nothing else.
+WIRING_DEMOBOARD = {"rp2350": "TTDBv3"}
 # What the boot check of a variant must do and does not yet (a board fails until it does): nothing now. The
 # wiring test of a board with a Tiny Tapeout chip was the last (`wiring`, below).
 PENDING = {}
@@ -273,11 +316,35 @@ class TTFPGA(TestBoard):
     # be wiring-tested.
     script_tests: ClassVar[dict] = {
         "wiring": {"variants": ("tt-asic",), "script": "tt_pmod_wiring.py",
-                   "args": ["--port", "{port}", "--controller", "rp2040", "--cabling", "asic", "--no-daemon",
+                   "args": ["--port", "{port}", "--controller", "{controller}", "--cabling", "asic", "--no-daemon",
                             "--time-limit", str(WIRING_TIME_LIMIT)],
                    "says": "WIRING:", "timeout": WIRING_TIMEOUT, "needs": ("sdk",)},
     }  # fmt: skip
     pending: ClassVar[dict] = PENDING
+
+    def script_values(self, facts):
+        """{controller}: the pin map of the microcontroller the board said it has. `sdk` passed first, so it is
+        one a row of SDK_SUPPORTED names; any other is refused here, since no pin map is a safe guess."""
+        mcu = facts.get("mcu")
+        if mcu not in WIRING_CONTROLLER:
+            raise Problem("error", "the wiring test has no pin map for the board's microcontroller "
+                                   f"({mcu or 'not read'}): not run, so no pin was driven")  # fmt: skip
+        controller = WIRING_CONTROLLER[mcu]
+        board, wanted = facts.get("demoboard") or "", WIRING_DEMOBOARD.get(controller)
+        if wanted and board != wanted and not (board.startswith(wanted + " [") and board.endswith("]")):
+            raise Problem("error", f"the wiring test's {mcu} pin map is the {wanted}'s, and the board said its demo "
+                                   f"board is {board or 'not read'}: not run, so no pin was driven")  # fmt: skip
+        return {"controller": controller}
+
+    def unwired(self, found):
+        """`wiring` on a Pi that is known to have no Pmod HAT (found["pi_hat"], from spot): the three ribbons go
+        to that HAT, so without it there is nothing to test, on an FPGA board or a chip board. A Pi whose HAT is
+        not known is tested."""
+        hat = (found or {}).get("pi_hat")
+        if hat is None or PMOD_HAT in hat.lower():
+            return {}
+        return {"wiring": NO_PMOD_HAT.format(what=f"its HAT is a {hat}" if hat else "it has no HAT")}
+
     # rpi-hwid's Tiny Tapeout label (its LABEL-CONTRACT.md, sections 1 and 7). Only the boot check reads the
     # fields rpi-hwid gives (it owns the port then): --identify takes them, and why they are missing, from the
     # boot report, matched by usb_serial.
@@ -340,7 +407,8 @@ class TTFPGA(TestBoard):
     abouts_by_variant: ClassVar[dict] = {
         "tt-fpga": {"wiring": "each Pmod HAT wire carries the FPGA pin the cabling map puts there (the pin-ID scan)"},
         "tt-asic": {
-            "wiring": "the RP2040 drives each ui_in and uio line and the Pi reads it on its HAT pin, bit by bit"
+            "wiring": "the board's microcontroller drives each ui_in and uio line and the Pi reads it on its HAT "
+            "pin, bit by bit"
         },
         None: {"wiring": "the three Pmod ribbons to the Pi's HAT, pin by pin (how depends on the board, not yet said)"},
     }
@@ -363,6 +431,9 @@ class TTFPGA(TestBoard):
         more than one, each also has "beside": where the others are (ONE_PORT)."""
         found = [{"variant": None, "usb": d["path"], "serial": d["serial"], "usb_id": f"{d['vendor']}:{d['product']}"}
                  for d in usb_matching(usb, self.usb)]  # fmt: skip
+        hat = pi_hat()
+        if hat is not None:  # what the Pi's HAT is, for unwired(): left out when it is not known
+            found = [{**f, "pi_hat": hat} for f in found]
         if len(found) > 1:
             found = [{**f, "beside": [o["usb"] for o in found if o is not f]} for f in found]
         return found

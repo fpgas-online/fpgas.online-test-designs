@@ -1738,6 +1738,11 @@ WIRING = "tt_pmod_wiring.py"
 WRONG_RIBBON = "the ui_in ribbon (to HAT JA): ui_in[5] (Pmod pin 8) did not reach HAT JA pin 8"
 
 
+# A chip on the RP2350 demo board, as board eea2df10a3c07d1e said on 2026-11-25
+TT_V3_CHIP = {"shuttle": "ttgf0p3", "repo": "TinyTapeout/tinytapeout-gf-0p3", "commit": "30504769",
+              "demoboard": "TTDBv3 [3.2]", "sdk": "3.1.1", "mcu": "RP2350"}  # fmt: skip
+
+
 def _wiring_said(rc, line):
     """tt_pmod_wiring.py's answer: its report, its WIRING: line, then RESULT."""
     return WIRING, (rc, f"== Wiring check: asic cabling ==\nWIRING: {line}\nRESULT: {'PASS' if rc == 0 else 'FAIL'}\n")
@@ -1830,9 +1835,126 @@ def test_the_wiring_test_stops_itself_well_before_the_check_would_kill_it():
     assert wiring.FALLBACK_SECONDS >= tt_fpga.SDK_START_TIMEOUT  # tt_sdk_start.py's own limit fits in it
     run = Runner([_wiring_said(0, "ok")])
     seen = []
-    TT.run_script_test("wiring", _host(TT), lambda argv, timeout: seen.append((argv, timeout)) or run(argv, timeout))
+    TT.run_script_test("wiring", _host(TT), lambda argv, timeout: seen.append((argv, timeout)) or run(argv, timeout),
+                       {"mcu": "RP2040"})  # fmt: skip
     ((argv, timeout),) = seen
     assert timeout == tt_fpga.WIRING_TIMEOUT and argv[-2:] == ["--time-limit", str(tt_fpga.WIRING_TIME_LIMIT)]
+
+
+@pytest.mark.parametrize("said, controller", [({}, "rp2040"), (TT_V3_CHIP, "rp2350")])
+def test_the_wiring_test_is_told_the_pin_map_of_the_microcontroller_the_board_said_it_has(
+    tmp_path, monkeypatch, said, controller
+):
+    """The RP2040 boards and the RP2350 board have ui_in, uio and uo_out on different GPIOs: the wrong map would
+    drive pins that are not the board's ui_in and uio (the RP2350's project selector among them)."""
+    _installed(monkeypatch)
+    run = Runner([_rpi_hwid({**TT_CHIP_BOARD, **said}), _wiring_said(0, "ok")])
+    report = _check(TT, tmp_path, TT_FOUND, run)
+    assert report["result"] == "pass" and [t["test"] for t in report["tests"]] == ["sdk", "wiring"]
+    argv = run.calls[_index(run, "tt_pmod_wiring.py")]
+    assert argv[argv.index("--controller") + 1] == controller and argv[argv.index("--cabling") + 1] == "asic"
+    assert set(tt_fpga.WIRING_CONTROLLER) == {row[2] for row in tt_fpga.SDK_SUPPORTED if row[0] == "asic"}
+
+
+def test_a_board_whose_microcontroller_has_no_pin_map_is_not_wiring_tested_and_no_pin_is_driven():
+    run = Runner([])
+    for facts in ({"mcu": "RP9999"}, {}, None):
+        done = TT.run_script_test("wiring", _host(TT), run, facts)
+        assert done["result"] == "error" and "has no pin map for the board's microcontroller" in done["reason"]
+    assert run.calls == []
+
+
+def _device_tree(tmp_path, product=None):
+    """A Pi's /proc/device-tree: with a hat node naming `product`, or with no HAT."""
+    root = tmp_path / "device-tree"
+    root.mkdir(parents=True)
+    (root / "model").write_bytes(b"Raspberry Pi 3 Model B Plus Rev 1.3\0")
+    if product is not None:
+        (root / "hat").mkdir()
+        (root / "hat" / "product").write_bytes(product.encode() + b"\0")
+    return root
+
+
+def test_the_pis_hat_is_read_from_its_device_tree_and_is_not_guessed(tmp_path):
+    assert tt_fpga.pi_hat(_device_tree(tmp_path / "pmod", "Pmod HAT Adaptor")) == "Pmod HAT Adaptor"
+    assert tt_fpga.pi_hat(_device_tree(tmp_path / "none")) == ""
+    assert tt_fpga.pi_hat(tmp_path / "not-a-pi") is None  # no device tree: not known, never "no HAT"
+    unread = _device_tree(tmp_path / "unread")
+    (unread / "hat").mkdir()
+    assert tt_fpga.pi_hat(unread) is None  # a hat node with no product: not known
+    assert tt_fpga.pi_hat() is None  # the tests' own machine is not the Pi (conftest)
+
+
+def test_a_demo_board_is_found_with_the_pis_hat_only_when_that_is_known(tmp_path, monkeypatch):
+    (tmp_path / "usb").mkdir()
+    usb = _usb(tmp_path / "usb", **{"1-2": ("2e8a", "0005", "E661")})
+    assert TT.spot(_host(TT), usb, []) == [TT_FOUND]
+    monkeypatch.setattr(tt_fpga, "DEVICE_TREE", _device_tree(tmp_path / "none"))
+    assert TT.spot(_host(TT), usb, []) == [{**TT_FOUND, "pi_hat": ""}]
+    monkeypatch.setattr(tt_fpga, "DEVICE_TREE", _device_tree(tmp_path / "pmod", "Pmod HAT Adaptor"))
+    assert TT.spot(_host(TT), usb, []) == [{**TT_FOUND, "pi_hat": "Pmod HAT Adaptor"}]
+
+
+@pytest.mark.parametrize("hat, what", [("", "it has no HAT"), ("PoE+ HAT", "its HAT is a PoE+ HAT")])
+def test_a_chip_board_on_a_pi_with_no_pmod_hat_is_not_wiring_tested_and_passes_on_its_sdk(
+    tmp_path, monkeypatch, hat, what
+):
+    """Tim, 2026-11-25: "When no Pmod HAT exists, then the pmod wiring check should be skipped." No ribbons, so
+    nothing to test: the script is not run, no pin is driven, and `wiring` is not applicable, with the reason."""
+    _installed(monkeypatch)
+    found = {**TT_FOUND, "pi_hat": hat}
+    run = Runner([_rpi_hwid({**TT_CHIP_BOARD, **TT_V3_CHIP})])
+    report = _check(TT, tmp_path, found, run)
+    assert report["result"] == "pass" and [t["test"] for t in report["tests"]] == ["sdk"]
+    assert "not_run" not in report and "reason" not in report
+    assert report["warnings"] == [f"wiring not tested: this Pi has no Pmod HAT ({what}), so the board has no "
+                                  "ribbons to the Pi to test: USB only"]  # fmt: skip
+    assert not any(WIRING in " ".join(c) for c in run.calls)
+    why = f"this Pi has no Pmod HAT ({what}), so the board has no ribbons to the Pi to test: USB only"
+    assert TT.planned("tt-asic", {}, found) == ["sdk"]
+    assert TT.not_applicable("tt-asic", found)["wiring"] == why
+    assert TT.planned(None, {}, found) == ["sdk"] and TT.not_applicable(None, found)["wiring"] == why
+    for variant in ("tt-fpga", "tt-asic", None):  # each common check is still planned or not applicable, never both
+        planned, cannot = TT.planned(variant, {}, found), TT.not_applicable(variant, found)
+        assert set(checks.COMMON) - set(planned) == set(cannot) and not set(planned) & set(cannot)
+
+
+def test_an_fpga_board_on_a_pi_with_no_pmod_hat_runs_its_other_tests_and_not_the_pin_id_scan(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    found = {**TT_FOUND, "pi_hat": ""}
+    run = Runner([_rpi_hwid(TT_BOARD)])
+    report = _check(TT, tmp_path, found, run)
+    assert _passed_what_it_has(report)
+    assert [t["test"] for t in report["tests"]] == ["sdk", "dip-switches", "uart", "spram"]
+    assert not any("pmod-pin-id" in " ".join(c) or "identify_pmod_pins.py" in " ".join(c) for c in run.calls)
+    assert "wiring" not in TT.planned("tt-fpga", {}, found) and "wiring" in TT.not_applicable("tt-fpga", found)
+    assert len(report["warnings"]) == 1 and report["warnings"][0].startswith("wiring not tested: this Pi has no")
+    # asked for by name, the pin-ID scan runs whatever the HAT
+    asked = Runner([_rpi_hwid(TT_BOARD)])
+    named = _check(TT, tmp_path / "named", found, asked, tests=["wiring"])
+    assert [t["test"] for t in named["tests"]] == ["wiring"] and "warnings" not in named
+    assert any("identify_pmod_pins.py" in " ".join(c) for c in asked.calls)
+
+
+def test_an_rp2350_board_that_did_not_say_it_is_a_ttdbv3_is_not_wiring_tested_and_no_pin_is_driven():
+    """The SDK knows an earlier RP2350 board with ui_in, uio, the project reset and the clock on other GPIOs."""
+    run = Runner([])
+    for board in ("TTDBv3 Alpha", "TTDBv3Alpha", None, "TT06+"):
+        done = TT.run_script_test("wiring", _host(TT), run, {"mcu": "RP2350", "demoboard": board})
+        assert done["result"] == "error" and "pin map is the TTDBv3's" in done["reason"], board
+    assert run.calls == []
+    for board in ("TTDBv3", "TTDBv3 [3.2]"):
+        assert TT.script_values({"mcu": "RP2350", "demoboard": board}) == {"controller": "rp2350"}
+    assert TT.script_values({"mcu": "RP2040", "demoboard": None}) == {"controller": "rp2040"}
+
+
+@pytest.mark.parametrize("found", [TT_FOUND, {**TT_FOUND, "pi_hat": "Pmod HAT Adaptor"}])
+def test_a_pi_with_a_pmod_hat_or_whose_hat_is_not_known_is_wiring_tested(tmp_path, monkeypatch, found):
+    _installed(monkeypatch)
+    run = Runner([_rpi_hwid(TT_CHIP_BOARD), _wiring_said(1, WRONG_RIBBON)])
+    report = _check(TT, tmp_path, found, run)
+    assert report["result"] == "fail" and [t["test"] for t in report["tests"]] == ["sdk", "wiring"]
+    assert "wiring" in TT.planned("tt-asic", {}, found) and "wiring" not in TT.not_applicable("tt-asic", found)
 
 
 def test_a_chip_board_with_another_fault_says_both_and_an_fpga_board_has_no_wiring_test_of_this_kind(
@@ -1878,8 +2000,13 @@ def test_the_report_of_a_chip_board_whose_ribbon_is_wrong_reads_plainly(tmp_path
      "a tt06 chip needs SDK 2.0.x on an RP2040, and the board runs SDK 3.1.0 on an RP2350"),
     ({"shuttle": "tt03p5", "sdk": "2.0.4"}, "tt-asic",
      "a tt03p5 chip needs SDK 1.2.x on an RP2040, and the board runs SDK 2.0.4 on an RP2040"),
+    ({"shuttle": "tt10"}, "tt-asic",
+     "no SDK release is recorded as supporting a tt10 chip: add its row to SDK_SUPPORTED"),
+    # a TT09 chip sits on the RP2350 demo board: an RP2040 saying it carries one is not a board the SDK supports
     ({"shuttle": "tt09"}, "tt-asic",
-     "no SDK release is recorded as supporting a tt09 chip: add its row to SDK_SUPPORTED"),
+     "a tt09 chip needs SDK 3.0.x on an RP2350 or SDK 3.1.x on an RP2350, and the board runs SDK 2.0.4 on an RP2040"),
+    ({"shuttle": "ttgf0p3", "mcu": "RP2350", "sdk": "3.0.7"}, "tt-asic",
+     "a ttgf0p3 chip needs SDK 3.1.x on an RP2350, and the board runs SDK 3.0.7 on an RP2350"),
     ({"mcu": None}, "tt-asic", "the board did not say its microcontroller"),
     ({"sdk": "dev"}, "tt-asic", "the board's SDK release reads 'dev', which is not a release number"),
     # what ttboard.VERSION is on a board with no release file
@@ -1899,10 +2026,15 @@ def test_a_board_whose_sdk_is_not_one_for_its_chip_fails_the_sdk_test_with_what_
     assert any(line.startswith("SDK release: ") for line in report["tests"][0]["output"])
 
 
-@pytest.mark.parametrize("shuttle, sdk", [("tt03p5", "1.2.2"), ("tt04", "2.0.4"), ("tt05", "2.0.0"),
-                                          ("tt07", "v2.0.3"), ("tt08", "2.0.4")])  # fmt: skip
-def test_every_chip_the_fleet_has_passes_the_sdk_test_on_the_release_line_for_it(shuttle, sdk):
-    facts = {"chip": "asic", "shuttle": shuttle, "mcu": "RP2040", "sdk": sdk}
+@pytest.mark.parametrize("shuttle, sdk, mcu", [
+    ("tt03p5", "1.2.2", "RP2040"), ("tt04", "2.0.4", "RP2040"), ("tt05", "2.0.0", "RP2040"),
+    ("tt07", "v2.0.3", "RP2040"), ("tt08", "2.0.4", "RP2040"),
+    # the RP2350 demo boards at welland, as each said on 2026-11-25
+    ("tt09", "3.0.7", "RP2350"), ("tt09", "3.1.1", "RP2350"),
+    ("ttgf0p2", "3.1.1", "RP2350"), ("ttgf0p2", "3.0.7", "RP2350"), ("ttgf0p3", "3.1.1", "RP2350"),
+])  # fmt: skip
+def test_every_chip_the_fleet_has_passes_the_sdk_test_on_the_release_line_for_it(shuttle, sdk, mcu):
+    facts = {"chip": "asic", "shuttle": shuttle, "mcu": mcu, "sdk": sdk}
     result, reason, lines = tt_fpga.sdk_check("tt-asic", facts)
     assert (result, reason) == ("pass", None) and f"supports a {shuttle} chip" in lines[-1]
 
