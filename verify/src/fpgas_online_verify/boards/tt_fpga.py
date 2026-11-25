@@ -21,7 +21,8 @@ said. Chip, shuttle, microcontroller and SDK release must be a combination the S
 (SDK_SUPPORTED), since an SDK that does not know the board's chip cannot select a project on it.
 
 The `wiring` test of a board with a Tiny Tapeout chip (tt_pmod_wiring.py, a script test: no bitstream) checks
-its three Pmod ribbons to the Pi's Pmod HAT bit for bit: the board's RP2040 drives each ui_in and uio signal
+its three Pmod ribbons to the Pi's Pmod HAT bit for bit: the board's RP2040 (TT08 and earlier) or RP2350 (TT09
+on, the demo board the FPGA breakout sits on too) drives each ui_in and uio signal
 from a command server run in RAM over its raw REPL, the Pi reads every HAT line, and the chip's own
 tt_um_factory_test (uo_out = uio_in) carries the uio walk out on uo_out. A fault is named by its ribbon and
 pin. The script then puts the board back from RAM as its SDK had it (tt_sdk_start.py only if that fails). Until this
@@ -176,15 +177,23 @@ def tinytapeout_fields(usb_serial, runner=run):
 
 # What the SDK's releases support: (chip, the shuttles, the microcontroller, the SDK release line). From the
 # releases of TinyTapeout/tt-micropython-firmware, read 2026-10-05: 2.0.4 is the last release for the RP2040
-# demo boards (TT04 to TT08); 3.x is built for the RP2350 demo board, which carries the FPGA breakout; the
-# TT03p5 board (a Pico on the older demo board) runs 1.2.x, whose chip ROM reader names that shuttle itself.
-# A combination that is not here fails the `sdk` test with what the board said: add its row when a release
-# is known to support it.
+# demo boards (TT04 to TT08); 3.x is built for the RP2350 demo board (TTDBv3), which carries the FPGA breakout
+# or a chip from TT09 on; the TT03p5 board (a Pico on the older demo board) runs 1.2.x, whose chip ROM reader
+# names that shuttle itself. The TTDBv3 chip rows are the releases the boards at welland came with, read from
+# them on 2026-11-25: TT09 and TTGF0p2 on 3.0.7, TTGF0p3 on 3.1.1 (each named its own shuttle from its chip ROM
+# and loaded its shuttle file). A combination that is not here fails the `sdk` test with what the board said:
+# add its row when a release is known to support it.
 SDK_SUPPORTED = (
     ("fpga", (None,), "RP2350", "3.1"),
     ("asic", ("tt03p5",), "RP2040", "1.2"),
     ("asic", ("tt04", "tt05", "tt06", "tt07", "tt08"), "RP2040", "2.0"),
+    ("asic", ("tt09", "ttgf0p2"), "RP2350", "3.0"),
+    ("asic", ("ttgf0p3",), "RP2350", "3.1"),
 )
+# The demo board's microcontroller, as rpi-hwid names it, to tt_pmod_wiring.py's --controller: its pin map and
+# its GPIO registers. The RP2040 boards and the RP2350 board (TTDBv3) put ui_in, uio and uo_out on different
+# GPIOs, so the wiring test of the wrong one would drive pins that are not the board's ui_in and uio.
+WIRING_CONTROLLER = {"RP2040": "rp2040", "RP2350": "rp2350"}
 # What the boot check of a variant must do and does not yet (a board fails until it does): nothing now. The
 # wiring test of a board with a Tiny Tapeout chip was the last (`wiring`, below).
 PENDING = {}
@@ -273,11 +282,21 @@ class TTFPGA(TestBoard):
     # be wiring-tested.
     script_tests: ClassVar[dict] = {
         "wiring": {"variants": ("tt-asic",), "script": "tt_pmod_wiring.py",
-                   "args": ["--port", "{port}", "--controller", "rp2040", "--cabling", "asic", "--no-daemon",
+                   "args": ["--port", "{port}", "--controller", "{controller}", "--cabling", "asic", "--no-daemon",
                             "--time-limit", str(WIRING_TIME_LIMIT)],
                    "says": "WIRING:", "timeout": WIRING_TIMEOUT, "needs": ("sdk",)},
     }  # fmt: skip
     pending: ClassVar[dict] = PENDING
+
+    def script_values(self, facts):
+        """{controller}: the pin map of the microcontroller the board said it has. `sdk` passed first, so it is
+        one a row of SDK_SUPPORTED names; any other is refused here, since no pin map is a safe guess."""
+        mcu = facts.get("mcu")
+        if mcu not in WIRING_CONTROLLER:
+            raise Problem("error", "the wiring test has no pin map for the board's microcontroller "
+                                   f"({mcu or 'not read'}): not run, so no pin was driven")  # fmt: skip
+        return {"controller": WIRING_CONTROLLER[mcu]}
+
     # rpi-hwid's Tiny Tapeout label (its LABEL-CONTRACT.md, sections 1 and 7). Only the boot check reads the
     # fields rpi-hwid gives (it owns the port then): --identify takes them, and why they are missing, from the
     # boot report, matched by usb_serial.
@@ -340,7 +359,8 @@ class TTFPGA(TestBoard):
     abouts_by_variant: ClassVar[dict] = {
         "tt-fpga": {"wiring": "each Pmod HAT wire carries the FPGA pin the cabling map puts there (the pin-ID scan)"},
         "tt-asic": {
-            "wiring": "the RP2040 drives each ui_in and uio line and the Pi reads it on its HAT pin, bit by bit"
+            "wiring": "the board's microcontroller drives each ui_in and uio line and the Pi reads it on its HAT "
+                      "pin, bit by bit"
         },
         None: {"wiring": "the three Pmod ribbons to the Pi's HAT, pin by pin (how depends on the board, not yet said)"},
     }

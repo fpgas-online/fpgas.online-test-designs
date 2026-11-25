@@ -235,7 +235,7 @@ Group on the dashboards: `basic`.
 | Fomu EVT | `evt` | it sits on the Pi's header: its reset, CDONE and SPI flash lines (header) and its UART lines (uart) | derived from [`header`](#header), [`uart`](#uart) |
 | Kosagi NeTV2 | `a7-35`, `a7-100` | its wires to the Pi are the header's JTAG lines (jtag) and UART lines (uart) | derived from [`jtag`](#jtag), [`uart`](#uart) |
 | TT FPGA Demo Board | `tt-fpga` | each Pmod HAT wire carries the FPGA pin the cabling map puts there (the pin-ID scan) | loads its test design, then runs [`identify_pmod_pins.py`](../../designs/pmod-pin-id/host/identify_pmod_pins.py) |
-| TT FPGA Demo Board | `tt-asic` | the RP2040 drives each ui_in and uio line and the Pi reads it on its HAT pin, bit by bit | runs [`tt_pmod_wiring.py`](../../designs/_host/tt_pmod_wiring.py); loads nothing |
+| TT FPGA Demo Board | `tt-asic` | the board's microcontroller drives each ui_in and uio line and the Pi reads it on its HAT pin, bit by bit | runs [`tt_pmod_wiring.py`](../../designs/_host/tt_pmod_wiring.py); loads nothing |
 | TT FPGA Demo Board | not yet known | the three Pmod ribbons to the Pi's HAT, pin by pin (how depends on the board, not yet said) | the tests of the board's own variant (the rows above), once the board has said which it is |
 
 When it fails:

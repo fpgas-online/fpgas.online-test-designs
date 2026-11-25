@@ -283,12 +283,22 @@ class TestBoard(Board):
     def script_tests_for(self, variant):
         return [name for name, t in self.script_tests.items() if variant in t["variants"]]
 
-    def run_script_test(self, test, host, runner=run):
+    def script_values(self, facts):
+        """What a script test's `args` may name besides {port}, from what the board said (port_facts): nothing,
+        except on a board whose script needs to be told what the board is (TTFPGA.script_values). Raises Problem
+        when the board did not say it."""
+        return {}
+
+    def run_script_test(self, test, host, runner=run, facts=None):
         """A script test (script_tests): its `pre` steps, then its script on the board's port; nothing is loaded.
         A script the check had to kill at its limit could not finish, and could not put back what it changed: an
-        error, not a fail."""
+        error, not a fail. So is a script that could not be told what its `args` name: it is not run."""
         t = self.script_tests[test]
-        argv = [sys.executable, host_tests.path(t["script"]), *(a.format(port=host["port"]) for a in t["args"])]
+        try:
+            values = {"port": host["port"], **self.script_values(facts or {})}
+            argv = [sys.executable, host_tests.path(t["script"]), *(a.format(**values) for a in t["args"])]
+        except Problem as p:
+            return {"test": test, "result": "error", "reason": p.reason}
         try:
             for step in t.get("pre", []):
                 with contextlib.suppress(Problem):
@@ -676,7 +686,7 @@ class TestBoard(Board):
                     not_run[test] = f"it needs {' and '.join(failed)} to pass first"
                     continue
                 event("fpga-test-started", {"test": test})
-                report["tests"].append(self.run_script_test(test, host, runner))
+                report["tests"].append(self.run_script_test(test, host, runner, facts))
                 done = report["tests"][-1]
                 event("fpga-test-finished", {"test": test, "result": done["result"], "reason": done.get("reason", "")})
             for test in tests:

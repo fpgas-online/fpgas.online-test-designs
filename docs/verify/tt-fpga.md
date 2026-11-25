@@ -181,10 +181,12 @@ not know the board's chip cannot select a project on it:
 | the FPGA breakout | RP2350 | 3.1.x |
 | a TT03p5 chip | RP2040 | 1.2.x |
 | a TT04, TT05, TT06, TT07 or TT08 chip | RP2040 | 2.0.x |
+| a TT09 or TTGF0p2 chip | RP2350 | 3.0.x |
+| a TTGF0p3 chip | RP2350 | 3.1.x |
 
 * Anything else fails the test, with what the board said: `a tt06 chip needs SDK 2.0.x on an RP2040, and the
   board runs SDK 1.2.2 on an RP2040`. A shuttle with no row fails as `no SDK release is recorded as supporting
-  a tt09 chip`. The table is `SDK_SUPPORTED` in `boards/tt_fpga.py`.
+  a tt10 chip`. The table is `SDK_SUPPORTED` in `boards/tt_fpga.py`.
 * Together with the `main.py` read (the board's `main.py` is that release's own) and the SDK having started,
   a pass means: the board answers, says what it is, and what it says is a combination the SDK's releases
   support. It compares what the board said with a table; it measures nothing on the chip.
@@ -284,8 +286,9 @@ How it tests:
 The test is an `error`, not a `fail`, when it could not make its reading, and stops there: the
 board did not answer its raw REPL; the board's SDK is not running (no `tt` object) or could not select
 `tt_um_factory_test`, or fewer than two `uio` bits float or fewer than two `uo_out` bits followed their `uio` bit,
-so `the loopback cannot be confirmed` (a ribbon on another port or turned round, or the chip); the RP2040 has too little heap free with the command
-server loaded (`RP2040 heap too low: N bytes free …`); gpiod or `pinctrl` is missing or could not read the HAT
+so `the loopback cannot be confirmed` (a ribbon on another port or turned round, or the chip); the board's microcontroller has too little heap free with the command
+server loaded (`RP2 heap too low: N bytes free …`); the board said a microcontroller the test has no pin map
+for (it is then not run, and no pin is driven); gpiod or `pinctrl` is missing or could not read the HAT
 GPIOs; the test was stopped or reached its own time limit (the Pi is put back first); the test failed in a way it
 does not know (the exception is named); or what it changed on the Pi or the board was not put back (the reason
 says what). It is not run when the `sdk` test failed (`wiring not run: it needs sdk to pass first`): a board on
@@ -303,7 +306,7 @@ the `WIRING:` line, where the boot report keeps them, and so are the `READINGS:`
   with JC10 are seen: the line is then held low, not by the Pi's pull-up.)
 * `MIN_HEAP_FREE` (27000 bytes) is a TT07 board's largest drop of free heap, 17424 bytes, plus headroom. A board
   on another shuttle may need more: its shuttle file is bigger (TT06's is about twice TT07's), so its SDK leaves
-  less heap. Such a board fails loudly (`RP2040 heap too low`).
+  less heap. Such a board fails loudly (`RP2 heap too low`).
 * A short between neighbouring wires is said as one, with where to look, not as which two wires.
 * "The board's files the same before and after" is every file by its hash, and `/boot.log` by its size: the
   board's own `main.py` rewrites it at every start (the identification start), so it is not hashed.
