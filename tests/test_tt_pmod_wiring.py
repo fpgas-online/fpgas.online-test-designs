@@ -1325,7 +1325,7 @@ def test_the_rp2_heap_is_said_and_a_heap_too_low_stops_the_test_before_it_starts
     low = ttw.MIN_HEAP_FREE - 1
     code, line = _main(monkeypatch, capsys, lambda: measured.append(1) or _passed(), heap=low)
     assert code == 2 and measured == []  # not started
-    assert line == (f"the wiring could not be tested: RP2040 heap too low: {low} bytes free with the command "
+    assert line == (f"the wiring could not be tested: RP2 heap too low: {low} bytes free with the command "
                     f"server loaded (the test needs {ttw.MIN_HEAP_FREE})")  # fmt: skip
 
 
@@ -1590,10 +1590,110 @@ def test_hat_jb9_or_jb10_shorted_to_ground_is_never_driven_against(gpio):
     assert code == 1 and "could not be tested: something holds its line low" in line, line
 
 
-def test_the_group_drive_is_refused_on_anything_but_an_rp2040():
-    probe = ttw.WiringProbe(rp2=None, hat=None, controller="rp2350", log=lambda *_: None)
-    with pytest.raises(ttw.ProtocolError, match="written for the RP2040 only"):
-        probe.walk_together(["uio[6]", "uio[7]"])
+def test_the_group_drive_has_the_registers_of_every_controller_there_is_a_pin_map_for():
+    assert set(ttw.SIO) == set(ttw.CONTROLLERS)
+    # RP2040 datasheet 2.3.1; RP2350: pico-sdk's hardware/regs/sio.h (SET, CLR, OE_SET, OE_CLR; low word, high word)
+    assert ttw.SIO["rp2040"] == ((0xD0000014, 0xD0000018, 0xD0000024, 0xD0000028),)
+    assert ttw.SIO["rp2350"] == ((0xD0000018, 0xD0000020, 0xD0000038, 0xD0000040),
+                                 (0xD000001C, 0xD0000024, 0xD000003C, 0xD0000044))  # fmt: skip
+    assert max(g for t in ttw.CONTROLLERS["rp2040"].values() for g in t) < 32  # one register word is all it has
+
+
+class Rp2Registers:
+    """The command server itself (the text build_firmware gives the board), run here with a `machine` that records
+    every register write and every Pin made, fed commands as the board's stdin would be."""
+
+    def __init__(self, monkeypatch, controller, commands):
+        import io
+        import types
+
+        self.writes, self.made = [], []
+        outer = self
+
+        class Mem32:
+            def __setitem__(self, address, value):
+                outer.writes.append((address, value))
+
+        class Pin:
+            IN, OUT, PULL_UP, PULL_DOWN = "in", "out", "up", "down"
+
+            def __init__(self, g, mode=None, pull=None, value=None, **_):
+                outer.made.append((g, mode))
+
+            def value(self, *_):
+                return 0
+
+        fake_time = types.SimpleNamespace(sleep_us=lambda _: None, sleep_ms=lambda _: None)
+        fake_gc = types.SimpleNamespace(collect=lambda: None, mem_free=lambda: 60000)
+        monkeypatch.setitem(sys.modules, "machine", types.SimpleNamespace(Pin=Pin, mem32=Mem32()))
+        monkeypatch.setitem(sys.modules, "time", fake_time)
+        monkeypatch.setitem(sys.modules, "gc", fake_gc)
+        monkeypatch.setattr(sys, "stdin", io.StringIO("".join(c + "\n" for c in [*commands, "quit"])))
+        said = io.StringIO()
+        monkeypatch.setattr(sys, "stdout", said)
+        exec(compile(ttw.build_firmware(controller), "firmware", "exec"), {"__name__": "firmware"})
+        self.said = said.getvalue().splitlines()
+
+
+def test_on_an_rp2040_a_group_is_one_write_for_the_level_and_one_for_the_outputs(monkeypatch):
+    board = Rp2Registers(monkeypatch, "rp2040", ["group 1 27 28", "group 0 27 28", "ungroup 27 28"])
+    mask = (1 << 27) | (1 << 28)
+    assert board.writes == [(0xD0000014, mask), (0xD0000024, mask), (0xD0000018, mask), (0xD0000024, mask),
+                            (0xD0000028, mask)]  # fmt: skip
+    assert [s.split()[1] for s in board.said] == ["READY", "VALS", "VALS", "OK", "BYE"]
+
+
+def test_on_an_rp2350_uio6_and_uio7_are_in_two_register_words_and_each_gets_its_own_write(monkeypatch):
+    """uio[6] is GPIO31 and uio[7] GPIO32 on the RP2350 demo board: bit 31 of the low word, bit 0 of the high one.
+    The level goes to both before either output is turned on, and the two output writes are the last two."""
+    uio6, uio7 = ttw.CONTROLLERS["rp2350"]["uio"][6:]
+    assert (uio6, uio7) == (31, 32)
+    board = Rp2Registers(monkeypatch, "rp2350", [f"group 1 {uio6} {uio7}", f"ungroup {uio6} {uio7}"])
+    assert board.writes == [
+        (0xD0000018, 1 << 31), (0xD000001C, 1),  # GPIO_OUT_SET, GPIO_HI_OUT_SET: the level, still inputs
+        (0xD0000038, 1 << 31), (0xD000003C, 1),  # GPIO_OE_SET, GPIO_HI_OE_SET: the outputs on
+        (0xD0000040, 1 << 31), (0xD0000044, 1),  # GPIO_OE_CLR, GPIO_HI_OE_CLR: and off
+    ]  # fmt: skip
+    low = Rp2Registers(monkeypatch, "rp2350", ["group 0 25 26"])  # both in the low word: one write each
+    assert low.writes == [(0xD0000020, 3 << 25), (0xD0000038, 3 << 25)]
+
+
+class DemoBoardV3(BoardModel):
+    """The RP2350 demo board (TTDBv3) with a Tiny Tapeout chip: the same nets on the RP2350's GPIOs."""
+
+    UI, UIO, UO = (ttw.CONTROLLERS["rp2350"][g] for g in ttw.GROUPS)
+
+
+V3_ASIC = [*ASIC, "--controller", "rp2350"]  # as the boot check runs it on a board that said RP2350
+
+
+def test_a_good_rp2350_chip_board_passes_and_its_project_selector_reset_is_never_touched():
+    """RP2350 GPIO1 is CRESET_B on the FPGA breakout and CTRL_SEL_nRST on a chip board: `creset` is never sent."""
+    assert ttw.parse_args(V3_ASIC).fpga_reset is False
+    assert ttw.parse_args(["--controller", "rp2350"]).fpga_reset is True  # an FPGA board, as before
+    assert ttw.parse_args(["--controller", "rp2350", "--cabling", "fpga"]).fpga_reset is True
+    with pytest.raises(SystemExit):
+        ttw.parse_args([*V3_ASIC, "--fpga-reset"])
+    sent = []
+
+    class Listening(FakeFirmware):
+        def handle(self, line):
+            sent.append(line.split()[0])
+            return super().handle(line)
+
+    model = DemoBoardV3(standard_wires(controller="rp2350", cabling="asic"))
+    result, _log = run_simulated(model, argv=V3_ASIC, pin_id=True, firmware_cls=Listening)
+    assert ttw.verdict(result)[0] == 0, ttw.verdict(result)
+    assert "group" in sent and "creset" not in sent
+    assert result["controller"] == "rp2350" and model.contentions == []
+
+
+def test_an_rp2350_chip_board_with_a_broken_wire_fails_naming_it():
+    table = ttw.CONTROLLERS["rp2350"]
+    model = DemoBoardV3(standard_wires(controller="rp2350", cabling="asic", drop=[table["ui_in"][5]]))
+    result, _log = run_simulated(model, argv=V3_ASIC, pin_id=True)
+    code, line = ttw.verdict(result)
+    assert code == 1 and "ui_in[5]" in line, line
 
 
 def test_ui_in0_held_low_says_nothing_of_uio_and_not_that_the_pi_s_pull_ups_hold_uio6_7():
