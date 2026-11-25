@@ -1984,7 +1984,7 @@ def test_the_report_of_a_chip_board_whose_ribbon_is_wrong_reads_plainly(tmp_path
      "no SDK release is recorded as supporting a tt10 chip: add its row to SDK_SUPPORTED"),
     # a TT09 chip sits on the RP2350 demo board: an RP2040 saying it carries one is not a board the SDK supports
     ({"shuttle": "tt09"}, "tt-asic",
-     "a tt09 chip needs SDK 3.0.x on an RP2350, and the board runs SDK 2.0.4 on an RP2040"),
+     "a tt09 chip needs SDK 3.0.x on an RP2350 or SDK 3.1.x on an RP2350, and the board runs SDK 2.0.4 on an RP2040"),
     ({"shuttle": "ttgf0p3", "mcu": "RP2350", "sdk": "3.0.7"}, "tt-asic",
      "a ttgf0p3 chip needs SDK 3.1.x on an RP2350, and the board runs SDK 3.0.7 on an RP2350"),
     ({"mcu": None}, "tt-asic", "the board did not say its microcontroller"),
@@ -2010,7 +2010,8 @@ def test_a_board_whose_sdk_is_not_one_for_its_chip_fails_the_sdk_test_with_what_
     ("tt03p5", "1.2.2", "RP2040"), ("tt04", "2.0.4", "RP2040"), ("tt05", "2.0.0", "RP2040"),
     ("tt07", "v2.0.3", "RP2040"), ("tt08", "2.0.4", "RP2040"),
     # the RP2350 demo boards at welland, as each said on 2026-11-25
-    ("tt09", "3.0.7", "RP2350"), ("ttgf0p2", "3.0.7", "RP2350"), ("ttgf0p3", "3.1.1", "RP2350"),
+    ("tt09", "3.0.7", "RP2350"), ("tt09", "3.1.1", "RP2350"),
+    ("ttgf0p2", "3.1.1", "RP2350"), ("ttgf0p2", "3.0.7", "RP2350"), ("ttgf0p3", "3.1.1", "RP2350"),
 ])  # fmt: skip
 def test_every_chip_the_fleet_has_passes_the_sdk_test_on_the_release_line_for_it(shuttle, sdk, mcu):
     facts = {"chip": "asic", "shuttle": shuttle, "mcu": mcu, "sdk": sdk}

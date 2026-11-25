@@ -181,7 +181,7 @@ not know the board's chip cannot select a project on it:
 | the FPGA breakout | RP2350 | 3.1.x |
 | a TT03p5 chip | RP2040 | 1.2.x |
 | a TT04, TT05, TT06, TT07 or TT08 chip | RP2040 | 2.0.x |
-| a TT09 or TTGF0p2 chip | RP2350 | 3.0.x |
+| a TT09 or TTGF0p2 chip | RP2350 | 3.0.x or 3.1.x |
 | a TTGF0p3 chip | RP2350 | 3.1.x |
 
 * Anything else fails the test, with what the board said: `a tt06 chip needs SDK 2.0.x on an RP2040, and the

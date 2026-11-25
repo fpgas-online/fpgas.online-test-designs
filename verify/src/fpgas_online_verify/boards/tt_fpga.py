@@ -207,14 +207,18 @@ def tinytapeout_fields(usb_serial, runner=run):
 # or a chip from TT09 on; the TT03p5 board (a Pico on the older demo board) runs 1.2.x, whose chip ROM reader
 # names that shuttle itself. The TTDBv3 chip rows are the releases the boards at welland came with, read from
 # them on 2026-11-25: TT09 and TTGF0p2 on 3.0.7, TTGF0p3 on 3.1.1 (each named its own shuttle from its chip ROM
-# and loaded its shuttle file). A combination that is not here fails the `sdk` test with what the board said:
-# add its row when a release is known to support it.
+# and loaded its shuttle file). The TT09 board and one TTGF0p2 board were then put on 3.1.1, the newest release
+# (Tim, 2026-11-25: "Upgrade the SDK on all boards to the latest version"), and each named its shuttle on it too:
+# 3.1.1's release builds both shuttle files in (its release.yml, TT_RUNS_SUPPORTED). That list has no ttgf0p3: the
+# TTGF0p3 boards came with their shuttle file on a 3.1.1 that is not the release's .uf2, so the release .uf2 is
+# not put on them. A combination that is not here fails the `sdk` test with what the board said: add its row when
+# a release is known to support it.
 SDK_SUPPORTED = (
     ("fpga", (None,), "RP2350", "3.1"),
     ("asic", ("tt03p5",), "RP2040", "1.2"),
     ("asic", ("tt04", "tt05", "tt06", "tt07", "tt08"), "RP2040", "2.0"),
     ("asic", ("tt09", "ttgf0p2"), "RP2350", "3.0"),
-    ("asic", ("ttgf0p3",), "RP2350", "3.1"),
+    ("asic", ("tt09", "ttgf0p2", "ttgf0p3"), "RP2350", "3.1"),
 )
 # The demo board's microcontroller, as rpi-hwid names it, to tt_pmod_wiring.py's --controller: its pin map and
 # its GPIO registers. The RP2040 boards and the RP2350 board (TTDBv3) put ui_in, uio and uo_out on different
