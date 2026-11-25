@@ -29,6 +29,10 @@ pin. The script then puts the board back from RAM as its SDK had it (tt_sdk_star
 test was here such a board failed as untested (Tim, 2026-10-05: "Fail until wiring is tested and prioritize
 landing the setup which properly tests the wiring"). The FPGA board's wiring test (also `wiring`) loads a design.
 
+Neither wiring test is run on a Pi with no Pmod HAT (pi_hat, TTFPGA.unwired): there are no ribbons to test, so
+`wiring` is not applicable there, with that reason, and the board is judged on its other tests (Tim, 2026-11-25:
+"When no Pmod HAT exists, then the pmod wiring check should be skipped"). Such a board is reached over USB only.
+
 Nothing is written to the demo board: for every load `openFPGALoader -b tt_fpga` (our build, the
 openfpgaloader-fpgasonline packages of fpgas.online-fpga-tools) streams the bitstream to the RP2350 over its raw
 REPL, which clocks it into the iCE40 from RAM. After each load it starts the TTDBv3 project clock (GPIO16, 50 MHz)
@@ -50,6 +54,7 @@ rpi-hwid reads only what the SDK built when the board started, so the board's SD
 not the SDK's does not start it, and that is an error with its own reason."""
 
 import json
+import pathlib
 import shutil
 import sys
 from typing import ClassVar
@@ -83,6 +88,27 @@ ALWAYS_THERE = ("mcu", "chip", "demoboard", "sdk")
 # said is its chip; whether it named a shuttle is settle()'s question, and whether its microcontroller and SDK
 # release are ones for that chip is the `sdk` test's, which fails a board that named no microcontroller.
 ALWAYS_THERE_ON_A_CHIP_BOARD = ("chip",)
+
+
+# Where the Pi's firmware puts the HAT it read from the ID EEPROM (GPIO0/1) when it started: hat/product is the
+# HAT's product name ("Pmod HAT Adaptor" on the hosts at welland that have one). A Pi with no HAT has no hat node.
+DEVICE_TREE = pathlib.Path("/proc/device-tree")
+PMOD_HAT = "pmod"  # in the product name, any case
+NO_PMOD_HAT = "this Pi has no Pmod HAT ({what}), so the board has no ribbons to the Pi to test: USB only"
+
+
+def pi_hat(root=None):
+    """The product name of the Pi's HAT, from its device tree; "" for a Pi with no HAT; None when that is not
+    known (no device tree: not a Pi, or a hat node whose product cannot be read). Never raises."""
+    root = DEVICE_TREE if root is None else pathlib.Path(root)
+    if not root.is_dir():
+        return None
+    if not (root / "hat").is_dir():
+        return ""
+    try:
+        return (root / "hat" / "product").read_bytes().rstrip(b"\0").decode(errors="replace").strip() or None
+    except OSError:
+        return None
 
 
 def which(name):
@@ -297,6 +323,15 @@ class TTFPGA(TestBoard):
                                    f"({mcu or 'not read'}): not run, so no pin was driven")  # fmt: skip
         return {"controller": WIRING_CONTROLLER[mcu]}
 
+    def unwired(self, found):
+        """`wiring` on a Pi that is known to have no Pmod HAT (found["pi_hat"], from spot): the three ribbons go
+        to that HAT, so without it there is nothing to test, on an FPGA board or a chip board. A Pi whose HAT is
+        not known is tested."""
+        hat = (found or {}).get("pi_hat")
+        if hat is None or PMOD_HAT in hat.lower():
+            return {}
+        return {"wiring": NO_PMOD_HAT.format(what=f"its HAT is a {hat}" if hat else "it has no HAT")}
+
     # rpi-hwid's Tiny Tapeout label (its LABEL-CONTRACT.md, sections 1 and 7). Only the boot check reads the
     # fields rpi-hwid gives (it owns the port then): --identify takes them, and why they are missing, from the
     # boot report, matched by usb_serial.
@@ -360,7 +395,7 @@ class TTFPGA(TestBoard):
         "tt-fpga": {"wiring": "each Pmod HAT wire carries the FPGA pin the cabling map puts there (the pin-ID scan)"},
         "tt-asic": {
             "wiring": "the board's microcontroller drives each ui_in and uio line and the Pi reads it on its HAT "
-                      "pin, bit by bit"
+            "pin, bit by bit"
         },
         None: {"wiring": "the three Pmod ribbons to the Pi's HAT, pin by pin (how depends on the board, not yet said)"},
     }
@@ -383,6 +418,9 @@ class TTFPGA(TestBoard):
         more than one, each also has "beside": where the others are (ONE_PORT)."""
         found = [{"variant": None, "usb": d["path"], "serial": d["serial"], "usb_id": f"{d['vendor']}:{d['product']}"}
                  for d in usb_matching(usb, self.usb)]  # fmt: skip
+        hat = pi_hat()
+        if hat is not None:  # what the Pi's HAT is, for unwired(): left out when it is not known
+            found = [{**f, "pi_hat": hat} for f in found]
         if len(found) > 1:
             found = [{**f, "beside": [o["usb"] for o in found if o is not f]} for f in found]
         return found

@@ -1864,6 +1864,79 @@ def test_a_board_whose_microcontroller_has_no_pin_map_is_not_wiring_tested_and_n
     assert run.calls == []
 
 
+def _device_tree(tmp_path, product=None):
+    """A Pi's /proc/device-tree: with a hat node naming `product`, or with no HAT."""
+    root = tmp_path / "device-tree"
+    root.mkdir(parents=True)
+    (root / "model").write_bytes(b"Raspberry Pi 3 Model B Plus Rev 1.3\0")
+    if product is not None:
+        (root / "hat").mkdir()
+        (root / "hat" / "product").write_bytes(product.encode() + b"\0")
+    return root
+
+
+def test_the_pis_hat_is_read_from_its_device_tree_and_is_not_guessed(tmp_path):
+    assert tt_fpga.pi_hat(_device_tree(tmp_path / "pmod", "Pmod HAT Adaptor")) == "Pmod HAT Adaptor"
+    assert tt_fpga.pi_hat(_device_tree(tmp_path / "none")) == ""
+    assert tt_fpga.pi_hat(tmp_path / "not-a-pi") is None  # no device tree: not known, never "no HAT"
+    unread = _device_tree(tmp_path / "unread")
+    (unread / "hat").mkdir()
+    assert tt_fpga.pi_hat(unread) is None  # a hat node with no product: not known
+    assert tt_fpga.pi_hat() is None  # the tests' own machine is not the Pi (conftest)
+
+
+def test_a_demo_board_is_found_with_the_pis_hat_only_when_that_is_known(tmp_path, monkeypatch):
+    (tmp_path / "usb").mkdir()
+    usb = _usb(tmp_path / "usb", **{"1-2": ("2e8a", "0005", "E661")})
+    assert TT.spot(_host(TT), usb, []) == [TT_FOUND]
+    monkeypatch.setattr(tt_fpga, "DEVICE_TREE", _device_tree(tmp_path / "none"))
+    assert TT.spot(_host(TT), usb, []) == [{**TT_FOUND, "pi_hat": ""}]
+    monkeypatch.setattr(tt_fpga, "DEVICE_TREE", _device_tree(tmp_path / "pmod", "Pmod HAT Adaptor"))
+    assert TT.spot(_host(TT), usb, []) == [{**TT_FOUND, "pi_hat": "Pmod HAT Adaptor"}]
+
+
+@pytest.mark.parametrize("hat, what", [("", "it has no HAT"), ("PoE+ HAT", "its HAT is a PoE+ HAT")])
+def test_a_chip_board_on_a_pi_with_no_pmod_hat_is_not_wiring_tested_and_passes_on_its_sdk(
+    tmp_path, monkeypatch, hat, what
+):
+    """Tim, 2026-11-25: "When no Pmod HAT exists, then the pmod wiring check should be skipped." No ribbons, so
+    nothing to test: the script is not run, no pin is driven, and `wiring` is not applicable, with the reason."""
+    _installed(monkeypatch)
+    found = {**TT_FOUND, "pi_hat": hat}
+    run = Runner([_rpi_hwid({**TT_CHIP_BOARD, **TT_V3_CHIP})])
+    report = _check(TT, tmp_path, found, run)
+    assert report["result"] == "pass" and [t["test"] for t in report["tests"]] == ["sdk"]
+    assert "not_run" not in report and "reason" not in report
+    assert not any(WIRING in " ".join(c) for c in run.calls)
+    why = f"this Pi has no Pmod HAT ({what}), so the board has no ribbons to the Pi to test: USB only"
+    assert TT.planned("tt-asic", {}, found) == ["sdk"]
+    assert TT.not_applicable("tt-asic", found)["wiring"] == why
+    assert TT.planned(None, {}, found) == ["sdk"] and TT.not_applicable(None, found)["wiring"] == why
+    for variant in ("tt-fpga", "tt-asic", None):  # each common check is still planned or not applicable, never both
+        planned, cannot = TT.planned(variant, {}, found), TT.not_applicable(variant, found)
+        assert set(checks.COMMON) - set(planned) == set(cannot) and not set(planned) & set(cannot)
+
+
+def test_an_fpga_board_on_a_pi_with_no_pmod_hat_runs_its_other_tests_and_not_the_pin_id_scan(tmp_path, monkeypatch):
+    _installed(monkeypatch)
+    found = {**TT_FOUND, "pi_hat": ""}
+    run = Runner([_rpi_hwid(TT_BOARD)])
+    report = _check(TT, tmp_path, found, run)
+    assert _passed_what_it_has(report)
+    assert [t["test"] for t in report["tests"]] == ["sdk", "dip-switches", "uart", "spram"]
+    assert not any("pmod-pin-id" in " ".join(c) or "identify_pmod_pins.py" in " ".join(c) for c in run.calls)
+    assert "wiring" not in TT.planned("tt-fpga", {}, found) and "wiring" in TT.not_applicable("tt-fpga", found)
+
+
+@pytest.mark.parametrize("found", [TT_FOUND, {**TT_FOUND, "pi_hat": "Pmod HAT Adaptor"}])
+def test_a_pi_with_a_pmod_hat_or_whose_hat_is_not_known_is_wiring_tested(tmp_path, monkeypatch, found):
+    _installed(monkeypatch)
+    run = Runner([_rpi_hwid(TT_CHIP_BOARD), _wiring_said(1, WRONG_RIBBON)])
+    report = _check(TT, tmp_path, found, run)
+    assert report["result"] == "fail" and [t["test"] for t in report["tests"]] == ["sdk", "wiring"]
+    assert "wiring" in TT.planned("tt-asic", {}, found) and "wiring" not in TT.not_applicable("tt-asic", found)
+
+
 def test_a_chip_board_with_another_fault_says_both_and_an_fpga_board_has_no_wiring_test_of_this_kind(
     tmp_path, monkeypatch
 ):

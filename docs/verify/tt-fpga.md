@@ -198,6 +198,19 @@ not know the board's chip cannot select a project on it:
 
 ## The wiring test
 
+**On a Pi with no Pmod HAT, `wiring` is not run**, on an FPGA board or a chip board: the three ribbons go to that
+HAT, so without it there is nothing to test. The report then has `wiring` under `not_applicable` with the reason
+(`this Pi has no Pmod HAT (it has no HAT), so the board has no ribbons to the Pi to test: USB only`), the board
+is judged on its other tests, and it is reached over USB only.
+
+* What the Pi's HAT is comes from the Pi's device tree (`/proc/device-tree/hat/product`), which the Pi's firmware
+  fills in from the HAT's ID EEPROM when the Pi starts. A product name with `Pmod` in it is a Pmod HAT.
+* A Pi with another HAT has no Pmod HAT either, and the reason names the HAT it has.
+* Where the HAT is not known (no device tree, or a `hat` node with no product name), `wiring` runs.
+* **A Pmod HAT whose ID EEPROM the firmware could not read looks like no HAT**, so its ribbons are not tested.
+  The `found` entry of the report says what was read (`pi_hat`).
+* `--test wiring` runs the test whatever the HAT.
+
 The `wiring` test of a board with a Tiny Tapeout chip (`tt-asic`) checks the three ribbon cables between the demo
 board's Pmod connectors and the Pi's Pmod HAT, wire by wire. It loads nothing: the board's microcontroller and
 the chip's own factory-test project make the signals
