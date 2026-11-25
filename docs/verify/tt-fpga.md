@@ -209,7 +209,9 @@ is judged on its other tests, and it is reached over USB only.
 * Where the HAT is not known (no device tree, or a `hat` node with no product name), `wiring` runs.
 * **A Pmod HAT whose ID EEPROM the firmware could not read looks like no HAT**, so its ribbons are not tested.
   The `found` entry of the report says what was read (`pi_hat`).
-* `--test wiring` runs the test whatever the HAT.
+* The report also has a warning (`wiring not tested: this Pi has no Pmod HAT …`), which the fleet page shows.
+* On an FPGA board, `--test wiring` runs the pin-ID scan whatever the HAT. A chip board's `wiring` runs only in
+  the whole check, so it cannot be asked for by name.
 
 The `wiring` test of a board with a Tiny Tapeout chip (`tt-asic`) checks the three ribbon cables between the demo
 board's Pmod connectors and the Pi's Pmod HAT, wire by wire. It loads nothing: the board's microcontroller and

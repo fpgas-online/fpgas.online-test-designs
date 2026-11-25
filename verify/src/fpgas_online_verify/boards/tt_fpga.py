@@ -224,6 +224,10 @@ SDK_SUPPORTED = (
 # its GPIO registers. The RP2040 boards and the RP2350 board (TTDBv3) put ui_in, uio and uo_out on different
 # GPIOs, so the wiring test of the wrong one would drive pins that are not the board's ui_in and uio.
 WIRING_CONTROLLER = {"RP2040": "rp2040", "RP2350": "rp2350"}
+# The RP2350 pin map is the TTDBv3's (the SDK's GPIOMapTTDBv3). The SDK also knows an earlier RP2350 board
+# (GPIOMapTTDBv3Alpha) with ui_in, uio, the project reset and the clock on other GPIOs, so a board on an RP2350
+# must also have said it is a TTDBv3: "TTDBv3", or with its version, "TTDBv3 [3.2]"; nothing else.
+WIRING_DEMOBOARD = {"rp2350": "TTDBv3"}
 # What the boot check of a variant must do and does not yet (a board fails until it does): nothing now. The
 # wiring test of a board with a Tiny Tapeout chip was the last (`wiring`, below).
 PENDING = {}
@@ -325,7 +329,12 @@ class TTFPGA(TestBoard):
         if mcu not in WIRING_CONTROLLER:
             raise Problem("error", "the wiring test has no pin map for the board's microcontroller "
                                    f"({mcu or 'not read'}): not run, so no pin was driven")  # fmt: skip
-        return {"controller": WIRING_CONTROLLER[mcu]}
+        controller = WIRING_CONTROLLER[mcu]
+        board, wanted = facts.get("demoboard") or "", WIRING_DEMOBOARD.get(controller)
+        if wanted and board != wanted and not (board.startswith(wanted + " [") and board.endswith("]")):
+            raise Problem("error", f"the wiring test's {mcu} pin map is the {wanted}'s, and the board said its demo "
+                                   f"board is {board or 'not read'}: not run, so no pin was driven")  # fmt: skip
+        return {"controller": controller}
 
     def unwired(self, found):
         """`wiring` on a Pi that is known to have no Pmod HAT (found["pi_hat"], from spot): the three ribbons go

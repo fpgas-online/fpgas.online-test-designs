@@ -1907,6 +1907,8 @@ def test_a_chip_board_on_a_pi_with_no_pmod_hat_is_not_wiring_tested_and_passes_o
     report = _check(TT, tmp_path, found, run)
     assert report["result"] == "pass" and [t["test"] for t in report["tests"]] == ["sdk"]
     assert "not_run" not in report and "reason" not in report
+    assert report["warnings"] == [f"wiring not tested: this Pi has no Pmod HAT ({what}), so the board has no "
+                                  "ribbons to the Pi to test: USB only"]  # fmt: skip
     assert not any(WIRING in " ".join(c) for c in run.calls)
     why = f"this Pi has no Pmod HAT ({what}), so the board has no ribbons to the Pi to test: USB only"
     assert TT.planned("tt-asic", {}, found) == ["sdk"]
@@ -1926,6 +1928,24 @@ def test_an_fpga_board_on_a_pi_with_no_pmod_hat_runs_its_other_tests_and_not_the
     assert [t["test"] for t in report["tests"]] == ["sdk", "dip-switches", "uart", "spram"]
     assert not any("pmod-pin-id" in " ".join(c) or "identify_pmod_pins.py" in " ".join(c) for c in run.calls)
     assert "wiring" not in TT.planned("tt-fpga", {}, found) and "wiring" in TT.not_applicable("tt-fpga", found)
+    assert len(report["warnings"]) == 1 and report["warnings"][0].startswith("wiring not tested: this Pi has no")
+    # asked for by name, the pin-ID scan runs whatever the HAT
+    asked = Runner([_rpi_hwid(TT_BOARD)])
+    named = _check(TT, tmp_path / "named", found, asked, tests=["wiring"])
+    assert [t["test"] for t in named["tests"]] == ["wiring"] and "warnings" not in named
+    assert any("identify_pmod_pins.py" in " ".join(c) for c in asked.calls)
+
+
+def test_an_rp2350_board_that_did_not_say_it_is_a_ttdbv3_is_not_wiring_tested_and_no_pin_is_driven():
+    """The SDK knows an earlier RP2350 board with ui_in, uio, the project reset and the clock on other GPIOs."""
+    run = Runner([])
+    for board in ("TTDBv3 Alpha", "TTDBv3Alpha", None, "TT06+"):
+        done = TT.run_script_test("wiring", _host(TT), run, {"mcu": "RP2350", "demoboard": board})
+        assert done["result"] == "error" and "pin map is the TTDBv3's" in done["reason"], board
+    assert run.calls == []
+    for board in ("TTDBv3", "TTDBv3 [3.2]"):
+        assert TT.script_values({"mcu": "RP2350", "demoboard": board}) == {"controller": "rp2350"}
+    assert TT.script_values({"mcu": "RP2040", "demoboard": None}) == {"controller": "rp2040"}
 
 
 @pytest.mark.parametrize("found", [TT_FOUND, {**TT_FOUND, "pi_hat": "Pmod HAT Adaptor"}])

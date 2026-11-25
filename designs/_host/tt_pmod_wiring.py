@@ -119,7 +119,9 @@ CONTROLLERS = {
 # GPIO_OUT_CLR, GPIO_OE_SET, GPIO_OE_CLR) for GPIO0 to GPIO31, and on a chip with more GPIOs the same four
 # for GPIO32 upwards (the GPIO_HI_ registers). RP2040: datasheet section 2.3.1. RP2350: pico-sdk
 # src/rp2350/hardware_regs/include/hardware/regs/sio.h (the offsets moved: its GPIO_OUT_SET is the RP2040's
-# GPIO_OUT_CLR address), which the SDK's own ttboard/util/platform/rp2350.py agrees with.
+# GPIO_OUT_CLR address). The SDK's own ttboard/util/platform/rp2350.py uses the same GPIO_OUT_SET and
+# GPIO_OUT_CLR; it does not use the OE_SET, OE_CLR or GPIO_HI_ registers, so those four are from sio.h alone,
+# and the RP2350 group drive has not yet run on a board (no chip board's Pi at welland has the Pmod HAT).
 SIO = {
     "rp2040": ((0xD0000014, 0xD0000018, 0xD0000024, 0xD0000028),),
     "rp2350": ((0xD0000018, 0xD0000020, 0xD0000038, 0xD0000040), (0xD000001C, 0xD0000024, 0xD000003C, 0xD0000044)),
