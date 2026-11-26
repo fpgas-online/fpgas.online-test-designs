@@ -15,6 +15,7 @@ on:
       - "tmp/**"
       - "pyproject.toml"
       - "uv.lock"
+      - ".python-version"
       - ".github/workflows/build-uart-test.yml"
   workflow_dispatch:
 

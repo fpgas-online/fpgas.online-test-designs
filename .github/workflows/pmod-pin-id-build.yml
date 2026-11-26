@@ -16,6 +16,7 @@ on:
       - "scripts/fix_yosys_edif_libref.py"
       - "pyproject.toml"
       - "uv.lock"
+      - ".python-version"
       - ".github/workflows/pmod-pin-id-build.yml"
   workflow_dispatch:
 
