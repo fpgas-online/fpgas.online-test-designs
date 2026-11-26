@@ -15,6 +15,7 @@ on:
       - "scripts/fix_yosys_edif_libref.py"
       - "pyproject.toml"
       - "uv.lock"
+      - ".python-version"
       - ".github/workflows/tt-display-build.yml"
   workflow_dispatch:
 
